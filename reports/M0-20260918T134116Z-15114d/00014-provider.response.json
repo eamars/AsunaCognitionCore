@@ -1,0 +1,38 @@
+{
+  "seq": 14,
+  "type": "provider.response",
+  "payload": {
+    "call_id": "5d4c8ca1-f655-4ec7-8f6e-8b42eb8a5df5",
+    "request_ref": "00013-provider.request.json",
+    "status_code": 200,
+    "body": {
+      "id": "chatcmpl-226",
+      "object": "chat.completion",
+      "created": 1789738895,
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "连接正常",
+            "reasoning_content": "用户要求只回复“连接正常”。需要遵守只输出短文本，不调用工具。最终回复应为：连接正常。"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 74,
+        "completion_tokens": 32,
+        "total_tokens": 106,
+        "prompt_tokens_details": {
+          "cached_tokens": 64
+        }
+      }
+    },
+    "duration_seconds": 17.96806430000288
+  },
+  "prev_hash": "1c87f8f72b44db651ef2c196897e68631a4815ac8c1a2a5535400b9cfd6a94ae",
+  "time_ns": 1789738895413395800,
+  "event_hash": "c4fc2384f09f6a511367211dc8a22af097cade3496bca39b30fcca19c535aed0"
+}

@@ -1,0 +1,42 @@
+{
+  "database": "asuna_cognition_core_v2",
+  "allowed_databases": [
+    "asuna_cognition_core_v2"
+  ],
+  "test_database_prefix": "asuna_v2_test_",
+  "embedding": {
+    "base_url": "http://192.168.2.8:1234/v1",
+    "model": "text-embedding-nomic-embed-text-v2-moe",
+    "query_prefix": "search_query: ",
+    "document_prefix": "search_document: "
+  },
+  "character": {
+    "base_url": "http://192.168.2.13:8083/v1",
+    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 4096
+  },
+  "executor": {
+    "base_url": "http://192.168.2.13:1919/v1",
+    "model": "qwen38-next-uncensored-freetoken-vision",
+    "sampling": {
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 8192
+  },
+  "dsh_home": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\asuna-dsh",
+  "workdir": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work",
+  "local_only": true,
+  "publish_adapter": "local-idempotent-sink",
+  "source": {
+    "connections": "explicit user input",
+    "embedding_model_and_key": "C:\\workspace\\kazusa_cognition_core_prod\\.env",
+    "legacy_config_sha256": "1c058b43d7fe656460b8d5012d57909f5b271f116d892bb5b23fa3353e1659c3"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "probe": "task-isolation",
+  "command": ".venv/Scripts/python.exe tools/probe_sandbox.py",
+  "status": "PASS",
+  "argv": [
+    "/usr/bin/python3",
+    "-c",
+    "import os,socket,pathlib,json\npathlib.Path('inside.txt').write_text('ok')\nresult={'host_absent':not pathlib.Path('/mnt/c/workspace').exists(), 'home_absent':not pathlib.Path('/home/rba90').exists(), 'dsh_absent':not pathlib.Path('/task/../../asuna-dsh').exists(),'env_keys':sorted(os.environ),'interfaces':socket.if_nameindex(),'task_write':pathlib.Path('inside.txt').read_text()=='ok'}\nassert result['host_absent'] and result['home_absent'] and result['dsh_absent'] and result['task_write']\nassert [x[1] for x in result['interfaces']]==['lo']\nassert not any(k in os.environ for k in ('MONGODB_URI','ASUNA_MONGODB_URI','ASUNA_LOCAL_DUMMY_KEY'))\nprint(json.dumps(result))\n"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"host_absent\": true, \"home_absent\": true, \"dsh_absent\": true, \"env_keys\": [\"LC_CTYPE\", \"PATH\", \"PWD\"], \"interfaces\": [[1, \"lo\"]], \"task_write\": true}\n",
+  "stderr": "",
+  "sandbox": "wsl-bubblewrap-unshare-all",
+  "network": "isolated",
+  "mount": "task-only"
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asuna V1 ReflectionResult",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "properties": {
+        "decision": {
+          "const": "no_change"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "proposal"
+      ],
+      "properties": {
+        "decision": {
+          "const": "propose"
+        },
+        "proposal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entity_key",
+            "base_revision_id",
+            "scope_key",
+            "change_class",
+            "changes",
+            "reason",
+            "source_ids"
+          ],
+          "properties": {
+            "entity_key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "base_revision_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "scope_key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "change_class": {
+              "enum": [
+                "persona",
+                "relationship",
+                "interpretation",
+                "scene_affect"
+              ]
+            },
+            "changes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "old",
+                  "new"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "old": {},
+                  "new": {}
+                }
+              }
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "source_ids": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "seq": 6,
+  "type": "provider.response",
+  "payload": {
+    "call_id": "fdf21c3b-ab87-4a75-8b74-492578afce03",
+    "request_ref": "00005-provider.request.json",
+    "status_code": 200,
+    "body": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "连接正常",
+            "reasoning_content": "*   Input: \"请只回复：连接正常\" (Please only reply: Connection normal).\n    *   Constraint: \"只输出用户要求的短文本，不调用工具\" (Only output the short text requested by the user, do not call tools).\n\n    *   The user wants exactly the string \"连接正常\".\n\n    *   Output: 连接正常."
+          }
+        }
+      ],
+      "created": 1789738877,
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "system_fingerprint": "b10659-4e2f54f8f",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 84,
+        "prompt_tokens": 38,
+        "total_tokens": 122,
+        "prompt_tokens_details": {
+          "cached_tokens": 33
+        }
+      },
+      "id": "chatcmpl-rZwgwNYzVlHgHju78XUTzhqrzYd6EH4K",
+      "timings": {
+        "cache_n": 33,
+        "prompt_n": 5,
+        "prompt_ms": 44.478,
+        "prompt_per_token_ms": 8.8956,
+        "prompt_per_second": 112.41512657943252,
+        "predicted_n": 84,
+        "predicted_ms": 436.117,
+        "predicted_per_token_ms": 5.254421686746988,
+        "predicted_per_second": 190.3159014668082,
+        "draft_n": 78,
+        "draft_n_accepted": 57
+      }
+    },
+    "duration_seconds": 0.48373730000457726
+  },
+  "prev_hash": "38147b5ecb7af0df7fe4bdc6a92671a4dbad90bbad621b334cc0e6a474e8d2d0",
+  "time_ns": 1789738877409730100,
+  "event_hash": "c9577dd7208a2a8fc885cc8eadc002937f554f0b6ba9f1ab0b6285bab99cdca2"
+}

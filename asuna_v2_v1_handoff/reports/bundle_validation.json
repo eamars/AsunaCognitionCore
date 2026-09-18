@@ -1,0 +1,101 @@
+{
+  "artifact_validation_only": true,
+  "date": "2026-09-19",
+  "checks": [
+    {
+      "name": "schema_definition:decision.schema.json",
+      "pass": true
+    },
+    {
+      "name": "schema_definition:mutation.schema.json",
+      "pass": true
+    },
+    {
+      "name": "schema_definition:reflection.schema.json",
+      "pass": true
+    },
+    {
+      "name": "schema_definition:report.schema.json",
+      "pass": true
+    },
+    {
+      "name": "schema_definition:task_result.schema.json",
+      "pass": true
+    },
+    {
+      "name": "NOT_RUN_report_matches_schema",
+      "pass": true
+    },
+    {
+      "name": "decision_valid_and_invalid_examples",
+      "pass": true
+    },
+    {
+      "name": "bundle_integrity",
+      "pass": true,
+      "stdout": {
+        "bundle_integrity_pass": true,
+        "acceptance_contracts": 41,
+        "behavior_scenarios": 12,
+        "retrieval_queries": 12,
+        "errors": [],
+        "NOT_TESTED": [
+          "local DSH",
+          "local MongoDB",
+          "local vector index",
+          "Gemma4",
+          "Qwen3.8",
+          "behavior quality",
+          "actual performance"
+        ]
+      }
+    },
+    {
+      "name": "report_template_integrity",
+      "pass": true,
+      "stdout": {
+        "report_format_valid": true,
+        "errors": [],
+        "scope": "report integrity only; no model/DSH/Mongo execution"
+      }
+    },
+    {
+      "name": "distractor_seed_reproducibility_200_records",
+      "pass": true,
+      "sha256": "3b8e80ae0a53af34730746cb6224104808afd7ae60cb4cd2de3e9c2571a00b32"
+    },
+    {
+      "name": "reject_unexecuted_overall_PASS",
+      "pass": true,
+      "errors": [
+        "overall PASS with non-PASS mandatory tests",
+        "overall PASS with non-PASS gate",
+        "overall PASS without local-only verification"
+      ]
+    },
+    {
+      "name": "reject_evidence_path_escape",
+      "pass": true
+    },
+    {
+      "name": "reject_malformed_report_without_traceback",
+      "pass": true
+    },
+    {
+      "name": "intentionally_buggy_fixture_detected_by_visible_tests",
+      "pass": true,
+      "note": "expected failure is a fixture check, not a system acceptance result"
+    }
+  ],
+  "all_artifact_checks_pass": true,
+  "live_acceptance_executed": false,
+  "NOT_TESTED": [
+    "local DSH",
+    "MongoDB connection or vector index",
+    "Gemma4",
+    "Qwen3.8",
+    "character quality",
+    "local performance"
+  ],
+  "note": "These checks verify the handoff materials and helper scripts. They do not establish architecture acceptance."
+}

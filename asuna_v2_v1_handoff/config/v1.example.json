@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "project": "asuna-v2",
+  "timezone": "Pacific/Auckland",
+  "local_only": true,
+  "database": {
+    "uri_env": "ASUNA_MONGODB_URI",
+    "database": "asuna_v2_dev",
+    "legacy_config_path_env": "KAZUSA_CONFIG_PATH",
+    "legacy_read_keys": [
+      "MONGODB_URI",
+      "MONGODB_DB_NAME",
+      "EMBEDDING_BASE_URL",
+      "EMBEDDING_API_KEY",
+      "EMBEDDING_MODEL"
+    ],
+    "allow_database_prefixes": [
+      "asuna_v2"
+    ],
+    "forbid_legacy_writes": true,
+    "database_env": "ASUNA_MONGODB_DB_NAME"
+  },
+  "runtime": {
+    "preferred_language": "python",
+    "dsh_plugin_language": "typescript",
+    "dsh_revision": null,
+    "dsh_bin": null,
+    "dsh_home": "./.runtime/asuna-dsh",
+    "character_profile": "asuna-character",
+    "executor_profile": "asuna-executor",
+    "max_repair_attempts": 1,
+    "max_handoffs_per_task": 3,
+    "max_tool_steps": 64,
+    "max_consecutive_scene_episodes": 2,
+    "publish_adapter": "local-idempotent-sink",
+    "max_recall_rounds_per_episode": 2
+  },
+  "models": {
+    "character": {
+      "family_requested": "gemma4-26b",
+      "provider": null,
+      "model_id": null,
+      "base_url_env": "ASUNA_GEMMA_BASE_URL",
+      "api_key_env": "ASUNA_GEMMA_API_KEY",
+      "declared_context_tokens": 262000,
+      "server_context_tokens": null,
+      "effective_context_tokens": null,
+      "working_input_budget": 65536,
+      "max_output_tokens": 4096,
+      "safety_margin_tokens": 4096,
+      "retain_tokens": 12288,
+      "summary_max_output_tokens": 4096,
+      "thinking_enabled": true,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "sampling_status": "PROPOSED_VERIFY_SUPPORTED",
+      "concurrency": 1,
+      "resource_group": "discover-gemma"
+    },
+    "executor": {
+      "family_requested": "qwen3.8-flash",
+      "provider": null,
+      "model_id": null,
+      "base_url_env": "ASUNA_QWEN_BASE_URL",
+      "api_key_env": "ASUNA_QWEN_API_KEY",
+      "declared_context_tokens": 262000,
+      "server_context_tokens": null,
+      "effective_context_tokens": null,
+      "working_input_budget": 196608,
+      "max_output_tokens": 8192,
+      "safety_margin_tokens": 4096,
+      "retain_tokens": 32768,
+      "summary_max_output_tokens": 8192,
+      "thinking_enabled": true,
+      "sampling": {
+        "temperature": 0.2,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "sampling_status": "PROPOSED_VERIFY_SUPPORTED",
+      "concurrency": 1,
+      "resource_group": "discover-qwen"
+    }
+  },
+  "memory": {
+    "embedding_base_url_env": "ASUNA_EMBEDDING_BASE_URL",
+    "embedding_model": null,
+    "embedding_dim": null,
+    "query_prefix": null,
+    "document_prefix": null,
+    "embedding_revision": null,
+    "vector_index": "asuna_memory_v1",
+    "vector_candidates": 24,
+    "lexical_candidates": 24,
+    "selected_memories": 6,
+    "rrf_k": 60,
+    "reranker_enabled": false,
+    "require_scope_prefilter": true,
+    "conversation_chunk_tokens": 1024,
+    "chunk_overlap_tokens": 128,
+    "background_indexing": true,
+    "embedding_api_key_env": "ASUNA_EMBEDDING_API_KEY"
+  },
+  "audit": {
+    "mode": "full-local",
+    "capture_provider_body": true,
+    "capture_reasoning_if_returned": true,
+    "raw_payload_store": "gridfs",
+    "public_export_redact": true,
+    "allow_cloud_export": false
+  },
+  "performance_slo": {
+    "approved": false,
+    "first_public_p95_seconds": null,
+    "task_feedback_p95_seconds": null
+  }
+}

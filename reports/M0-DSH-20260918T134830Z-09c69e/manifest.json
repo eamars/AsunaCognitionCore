@@ -1,0 +1,106 @@
+{
+  "experiment_id": "M0-DSH-20260918T134830Z-09c69e",
+  "kind": "M0-DSH-probe",
+  "dsh_version": "0.1.5-rc.2",
+  "dsh_commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
+  "dsh_executable": "C:\\workspace\\asuna_cognition_core_v2\\node_modules\\.bin\\dsh.cmd",
+  "executable_sha256": "0ff7f1d72c4e0cbe14001709c81e20a04b70464118a7f78568952988e28f2ac5",
+  "package_lock_sha256": "d2e787afc0357c6d277fed5eed68fe731f7fe0798ca2af110b7f5585623ecb83",
+  "prompt_sha256": "83a6e41aff8e63096ae9f7ab87a3a7a7f509db19c07c36e059fb31610e0d0b32",
+  "patch": [
+    {
+      "id": "llm-deepseek",
+      "disabled": true
+    },
+    {
+      "id": "deepseek-llm-api-extensions",
+      "disabled": true
+    },
+    {
+      "id": "session-log-deepseek",
+      "disabled": true
+    },
+    {
+      "id": "plugin-package-inventory-deepseek",
+      "disabled": true
+    },
+    {
+      "id": "persistent-bash",
+      "disabled": true
+    },
+    {
+      "id": "persistent-pwsh",
+      "disabled": true
+    },
+    {
+      "id": "terminal-bash",
+      "disabled": true
+    },
+    {
+      "id": "terminal-pwsh",
+      "disabled": true
+    },
+    {
+      "id": "pty",
+      "disabled": true
+    },
+    {
+      "id": "subprocess",
+      "disabled": true
+    },
+    {
+      "insert": [
+        {
+          "id": "asuna-prompt",
+          "name": "C:/workspace/asuna_cognition_core_v2/dsh-plugin/bridge.ts",
+          "config": {
+            "promptFile": "C:/workspace/asuna_cognition_core_v2/.runtime/work/M0-DSH-20260918T134830Z-09c69e/system.md"
+          }
+        },
+        {
+          "id": "asuna-local-provider",
+          "name": "@deepseek-ai/dsh-llm-pi-ai",
+          "config": {
+            "providers": {
+              "asuna-local": {
+                "api": "openai-completions",
+                "baseURL": "http://127.0.0.1:54569/v1",
+                "apiKeyEnv": "ASUNA_LOCAL_DUMMY_KEY",
+                "reasoning": "high",
+                "compat": {
+                  "supportsDeveloperRole": false,
+                  "supportsReasoningEffort": false,
+                  "thinkingFormat": "chat-template",
+                  "chatTemplateKwargs": {
+                    "enable_thinking": true
+                  },
+                  "maxTokensField": "max_tokens"
+                },
+                "models": [
+                  {
+                    "id": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "contextWindow": 262144,
+                    "maxTokens": 4096,
+                    "reasoningEfforts": {
+                      "high": "high",
+                      "off": null
+                    }
+                  }
+                ],
+                "retryPolicy": {
+                  "mode": "normal",
+                  "maxRetries": 0
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "seed": 20260919
+  }
+}

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling==1.30.1"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asuna-ai-cognition-core"
+version = "0.1.0"
+description = "Local staged cognition coordinator with auditable DSH lanes"
+requires-python = ">=3.12"
+dependencies = ["httpx==0.28.1", "pymongo==4.16.0", "jsonschema==4.26.0", "pydantic==2.12.5", "PyYAML==6.0.3", "deepseek-harness-sdk"]
+
+[project.scripts]
+asuna = "asuna.cli:main"
+
+[dependency-groups]
+dev = [
+    "paramiko==4.0.0",
+    "pytest==9.0.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asuna"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+# Explicit pinned npm DSH executable replaces the unavailable Windows runtime wheel.
+override-dependencies = ["deepseek-harness-runtime-bin; sys_platform == 'never'"]
+
+[tool.uv.sources]
+deepseek-harness-sdk = { git = "https://github.com/deepseek-ai/deepseek-harness.git", rev = "fb2c4b9e698e30edb738bca4cf0618587db7d203", subdirectory = "python/sdk" }

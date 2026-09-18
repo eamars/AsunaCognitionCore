@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asuna V1 Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "overall_status",
+    "gates",
+    "environment",
+    "results",
+    "human_review",
+    "what_works",
+    "what_fails",
+    "not_tested",
+    "design_deviations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "overall_status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT_RUN",
+        "INCONCLUSIVE"
+      ]
+    },
+    "gates": {
+      "type": "object",
+      "required": [
+        "ENGINEERING",
+        "LOCAL_DEPLOYMENT",
+        "COGNITION",
+        "PERFORMANCE"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED",
+              "NOT_RUN",
+              "INCONCLUSIVE"
+            ]
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object"
+    },
+    "human_review": {
+      "type": "object",
+      "required": [
+        "completed",
+        "reviewer_count"
+      ]
+    },
+    "results": {
+      "type": "array",
+      "minItems": 41,
+      "items": {
+        "type": "object",
+        "required": [
+          "test_id",
+          "status",
+          "mode",
+          "attempts",
+          "commands",
+          "assertions",
+          "metrics",
+          "evidence",
+          "limitations"
+        ],
+        "properties": {
+          "test_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED",
+              "NOT_RUN",
+              "INCONCLUSIVE"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

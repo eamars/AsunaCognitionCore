@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "seed": 20260919,
+  "attribution": {
+    "models": [
+      "character",
+      "executor"
+    ],
+    "personas": [
+      "P0",
+      "P1",
+      "P2"
+    ],
+    "cases": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10",
+      "P11",
+      "P12"
+    ],
+    "repetitions": 3,
+    "common_sampling": {
+      "temperature": 0.7,
+      "top_p": 0.95
+    },
+    "thinking": "verify-and-freeze-on-for-both",
+    "mutations_enabled": false,
+    "tools": "fixture-result-only",
+    "contrast_probes": "fixtures/contrast_cases.jsonl",
+    "counting_unit": "scenario-run; contains one or more episodes and multiple model calls",
+    "expected_scenario_runs": 216,
+    "total_scenario_runs_with_contrasts": 264,
+    "contrast_scenario_runs": 48
+  },
+  "noise": {
+    "conditions": [
+      "clean",
+      "noisy-executor",
+      "noisy-plus-compact"
+    ],
+    "cases": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10",
+      "P11",
+      "P12"
+    ],
+    "repetitions": 3,
+    "clock_frozen": true,
+    "minimum_noise_tokens": 65536
+  },
+  "compaction": {
+    "cycles": [
+      [
+        0,
+        0
+      ],
+      [
+        3,
+        0
+      ],
+      [
+        0,
+        5
+      ],
+      [
+        3,
+        5
+      ]
+    ],
+    "repetitions": 3
+  },
+  "long_context": {
+    "target_input_tokens": [
+      8192,
+      65536,
+      196608,
+      234000
+    ],
+    "repetitions": 3,
+    "lanes": [
+      "character",
+      "executor"
+    ],
+    "output_budget_and_margin_required": true
+  },
+  "blind_review": {
+    "required": true,
+    "model_identity_hidden": true,
+    "target_persona_visible": true,
+    "actor_self_judgement_not_final": true
+  }
+}

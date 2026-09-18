@@ -17,7 +17,7 @@ from .state import Store
 
 class DshLane:
     """Replaceable lane: pinned SDK boot + narrowly scoped native DSH operations."""
-    def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None):
+    def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None, broker_token=None):
         self.config,self.store,self.evidence,self.lane=config,store,evidence,lane
         declared=json.loads((ROOT/'package.json').read_text())['dependencies']['@deepseek-ai/dsh']
         installed=json.loads((ROOT/'node_modules/@deepseek-ai/dsh/package.json').read_text())['version']
@@ -47,6 +47,7 @@ class DshLane:
         for key in ('SystemRoot','SYSTEMROOT','WINDIR','PATH','PATHEXT','TEMP','TMP','COMSPEC'):
             if key in os.environ:child[key]=os.environ[key]
         child.update({'DSH_HOME':str(self.home),'DSH_TELEMETRY_DISABLED':'1','ASUNA_LOCAL_DUMMY_KEY':'local-only-not-a-secret','ASUNA_BRIDGE_TOKEN':self.token})
+        if broker_token:child['ASUNA_BROKER_TOKEN']=broker_token
         self.sdk=DeepSeekHarness(dsh_bin=str(ROOT/'node_modules/.bin/dsh.cmd'),dsh_home=str(self.home),profile='sdk-minimal',patches=(str(patch),),cwd=str(self.work),env=child,provider='asuna-local',model=self.model['model'],reasoning_effort='high',max_tokens=self.model['max_tokens'],request_timeout_seconds=300,initialize_timeout_seconds=45)
         try:
             self.sdk.start()

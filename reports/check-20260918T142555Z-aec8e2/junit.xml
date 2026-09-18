@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="23" time="31.007" timestamp="2026-09-19T02:25:55.535366+12:00" hostname="Ran-Workstation"><testcase classname="tests.test_engineering_m1" name="test_E01_namespace_guard" time="0.561" /><testcase classname="tests.test_engineering_m1" name="test_E02_actual_fake_request_and_missing_persona" time="0.804" /><testcase classname="tests.test_engineering_m1" name="test_E03_stops_advance_and_E04_private_public_split" time="0.720" /><testcase classname="tests.test_engineering_m1" name="test_E05_delivered_projection_only" time="0.593" /><testcase classname="tests.test_engineering_m1" name="test_E07_invalid_stage_fails_closed[bad0]" time="0.593" /><testcase classname="tests.test_engineering_m1" name="test_E07_invalid_stage_fails_closed[bad1]" time="0.617" /><testcase classname="tests.test_engineering_m1" name="test_E07_invalid_stage_fails_closed[bad2]" time="0.545" /><testcase classname="tests.test_engineering_m1" name="test_E07_invalid_stage_fails_closed[bad3]" time="0.697" /><testcase classname="tests.test_engineering_m1" name="test_E07_json_retry_and_recall_bounds" time="0.949" /><testcase classname="tests.test_engineering_m1" name="test_E09_identity_and_E10_scope" time="0.641" /><testcase classname="tests.test_engineering_m1" name="test_E14_100_duplicates" time="1.214" /><testcase classname="tests.test_engineering_m1" name="test_E14_real_process_crash_after_receive" time="1.049" /><testcase classname="tests.test_engineering_m1" name="test_E15_nonidempotent_unknown" time="0.741" /><testcase classname="tests.test_engineering_m1" name="test_E17_twenty_cas_proposals" time="0.529" /><testcase classname="tests.test_engineering_m1" name="test_E19_scope_inheritance_and_policy_denial" time="0.603" /><testcase classname="tests.test_engineering_m1" name="test_E21_audit_failure_prevents_calls_and_effects" time="0.492" /><testcase classname="tests.test_engineering_m1" name="test_E23_state_replay_and_tamper" time="7.035"><failure message="pymongo.errors.AutoReconnect: 192.168.2.10:27027: connection closed (configured timeouts: timeoutMS: 20000.0ms, connectTimeoutMS: 5000.0ms)">self = Connection(&lt;pymongo.network_layer.NetworkingInterface object at 0x000001A7E6340B00&gt;) CLOSED at 1820635195168
+dbname = 'asuna_v2_test_M1_6f23bc3ab008_replay'
+spec = {'$clusterTime': {'clusterTime': Timestamp(1789741567, 79), 'signature': {'hash': b'\x00\x00\x00\x00\x00\x00\x00\x00\x...d_1_platform_event_id_1', 'partialFilterExpression': {'platform_event_id': {'$type': 'string'}}, 'unique': True}], ...}
+read_preference = Primary()
+codec_options = CodecOptions(document_class=dict, tz_aware=False, uuid_representation=UuidRepresentation.UNSPECIFIED, unicode_decode_e...ne, type_registry=TypeRegistry(type_codecs=[], fallback_encoder=None), datetime_conversion=DatetimeConversion.DATETIME)
+check = True, allowable_errors = None, read_concern = None
+write_concern = WriteConcern(j=True, w='majority')
+parse_write_concern_error = True, collation = None
+session = &lt;pymongo.synchronous.client_session.ClientSession object at 0x000001A7E6506D80&gt;
+client = MongoClient(host=['192.168.2.10:27027'], document_class=dict, tz_aware=False, connect=True, directconnection=True, serverselectiontimeoutms=5000, connecttimeoutms=5000, timeoutms=20.0)
+retryable_write = False, publish_events = True, user_fields = None
+exhaust_allowed = False
+
+    @_handle_reauth
+    def command(
+        self,
+        dbname: str,
+        spec: MutableMapping[str, Any],
+        read_preference: _ServerMode = ReadPreference.PRIMARY,
+        codec_options: CodecOptions[Mapping[str, Any]] = DEFAULT_CODEC_OPTIONS,  # type: ignore[assignment]
+        check: bool = True,
+        allowable_errors: Optional[Sequence[Union[str, int]]] = None,
+        read_concern: Optional[ReadConcern] = None,
+        write_concern: Optional[WriteConcern] = None,
+        parse_write_concern_error: bool = False,
+        collation: Optional[_CollationIn] = None,
+        session: Optional[ClientSession] = None,
+        client: Optional[MongoClient[Any]] = None,
+        retryable_write: bool = False,
+        publish_events: bool = True,
+        user_fields: Optional[Mapping[str, Any]] = None,
+        exhaust_allowed: bool = False,
+    ) -&gt; dict[str, Any]:
+        """Execute a command or raise an error.
+    
+        :param dbname: name of the database on which to run the command
+        :param spec: a command document as a dict, SON, or mapping object
+        :param read_preference: a read preference
+        :param codec_options: a CodecOptions instance
+        :param check: raise OperationFailure if there are errors
+        :param allowable_errors: errors to ignore if `check` is True
+        :param read_concern: The read concern for this command.
+        :param write_concern: The write concern for this command.
+        :param parse_write_concern_error: Whether to parse the
+            ``writeConcernError`` field in the command response.
+        :param collation: The collation for this command.
+        :param session: optional ClientSession instance.
+        :param client: optional MongoClient for gossipping $clusterTime.
+        :param retryable_write: True if this command is a retryable write.
+        :param publish_events: Should we publish events for this command?
+        :param user_fields: Response fields that should be decoded
+            using the TypeDecoders from codec_options, passed to
+            bson._decode_all_selective.
+        """
+        self.validate_session(client, session)
+        session = _validate_session_write_concern(session, write_concern)
+    
+        # Ensure command name remains in first place.
+        if not isinstance(spec, ORDERED_TYPES):  # type:ignore[arg-type]
+            spec = dict(spec)
+    
+        if not (write_concern is None or write_concern.acknowledged or collation is None):
+            raise ConfigurationError("Collation is unsupported for unacknowledged writes.")
+    
+        self.add_server_api(spec)
+        if session:
+            session._apply_to(spec, retryable_write, read_preference, self)
+        self.send_cluster_time(spec, session, client)
+        listeners = self.listeners if publish_events else None
+        unacknowledged = bool(write_concern and not write_concern.acknowledged)
+        if self.op_msg_enabled:
+            self._raise_if_not_writable(unacknowledged)
+        try:
+&gt;           return command(
+                self,
+                dbname,
+                spec,
+                self.is_mongos,
+                read_preference,
+                codec_options,  # type: ignore[arg-type]
+                session,
+                client,
+                check,
+                allowable_errors,
+                self.address,
+                listeners,
+                self.max_bson_size,
+                read_concern,
+                parse_write_concern_error=parse_write_concern_error,
+                collation=collation,
+                compression_ctx=self.compression_context,
+                use_op_msg=self.op_msg_enabled,
+                unacknowledged=unacknowledged,
+                user_fields=user_fields,
+                exhaust_allowed=exhaust_allowed,
+                write_concern=write_concern,
+            )
+
+.venv\Lib\site-packages\pymongo\synchronous\pool.py:398: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\pymongo\synchronous\network.py:198: in command
+    reply = receive_message(conn, request_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\network_layer.py:759: in receive_message
+    length, _, response_to, op_code = _UNPACK_HEADER(receive_data(conn, 16, deadline))
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+conn = Connection(&lt;pymongo.network_layer.NetworkingInterface object at 0x000001A7E6340B00&gt;) CLOSED at 1820635195168
+length = 16, deadline = 93286.859
+
+    def receive_data(conn: Connection, length: int, deadline: Optional[float]) -&gt; memoryview:
+        buf = bytearray(length)
+        mv = memoryview(buf)
+        bytes_read = 0
+        # To support cancelling a network read, we shorten the socket timeout and
+        # check for the cancellation signal after each timeout. Alternatively we
+        # could close the socket but that does not reliably cancel recv() calls
+        # on all OSes.
+        # When the timeout has expired we perform one final non-blocking recv.
+        # This helps avoid spurious timeouts when the response is actually already
+        # buffered on the client.
+        orig_timeout = conn.conn.gettimeout()
+        try:
+            while bytes_read &lt; length:
+                try:
+                    # Use the legacy wait_for_read cancellation approach on PyPy due to PYTHON-5011.
+                    # also use it on Windows due to PYTHON-5405
+                    if _PYPY or _WINDOWS:
+                        wait_for_read(conn, deadline)
+                        if _csot.get_timeout() and deadline is not None:
+                            conn.set_conn_timeout(max(deadline - time.monotonic(), 0))
+                    else:
+                        if deadline is not None:
+                            short_timeout = min(max(deadline - time.monotonic(), 0), _POLL_TIMEOUT)
+                        else:
+                            short_timeout = _POLL_TIMEOUT
+                        conn.set_conn_timeout(short_timeout)
+    
+                    chunk_length = conn.conn.recv_into(mv[bytes_read:])
+                except BLOCKING_IO_ERRORS:
+                    if conn.cancel_context.cancelled:
+                        raise _OperationCancelled("operation cancelled") from None
+                    # We reached the true deadline.
+                    raise socket.timeout("timed out") from None
+                except socket.timeout:
+                    if conn.cancel_context.cancelled:
+                        raise _OperationCancelled("operation cancelled") from None
+                    if (
+                        _PYPY
+                        or _WINDOWS
+                        or not conn.is_sdam
+                        and deadline is not None
+                        and deadline - time.monotonic() &lt; 0
+                    ):
+                        # We reached the true deadline.
+                        raise
+                    continue
+                except OSError as exc:
+                    if conn.cancel_context.cancelled:
+                        raise _OperationCancelled("operation cancelled") from None
+                    if _errno_from_exception(exc) == errno.EINTR:
+                        continue
+                    raise
+                if chunk_length == 0:
+&gt;                   raise OSError("connection closed")
+E                   OSError: connection closed
+
+.venv\Lib\site-packages\pymongo\network_layer.py:379: OSError
+
+The above exception was the direct cause of the following exception:
+
+store = &lt;asuna.state.Store object at 0x000001A7E62EAB10&gt;
+tmp_path = WindowsPath('C:/Users/rba90/AppData/Local/Temp/pytest-of-rba90/pytest-2049/test_E23_state_replay_and_tamp0')
+
+    def test_E23_state_replay_and_tamper(store,tmp_path):
+        coordinator,lane=normal(store);coordinator.ingest(event())
+        events=list(store.db.audit_events.find({}))
+        verify(events)
+        target=Store(load(),store.name+'_replay')
+&gt;       assert replay(events,target)['sha256']==projection(store)['sha256']
+               ^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_engineering_m1.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\asuna\audit.py:27: in replay
+    target.migrate()
+src\asuna\state.py:55: in migrate
+    self.db[name].create_index(keys, **options)
+.venv\Lib\site-packages\pymongo\synchronous\collection.py:2387: in create_index
+    return (self._create_indexes([index], session, **cmd_options))[0]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\_csot.py:124: in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\synchronous\collection.py:2261: in _create_indexes
+    self._command(
+.venv\Lib\site-packages\pymongo\synchronous\collection.py:621: in _command
+    return conn.command(
+.venv\Lib\site-packages\pymongo\synchronous\helpers.py:47: in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pymongo\synchronous\pool.py:426: in command
+    self._raise_connection_failure(error)
+.venv\Lib\site-packages\pymongo\synchronous\pool.py:628: in _raise_connection_failure
+    _raise_connection_failure(self.address, error, timeout_details=details)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+address = ('192.168.2.10', 27027), error = OSError('connection closed')
+msg_prefix = None
+timeout_details = {'connectTimeoutMS': 5000.0, 'timeoutMS': 20000.0}
+
+    def _raise_connection_failure(
+        address: Any,
+        error: Exception,
+        msg_prefix: Optional[str] = None,
+        timeout_details: Optional[dict[str, float]] = None,
+    ) -&gt; NoReturn:
+        """Convert a socket.error to ConnectionFailure and raise it."""
+        host, port = address
+        # If connecting to a Unix socket, port will be None.
+        if port is not None:
+            msg = "%s:%d: %s" % (host, port, error)
+        else:
+            msg = f"{host}: {error}"
+        if msg_prefix:
+            msg = msg_prefix + msg
+        if "configured timeouts" not in msg:
+            msg += format_timeout_details(timeout_details)
+        if (
+            isinstance(error, socket.timeout)
+            or isinstance(error, SSLErrors)
+            and "timed out" in str(error)
+        ):
+            raise NetworkTimeout(msg) from error
+        else:
+&gt;           raise AutoReconnect(msg) from error
+E           pymongo.errors.AutoReconnect: 192.168.2.10:27027: connection closed (configured timeouts: timeoutMS: 20000.0ms, connectTimeoutMS: 5000.0ms)
+
+.venv\Lib\site-packages\pymongo\pool_shared.py:148: AutoReconnect</failure></testcase><testcase classname="tests.test_engineering_m3" name="test_E16_cancel_fences_tool_and_result" time="3.579" /><testcase classname="tests.test_engineering_m3" name="test_E14_simulated_effect_dedupe" time="2.606" /><testcase classname="tests.test_engineering_m3" name="test_E06_sandbox_cannot_access_host_credentials_or_network" time="1.601" /><testcase classname="tests.test_engineering_m3" name="test_E21_audit_failure_blocks_file_effect" time="1.324" /><testcase classname="tests.test_engineering_m3" name="test_E14_uncertain_tool_does_not_repeat" time="2.084"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work\\test-ce7805fd53994264aa029943f0304920\\effect.txt'">store = &lt;asuna.state.Store object at 0x000001A7E6576180&gt;
+
+    def test_E14_uncertain_tool_does_not_repeat(store):
+        service,task,broker,work=task_setup(store)
+        def crash(point):
+            if point=='after_tool_before_receipt':raise RuntimeError('simulated worker failure')
+        service.crash=crash
+        try:
+            with pytest.raises(RuntimeError):broker.call('s-test','uncertain','sandbox_run',{'argv':['python3','-c',"open('effect.txt','a').write('x')"]})
+            service.crash=lambda p:None
+            with pytest.raises(Denied):broker.call('s-test','uncertain','sandbox_run',{'argv':['python3','-c',"open('effect.txt','a').write('x')"]})
+&gt;           assert (work/'effect.txt').read_text()=='x'
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_engineering_m3.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\rba90\AppData\Local\Programs\Python\Python312\Lib\pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/workspace/asuna_cognition_core_v2/.runtime/work/test-ce7805fd53994264aa029943f0304920/effect.txt')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work\\test-ce7805fd53994264aa029943f0304920\\effect.txt'
+
+C:\Users\rba90\AppData\Local\Programs\Python\Python312\Lib\pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_engineering_m3" name="test_E08_scope_and_receipt_references_are_enforced" time="1.237" /></testsuite></testsuites>

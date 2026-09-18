@@ -16,7 +16,10 @@ class Sandbox:
             raise ValueError('INVALID_COMMAND')
         p=self.task_dir
         mount='/mnt/'+p.drive[0].lower()+p.as_posix()[2:]
-        command=['wsl','-d','Ubuntu','--','bwrap','--unshare-all','--die-with-parent','--new-session',
+        # --exec bypasses WSL's default shell reconstruction. Without it a
+        # single argv containing shell punctuation can be reinterpreted outside
+        # bubblewrap before the sandbox starts.
+        command=['wsl','-d','Ubuntu','--exec','bwrap','--unshare-all','--die-with-parent','--new-session',
                  '--ro-bind','/usr','/usr','--symlink','usr/bin','/bin','--symlink','usr/lib','/lib',
                  '--symlink','usr/lib64','/lib64','--proc','/proc','--dev','/dev','--tmpfs','/tmp',
                  '--bind',mount,'/task','--chdir','/task','--clearenv','--setenv','PATH','/usr/bin:/bin',

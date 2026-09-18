@@ -21,13 +21,14 @@ class ContextBuilder:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
         relation=self.store.head('relationship:'+event['person_id'],scope)
         overlay=self.store.head('overlay:'+persona,scope)
+        history=list(self.store.db.messages.find({'scene_id':scene['_id'],'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]},{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1}).sort('scene_seq',-1).limit(12))
+        tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         if self.retrieval:
-            memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'])
+            memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
         else:
             memories=list(self.store.db.memory_units.find({'scope_key':{'$in':['global-safe',scope]},'status':'active','policy_epoch':scene['policy_epoch']},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
-        history=list(self.store.db.messages.find({'scene_id':scene['_id'],'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]},{'text':1,'author':1,'direction':1,'delivery_state':1}).sort('scene_seq',-1).limit(12))
-        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','source_event_ids','status') if k in m} for m in memories]
+        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','source_event_ids','status','historical_sources') if k in m} for m in memories]
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
                  'memories':facts,'delivered_history':list(reversed(history)),

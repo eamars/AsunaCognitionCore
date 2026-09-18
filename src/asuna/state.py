@@ -192,8 +192,12 @@ class Store:
             raise Conflict('MUTATION_ALREADY_ATTEMPTED')
         if not head or head['revision_id']!=base_revision_id:
             raise Conflict('BASE_REVISION_STALE')
+        evidence_ids={e for m in self.db.memory_units.find({'_id':{'$in':sources}}) for e in m.get('source_event_ids',[])}
+        processed=set(base.get('processed_source_ids',[]))
+        if evidence_ids and evidence_ids.issubset(processed):
+            raise Conflict('NO_NEW_SOURCE_EVENTS')
         new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'parent_revision_id':base_revision_id},stream='mutation:'+mutation_id)
+        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id},stream='mutation:'+mutation_id)
         self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
         return revision
 

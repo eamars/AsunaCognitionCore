@@ -13,6 +13,8 @@ import uuid
 import httpx
 from .config import validate_endpoint
 from .evidence import Evidence, canonical, sha
+from .queue import EndpointLock
+from .tokens import TokenMeter
 
 
 class ProviderProxy:
@@ -22,6 +24,7 @@ class ProviderProxy:
         self.purpose = 'integration-probe'
         self.calls = []
         self.lock = threading.Lock()
+        self.capacity_probe_override=False
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -45,13 +48,16 @@ class ProviderProxy:
                     evidence.record('dsh.provider_input', {'call_id': call_id, 'lane': lane, 'body': body})
                     body.update(cfg['sampling'])
                     body['max_tokens'] = min(body.get('max_tokens', cfg['max_tokens']), cfg['max_tokens'])
+                    budget=TokenMeter(cfg,evidence,lane).check(body,owner.capacity_probe_override)
                     outgoing = canonical(body)
                     # Record exact bytes before network. Log failure prevents generation.
-                    request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': owner.purpose, 'body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':'unavailable'})
+                    last=body.get('messages',[{}])[-1].get('content','')
+                    purpose='compaction' if isinstance(last,str) and last.startswith('ASUNA_COMPACTION_V1\n') else owner.purpose
+                    request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': purpose, 'body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':'unavailable'})
                     started = time.perf_counter()
                     chunks = []
                     first = None
-                    with httpx.Client(timeout=httpx.Timeout(180, connect=10), trust_env=False, follow_redirects=False) as client:
+                    with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(300, connect=10), trust_env=False, follow_redirects=False) as client:
                         with client.stream('POST', cfg['base_url'] + '/chat/completions', content=outgoing, headers={'Content-Type':'application/json'}) as response:
                             self.send_response(response.status_code)
                             self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
@@ -64,8 +70,8 @@ class ProviderProxy:
                                 # Save complete return before DSH can commit it; stream buffering
                                 # does not provide public-text TTFT and is reported as such.
                             raw = b''.join(chunks)
-                            ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'total_seconds':time.perf_counter()-started})
-                            owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code})
+                            ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
+                            owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
                             self.wfile.write(raw)
                             self.wfile.flush()
                 except Exception as exc:

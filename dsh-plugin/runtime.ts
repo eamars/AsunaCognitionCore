@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
 export const name = 'asuna-runtime-operations';
-export const inject = ['agents', 'sessions', 'sessionPersistence', 'systemPrompt'];
+export const inject = ['agents', 'sessions', 'sessionPersistence', 'systemPrompt', 'compaction', 'tokenMeter'];
 
 // A runtime capability bridge, not a second business coordinator. SDK 0.1.5-rc.2
 // exposes initialize/prompt/shutdown only; it cannot resume persisted sessions.
@@ -13,6 +13,7 @@ export function apply(ctx, config) {
   mkdirSync(config.receipts, { recursive: true });
   const handles = new Map();
   const prompts = new Map();
+  const active = new Map();
   let queue = Promise.resolve();
   const hash = value => createHash('sha256').update(value).digest('hex');
   function save(path, data) {
@@ -21,6 +22,26 @@ export function apply(ctx, config) {
     const fd = openSync(tmp, 'r+'); fsyncSync(fd); closeSync(fd);
     renameSync(tmp, path);
   }
+  ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+    const operation = active.get(agent.session.id);
+    if (!operation) throw new Error('UNOWNED_LANE_GENERATION');
+    if (++operation.steps > 65) return { kind: 'reject' };
+    if (operation.compact && !operation.compacted) {
+      operation.compacted = true;
+      const nodes = agent.session.surface.nodes;
+      const first = nodes.find(seq => agent.session.eventAt(seq)?.type !== 'system/message');
+      const last = nodes.at(-1);
+      if (first === undefined || first === last) throw new Error('NO_COMPLETE_COMPACTION_SPAN');
+      // At the first pre-step, the newly admitted user message has not yet
+      // entered the surface. The prior operation ended at a full episode/task
+      // boundary validated below; compact the entire closed history, not a
+      // token-sliced tail ending between MONOLOGUE and SPEAK.
+      const result = await ctx.compaction.compactRegion(first, last, agent, signal);
+      if (!await ctx.sessions.flush(agent.session)) throw new Error('COMPACTION_NOT_DURABLE');
+      operation.compactionResult = result;
+    }
+    return next();
+  });
   async function handleSession(id, system) {
     if (!/^[a-z0-9-]{1,100}$/.test(id)) throw new Error('INVALID_SESSION_ID');
     if (typeof system !== 'string' || system.trim().length < 80) throw new Error('MISSING_SYSTEM');
@@ -54,10 +75,11 @@ export function apply(ctx, config) {
   }
   async function run(input) {
     const path = join(config.receipts, hash(input.operation) + '.json');
-    const inputHash = hash(JSON.stringify([input.session, input.phase, input.text, input.system]));
+    const inputHash = hash(JSON.stringify([input.session, input.phase, input.text, input.system, !!input.compact_before]));
     let record = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
     if (record && record.inputHash !== inputHash) throw new Error('OPERATION_CONTENT_MISMATCH');
     if (record?.state === 'DONE') return record.result;
+    active.set(input.session, { steps: 0, compact: !!input.compact_before, compacted: false });
     const agent = await handleSession(input.session, input.system);
     if (record) {
       await agent.whenIdle();
@@ -68,6 +90,9 @@ export function apply(ctx, config) {
       return recovered;
     }
     const message = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: input.text }] });
+    const boundaryPath = join(config.receipts, 'boundary-' + input.session + '.json');
+    const boundary = existsSync(boundaryPath) ? JSON.parse(readFileSync(boundaryPath, 'utf8')) : undefined;
+    if (input.compact_before && (!boundary || !['SPEAK', 'execution', 'execution-repair'].includes(boundary.phase))) throw new Error('COMPACTION_REQUIRES_COMPLETED_EPISODE_OR_TASK');
     record = { state: 'INTENT', inputHash, session: input.session, message };
     save(path, record);
     agent.followup(message);
@@ -77,7 +102,11 @@ export function apply(ctx, config) {
     if (!await ctx.sessions.flush(agent.session)) throw new Error('NO_DURABLE_SESSION_LISTENER');
     const result = resultFrom(agent.session.snapshotEvents(), message.id);
     if (!result) throw new Error('NO_CAUSAL_TURN_RESULT');
+    result.compaction = active.get(input.session)?.compactionResult;
+    result.surface = [...agent.session.surface.nodes];
+    result.compaction_events = agent.session.snapshotEvents().filter(e => e.type.startsWith('compaction/'));
     save(path, { ...record, state: 'DONE', result });
+    save(boundaryPath, { phase: input.phase, operation: input.operation, finish_reason: result.finish_reason });
     return result;
   }
   const server = createServer(async (req, res) => {

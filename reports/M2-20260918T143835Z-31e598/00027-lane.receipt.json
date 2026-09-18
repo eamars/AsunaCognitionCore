@@ -1,0 +1,274 @@
+{
+  "seq": 27,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-4f5c6b127f0f307cd9e3f08252d3fbea:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"speak\",\"goal\":\"回答A的问题，确认他刚才的意图\",\"constraints\":[\"直接回答\",\"不使用客服式礼貌\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 42,
+          "time": 1789742338608,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "ff4f4020-f01b-4518-975a-82acd3de219b"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 43,
+          "time": 1789742339196,
+          "data": {
+            "turn": 5,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"speak\",\"goal\":\"回答A的问题，确认他刚才的意图\",\"constraints\":[\"直接回答\",\"不使用客服式礼貌\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-LJ7J5nV1ZPivjdja9yBd9tAUQ2hk0iQw",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "2541d4fa-19a7-406e-8bf2-1cb5bedc4349"
+            },
+            "usage": {
+              "inputTokens": 256,
+              "outputTokens": 47,
+              "totalTokens": 3075,
+              "cacheReadTokens": 2772
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789742339195,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789742339195,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "speak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回答",
+                  "A",
+                  "的问题",
+                  "，",
+                  "确认",
+                  "他",
+                  "刚才",
+                  "的",
+                  "意",
+                  "图",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "直接",
+                  "回答",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "客服",
+                  "式",
+                  "礼",
+                  "貌",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789742339196,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"speak\",\"goal\":\"回答A的问题，确认他刚才的意图\",\"constraints\":[\"直接回答\",\"不使用客服式礼貌\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789742339196,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 256,
+                    "outputTokens": 47,
+                    "totalTokens": 3075,
+                    "cacheReadTokens": 2772
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789742339196,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-LJ7J5nV1ZPivjdja9yBd9tAUQ2hk0iQw",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 44,
+          "time": 1789742339197,
+          "data": {
+            "turn": 5,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 45,
+          "time": 1789742339197,
+          "data": {
+            "turn": 5,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "ff4f4020-f01b-4518-975a-82acd3de219b",
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        33,
+        35,
+        42,
+        43
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "6f5c36300c5e6c9bcd8176f24698bc003391d87b4a359ac8ae035f47724592ac",
+  "time_ns": 1789742339208832500,
+  "event_hash": "8570b598dcccfe82b928823859a386ad693a5a97576609c484527bc9dbf4039b"
+}

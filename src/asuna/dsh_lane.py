@@ -9,7 +9,7 @@ import yaml
 import httpx
 from deepseek_harness import DeepSeekHarness
 from .config import ROOT
-from .evidence import Evidence,sha
+from .evidence import Evidence,sha,canonical
 from .lanes import LaneResult
 from .provider_proxy import ProviderProxy
 from .state import Store
@@ -30,15 +30,18 @@ class DshLane:
         self.work=Path(config['workdir'])/store.name/lane
         self.home.mkdir(parents=True,exist_ok=True);self.work.mkdir(parents=True,exist_ok=True)
         self.lock=threading.RLock()
+        self.compact_pending=set()
         self.proxy=ProviderProxy(self.model,evidence,lane)
         self.token=secrets.token_hex(32)
         self.endpoint_file=self.home/'bridge-endpoint.json'
         if self.endpoint_file.exists():self.endpoint_file.unlink()
-        rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess')]
+        rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
         compat={'supportsDeveloperRole':False,'supportsReasoningEffort':lane=='executor','thinkingFormat':'chat-template' if lane=='character' else 'qwen','maxTokensField':'max_tokens'}
         if lane=='character':compat['chatTemplateKwargs']={'enable_thinking':True}
         provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':262144,'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0}}
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
+            {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
+            {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
             {'id':'asuna-runtime','name':(ROOT/'dsh-plugin/runtime.ts').as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
             *(plugin_rows or [])]}]
@@ -64,22 +67,43 @@ class DshLane:
 
     def generate(self, session, operation, phase, text, system):
         with self.lock:
+            native_id='s-'+sha(session.encode())[:40]
+            bound=self.store.db.sessions.find_one({'_id':native_id})
+            if bound and bound.get('state')=='INVALIDATED':raise PermissionError('SESSION_INVALIDATED')
             existing=self.store.db.lane_receipts.find_one({'_id':operation})
-            if existing:return LaneResult(**existing['result'])
+            if existing:
+                if existing.get('state')=='INVALIDATED':raise PermissionError('OPERATION_INVALIDATED')
+                return LaneResult(**existing['result'])
             self.proxy.purpose=phase
             request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':text,'system':system}
+            if session in self.compact_pending:
+                request['compact_before']=True
             self.evidence.record('lane.intent',{'lane':self.lane,**request})
             before=len(self.proxy.calls)
             response=self.http.post(self.url+'/run',headers={'Authorization':'Bearer '+self.token},json=request)
             body=response.json()
             self.evidence.record('lane.receipt',{'lane':self.lane,'operation':operation,'status_code':response.status_code,'body':body})
             response.raise_for_status()
+            if body.get('compaction'):
+                self.compact_pending.discard(session)
+                self.store.audit(operation,'compaction.native',{'result':body['compaction'],'events':body.get('compaction_events',[])})
             calls=self.proxy.calls[before:]
             value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason='stop' if body['finish_reason']=='completed' else body['finish_reason'],request_refs=[c['request_ref'] for c in calls],receipt=body['message_id'])
             self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
+            previous=self.store.db.sessions.find_one({'_id':request['session']})
+            owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
+            self.store.put('sessions',{'_id':request['session'],'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'last_phase':phase,'last_operation':operation,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root),'state':'ACTIVE','compaction_generation':(previous or {}).get('compaction_generation',0)+(1 if body.get('compaction') else 0)},expected=previous['revision'] if previous else None,stream=operation)
             return value
 
+    def compact(self,session):
+        """Queue native complete-span compaction before the next real phase."""
+        self.compact_pending.add(session)
+        self.store.audit(session,'compaction.requested',{'execution':'next real phase at completed episode/task boundary'})
+        return {'state':'QUEUED','session':session,'summary_generated':False}
+
     def close(self):
+        if getattr(self,'closed',False):return
+        self.closed=True
         self.sdk.close()
         self.http.close()
         self.proxy.close()

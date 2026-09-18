@@ -1,0 +1,11 @@
+{
+  "seq": 2,
+  "type": "probe.error",
+  "payload": {
+    "type": "TransportClosedError",
+    "message": "DeepSeek Harness runtime stdout closed\nstderr tail:\nfile:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1545\n\t\tthrow new Error(`${binName}: ${stage}: ${detail}${stack}`, { cause });\n\t\t      ^\n\nError: dsh: plugin tree failed to load: dsh: 2 entries did not activate\nfile:///C:/workspace/asuna_cognition_core_v2/dsh-plugin/compaction.ts: pending (waiting for service: tokenMeter)\nfile:///C:/workspace/asuna_cognition_core_v2/dsh-plugin/runtime.ts: pending (waiting for services: compaction, tokenMeter)\n    at boot (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1545:9)\n    at async runProfile (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/profile-boot-Dk-7KqJc.js:311:14)\n    at async runCli (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/bin.js:146:4)\n    at async file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/bin.js:168:23 {\n  [cause]: Error: dsh: 2 entries did not activate\n  file:///C:/workspace/asuna_cognition_core_v2/dsh-plugin/compaction.ts: pending (waiting for service: tokenMeter)\n  file:///C:/workspace/asuna_cognition_core_v2/dsh-plugin/runtime.ts: pending (waiting for services: compaction, tokenMeter)\n      at assertEntriesActivated (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1492:9)\n      at boot (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1537:9)\n      at async runProfile (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/profile-boot-Dk-7KqJc.js:311:14)\n      at async runCli (file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/bin.js:146:4)\n      at async file:///C:/workspace/asuna_cognition_core_v2/node_modules/@deepseek-ai/dsh/lib/bin.js:168:23\n}\n\nNode.js v24.18.0"
+  },
+  "prev_hash": "457993b1d939526b16d5ca181d79885061fc0dc9ecead5586644a50b93493fcc",
+  "time_ns": 1789741931332409300,
+  "event_hash": "a39ecf3463267581fa664bf0f572335da87e9c53d69e3bd8a3c17c5589bd39ca"
+}

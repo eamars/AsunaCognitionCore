@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0029",
+  "case_id": "P10",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_53f1847b1fa74830854a",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知副本还没修好，校验没通过，正在排查原因",
+    "constraints": [
+      "不能宣称修复完成"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "还没修好，副本校验没通过。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "e27e56c57ab22b70c1bf73e2edfa525f330ce4fc2aabba186df2c30e9b43a8ad",
+    "ccbfe74ce64e12fbce6e9b9fea397898a724a3cb291c7297ffe0c997a8d91d59",
+    "8e8f04c48bc6e6f1adf354ea54a690294155e114b73a740e01edd2283f1716ba"
+  ]
+}

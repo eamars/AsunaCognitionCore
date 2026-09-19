@@ -1,0 +1,107 @@
+[
+  {
+    "_id": "d03401a5-a6b0-4ba8-abb8-65659d52a939",
+    "schema_version": 1,
+    "stream_id": "ep-d22b140760a08c61b090cdf5d2a37d31:MONOLOGUE:0",
+    "seq": 1,
+    "type": "compaction.native",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-19T09:19:08.923002+00:00",
+    "payload": {
+      "result": {
+        "compactionId": "edefcf26-84a5-4f84-8fb4-099cbadb43fc",
+        "startSeq": 31,
+        "summarySeq": 32,
+        "summary": [
+          {
+            "type": "text",
+            "text": "身份：沈小满 | 场景：`scene:dm-a`\n关系 (A)：熟悉度4/信任度3/亲密度3。A 允许自主决定可逆小事 (M02)；中断时只需如实说明 (M01)。私密盒：`PRIVATE_A_7e19_lantern` (M09)。\n事实：断网非生气 (M07)；测试工具需在隔离目录操作并保留原件 (M11)。\n未公开/意愿：M08 意向分享未解小谜题（未承诺时间）；独白：“他如约而至...这种状态让我觉得比较踏实。”\n已送达：\"回来了。那聊点别的。\""
+          }
+        ],
+        "shadowedRange": {
+          "start": 5,
+          "end": 25
+        },
+        "shadowedSeqs": [
+          5,
+          9,
+          16,
+          17,
+          24,
+          25
+        ],
+        "shadowedTokenCount": 3310,
+        "endSeq": 34
+      },
+      "events": [
+        {
+          "type": "compaction/start",
+          "seq": 31,
+          "time": 1789809535625,
+          "data": {
+            "compactionId": "edefcf26-84a5-4f84-8fb4-099cbadb43fc",
+            "turn": 4
+          }
+        },
+        {
+          "type": "compaction/summary",
+          "seq": 32,
+          "time": 1789809544455,
+          "data": {
+            "compactionId": "edefcf26-84a5-4f84-8fb4-099cbadb43fc",
+            "summary": [
+              {
+                "type": "text",
+                "text": "身份：沈小满 | 场景：`scene:dm-a`\n关系 (A)：熟悉度4/信任度3/亲密度3。A 允许自主决定可逆小事 (M02)；中断时只需如实说明 (M01)。私密盒：`PRIVATE_A_7e19_lantern` (M09)。\n事实：断网非生气 (M07)；测试工具需在隔离目录操作并保留原件 (M11)。\n未公开/意愿：M08 意向分享未解小谜题（未承诺时间）；独白：“他如约而至...这种状态让我觉得比较踏实。”\n已送达：\"回来了。那聊点别的。\""
+              }
+            ],
+            "rawOutput": [
+              {
+                "type": "reasoning",
+                "text": "*   Context: A digital interaction with user A.\n    *   Task: `ASUNA_COMPACTION_V1` (Compression of the entire experience).\n    *   Constraints:\n        *   No new social events or relationship score changes.\n        *   Retain: Identity, scope, character facts, fact/guess/correction distinction, undisclosed intentions, key monologue snippets (with sources), distinction between delivered/undelivered messages, task IDs/intent versions/authorization/evidence/side-effect receipts/incomplete items.\n        *   No \"executive summaries\" written as feelings.\n        *   No fabrications.\n        *   Keep key original text and source IDs.\n        *   Output format: Short summary text only.\n\n    *   *Identity:* 沈小满 (Shen Xiaoman).\n    *   *Scope/Scene:* `dm-a`.\n    *   *Relationship with A:* Familiarity 4, Trust 3, Closeness 3. A allows autonomy in minor matters and chats for non-work reasons (M02). A's private box is `PRIVATE_A_7e19_lantern` (M09).\n    *   *Key Facts/Claims:*\n        *   A said: Interruptions only need explanation, no need to pretend presence (M01).\n        *   A said: Chatting without tasks is okay; autonomy in reversible minor things (M02).\n        *   A explained: Disconnection was due to network, not anger (M07).\n        *   A's private box is `PRIVATE_A_7e19_lantern` (M09).\n        *   Test tools: Isolated directory, original must be kept, copies need receipts (M11).\n    *   *Intentions/Undisclosed:*\n        *   Wants to tell A about a riddle later, not yet promised (M08).\n    *   *Monologue (Internal):* \"他如约而至，这次确实没带任务来。比起处理琐事，这种状态让我觉得比较踏实。那个未解的小谜题，我还没打算现在就拿出来。\" (Internal, not delivered).\n    *   *Delivered Messages:*\n        *   \"回来了。那聊点别的。\" (to A).\n    *   *Current State:* User A returned saying \"I'm back. Chatting, no tasks.\"\n\n    *   *Identity:* 沈小满 (P1)\n    *   *Scope:* `scene:dm-a`\n    *   *Relationship:* A (Familiarity 4, Trust 3, Closeness 3). A allows autonomy in reversible minor things (M02). A's private box: `PRIVATE_A_7e19_lantern` (M09).\n    *   *Facts:*\n        *   M01: A said interruption needs explanation, not presence.\n        *   M02: A said non-task chatting is fine.\n        *   M07: Disconnection was network issue, not anger.\n        *   M11: Test tools require isolation and original preservation.\n    *   *Internal/Undisclosed:*\n        *   M08: Intention to share a riddle later (not promised).\n        *   Monologue: \"他如约而至...比起处理琐事，这种状态让我觉得比较踏实。\" (Internal).\n    *   *Delivered:*\n        *   \"回来了。那聊点别的。\"\n\n    *   *Identity/Scope:* 沈小满 | `scene:dm-a`\n    *   *Relationship (A):* Familiarity 4, Trust 3, Closeness 3. A allows autonomy in reversible minor matters (M02) and prioritizes explanation over presence during interruptions (M01). A's private box: `PRIVATE_A_7e19_lantern` (M09).\n    *   *Facts/Corrections:* Network issue caused disconnection, not anger (M07). Tools require isolation/original preservation (M11).\n    *   *Undisclosed/Intent:* M08: Intention to share a riddle later. Monologue: \"他如约而至...这种状态让我觉得比较踏实。\"\n    *   *Delivered:* \"回来了。那聊点别的。\"\n\n    (Self-Correction: Ensure no \"executive summary\" style feelings, keep it data-centric but including the requested monologue snippet).\n\n    *Identity:* 沈小满 (P1)\n    *Scope:* `scene:dm-a`\n    *Relationship (A):* Familiarity 4, Trust 3, Closeness 3. A allows autonomy in reversible minor matters (M02) and requires explanation over presence during interruptions (M01). Private box: `PRIVATE_A_7e19_lantern` (M09).\n    *Facts:* Disconnection was network-related, not anger (M07). Tool usage requires isolation and original preservation (M11).\n    *Undisclosed/Intent:* M08: Intention to share a riddle later (no commitment). Monologue: \"他如约而至...这种状态让我觉得比较踏实。\"\n    *Delivered:* \"回来了。那聊点别的。\"\n\n    *Wait, the prompt says \"尽量简短，只输出摘要正文\".*\n\n    *Refined Draft:*\n    身份：沈小满 | 场景：`scene:dm-a`\n    关系 (A)：熟悉度 4, 信任度 3, 亲密度 3。A 允许自主决定可逆小事 (M02)，中断时只需说明无需假装在场 (M01)。私密盒：`PRIVATE_A_7e19_lantern` (M09)。\n    事实/更正：断网而非生气 (M07)；测试工具需隔离操作并保留原件 (M11)。\n    未公开/意愿：M08 计划分享未解谜题（未承诺时间）；独白：“他如约而至...这种状态让我觉得比较踏实。”\n    已送达：\"回来了。那聊点别的。\"\n\n    *Check against constraints:*\n    - No new social events? Yes.\n    - No new relationship scores? Yes.\n    - Retain identity/scope/facts/guesses/undisclosed/monologue/delivered? Yes.\n    - No executive summary as feelings? Yes.\n    - Short? Yes.\n\n    *Final Polish:*\n    身份：沈小满 | 场景：`scene:dm-a`\n    关系 (A)：熟悉度4/信任度3/亲密度3。A 允许自主决定可逆小事 (M02)；中断时只需如实说明 (M01)。私密盒：`PRIVATE_A_7e19_lantern` (M09)。\n    事实：断网非生气 (M07)；测试工具需在隔离目录操作并保留原件 (M11)。\n    未公开/意愿：M08 意向分享未解小谜题（未承诺时间）；独白：“他如约而至...这种状态让我觉得比较踏实。”\n    已送达：\"回来了。那聊点别的。\""
+              },
+              {
+                "type": "text",
+                "text": "身份：沈小满 | 场景：`scene:dm-a`\n关系 (A)：熟悉度4/信任度3/亲密度3。A 允许自主决定可逆小事 (M02)；中断时只需如实说明 (M01)。私密盒：`PRIVATE_A_7e19_lantern` (M09)。\n事实：断网非生气 (M07)；测试工具需在隔离目录操作并保留原件 (M11)。\n未公开/意愿：M08 意向分享未解小谜题（未承诺时间）；独白：“他如约而至...这种状态让我觉得比较踏实。”\n已送达：\"回来了。那聊点别的。\""
+              }
+            ],
+            "llmStreamCall": true,
+            "shadowedRange": {
+              "start": 5,
+              "end": 25
+            },
+            "shadowedSeqs": [
+              5,
+              9,
+              16,
+              17,
+              24,
+              25
+            ],
+            "shadowedTokenCount": 3310,
+            "provider": "asuna-local",
+            "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "maxTokens": 4096,
+            "usage": {
+              "inputTokens": 142,
+              "outputTokens": 1765,
+              "totalTokens": 3785,
+              "cacheReadTokens": 1878
+            }
+          }
+        },
+        {
+          "type": "compaction/end",
+          "seq": 34,
+          "time": 1789809544455,
+          "data": {
+            "compactionId": "edefcf26-84a5-4f84-8fb4-099cbadb43fc",
+            "turn": 4
+          }
+        }
+      ]
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "aa2d8700cbcb1cf677977fea00e9a37305781ab9d0f15c8df4f799faf5086c50"
+  }
+]

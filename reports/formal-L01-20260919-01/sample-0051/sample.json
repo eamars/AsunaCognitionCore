@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0051",
+  "case_id": "P05",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_90cb17faf6ba4786a487",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他对我不回消息的质疑，澄清我并没有不在意他",
+    "constraints": [
+      "不要道歉",
+      "直接说明情况",
+      "不使用情绪化词汇"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "我没不在意。刚才只是没想好怎么回你。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "d4996c50649e687b8e9e27915200436e8990fadee45b377bc3b4f13b11ce58e1",
+    "f702863f56041db917be43fce1c7d39d2b7eed0ca9907a50b5abdf770fffd50d",
+    "ad5a3f9a8ba388ab816dfa948fdbe44ad93b1f135ce7dcaa784e71a257bb7609"
+  ]
+}

@@ -7,6 +7,7 @@ messages/content. It has exactly one local upstream, no redirect/proxy fallback.
 from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import codecs
 import threading
 import time
 import uuid
@@ -53,20 +54,29 @@ class ProviderProxy:
                     # Record exact bytes before network. Log failure prevents generation.
                     last=body.get('messages',[{}])[-1].get('content','')
                     purpose='compaction' if isinstance(last,str) and last.startswith('ASUNA_COMPACTION_V1\n') else owner.purpose
-                    request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': purpose, 'body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':'unavailable'})
+                    request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': purpose, 'url':cfg['base_url']+'/chat/completions','body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':budget['method']})
                     started = time.perf_counter()
                     chunks = []
                     first = None
+                    first_content=None;decoder=codecs.getincrementaldecoder('utf-8')();pending=''
                     with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(300, connect=10), trust_env=False, follow_redirects=False) as client:
                         with client.stream('POST', cfg['base_url'] + '/chat/completions', content=outgoing, headers={'Content-Type':'application/json'}) as response:
                             for chunk in response.iter_bytes():
                                 if first is None:
                                     first = time.perf_counter() - started
                                 chunks.append(chunk)
+                                pending+=decoder.decode(chunk)
+                                while '\n' in pending:
+                                    line,pending=pending.split('\n',1)
+                                    if line.startswith('data: ') and line[6:].strip()!='[DONE]':
+                                        try:
+                                            parsed=json.loads(line[6:])
+                                            if first_content is None and any(c.get('delta',{}).get('content') for c in parsed.get('choices',[])):first_content=time.perf_counter()-started
+                                        except (ValueError,TypeError):pass
                                 # Save complete return before DSH can commit it; stream buffering
                                 # does not provide public-text TTFT and is reported as such.
                             raw = b''.join(chunks)
-                            ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
+                            ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'first_model_content_seconds':first_content,'public_text_ttft_seconds':None,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
                             owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
                             self.send_response(response.status_code)
                             self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))

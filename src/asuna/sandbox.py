@@ -6,17 +6,26 @@ from .config import ROOT
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path):
+    def __init__(self, task_dir: Path, protected_paths=()):
         self.task_dir = task_dir.resolve()
         if not self.task_dir.is_relative_to((ROOT/'.runtime/work').resolve()):
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')
         self.task_dir.mkdir(parents=True, exist_ok=True)
+        self.protected_paths=[]
+        for path in protected_paths:
+            path=Path(path).resolve()
+            if not path.is_relative_to(self.task_dir) or not path.is_file():raise PermissionError('PROTECTED_INPUT_PATH_DENIED')
+            self.protected_paths.append(path)
 
     def run(self, argv: list[str], timeout: int = 30) -> dict:
         if not argv or len(argv) > 40 or sum(map(len, argv)) > 16000:
             raise ValueError('INVALID_COMMAND')
         p=self.task_dir
         mount='/mnt/'+p.drive[0].lower()+p.as_posix()[2:]
+        protected=[]
+        for path in self.protected_paths:
+            relative=path.relative_to(self.task_dir).as_posix()
+            protected+=['--ro-bind',mount+'/'+relative,'/task/'+relative]
         # --exec bypasses WSL's default shell reconstruction. Without it a
         # single argv containing shell punctuation can be reinterpreted outside
         # bubblewrap before the sandbox starts.
@@ -43,7 +52,7 @@ print(json.dumps({'exit_code':p.returncode,'stdout':buffers[0].decode('utf-8','r
         command=['wsl','-d','Ubuntu','--exec','bwrap','--unshare-all','--die-with-parent','--new-session',
                  '--ro-bind','/usr','/usr','--symlink','usr/bin','/bin','--symlink','usr/lib','/lib',
                  '--symlink','usr/lib64','/lib64','--proc','/proc','--dev','/dev','--tmpfs','/tmp',
-                 '--bind',mount,'/task','--chdir','/task','--clearenv','--setenv','PATH','/usr/bin:/bin',
+                 '--bind',mount,'/task',*protected,'--chdir','/task','--clearenv','--setenv','PATH','/usr/bin:/bin',
                  '/usr/bin/prlimit','--cpu=20','--as=1073741824','--fsize=8388608','--nofile=128','--',
                  'python3','-c',wrapper,json.dumps(argv),str(timeout)]
         result=subprocess.run(command, capture_output=True, timeout=timeout+5, encoding='utf-8', errors='replace')

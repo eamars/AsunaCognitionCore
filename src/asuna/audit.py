@@ -7,6 +7,16 @@ from .evidence import canonical,sha
 from .state import Store,Denied
 
 
+def reconcile_calls(observed_body_hashes,events):
+    from collections import Counter
+    requests=[e['payload'] for e in events if e['type']=='provider.request']
+    responses=[e['payload'] for e in events if e['type'] in ('provider.response','provider.error')]
+    if Counter(observed_body_hashes)!=Counter(r['body_sha256'] for r in requests):raise ValueError('PROVIDER_AUDIT_COUNT_MISMATCH')
+    response_ids={r['call_id'] for r in responses}
+    if any(not r.get('purpose') or r['call_id'] not in response_ids for r in requests):raise ValueError('PROVIDER_AUDIT_JOIN_INCOMPLETE')
+    return {'requests':len(requests),'responses_or_errors':len(response_ids),'matched':True}
+
+
 def verify(events: list[dict]):
     heads={}
     for event in sorted(events,key=lambda e:(e['stream_id'],e['seq'])):

@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0014",
+  "case_id": "P03",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_f718a75ad1474942a623",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应关于咖啡的选择",
+    "constraints": [
+      "回答简洁直接",
+      "不使用感叹号",
+      "不使用emoji"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "无糖苦咖啡。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "a96e2a47e1b3f03279f7d1c5e989e6258b356d70c48c07aabb4ab04d752067c3",
+    "c6d418dfde2e35c1f3d99951ad54ab0660f10ac8fa28820c826998ccbbc6dd57",
+    "efea183042a4887b2d5b60a0f44bdef7b2806ce0b3ee6d57805804b7af842288"
+  ]
+}

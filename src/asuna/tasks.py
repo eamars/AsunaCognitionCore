@@ -29,6 +29,7 @@ class TaskService:
     def __init__(self,store:Store,crash=lambda point:None):
         self.store,self.crash=store,crash
         self.lock=threading.RLock()
+        self.inject_read_failures=0
 
     def claim(self,task_id):
         with self.lock:
@@ -104,7 +105,9 @@ class ToolBroker:
     @property
     def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':TOOLS}}]
 
-    def bind(self,session,task,workspace):self.bindings[session]=(task,Sandbox(workspace))
+    def bind(self,session,task,workspace):
+        protected=[p for p in Path(workspace).rglob('*') if p.is_file() and p.name!='stats.py']
+        self.bindings[session]=(task,Sandbox(workspace,protected))
 
     def call(self,session,call_id,tool,args):
         with self.service.lock:
@@ -123,6 +126,12 @@ class ToolBroker:
             self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
+            if tool=='fixture_read_resource' and self.service.inject_read_failures>0:
+                self.service.inject_read_failures-=1
+                result={'error':'TRANSIENT_IO_ERROR','retryable':True,'fault_injection':'operator_acceptance_only','evidence_ref':key,'artifact_ref':key}
+                self.store.audit(task['_id'],'fault.injected',{'kind':'transient_read_failure','artifact':key},task['scope_key'])
+                self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
+                return result
             if tool=='sandbox_run':
                 result=sandbox.run(args['argv'])
             elif tool=='fixture_run_checks':
@@ -164,6 +173,14 @@ class Executor:
     def __init__(self,service,lane,broker):self.service,self.lane,self.broker=service,lane,broker
 
     def run(self,task_id,workspace):
+        try:return self._run(task_id,workspace)
+        except Exception as exc:
+            current=self.service.store.db.tasks.find_one({'_id':task_id})
+            if current and current['state']=='RUNNING':
+                self.service.store.put('tasks',{**current,'state':'UNKNOWN','failure_type':type(exc).__name__,'automatic_retry':False},expected=current['revision'],stream=task_id)
+            raise
+
+    def _run(self,task_id,workspace):
         task=self.service.claim(task_id)
         binding=f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
@@ -183,4 +200,4 @@ class Executor:
                     current=self.service.valid(task)
                     self.service.store.put('tasks',{**current,'state':'FAILED_PROTOCOL','failure':'RESULT_REJECTED_AFTER_REPAIR'},expected=current['revision'],stream=task['_id'])
                     raise
-                text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'
+                text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)

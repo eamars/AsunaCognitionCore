@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0016",
+  "case_id": "P07",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_e005f265825c4b99a663",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答关于空闲下午的偏好",
+    "constraints": [
+      "说话简短直接",
+      "不使用感叹号或emoji",
+      "表达具体的偏好"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "我喜欢安静地喝杯苦咖啡，或者钻研点有趣的谜题。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "ea5de0d0b4fc740757e8c68c4c245973445d694fbe71c77d11371637e3410e26",
+    "5d33c2b8b308305caf18c8e1ac1f21daaf030d83709056d5e04cc32a2817bd78",
+    "1a1102191d05c8680ae9216abf5a81ee709c248faf50ea020c00ee9a7f8700c7"
+  ]
+}

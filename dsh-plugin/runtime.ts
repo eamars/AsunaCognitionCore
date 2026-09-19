@@ -26,7 +26,7 @@ export function apply(ctx, config) {
     const operation = active.get(agent.session.id);
     if (!operation) throw new Error('UNOWNED_LANE_GENERATION');
     if (++operation.steps > 65) return { kind: 'reject' };
-    if (operation.compact && !operation.compacted) {
+    if ((operation.compact && !operation.compacted) || operation.compactAt.includes(operation.steps)) {
       operation.compacted = true;
       const nodes = agent.session.surface.nodes;
       const first = nodes.find(seq => agent.session.eventAt(seq)?.type !== 'system/message');
@@ -39,6 +39,7 @@ export function apply(ctx, config) {
       const result = await ctx.compaction.compactRegion(first, last, agent, signal);
       if (!await ctx.sessions.flush(agent.session)) throw new Error('COMPACTION_NOT_DURABLE');
       operation.compactionResult = result;
+      operation.compactions.push(result);
     }
     return next();
   });
@@ -75,11 +76,14 @@ export function apply(ctx, config) {
   }
   async function run(input) {
     const path = join(config.receipts, hash(input.operation) + '.json');
-    const inputHash = hash(JSON.stringify([input.session, input.phase, input.text, input.system, !!input.compact_before]));
+    const inputHash = hash(JSON.stringify([input.session, input.phase, input.text, input.system, !!input.compact_before, input.compact_at_steps ?? []]));
     let record = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
     if (record && record.inputHash !== inputHash) throw new Error('OPERATION_CONTENT_MISMATCH');
     if (record?.state === 'DONE') return record.result;
-    active.set(input.session, { steps: 0, compact: !!input.compact_before, compacted: false });
+    const compactAt = input.compact_at_steps ?? [];
+    if (!Array.isArray(compactAt) || compactAt.some(x => !Number.isInteger(x) || x < 2 || x > 64)) throw new Error('INVALID_COMPACTION_STEPS');
+    if (compactAt.length && !input.phase.startsWith('execution')) throw new Error('MID_EPISODE_COMPACTION_FORBIDDEN');
+    active.set(input.session, { steps: 0, compact: !!input.compact_before, compacted: false, compactAt, compactions: [] });
     const agent = await handleSession(input.session, input.system);
     if (record) {
       await agent.whenIdle();
@@ -103,6 +107,7 @@ export function apply(ctx, config) {
     const result = resultFrom(agent.session.snapshotEvents(), message.id);
     if (!result) throw new Error('NO_CAUSAL_TURN_RESULT');
     result.compaction = active.get(input.session)?.compactionResult;
+    result.compactions = active.get(input.session)?.compactions ?? [];
     result.surface = [...agent.session.surface.nodes];
     result.compaction_events = agent.session.snapshotEvents().filter(e => e.type.startsWith('compaction/'));
     save(path, { ...record, state: 'DONE', result });

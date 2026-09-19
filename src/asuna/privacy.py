@@ -5,6 +5,8 @@ import uuid
 from .config import ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
+from .queue import RuntimeLease
+from contextlib import ExitStack
 
 
 class PrivacyService:
@@ -16,12 +18,21 @@ class PrivacyService:
         if not memory:raise ValueError('MEMORY_NOT_FOUND')
         scope=memory['scope_key']
         if scope=='global-safe':raise Denied('GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION')
+        # A separate CLI must not erase files still owned by a live DSH worker.
+        # Inline callers close their own lanes before acquiring these leases.
+        for lane in active_lanes:lane.close()
+        with ExitStack() as leases:
+            homes={s['dsh_home'] for s in db.sessions.find({'scope_key':scope})}
+            for home in sorted(homes):leases.enter_context(RuntimeLease(Path(home)/'runtime.lock'))
+            return self._erase(key,memory)
+
+    def _erase(self,key,memory):
+        db=self.store.db;scope=memory['scope_key']
         deletion='erase-'+uuid.uuid4().hex
         self.store.audit(deletion,'privacy.intent',{'memory_id':key,'scope':scope},scope)
         scene=db.scenes.find_one({'scope_key':scope})
         self.store.put('scenes',{**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
         # Immediate fencing precedes potentially slow file cleanup.
-        for lane in active_lanes:lane.close()
         sources=set(memory.get('source_event_ids',[]))|{key}
         affected={key}
         for _ in range(32):

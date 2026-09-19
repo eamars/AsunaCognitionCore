@@ -6,6 +6,7 @@ import secrets
 import threading
 import time
 import yaml
+from contextlib import ExitStack
 import httpx
 from deepseek_harness import DeepSeekHarness
 from .config import ROOT
@@ -13,6 +14,7 @@ from .evidence import Evidence,sha,canonical
 from .lanes import LaneResult
 from .provider_proxy import ProviderProxy
 from .state import Store
+from .queue import RuntimeLease
 
 
 class DshLane:
@@ -29,9 +31,12 @@ class DshLane:
         self.home=Path(config['dsh_home'])/store.name/lane
         self.work=Path(config['workdir'])/store.name/lane
         self.home.mkdir(parents=True,exist_ok=True);self.work.mkdir(parents=True,exist_ok=True)
+        self._resources=ExitStack()
+        self._resources.enter_context(RuntimeLease(self.home/'runtime.lock'))
         self.lock=threading.RLock()
         self.compact_pending=set()
         self.proxy=ProviderProxy(self.model,evidence,lane)
+        self._resources.callback(self.proxy.close)
         self.token=secrets.token_hex(32)
         self.endpoint_file=self.home/'bridge-endpoint.json'
         if self.endpoint_file.exists():self.endpoint_file.unlink()
@@ -52,18 +57,22 @@ class DshLane:
         child.update({'DSH_HOME':str(self.home),'DSH_TELEMETRY_DISABLED':'1','ASUNA_LOCAL_DUMMY_KEY':'local-only-not-a-secret','ASUNA_BRIDGE_TOKEN':self.token})
         if broker_token:child['ASUNA_BROKER_TOKEN']=broker_token
         self.sdk=DeepSeekHarness(dsh_bin=str(ROOT/'node_modules/.bin/dsh.cmd'),dsh_home=str(self.home),profile='sdk-minimal',patches=(str(patch),),cwd=str(self.work),env=child,provider='asuna-local',model=self.model['model'],reasoning_effort='high',max_tokens=self.model['max_tokens'],request_timeout_seconds=300,initialize_timeout_seconds=45)
+        self._resources.callback(self.sdk.close)
         try:
             self.sdk.start()
         except BaseException:
-            self.sdk.close()
-            self.proxy.close()
+            self._resources.close()
             raise
         deadline=time.monotonic()+5
         while not self.endpoint_file.exists():
-            if time.monotonic()>deadline:raise TimeoutError('BRIDGE_ENDPOINT_NOT_READY')
+            if time.monotonic()>deadline:
+                self._resources.close();raise TimeoutError('BRIDGE_ENDPOINT_NOT_READY')
             time.sleep(.05)
         self.url=f"http://127.0.0.1:{json.loads(self.endpoint_file.read_text())['port']}"
-        self.http=httpx.Client(timeout=300,trust_env=False)
+        # One bridge operation can contain many bounded model/tool steps.
+        # The former 300s whole-operation timeout interrupted valid workflows.
+        self.http=httpx.Client(timeout=config.get('workflow_timeout_seconds',1800),trust_env=False)
+        self._resources.callback(self.http.close)
 
     def generate(self, session, operation, phase, text, system):
         with self.lock:
@@ -78,7 +87,10 @@ class DshLane:
                 if existing.get('semantic_hash')!=semantic_hash:raise PermissionError('OPERATION_INPUT_CHANGED_OR_LEGACY_UNVERIFIED')
                 return LaneResult(**existing['result'])
             self.proxy.purpose=phase
-            request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':text,'system':system}
+            initial_system=(bound or {}).get('initial_system',system)
+            delivered_text=text if initial_system==system else ('ASUNA_STATE_REVISION\n本阶段采用程序已提交并冻结的当前人格快照；以下不是外部引用。历史阶段仍使用其原版本。\n'+system+'\n\n'+text)
+            request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':delivered_text,'system':initial_system}
+            if self.lane=='executor' and self.model.get('compact_at_steps'):request['compact_at_steps']=self.model['compact_at_steps']
             if session in self.compact_pending:
                 request['compact_before']=True
             self.evidence.record('lane.intent',{'lane':self.lane,**request})
@@ -95,7 +107,7 @@ class DshLane:
             self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'semantic_hash':semantic_hash,'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
             previous=self.store.db.sessions.find_one({'_id':request['session']})
             owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
-            self.store.put('sessions',{'_id':request['session'],'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'last_phase':phase,'last_operation':operation,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root),'state':'ACTIVE','compaction_generation':(previous or {}).get('compaction_generation',0)+(1 if body.get('compaction') else 0)},expected=previous['revision'] if previous else None,stream=operation)
+            self.store.put('sessions',{'_id':request['session'],'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'last_phase':phase,'last_operation':operation,'initial_system':initial_system,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root),'state':'ACTIVE','compaction_generation':(previous or {}).get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'] if previous else None,stream=operation)
             return value
 
     def compact(self,session):
@@ -107,9 +119,7 @@ class DshLane:
     def close(self):
         if getattr(self,'closed',False):return
         self.closed=True
-        self.sdk.close()
-        self.http.close()
-        self.proxy.close()
+        self._resources.close()
 
     def __enter__(self):return self
     def __exit__(self,*args):self.close()

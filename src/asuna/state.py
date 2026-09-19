@@ -117,7 +117,7 @@ class Store:
         doc = self.db[collection].find_one({'_id':key})
         if doc is None:
             return None
-        if not operator and (collection in ('audit_events','artifacts','episodes','sessions','state_revisions') or doc.get('scope_key') not in ('global-safe',scope) or doc.get('status')=='tombstone'):
+        if not operator and (collection in ('audit_events','artifacts','episodes','sessions','state_revisions','lane_receipts','tasks') or doc.get('scope_key') not in ('global-safe',scope) or doc.get('status')=='tombstone'):
             raise Denied('OBJECT_SCOPE_DENIED')
         if not operator and collection == 'memory_units' and doc.get('kind')=='monologue':
             raise Denied('OPERATOR_ONLY_MONOLOGUE')

@@ -17,9 +17,13 @@ def artifact(path):
 
 
 def freeze(config,contract,evidence,test):
-    paths=[*sorted((BUNDLE/'fixtures').rglob('*')),*sorted((BUNDLE/'prompts').rglob('*')),*sorted((BUNDLE/'config').rglob('*')),*sorted((ROOT/'src/asuna').glob('*.py')),*sorted((ROOT/'dsh-plugin').glob('*.ts')),ROOT/'package-lock.json',ROOT/'uv.lock']
+    paths=[*sorted((BUNDLE/'fixtures').rglob('*')),*sorted((BUNDLE/'prompts').rglob('*')),*sorted((BUNDLE/'config').rglob('*')),*sorted((ROOT/'src/asuna').glob('*.py')),*sorted((ROOT/'dsh-plugin').glob('*.ts')),*sorted((ROOT/'tools').glob('*.py')),ROOT/'package-lock.json',ROOT/'uv.lock',ROOT/'environment.json']
     manifest={'experiment_id':evidence.root.name,'test_id':test,'created_at':datetime.now(timezone.utc).isoformat(),'seed':20260919,'contract':artifact(contract),'implementation_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'files':[artifact(p) for p in paths if p.is_file()],'configuration':redacted(config),'human_review_required':True,'performance_slo':None,'failed_attempts_retained':True}
     write_json(evidence.root/'manifest.json',manifest)
+    import zipfile
+    with zipfile.ZipFile(evidence.root/'frozen-inputs.zip','x',compression=zipfile.ZIP_DEFLATED) as archive:
+        for p in paths:
+            if p.is_file():archive.write(p,p.relative_to(ROOT).as_posix())
     return manifest
 
 
@@ -111,6 +115,15 @@ def evaluate(config,test,contract,evidence):
     manifest=freeze(config,contract,evidence,test)
     command=['asuna','evaluate','--test',test,'--manifest',str(contract),'--out',str(evidence.root)]
     if test in ('L01','A01'):result=staged_suite(config,test,evidence)
+    elif test=='L04':
+        from .retrieval_trials import suite
+        result=suite(config,evidence)
+    elif test in ('L02','L03','L12'):
+        from .live_trials import suite
+        result=suite(config,test,evidence)
+    elif test=='F01':
+        from .capacity import suite
+        result=suite(config,evidence)
     elif test.startswith('E'):
         tests=sorted((ROOT/'tests').glob('test_engineering_*.py'))
         cmd=[sys.executable,'-m','pytest',*[str(p) for p in tests],'-k',test,'-q','--junitxml='+str(evidence.root/'junit.xml')]

@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0019",
+  "case_id": "P11",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_abed6d3eba9b47719a5e",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他关于之前没回复原因的询问",
+    "constraints": [
+      "直接回答",
+      "不使用感叹号",
+      "不使用emoji",
+      "不使用礼貌客套话"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "弄清楚了，是因为你断网了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "8a5225f16aaac08dc29f1de43342649b819b7fae53334091a2427f48b50c9ded",
+    "339b16d20921089a0605f3a86af5050a6dcbff466a2794ff88e72fa8c49c7c6b",
+    "00d24f71a5861ec49ec6b1df676c42030379a83dbede9274439f0a48755d240f"
+  ]
+}

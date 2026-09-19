@@ -9,6 +9,8 @@ from .audit import render_html,replay
 
 
 def main():
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
     sub=parser.add_subparsers(dest='command',required=True)
     for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','index','delete','cancel','replay','evaluate','report','export'):

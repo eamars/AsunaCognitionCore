@@ -1,0 +1,48 @@
+{
+  "test_id": "PROBE-L03",
+  "status": "FAIL",
+  "mode": "real_models_real_DSH_real_sandbox_real_Mongo",
+  "attempts": 1,
+  "samples": [
+    {
+      "number": 1,
+      "database": "asuna_v2_test_L03_37c52192c3894c76",
+      "status": "FAIL",
+      "mode": "Gemma_intent_Qwen_tools_Gemma_feedback",
+      "error_type": "ReadTimeout"
+    }
+  ],
+  "controls": [
+    {
+      "number": 1,
+      "status": "FAIL",
+      "database": "asuna_v2_test_control_L03_e139c20cfa9c",
+      "mode": "Qwen_only_frozen_same_task_no_character_calls",
+      "error_type": "ReadTimeout"
+    }
+  ],
+  "metrics": {
+    "successes": 0,
+    "control_successes": 0,
+    "bridge_degradation": false
+  },
+  "limitations": [
+    "Public response factual quality still requires independent review.",
+    "Reduced executable design probe, not full acceptance."
+  ],
+  "experiment_id": "formal-L03-20260919T090557Z-98a165",
+  "manifest_sha256": "060d98e15ee90d8f86e647226d3ef9b53e99898c009049b94997da5fda668bea",
+  "executed_at": "2026-09-19T09:16:30.452966+00:00",
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/run_acceptance.py",
+        "L03",
+        "--probe-count",
+        "1"
+      ],
+      "exit_code": 1
+    }
+  ]
+}

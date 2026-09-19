@@ -1,0 +1,128 @@
+{
+  "seq": 30,
+  "type": "vector.index",
+  "payload": {
+    "database": "asuna_v2_test_L04_aeba493841234e0a",
+    "definition": {
+      "fields": [
+        {
+          "type": "vector",
+          "path": "embedding",
+          "numDimensions": 768,
+          "similarity": "cosine"
+        },
+        {
+          "type": "filter",
+          "path": "scope_key"
+        },
+        {
+          "type": "filter",
+          "path": "character_id"
+        },
+        {
+          "type": "filter",
+          "path": "status"
+        },
+        {
+          "type": "filter",
+          "path": "policy_epoch"
+        },
+        {
+          "type": "filter",
+          "path": "embedding_revision"
+        }
+      ]
+    },
+    "status": [
+      {
+        "id": "6aae506e5e9849184b55b2cf",
+        "name": "asuna_memory_v1",
+        "status": "READY",
+        "queryable": true,
+        "latestDefinitionVersion": {
+          "version": 0,
+          "createdAt": "2026-09-19 09:05:50"
+        },
+        "latestDefinition": {
+          "fields": [
+            {
+              "type": "vector",
+              "path": "embedding",
+              "numDimensions": 768,
+              "similarity": "cosine"
+            },
+            {
+              "type": "filter",
+              "path": "scope_key"
+            },
+            {
+              "type": "filter",
+              "path": "character_id"
+            },
+            {
+              "type": "filter",
+              "path": "status"
+            },
+            {
+              "type": "filter",
+              "path": "policy_epoch"
+            },
+            {
+              "type": "filter",
+              "path": "embedding_revision"
+            }
+          ]
+        },
+        "statusDetail": [
+          {
+            "hostname": "69cf00cd117bb52085607a89",
+            "status": "READY",
+            "queryable": true,
+            "mainIndex": {
+              "status": "READY",
+              "queryable": true,
+              "definitionVersion": {
+                "version": 0,
+                "createdAt": "2026-09-19 09:05:50"
+              },
+              "definition": {
+                "fields": [
+                  {
+                    "type": "vector",
+                    "path": "embedding",
+                    "numDimensions": 768,
+                    "similarity": "cosine"
+                  },
+                  {
+                    "type": "filter",
+                    "path": "scope_key"
+                  },
+                  {
+                    "type": "filter",
+                    "path": "character_id"
+                  },
+                  {
+                    "type": "filter",
+                    "path": "status"
+                  },
+                  {
+                    "type": "filter",
+                    "path": "policy_epoch"
+                  },
+                  {
+                    "type": "filter",
+                    "path": "embedding_revision"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "numDocs": 212
+      }
+    ]
+  },
+  "prev_hash": "5335b7eb19bf5566a185f40ceb646594921815ea535fb625f9bd37ea36d4de5b",
+  "time_ns": 1789808752311365700,
+  "event_hash": "fcd1e5c8985d9944175a85d0d47c89443ea0be0164a302e5155a546ecdd5f092"
+}

@@ -26,3 +26,9 @@ class EndpointLock:
         return self
     def __exit__(self,*args):
         self.file.seek(0);msvcrt.locking(self.file.fileno(),msvcrt.LK_UNLCK,1);self.file.close()
+
+
+class RuntimeLease(EndpointLock):
+    def __init__(self,path,timeout=2):
+        self.path=path.resolve();self.timeout=timeout
+        if not self.path.is_relative_to((ROOT/'.runtime').resolve()):raise PermissionError('RUNTIME_LEASE_PATH_DENIED')

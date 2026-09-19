@@ -1,0 +1,13 @@
+"""Reading summary helpers."""
+
+
+def summarize_readings(values):
+    """Return (min, max, mean) ignoring None entries.
+
+    The input is never modified. An empty valid set yields
+    (None, None, None). Negative numbers and decimals are supported.
+    """
+    valid = [v for v in values if v is not None]
+    if not valid:
+        return (None, None, None)
+    return (min(valid), max(valid), sum(valid) / len(valid))

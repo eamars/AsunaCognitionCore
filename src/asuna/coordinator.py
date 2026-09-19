@@ -19,12 +19,13 @@ class ProtocolFailure(RuntimeError):
 
 
 class Coordinator:
-    def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None):
+    def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None,monologue_enabled=True):
         self.store,self.character = store,character
         self.context=context or ContextBuilder(store)
         self.publisher=publisher or PublishService(store,crash=crash)
         self.crash=crash
         self.lock=threading.RLock()
+        self.monologue_enabled=monologue_enabled
 
     def ingest(self, event: dict, *, persona='P1'):
         with self.lock:
@@ -50,7 +51,7 @@ class Coordinator:
     def _stage(self, ep, phase, round_id=0, extra=''):
         operation=f"{ep['_id']}:{phase}:{round_id}"
         instruction=(BUNDLE/f'prompts/stage_{phase.lower()}.md').read_text(encoding='utf-8')
-        if phase=='MONOLOGUE':
+        if phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE'):
             instruction=json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+instruction
         instruction += '\n'+extra
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
@@ -68,6 +69,9 @@ class Coordinator:
             if not ep:
                 raise ValueError('EPISODE_NOT_FOUND')
             try:
+                if ep['state']=='PREPARED':
+                    if not self.monologue_enabled:
+                        ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[],experiment_control='monologue_off')
                 if ep['state']=='PREPARED':
                     text=self._stage(ep,'MONOLOGUE',ep.get('recall_rounds',0))
                     memory_id='mono-'+ep_id+':'+str(ep.get('recall_rounds',0))

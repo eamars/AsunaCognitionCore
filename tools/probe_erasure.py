@@ -9,6 +9,7 @@ from asuna.coordinator import Coordinator
 from asuna.privacy import PrivacyService
 from asuna.retrieval import Retrieval
 from asuna.audit import verify
+from asuna.memory import MemoryService
 
 run='E20-probe-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-')+uuid.uuid4().hex[:6]
 ev=Evidence(ROOT/'reports'/run);private=Evidence(ev.root/'scope-evidence')
@@ -27,6 +28,9 @@ try:
         assert ep['state']=='COMMITTED'
         assert any(needle in json.dumps(call['body'],ensure_ascii=False) for call in lane.proxy.calls)
         assert store.db.audit_events.count_documents({'type':'compaction.native'})==1
+        store.init_head('overlay:P1','scene:dm-a',{'body':'只在本私聊保留适用偏好，不传播到公共场景。'},[])
+        MemoryService(store).reflect(lane,'scene:dm-a','overlay:P1','private-reflection')
+        assert store.db.sessions.count_documents({'scope_key':'scene:dm-a'})==2
         retrieval.close()
         deletion=PrivacyService(store).delete_memory('M09',operator=True,active_lanes=[lane])
     # Probe evidence remains only as hashes/erasure metadata in the erased run.

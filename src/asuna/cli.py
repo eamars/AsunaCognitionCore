@@ -13,7 +13,7 @@ def main():
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
     sub=parser.add_subparsers(dest='command',required=True)
-    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','index','delete','cancel','replay','evaluate','report','export'):
+    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import'):
         p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
@@ -27,6 +27,8 @@ def main():
         if cmd=='replay':p.add_argument('trace');p.add_argument('--mode',choices=['state-only'],required=True);p.add_argument('--deny-model-and-tools',action='store_true',required=True)
         if cmd=='evaluate':p.add_argument('--test',required=True);p.add_argument('--manifest',default=str(BUNDLE/'fixtures/acceptance_cases.json'))
         if cmd in ('report','export'):p.add_argument('--reports',default=str(ROOT/'reports'))
+        if cmd=='review-pack':p.add_argument('--reports',default=str(ROOT/'reports'))
+        if cmd=='review-import':p.add_argument('--original',required=True);p.add_argument('--submitted',required=True)
     args=parser.parse_args();ev=None;store=None
     try:
         config=load(args.config)
@@ -85,6 +87,10 @@ def main():
         elif args.command=='evaluate':
             from .experiments import evaluate
             value=evaluate(config,args.test,Path(args.manifest),ev)
+        elif args.command in ('review-pack','review-import'):
+            from .review import pack,ingest
+            if not args.out:raise ValueError('OUT_REQUIRED')
+            value=pack(Path(args.reports),Path(args.out)) if args.command=='review-pack' else ingest(Path(args.original),Path(args.submitted),Path(args.out))
         else:
             from .reporting import build_report,export
             value=build_report(Path(args.reports),Path(args.out) if args.out else ROOT/'report.json') if args.command=='report' else export(config,Path(args.reports),Path(args.out) if args.out else ROOT/'evidence.zip')

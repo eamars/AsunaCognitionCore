@@ -1,0 +1,337 @@
+{
+  "seq": 268,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-571aa30b7fd86c97776c1fe3ec7375cd:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"delegate\",\"goal\":\"完成文件操作任务：查阅 example.txt，复制副本到 copies/ 目录下，核实 SHA256 并提交模拟回执。\",\"constraints\":[\"保留原件\",\"核实 SHA256\",\"提交模拟回执\",\"完成后告知\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 48,
+          "time": 1789812277626,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "17552b70-4f63-408a-9f6e-ae1fa0ba6b61"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 49,
+          "time": 1789812284277,
+          "data": {
+            "turn": 6,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"delegate\",\"goal\":\"完成文件操作任务：查阅 example.txt，复制副本到 copies/ 目录下，核实 SHA256 并提交模拟回执。\",\"constraints\":[\"保留原件\",\"核实 SHA256\",\"提交模拟回执\",\"完成后告知\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-6z7altvaY2rDSTwQP4eqdvfco7uYlKW6",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "62d8703b-e5e3-451f-8276-13ffc8f24c3d"
+            },
+            "usage": {
+              "inputTokens": 3997,
+              "outputTokens": 77,
+              "totalTokens": 4738,
+              "cacheReadTokens": 664
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789812284275,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789812284275,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "delegate",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "完成",
+                  "文件",
+                  "操作",
+                  "任务",
+                  "：",
+                  "查",
+                  "阅",
+                  " example",
+                  ".",
+                  "txt",
+                  "，",
+                  "复制",
+                  "副本",
+                  "到",
+                  " copies",
+                  "/",
+                  " ",
+                  "目录下",
+                  "，",
+                  "核",
+                  "实",
+                  " SHA",
+                  "2",
+                  "5",
+                  "6",
+                  " 并",
+                  "提交",
+                  "模拟",
+                  "回",
+                  "执",
+                  "。",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "保留",
+                  "原",
+                  "件",
+                  "\",\"",
+                  "核",
+                  "实",
+                  " SHA",
+                  "2",
+                  "5",
+                  "6",
+                  "\",\"",
+                  "提交",
+                  "模拟",
+                  "回",
+                  "执",
+                  "\",\"",
+                  "完成后",
+                  "告知",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789812284276,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"delegate\",\"goal\":\"完成文件操作任务：查阅 example.txt，复制副本到 copies/ 目录下，核实 SHA256 并提交模拟回执。\",\"constraints\":[\"保留原件\",\"核实 SHA256\",\"提交模拟回执\",\"完成后告知\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812284276,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 3997,
+                    "outputTokens": 77,
+                    "totalTokens": 4738,
+                    "cacheReadTokens": 664
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812284276,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-6z7altvaY2rDSTwQP4eqdvfco7uYlKW6",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 50,
+          "time": 1789812284277,
+          "data": {
+            "turn": 6,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 51,
+          "time": 1789812284277,
+          "data": {
+            "turn": 6,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "17552b70-4f63-408a-9f6e-ae1fa0ba6b61",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "16649556051abfdc6bc2b96da959dab3f8b9b56590181a264968c7cf11500859",
+  "time_ns": 1789812284283167500,
+  "event_hash": "150beffe5bc3621b4cc84444e138bdb2db17bd5a7a24f286b205f4fd0b91cb8f"
+}

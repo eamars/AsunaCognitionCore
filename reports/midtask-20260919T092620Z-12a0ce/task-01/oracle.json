@@ -1,0 +1,50 @@
+{
+  "source_hashes_before": {
+    "START_HERE.md": "e26a446b563cdbdc52fdfc2d63e20c376dfa41212c15461fc2d0332bebf8eba1",
+    "stats.py": "e26cb4cf9343550635e3b09dea77b222df4842c934730b78a034b35dcb573716",
+    "test_visible.py": "174f0bd2ba6dbd172e6d74dc56a168435a39fe683f9d7442c8a6bdf6949e0d4d"
+  },
+  "source_hashes_after": {
+    "__pycache__/stats.cpython-314.pyc": "04cb682f658362f0d31716f3e531921b7935ce3a2f4d96ef0105b8a25cfda85a",
+    "__pycache__/test_visible.cpython-314.pyc": "818a0354ea29d6411e55fccf581ee49dacfcb2e865ec261dfa9cd58fb70c860f",
+    "staged/stats.py": "cc83fde32b7bcf61f9fc3c90019d9d0c717e39185165a4eac59713b430bbbcaa",
+    "START_HERE.md": "e26a446b563cdbdc52fdfc2d63e20c376dfa41212c15461fc2d0332bebf8eba1",
+    "stats.py": "cc83fde32b7bcf61f9fc3c90019d9d0c717e39185165a4eac59713b430bbbcaa",
+    "test_visible.py": "174f0bd2ba6dbd172e6d74dc56a168435a39fe683f9d7442c8a6bdf6949e0d4d"
+  },
+  "task_state": "DONE",
+  "status": "PASS",
+  "protected_inputs_unchanged": true,
+  "hidden_oracle": {
+    "argv": [
+      "python3",
+      "-m",
+      "unittest",
+      "test_hidden.py"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.000s\n\nOK\n",
+    "output_limit": false,
+    "timed_out": false,
+    "sandbox": "wsl-bubblewrap-unshare-all",
+    "network": "isolated",
+    "mount": "task-only"
+  },
+  "visible_checks": {
+    "argv": [
+      "python3",
+      "-m",
+      "unittest",
+      "test_visible.py"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "..\n----------------------------------------------------------------------\nRan 2 tests in 0.000s\n\nOK\n",
+    "output_limit": false,
+    "timed_out": false,
+    "sandbox": "wsl-bubblewrap-unshare-all",
+    "network": "isolated",
+    "mount": "task-only"
+  }
+}

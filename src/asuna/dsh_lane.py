@@ -35,7 +35,7 @@ class DshLane:
         self._resources.enter_context(RuntimeLease(self.home/'runtime.lock'))
         self.lock=threading.RLock()
         self.compact_pending=set()
-        self.proxy=ProviderProxy(self.model,evidence,lane)
+        self.proxy=ProviderProxy(self.model,evidence,lane,store)
         self._resources.callback(self.proxy.close)
         self.token=secrets.token_hex(32)
         self.endpoint_file=self.home/'bridge-endpoint.json'
@@ -43,7 +43,8 @@ class DshLane:
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
         compat={'supportsDeveloperRole':False,'supportsReasoningEffort':lane=='executor','thinkingFormat':'chat-template' if lane=='character' else 'qwen','maxTokensField':'max_tokens'}
         if lane=='character':compat['chatTemplateKwargs']={'enable_thinking':True}
-        provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':262144,'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0}}
+        provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':262144,'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
+        provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
@@ -74,14 +75,16 @@ class DshLane:
         self.http=httpx.Client(timeout=config.get('workflow_timeout_seconds',1800),trust_env=False)
         self._resources.callback(self.http.close)
 
-    def generate(self, session, operation, phase, text, system):
+    def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None):
         with self.lock:
             native_id='s-'+sha(session.encode())[:40]
             bound=self.store.db.sessions.find_one({'_id':native_id})
             if bound and bound.get('state')=='INVALIDATED':raise PermissionError('SESSION_INVALIDATED')
             if bound and bound.get('compact_requested'):self.compact_pending.add(session)
             existing=self.store.db.lane_receipts.find_one({'_id':operation})
-            semantic_hash=sha(canonical({'session':native_id,'phase':phase,'text':text,'system':system}))
+            semantic={'session':native_id,'phase':phase,'text':text,'system':system}
+            if scope_key is not None:semantic.update(scope_key=scope_key,policy_epoch=policy_epoch)
+            semantic_hash=sha(canonical(semantic))
             if existing:
                 if existing.get('state')=='INVALIDATED':raise PermissionError('OPERATION_INVALIDATED')
                 if existing.get('semantic_hash')!=semantic_hash:raise PermissionError('OPERATION_INPUT_CHANGED_OR_LEGACY_UNVERIFIED')
@@ -93,6 +96,21 @@ class DshLane:
             if self.lane=='executor' and self.model.get('compact_at_steps'):request['compact_at_steps']=self.model['compact_at_steps']
             if session in self.compact_pending:
                 request['compact_before']=True
+            owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
+            if scope_key is not None:
+                if owner and owner.get('scope_key')!=scope_key:raise PermissionError('LANE_OWNER_SCOPE_MISMATCH')
+                owner={'scope_key':scope_key,'policy_epoch':policy_epoch}
+            if bound and bound.get('scope_key','operator')!=owner.get('scope_key','operator'):raise PermissionError('SESSION_SCOPE_CHANGED')
+            if owner.get('scene_id'):
+                scene=self.store.db.scenes.find_one({'_id':owner['scene_id']})
+                if scene['policy_epoch']!=owner['policy_epoch']:raise PermissionError('POLICY_EPOCH_CHANGED')
+            self.proxy.scope_key=owner.get('scope_key','operator')
+            roots=set((bound or {}).get('evidence_roots',[]))
+            if (bound or {}).get('evidence_root'):roots.add(bound['evidence_root'])
+            roots.add(str(self.evidence.root.resolve()))
+            # Persist ownership before native delivery so an interrupted first
+            # call cannot leave an untracked private session or raw request.
+            bound=self.store.put('sessions',{**(bound or {}),'_id':native_id,'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'initial_system':initial_system,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root.resolve()),'evidence_roots':sorted(roots),'state':'ACTIVE','inflight_operation':operation,'compaction_generation':(bound or {}).get('compaction_generation',0)},expected=bound['revision'] if bound else None,stream=operation)
             self.evidence.record('lane.intent',{'lane':self.lane,**request})
             before=len(self.proxy.calls)
             response=self.http.post(self.url+'/run',headers={'Authorization':'Bearer '+self.token},json=request)
@@ -103,11 +121,11 @@ class DshLane:
                 self.compact_pending.discard(session)
                 self.store.audit(operation,'compaction.native',{'result':body['compaction'],'events':body.get('compaction_events',[])})
             calls=self.proxy.calls[before:]
-            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason='stop' if body['finish_reason']=='completed' else body['finish_reason'],request_refs=[c['request_ref'] for c in calls],receipt=body['message_id'])
+            refs=[{'artifact_path':(self.evidence.root/c['request_ref']).resolve().relative_to(ROOT).as_posix(),'sha256':sha((self.evidence.root/c['request_ref']).read_bytes())} for c in calls]
+            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason='stop' if body['finish_reason']=='completed' else body['finish_reason'],request_refs=refs,receipt=body['message_id'])
             self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'semantic_hash':semantic_hash,'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
             previous=self.store.db.sessions.find_one({'_id':request['session']})
-            owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
-            self.store.put('sessions',{'_id':request['session'],'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'last_phase':phase,'last_operation':operation,'initial_system':initial_system,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root),'state':'ACTIVE','compaction_generation':(previous or {}).get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'] if previous else None,stream=operation)
+            self.store.put('sessions',{**previous,'last_phase':phase,'last_operation':operation,'inflight_operation':None,'compact_requested':False,'compaction_generation':previous.get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'],stream=operation)
             return value
 
     def compact(self,session):

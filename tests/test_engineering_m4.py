@@ -9,6 +9,13 @@ def test_E18_same_source_not_new_experience(store):
     head,base=store.head('relationship:A','scene:dm-a')
     rev=store.mutate('relationship:A','scene:dm-a',base['_id'],{'body':'一次新的理解。','trust':3},['M01'],'scene:dm-a','once')
     for _ in range(10):ContextBuilder(store).prepare(event())
+    previous='M01'
+    for i in range(3):
+        key='fake-summary-'+str(i)
+        store.put('memory_units',{'_id':key,'scope_key':'scene:dm-a','status':'active','source_event_ids':[previous],'body_markdown':'同一个事件的压缩解释，非新观察。','kind':'summary'})
+        with pytest.raises(Conflict,match='NO_NEW_SOURCE_EVENTS'):
+            store.mutate('relationship:A','scene:dm-a',rev['_id'],{'body':'不应重复累计。','trust':4},[key],'scene:dm-a','summary-'+str(i))
+        previous=key
     for i in range(5):
         with pytest.raises(Conflict):store.mutate('relationship:A','scene:dm-a',rev['_id'],{'body':'再加一次。','trust':4},['M01'],'scene:dm-a','retry-'+str(i))
     assert store.head('relationship:A','scene:dm-a')[1]['content']['trust']==3

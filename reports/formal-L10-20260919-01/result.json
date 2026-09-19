@@ -1,0 +1,44 @@
+{
+  "test_id": "L10",
+  "status": "FAIL",
+  "attempts": 1,
+  "mode": "real_interleaved_ingress_and_executor",
+  "timeline": [
+    {
+      "kind": "task_start",
+      "time_ns": 1789811966984653900,
+      "task_id": "task-ep-5fc13e6d2a5b9ca9ad597e3b236ffb71"
+    },
+    {
+      "kind": "executor_return",
+      "time_ns": 1789812267117707900
+    },
+    {
+      "kind": "scene_batch_return",
+      "time_ns": 1789812735916275000
+    }
+  ],
+  "database": "asuna_v2_test_parallel_a2c0b3e011194b0a",
+  "limitations": [
+    "Synthetic private canary scope check; arbitrary semantic disclosure still requires human review.",
+    "Ingress queue is synchronous per actor lane; executor runs concurrently in its separate native lane."
+  ],
+  "experiment_id": "formal-L10-20260919-01",
+  "manifest_sha256": "e967e0ebd08308ca80d228df909a1d89495176a011631fb4751ef2a25cee6339",
+  "executed_at": "2026-09-19T10:12:17.149187+00:00",
+  "commands": [
+    {
+      "argv": [
+        "asuna",
+        "evaluate",
+        "--test",
+        "L10",
+        "--manifest",
+        "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+        "--out",
+        "reports\\formal-L10-20260919-01"
+      ],
+      "exit_code": 1
+    }
+  ]
+}

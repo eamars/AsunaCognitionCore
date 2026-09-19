@@ -1,0 +1,21 @@
+{
+  "test_id": "PROBE-export",
+  "status": "PASS",
+  "commands": [
+    {
+      "argv": [
+        ".venv/Scripts/python.exe",
+        "tools/probe_export.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    "actual zip verified",
+    "source bytes unchanged",
+    "private excluded",
+    "nested secrets removed",
+    "unrelated float and hash retained"
+  ],
+  "files": 2
+}

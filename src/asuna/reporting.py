@@ -1,6 +1,6 @@
 """Evidence-first reporting. Missing evidence never becomes an acceptance pass."""
 from datetime import datetime,timezone
-import copy,json,re,subprocess,uuid,zipfile
+import copy,io,json,re,subprocess,uuid,zipfile
 from pathlib import Path
 from .config import ROOT,BUNDLE
 from .evidence import canonical,sha,write_json
@@ -97,22 +97,38 @@ def export(config,reports:Path,output:Path):
     collect(config)
     operator=ROOT/'.runtime/operator-ssh.json'
     if operator.exists():collect(json.loads(operator.read_text(encoding='utf-8')))
+    embedding_operator=ROOT/'.runtime/embedding-ssh.json'
+    if embedding_operator.exists():collect(json.loads(embedding_operator.read_text(encoding='utf-8')))
     selected=[]
-    for directory in (reports,ROOT/'src',ROOT/'dsh-plugin',ROOT/'tests',ROOT/'tools',ROOT/'docs',BUNDLE):
+    for directory in (reports,ROOT/'src',ROOT/'dsh-plugin',ROOT/'tests',ROOT/'tools',ROOT/'docs',ROOT/'migrations',ROOT/'examples',BUNDLE):
         if directory.exists():
-            selected += [p for p in directory.rglob('*') if p.is_file() and not any(x in p.parts for x in ('private','__pycache__','.pytest_cache')) and p.suffix.lower() not in ('.zip','.pyc')]
-    selected += [p for p in (ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md') if p.exists()]
+            selected += [p for p in directory.rglob('*') if p.is_file() and not any(x in p.parts for x in ('private','__pycache__','.pytest_cache')) and (p.suffix.lower() not in ('.zip','.pyc') or p.name=='frozen-inputs.zip')]
+    selected += [p for p in (ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md',ROOT/'config/local.example.json') if p.exists()]
     manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':[],'exclusions':['.runtime (homes, sessions, operator credentials, task workspaces)','.venv','node_modules','.git','config/local.json','reports/private','previous zip exports'],'redactions':0}
+    # A six-digit password may coincidentally occur inside an embedding float
+    # or SHA256. Redact actual credential-sized lexemes, not arbitrary numeric
+    # substrings that would corrupt JSON and invalidate unrelated evidence.
+    patterns=[re.compile(r'(?<![A-Za-z0-9_.:/\\-])'+re.escape(secret)+r'(?![A-Za-z0-9_.:/\\-])') for secret in secrets]
     def sanitize(raw):
         try:text=raw.decode('utf-8')
         except UnicodeDecodeError:raise ValueError('NON_TEXT_EXPORT_REQUIRES_EXPLICIT_REVIEW')
-        for secret in secrets:text=text.replace(secret,'[REDACTED]')
+        for pattern in patterns:text=pattern.sub('[REDACTED]',text)
         text=re.sub(r'(mongodb(?:\+srv)?://)[^/@\s\"]+:[^/@\s\"]+@',r'\1[REDACTED]@',text)
         return text.encode()
+    def sanitize_archive(raw):
+        members=[];changed=False
+        with zipfile.ZipFile(io.BytesIO(raw)) as nested:
+            for name in nested.namelist():
+                source=nested.read(name);safe=sanitize(source);members.append((name,safe));changed|=source!=safe
+        if not changed:return raw
+        output=io.BytesIO()
+        with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED) as nested:
+            for name,safe in members:nested.writestr(name,safe)
+        return output.getvalue()
     output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
         for path in sorted(set(selected)):
-            raw=path.read_bytes();safe=sanitize(raw);name=path.resolve().relative_to(ROOT).as_posix()
+            raw=path.read_bytes();safe=sanitize_archive(raw) if path.suffix=='.zip' else sanitize(raw);name=path.resolve().relative_to(ROOT).as_posix()
             manifest['files'].append({'artifact_path':name,'source_sha256':sha(raw),'export_sha256':sha(safe),'redacted':raw!=safe})
             manifest['redactions']+=int(raw!=safe);archive.writestr(name,safe)
         archive.writestr('evidence-manifest.json',canonical(manifest))
@@ -120,7 +136,11 @@ def export(config,reports:Path,output:Path):
     with zipfile.ZipFile(output) as archive:
         for item in manifest['files']:
             raw=archive.read(item['artifact_path'])
-            if sha(raw)!=item['export_sha256'] or any(secret.encode() in raw for secret in secrets):raise ValueError('EXPORT_VERIFICATION_FAILED')
+            if sha(raw)!=item['export_sha256']:raise ValueError('EXPORT_VERIFICATION_FAILED')
+            if item['artifact_path'].endswith('.zip'):
+                with zipfile.ZipFile(io.BytesIO(raw)) as nested:values=[nested.read(n).decode('utf-8') for n in nested.namelist()]
+            else:values=[raw.decode('utf-8')]
+            if any(pattern.search(value) for value in values for pattern in patterns):raise ValueError('EXPORT_VERIFICATION_FAILED')
     result={'status':'PASS','archive':ref(output),'files':len(manifest['files']),'redacted_files':manifest['redactions'],'export_is_redacted_copy':True}
     write_json(output.with_suffix('.manifest.json'),result)
     return result

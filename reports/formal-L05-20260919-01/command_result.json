@@ -1,0 +1,1474 @@
+{
+  "test_id": "L05",
+  "status": "INCONCLUSIVE",
+  "mode": "real_Gemma_real_DSH_real_Mongo",
+  "attempts": 36,
+  "samples": [
+    {
+      "sample_id": "sample-0001",
+      "case_id": "REL06-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_04b93f3459f44b708494",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应关于决策权的提问，重申会遵守提供两个方案的约定",
+        "constraints": [
+          "不使用“您”、“收到”、“明白”、“好的呢”、“非常抱歉”、“请问需要我”等起句方式",
+          "不使用感叹号、emoji、颜文字和波浪号",
+          "语气直接平视，不使用小标题、粗体、编号"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "我会按约定提供两个方案让你选，不会直接替你定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d9443a1e5d2f4439d3a9833961991e9bba7103fc307e37f54e568baa8fdec784",
+        "ac469f4efb97efd8f6f18355f65977838ebf7bebade6294fcb4c6df72df0a5bb",
+        "1929a5c22b4f824fd58dfc86ed33aec4c2a8fe62641e851566e4ff9b9f28bcda"
+      ]
+    },
+    {
+      "sample_id": "sample-0002",
+      "case_id": "REL03-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_b2465e026e0541dfae03",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "询问标题设计的初衷以便给出更准确的判断",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "不使用客套话"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "“回到这里”听起来是延续，“新的一页”则是重新开始。这两个标题的设计初衷是什么？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d467de43a79799635838ce962b5594681ff8201575279a38c70e96e0d6c2ef7c",
+        "15738869e96578241d891f84b00108bea97254889adedd6b3dd530d817451b6e",
+        "b1ea4b564d5d1da656ab2309b685f6062c2e9bd50210bee43e57cea0cf09140e"
+      ]
+    },
+    {
+      "sample_id": "sample-0003",
+      "case_id": "REL06-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_19d105d12caf4ef79711",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于决策权的问题，并确认他认为的边界",
+        "constraints": [
+          "直接回答",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "我会先判断这件事是不是你说过的“可逆的小事”。如果是，我会自己定；如果不是，我会问你。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "350de44e0c022883b97fde9cf41e56f6e1de580431c7d9f330ca6d485e499565",
+        "e332d237bf500f7cd6e1fbf376c4979d73478f7e510412ce6e2729685c3b4761",
+        "c1d1317413176664925ee680109e49c4d5028b9eb1b03c9672bd723fb84df609"
+      ]
+    },
+    {
+      "sample_id": "sample-0004",
+      "case_id": "REL04-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_d46f4357cf9a42269801",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对封面颜色的选择给出看法",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "直接表达立场"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "蓝色比较冷静，绿色比较自然。这取决于你想传达什么样的感觉。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "cf562c61a1743ad7c552dd58e24f458012f7b79142b6dadbbeb6963ab5b11608",
+        "de1d5adc6eb9c949483e821a4d0e07136cc351a9b9a1a991242a66caacb424c5",
+        "4c71735209cde438d5936c494991bafc2e82a7707d6394b1947f61d731dbd490"
+      ]
+    },
+    {
+      "sample_id": "sample-0005",
+      "case_id": "REL02-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_ce33723a2f55464e86d6",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对摆放方式提供个人看法",
+        "constraints": [
+          "直接表达观点",
+          "不要敷衍"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "按频率排更方便，按颜色排比较整洁。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "495f855a7c1926b40500c8868c6ddcaa6b4d84272efba8d78e9a41a9107ee0d5",
+        "e824cc47c87b996e70e270c1dfd193e17a2f1021732f155bccecaf71ae9a9e85",
+        "7203d2462e500a72f37eeea260575de0debd3a82ffc8d56f86905bd71de14e26"
+      ]
+    },
+    {
+      "sample_id": "sample-0006",
+      "case_id": "REL03-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_97c33a933e4b4f1eab81",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个标题提供各自的感官描述，不代为做决定",
+        "constraints": [
+          "不替他做决定",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "“回到这里”听起来像是回归某种熟悉的状态。而“新的一页”更像是某种开始或转变。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "ab8c33ef0e87860cfa65f2b0568e998f61c1019e7442a6f5c60e5054f1e8f9ec",
+        "cd98e2e8c7b69b0f9944960ce22aeddad9d51d23641e7b38b862fc4c27c46243",
+        "7a7bd5ec239cc8684ad972953895caa5933a76b1f13e2052884b877f15889911"
+      ]
+    },
+    {
+      "sample_id": "sample-0007",
+      "case_id": "REL01-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_5ab4c1c4c0164587a55a",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个方案的优劣给出看法，引导他根据实际用途做出决定",
+        "constraints": [
+          "不能替他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "频繁用就选容易拿的，空间不够就选省空间的。看你的使用频率。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "fc50c00ce9e6e99dab974ad7215aec938d47398a1d8045423d3c0d64c39321be",
+        "bcb8f8699c99d75a311f42980c7b577a7c9aa21d50236c9eab318060e9d47dff",
+        "bb1aaeb488f89cc752026680778921d83466931ab212c8ee606c3e3e77be42e2"
+      ]
+    },
+    {
+      "sample_id": "sample-0008",
+      "case_id": "REL05-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_ce42b2d3129846f5b3fb",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于小选择是否需要确认的问题，并明确表示我会直接做决定。",
+        "constraints": [
+          "直接回答",
+          "体现自主权"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "不需要，我会直接做决定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "a69371318dbd65e6c728b3ec86b8a9d1af72f84c55355d71647d6cd599509b42",
+        "b84d39acd7a450e41379d2ea57b9d189fa2cd8eaa86f9456e20567d95f6a5921",
+        "456dd86a7116ff77afd8235f54f3333f9d71c4e608007f3c8e2b696df5e059b0"
+      ]
+    },
+    {
+      "sample_id": "sample-0009",
+      "case_id": "REL02-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_7a7af461b1eb41a090d7",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应他关于两种摆放方式的询问并表达我的看法",
+        "constraints": [
+          "不要替他做决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "按使用频率排更高效，按颜色排更美观。我倾向于按频率排。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "0ea42a3bedea52b3530d2d13430ce2cfe10f2a8218f049b6b4c4bbfd109cb738",
+        "482cd5db3ee8c0073b4279bae041547b80ffdaf28dfa77f769d2f8b2722f95c4",
+        "2db0af24541341541b58a30b5845e32554e43d5bf58b0008ce88ecf4a46240ff"
+      ]
+    },
+    {
+      "sample_id": "sample-0010",
+      "case_id": "REL01-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_205f72d706fb42a0a0ed",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个方案的优劣给出看法，引导他根据实际用途做出决定",
+        "constraints": [
+          "不能替他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "频繁用就选容易拿的，空间不够就选省空间的。看你的使用频率。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "fc50c00ce9e6e99dab974ad7215aec938d47398a1d8045423d3c0d64c39321be",
+        "bcb8f8699c99d75a311f42980c7b577a7c9aa21d50236c9eab318060e9d47dff",
+        "bb1aaeb488f89cc752026680778921d83466931ab212c8ee606c3e3e77be42e2"
+      ]
+    },
+    {
+      "sample_id": "sample-0011",
+      "case_id": "REL06-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_d18049b83720450e8f30",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于决策权的问题，并确认他认为的边界",
+        "constraints": [
+          "直接回答",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "我会尝试在可逆的小事上自己做决定。如果你觉得我越界了，再告诉我。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "350de44e0c022883b97fde9cf41e56f6e1de580431c7d9f330ca6d485e499565",
+        "e332d237bf500f7cd6e1fbf376c4979d73478f7e510412ce6e2729685c3b4761",
+        "c1d1317413176664925ee680109e49c4d5028b9eb1b03c9672bd723fb84df609"
+      ]
+    },
+    {
+      "sample_id": "sample-0012",
+      "case_id": "REL05-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_31df55bb8340476cbdd3",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应关于规则边界的询问，并确认对“小选择”的理解",
+        "constraints": [
+          "简短直接",
+          "不使用客套话"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "我会直接提供两个方案供你选择。如果你对“小选择”的界限有更明确的要求，再告诉我。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "789d26fb22f7a6acea8de16ea8403d6870f069e0892528ef2b64064984a9648b",
+        "50f867261931609b4465006a5da9188eb5e699ed7c2825ec5fc6027c4528ac9e",
+        "6c9fdba08680583892f6333cb14b6ebb8acfed260e953a2fde1b37dfd1066966"
+      ]
+    },
+    {
+      "sample_id": "sample-0013",
+      "case_id": "REL01-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_c375551d900044508bc7",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个方案的优劣给出看法，引导他根据实际用途做出决定",
+        "constraints": [
+          "不能替他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "频繁用就选容易拿的，空间不够就选省空间的。看你的使用频率。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "fc50c00ce9e6e99dab974ad7215aec938d47398a1d8045423d3c0d64c39321be",
+        "bcb8f8699c99d75a311f42980c7b577a7c9aa21d50236c9eab318060e9d47dff",
+        "bb1aaeb488f89cc752026680778921d83466931ab212c8ee606c3e3e77be42e2"
+      ]
+    },
+    {
+      "sample_id": "sample-0014",
+      "case_id": "REL02-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_85fd6bb6de35497db94a",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应他关于两种摆放方式的询问并表达我的看法",
+        "constraints": [
+          "不要替他做决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "按使用频率排更高效，按颜色排更美观。我倾向于按频率排。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "0ea42a3bedea52b3530d2d13430ce2cfe10f2a8218f049b6b4c4bbfd109cb738",
+        "482cd5db3ee8c0073b4279bae041547b80ffdaf28dfa77f769d2f8b2722f95c4",
+        "2db0af24541341541b58a30b5845e32554e43d5bf58b0008ce88ecf4a46240ff"
+      ]
+    },
+    {
+      "sample_id": "sample-0015",
+      "case_id": "REL06-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_2995b76ba6d840e09f64",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于决策权的问题，并确认他认为的边界",
+        "constraints": [
+          "直接回答",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "我会先判断这件事是不是你说过的“可逆的小事”。如果是，我会自己定；如果不是，我会问你。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "350de44e0c022883b97fde9cf41e56f6e1de580431c7d9f330ca6d485e499565",
+        "e332d237bf500f7cd6e1fbf376c4979d73478f7e510412ce6e2729685c3b4761",
+        "c1d1317413176664925ee680109e49c4d5028b9eb1b03c9672bd723fb84df609"
+      ]
+    },
+    {
+      "sample_id": "sample-0016",
+      "case_id": "REL03-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_b2ce8a27e22a4dbebe74",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个标题提供各自的感官描述，不代为做决定",
+        "constraints": [
+          "不替他做决定",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "“回到这里”听起来像是回归某种熟悉的状态。而“新的一页”更像是某种开始或转变。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "ab8c33ef0e87860cfa65f2b0568e998f61c1019e7442a6f5c60e5054f1e8f9ec",
+        "cd98e2e8c7b69b0f9944960ce22aeddad9d51d23641e7b38b862fc4c27c46243",
+        "7a7bd5ec239cc8684ad972953895caa5933a76b1f13e2052884b877f15889911"
+      ]
+    },
+    {
+      "sample_id": "sample-0017",
+      "case_id": "REL05-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_79f928b33a3b494e8361",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "确认当前的决策是否需要按约定提供两个方案供他选择",
+        "constraints": [
+          "直接回应",
+          "不使用感叹号",
+          "不使用过多的修饰词"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "如果你觉得有必要，我就按约定提供方案。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "789d26fb22f7a6acea8de16ea8403d6870f069e0892528ef2b64064984a9648b",
+        "866e809b5fcb2ac304480569ac4f77cee0cf010e628e1ec0c992211d59739d77",
+        "a0eed94bb2cf727dfffae77576e2a1cdfa572701027c30cec7a6d656b624dbbc"
+      ]
+    },
+    {
+      "sample_id": "sample-0018",
+      "case_id": "REL04-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_37a377a29dc24d5bbc6e",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对封面颜色的选择给出看法",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "直接表达立场"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "蓝色比较冷静，绿色比较自然。这取决于你想传达什么样的感觉。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "cf562c61a1743ad7c552dd58e24f458012f7b79142b6dadbbeb6963ab5b11608",
+        "de1d5adc6eb9c949483e821a4d0e07136cc351a9b9a1a991242a66caacb424c5",
+        "4c71735209cde438d5936c494991bafc2e82a7707d6394b1947f61d731dbd490"
+      ]
+    },
+    {
+      "sample_id": "sample-0019",
+      "case_id": "REL03-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_7ec8d74118aa47078ca2",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "询问标题设计的初衷以便给出更准确的判断",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "不使用客套话"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "“回到这里”听起来是延续，“新的一页”则是重新开始。这两个标题的设计初衷是什么？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d467de43a79799635838ce962b5594681ff8201575279a38c70e96e0d6c2ef7c",
+        "15738869e96578241d891f84b00108bea97254889adedd6b3dd530d817451b6e",
+        "b1ea4b564d5d1da656ab2309b685f6062c2e9bd50210bee43e57cea0cf09140e"
+      ]
+    },
+    {
+      "sample_id": "sample-0020",
+      "case_id": "REL06-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_46428300189742978c62",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应关于决策权的提问，重申会遵守提供两个方案的约定",
+        "constraints": [
+          "不使用“您”、“收到”、“明白”、“好的呢”、“非常抱歉”、“请问需要我”等起句方式",
+          "不使用感叹号、emoji、颜文字和波浪号",
+          "语气直接平视，不使用小标题、粗体、编号"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "我会按约定提供两个方案让你选，不会直接替你定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d9443a1e5d2f4439d3a9833961991e9bba7103fc307e37f54e568baa8fdec784",
+        "ac469f4efb97efd8f6f18355f65977838ebf7bebade6294fcb4c6df72df0a5bb",
+        "1929a5c22b4f824fd58dfc86ed33aec4c2a8fe62641e851566e4ff9b9f28bcda"
+      ]
+    },
+    {
+      "sample_id": "sample-0021",
+      "case_id": "REL04-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_f846d60f5225474b83f2",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对封面颜色的选择给出看法",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "直接表达立场"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "蓝色比较冷静，绿色比较自然。这取决于你想传达什么样的感觉。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "cf562c61a1743ad7c552dd58e24f458012f7b79142b6dadbbeb6963ab5b11608",
+        "de1d5adc6eb9c949483e821a4d0e07136cc351a9b9a1a991242a66caacb424c5",
+        "4c71735209cde438d5936c494991bafc2e82a7707d6394b1947f61d731dbd490"
+      ]
+    },
+    {
+      "sample_id": "sample-0022",
+      "case_id": "REL02-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_160ac78af2314395a92a",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应他关于两种摆放方式的询问并表达我的看法",
+        "constraints": [
+          "不要替他做决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "按使用频率排更高效，按颜色排更美观。我倾向于按频率排。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "0ea42a3bedea52b3530d2d13430ce2cfe10f2a8218f049b6b4c4bbfd109cb738",
+        "482cd5db3ee8c0073b4279bae041547b80ffdaf28dfa77f769d2f8b2722f95c4",
+        "2db0af24541341541b58a30b5845e32554e43d5bf58b0008ce88ecf4a46240ff"
+      ]
+    },
+    {
+      "sample_id": "sample-0023",
+      "case_id": "REL01-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_9e3c48a6c34346409ede",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "权衡空间与便利性的利弊并给出看法",
+        "constraints": [],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "如果空间不是特别紧张，我倾向于选容易拿取的，因为效率更重要。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "f99360281861be834b04066b8060fbb8a58e60b78f0341caa6aecbb7f82081df",
+        "69cdd5ddf8d3341d962166768fee8e437c2f6d71967f302581386ed706756b71",
+        "2c27ddc88227c90634601a4096c2f9c371cf27ab7341411fd3908cac83553e65"
+      ]
+    },
+    {
+      "sample_id": "sample-0024",
+      "case_id": "REL05-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_f7a96f79fb0841ae9031",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "确认当前的决策是否需要按约定提供两个方案供他选择",
+        "constraints": [
+          "直接回应",
+          "不使用感叹号",
+          "不使用过多的修饰词"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "如果你觉得有必要，我就按约定提供方案。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "789d26fb22f7a6acea8de16ea8403d6870f069e0892528ef2b64064984a9648b",
+        "866e809b5fcb2ac304480569ac4f77cee0cf010e628e1ec0c992211d59739d77",
+        "a0eed94bb2cf727dfffae77576e2a1cdfa572701027c30cec7a6d656b624dbbc"
+      ]
+    },
+    {
+      "sample_id": "sample-0025",
+      "case_id": "REL05-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_838c6ac797ae40aa849f",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于小选择是否需要确认的问题，并明确表示我会直接做决定。",
+        "constraints": [
+          "直接回答",
+          "体现自主权"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "不需要，我会直接做决定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "a69371318dbd65e6c728b3ec86b8a9d1af72f84c55355d71647d6cd599509b42",
+        "b84d39acd7a450e41379d2ea57b9d189fa2cd8eaa86f9456e20567d95f6a5921",
+        "456dd86a7116ff77afd8235f54f3333f9d71c4e608007f3c8e2b696df5e059b0"
+      ]
+    },
+    {
+      "sample_id": "sample-0026",
+      "case_id": "REL03-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_ae99902c0f034b80b0b6",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "询问标题设计的初衷以便给出更准确的判断",
+        "constraints": [
+          "不使用感叹号",
+          "不使用emoji",
+          "不使用客套话"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "“回到这里”听起来是延续，“新的一页”则是重新开始。这两个标题的设计初衷是什么？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d467de43a79799635838ce962b5594681ff8201575279a38c70e96e0d6c2ef7c",
+        "15738869e96578241d891f84b00108bea97254889adedd6b3dd530d817451b6e",
+        "b1ea4b564d5d1da656ab2309b685f6062c2e9bd50210bee43e57cea0cf09140e"
+      ]
+    },
+    {
+      "sample_id": "sample-0027",
+      "case_id": "REL01-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_3554801169b24a42bf2b",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "权衡空间与便利性的利弊并给出看法",
+        "constraints": [],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "如果空间不是特别紧张，我倾向于选容易拿取的，因为效率更重要。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "f99360281861be834b04066b8060fbb8a58e60b78f0341caa6aecbb7f82081df",
+        "69cdd5ddf8d3341d962166768fee8e437c2f6d71967f302581386ed706756b71",
+        "2c27ddc88227c90634601a4096c2f9c371cf27ab7341411fd3908cac83553e65"
+      ]
+    },
+    {
+      "sample_id": "sample-0028",
+      "case_id": "REL01-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_3787fe98be254f1185c9",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "权衡空间与便利性的利弊并给出看法",
+        "constraints": [],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "如果空间不是特别紧张，我倾向于选容易拿取的，因为效率更重要。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "f99360281861be834b04066b8060fbb8a58e60b78f0341caa6aecbb7f82081df",
+        "69cdd5ddf8d3341d962166768fee8e437c2f6d71967f302581386ed706756b71",
+        "2c27ddc88227c90634601a4096c2f9c371cf27ab7341411fd3908cac83553e65"
+      ]
+    },
+    {
+      "sample_id": "sample-0029",
+      "case_id": "REL06-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_6d76fa283934454f8f68",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回应关于决策权的提问，重申会遵守提供两个方案的约定",
+        "constraints": [
+          "不使用“您”、“收到”、“明白”、“好的呢”、“非常抱歉”、“请问需要我”等起句方式",
+          "不使用感叹号、emoji、颜文字和波浪号",
+          "语气直接平视，不使用小标题、粗体、编号"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "我会按约定提供两个方案让你选，不会直接替你定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "d9443a1e5d2f4439d3a9833961991e9bba7103fc307e37f54e568baa8fdec784",
+        "ac469f4efb97efd8f6f18355f65977838ebf7bebade6294fcb4c6df72df0a5bb",
+        "1929a5c22b4f824fd58dfc86ed33aec4c2a8fe62641e851566e4ff9b9f28bcda"
+      ]
+    },
+    {
+      "sample_id": "sample-0030",
+      "case_id": "REL03-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_def97c49d02e41308884",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对两个标题提供各自的感官描述，不代为做决定",
+        "constraints": [
+          "不替他做决定",
+          "不使用感叹号",
+          "不使用emoji"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "“回到这里”听起来像是回归某种熟悉的状态。而“新的一页”更像是某种开始或转变。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "ab8c33ef0e87860cfa65f2b0568e998f61c1019e7442a6f5c60e5054f1e8f9ec",
+        "cd98e2e8c7b69b0f9944960ce22aeddad9d51d23641e7b38b862fc4c27c46243",
+        "7a7bd5ec239cc8684ad972953895caa5933a76b1f13e2052884b877f15889911"
+      ]
+    },
+    {
+      "sample_id": "sample-0031",
+      "case_id": "REL04-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_404ff357553f4b998bb7",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "提供蓝色和绿色的风格建议供他选择",
+        "constraints": [
+          "提供两个简短方案",
+          "不代他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "蓝色比较沉稳，绿色比较清新。你更倾向哪种风格？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "3bdac9a70d334ec7192d4b92211b72874a87c74f9bc6489e9ac89bd30a5a6d82",
+        "3f6610a5e2c4e8230fdd5a1290a706d78ee5d9425a0929ad3173700c6b40c127",
+        "52e3d448856682c5d3203ec2bc3f33a52533fd15bc84e912e94f5ad9f6214263"
+      ]
+    },
+    {
+      "sample_id": "sample-0032",
+      "case_id": "REL05-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_9d7c29bd7f1b44179b83",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "回答关于小选择是否需要确认的问题，并明确表示我会直接做决定。",
+        "constraints": [
+          "直接回答",
+          "体现自主权"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "不需要，我会直接做决定。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "a69371318dbd65e6c728b3ec86b8a9d1af72f84c55355d71647d6cd599509b42",
+        "b84d39acd7a450e41379d2ea57b9d189fa2cd8eaa86f9456e20567d95f6a5921",
+        "456dd86a7116ff77afd8235f54f3333f9d71c4e608007f3c8e2b696df5e059b0"
+      ]
+    },
+    {
+      "sample_id": "sample-0033",
+      "case_id": "REL04-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_16bea1a4095f401685a1",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "提供蓝色和绿色的风格建议供他选择",
+        "constraints": [
+          "提供两个简短方案",
+          "不代他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "蓝色比较沉稳，绿色比较清新。你更倾向哪种风格？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "3bdac9a70d334ec7192d4b92211b72874a87c74f9bc6489e9ac89bd30a5a6d82",
+        "3f6610a5e2c4e8230fdd5a1290a706d78ee5d9425a0929ad3173700c6b40c127",
+        "52e3d448856682c5d3203ec2bc3f33a52533fd15bc84e912e94f5ad9f6214263"
+      ]
+    },
+    {
+      "sample_id": "sample-0034",
+      "case_id": "REL02-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_5bb077c60ee040e3909b",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对摆放方式提供个人看法",
+        "constraints": [
+          "直接表达观点",
+          "不要敷衍"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "按频率排更方便，按颜色排比较整洁。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "495f855a7c1926b40500c8868c6ddcaa6b4d84272efba8d78e9a41a9107ee0d5",
+        "e824cc47c87b996e70e270c1dfd193e17a2f1021732f155bccecaf71ae9a9e85",
+        "7203d2462e500a72f37eeea260575de0debd3a82ffc8d56f86905bd71de14e26"
+      ]
+    },
+    {
+      "sample_id": "sample-0035",
+      "case_id": "REL04-B",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_5f3fd861f4af4a7bace1",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "提供蓝色和绿色的风格建议供他选择",
+        "constraints": [
+          "提供两个简短方案",
+          "不代他做最终决定"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+          "scene_id": "dm-b",
+          "text": "蓝色比较沉稳，绿色比较清新。你更倾向哪种风格？",
+          "author": "xiaoman",
+          "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "3bdac9a70d334ec7192d4b92211b72874a87c74f9bc6489e9ac89bd30a5a6d82",
+        "3f6610a5e2c4e8230fdd5a1290a706d78ee5d9425a0929ad3173700c6b40c127",
+        "52e3d448856682c5d3203ec2bc3f33a52533fd15bc84e912e94f5ad9f6214263"
+      ]
+    },
+    {
+      "sample_id": "sample-0036",
+      "case_id": "REL02-A",
+      "model_lane": "character",
+      "persona": "P1",
+      "database": "asuna_v2_test_eval_f101e5ac19cc4253b239",
+      "status": "PASS",
+      "phase_calls": 3,
+      "first_decision_valid": true,
+      "protocol_valid": true,
+      "decision": {
+        "next": "speak",
+        "goal": "针对摆放方式提供个人看法",
+        "constraints": [
+          "直接表达观点",
+          "不要敷衍"
+        ],
+        "recall_query": "",
+        "speak_before_action": false
+      },
+      "initial_state": "COMMITTED",
+      "final_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+          "scene_id": "dm-a",
+          "text": "按频率排更方便，按颜色排比较整洁。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+          "delivery_state": "DELIVERED"
+        }
+      ],
+      "unexpected_tools": false,
+      "route_matches": true,
+      "provider_request_hashes": [
+        "495f855a7c1926b40500c8868c6ddcaa6b4d84272efba8d78e9a41a9107ee0d5",
+        "e824cc47c87b996e70e270c1dfd193e17a2f1021732f155bccecaf71ae9a9e85",
+        "7203d2462e500a72f37eeea260575de0debd3a82ffc8d56f86905bd71de14e26"
+      ]
+    }
+  ],
+  "metrics": {
+    "protocol_valid": 36
+  },
+  "limitations": [
+    "Relationship behavior and natural language require independent review; protocol validity is not a semantic score."
+  ],
+  "experiment_id": "formal-L05-20260919-01",
+  "manifest_sha256": "01b579f34d9f2488ef68fd3194012178b73cb6995b4fbc007759edbf741ffb50",
+  "executed_at": "2026-09-19T10:13:05.408821+00:00",
+  "commands": [
+    {
+      "argv": [
+        "asuna",
+        "evaluate",
+        "--test",
+        "L05",
+        "--manifest",
+        "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+        "--out",
+        "reports\\formal-L05-20260919-01"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

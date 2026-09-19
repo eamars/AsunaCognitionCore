@@ -1,0 +1,88 @@
+{
+  "seq": 530,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "da149f0ce5db36671a284ff01cb1681080d59c2bd2863b60a08e1c11f955e28a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:g2",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [],
+    "ranks": {
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M05": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-cf6ea7571a0dab785021849000d08f5f:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-b5bb8fcf83a2d8b2695832454cdf4beb:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-2fa60132279c4176a33cdc9c056ea182:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M05",
+      "M11",
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0",
+      "mono-ep-2fa60132279c4176a33cdc9c056ea182:0",
+      "mono-ep-b5bb8fcf83a2d8b2695832454cdf4beb:0",
+      "mono-ep-cf6ea7571a0dab785021849000d08f5f:0"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M05",
+      "mono-ep-cf6ea7571a0dab785021849000d08f5f:0",
+      "mono-ep-b5bb8fcf83a2d8b2695832454cdf4beb:0",
+      "mono-ep-2fa60132279c4176a33cdc9c056ea182:0",
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0"
+    ]
+  },
+  "prev_hash": "a5e8c1de60a6bd542234e9ca2d4fc458632964283d687f153a9e7e64f08447a3",
+  "time_ns": 1789812597550297300,
+  "event_hash": "d330715b1e88c7cba232a80ec65a280365f871a72578b8f923f29f5787960fcf"
+}

@@ -187,12 +187,32 @@ class Store:
         head,base=self.head(entity,scope) or (None,None)
         existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
         if existing:
-            if head and head['revision_id']==existing['_id']:
-                return existing
+            if existing.get('content')!=content or existing.get('source_ids')!=sources or existing.get('parent_revision_id')!=base_revision_id or existing.get('entity_key')!=entity+'|'+scope:
+                raise Conflict('MUTATION_ID_CONTENT_CHANGED')
+            ancestor=base
+            for _ in range(512):
+                if not ancestor:break
+                if ancestor['_id']==existing['_id']:return existing
+                parent=ancestor.get('parent_revision_id')
+                ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
             raise Conflict('MUTATION_ALREADY_ATTEMPTED')
         if not head or head['revision_id']!=base_revision_id:
             raise Conflict('BASE_REVISION_STALE')
-        evidence_ids={e for m in self.db.memory_units.find({'_id':{'$in':sources}}) for e in m.get('source_event_ids',[])}
+        evidence_ids=set();visited=set()
+        def roots(key,path):
+            if key in path:raise Denied('SOURCE_CYCLE')
+            if len(visited)>512:raise Denied('SOURCE_GRAPH_LIMIT')
+            if key in visited:return
+            visited.add(key)
+            row=self.db.memory_units.find_one({'_id':key})
+            if row:
+                if row.get('status')=='tombstone' or row['scope_key'] not in ('global-safe',scope):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
+                descendants=row.get('source_event_ids',[])
+                if descendants:
+                    for child in descendants:roots(child,path|{key})
+                else:evidence_ids.add(key)
+            else:evidence_ids.add(key)
+        for source in sources:roots(source,set())
         processed=set(base.get('processed_source_ids',[]))
         if evidence_ids and evidence_ids.issubset(processed):
             raise Conflict('NO_NEW_SOURCE_EVENTS')

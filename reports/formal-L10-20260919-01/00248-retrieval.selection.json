@@ -1,0 +1,103 @@
+{
+  "seq": 248,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a6e9784c4cb844e05b8a36c32f0d27d1c6735364c06f35f8c637cd21f9e0ca6a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "mono-ep-1a2593588b5db0ee082072fa8d7186a4:0",
+      "mono-ep-5fc13e6d2a5b9ca9ad597e3b236ffb71:0"
+    ],
+    "ranks": {
+      "mono-ep-1a2593588b5db0ee082072fa8d7186a4:0": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1
+        }
+      },
+      "mono-ep-5fc13e6d2a5b9ca9ad597e3b236ffb71:0": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "lexical": 2
+        }
+      },
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M09": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M08": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M07": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M02": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M01": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "mono-ep-1a2593588b5db0ee082072fa8d7186a4:0",
+      "mono-ep-5fc13e6d2a5b9ca9ad597e3b236ffb71:0",
+      "M01",
+      "M02",
+      "M07",
+      "M08"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M09",
+      "M08",
+      "M07",
+      "M02",
+      "M01"
+    ]
+  },
+  "prev_hash": "9a558486a131bd436efd48b198aa2765eb8675e2958be1e3032278a426f100cd",
+  "time_ns": 1789812270330535800,
+  "event_hash": "6d50e4331fcde30ef7f9a1cd202a81515199951417d8ff91ff5ef77783e9fb1c"
+}

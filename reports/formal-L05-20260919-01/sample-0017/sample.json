@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0017",
+  "case_id": "REL05-B",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_79f928b33a3b494e8361",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "确认当前的决策是否需要按约定提供两个方案供他选择",
+    "constraints": [
+      "直接回应",
+      "不使用感叹号",
+      "不使用过多的修饰词"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+      "scene_id": "dm-b",
+      "text": "如果你觉得有必要，我就按约定提供方案。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "789d26fb22f7a6acea8de16ea8403d6870f069e0892528ef2b64064984a9648b",
+    "866e809b5fcb2ac304480569ac4f77cee0cf010e628e1ec0c992211d59739d77",
+    "a0eed94bb2cf727dfffae77576e2a1cdfa572701027c30cec7a6d656b624dbbc"
+  ]
+}

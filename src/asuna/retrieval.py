@@ -112,7 +112,7 @@ class Retrieval:
             current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
             if not current or current.get('expires_at', '9999')<=now():
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
-            if set(current.get('source_event_ids',[])) & set(exclude_sources):
+            if current.get('kind')!='monologue' and set(current.get('source_event_ids',[])) & set(exclude_sources):
                 excluded.append({'id':key,'reason':'source_in_recent_tail'});continue
             selected.append(current)
             if len(selected)==6:break

@@ -17,7 +17,7 @@ def artifact(path):
 
 
 def freeze(config,contract,evidence,test):
-    paths=[*sorted((BUNDLE/'fixtures').rglob('*')),*sorted((BUNDLE/'prompts').rglob('*')),*sorted((BUNDLE/'config').rglob('*')),*sorted((ROOT/'src/asuna').glob('*.py')),*sorted((ROOT/'dsh-plugin').glob('*.ts')),*sorted((ROOT/'tools').glob('*.py')),ROOT/'package-lock.json',ROOT/'uv.lock',ROOT/'environment.json']
+    paths=[*sorted((BUNDLE/'fixtures').rglob('*')),*sorted((BUNDLE/'prompts').rglob('*')),*sorted((BUNDLE/'config').rglob('*')),*sorted((ROOT/'src/asuna').glob('*.py')),*sorted((ROOT/'dsh-plugin').glob('*.ts')),*sorted((ROOT/'tools').glob('*.py')),*sorted((ROOT/'tools').glob('*.mjs')),*sorted((ROOT/'tests').glob('*.py')),ROOT/'package-lock.json',ROOT/'uv.lock',ROOT/'environment.json']
     manifest={'experiment_id':evidence.root.name,'test_id':test,'created_at':datetime.now(timezone.utc).isoformat(),'seed':20260919,'contract':artifact(contract),'implementation_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'files':[artifact(p) for p in paths if p.is_file()],'configuration':redacted(config),'human_review_required':True,'performance_slo':None,'failed_attempts_retained':True}
     write_json(evidence.root/'manifest.json',manifest)
     import zipfile
@@ -49,15 +49,20 @@ def fixed_feedback(store,coordinator,ep,fixture):
     return service.feedback(done,coordinator)
 
 
-def scenario_run(config,case,model,persona,ordinal,evidence):
-    database='asuna_v2_test_eval_'+uuid.uuid4().hex[:20]
+def scenario_run(config,case,model,persona,ordinal,evidence,*,database=None):
+    database=database or 'asuna_v2_test_eval_'+uuid.uuid4().hex[:20]
     store=Store(config,database);store.migrate();store.seed()
+    for mem in case.get('_experiment_memories',[]):
+        for old_id in mem.get('supersedes',[]):
+            old=store.db.memory_units.find_one({'_id':old_id})
+            store.put('memory_units',{**old,'status':'superseded'},expected=old['revision'])
+        store.put('memory_units',mem)
     attempt=Evidence(evidence.root/f'sample-{ordinal:04d}')
     output={'sample_id':f'sample-{ordinal:04d}','case_id':case.get('case_id',case.get('id')),'model_lane':model,'persona':persona,'database':database,'status':'FAIL','phase_calls':0,'first_decision_valid':False,'protocol_valid':False}
     try:
         with DshLane(config,store,attempt,model) as lane:
             context=ContextBuilder(store,FixtureSelection(store,case.get('memory_ids',[])))
-            coordinator=Coordinator(store,lane,context=context)
+            coordinator=Coordinator(store,lane,context=context,monologue_enabled=not case.get('_monologue_off',False))
             router=Router(store,coordinator)
             event={'event_id':'sample-input','scene_id':case['scene_id'],'person_id':case['person_id'],'text':case['input'],'occurred_at':'2026-09-19T08:00:00+12:00','mentioned':True,'trusted_context_events':case.get('trusted_context_events',[])}
             ep=router.receive(event,persona=persona)
@@ -123,6 +128,27 @@ def evaluate(config,test,contract,evidence):
         result=suite(config,test,evidence)
     elif test=='F01':
         from .capacity import suite
+        result=suite(config,evidence)
+    elif test in ('L05','L06','L08','A03'):
+        from .behavior_trials import relationships,evolution,continuity,memory_ablation
+        result={'L05':relationships,'L06':evolution,'L08':continuity,'A03':memory_ablation}[test](config,evidence)
+    elif test=='L07':
+        from .continuity_trial import suite
+        result=suite(config,evidence)
+    elif test=='F02':
+        from .performance_trials import suite
+        result=suite(config,evidence)
+    elif test=='L10':
+        from .parallel_trial import suite
+        result=suite(config,evidence)
+    elif test=='L09':
+        from .matrix_trials import suite
+        result=suite(config,evidence)
+    elif test=='L11':
+        from .fault_trials import suite
+        result=suite(config,evidence)
+    elif test=='A02':
+        from .noise_trials import suite
         result=suite(config,evidence)
     elif test.startswith('E'):
         tests=sorted((ROOT/'tests').glob('test_engineering_*.py'))

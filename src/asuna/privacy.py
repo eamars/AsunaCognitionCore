@@ -33,6 +33,8 @@ class PrivacyService:
         scene=db.scenes.find_one({'scope_key':scope})
         self.store.put('scenes',{**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
         # Immediate fencing precedes potentially slow file cleanup.
+        from .blobs import BlobStore
+        erased_blobs=BlobStore(self.store).erase_scope(scope)
         sources=set(memory.get('source_event_ids',[]))|{key}
         affected={key}
         for _ in range(32):
@@ -42,7 +44,7 @@ class PrivacyService:
             affected|=new;sources|=new
         roots=set();session_ids=set()
         for session in db.sessions.find({'scope_key':scope}):
-            roots.add(session.get('evidence_root',''));session_ids.add(session['_id'])
+            roots.update(session.get('evidence_roots',[]));roots.add(session.get('evidence_root',''));session_ids.add(session['_id'])
             home=Path(session['dsh_home']).resolve()
             if not home.is_relative_to((ROOT/'.runtime').resolve()):raise Denied('ERASURE_HOME_OUTSIDE_REPOSITORY')
             for directory in (home/'sessions').glob('**/'+session['_id']):
@@ -103,6 +105,6 @@ class PrivacyService:
             for item in path.rglob('*'):
                 if item.is_file():item.unlink();removed_files+=1
             write_json(path/'erasure.json',{'deletion_id':deletion,'scope_key':scope,'reason':'conservative removal of the affected run evidence containing raw requests','previous_audit_roots':previous_roots})
-        result={'deletion_id':deletion,'scope_key':scope,'memory_ids':sorted(affected),'policy_epoch':scene['policy_epoch']+1,'invalidated_sessions':sorted(session_ids),'evidence_files_removed':removed_files,'old_roots':previous_roots,'new_roots':new_roots,'limitations':['global-safe deletion currently rejected','scope-wide generated content and affected run evidence are conservatively erased','previously downloaded exports and external backups cannot be recalled; backup retention not configured']}
+        result={'deletion_id':deletion,'scope_key':scope,'memory_ids':sorted(affected),'policy_epoch':scene['policy_epoch']+1,'invalidated_sessions':sorted(session_ids),'evidence_files_removed':removed_files,'gridfs_blobs_removed':erased_blobs,'old_roots':previous_roots,'new_roots':new_roots,'limitations':['global-safe deletion currently rejected','scope-wide generated content and affected run evidence are conservatively erased','previously downloaded exports and external backups cannot be recalled; backup retention not configured']}
         self.store.audit(deletion,'privacy.completed',result,'operator')
         return result

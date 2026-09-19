@@ -62,9 +62,13 @@ Copy-Item config/local.example.json config/local.json
 .venv\Scripts\python.exe tools/run_acceptance.py F01
 .venv\Scripts\asuna.exe report --out reports/my-report-unique.json
 .venv\Scripts\asuna.exe export --out evidence-unique.zip
+.venv\Scripts\asuna.exe review-pack --out reports/review-unique
+.venv\Scripts\asuna.exe review-import --original reports/review-unique/blind.json --submitted my-human-ratings.json --out reports/import-unique
 ```
 
 每轮创建新的 experiment_id，先写 manifest，再调用模型；同名输出目录会拒绝覆盖。所有失败与重试保留。`--probe-count` 是缩小的设计探针，不算正式验收。A01 生成匿名评审表与单独 operator 映射；模型或本代理的自评不能替代用户评分。
+
+`review-pack` 生成离线 `review.html`。人工填写后下载 JSON，再用 `review-import` 导入；空白评分保留为空，导入本身不宣布认知通过。大型 provider 正文同时保存到新库 GridFS，详见 [migration 002](migrations/002_artifact_blobs.md)。
 
 详细限制、测试命令与 exit code 见各 `result.json`。特别需要区分：真实 native compaction 与 mock、真实长输入与 metadata、向量命中与近期回读、收到模型文本与实际送达、状态重放与模型重跑。
 

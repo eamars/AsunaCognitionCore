@@ -60,7 +60,8 @@ class MemoryService:
         persona=self.store.head('persona:P1','global-safe')[1]['content']['body']
         system=(BUNDLE/'prompts/common.md').read_text(encoding='utf-8')+'\n'+persona
         text=json.dumps({'scope_key':scope,'entity_key':entity,'base_revision_id':head['revision_id'],'current':base['content'],'sources':sources,'schema':REFLECTION},ensure_ascii=False)+'\n'+(BUNDLE/'prompts/reflect.md').read_text(encoding='utf-8')
-        result=lane.generate('reflection:'+scope+':'+operation,operation,'REFLECT',text,system)
+        scene=self.store.db.scenes.find_one({'scope_key':scope})
+        result=lane.generate('reflection:'+scope+':'+operation,operation,'REFLECT',text,system,scope_key=scope,policy_epoch=scene['policy_epoch'] if scene else 1)
         self.store.audit(operation,'reflection.output',{'request_refs':result.request_refs,'content':result.content,'finish_reason':result.finish_reason},scope)
         if result.finish_reason!='stop':raise ValueError('REFLECTION_INCOMPLETE')
         value=json.loads(result.content);jsonschema.validate(value,REFLECTION)

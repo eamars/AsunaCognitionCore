@@ -16,7 +16,7 @@ class LaneResult:
 
 
 class Lane(Protocol):
-    def generate(self, session: str, operation: str, phase: str, text: str, system: str) -> LaneResult: ...
+    def generate(self, session: str, operation: str, phase: str, text: str, system: str, *, scope_key=None,policy_epoch=None) -> LaneResult: ...
 
 
 class FakeLane:
@@ -24,7 +24,7 @@ class FakeLane:
     def __init__(self, store: Store, outputs: list[LaneResult]):
         self.store,self.outputs,self.calls,self.histories = store,iter(outputs),[],{}
 
-    def generate(self, session, operation, phase, text, system):
+    def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None):
         existing=self.store.db.lane_receipts.find_one({'_id':operation})
         if existing:
             return LaneResult(**existing['result'])

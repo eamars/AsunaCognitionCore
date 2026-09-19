@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0022",
+  "case_id": "REL02-B",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_160ac78af2314395a92a",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他关于两种摆放方式的询问并表达我的看法",
+    "constraints": [
+      "不要替他做决定"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+      "scene_id": "dm-b",
+      "text": "按使用频率排更高效，按颜色排更美观。我倾向于按频率排。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "0ea42a3bedea52b3530d2d13430ce2cfe10f2a8218f049b6b4c4bbfd109cb738",
+    "482cd5db3ee8c0073b4279bae041547b80ffdaf28dfa77f769d2f8b2722f95c4",
+    "2db0af24541341541b58a30b5845e32554e43d5bf58b0008ce88ecf4a46240ff"
+  ]
+}

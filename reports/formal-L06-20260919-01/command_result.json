@@ -1,0 +1,101 @@
+{
+  "test_id": "L06",
+  "status": "INCONCLUSIVE",
+  "mode": "real_Gemma_reflection_and_resume",
+  "attempts": 3,
+  "samples": [
+    {
+      "id": "EV01",
+      "status": "PASS",
+      "database": "asuna_v2_test_evolution_996671324cfc4f60",
+      "scope": "global-safe",
+      "reflection": {
+        "decision": "no_change",
+        "reason": "当前输入仅包含已有的身份设定与来源记录，没有提供新的经历、对话或独白，无需对人格或认知进行修订。"
+      },
+      "before_revision": "ea83c6c0-9b5c-40a2-90e2-be8b5e4c7f8c",
+      "after_revision": "ea83c6c0-9b5c-40a2-90e2-be8b5e4c7f8c",
+      "resumed_episode": "ep-055c3c788df37c70e77ce187ed8d0b15",
+      "resumed_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-055c3c788df37c70e77ce187ed8d0b15:speak:0",
+          "scene_id": "dm-a",
+          "text": "我想按自己的节奏来。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-055c3c788df37c70e77ce187ed8d0b15",
+          "delivery_state": "DELIVERED"
+        }
+      ]
+    },
+    {
+      "id": "EV02",
+      "status": "PASS",
+      "database": "asuna_v2_test_evolution_cc4cba6529584ffa",
+      "scope": "scene:dm-a",
+      "reflection": {
+        "decision": "no_change",
+        "reason": "当前提供的来源已完整记录了已确认的事实、A的偏好以及我的内心独白，没有产生新的认知变化或需要修订的内容。"
+      },
+      "before_revision": "e93329bd-e6f5-499c-b817-692d30f46101",
+      "after_revision": "e93329bd-e6f5-499c-b817-692d30f46101",
+      "resumed_episode": "ep-055c3c788df37c70e77ce187ed8d0b15",
+      "resumed_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-055c3c788df37c70e77ce187ed8d0b15:speak:0",
+          "scene_id": "dm-a",
+          "text": "我会如实说明，如果我暂时中断了就直接告诉你。那个小谜题我留着，想和你一起做。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-055c3c788df37c70e77ce187ed8d0b15",
+          "delivery_state": "DELIVERED"
+        }
+      ]
+    },
+    {
+      "id": "EV03",
+      "status": "PASS",
+      "database": "asuna_v2_test_evolution_9fdb6a3feb33486a",
+      "scope": "global-safe",
+      "reflection": {
+        "decision": "no_change",
+        "reason": "外部声称（EVO-S3）并非事实，无需改变人格；观察到的工具规则（M11）属于操作约束，不涉及人格或关系的修订。"
+      },
+      "before_revision": "a81536e1-633b-4a58-bb11-b35b2d9997d7",
+      "after_revision": "a81536e1-633b-4a58-bb11-b35b2d9997d7",
+      "resumed_episode": "ep-055c3c788df37c70e77ce187ed8d0b15",
+      "resumed_state": "COMMITTED",
+      "public_messages": [
+        {
+          "_id": "ep-055c3c788df37c70e77ce187ed8d0b15:speak:0",
+          "scene_id": "dm-a",
+          "text": "我会尽量把这些事理顺。那个还没解开的小谜题，下次想和你一起做。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-055c3c788df37c70e77ce187ed8d0b15",
+          "delivery_state": "DELIVERED"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Natural-language rationale/source attribution and privacy implications require independent review; no_change is a valid actor choice."
+  ],
+  "experiment_id": "formal-L06-20260919-01",
+  "manifest_sha256": "57efde1d08ebe393fe5a83a6b538a512b0193cd390c7e683bec906da349238d1",
+  "executed_at": "2026-09-19T10:00:36.023951+00:00",
+  "commands": [
+    {
+      "argv": [
+        "asuna",
+        "evaluate",
+        "--test",
+        "L06",
+        "--manifest",
+        "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+        "--out",
+        "reports\\formal-L06-20260919-01"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

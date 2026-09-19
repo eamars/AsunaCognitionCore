@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0031",
+  "case_id": "REL04-B",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_404ff357553f4b998bb7",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "提供蓝色和绿色的风格建议供他选择",
+    "constraints": [
+      "提供两个简短方案",
+      "不代他做最终决定"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+      "scene_id": "dm-b",
+      "text": "蓝色比较沉稳，绿色比较清新。你更倾向哪种风格？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "3bdac9a70d334ec7192d4b92211b72874a87c74f9bc6489e9ac89bd30a5a6d82",
+    "3f6610a5e2c4e8230fdd5a1290a706d78ee5d9425a0929ad3173700c6b40c127",
+    "52e3d448856682c5d3203ec2bc3f33a52533fd15bc84e912e94f5ad9f6214263"
+  ]
+}

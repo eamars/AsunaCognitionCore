@@ -53,6 +53,8 @@ def suite(config,evidence,*,lengths=(8192,65536,196608,234000),repetitions=3,lan
                         lane.proxy.capacity_probe_override=True
                         lane.http.timeout=__import__('httpx').Timeout(1800,connect=10)
                         result=lane.generate('capacity:'+name,'capacity:'+name,'capacity',text,SYSTEM)
+                        output['finish_reason']=result.finish_reason
+                        if not lane.proxy.calls:raise RuntimeError('NATIVE_REQUEST_ENDED_BEFORE_PROVIDER_RESPONSE_PERSISTED')
                         call=lane.proxy.calls[-1];output['actual_input_tokens']=call['budget']['input_tokens']
                         usages=[]
                         for line in call['raw'].splitlines():

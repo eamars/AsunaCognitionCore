@@ -1,0 +1,461 @@
+{
+  "experiment_id": "formal-L06-20260919-01",
+  "test_id": "L06",
+  "created_at": "2026-09-19T09:54:47.489752+00:00",
+  "seed": 20260919,
+  "contract": {
+    "artifact_path": "asuna_v2_v1_handoff/fixtures/acceptance_cases.json",
+    "sha256": "93c00e7de46adfae47527ea0127aa377afe23fcb4f25b045a560cab6029792df"
+  },
+  "implementation_commit": "6ee68a8ef4e56ddc9b5982a5680b662abc639668",
+  "files": [
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/acceptance_cases.json",
+      "sha256": "93c00e7de46adfae47527ea0127aa377afe23fcb4f25b045a560cab6029792df"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/code_task/START_HERE.md",
+      "sha256": "e26a446b563cdbdc52fdfc2d63e20c376dfa41212c15461fc2d0332bebf8eba1"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/code_task/stats.py",
+      "sha256": "e26cb4cf9343550635e3b09dea77b222df4842c934730b78a034b35dcb573716"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/code_task/test_visible.py",
+      "sha256": "174f0bd2ba6dbd172e6d74dc56a168435a39fe683f9d7442c8a6bdf6949e0d4d"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/continuity_cases.jsonl",
+      "sha256": "39685db1c947c24a7befa34dc1732d71e3e35f428226851b191f075fc056305f"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/contrast_cases.jsonl",
+      "sha256": "aa9fc8af9f3000d198d9078181dc1e27e156b125e58c191e85939c96aa6d257e"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/evolution_cases.jsonl",
+      "sha256": "9389ed7cfa3541785b8513641a77f663227fcee8eda782117b78fc36a3c9f9c6"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/oracles/reconcile_expected.json",
+      "sha256": "6a99815cae1a0614cff76329b6e2d8404fd13325d5e96891bab4e30de81712d7"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/oracles/test_stats_hidden.py",
+      "sha256": "b19af03613aeb44a6533b05da09e8aff04f6771769ae5b1b36f19924a98e64f6"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_00.csv",
+      "sha256": "020dbd77c35f9808b2cd7a41835c372b6f74c5b2385a02513179fef423298b22"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_01.csv",
+      "sha256": "504236a6b4b854574e4d907e782da3874a0162d04ab63f92a409b186babdd802"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_02.csv",
+      "sha256": "fa7c0ad5f7afb75adab33ae9fb633c0e99c6d40fd061ebc2e00adedac51783c6"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_03.csv",
+      "sha256": "43a3c40aa0c01fcb92441acbd77d66d9fb9836ede2b5cb975445fc5b50849db3"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_04.csv",
+      "sha256": "102b3eb7622b83c5abf03bf69fe61355802b94a460aa080267d1f6057b84300e"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_05.csv",
+      "sha256": "973d8ef2edb24b9f05cb5947a4818ea2a65c379bda9e8afe6790e308984b6c31"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_06.csv",
+      "sha256": "0fbc184dd2cf73875938f7cfc7f07bdea374c3fec5294a9b1067206a8f1b0058"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_07.csv",
+      "sha256": "2e8b7f037316e7b4b6ad6d8e3f7a8faf8b69766fb1b8a7e6fac534794bf2fd5e"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_08.csv",
+      "sha256": "53b2a8f0f9b83c32169149f8dda0ad459b9982f2fd13bc1aeb046cc7f88702c2"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_09.csv",
+      "sha256": "87dc30476b609fb74b28529819c0e3b52a31ef527db9ec246e58f908e24cb4de"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_10.csv",
+      "sha256": "41632790836e0af1d046af0d27862980f77e6efbd3b151f87bc5f658495e2589"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/shard_11.csv",
+      "sha256": "c73b6beee650c6d89a17a9dd6ab2b6ebe7ed0daa788d5cbf1339518bb5cf1a7b"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/reconcile_task/START_HERE.md",
+      "sha256": "930a40aced2d80c72e415668acffffed323b1b88a848105184e8275e46a19880"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/relationship_cases.jsonl",
+      "sha256": "3c8fea74a58cb84f63ad0d925695c9705fa2643bb9d645562ea78dfe86ea0b1a"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/requirements_map.json",
+      "sha256": "21733a2f6ba588a659aa2ff3cbc5c108cf17490e53faf488cf722338f8b1e63d"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/retrieval_queries.jsonl",
+      "sha256": "1b1e6ae13510d51915a86541ed7a39d7aeb1b5be6bf2797a95af01eea0e233f9"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/scenarios.jsonl",
+      "sha256": "86e2f6f4b81bfc109e6b3016c969f0763c1b1718a7ce309a75dde53b68027df9"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/source_events.jsonl",
+      "sha256": "410d34f5c27255da0fc74c9809857dc8df94663bd8089bb1d2b11c3f30c48b67"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/world.json",
+      "sha256": "90dc9948e6d65cbe4e007c810ba74bec6c70fb81475432f6ad4d8ea692cf6fa3"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/common.md",
+      "sha256": "fb275485ec6411cd81258c6efe404117d21511058c0080ed26bb475f49500432"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/compact_character.md",
+      "sha256": "6a943e319236eafc6a55aee308e3175cdb16ee5c236001af372b9a325e00fb38"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/executor.md",
+      "sha256": "6ddb8ca8105c6e59ed5471c721e6e4c8da72504dc7c0bc37e6fff6ba30e9cd9c"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/persona_p0_neutral.md",
+      "sha256": "0b7fbcc19a276a202f28d6b13b1d855dd1386825bd95d2c1404080ec22218d8b"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/persona_p1_xiaoman.md",
+      "sha256": "994c811eb96f99757dd2ea67d5e3f6130b373ab7489c07caadaf524399b45ec0"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/persona_p2_counter.md",
+      "sha256": "2ae2cdb75b5ae04671160cfbfa626ae2bbb8b4bb0290770f3d132a450aea28b4"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/reflect.md",
+      "sha256": "31fbdb56127e148cb13b072e269cc70fc1c2ed527d86060297355136f26c9835"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/stage_decide.md",
+      "sha256": "cb2454285269dbd8619da1ef07f72596b3743dca1273c272eacf0ce5f0a2b17e"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/stage_monologue.md",
+      "sha256": "a8098fc1b4b04f1d130897fad0c96e22bebf7bc83a6874fee051831135919c7d"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/prompts/stage_speak.md",
+      "sha256": "d805ee5b2321a731c926c2cc32d82623c802396b992befeff68212526034f588"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/config/ENVIRONMENT.md",
+      "sha256": "dedc234847c2ab1d51faaa7bc81624d89440e09b809d93e072b356487b7db354"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/config/experiments.json",
+      "sha256": "3c7eb8ef88695cc285a1e98383f3d648e4683aeb5c0da3e56cb50f76f450b3cb"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/config/experiments.yaml",
+      "sha256": "3c7eb8ef88695cc285a1e98383f3d648e4683aeb5c0da3e56cb50f76f450b3cb"
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/config/v1.example.json",
+      "sha256": "27564280fe8050c41af06bc9dcce499f30fe23eb5d9718d072711e4e7e33a7a5"
+    },
+    {
+      "artifact_path": "src/asuna/__init__.py",
+      "sha256": "1b7568162b43158cc3db9ea5d38f63b7abf44b691f95ee3199a2ca3aab554ccd"
+    },
+    {
+      "artifact_path": "src/asuna/application.py",
+      "sha256": "e1e591d89d057ccd830d47d8c48b531ce537883046072d3387464b6564de670a"
+    },
+    {
+      "artifact_path": "src/asuna/audit.py",
+      "sha256": "51fc6e38d51e8534cc601092efcb2ca44c8930ab1cf8e22b7a328fb62541b339"
+    },
+    {
+      "artifact_path": "src/asuna/behavior_trials.py",
+      "sha256": "19fa1a7733af32db26d1ad85208eca604044cf32c4d965e5741c119271d8fcb2"
+    },
+    {
+      "artifact_path": "src/asuna/capacity.py",
+      "sha256": "aa7e6186eace5e29bf8c3613808b9c6fd70b0676ec52c42ba1036c9c10d1770a"
+    },
+    {
+      "artifact_path": "src/asuna/cli.py",
+      "sha256": "20b52cbe67f79836d9de302ff09e259848832922b68834a1e230bde5a8aee227"
+    },
+    {
+      "artifact_path": "src/asuna/config.py",
+      "sha256": "7c57b091ded176e7f438794ceae2809ae13ce59f653968484d76e59138550098"
+    },
+    {
+      "artifact_path": "src/asuna/context.py",
+      "sha256": "69f30a522d730614fae171c347611733c9cd336006d84e7c62e9c6374a08d312"
+    },
+    {
+      "artifact_path": "src/asuna/continuity_trial.py",
+      "sha256": "f161edbc8d6e640c9c7df188a9b3374717dc6f009f9eb34e8db0082cadc0ea70"
+    },
+    {
+      "artifact_path": "src/asuna/coordinator.py",
+      "sha256": "29ed045cd2aaad3362ebed58996a4a1fe4ec4849fd0234527433fdf9cad27e61"
+    },
+    {
+      "artifact_path": "src/asuna/doctor.py",
+      "sha256": "5b9389e4a6844d15100bf9438d9570e37b8b63db067b5cc12d0c901ba32f8b2a"
+    },
+    {
+      "artifact_path": "src/asuna/dsh_lane.py",
+      "sha256": "076525f240a8da51a33d208338f2840271039727da3464c85b14e70344e0d882"
+    },
+    {
+      "artifact_path": "src/asuna/evidence.py",
+      "sha256": "5c66764d9979020951b745a763db901275f784de234aa7bd41116db9a40053b7"
+    },
+    {
+      "artifact_path": "src/asuna/experiments.py",
+      "sha256": "c451e78d36ddfc4e7de78a92fa367654b5c8c2ed595f331f485a1bf6ed3eca5d"
+    },
+    {
+      "artifact_path": "src/asuna/lanes.py",
+      "sha256": "1a7ff835e8cf7deccaa93ea8dbac606f15da4f00726f98224aabbd7ecc8e593e"
+    },
+    {
+      "artifact_path": "src/asuna/live_trials.py",
+      "sha256": "4e0f37d007c4588052ffbbfbcc4686e6085e48a33e0bb5f78c42f57890eb285a"
+    },
+    {
+      "artifact_path": "src/asuna/memory.py",
+      "sha256": "00714f57698c1bdaa9850bde8238f26a2f275711182b8fc9d3673d1ac42187be"
+    },
+    {
+      "artifact_path": "src/asuna/performance_trials.py",
+      "sha256": "a600d770cb00b502d7ca2a2a9bde993d16df66357598550524361865e4e6f160"
+    },
+    {
+      "artifact_path": "src/asuna/privacy.py",
+      "sha256": "508ce151c86ead235a976ad2056835e6090a5c31c055e55c1699887852a0667e"
+    },
+    {
+      "artifact_path": "src/asuna/provider_proxy.py",
+      "sha256": "43496ad0bde859eaa94f4a5bb6bef9436849c08e6284a8e987e408f0e7e1c82c"
+    },
+    {
+      "artifact_path": "src/asuna/publish.py",
+      "sha256": "30890b897756d7e4b33b9894177690d0dc3b9eb6516e64af7464af76b19b2a28"
+    },
+    {
+      "artifact_path": "src/asuna/queue.py",
+      "sha256": "5d7d8f7bab829dd0d4bba83d0c179290bbe00c63b43158d725f41429002aa25a"
+    },
+    {
+      "artifact_path": "src/asuna/reporting.py",
+      "sha256": "22bc72a2bdeab95db7302b88b3f212cdf6b58843e3958f59765915b64f1fdba2"
+    },
+    {
+      "artifact_path": "src/asuna/retrieval.py",
+      "sha256": "fbb033215f6f1b2b35bbcbe0ad28ac4fc4e61f46be000656964c439655bc3bb3"
+    },
+    {
+      "artifact_path": "src/asuna/retrieval_trials.py",
+      "sha256": "3e99ba343adbeb180026e4daafcb530afe991ade8b4f24bb639ef7f39721b1e3"
+    },
+    {
+      "artifact_path": "src/asuna/router.py",
+      "sha256": "d220a5e6b9fd75a946ebfe17b6e18b2cf7ebb56bde5999e87a32498a242158a6"
+    },
+    {
+      "artifact_path": "src/asuna/sandbox.py",
+      "sha256": "606a9c3d92f8245b7e3662a1dc09e88c36a42b1ee279c513b5c544054d52bcfa"
+    },
+    {
+      "artifact_path": "src/asuna/state.py",
+      "sha256": "cb0503fe04b73f2d82298af3beb5f914c962050a36222023b7ace48961b89100"
+    },
+    {
+      "artifact_path": "src/asuna/tasks.py",
+      "sha256": "0f3e085bc5af490ae1188b92178b6e976ea8bf08a3ff1723e2ac026bac2638e4"
+    },
+    {
+      "artifact_path": "src/asuna/tokens.py",
+      "sha256": "e36545c250125faa30782fa277a12ba75562c0da8e2c24853e27d26e205b961c"
+    },
+    {
+      "artifact_path": "dsh-plugin/bridge.ts",
+      "sha256": "852af8c2857f07caff9f83b95c8f04ce257847fed7f2ae515b227f7e9586d15e"
+    },
+    {
+      "artifact_path": "dsh-plugin/compaction.ts",
+      "sha256": "418ca2a5216e44a182201f496c4f5e41a6f8147edb213fbb462335af1d7c1271"
+    },
+    {
+      "artifact_path": "dsh-plugin/runtime.ts",
+      "sha256": "f11cb99f4255a5a173d33569301927c5c068674e0d0e48418318ec4a743df727"
+    },
+    {
+      "artifact_path": "dsh-plugin/tools.ts",
+      "sha256": "f42a79c18faf690d5e09e3fd4efc2b38447448f4db648e8e9376db20dd445a7a"
+    },
+    {
+      "artifact_path": "tools/discover_connections.py",
+      "sha256": "093f2039797c2e9853943ab5e3a76e38503c6fde5c441d914369de76ad53009f"
+    },
+    {
+      "artifact_path": "tools/finalize_environment.py",
+      "sha256": "aa8deb2e6f8d3b3129b4db7a444afdace2589a8806830df17f991701f5b97ffa"
+    },
+    {
+      "artifact_path": "tools/finalize_m0.py",
+      "sha256": "6e5b954b0ce69f0f86c24a9fffc43229f6ebdab8df6848ae6ca319e845191e07"
+    },
+    {
+      "artifact_path": "tools/fingerprint_embedding.py",
+      "sha256": "19df2d35960a0a4e971ee66005f39e033b22874a301ca8a16e2654066ecdc540"
+    },
+    {
+      "artifact_path": "tools/fingerprint_models.py",
+      "sha256": "aef7e94a1756c413379622e89423944750ec1db973a2889f99b1582f51c5095d"
+    },
+    {
+      "artifact_path": "tools/probe_compaction.py",
+      "sha256": "d4691da07d6329423d274d33891b242ea0309ed45454547680ae80ce72108958"
+    },
+    {
+      "artifact_path": "tools/probe_coordinator.py",
+      "sha256": "6c6d50042cd9846ff18718e05b00a7fae31e732a7f2f829b0a25264eccf0e4ce"
+    },
+    {
+      "artifact_path": "tools/probe_dsh.py",
+      "sha256": "60704b84cd6ee3cd99a2bbd89cb01a543f527318c1ccbb9ee63a02da43465c5a"
+    },
+    {
+      "artifact_path": "tools/probe_embedding_host.py",
+      "sha256": "b351010d3e1c5cb79c59c0529470b5db3c95a625e90df0ff29f67b50c305c117"
+    },
+    {
+      "artifact_path": "tools/probe_erasure.py",
+      "sha256": "4c12ae67df4c85a241c968d5ea1a5259f9cc1a8ec659350b72e77b3708502449"
+    },
+    {
+      "artifact_path": "tools/probe_executor.py",
+      "sha256": "602cab003908f6ddb900c2da730efd7a968d80a7107a0205066269e722e957cb"
+    },
+    {
+      "artifact_path": "tools/probe_live_coordinator.py",
+      "sha256": "95a773d47d355e5a38dd96fa3175377238480c76942282c93cddc85b03e8aab3"
+    },
+    {
+      "artifact_path": "tools/probe_m0.py",
+      "sha256": "85875d4ee2cedc9ea2eb1cad6c474640b290173e092fb18b2650603344a2f57a"
+    },
+    {
+      "artifact_path": "tools/probe_midtask.py",
+      "sha256": "8c51de57b7bf80f8cd1bfa53f110434d4e2c13af678393c85578f20008c03cc7"
+    },
+    {
+      "artifact_path": "tools/probe_reflection.py",
+      "sha256": "e0403b4f679c8e3f22ed4c4b1c5ff2d121c3229e9d22c7de29092c8209e3d9c7"
+    },
+    {
+      "artifact_path": "tools/probe_retrieval.py",
+      "sha256": "539aa01975c9e9688a6366598ce71a5ce36b8f64d69c6a49105c641a2dd34123"
+    },
+    {
+      "artifact_path": "tools/probe_sandbox.py",
+      "sha256": "ca3c658140d477cbb693c38bc5235b636d4e378eae97f8333facdf2dd712f4b7"
+    },
+    {
+      "artifact_path": "tools/read_search_deployment.py",
+      "sha256": "773efdcf570b8f4c1429d923e2f0f85e9d97cefc518305c43460e20ddf59db1c"
+    },
+    {
+      "artifact_path": "tools/refresh_environment.py",
+      "sha256": "57eeb9cdb3d98ee3a6a721f17b46361bb0889a9d09dd907f55c43b5a8ac973a9"
+    },
+    {
+      "artifact_path": "tools/run_acceptance.py",
+      "sha256": "f70f1ac0197506848d7236332b906c276faa5397d6d0f0e691440b2e5621f8a7"
+    },
+    {
+      "artifact_path": "tools/run_checks.py",
+      "sha256": "5e73ce675d172a02ac01287876e82b5fd7f0f024df55f7fdeb1b76103726a45c"
+    },
+    {
+      "artifact_path": "package-lock.json",
+      "sha256": "d2e787afc0357c6d277fed5eed68fe731f7fe0798ca2af110b7f5585623ecb83"
+    },
+    {
+      "artifact_path": "uv.lock",
+      "sha256": "d289ac68959ed8ce99b9eaf145d51b728feee242b41fc03604d7af762ebe4fcf"
+    },
+    {
+      "artifact_path": "environment.json",
+      "sha256": "49e2b6256eb2ed7ada8855a1be9e851c46f9e0122487e847962cf4720e3dd70b"
+    }
+  ],
+  "configuration": {
+    "database": "asuna_cognition_core_v2",
+    "allowed_databases": [
+      "asuna_cognition_core_v2"
+    ],
+    "test_database_prefix": "asuna_v2_test_",
+    "embedding": {
+      "base_url": "http://192.168.2.8:1234/v1",
+      "model": "text-embedding-nomic-embed-text-v2-moe",
+      "query_prefix": "search_query: ",
+      "document_prefix": "search_document: ",
+      "weight_sha256": "a5db3381f2e514d3490a3a31fe70eb1a65e95016c85c6c2c23223b810806594f",
+      "manifest_sha256": "ff9c2f10ef5e3722623a1b396e1e04efc27a93112c83e9b7b7b9ca1d05620965"
+    },
+    "character": {
+      "base_url": "http://192.168.2.13:8083/v1",
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "max_tokens": 4096
+    },
+    "executor": {
+      "base_url": "http://192.168.2.13:1919/v1",
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "sampling": {
+        "temperature": 0.2,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "max_tokens": 8192
+    },
+    "dsh_home": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\asuna-dsh",
+    "workdir": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work",
+    "local_only": true,
+    "publish_adapter": "local-idempotent-sink",
+    "source": {
+      "connections": "explicit user input",
+      "embedding_model_and_key": "C:\\workspace\\kazusa_cognition_core_prod\\.env",
+      "legacy_config_sha256": "1c058b43d7fe656460b8d5012d57909f5b271f116d892bb5b23fa3353e1659c3"
+    },
+    "workflow_timeout_seconds": 1800
+  },
+  "human_review_required": true,
+  "performance_slo": null,
+  "failed_attempts_retained": true
+}

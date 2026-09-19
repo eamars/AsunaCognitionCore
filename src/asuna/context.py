@@ -26,7 +26,7 @@ class ContextBuilder:
         if self.retrieval:
             memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
         else:
-            memories=list(self.store.db.memory_units.find({'scope_key':{'$in':['global-safe',scope]},'status':'active','policy_epoch':scene['policy_epoch']},{'embedding':0}).sort('_id',1).limit(6))
+            memories=list(self.store.db.memory_units.find({'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}],'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','source_event_ids','status','historical_sources') if k in m} for m in memories]
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],

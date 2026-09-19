@@ -70,9 +70,12 @@ class DshLane:
             native_id='s-'+sha(session.encode())[:40]
             bound=self.store.db.sessions.find_one({'_id':native_id})
             if bound and bound.get('state')=='INVALIDATED':raise PermissionError('SESSION_INVALIDATED')
+            if bound and bound.get('compact_requested'):self.compact_pending.add(session)
             existing=self.store.db.lane_receipts.find_one({'_id':operation})
+            semantic_hash=sha(canonical({'session':native_id,'phase':phase,'text':text,'system':system}))
             if existing:
                 if existing.get('state')=='INVALIDATED':raise PermissionError('OPERATION_INVALIDATED')
+                if existing.get('semantic_hash')!=semantic_hash:raise PermissionError('OPERATION_INPUT_CHANGED_OR_LEGACY_UNVERIFIED')
                 return LaneResult(**existing['result'])
             self.proxy.purpose=phase
             request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':text,'system':system}
@@ -89,7 +92,7 @@ class DshLane:
                 self.store.audit(operation,'compaction.native',{'result':body['compaction'],'events':body.get('compaction_events',[])})
             calls=self.proxy.calls[before:]
             value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason='stop' if body['finish_reason']=='completed' else body['finish_reason'],request_refs=[c['request_ref'] for c in calls],receipt=body['message_id'])
-            self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
+            self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'semantic_hash':semantic_hash,'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
             previous=self.store.db.sessions.find_one({'_id':request['session']})
             owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
             self.store.put('sessions',{'_id':request['session'],'binding_key':session,'lane':self.lane,'scope_key':owner.get('scope_key','operator'),'policy_epoch':owner.get('policy_epoch'),'last_phase':phase,'last_operation':operation,'dsh_home':str(self.home),'evidence_root':str(self.evidence.root),'state':'ACTIVE','compaction_generation':(previous or {}).get('compaction_generation',0)+(1 if body.get('compaction') else 0)},expected=previous['revision'] if previous else None,stream=operation)

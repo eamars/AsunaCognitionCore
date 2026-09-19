@@ -64,7 +64,7 @@ class Retrieval:
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False):
-        auth={'scope_key':{'$in':['global-safe',scope]},'character_id':'xiaoman','policy_epoch':epoch,'status':'active'}
+        auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}],'character_id':'xiaoman','status':'active'}
         vector_filter={**auth,'embedding_revision':self.revision}
         vector=[]; failure=None
         pipeline=None
@@ -113,7 +113,7 @@ class Retrieval:
         for m in selected:
             m['historical_sources']=[]
             for old_id in m.get('supersedes',[])[:8]:
-                old=self.store.db.memory_units.find_one({'_id':old_id,'scope_key':auth['scope_key'],'status':'superseded','policy_epoch':epoch},{'embedding':0})
+                old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback','vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':False,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
         self.evidence.record('retrieval.selection',manifest)

@@ -42,11 +42,13 @@ class TaskService:
         scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
         if not current or current['state']!=state or current['intent_revision']!=task['intent_revision'] or current['fencing_token']!=task['fencing_token'] or scene['policy_epoch']!=task['policy_epoch']:
             raise Denied('STALE_TASK_FENCE')
+        if state=='RUNNING' and current.get('lease_expires_at',0)<=__import__('time').time():raise Denied('TASK_LEASE_EXPIRED')
         return current
 
-    def cancel(self,task_id,reason='user_cancelled'):
+    def cancel(self,task_id,reason='user_cancelled',*,person_id=None,operator=False):
         with self.lock:
             task=self.store.db.tasks.find_one({'_id':task_id})
+            if not task or not(operator or person_id==task['requester_id']):raise Denied('TASK_CANCEL_NOT_AUTHORIZED')
             return self.store.put('tasks',{**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason},expected=task['revision'],stream=task_id)
 
     def finish(self,task,result):
@@ -118,7 +120,7 @@ class ToolBroker:
                 if old['state']!='DONE':raise Denied('TOOL_DELIVERY_UNKNOWN')
                 return old['result']
             if current['tool_steps']>=64:raise Denied('TOOL_BUDGET_EXHAUSTED')
-            self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1},expected=current['revision'],stream=task['_id'])
+            self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
             if tool=='sandbox_run':
@@ -177,5 +179,8 @@ class Executor:
             try:return self.service.finish(task,json.loads(value.content))
             except (Denied,ValueError,jsonschema.ValidationError) as exc:
                 self.service.store.audit(task['_id'],'execution.result_rejected',{'attempt':attempt,'reason':str(exc)},task['scope_key'])
-                if attempt:raise
+                if attempt:
+                    current=self.service.valid(task)
+                    self.service.store.put('tasks',{**current,'state':'FAILED_PROTOCOL','failure':'RESULT_REJECTED_AFTER_REPAIR'},expected=current['revision'],stream=task['_id'])
+                    raise
                 text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'

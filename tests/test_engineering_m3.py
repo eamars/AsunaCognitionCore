@@ -24,7 +24,7 @@ def test_E16_cancel_fences_tool_and_result(store):
     service,task,broker,work=task_setup(store)
     try:
         read=broker.call('s-test','read','fixture_lookup',{})
-        service.cancel(task['_id'])
+        service.cancel(task['_id'],person_id='A')
         with pytest.raises(Denied):broker.call('s-test','late','fixture_stage_copy',{'source':'a.txt','destination':'late.txt'})
         with pytest.raises(Denied):service.finish(task,{})
         assert not (work/'late.txt').exists()
@@ -82,6 +82,6 @@ def test_E08_scope_and_receipt_references_are_enforced(store):
         result={'task_id':task['_id'],'intent_revision':1,'status':'done','facts':[{'text':'done','evidence_refs':['invented']}],'artifact_refs':[],'effect_receipts':[],'uncertainties':[],'unmet_items':[],'needs_decision':None}
         with pytest.raises(Denied):service.finish(task,result)
         assert store.db.tasks.find_one({'_id':task['_id']})['state']=='RUNNING'
-        service.cancel(task['_id'])
+        service.cancel(task['_id'],person_id='A')
         assert service.feedback(store.db.tasks.find_one({'_id':task['_id']}),None) is None
     finally:broker.close()

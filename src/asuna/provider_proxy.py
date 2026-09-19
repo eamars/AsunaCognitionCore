@@ -59,10 +59,6 @@ class ProviderProxy:
                     first = None
                     with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(300, connect=10), trust_env=False, follow_redirects=False) as client:
                         with client.stream('POST', cfg['base_url'] + '/chat/completions', content=outgoing, headers={'Content-Type':'application/json'}) as response:
-                            self.send_response(response.status_code)
-                            self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
-                            self.send_header('Connection', 'close')
-                            self.end_headers()
                             for chunk in response.iter_bytes():
                                 if first is None:
                                     first = time.perf_counter() - started
@@ -72,6 +68,10 @@ class ProviderProxy:
                             raw = b''.join(chunks)
                             ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
                             owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
+                            self.send_response(response.status_code)
+                            self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
+                            self.send_header('Connection', 'close')
+                            self.end_headers()
                             self.wfile.write(raw)
                             self.wfile.flush()
                 except Exception as exc:

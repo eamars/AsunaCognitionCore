@@ -20,10 +20,7 @@ def suite(config,evidence):
             mono=store.db.memory_units.find_one({'_id':ep['monologue_refs'][0]})
             original=mono['body_markdown'];output['original_monologue_sha256']=sha(original.encode());output['monologue_id']=mono['_id']
             output['verbatim_monologue_published']=any(m['text']==original for m in store.public_messages('dm-a','A'))
-            # A normal completed greeting supplies the complete-episode boundary
-            # even when the private-intention episode legitimately chose silence.
-            greeting=c.ingest({'event_id':'greeting','scene_id':'dm-a','person_id':'A','text':'回来了，先打个招呼就好。'})
-            if greeting['state']!='COMMITTED':raise ValueError('GREETING_NOT_COMMITTED')
+            if ep['state']!='COMMITTED':raise ValueError('PRIVATE_INTENTION_EPISODE_NOT_COMMITTED')
             lane.compact('xiaoman:dm-a:1:P1')
             after=c.ingest({'event_id':'after-summary','scene_id':'dm-a','person_id':'A','text':'嗯，先聊到这里。'})
             output['native_compactions']=store.db.audit_events.count_documents({'type':'compaction.native'})
@@ -40,13 +37,14 @@ def suite(config,evidence):
         with DshLane(config,store,evidence) as lane:
             c=Coordinator(store,lane,context=ContextBuilder(store,r))
             ep=c.ingest({'event_id':'recall-private-intention','scene_id':'dm-a','person_id':'A','text':question})
+            output['recall_state']=ep['state']
             output['new_epoch']=ep['policy_epoch'];output['public_messages']=store.public_messages('dm-a','A')
             output['new_request_contains_original']=any(json.dumps(original,ensure_ascii=False) in m.get('content','') for call in lane.proxy.calls for m in call['body']['messages'] if isinstance(m.get('content'),str))
         write_json(evidence.root/'trace.json',list(store.db.audit_events.find({})))
         review=blind(output,{'case_id':'L07','input':question,'memory_ids':[mono['_id']]},'monologue_recall')
         review['original_private_monologue']=original;review['previous_public_messages']=output['public_messages'][:-1]
         write_json(evidence.root/'blind_review.json',[review])
-        output['status']='INCONCLUSIVE' if output['retrieved_exact_monologue'] and output['new_request_contains_original'] and output['native_compactions'] and not output['verbatim_monologue_published'] else 'FAIL'
+        output['status']='INCONCLUSIVE' if output['recall_state']=='COMMITTED' and output['retrieved_exact_monologue'] and output['new_request_contains_original'] and output['native_compactions'] and not output['verbatim_monologue_published'] else 'FAIL'
     except Exception as exc:evidence.record('continuity.error',{'type':type(exc).__name__,'message':str(exc)})
     finally:r.close();store.client.close()
     output['limitations']=['Independent review must check that the later reply does not turn an unsaid intention into a past public promise.','Native summary and retrieved source are both real; this does not by itself establish artistic improvement.']

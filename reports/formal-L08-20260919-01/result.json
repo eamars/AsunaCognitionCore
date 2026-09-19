@@ -1,0 +1,191 @@
+{
+  "test_id": "L08",
+  "status": "FAIL",
+  "mode": "real_Gemma_native_three_compactions_per_scene",
+  "attempts": 3,
+  "samples": [
+    {
+      "scene": "dm-a",
+      "repetition": 1,
+      "database": "asuna_v2_test_continuity_68643a55fcb74dee",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "dm-b",
+      "repetition": 1,
+      "database": "asuna_v2_test_continuity_9bd69c86a51f4492",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "g1",
+      "repetition": 1,
+      "database": "asuna_v2_test_continuity_e3b137c12cd446f6",
+      "status": "PASS",
+      "native_compactions": 3,
+      "answers": [
+        {
+          "id": "K04",
+          "episode": "ep-6188b2823583d628dcf3fb977b4f838c",
+          "state": "COMMITTED",
+          "text": "在北架，标签 K17。",
+          "critical": true
+        },
+        {
+          "id": "K08",
+          "episode": "ep-a0a043b8b718339ab0610d6537c9ca37",
+          "state": "COMMITTED",
+          "text": "不会，在隔离目录操作。",
+          "critical": false
+        },
+        {
+          "id": "K09",
+          "episode": "ep-c7fea63d2c7b1edd090f9c5a2758bc81",
+          "state": "COMMITTED",
+          "text": "周日审核。",
+          "critical": false
+        }
+      ]
+    },
+    {
+      "scene": "g2",
+      "repetition": 1,
+      "database": "asuna_v2_test_continuity_446e9514cccc4c3c",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "dm-a",
+      "repetition": 2,
+      "database": "asuna_v2_test_continuity_33b460e6e6ca4943",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "dm-b",
+      "repetition": 2,
+      "database": "asuna_v2_test_continuity_a58822f8cda64acb",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "g1",
+      "repetition": 2,
+      "database": "asuna_v2_test_continuity_a0afe1c84c3e4424",
+      "status": "PASS",
+      "native_compactions": 3,
+      "answers": [
+        {
+          "id": "K04",
+          "episode": "ep-6188b2823583d628dcf3fb977b4f838c",
+          "state": "COMMITTED",
+          "text": "在北架，标签 K17。",
+          "critical": true
+        },
+        {
+          "id": "K08",
+          "episode": "ep-a0a043b8b718339ab0610d6537c9ca37",
+          "state": "COMMITTED",
+          "text": "不会，在隔离目录操作。",
+          "critical": false
+        },
+        {
+          "id": "K09",
+          "episode": "ep-c7fea63d2c7b1edd090f9c5a2758bc81",
+          "state": "COMMITTED",
+          "text": "是周日。",
+          "critical": false
+        }
+      ]
+    },
+    {
+      "scene": "g2",
+      "repetition": 2,
+      "database": "asuna_v2_test_continuity_229664676a15402a",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "dm-a",
+      "repetition": 3,
+      "database": "asuna_v2_test_continuity_9b631043a5844e9c",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "dm-b",
+      "repetition": 3,
+      "database": "asuna_v2_test_continuity_b76b26c072b347ec",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    },
+    {
+      "scene": "g1",
+      "repetition": 3,
+      "database": "asuna_v2_test_continuity_606c6667939c4068",
+      "status": "PASS",
+      "native_compactions": 3,
+      "answers": [
+        {
+          "id": "K04",
+          "episode": "ep-6188b2823583d628dcf3fb977b4f838c",
+          "state": "COMMITTED",
+          "text": "在北架，标签 K17。",
+          "critical": true
+        },
+        {
+          "id": "K08",
+          "episode": "ep-a0a043b8b718339ab0610d6537c9ca37",
+          "state": "COMMITTED",
+          "text": "不会，操作是在隔离目录进行的。",
+          "critical": false
+        },
+        {
+          "id": "K09",
+          "episode": "ep-c7fea63d2c7b1edd090f9c5a2758bc81",
+          "state": "COMMITTED",
+          "text": "是周日。",
+          "critical": false
+        }
+      ]
+    },
+    {
+      "scene": "g2",
+      "repetition": 3,
+      "database": "asuna_v2_test_continuity_6a69d293bf8d4886",
+      "status": "FAIL",
+      "native_compactions": 0,
+      "answers": []
+    }
+  ],
+  "limitations": [
+    "Thirty answers require independent semantic scoring. Gold expected answers were never included in provider input."
+  ],
+  "experiment_id": "formal-L08-20260919-01",
+  "manifest_sha256": "05675e44faab31de422af428799b8d5b4ef44db5b4682bffbc1da5caa23d483b",
+  "executed_at": "2026-09-19T10:14:47.692461+00:00",
+  "commands": [
+    {
+      "argv": [
+        "asuna",
+        "evaluate",
+        "--test",
+        "L08",
+        "--manifest",
+        "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+        "--out",
+        "reports\\formal-L08-20260919-01"
+      ],
+      "exit_code": 1
+    }
+  ]
+}

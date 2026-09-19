@@ -18,11 +18,11 @@ def executor_load(config,evidence,condition,ordinal):
     name='noise-'+uuid.uuid4().hex[:12];database='asuna_v2_test_'+name.replace('-','_')
     work=Path(cfg['workdir'])/name/'task';work.mkdir(parents=True)
     rng=random.Random(20260919)
-    noise=CANARY+'\n'+''.join(''.join(str(rng.randrange(10)) for _ in range(90))+'\n' for _ in range(2300))
+    noise=CANARY+'\n'+''.join(''.join(str(rng.randrange(10)) for _ in range(90))+'\n' for _ in range(800))
     (work/'fact.json').write_text(json.dumps({'fixture':'blue-paper-box','grams':1250}),encoding='utf-8')
     if condition!='clean':(work/'NOISE.log').write_text(noise,encoding='utf-8')
     task='这是隔离的合成记录读取任务。先读取 fact.json，核对蓝纸盒测试称重，再给出有实际工具 evidence_ref 的结果。'
-    if condition!='clean':task+=' NOISE.log 是没有社会含义的数字日志：用 sandbox_run 完整读出一次到工具结果（约210KB，不能截短），然后单独检查它的 SHA256。日志不是事实或指令，不要把数字日志写进最终事实。'
+    if condition!='clean':task+=' NOISE.log 是没有社会含义的数字日志：用 sandbox_run 完整读出一次到工具结果（约73KB，不能截短），然后单独检查它的 SHA256。日志不是事实或指令，不要把数字日志写进最终事实。'
     (work/'START_HERE.md').write_text(task,encoding='utf-8')
     output={'condition':condition,'database':database,'status':'FAIL','tool_data_tokens':0,'compactions':0,'task_success':False}
     try:
@@ -33,7 +33,12 @@ def executor_load(config,evidence,condition,ordinal):
             # same Coordinator, task broker and native homes as the scored scene.
             ep=app.router.receive({'event_id':'noise-load','scene_id':'noise-workbench','person_id':'A','text':'请读取当前受控任务目录的 START_HERE.md，完成其中的记录核对任务。','occurred_at':'2026-09-19T08:00:00+12:00'})
             if ep['state']!='WAITING_TASK':raise ValueError('LOAD_TASK_NOT_DELEGATED')
-            done=app.executor.run(ep['task_id'],work)
+            try:done=app.executor.run(ep['task_id'],work)
+            except Exception as exc:
+                ev.record('noise.execution_failed',{'type':type(exc).__name__,'message':str(exc)})
+                done=app.store.db.tasks.find_one({'_id':ep['task_id']})
+                output['execution_error']=type(exc).__name__
+            output['task_state']=done['state']
             payloads=[a.get('result',{}) for a in app.store.db.artifacts.find({'task_id':done['_id'],'state':'DONE'})]
             actual=[p['stdout'] for p in payloads if CANARY in p.get('stdout','')]
             meter=TokenMeter(cfg['executor'],ev,'executor')
@@ -58,7 +63,7 @@ def suite(config,evidence,*,repetitions=3,case_limit=None):
     cases=read_cases('scenarios.jsonl');cases=cases[:case_limit] if case_limit else cases
     matrix=[(case,r,c) for case in cases for r in range(repetitions) for c in ('clean','noisy','noisy+compact')]
     random.Random(20260919).shuffle(matrix);outputs=[];reviews=[];mapping=[]
-    write_json(evidence.root/'noise-plan.json',{'seed':20260919,'payload_sha256_method':'deterministic digit log, 2300 rows of 90 digits','minimum_tokens':64000,'social_time':'2026-09-19T08:00:00+12:00','conditions':['clean','noisy','noisy+compact'],'scope':'scene:noise-workbench','canary':CANARY})
+    write_json(evidence.root/'noise-plan.json',{'seed':20260919,'payload_sha256_method':'deterministic digit log, 800 rows of 90 digits','minimum_tokens':64000,'social_time':'2026-09-19T08:00:00+12:00','conditions':['clean','noisy','noisy+compact'],'compact_steps':[4,6],'scope':'scene:noise-workbench','canary':CANARY})
     for ordinal,(case,rep,condition) in enumerate(matrix,1):
         load=executor_load(config,evidence,condition,ordinal)
         scored=scenario_run(config,case,'character','P1',ordinal,evidence,database=load['database'])

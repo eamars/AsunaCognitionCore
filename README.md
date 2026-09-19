@@ -40,13 +40,16 @@ Copy-Item config/local.example.json config/local.json
 # compact 排队到下一完整阶段边界，不会立即伪造摘要。
 .venv\Scripts\asuna.exe reflect --scope scene:dm-a --entity relationship:A
 .venv\Scripts\asuna.exe cancel TASK_ID
+.venv\Scripts\asuna.exe run --scene dm-a --person A --supersedes-task TASK_ID --text '修改刚才的任务，按新的要求核实'
 .venv\Scripts\asuna.exe inspect episode EP_ID --format html --out reports/episode.html
 .venv\Scripts\asuna.exe inspect request CALL_ID --view provider
 .venv\Scripts\asuna.exe inspect trace --format html --out reports/operator-audit.html
 .venv\Scripts\asuna.exe replay reports/RUN/trace.json --database asuna_v2_test_replay_unique --mode state-only --deny-model-and-tools
 ```
 
-`cancel` 是 operator CLI；服务内部按可信 requester 检查身份。`delete MEMORY_ID --operator` 会提高 scope epoch、使旧会话失效，并保守清理该 scope 的派生内容。只对合成测试库操作删除，或先明确接受其 scope 范围影响。它不撤回外部备份、已下载导出或 Git 历史；全局记忆删除当前会被拒绝。
+`cancel` 是 operator CLI；服务内部按可信 requester 检查身份。`--supersedes-task` 先使旧意图失效，再由角色形成新 decision；沿用 task_id、递增 intent_revision，保留旧副作用，不重用旧工具证据。每个 DSH_HOME 仅允许一个控制进程，运行中的多场景输入通过同一 Router 接收。
+
+`delete MEMORY_ID --operator` 会提高 scope epoch、使旧会话失效，并保守清理该 scope 的派生内容。只对合成测试库操作删除，或先明确接受其 scope 范围影响。它不撤回外部备份、已下载导出或 Git 历史；全局记忆删除当前会被拒绝。
 
 ## 测试和证据
 

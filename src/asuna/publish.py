@@ -2,6 +2,7 @@ from __future__ import annotations
 import uuid
 from .state import Store, Denied, Conflict, now
 from .evidence import sha
+from .queue import database_effects_lock
 
 
 class PublishService:
@@ -9,6 +10,9 @@ class PublishService:
         self.store,self.idempotent,self.crash = store,idempotent,crash
 
     def publish(self, message_id: str):
+        with database_effects_lock(self.store.name):return self._publish(message_id)
+
+    def _publish(self, message_id: str):
         db=self.store.db
         msg=db.messages.find_one({'_id':message_id})
         if not msg or msg.get('author')!='xiaoman' or msg.get('phase')!='SPEAK':
@@ -21,7 +25,7 @@ class PublishService:
             raise Denied('PUBLICATION_CONTEXT_STALE')
         if ep.get('task_id'):
             task=db.tasks.find_one({'_id':ep['task_id']})
-            if not task or task['intent_revision']!=ep['intent_revision'] or task['state']=='CANCELLED':
+            if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE','UNKNOWN'):
                 raise Denied('PUBLICATION_INTENT_STALE')
         if msg['delivery_state']=='SENDING' and not self.idempotent:
             return self.store.put('messages',{**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])

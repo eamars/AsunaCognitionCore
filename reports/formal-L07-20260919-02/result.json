@@ -1,0 +1,55 @@
+{
+  "test_id": "L07",
+  "status": "INCONCLUSIVE",
+  "attempts": 1,
+  "database": "asuna_v2_test_L07_22f4137d878f4c20",
+  "mode": "real_Gemma_private_monologue_native_compaction_new_epoch_vector_retrieval",
+  "original_monologue_sha256": "ade39d0a1a6a6b4416bc3cfcdaf47d791025dfda0377d14ff9a7fd5b95cac90c",
+  "monologue_id": "mono-ep-71c79b1c13cb9db992b23e9fc87d7dde:0",
+  "verbatim_monologue_published": false,
+  "native_compactions": 1,
+  "retrieved_exact_monologue": true,
+  "recall_state": "COMMITTED",
+  "new_epoch": 2,
+  "public_messages": [
+    {
+      "_id": "ep-918c4940e9b660c35f05eaa07b31224c:speak:0",
+      "scene_id": "dm-a",
+      "text": "嗯，下次见。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-918c4940e9b660c35f05eaa07b31224c",
+      "delivery_state": "DELIVERED"
+    },
+    {
+      "_id": "ep-78f517142ae04c81c6f895b63d8f5405:speak:0",
+      "scene_id": "dm-a",
+      "text": "是青桥、雪灯或者石钟，还没想好具体选哪个。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-78f517142ae04c81c6f895b63d8f5405",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "new_request_contains_original": true,
+  "limitations": [
+    "Independent review must check that the later reply does not turn an unsaid intention into a past public promise.",
+    "Native summary and retrieved source are both real; this does not by itself establish artistic improvement."
+  ],
+  "experiment_id": "formal-L07-20260919-02",
+  "manifest_sha256": "be53b6502d3a09f96485b6c7aeaf840020ee36daebf2ea5e0c9d571e1e56646d",
+  "executed_at": "2026-09-19T10:20:24.973911+00:00",
+  "commands": [
+    {
+      "argv": [
+        "asuna",
+        "evaluate",
+        "--test",
+        "L07",
+        "--manifest",
+        "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+        "--out",
+        "reports\\formal-L07-20260919-02"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

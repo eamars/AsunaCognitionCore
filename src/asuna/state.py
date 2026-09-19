@@ -211,7 +211,16 @@ class Store:
                 if descendants:
                     for child in descendants:roots(child,path|{key})
                 else:evidence_ids.add(key)
-            else:evidence_ids.add(key)
+            else:
+                # Derived memory may cite a message/artifact rather than
+                # another memory. Known internal sources retain their scope.
+                known=[]
+                for collection in ('messages','artifacts','episodes'):
+                    source=self.db[collection].find_one({'_id':key},{'scope_key':1,'deletion_id':1})
+                    if source:known.append(source)
+                known+=list(self.db.messages.find({'platform_event_id':key},{'scope_key':1,'deletion_id':1}))
+                if any(item.get('deletion_id') or item.get('scope_key') not in ('global-safe',scope) for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
+                evidence_ids.add(key)
         for source in sources:roots(source,set())
         processed=set(base.get('processed_source_ids',[]))
         if evidence_ids and evidence_ids.issubset(processed):

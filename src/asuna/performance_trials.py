@@ -1,5 +1,7 @@
 """F02: measured native requests; unavailable counters stay null."""
 import json,statistics,uuid
+from datetime import datetime
+from .config import ROOT
 from .evidence import Evidence,write_json,canonical,sha
 from .state import Store
 from .dsh_lane import DshLane
@@ -49,4 +51,31 @@ def suite(config,evidence):
         hot=[r['measurements'][-1] for r in outputs if r['lane']==name and r['condition']=='fixed' and r['ordinal']>0 and r['measurements']]
         ratios=[r['cached_tokens']/r['input_tokens'] for r in hot if r['cached_tokens'] is not None and r['input_tokens']]
         fixed[name]={'hot_reuse_ratio':sum(ratios)/len(ratios) if ratios else None,'metric_available_samples':len(ratios),'prefix_stable':len({r['request_messages_sha256'] for r in hot})==1}
-    return {'test_id':'F02','status':'INCONCLUSIVE','mode':'real_DSH_real_provider_timing_and_cache_counters','attempts':len(outputs),'samples':outputs,'metrics':{'fixed_prefix':fixed,'performance_slo':None},'limitations':['No absolute latency SLO approved.','Public-text latency is not measured by private performance turns; buffering prevents presenting transport first byte as public output.','Run after other endpoint workloads finish for controlled hot-cache interpretation; incidental shared-server traffic cannot be excluded.','Missing cache or prefill/decode fields are null, never inferred from total time.']}
+    public=public_latency_samples()
+    write_json(evidence.root/'public-latency.json',public)
+    failed=any(o['status']=='FAIL' for o in outputs) or any(not m['prefix_stable'] or m['metric_available_samples']==9 and m['hot_reuse_ratio']<.9 for m in fixed.values())
+    return {'test_id':'F02','status':'FAIL' if failed else 'INCONCLUSIVE','mode':'real_DSH_real_provider_timing_and_cache_counters','attempts':len(outputs),'samples':outputs,'metrics':{'fixed_prefix':fixed,'performance_slo':None,'public_text_latency_samples':public},'limitations':['No absolute latency SLO approved.','Public-text latency uses actual audited receiver acceptance timestamps from formal L02 traces, under the configuration recorded by each source experiment. It includes queueing and may include concurrent evaluation load.','Private cache turns have no public text; model-content and transport-first-byte counters are not presented as public output.','Run after other endpoint workloads finish for controlled hot-cache interpretation; incidental shared-server traffic cannot be excluded.','Missing cache or prefill/decode/model-load fields are null, never inferred from total time.']}
+
+
+def public_latency_samples():
+    results=[]
+    for path in sorted((ROOT/'reports').glob('formal-L02-*/task-*/trace.json')):
+        trace=json.loads(path.read_text(encoding='utf-8'));docs={}
+        for event in sorted(trace,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):
+            if event['type']=='state.commit':
+                payload=event['payload'];doc=payload['document'];key=(payload['collection'],doc['_id'])
+                if key not in docs or docs[key]['revision']<doc['revision']:docs[key]=doc
+        incoming=[v for (col,_),v in docs.items() if col=='messages' and v.get('direction')=='inbound' and v.get('platform_event_id')=='input']
+        if not incoming:continue
+        start=datetime.fromisoformat(incoming[0]['received_at']);messages={v['_id']:v for (col,_),v in docs.items() if col=='messages'}
+        tasks={v['_id']:v for (col,_),v in docs.items() if col=='tasks'}
+        episodes={v['_id']:v for (col,_),v in docs.items() if col=='episodes'}
+        samples=[]
+        for (col,_),receipt in docs.items():
+            if col!='sink_receipts' or 'publication_key' not in receipt:continue
+            message=messages.get(receipt['publication_key']);ep=episodes.get(message.get('episode_id')) if message else None
+            if not ep:continue
+            at=datetime.fromisoformat(receipt['received_at']);task=tasks.get(ep.get('task_id'))
+            samples.append({'kind':'task_final' if ep.get('episode_kind')=='task_feedback' else 'initial_response','publication_key':receipt['publication_key'],'seconds_from_input':(at-start).total_seconds(),'seconds_from_task_completion':(at-datetime.fromisoformat(task['finished_at'])).total_seconds() if task and task.get('finished_at') and ep.get('episode_kind')=='task_feedback' else None})
+        results.append({'source':{'artifact_path':path.relative_to(ROOT).as_posix(),'sha256':sha(path.read_bytes())},'first_public_character_text_seconds':min((s['seconds_from_input'] for s in samples),default=None),'publications':samples,'clock':'same coordinator wall-clock; receiver acceptance, not transport TTFT'})
+    return results

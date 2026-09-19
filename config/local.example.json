@@ -9,5 +9,7 @@
   "executor": {"base_url":"http://192.168.2.13:1919/v1","model":"qwen38-next-uncensored-freetoken-vision","sampling":{"temperature":0.2,"top_p":0.95,"seed":20260919},"max_tokens":8192},
   "embedding": {"base_url":"http://192.168.2.8:1234/v1","model":"text-embedding-nomic-embed-text-v2-moe","query_prefix":"search_query: ","document_prefix":"search_document: ","api_key":""},
   "local_only": true,
+  "workflow_timeout_seconds": 1800,
+  "provider_idle_timeout_seconds": 1800,
   "publish_adapter": "local-idempotent-sink"
 }

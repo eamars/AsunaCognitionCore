@@ -21,6 +21,12 @@ def build_report(reports:Path,output:Path):
         if value.get('report_kind'):continue
         attempts.append({'evidence':ref(path),'result':value})
     report['attempt_inventory']=attempts
+    report['failure_artifacts']=[ref(p) for p in sorted(reports.rglob('*error.json')) if 'private' not in p.relative_to(reports).parts]
+    report['unfinished_experiments']=[]
+    for path in sorted(reports.rglob('manifest.json')):
+        if 'private' in path.relative_to(reports).parts or (path.parent/'result.json').exists():continue
+        manifest=json.loads(path.read_text(encoding='utf-8'))
+        if manifest.get('experiment_id'):report['unfinished_experiments'].append({'manifest':ref(path),'experiment_id':manifest['experiment_id'],'test_id':manifest.get('test_id'),'status':'INCONCLUSIVE','completed_sample_files':len(list(path.parent.rglob('sample.json'))),'reason':'No final result exists; work may still be running or was interrupted.'})
     report['environment']['implementation_commit']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     env=ROOT/'environment.json'
     if not env.exists():env=reports/'environment.json'
@@ -45,14 +51,34 @@ def build_report(reports:Path,output:Path):
                     row['commands'].append({'argv':actual['argv'],'exit_code':actual['exit_code'],'note':'actual outer invocation; see '+ref(invocation)['artifact_path']})
                     row['evidence'].append(ref(invocation))
             row['experiment_id']=value.get('experiment_id');manifests.append(value.get('manifest_sha256'))
+            if not test.startswith('E'):
+                row['evidence_mode']=row['mode'];row['mode']='live+manual' if test.startswith('A') or test in ('L05','L06','L07','L08') else 'live'
+            if not row['assertions']:
+                metrics=value.get('metrics',{})
+                if test=='L01':row['assertions']=[{'name':'first decision format','observed':metrics.get('first_decision_valid'),'required':57,'denominator':60},{'name':'decision after at most one repair','observed':metrics.get('decision_valid_after_repair'),'required':59,'denominator':60},{'name':'semantic route','observed':metrics.get('behavior_passes'),'required':54,'denominator':60}]
+                elif test=='F01':row['assertions']=[{'name':'actual length, all three needles, stop and matching provider usage','observed_passed':metrics.get('passed'),'required_passed':24,'details':'Each sample has independently recorded input/usage/needle checks.'}]
+                elif test in ('L02','L03','L12'):row['assertions']=[{'name':'fresh workspace task and independent oracle','observed_passed':metrics.get('successes'),'required_passed':9 if test=='L02' else 4,'samples':10 if test=='L02' else 5}]
+                elif test=='L04':row['assertions']=[{'name':'retrieval gold, critical records, ready vector index, pending backread and stale-ID authority checks','observed':metrics,'details':'See recorded query-by-query assertions in result and retrieval selections.'}]
+            if row['status']=='FAIL' and not row['minimal_repro']:
+                row['minimal_repro']={'commands':row['commands'],'frozen_experiment':row['experiment_id'],'result_artifact':latest['evidence'],'instructions':'Use the frozen-inputs archive and per-sample input/request in this attempt; never overwrite the failing directory.'}
         else:
-            supporting=[]
+            supporting=[];checks=[]
             for path in reports.glob('check-*/junit.xml'):
                 text=path.read_text(encoding='utf-8')
-                if re.search(r'(?<![A-Z0-9])'+test+r'(?!\d)',text):supporting.append(ref(path))
+                if re.search(r'(?<![A-Z0-9])'+test+r'(?!\d)',text):
+                    supporting.append(ref(path))
+                    check_path=path.parent/'result.json'
+                    if check_path.exists():
+                        check=json.loads(check_path.read_text(encoding='utf-8'));checks.append({'argv':check['command'],'exit_code':check['exit_code']})
             if supporting:
                 row.update(status='INCONCLUSIVE',mode='engineering_subset_real_Mongo',evidence=supporting)
+                row.update(commands=checks,attempts=len(checks),assertions=[{'name':'repository integration subset','details':'Named pytest cases and their outcomes are in each JUnit artifact; this is not a full-contract PASS.'}])
                 row['limitations']=['Passing subset is not full acceptance; review each clause of docs/04 and the immutable fixture.']
+        # The immutable package validator expects paths relative to the report
+        # directory; retain artifact_path as the repository-oriented reference.
+        for ev in row['evidence']:
+            try:ev['path']=(ROOT/ev['artifact_path']).resolve().relative_to(output.resolve().parent).as_posix()
+            except ValueError:raise ValueError('REPORT_DIRECTORY_MUST_CONTAIN_REFERENCED_EVIDENCE')
     report['manifest_sha256']=sha(canonical([m for m in manifests if m])) if manifests else None
     groups={'ENGINEERING':[f'E{i:02}' for i in range(1,25)],'LOCAL_DEPLOYMENT':[f'L{i:02}' for i in range(1,13)],'COGNITION':['A01','A02','A03','L05','L06','L07','L08'],'PERFORMANCE':['F01','F02']}
     for gate,ids in groups.items():
@@ -70,6 +96,8 @@ def build_report(reports:Path,output:Path):
         'No automatic maintenance or per-turn emotion model is on the character path. No physical devices, camera or real group sending are connected.',
         'Working-budget overflow fails closed; compaction is explicit at complete boundaries, not automatic.',
         'No approved absolute performance SLO and no independent human ratings; cognition and user-experience claims remain INCONCLUSIVE.',
+        'Large provider bodies use verified GridFS plus local evidence; arbitrary oversized state records still require explicit artifact storage and fail closed above 1 MiB.',
+        'Offline review HTML was generated and import validation tested; rendered UI validation is blocked because the Browser runtime lists no available browser.',
     ]
     report['next_smallest_experiment']='Resolve failed assertions and incomplete acceptance clauses; obtain independent blind ratings after the fixed real-model matrix.'
     write_json(output,report)

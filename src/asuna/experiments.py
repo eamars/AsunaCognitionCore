@@ -43,7 +43,7 @@ def fixed_feedback(store,coordinator,ep,fixture):
     """Only attribution/protocol control: the contract explicitly fixes this result."""
     service=TaskService(store);task=service.claim(ep['task_id'])
     ref=fixture['receipt']['id']
-    store.put('artifacts',{'_id':ref,'scope_key':task['scope_key'],'task_id':task['_id'],'state':'DONE','kind':'preregistered_fixture_receipt','receipt':fixture['receipt']},stream=task['_id'])
+    store.put('artifacts',{'_id':ref,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE','kind':'preregistered_fixture_receipt','receipt':fixture['receipt']},stream=task['_id'])
     result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'status':fixture['status'],'facts':[{'text':f['fact'],'evidence_refs':[ref]} for f in fixture['facts']],'uncertainties':[],'unmet_items':[],'artifact_refs':[ref],'effect_receipts':[],'needs_decision':None}
     done=service.finish(task,result)
     return service.feedback(done,coordinator)

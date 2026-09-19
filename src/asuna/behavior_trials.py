@@ -67,9 +67,9 @@ def continuity(config,evidence):
                 with DshLane(config,store,ev) as lane:
                     c=Coordinator(store,lane,context=ContextBuilder(store,FixtureSelection(store,ids)))
                     router=Router(store,c)
-                    for i in range(4):
+                    for i,text in enumerate(['我回来了，先向你打个招呼。','今天不办事。你觉得安静的闲聊怎么样？','如果我暂时没有新话题，你也可以安静待着。','这一小段先到这里，不需要安排额外任务。']):
                         if i:lane.compact(f'xiaoman:{scene}:1:P1')
-                        ep=router.receive({'event_id':f'continuity-warm-{i}','scene_id':scene,'person_id':person,'text':'今天先聊两句，不办事。','mentioned':True})
+                        ep=router.receive({'event_id':f'continuity-warm-{i}','scene_id':scene,'person_id':person,'text':text,'mentioned':True})
                         if ep['state']!='COMMITTED':raise ValueError('WARMUP_NOT_COMPLETED_EPISODE')
                     output['native_compactions']=store.db.audit_events.count_documents({'type':'compaction.native'})
                     # Withhold fresh retrieval after compression; answers must
@@ -81,7 +81,7 @@ def continuity(config,evidence):
                         sample={'database':store.name,'public_messages':[answer] if answer else []}
                         reviews.append({**blind(sample,case,'continuity'),'critical':case['critical']})
                         output['answers'].append({'id':case['id'],'episode':ep['_id'],'state':ep['state'],'text':answer['text'] if answer else None,'critical':case['critical']})
-                    output['status']='PASS' if output['native_compactions']==3 else 'FAIL'
+                    output['status']='PASS' if output['native_compactions']==3 and all(a['state']=='COMMITTED' for a in output['answers']) else 'FAIL'
                     write_json(ev.root/'trace.json',list(store.db.audit_events.find({})))
             except Exception as exc:ev.record('continuity.error',{'type':type(exc).__name__,'message':str(exc)})
             finally:store.client.close()

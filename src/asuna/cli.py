@@ -17,8 +17,8 @@ def main():
         p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
-            p.add_argument('--scene',default='dm-a');p.add_argument('--person',default='A');p.add_argument('--text');p.add_argument('--events',type=Path);p.add_argument('--persona',default='P1',choices=['P0','P1','P2']);p.add_argument('--workspace',type=Path);p.add_argument('--mentioned',action='store_true');p.add_argument('--compact-before',action='store_true')
-        if cmd=='inspect':
+            p.add_argument('--scene',default='dm-a');p.add_argument('--person',default='A');p.add_argument('--text');p.add_argument('--events',type=Path);p.add_argument('--persona',default='P1',choices=['P0','P1','P2']);p.add_argument('--workspace',type=Path);p.add_argument('--mentioned',action='store_true');p.add_argument('--compact-before',action='store_true');p.add_argument('--supersedes-task')
+          if cmd=='inspect':
             p.add_argument('kind',choices=['episode','task','request','trace']);p.add_argument('id',nargs='?');p.add_argument('--format',choices=['json','html'],default='json');p.add_argument('--view',choices=['provider'],default='provider')
         if cmd=='compact':p.add_argument('--scene',default='dm-a');p.add_argument('--persona',default='P1')
         if cmd=='reflect':p.add_argument('--scope',required=True);p.add_argument('--entity',required=True)
@@ -48,7 +48,7 @@ def main():
             finally:r.close()
         elif args.command=='run':
             from .application import Application
-            events=[json.loads(line) for line in args.events.read_text(encoding='utf-8').splitlines() if line.strip()] if args.events else [{'event_id':str(uuid.uuid4()),'scene_id':args.scene,'person_id':args.person,'text':args.text,'mentioned':args.mentioned}]
+            events=[json.loads(line) for line in args.events.read_text(encoding='utf-8').splitlines() if line.strip()] if args.events else [{'event_id':str(uuid.uuid4()),'scene_id':args.scene,'person_id':args.person,'text':args.text,'mentioned':args.mentioned,**({'supersedes_task_id':args.supersedes_task} if args.supersedes_task else {})}]
             if any(not e.get('text') for e in events):raise ValueError('TEXT_OR_EVENTS_REQUIRED')
             with Application(config,ev,args.database) as app:
                 if args.compact_before:
@@ -63,7 +63,7 @@ def main():
             scene=store.db.scenes.find_one({'_id':args.scene});binding=f'xiaoman:{args.scene}:{scene["policy_epoch"]}:{args.persona}'
             session=store.db.sessions.find_one({'binding_key':binding})
             if not session:raise ValueError('SESSION_NOT_FOUND')
-            store.put('sessions',{**session,'compact_requested':True},expected=session['revision'],stream=binding)
+            store.put('sessions',{**session,'compact_requested':True,'compact_request_id':str(uuid.uuid4())},expected=session['revision'],stream=binding)
             value={'state':'QUEUED','binding':binding,'summary_generated':False}
         elif args.command=='delete':
             from .privacy import PrivacyService

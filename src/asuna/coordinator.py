@@ -42,7 +42,7 @@ class Coordinator:
             msg={'_id':'in-'+ep_id,'adapter_id':'fixture','platform_event_id':event['event_id'],'scene_id':scene['_id'],'scope_key':scene['scope_key'],'scene_seq':sequence,'text':event['text'],'author':event['person_id'],'direction':'inbound','delivery_state':'RECEIVED','occurred_at':event.get('occurred_at',now()),'received_at':now()}
             if not self.store.db.messages.find_one({'_id':msg['_id']}):
                 self.store.put('messages',msg,stream=ep_id)
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
+            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             return self.advance(ep_id)
 
     def _update(self, ep, **changes):
@@ -108,13 +108,18 @@ class Coordinator:
                     if next_step=='delegate':
                         if ep.get('delegation_depth',0)>=3:
                             return self._update(ep,state='BLOCKED',reason='delegation depth exhausted')
-                        task_id='task-'+ep_id
+                        task_id=ep.get('supersedes_task_id') or 'task-'+ep_id
+                        intent_revision=1
+                        if ep.get('supersedes_task_id'):
+                            from .tasks import TaskService
+                            revised=TaskService(self.store).activate_revision(ep)
+                            intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
                             self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'allowed_capabilities':['fixture_lookup','fixture_read_resource','fixture_stage_copy','fixture_commit_copy','fixture_run_checks','sandbox_run']},stream=ep_id)
                         self.crash('after_task_persist')
                         if not ep['decision']['speak_before_action']:
-                            return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=1)
-                        ep=self._update(ep,task_id=task_id,intent_revision=1)
+                            return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
+                        ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
                     text=self._stage(ep,'SPEAK')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text)
                 if ep['state']=='SPEAK_ACCEPTED':

@@ -6,11 +6,13 @@ import shutil
 import threading
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import uuid
+from contextlib import contextmanager
 import jsonschema
 from .config import ROOT,BUNDLE
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .state import Store,Denied,Conflict,now
+from .queue import database_effects_lock
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -28,7 +30,7 @@ TOOLS=[
 class TaskService:
     def __init__(self,store:Store,crash=lambda point:None):
         self.store,self.crash=store,crash
-        self.lock=threading.RLock()
+        self.lock=database_effects_lock(store.name)
         self.inject_read_failures=0
 
     def claim(self,task_id):
@@ -52,6 +54,57 @@ class TaskService:
             if not task or not(operator or person_id==task['requester_id']):raise Denied('TASK_CANCEL_NOT_AUTHORIZED')
             return self.store.put('tasks',{**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason},expected=task['revision'],stream=task_id)
 
+    def revise(self,task_id,event):
+        """Fence the old intention before the character considers a new one."""
+        with self.lock:
+            task=self.store.db.tasks.find_one({'_id':task_id})
+            if not task or (task['requester_id'],task['scene_id'])!=(event['person_id'],event['scene_id']):
+                raise Denied('TASK_REVISION_NOT_AUTHORIZED')
+            identity=sha(canonical({k:event[k] for k in ('event_id','person_id','scene_id','text')}))
+            if task.get('revision_event_id')==event['event_id']:
+                if task.get('revision_input_hash')!=identity:raise Denied('REVISION_EVENT_REUSED')
+                return task
+            if task['state'] not in ('READY','RUNNING','CANCELLED','STALE'):
+                raise Conflict('TASK_REVISION_NOT_ACTIVE')
+            return self.store.put('tasks',{**task,'state':'STALE','intent_revision':task['intent_revision']+1,
+                'fencing_token':task['fencing_token']+1,'revision_event_id':event['event_id'],
+                'revision_input_hash':identity,'feedback_state':'SUPPRESSED','revision_requested_at':now()},
+                expected=task['revision'],stream=task_id)
+
+    def activate_revision(self,episode):
+        """Only a persisted character DECIDE can set the revised task goal."""
+        with self.lock:
+            ep=self.store.db.episodes.find_one({'_id':episode['_id']})
+            task=self.store.db.tasks.find_one({'_id':ep['supersedes_task_id']})
+            if task and task.get('episode_id')==ep['_id']:return task
+            if not task or task['state']!='STALE' or task.get('revision_event_id')!=ep['source_event_id']:
+                raise Denied('TASK_REVISION_SUPERSEDED')
+            if (task['requester_id'],task['scene_id'],task['policy_epoch'])!=(ep['person_id'],ep['scene_id'],ep['policy_epoch']):
+                raise Denied('TASK_REVISION_CONTEXT_MISMATCH')
+            if ep['state']!='DECISION_ACCEPTED' or ep.get('decision',{}).get('next')!='delegate':
+                raise Denied('REVISION_REQUIRES_CHARACTER_DECISION')
+            revised={k:v for k,v in task.items() if k not in ('result','finished_at','feedback_episode','lease_owner','lease_expires_at','failure','failure_type')}
+            revised.update(state='READY',episode_id=ep['_id'],goal=ep['decision']['goal'],constraints=ep['decision']['constraints'],
+                raw_input_refs=['in-'+ep['_id']],persona_revision=ep['manifest']['persona_revision'],tool_steps=0,feedback_state='PENDING')
+            return self.store.put('tasks',revised,expected=task['revision'],stream=task['_id'])
+
+    @contextmanager
+    def keepalive(self,task,interval=30):
+        """Renew only this live worker's fenced lease while it waits on a model."""
+        stopped=threading.Event();errors=[]
+        def renew():
+            while not stopped.wait(interval):
+                try:
+                    with self.lock:
+                        current=self.valid(task)
+                        self.store.put('tasks',{**current,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
+                except Exception as exc:errors.append(exc);return
+        worker=threading.Thread(target=renew,daemon=True);worker.start()
+        def check():
+            if errors:raise RuntimeError('TASK_LEASE_RENEWAL_FAILED') from errors[0]
+        try:yield check
+        finally:stopped.set();worker.join(5)
+
     def finish(self,task,result):
         with self.lock:
             current=self.valid(task)
@@ -59,12 +112,12 @@ class TaskService:
             if result['task_id']!=task['_id'] or result['intent_revision']!=task['intent_revision']:raise Denied('RESULT_IDENTITY_MISMATCH')
             for fact in result['facts']:
                 for ref in fact['evidence_refs']:
-                    receipt=self.store.db.artifacts.find_one({'_id':ref,'task_id':task['_id'],'scope_key':task['scope_key'],'state':'DONE'})
+                    receipt=self.store.db.artifacts.find_one({'_id':ref,'task_id':task['_id'],'intent_revision':task['intent_revision'],'scope_key':task['scope_key'],'state':'DONE'})
                     if not receipt:raise Denied('RESULT_EVIDENCE_MISSING')
             for ref in result['effect_receipts']:
-                if not self.store.db.sink_receipts.find_one({'_id':ref,'task_id':task['_id']}):raise Denied('EFFECT_RECEIPT_MISSING')
+                if not self.store.db.sink_receipts.find_one({'_id':ref,'task_id':task['_id'],'intent_revision':task['intent_revision']}):raise Denied('EFFECT_RECEIPT_MISSING')
             for ref in result['artifact_refs']:
-                if not self.store.db.artifacts.find_one({'_id':ref,'task_id':task['_id'],'scope_key':task['scope_key']}):raise Denied('ARTIFACT_SCOPE_DENIED')
+                if not self.store.db.artifacts.find_one({'_id':ref,'task_id':task['_id'],'intent_revision':task['intent_revision'],'scope_key':task['scope_key'],'state':'DONE'}):raise Denied('ARTIFACT_SCOPE_DENIED')
             if result['status']=='done' and (not result['facts'] or result['unmet_items']):raise Denied('DONE_WITHOUT_EVIDENCE')
             return self.store.put('tasks',{**current,'state':result['status'].upper(),'result':result,'finished_at':now(),'feedback_state':'READY'},expected=current['revision'],stream=task['_id'])
 
@@ -173,15 +226,19 @@ class Executor:
     def __init__(self,service,lane,broker):self.service,self.lane,self.broker=service,lane,broker
 
     def run(self,task_id,workspace):
-        try:return self._run(task_id,workspace)
+        task=self.service.claim(task_id)
+        try:
+            with self.service.keepalive(task) as healthy:
+                return self._run_claimed(task,workspace,healthy)
         except Exception as exc:
-            current=self.service.store.db.tasks.find_one({'_id':task_id})
-            if current and current['state']=='RUNNING':
-                self.service.store.put('tasks',{**current,'state':'UNKNOWN','failure_type':type(exc).__name__,'automatic_retry':False},expected=current['revision'],stream=task_id)
+            with self.service.lock:
+                current=self.service.store.db.tasks.find_one({'_id':task_id})
+                if current and current['state']=='RUNNING' and current['intent_revision']==task['intent_revision'] and current['fencing_token']==task['fencing_token']:
+                    self.service.store.put('tasks',{**current,'state':'UNKNOWN','failure_type':type(exc).__name__,'automatic_retry':False},expected=current['revision'],stream=task_id)
             raise
 
-    def _run(self,task_id,workspace):
-        task=self.service.claim(task_id)
+    def _run_claimed(self,task,workspace,healthy):
+        task_id=task['_id']
         binding=f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
         source=self.service.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
@@ -191,6 +248,7 @@ class Executor:
         text+='\nartifact_refs只能使用工具返回的artifact_ref，不得填文件路径。effect_receipts只能使用工具返回的effect_receipt。'
         for attempt in range(2):
             value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision'])+':'+str(attempt),'execution' if not attempt else 'execution-repair',text,system)
+            healthy()
             self.service.store.audit(task['_id'],'execution.output',{'attempt':attempt,'request_refs':value.request_refs,'content':value.content,'finish_reason':value.finish_reason},task['scope_key'])
             if value.finish_reason!='stop':raise ValueError('EXECUTOR_INCOMPLETE')
             try:return self.service.finish(task,json.loads(value.content))
@@ -200,4 +258,4 @@ class Executor:
                     current=self.service.valid(task)
                     self.service.store.put('tasks',{**current,'state':'FAILED_PROTOCOL','failure':'RESULT_REJECTED_AFTER_REPAIR'},expected=current['revision'],stream=task['_id'])
                     raise
-                text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)
+                text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。输出必须是单个原始JSON对象，以 { 开始、以 } 结束；禁止 Markdown 代码围栏、解释或前后文字。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)

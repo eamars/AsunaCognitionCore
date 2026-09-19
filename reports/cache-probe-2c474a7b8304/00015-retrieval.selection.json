@@ -1,0 +1,62 @@
+{
+  "seq": 15,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "8654a8930ea86a29eb25a7a8cadc36087e711396c12a6856bcf2cb710e479dc8",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 2
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [
+      {
+        "_id": "M11",
+        "score": 0.5902222394943237
+      }
+    ],
+    "lexical_ids": [],
+    "ranks": {
+      "M11": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "vector": 1
+        }
+      }
+    },
+    "selected": [
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [],
+    "cache_key": {
+      "scope": "scene:dm-a",
+      "policy_epoch": 2,
+      "character_id": "xiaoman",
+      "query_sha256": "8654a8930ea86a29eb25a7a8cadc36087e711396c12a6856bcf2cb710e479dc8",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "2b09c7d2b68a84edfeec0c2100d902021f0abc8150382f61f120a75279a353f6"
+    },
+    "cache_key_sha256": "85351f2ddc43db45aa819024b047809319110a114c376a525fe164fb6217e021",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "a269fdeb6f16486baa3944367c285bd63462a2068b7c40121da678828ee71946",
+  "time_ns": 1789813268884154100,
+  "event_hash": "fd9d4dea1442a226afb999c23aced04391f9a63b2c404dfb1ff4d0b94414e648"
+}

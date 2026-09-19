@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 import time
-from collections import Counter
+from collections import Counter,OrderedDict
 from pymongo.operations import SearchIndexModel
 from .evidence import Evidence, LocalHttp, canonical, sha
 from .state import Store, now
@@ -26,6 +26,7 @@ class Retrieval:
         self.revision='route-'+sha(canonical({k:self.cfg.get(k) for k in ('base_url','model','dimensions','query_prefix','document_prefix','weight_sha256','manifest_sha256')}))
         self.weight_verified=False
         self.dim=768
+        self.cache=OrderedDict()
 
     def embed(self, texts, purpose):
         if self.cfg.get('manifest_sha256') and not self.weight_verified:
@@ -72,19 +73,31 @@ class Retrieval:
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False):
         auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}],'character_id':'xiaoman','status':'active'}
         vector_filter={**auth,'embedding_revision':self.revision}
+        # Cache contains IDs/scores only, never bodies, vectors or raw queries.
+        # Every hit still passes the authoritative read below. State revision
+        # and scope epoch are part of the key even for an identical query.
+        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort('_id',1).limit(4097))
+        if len(rows)>4096:raise ValueError('LEXICAL_SCOPE_LIMIT')
+        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]}},{'_id':1,'revision_id':1}).sort('_id',1))
+        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':'xiaoman','query_sha256':sha(query.encode()),'embedding_revision':self.revision,'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
+        cache_hit=bool(cached and cached['expires']>time.monotonic())
         vector=[]; failure=None
         pipeline=None
         try:
-            v=self.embed([query],'query')[0]
-            pipeline=[{'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':192,'limit':24,'filter':vector_filter}},
-                      {'$project':{'_id':1,'score':{'$meta':'vectorSearchScore'}}}]
-            vector=list(self.store.db.memory_units.aggregate(pipeline))
+            if cache_hit:
+                vector=[dict(row) for row in cached['vector']];self.cache.move_to_end(cache_key)
+            else:
+                v=self.embed([query],'query')[0]
+                pipeline=[{'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':192,'limit':24,'filter':vector_filter}},
+                          {'$project':{'_id':1,'score':{'$meta':'vectorSearchScore'}}}]
+                vector=list(self.store.db.memory_units.aggregate(pipeline))
+                self.cache[cache_key]={'expires':time.monotonic()+300,'vector':[dict(row) for row in vector]}
+                while len(self.cache)>128:self.cache.popitem(last=False)
         except Exception as exc:
             failure=type(exc).__name__
             if require_vector:raise
         # Hard-bounded authorized candidate set, not global retrieve-then-filter.
-        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort('_id',1).limit(4097))
-        if len(rows)>4096:raise ValueError('LEXICAL_SCOPE_LIMIT')
         qterms=terms(query)
         document_terms={m['_id']:terms(m['body_markdown']) for m in rows}
         frequencies=Counter(term for values in document_terms.values() for term in values)
@@ -122,6 +135,7 @@ class Retrieval:
                 old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback','vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
+        manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only')
         self.evidence.record('retrieval.selection',manifest)
         self.store.audit('retrieval','retrieval.selected',manifest,scope)
         return selected,manifest

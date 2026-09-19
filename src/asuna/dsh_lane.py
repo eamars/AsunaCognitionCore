@@ -5,6 +5,7 @@ from pathlib import Path
 import secrets
 import threading
 import time
+import uuid
 import yaml
 from contextlib import ExitStack
 import httpx
@@ -17,6 +18,17 @@ from .state import Store
 from .queue import RuntimeLease
 
 
+def provider_finish(raw):
+    """Native turn completion is not proof that the provider stopped normally."""
+    result=None
+    for line in raw.splitlines():
+        if line.startswith('data: ') and line[6:].strip()!='[DONE]':
+            value=json.loads(line[6:])
+            for choice in value.get('choices',[]):
+                if choice.get('finish_reason') is not None:result=choice['finish_reason']
+    return result
+
+
 class DshLane:
     """Replaceable lane: pinned SDK boot + narrowly scoped native DSH operations."""
     def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None, broker_token=None):
@@ -26,7 +38,8 @@ class DshLane:
         locked=json.loads((ROOT/'package-lock.json').read_text())['packages']['node_modules/@deepseek-ai/dsh']['version']
         if not declared==installed==locked=='0.1.5-rc.2':
             raise RuntimeError('DSH_RUNTIME_PIN_MISMATCH')
-        evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_sha256':sha((ROOT/'dsh-plugin/runtime.ts').read_bytes()),'sampling':config[lane]['sampling']})
+        bridge=ROOT/'dsh-plugin/runtime-v2.ts'
+        evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_path':str(bridge),'bridge_sha256':sha(bridge.read_bytes()),'sampling':config[lane]['sampling'],'provider_timeout_ms':config.get('provider_idle_timeout_seconds',1800)*1000})
         self.model=config[lane]
         self.home=Path(config['dsh_home'])/store.name/lane
         self.work=Path(config['workdir'])/store.name/lane
@@ -48,7 +61,7 @@ class DshLane:
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
-            {'id':'asuna-runtime','name':(ROOT/'dsh-plugin/runtime.ts').as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
             *(plugin_rows or [])]}]
         patch=self.home/'lane.patch.yml';patch.write_text(yaml.safe_dump(rows,allow_unicode=True,sort_keys=False),encoding='utf-8')
@@ -95,7 +108,11 @@ class DshLane:
             request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':delivered_text,'system':initial_system}
             if self.lane=='executor' and self.model.get('compact_at_steps'):request['compact_at_steps']=self.model['compact_at_steps']
             if session in self.compact_pending:
-                request['compact_before']=True
+                safe=bool(bound and bound.get('last_phase') in ('SPEAK','execution','execution-repair'))
+                if bound and bound.get('last_phase')=='DECIDE':
+                    prior=self.store.db.episodes.find_one({'_id':bound['last_operation'].split(':')[0],'state':'COMMITTED','decision.next':'silent'})
+                    if prior:safe=True;request['completed_episode_boundary']=bound['last_operation']
+                if safe:request['compact_before']=True
             owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
             if scope_key is not None:
                 if owner and owner.get('scope_key')!=scope_key:raise PermissionError('LANE_OWNER_SCOPE_MISMATCH')
@@ -122,16 +139,22 @@ class DshLane:
                 self.store.audit(operation,'compaction.native',{'result':body['compaction'],'events':body.get('compaction_events',[])})
             calls=self.proxy.calls[before:]
             refs=[{'artifact_path':(self.evidence.root/c['request_ref']).resolve().relative_to(ROOT).as_posix(),'sha256':sha((self.evidence.root/c['request_ref']).read_bytes())} for c in calls]
-            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason='stop' if body['finish_reason']=='completed' else body['finish_reason'],request_refs=refs,receipt=body['message_id'])
+            finish=body['finish_reason']
+            if finish=='completed':finish=(provider_finish(calls[-1]['raw']) if calls else None) or 'unverified_provider_finish'
+            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason=finish,request_refs=refs,receipt=body['message_id'])
             self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'semantic_hash':semantic_hash,'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
             previous=self.store.db.sessions.find_one({'_id':request['session']})
-            self.store.put('sessions',{**previous,'last_phase':phase,'last_operation':operation,'inflight_operation':None,'compact_requested':False,'compaction_generation':previous.get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'],stream=operation)
+            pending=session in self.compact_pending or bool(previous.get('compact_requested') and previous.get('compact_request_id')!=bound.get('compact_request_id'))
+            self.store.put('sessions',{**previous,'last_phase':phase,'last_operation':operation,'inflight_operation':None,'compact_requested':pending,'compaction_generation':previous.get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'],stream=operation)
             return value
 
     def compact(self,session):
         """Queue native complete-span compaction before the next real phase."""
-        self.compact_pending.add(session)
-        self.store.audit(session,'compaction.requested',{'execution':'next real phase at completed episode/task boundary'})
+        with self.lock:
+            self.compact_pending.add(session)
+            bound=self.store.db.sessions.find_one({'binding_key':session})
+            if bound:self.store.put('sessions',{**bound,'compact_requested':True,'compact_request_id':str(uuid.uuid4())},expected=bound['revision'],stream=session)
+            self.store.audit(session,'compaction.requested',{'execution':'next real phase at completed episode/task boundary'})
         return {'state':'QUEUED','session':session,'summary_generated':False}
 
     def close(self):

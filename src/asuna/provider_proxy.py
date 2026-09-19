@@ -102,7 +102,7 @@ class ProviderProxy:
                             self.wfile.flush()
                 except Exception as exc:
                     try:
-                        evidence.record('proxy.error', {'call_id':call_id,'type':type(exc).__name__})
+                        evidence.record('proxy.error', {'call_id':call_id,'type':type(exc).__name__,'reason':str(exc) if isinstance(exc,(ValueError,PermissionError)) else None})
                         if headers_sent:
                             self.wfile.write(b'data: {"error":{"message":"ASUNA_PROVIDER_BOUNDARY_FAILED","type":"boundary_error","code":"ASUNA_PROVIDER_BOUNDARY_FAILED"}}\n\n');self.wfile.flush()
                         else:self.send_error(502, 'ASUNA_PROVIDER_BOUNDARY_FAILED')

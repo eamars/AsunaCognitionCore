@@ -1,0 +1,114 @@
+{
+  "seq": 32,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "8e97ab6452cdeac1b5ad71a5da79a6320cee2b0297c9789c16dbb21ad37a9fe2",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [
+      {
+        "_id": "M02",
+        "score": 0.6958209276199341
+      },
+      {
+        "_id": "M08",
+        "score": 0.6879776120185852
+      },
+      {
+        "_id": "M01",
+        "score": 0.6826231479644775
+      },
+      {
+        "_id": "M07",
+        "score": 0.6645402908325195
+      },
+      {
+        "_id": "M09",
+        "score": 0.6388421058654785
+      },
+      {
+        "_id": "M11",
+        "score": 0.5832749605178833
+      }
+    ],
+    "lexical_ids": [],
+    "ranks": {
+      "M02": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "vector": 1
+        }
+      },
+      "M08": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "vector": 2
+        }
+      },
+      "M01": {
+        "score": 0.015873015873015872,
+        "origins": {
+          "vector": 3
+        }
+      },
+      "M07": {
+        "score": 0.015625,
+        "origins": {
+          "vector": 4
+        }
+      },
+      "M09": {
+        "score": 0.015384615384615385,
+        "origins": {
+          "vector": 5
+        }
+      },
+      "M11": {
+        "score": 0.015151515151515152,
+        "origins": {
+          "vector": 6
+        }
+      },
+      "mono-ep-71c79b1c13cb9db992b23e9fc87d7dde:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M02",
+      "M08",
+      "M01",
+      "M07",
+      "M09",
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "mono-ep-71c79b1c13cb9db992b23e9fc87d7dde:0"
+    ]
+  },
+  "prev_hash": "346f55367329ae29d46b7c1a50de21ce5399aba7ca7a2de4c3469212c9099b79",
+  "time_ns": 1789813145053116200,
+  "event_hash": "cebec3eb7ca11937c593d7575e00af2495b7105fe5edff56863b70ce1806ae2d"
+}

@@ -27,9 +27,12 @@ class Router:
         # Fixture/CLI adapter is an operator-owned simulator. Identity fields
         # below come from its envelope, never from quoted JSON in event text.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
-        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','task_id','intent_revision','delegation_depth')
+        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','task_id','intent_revision','delegation_depth','supersedes_task_id')
         trusted={k:event[k] for k in allowed if k in event}
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':'cli-fixture'},scene['scope_key'])
+        if event.get('supersedes_task_id'):
+            if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')
+            self.tasks.revise(event['supersedes_task_id'],trusted)
         if scene['kind']=='group' and not(event.get('mentioned') or event.get('reply_to') or event.get('scene_tick')):
             key='quiet-'+sha(canonical([scene['_id'],event['event_id']]))
             previous=self.store.db.messages.find_one({'_id':key})

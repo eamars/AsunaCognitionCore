@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "created_at": "2026-09-19T09:24:12.422959+00:00",
+  "created_at": "2026-09-19T10:54:21.532026+00:00",
   "platform": "Windows-11-10.0.26200-SP0",
   "python": "3.12.10",
   "configuration": {
@@ -1826,7 +1826,39 @@
   },
   "sampling_changes_require_new_experiment_id": true,
   "previous_version": {
-    "artifact_path": "reports/environment-v2-20260919T092412Z-6cf3d8/previous-environment.json",
-    "sha256": "a839a95027834c3fd8c248f417e2136d58225f0e3d9637cc9a7925363a026562"
+    "artifact_path": "reports/environment-v3-05c1cc1133/previous-environment.json",
+    "sha256": "df9ad76f640b5fc709587f32e4f4be48429a6e22ae46acf7d26b25b72204871a"
+  },
+  "adapter_runtime": {
+    "bridge": {
+      "artifact_path": "dsh-plugin/runtime-v2.ts",
+      "sha256": "5896423e528e6ecd5d57731d751328fe30991b389301ba0c940bc5fc605cf88b"
+    },
+    "legacy_bridge_retained_for_frozen_experiments": {
+      "artifact_path": "dsh-plugin/runtime.ts",
+      "sha256": "f11cb99f4255a5a173d33569301927c5c068674e0d0e48418318ec4a743df727"
+    },
+    "provider_idle_timeout_seconds": 1800,
+    "provider_http_timeout_seconds": 1800,
+    "model_response_policy": "Upstream-accepted SSE comment followed by complete durable response before model content reaches DSH.",
+    "summary_policy": "queued request persists across restart; only complete episode/task boundaries; silent DECIDE boundary validated against committed episode and native receipt",
+    "implementation_commit_before_snapshot": "4e97fa6c48bce517859652f4df6ae98a9e22f1f4"
+  },
+  "storage_runtime": {
+    "query_cache": "IDs and scores only; scope/epoch/source revision in key; authoritative read on every hit",
+    "large_provider_payloads": "verified scoped GridFS artifacts",
+    "task_fencing": "intent revision and worker token plus local cross-process side-effect lock",
+    "scope": "single Windows controller host; no multi-host HA claim"
+  },
+  "capacity_evidence": {
+    "full_matrix_first_attempt": {
+      "artifact_path": "reports/formal-F01-20260919T092450Z-ced9f8/result.json",
+      "sha256": "9287eea85688aed2b0ac51a823b57e43eb5d32b756928856cb7f2984e798144a"
+    },
+    "transport_fix_234k_probe": {
+      "artifact_path": "reports/capacity-stream-reprobe-4db631d2b7/result.json",
+      "sha256": "9fb8735cd79e83b1122b58cd4493df5ce381a839762af0a7a7b3b57af42d40d6"
+    },
+    "conclusion": "First full matrix 23/24. New 234k Qwen probe passes after transport deadline fix; full new matrix required, no claim of all-length acceptance yet."
   }
 }

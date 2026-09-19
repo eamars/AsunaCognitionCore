@@ -1,0 +1,62 @@
+{
+  "seq": 7,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "27d839ceffadd88d5c40a8bb16c1170795a4066fd256e234c1fc418c9040e8f3",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:noise-workbench",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "M11"
+    ],
+    "ranks": {
+      "M11": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11"
+    ],
+    "cache_key": {
+      "scope": "scene:noise-workbench",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "27d839ceffadd88d5c40a8bb16c1170795a4066fd256e234c1fc418c9040e8f3",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "7ca905713982c8b87c6adc669d2fa680e551f4173b52f30b5bbb267a4bbe7185"
+    },
+    "cache_key_sha256": "6011f2aa2948fef7f275d5827d9011133b384278107814be94b94453f965b4e2",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "df9208f52ffa56df253ea03e2af22a3e479f172376cdfa61682cbf61ac44fed0",
+  "time_ns": 1789813380647544000,
+  "event_hash": "bc0e34023947f3ca97efae9cfae20fbe3141656f8da9b0f1b1625247c537a706"
+}

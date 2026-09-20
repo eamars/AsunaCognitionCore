@@ -1,0 +1,222 @@
+{
+  "test_id": "PROBE-L09-FAILURE-PROVENANCE",
+  "status": "PASS",
+  "executed_at": "2026-09-20T02:41:12.957363+00:00",
+  "mode": "offline_completed_failure_inspection",
+  "source_experiment": "matrix-probe-0b783bca1b",
+  "observations": {
+    "task_state": "FAILED_PROTOCOL",
+    "task_failure": "RESULT_REJECTED_AFTER_REPAIR",
+    "native_compactions": {
+      "character": 3,
+      "executor": 5
+    },
+    "summaries": [
+      {
+        "lane": "character",
+        "id": "25951a9b-f648-42b5-b5e2-9a2670acbfd2",
+        "shadowed_range": {
+          "start": 33,
+          "end": 54
+        },
+        "shadowed_token_count": 2297,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "character",
+        "id": "37f74168-83fd-4b55-995c-44c9cd82b298",
+        "shadowed_range": {
+          "start": 62,
+          "end": 83
+        },
+        "shadowed_token_count": 2525,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "character",
+        "id": "443c5e17-a207-43b5-9751-b4d580cbbf1f",
+        "shadowed_range": {
+          "start": 5,
+          "end": 25
+        },
+        "shadowed_token_count": 2192,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "executor",
+        "id": "e1e13261-a952-431a-9776-dcc70fd07650",
+        "shadowed_range": {
+          "start": 5,
+          "end": 16
+        },
+        "shadowed_token_count": 1193,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "executor",
+        "id": "62a52704-55cb-4109-93b4-08c9eabcef42",
+        "shadowed_range": {
+          "start": 20,
+          "end": 37
+        },
+        "shadowed_token_count": 2377,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "executor",
+        "id": "59843cd5-310a-4342-a24c-9145f8420007",
+        "shadowed_range": {
+          "start": 41,
+          "end": 66
+        },
+        "shadowed_token_count": 4441,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "executor",
+        "id": "3da64db6-0594-40ab-ba36-dd4595dacde6",
+        "shadowed_range": {
+          "start": 70,
+          "end": 83
+        },
+        "shadowed_token_count": 8187,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      },
+      {
+        "lane": "executor",
+        "id": "c283355e-6953-448c-9e3b-0715f37e626b",
+        "shadowed_range": {
+          "start": 87,
+          "end": 100
+        },
+        "shadowed_token_count": 3022,
+        "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+      }
+    ],
+    "result_rejections": [
+      {
+        "attempt": 0,
+        "reason": "Expecting value: line 3 column 1 (char 2)"
+      },
+      {
+        "attempt": 1,
+        "reason": "DONE_WITHOUT_EVIDENCE"
+      }
+    ],
+    "executor_outputs": [
+      {
+        "source": {
+          "artifact_path": "reports/matrix-probe-0b783bca1b/c3-e5-1/00432-lane.receipt.json",
+          "sha256": "438d228597e65400db007a66bdffb3a46eb6640d0eb261fb79658f7253e3e3aa"
+        },
+        "extracted": {
+          "artifact_path": "reports/matrix-diagnosis-20260920-01/00432-lane.receipt-output.json",
+          "sha256": "7f8fe2ebfd09996d6ebc0256c21bd63875cafd7bb1bd92bcb8a357077cfb1eac"
+        }
+      },
+      {
+        "source": {
+          "artifact_path": "reports/matrix-probe-0b783bca1b/c3-e5-1/00446-lane.receipt.json",
+          "sha256": "93f2a39abbf4b32c6e58898248584aef6715433aea272db85dcd233902b4fb27"
+        },
+        "extracted": {
+          "artifact_path": "reports/matrix-diagnosis-20260920-01/00446-lane.receipt-output.json",
+          "sha256": "5874dff0770611b2619563f253adeab73fce9e05a3f9a236b9f1812c6906cd84"
+        }
+      }
+    ],
+    "saved_work_products": [
+      {
+        "name": "report.json",
+        "evidence": {
+          "artifact_path": "reports/matrix-diagnosis-20260920-01/saved-report.json",
+          "sha256": "d346a022b32166b8fec9f15015524c2fb41985b78f5f80c948943eb238593297"
+        },
+        "source_sha256": "d346a022b32166b8fec9f15015524c2fb41985b78f5f80c948943eb238593297"
+      },
+      {
+        "name": "anomalies.md",
+        "evidence": {
+          "artifact_path": "reports/matrix-diagnosis-20260920-01/saved-anomalies.md",
+          "sha256": "3b2441178a5059c3e5808c4f4382798ce2c295e4548299d96aaba55d9fc002a7"
+        },
+        "source_sha256": "3b2441178a5059c3e5808c4f4382798ce2c295e4548299d96aaba55d9fc002a7"
+      }
+    ],
+    "protected_inputs_equal_frozen_fixtures": true,
+    "file_counts_and_total_equal_truth": true,
+    "file_values": {
+      "unique_posted_count": 668,
+      "total_amount_cents": 935122
+    },
+    "committed_effect_receipts": [
+      {
+        "_id": "effect-5f5767422f169aa832558ebd768d57865283ad059e7386e1c07b21f6d54cbaab",
+        "scope_key": "scene:dm-a",
+        "task_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+        "intent_revision": 1,
+        "kind": "simulated_copy_commit",
+        "value": {
+          "path": "staged/report.json",
+          "sha256": "d346a022b32166b8fec9f15015524c2fb41985b78f5f80c948943eb238593297"
+        },
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "cafa67e6-ebfb-4f65-b4d8-3326103673da"
+      },
+      {
+        "_id": "effect-256c15e314b3df777646fa6c72cd93336ec356dfffa1bd4f6b57cbf8d7ac0257",
+        "scope_key": "scene:dm-a",
+        "task_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+        "intent_revision": 1,
+        "kind": "simulated_copy_commit",
+        "value": {
+          "path": "staged/anomalies.md",
+          "sha256": "3b2441178a5059c3e5808c4f4382798ce2c295e4548299d96aaba55d9fc002a7"
+        },
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "17e4e552-44e6-4ab2-bcd1-022ef28dbed4"
+      }
+    ],
+    "sources": [
+      {
+        "artifact_path": "reports/matrix-probe-0b783bca1b/c3-e5-1/sample.json",
+        "sha256": "b2fdae1e8e1b238949e6251ef3af9bc4e80237f0e915621a3acace1f60d3a167"
+      },
+      {
+        "artifact_path": "reports/matrix-probe-0b783bca1b/c3-e5-1/terminal-state.json",
+        "sha256": "48327d2c4cdd30228077fecb0173e6a942a86d36976ee9410aa028d73f3ff236"
+      },
+      {
+        "artifact_path": "reports/matrix-probe-0b783bca1b/c3-e5-1/trace.json",
+        "sha256": "ba621635427fb8d8bda3ae04a01cb11c32f0490cd7d594071eaf3659727f5e08"
+      },
+      {
+        "artifact_path": "reports/matrix-probe-0b783bca1b/manifest.json",
+        "sha256": "b297db4f6b589df3a82337471c0790878c7a8bb437d5e82fa6cc208fcbbd84a0"
+      }
+    ]
+  },
+  "model_calls": 0,
+  "database_writes": 0,
+  "commands": [
+    {
+      "argv": [
+        "C:\\Users\\rba90\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "tools\\diagnose_matrix.py",
+        "reports\\matrix-probe-0b783bca1b\\c3-e5-1",
+        "--out",
+        "reports\\matrix-diagnosis-20260920-01"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Source sample remains FAIL: correct files and eight summaries do not establish accepted task completion or public feedback.",
+    "The repaired result declares done with a nonempty unmet_items array; rejection is required by the existing task contract.",
+    "These are engineering observations, not independent natural-language ratings."
+  ]
+}

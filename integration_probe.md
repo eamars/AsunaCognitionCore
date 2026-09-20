@@ -57,3 +57,8 @@ Remaining scope limitations include global-safe deletion (rejected), external
 backup/export recall, explicit rather than automatic compaction, and incomplete
 formal matrices. A probe passing is never promoted to full acceptance by this
 document. The report compiler preserves all failed attempts and missing tests.
+
+
+### M7c: real L09 protocol counterexample
+
+The hardest condition now has all 3 character + 5 executor native summaries and correct committed reconciliation files, but the repaired executor result declares done with unmet items. TaskService rejects it; the source probe remains FAIL. See `reports/M7c.md` and `reports/matrix-diagnosis-20260920-01/result.json`. Full remaining matrices continue without changing the result guard, persona or deployment.

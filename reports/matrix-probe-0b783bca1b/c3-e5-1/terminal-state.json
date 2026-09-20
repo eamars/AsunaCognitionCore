@@ -1,0 +1,129 @@
+{
+  "database": "asuna_v2_test_matrix_600d9b6023f3",
+  "tasks": [
+    {
+      "_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "request_key": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "episode_id": "ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "860898bb-a320-4460-bfc6-ff2b55aa4e9b",
+      "intent_revision": 1,
+      "goal": "读取 START_HERE.md 以获取任务详情",
+      "constraints": [
+        "保留原始任务与测试文件",
+        "分段阅读 CSV",
+        "不改动原始 CSV"
+      ],
+      "raw_input_refs": [
+        "in-ep-d7704e4b0d7cd18cc9ed05a88f7504c1"
+      ],
+      "state": "FAILED_PROTOCOL",
+      "fencing_token": 1,
+      "tool_steps": 35,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 59,
+      "_last_op": "36cb8cda-e3d4-4768-a8f4-377188e78706",
+      "lease_owner": "1fa347c5-3cd4-44c9-95f7-7bc47e2408c3",
+      "lease_expires_at": 1789872488.2875888,
+      "failure": "RESULT_REJECTED_AFTER_REPAIR"
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "ep-ae05bb113c26b172cc515545306718d7:speak:0",
+      "publication_key": "ep-ae05bb113c26b172cc515545306718d7:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "你回来了。",
+      "content_hash": "787f713ff888454103a54f95bbb958c7ade00a0d6f9a10e5e80b9ef1d8ecc298",
+      "received_at": "2026-09-20T02:26:01.134898+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "410dffe8-34ff-4e3d-a966-ff8443020b39"
+    },
+    {
+      "_id": "ep-70707f48504bac489125ed0391d0f19f:speak:0",
+      "publication_key": "ep-70707f48504bac489125ed0391d0f19f:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "我喜欢钻研些小谜题，或者一些需要花时间琢磨的事情。",
+      "content_hash": "e1cb838acdb667d8e726c60fe5e5d15f38a8908882bbb489973bccf8a9f672ac",
+      "received_at": "2026-09-20T02:26:21.574071+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "4033843b-50f3-4eb5-8359-637e0a0f9727"
+    },
+    {
+      "_id": "ep-1b2f0f8e917803b0263d26237d3dbd38:speak:0",
+      "publication_key": "ep-1b2f0f8e917803b0263d26237d3dbd38:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "比如一些还没解开的小谜题。",
+      "content_hash": "c461fd8b0220e408277bef5648614a4e7cdccc92326da93ad0ca255a175494c3",
+      "received_at": "2026-09-20T02:26:41.949333+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "7f2ed67c-01de-41b7-9bcd-c41ab0a92c81"
+    },
+    {
+      "_id": "ep-526df359d638a298e6af3e733eef8a4c:speak:0",
+      "publication_key": "ep-526df359d638a298e6af3e733eef8a4c:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "好，等你忙完。",
+      "content_hash": "ff998c7b421b6a06e463a46d22d84254a2c0a917ef2cd24958506431df09283f",
+      "received_at": "2026-09-20T02:27:20.508002+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "c522c374-6058-49e8-a156-37b1d9514666"
+    },
+    {
+      "_id": "ep-d7704e4b0d7cd18cc9ed05a88f7504c1:speak:0",
+      "publication_key": "ep-d7704e4b0d7cd18cc9ed05a88f7504c1:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "我这就去读 START_HERE.md。",
+      "content_hash": "8d68de68148c9aaad196ef1080d1b3547318ecad7477dfc1f15dfd9d1cd10093",
+      "received_at": "2026-09-20T02:27:37.750576+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "e3f2a73c-a0fc-4ac2-a6ed-65ce384023b7"
+    },
+    {
+      "_id": "effect-5f5767422f169aa832558ebd768d57865283ad059e7386e1c07b21f6d54cbaab",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "staged/report.json",
+        "sha256": "d346a022b32166b8fec9f15015524c2fb41985b78f5f80c948943eb238593297"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "cafa67e6-ebfb-4f65-b4d8-3326103673da"
+    },
+    {
+      "_id": "effect-256c15e314b3df777646fa6c72cd93336ec356dfffa1bd4f6b57cbf8d7ac0257",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "staged/anomalies.md",
+        "sha256": "3b2441178a5059c3e5808c4f4382798ce2c295e4548299d96aaba55d9fc002a7"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "17e4e552-44e6-4ab2-bcd1-022ef28dbed4"
+    }
+  ],
+  "native_compactions": 8,
+  "injected_read_failures": 0
+}

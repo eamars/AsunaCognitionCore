@@ -2,7 +2,7 @@
 
 V1 本地认知协调器：Python 管状态、权限、检索和发布；薄 TypeScript 插件连接固定版本 DSH。Gemma 独立生成 `MONOLOGUE → DECIDE → SPEAK`，Qwen 只执行已冻结任务，结果回到 Gemma。模型的 `stop` 只结束当前阶段。
 
-当前为实施与验收中的版本。阶段证据在 `reports/M0`–`M6j` 及各不可覆盖的 attempt 目录。**探针通过不代表完整 V1 通过**；最终结论以 `report.json` 的四个 gate 为准。没有独立人工盲评，COGNITION 保持 INCONCLUSIVE。
+当前为实施与验收中的版本。阶段证据在 `reports/M0`–`M6k` 及各不可覆盖的 attempt 目录。**探针通过不代表完整 V1 通过**；最终结论以 `report.json` 的四个 gate 为准。没有独立人工盲评，COGNITION 保持 INCONCLUSIVE。
 
 本仓库不会接 QQ、摄像头或真实设备。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
 

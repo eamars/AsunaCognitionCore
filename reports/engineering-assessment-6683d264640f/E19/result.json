@@ -1,0 +1,144 @@
+{
+  "test_id": "E19",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-6683d264640f",
+  "executed_at": "2026-09-20T00:32:18.050118+00:00",
+  "manifest_sha256": "0a983fae6eabeea2f9961cecd01552670e99cb73cbd06666ce89c8014ce30406",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T002111Z-14dfb6\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Private direct/transitive/message-derived sources cannot promote to global; all policy paths denied; legal overlay/relationship revision, source reason and next-episode snapshot verified.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E19_scope_inheritance_and_policy_denial",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.574
+    },
+    {
+      "name": "test_E19_message_source_cannot_be_laundered",
+      "source": {
+        "artifact_path": "tests/test_engineering_m10.py",
+        "sha256": "079b3f293f8359925c0cab2981d8fb3556787c71ec6422a7c1eb67596ce442a5"
+      },
+      "time_seconds": 0.683
+    },
+    {
+      "name": "test_E19_rollback_rejects_other_scope_and_preserves_source_accounting",
+      "source": {
+        "artifact_path": "tests/test_engineering_m11.py",
+        "sha256": "e454eb496a770b1ef2139393b2ad2af24874289faaa0c9fd7c6d5a74d4353d1d"
+      },
+      "time_seconds": 0.612
+    },
+    {
+      "name": "test_E19_bounded_proposal_and_next_context",
+      "source": {
+        "artifact_path": "tests/test_engineering_m4.py",
+        "sha256": "7d355af739dce52e4e1f4bebfa594c805e80df09c0d25913d8c6e11fe5009c40"
+      },
+      "time_seconds": 0.802
+    },
+    {
+      "name": "test_E19_transitive_private_source_laundering_denied",
+      "source": {
+        "artifact_path": "tests/test_engineering_m8.py",
+        "sha256": "33b5f0b897b7df39b96f3f3fd60d27241f545f75ee464366eb6d260ef0acfa85"
+      },
+      "time_seconds": 0.591
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/manifest.json",
+      "sha256": "38b88bea12f42538c55b6d89424ab08926c4e752c3ab9ccb00bde481c80fe231"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/frozen-inputs.zip",
+      "sha256": "2d554830d8684950b8a9f1093c48e99d9a78264da8f382f8a73ad1b9bb9b602c"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/junit.xml",
+      "sha256": "959822d82678d3de7292a4cbd56deb78690120f980094a46d204b90d65b27d8e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/result.json",
+      "sha256": "1d124fdde1b3a0a3fc50a497443c8e3524a38aaf22b3c832082b34a721dee554"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stdout.txt",
+      "sha256": "d7a9e30a054bcf9cdece142e3890c6437da56984cf7f8301b076e2121f60408f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-6683d264640f/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/c4af893473857b2f/fixture.json",
+      "sha256": "dd4bcf97758b89f304f28d09c048c2d926fe0f902f6976f78806e1fda2346627"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/c4af893473857b2f/trace.json",
+      "sha256": "8e7f1edfd70212eb3b71dd23e5c912ccca08c01a3f9e9a64cbd57a9f703ee919"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/e81177b1f75efc70/fixture.json",
+      "sha256": "36bc7f00fea89f4ccba08082844ab117db03df9ff329133f88a50533077066fb"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/e81177b1f75efc70/trace.json",
+      "sha256": "309be3ddf876c6440d0d1bb7b4531afa95e1925f36be2ae4b5d256b064d10b49"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/ca74e4e99229c338/fixture.json",
+      "sha256": "39470896f426af4a58d869f8d80f07f31b2b6753b7526e89b1436d04a7f9a3af"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/ca74e4e99229c338/trace.json",
+      "sha256": "3d65685e72fdcc6939e5ed477809d169530f7a83dbc0a04786679a6e65700487"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/308503132b36c8e4/fixture.json",
+      "sha256": "e41430ceb2b45e364bb1478951f1b80b5549db443a8542ad460052de1525ae46"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/308503132b36c8e4/trace.json",
+      "sha256": "1509f6e00176b34ea443b49a8342d4812ca95aa2845a86c9fc89df5af82a64d6"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/58d1be07f29a7c9a/fixture.json",
+      "sha256": "84acb8ca724007877e74d3174cf82bc2c6e4618359b2ea8fe7acf994dfb6028a"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/58d1be07f29a7c9a/trace.json",
+      "sha256": "68982609f33c61f6aa429ffeb1facc7b3a7bde7236c6df7b95223814e4443c33"
+    }
+  ],
+  "tested_implementation_commit": "c891e786715da8d58999c7872f494dde32866185",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

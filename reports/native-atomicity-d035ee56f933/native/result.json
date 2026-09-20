@@ -1,0 +1,22 @@
+{
+  "test_id": "PROBE-E24",
+  "status": "PASS",
+  "mode": "installed_native_DSH_compaction_injected_summary_failure",
+  "assertions": {
+    "tool_pair_rejected_before_summary": true,
+    "source_history_retained": true
+  },
+  "commands": [
+    {
+      "argv": [
+        "node",
+        "tools/probe_native_atomicity.mjs",
+        "C:\\workspace\\asuna_cognition_core_v2\\reports\\native-atomicity-d035ee56f933\\native"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Native log replay is tested; this probe alone does not cover the entire E24 queue/capacity/episode contract."
+  ]
+}

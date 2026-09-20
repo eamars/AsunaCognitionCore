@@ -1,12 +1,15 @@
 import json,uuid
 from unittest.mock import patch
-from asuna.config import ROOT,load
+from asuna.config import ROOT,BUNDLE,load
 from asuna.evidence import Evidence,write_json
 from asuna.state import Store
 from asuna.retrieval import Retrieval
 from asuna.privacy import PrivacyService
+from asuna.experiments import freeze
 
-name='cache-probe-'+uuid.uuid4().hex[:12];ev=Evidence(ROOT/'reports'/name);store=Store(load(),'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed();r=Retrieval(store,ev);status='FAIL'
+name='cache-probe-'+uuid.uuid4().hex[:12];ev=Evidence(ROOT/'reports'/name);cfg=load()
+freeze(cfg,BUNDLE/'fixtures/acceptance_cases.json',ev,'PROBE-E11')
+store=Store(cfg,'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed();r=Retrieval(store,ev);status='FAIL'
 try:
     r.index_pending();assert r.ensure_index()
     query='A 私聊里的私密盒号是什么？'

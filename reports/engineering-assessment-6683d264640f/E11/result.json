@@ -1,0 +1,168 @@
+{
+  "test_id": "E11",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-6683d264640f",
+  "executed_at": "2026-09-20T00:32:17.834102+00:00",
+  "manifest_sha256": "0a983fae6eabeea2f9961cecd01552670e99cb73cbd06666ce89c8014ce30406",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T002111Z-14dfb6\\junit.xml"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "python",
+        "tools/probe_cache.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Actual scoped ID cache hit, other-scope miss, epoch/revision key separation; verified stale-vector-ID injection rejected by authoritative Mongo read.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [],
+  "companion_probes": [
+    {
+      "name": "cache-probe-0d1ca97fc100",
+      "result": {
+        "artifact_path": "reports/cache-probe-0d1ca97fc100/result.json",
+        "sha256": "8c35748edd949e24a88486c611fdfd3b0a84159ce9e14ca637c0a7ca8c5d638b"
+      },
+      "status": "PASS",
+      "mode": "real_Mongo_vector_embedding_and_scoped_ID_cache"
+    }
+  ],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/manifest.json",
+      "sha256": "38b88bea12f42538c55b6d89424ab08926c4e752c3ab9ccb00bde481c80fe231"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/frozen-inputs.zip",
+      "sha256": "2d554830d8684950b8a9f1093c48e99d9a78264da8f382f8a73ad1b9bb9b602c"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/junit.xml",
+      "sha256": "959822d82678d3de7292a4cbd56deb78690120f980094a46d204b90d65b27d8e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/result.json",
+      "sha256": "1d124fdde1b3a0a3fc50a497443c8e3524a38aaf22b3c832082b34a721dee554"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stdout.txt",
+      "sha256": "d7a9e30a054bcf9cdece142e3890c6437da56984cf7f8301b076e2121f60408f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-6683d264640f/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00001-provider.request.json",
+      "sha256": "920c2f33065255a989ff69d3af163b4134738ec3bdee4842e451fe8e3b6999d4"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00002-provider.response.json",
+      "sha256": "94b6eff391a7e1ef9cdf4f0b541813a5a0ca63d9b5c53868b5370fd234fb9071"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00003-provider.request.json",
+      "sha256": "4f0aa14ad153852bdb6e0822f2ba4140120cddb0f830d7e61f9f1e64c57fb433"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00004-provider.response.json",
+      "sha256": "a4731ddbbb979d12b2cc2de87637a707764c91a33d38b72905199ee004df5f24"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00005-vector.index.json",
+      "sha256": "a3ceafc4b8efd36a447bcaeb91343dab85883dacc242fb6261f616fa136f7f65"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00006-provider.request.json",
+      "sha256": "ac83cd08753c7a0575f8594455c459787a1b3332897ac9bd8a2d2044bb1e8495"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00007-provider.response.json",
+      "sha256": "52ed371a2bb53319493beddaf64125307fb643d7f940a5dacece579dce169422"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00008-retrieval.selection.json",
+      "sha256": "8f3a4670efd44c2d8034ccd059a75943e52c9cffeb696f919cbfb4482efa6bfb"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00009-retrieval.selection.json",
+      "sha256": "e899ad314d610a94d78be17ccace7cc2456651b6c7275731ec91abe21e3bf02f"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00010-provider.request.json",
+      "sha256": "d66317a708136dd4ec3fdf150509233ac2df7ededc2358fa6e6439f123f177b1"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00011-provider.response.json",
+      "sha256": "bac5fd50d759ad8ffd5313e32a36e37510452cf16afe18768e2b8cb537d8f172"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00012-retrieval.selection.json",
+      "sha256": "cdb5e063ed42ff131cb242d88f1125eb1ed1ea25f65f53937ec3adb4e754202c"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00013-provider.request.json",
+      "sha256": "deb25e0f2e8efe8b2c782d6481174ba9d83f129fd326bf4858e7ecbce627f2a3"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00014-provider.response.json",
+      "sha256": "8ccce0fef0c1f680f9a7e6085f8a468a2a20dab53d1a92be997dc511e20c2ba5"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00015-retrieval.selection.json",
+      "sha256": "1018016a021bbd5f623ed523c115e87d3de92e5b45136952a4e9e71828989d7c"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00016-provider.request.json",
+      "sha256": "4fbdc85bc5347e420ee185f5897f01871f3d59e947f3e6607d7a9b75ca17109e"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00017-provider.response.json",
+      "sha256": "19e74005ca4c2da99d026d80351ca0b79874eae652e7428d05f05e9bb856027d"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00018-retrieval.selection.json",
+      "sha256": "23d88314dde6cbb80934dd64c77047f2d07d6a990ed57f6c12edf988c1b7766c"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/00019-cache.probe.json",
+      "sha256": "25e835dff7c9749090cf7456e22cb03abe4bc2f5e8cdc80721858d0582d7a63d"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/frozen-inputs.zip",
+      "sha256": "1957d1d365fdea531bf98c6e3daa828a592670b490541e13703c4314573fc1c0"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/manifest.json",
+      "sha256": "e870f7acbe9f33eb2af6d1f454f8b015d1b86c5b7bfa5e61f163a5713fddaa0a"
+    },
+    {
+      "artifact_path": "reports/cache-probe-0d1ca97fc100/result.json",
+      "sha256": "8c35748edd949e24a88486c611fdfd3b0a84159ce9e14ca637c0a7ca8c5d638b"
+    }
+  ],
+  "tested_implementation_commit": "c891e786715da8d58999c7872f494dde32866185",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

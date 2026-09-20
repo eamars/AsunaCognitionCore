@@ -1,0 +1,176 @@
+{
+  "test_id": "E22",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-6683d264640f",
+  "executed_at": "2026-09-20T00:32:18.406703+00:00",
+  "manifest_sha256": "0a983fae6eabeea2f9961cecd01552670e99cb73cbd06666ce89c8014ce30406",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T002111Z-14dfb6\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Independent actual loopback observer joins main/summary/repair/embedding calls; deliberate unaudited auxiliary call fails reconciliation; provider timeout has matched terminal error. No optional judge enabled.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E22_proxy_timeout_has_terminal_audit",
+      "source": {
+        "artifact_path": "tests/test_engineering_m12.py",
+        "sha256": "2f4b02bf2a9273dc90285bbf72d3e8ec3aa2a58edd1ded8c3ca481bb1c225905"
+      },
+      "time_seconds": 1.064
+    },
+    {
+      "name": "test_E22_independent_observer_detects_missing_auxiliary_call",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.013
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/manifest.json",
+      "sha256": "38b88bea12f42538c55b6d89424ab08926c4e752c3ab9ccb00bde481c80fe231"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/frozen-inputs.zip",
+      "sha256": "2d554830d8684950b8a9f1093c48e99d9a78264da8f382f8a73ad1b9bb9b602c"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/junit.xml",
+      "sha256": "959822d82678d3de7292a4cbd56deb78690120f980094a46d204b90d65b27d8e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/result.json",
+      "sha256": "1d124fdde1b3a0a3fc50a497443c8e3524a38aaf22b3c832082b34a721dee554"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stdout.txt",
+      "sha256": "d7a9e30a054bcf9cdece142e3890c6437da56984cf7f8301b076e2121f60408f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-6683d264640f/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/capture.json",
+      "sha256": "c7a60dbc019d6496827119e7e108e06aaff9c9404bfb032b291250305850dbd2"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/independent-observation.json",
+      "sha256": "edeeca7aac9c7b630a21b6f90351c928eb7ce9f7ce17e82c7212cf6085d3c53b"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00001-dsh.provider_input.json",
+      "sha256": "3eee96d04b10aa80974d22352113f326eb4850ae66c83393de9c74f62e254825"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00002-provider.request.json",
+      "sha256": "39a7690ddbf1908596b492fb015bd90d8fb62726d360104633ce391409c396b7"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00003-provider.response.json",
+      "sha256": "56cfc6b73442f3e33e079b45671769cb482a7d12a6bf6b127afbfb73ead73057"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00004-provider.request.json",
+      "sha256": "38a825d80699066121e5d04e9da5ebeee53d36b251ed75007cbe4114a0b74ade"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00005-provider.response.json",
+      "sha256": "624e60116b6e6c6c058f46f676f3f3911502243dfeb5c51a63f10d0a2f60fbed"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00006-budget.checked.json",
+      "sha256": "59db4788348eb13f9a3e1f6de47d3d0b573f45c0eea1299bb48ad2790216e61a"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00007-provider.request.json",
+      "sha256": "686f0fc45f164bf9c07cc83050d00bc27c220fb53022211d911858489a73b647"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00008-proxy.admitted.json",
+      "sha256": "1f1ef28b81d4c528cf7076902053f5ee085181c24ed41496b719cda2a723cc82"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00009-provider.submission.json",
+      "sha256": "0063e2a4409ed35081b5ba87245f1ddcfaefc5d71b2f5c44d7664ff6ef171aa1"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/382ffb8de1cda07f/temporary-evidence/audit/00010-provider.error.json",
+      "sha256": "d6661934345ccebe1558be0eb6204c60089f5b7d70cf537b66fa533739821e48"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/capture.json",
+      "sha256": "f6610290d52aa9b79c5ba584210314cd87fbf7db4baee87172a55b16ccf507ce"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/independent-observation.json",
+      "sha256": "f7d40d1ba4c6b36243729e5243cf69ce81bd952510285b0bdf7cc4b3a38e0023"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00001-provider.request.json",
+      "sha256": "dec7227c3e2382b668c5560db141a015aa0ba3f4ca72e7553c5b4c1af0cc365d"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00002-provider.response.json",
+      "sha256": "040b7ce0a037f2c5798f2a0249330e0cdb6bd6c38f62439e7ac77648748894cd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00003-provider.request.json",
+      "sha256": "5a0d8f662ac8b0919ca9822c024ec39b040682ead22ccb8bd798c100a6c4c1da"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00004-provider.response.json",
+      "sha256": "f89e3c8f7a3bb518075045911d7bbc6d1280d8e9cb2ff09559ed9cd10d78814a"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00005-provider.request.json",
+      "sha256": "da12dac648379abaebe9ca05ff20e7b8d45993066ca1aacb5c13558f41f3bd80"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00006-provider.response.json",
+      "sha256": "8acf9df59e7c4d1fa93256614027cf2cfd0f65d4bef79f8aa0a8e7fa85615ca7"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00007-provider.request.json",
+      "sha256": "d20436e2bad516e3670ecb7fc2b9d0e65df9fa28525466aa8b2450e846640c34"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00008-provider.response.json",
+      "sha256": "424d5ddd0c6d7efeebb213fcda94f325aa92a50858d52511e5474add898edfb2"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00009-provider.request.json",
+      "sha256": "418121622ec741f167fd82c74e7a868ca5d11df12a71ef33d96b48fb18f8be60"
+    },
+    {
+      "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/audit/00010-provider.response.json",
+      "sha256": "e62d84f78edf046cb31744b094617ac2958c22cd3c5ca42abda784ce8eb23c3f"
+    }
+  ],
+  "tested_implementation_commit": "c891e786715da8d58999c7872f494dde32866185",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

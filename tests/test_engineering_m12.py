@@ -2,7 +2,7 @@ import json,threading,time
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import httpx
 from asuna.audit import reconcile_calls
-from asuna.evidence import Evidence,sha
+from asuna.evidence import Evidence,sha,write_json
 from asuna.provider_proxy import ProviderProxy
 
 
@@ -36,5 +36,6 @@ def test_E22_proxy_timeout_has_terminal_audit(tmp_path):
         error=next(e['payload'] for e in events if e['type']=='provider.error')
         assert error['type']=='ReadTimeout' and error['upstream_submitted'] is True
         assert error['request_ref'] and error['partial_response_utf8']==''
+        write_json(tmp_path/'independent-observation.json',{'observed_body_hashes':observed,'join':reconcile_calls(observed,events),'local_admission_status_code':response.status_code,'terminal_error':error['type'],'accepted_model_calls':len(proxy.calls)})
     finally:
         proxy.close();upstream.shutdown();upstream.server_close();thread.join()

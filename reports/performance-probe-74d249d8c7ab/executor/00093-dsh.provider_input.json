@@ -1,0 +1,41 @@
+{
+  "seq": 93,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "52e5834e-d23b-461d-b51e-aa675a619835",
+    "lane": "executor",
+    "body": {
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "独立场景 A，标记为 A52。只简短确认当前标记。"
+        },
+        {
+          "role": "assistant",
+          "content": "\n\nA52",
+          "reasoning_content": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。需要简短确认当前标记。无需工具。最终中文简短。\n"
+        },
+        {
+          "role": "user",
+          "content": "独立场景 A，标记为 A52。只简短确认当前标记。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 8192,
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "prev_hash": "eb895d891a5310f5971cb98eda9f87cf6821d6151df71bf01c5b94308b0ea608",
+  "time_ns": 1789867110058678800,
+  "event_hash": "b8549b51ba1bd7a13d8ca10ad567daf4e89642d2cab926d5423266234ee9cdea"
+}

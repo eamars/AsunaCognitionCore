@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0081",
+  "case_id": "P05",
+  "model_lane": "character",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_9811ffdbad3e43c4bc2f",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他的不安，解释沉默并不代表不在意，并重申对他的态度",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "没有那回事。我刚才确实没能及时回你，但这并不代表我不在意。我也一直记着你说的，如果暂时中断了，如实说明就好。我没有因为没能即时回应就忽视你。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "7f848744e526a5f820a1c9a8a61b8f29a2746af839bf01695ae4c02d3c5141cf",
+    "14339ed0f871c8661f5e548c6bfc08b5fa83a9fbaba3e03a85de0820db9427ae",
+    "66dc8de5c53b49a923b9bc9e64938865b6380377d3a36a210e3eb96fc44d488b"
+  ]
+}

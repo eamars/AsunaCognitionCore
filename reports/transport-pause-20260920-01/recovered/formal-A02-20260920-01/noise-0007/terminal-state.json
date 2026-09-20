@@ -1,0 +1,43 @@
+{
+  "database": "asuna_v2_test_noise_0e3cc6388e7f",
+  "tasks": [
+    {
+      "_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "request_key": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "episode_id": "ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "scene_id": "noise-workbench",
+      "scope_key": "scene:noise-workbench",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "1e7bc2a9-7ea4-4a94-ba29-94ebdab0f247",
+      "intent_revision": 1,
+      "goal": "读取受控任务目录中的 START_HERE.md，以明确核对任务的具体内容",
+      "constraints": [
+        "必须在隔离目录中操作",
+        "严禁修改或破坏原件"
+      ],
+      "raw_input_refs": [
+        "in-ep-7ca8668457d02eded3ed2dc4d6c4728e"
+      ],
+      "state": "RUNNING",
+      "fencing_token": 1,
+      "tool_steps": 7,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 14,
+      "_last_op": "a5fd465a-5222-45ac-add5-74659fc3b0cc",
+      "lease_owner": "6a07f23e-db17-4b2b-a49e-1d7eb43fcaea",
+      "lease_expires_at": 1789867251.9426801
+    }
+  ],
+  "effect_receipts": [],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

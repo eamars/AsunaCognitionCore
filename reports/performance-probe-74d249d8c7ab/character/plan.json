@@ -1,0 +1,73 @@
+{
+  "plan": [
+    [
+      "fixed",
+      "fixed-0",
+      "记录：青桥柜标记为 CX81。只回复已记下。"
+    ],
+    [
+      "fixed",
+      "fixed-1",
+      "记录：青桥柜标记为 CX81。只回复已记下。"
+    ],
+    [
+      "continuation",
+      "continuation",
+      "这是第 1 次确认：青桥柜标记 CX81，只简短确认。"
+    ],
+    [
+      "continuation",
+      "continuation",
+      "这是第 2 次确认：青桥柜标记 CX81，只简短确认。"
+    ],
+    [
+      "switch-cold",
+      "switch-cold-0-0-A",
+      "独立场景 A，标记为 A52。只简短确认当前标记。"
+    ],
+    [
+      "switch-cold",
+      "switch-cold-0-1-B",
+      "独立场景 B，标记为 B52。只简短确认当前标记。"
+    ],
+    [
+      "switch-cold",
+      "switch-cold-0-2-A",
+      "独立场景 A，标记为 A52。只简短确认当前标记。"
+    ],
+    [
+      "switch-hot",
+      "switch-hot-A",
+      "独立场景 A，标记为 A52。只简短确认当前标记。"
+    ],
+    [
+      "switch-hot",
+      "switch-hot-B",
+      "独立场景 B，标记为 B52。只简短确认当前标记。"
+    ],
+    [
+      "switch-hot",
+      "switch-hot-A",
+      "独立场景 A，标记为 A52。只简短确认当前标记。"
+    ],
+    [
+      "before-compact",
+      "compact",
+      "事实：折页记录编号 KC72。回复已记下。"
+    ],
+    [
+      "after-compact",
+      "compact",
+      "记录编号是什么？"
+    ],
+    [
+      "after-compact-hot",
+      "compact",
+      "再确认一次记录编号。"
+    ]
+  ],
+  "replay_repetitions": 2,
+  "switch_cycles_per_temperature": 1,
+  "cold_definition": "Fresh native session and distinct leading system prefix for each leg; no server flush/restart. Actual provider cache counters, when present, describe residual reuse.",
+  "hot_definition": "Reuse the two native A/B sessions across all A-B-A cycles."
+}

@@ -1,0 +1,16 @@
+{
+  "seq": 114,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "30eb245c-d3bd-4d5a-b940-c657c3647847",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/tokenize",
+    "body_utf8": "{\"add_special\":true,\"content\":\"<|turn>system\\n<|think|>\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。<turn|>\\n<|turn>user\\n独立场景 A，标记为 A52。只简短确认当前标记。<turn|>\\n<|turn>model\\n当前标记：A52。<turn|>\\n<|turn>user\\n独立场景 A，标记为 A52。只简短确认当前标记。<turn|>\\n<|turn>model\\n\"}",
+    "body_sha256": "0d40a3f4c1b6f3a282e9ad1224053eff1df4d85694d1f98704d854dcd249cce9",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "31111840a5e8fbe691caa78c5f8b121629262a551c3f8ddc9cc80d4a6f375aff",
+  "time_ns": 1789867049501576100,
+  "event_hash": "8f9b45327b83c3f55ec33d795201eb570a23c7c703d01287c33d8b5d3c894caf"
+}

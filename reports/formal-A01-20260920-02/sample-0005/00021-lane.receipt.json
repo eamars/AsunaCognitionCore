@@ -1,0 +1,490 @@
+{
+  "seq": 21,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-7bfb858cc2c627a76426ae95a4759520:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n{\"next\":\"speak\",\"goal\":\"回应这次群聊里的空闲下午话题\",\"constraints\":[\"短而直接\",\"不空泛吹捧\",\"不声称有现实身体\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "我们需要回答 DECIDE 阶段，只输出 JSON，不加围栏。需要选择 next。场景群聊，事件让大家简单说空闲下午。已独白。应该 speak，回应。goal 回应这个群聊问题，说明喜欢怎样过空闲下午。constraints 可保持短、直接、不用客服。recall_query 空字符串，speak_before_action false。字段都必须存在。不要收件人等。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 16,
+          "time": 1789861258357,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "bcf33bea-c61b-4f2c-826c-2e12831d5860"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 17,
+          "time": 1789861278315,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答 DECIDE 阶段，只输出 JSON，不加围栏。需要选择 next。场景群聊，事件让大家简单说空闲下午。已独白。应该 speak，回应。goal 回应这个群聊问题，说明喜欢怎样过空闲下午。constraints 可保持短、直接、不用客服。recall_query 空字符串，speak_before_action false。字段都必须存在。不要收件人等。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应这次群聊里的空闲下午话题\",\"constraints\":[\"短而直接\",\"不空泛吹捧\",\"不声称有现实身体\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-759",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "c300b882-ce0c-4992-9048-bcfd3e7d007f"
+            },
+            "usage": {
+              "inputTokens": 467,
+              "outputTokens": 134,
+              "totalTokens": 1433,
+              "cacheReadTokens": 832
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789861278309,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789861278309,
+                "index": 0,
+                "dt": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  " DEC",
+                  "IDE",
+                  " ",
+                  "阶段",
+                  "，",
+                  "只",
+                  "输出",
+                  " JSON",
+                  "，",
+                  "不加",
+                  "围栏",
+                  "。",
+                  "需要",
+                  "选择",
+                  " next",
+                  "。",
+                  "场景",
+                  "群",
+                  "聊",
+                  "，",
+                  "事件",
+                  "让大家",
+                  "简单",
+                  "说",
+                  "空闲",
+                  "下午",
+                  "。",
+                  "已",
+                  "独",
+                  "白",
+                  "。",
+                  "应该",
+                  " speak",
+                  "，",
+                  "回应",
+                  "。",
+                  "goal",
+                  " ",
+                  "回应",
+                  "这个",
+                  "群",
+                  "聊",
+                  "问题",
+                  "，",
+                  "说明",
+                  "喜欢",
+                  "怎样",
+                  "过",
+                  "空闲",
+                  "下午",
+                  "。",
+                  "constraints",
+                  " ",
+                  "可",
+                  "保持",
+                  "短",
+                  "、",
+                  "直接",
+                  "、",
+                  "不用",
+                  "客服",
+                  "。",
+                  "recall",
+                  "_query",
+                  " ",
+                  "空",
+                  "字符串",
+                  "，",
+                  "s",
+                  "peak",
+                  "_before",
+                  "_action",
+                  " false",
+                  "。",
+                  "字段",
+                  "都必须",
+                  "存在",
+                  "。",
+                  "不要",
+                  "收件",
+                  "人",
+                  "等",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789861278313,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789861278313,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "s",
+                  "peak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "这次",
+                  "群",
+                  "聊",
+                  "里的",
+                  "空闲",
+                  "下午",
+                  "话题",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "短",
+                  "而",
+                  "直接",
+                  "\",\"",
+                  "不",
+                  "空",
+                  "泛",
+                  "吹",
+                  "捧",
+                  "\",\"",
+                  "不",
+                  "声称",
+                  "有",
+                  "现实",
+                  "身体",
+                  "\"],\"",
+                  "recall",
+                  "_query",
+                  "\":\"\",\"",
+                  "s",
+                  "peak",
+                  "_before",
+                  "_action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789861278314,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答 DECIDE 阶段，只输出 JSON，不加围栏。需要选择 next。场景群聊，事件让大家简单说空闲下午。已独白。应该 speak，回应。goal 回应这个群聊问题，说明喜欢怎样过空闲下午。constraints 可保持短、直接、不用客服。recall_query 空字符串，speak_before_action false。字段都必须存在。不要收件人等。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789861278314,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应这次群聊里的空闲下午话题\",\"constraints\":[\"短而直接\",\"不空泛吹捧\",\"不声称有现实身体\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789861278314,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 467,
+                    "outputTokens": 134,
+                    "totalTokens": 1433,
+                    "cacheReadTokens": 832
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789861278314,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-759",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 18,
+          "time": 1789861278315,
+          "data": {
+            "turn": 2,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 19,
+          "time": 1789861278316,
+          "data": {
+            "turn": 2,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "bcf33bea-c61b-4f2c-826c-2e12831d5860",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "c8dee33baed151ff6389ea19058c1f3f0e4c192a20edd93f51b5c9af1e4f4640",
+  "time_ns": 1789861278322746900,
+  "event_hash": "a6e41f3f4b0e0211dae012eeb8c9cc6cf2bf6370e0da2fb16268a82db3364cb3"
+}

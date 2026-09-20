@@ -1,0 +1,16 @@
+{
+  "seq": 158,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "64b3ce9d-3bed-4f29-a686-4962a4c29d83",
+    "purpose": "tokenizer.render",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/apply-template",
+    "body_utf8": "{\"chat_template_kwargs\":{\"enable_thinking\":true},\"max_tokens\":4096,\"messages\":[{\"content\":\"这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"role\":\"system\"},{\"content\":\"This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\\n\\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\\nFacts: 折页记录编号 KC72\\nStatus: 已记下</compacted-summary>\",\"role\":\"user\"},{\"content\":\"记录编号是什么？\",\"role\":\"user\"},{\"content\":\"KC72\",\"reasoning_content\":\"*   Current input: \\\"记录编号是什么？\\\" (What is the record number?)\\n    *   Context: A condensed summary of the previous conversation.\\n    *   Summary facts: \\\"折页记录编号 KC72\\\" (Folding record number KC72).\\n    *   Instructions: Give a short answer to the current question, don't call tools, don't create fake execution statements, maintain facts, and don't restate the context/checkpoint acknowledgment.\\n\\n    *   Question: \\\"记录编号是什么？\\\"\\n    *   Fact from context: \\\"折页记录编号 KC72\\\"\\n    *   Answer: KC72.\\n\\n    *   \\\"KC72\\\" (Direct and short).\",\"role\":\"assistant\"},{\"content\":\"再确认一次记录编号。\",\"role\":\"user\"}],\"model\":\"gemma4-26b-a4b-it-qat-vision-262144-qat-mtp\",\"seed\":20260919,\"store\":false,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"top_p\":0.95}",
+    "body_sha256": "213035fa935d865cd28d82c31d8a1935e7aae382923ca900262b7000b27b9c51",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "fcbca5dceca42be735b9e282a58f8c5b25a69f2e935e123c10f3f761e7a1fdd0",
+  "time_ns": 1789867060651905800,
+  "event_hash": "c37b9a925b2b6bd139d0b8ba943caf67ad7b343e70ee88797bd614682231b27b"
+}

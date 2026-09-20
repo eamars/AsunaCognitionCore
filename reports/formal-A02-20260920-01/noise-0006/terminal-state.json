@@ -1,0 +1,72 @@
+{
+  "database": "asuna_v2_test_noise_6fb29a9d5595",
+  "tasks": [
+    {
+      "_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "request_key": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "episode_id": "ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "scene_id": "noise-workbench",
+      "scope_key": "scene:noise-workbench",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "58cae54a-f4d1-4000-b869-c510f7e9085c",
+      "intent_revision": 1,
+      "goal": "读取 START_HERE.md 以获取核对任务的具体指令",
+      "constraints": [
+        "必须在隔离目录下操作",
+        "严禁修改原件"
+      ],
+      "raw_input_refs": [
+        "in-ep-7ca8668457d02eded3ed2dc4d6c4728e"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 7,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 43,
+      "_last_op": "9051d883-bc46-40dc-afcd-32814a9ab395",
+      "lease_owner": "7bdb6081-d9a9-4db2-975b-5b41e50e6a08",
+      "lease_expires_at": 1789867022.131774,
+      "result": {
+        "task_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "蓝纸盒测试称重记录为 1250 克",
+            "evidence_refs": [
+              "tool-c02405e1b659f79522f6f3214ef2a35ab143c69de38caecebd4a0a0531e69245",
+              "tool-37890409c2c637089ba2f866a62ceceb5753522bd95797dec68d6dd238bf073b"
+            ]
+          }
+        ],
+        "uncertainties": [],
+        "unmet_items": [],
+        "artifact_refs": [
+          "tool-bddff815c28a20496ea75fd0851846aa147a72a5081b64c9ad5df0f017ddc5c3",
+          "tool-12debda52db3acab24710334360a470a263e7c5202023c427d67f09e5424ba30",
+          "tool-c02405e1b659f79522f6f3214ef2a35ab143c69de38caecebd4a0a0531e69245",
+          "tool-0ec48d356570b301b255f089e1926fff9a91e4400af57b2c310da680ebd31b66",
+          "tool-61f5f951b91f08595de7d0e7769aa2a56067562cffeba9ffc871ed99241a9ab5",
+          "tool-37890409c2c637089ba2f866a62ceceb5753522bd95797dec68d6dd238bf073b",
+          "tool-5398fd0f8b9c02222a4b684eb56dcc99f4e592cf1f38cf1d14f1121707cd8305"
+        ],
+        "effect_receipts": [],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-20T01:07:26.785842+00:00",
+      "feedback_state": "READY"
+    }
+  ],
+  "effect_receipts": [],
+  "native_compactions": 2,
+  "injected_read_failures": 0
+}

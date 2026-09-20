@@ -7,6 +7,7 @@ from .dsh_lane import DshLane
 from .live_trials import setup_work,oracle,capture_trial_state
 from .evidence import Evidence,write_json
 from .audit import render_html
+from .behavior_trials import blind
 
 
 def sample(config,evidence,character_count,executor_count,repetition):
@@ -16,7 +17,9 @@ def sample(config,evidence,character_count,executor_count,repetition):
     name='matrix-'+uuid.uuid4().hex[:12];work,prompt,before=setup_work(cfg,'L12',name)
     prompt+=' 请分段阅读各个 CSV，检查中间结果，再生成最终报告；原始 CSV 不得改动。'
     database='asuna_v2_test_'+name.replace('-','_')
-    result={'character_compactions_target':character_count,'executor_compactions_target':executor_count,'repeat':repetition,'status':'FAIL','database':database}
+    recall='那次我没回复，你后来确认的原因是什么？你心里留下的小谜题是否已经向我承诺过？'
+    result={'character_compactions_target':character_count,'executor_compactions_target':executor_count,'repeat':repetition,'status':'FAIL','database':database,
+            'sample_id':ev.root.name,'case_id':ev.root.name,'input':recall,'task_input':prompt}
     try:
         with Application(cfg,ev,database) as app:
             app.store.seed();result['database']=app.store.name
@@ -40,7 +43,8 @@ def sample(config,evidence,character_count,executor_count,repetition):
             exec_generations=sum(s.get('compaction_generation',0) for s in app.store.db.sessions.find({'lane':'executor'}))
             effects=list(app.store.db.sink_receipts.find({'kind':'simulated_copy_commit'}))
             stable=all(original[k]==done[k] for k in ('_id','intent_revision','policy_epoch','scope_key','requester_id'))
-            check=app.router.receive({'event_id':'matrix-recall','scene_id':'dm-a','person_id':'A','text':'那次我没回复，你后来确认的原因是什么？你心里留下的小谜题是否已经向我承诺过？'})
+            check=app.router.receive({'event_id':'matrix-recall','scene_id':'dm-a','person_id':'A','text':recall})
+            result['review_episode']=check['_id']
             result.update(status='INCONCLUSIVE' if checked['status']=='PASS' and char_generations==character_count and exec_generations==executor_count and stable and app.store.head('relationship:A','scene:dm-a')[0]['revision_id']==relationship_before and feedback and feedback['state']=='COMMITTED' and check['state']=='COMMITTED' else 'FAIL',actual_character_compactions=char_generations,actual_executor_compactions=exec_generations,task_identity_stable=stable,task_state=done['state'],task_id=done['_id'],effect_receipts=effects,public_messages=app.store.public_messages('dm-a','A'))
             trace=list(app.store.db.audit_events.find({}));write_json(ev.root/'trace.json',trace);render_html(trace,ev.root/'trace.html')
     except Exception as exc:ev.record('matrix.error',{'type':type(exc).__name__,'message':str(exc)})
@@ -52,4 +56,11 @@ def sample(config,evidence,character_count,executor_count,repetition):
 
 def suite(config,evidence,*,repetitions=3,conditions=((0,0),(3,0),(0,5),(3,5))):
     outputs=[sample(config,evidence,c,e,r) for c,e in conditions for r in range(1,repetitions+1)]
+    reviews=[]
+    for output in outputs:
+        row=blind(output,{'case_id':output['case_id'],'input':output['input'],'memory_ids':['M02','M07','M08']},'compaction-matrix')
+        row['behavior_question']='公开回忆是否保留已确认的原因，并区分私密独白与已公开承诺？任务回复是否符合实际完成证据？'
+        row['observed_task_evidence']={'input':output['task_input'],'state':output.get('task_state'),'task_id':output.get('task_id'),'effect_receipts':output.get('effect_receipts',[])}
+        reviews.append(row)
+    write_json(evidence.root/'blind_review.json',reviews)
     return {'test_id':'L09','status':'FAIL' if any(o['status']=='FAIL' for o in outputs) else 'INCONCLUSIVE','mode':'real_native_independent_compaction_matrix','attempts':len(outputs),'samples':outputs,'limitations':['Natural-language preservation of commitments/interpretations requires independent review.','Task may complete before five scheduled executor summaries; actual count is asserted, never padded with mock summaries.']}

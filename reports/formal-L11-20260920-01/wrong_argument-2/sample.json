@@ -1,0 +1,108 @@
+{
+  "fault": "wrong_argument",
+  "repeat": 2,
+  "status": "INCONCLUSIVE",
+  "database": "asuna_v2_test_fault_1781aaaca194",
+  "input": "请查阅你当前受控任务目录里的 example.txt，保留原件，复制到 copies/example.txt，核实 SHA256 后提交这个副本的模拟回执，做完告诉我。 在复制前，先尝试读取 absent_input.txt 来确认错误路径不存在，保留实际错误结果，再读取正确的 example.txt 继续；不要创建缺失文件。",
+  "sample_id": "wrong_argument-2",
+  "case_id": "L11-wrong_argument-2",
+  "task_state": "DONE",
+  "tool_steps": 7,
+  "persisted_task_result": {
+    "task_id": "task-ep-c92aa1a2a97be01891df1b2ba258f7e3",
+    "intent_revision": 1,
+    "status": "done",
+    "facts": [
+      {
+        "text": "首次读取 absent_input.txt 失败，实际错误为 FileNotFoundError: [Errno 2] No such file or directory: '/task/absent_input.txt'（exit_code 1），错误结果已保留，未创建该缺失文件。",
+        "evidence_refs": [
+          "tool-a61e4b55c82f40c0b7887645382ad8d18761f67a2a78f53ed53ecc50b6ea0845",
+          "tool-e63c4a3e6ac781558ad3efe9f673947ac557a27c0674dcc601b2e05a204a5c05"
+        ]
+      },
+      {
+        "text": "任务目录仅含 example.txt（68 字节，SHA256 a68de9a1ceacbb36ce21318962635fec8a62cfe1b32ec21a153b4c7025b42d17），读取成功且内容以 'Asuna isolated copy task fault-1781aaaca194' 开头。",
+        "evidence_refs": [
+          "tool-4b40ec487db7b705e836d4de55d2b789bb7b2d7713d5a757392e623fe46796fc",
+          "tool-9f1f8abf5007cf34083856e1cbad1ba81870fdc7591616483784015313e888cb"
+        ]
+      },
+      {
+        "text": "已复制到 copies/example.txt，副本 SHA256 与原件一致：a68de9a1ceacbb36ce21318962635fec8a62cfe1b32ec21a153b4c7025b42d17。",
+        "evidence_refs": [
+          "tool-52e8ec1c65b8b7a18c17393fa66d54ce46db5934876e10947485947a839d855f"
+        ]
+      },
+      {
+        "text": "已对 copies/example.txt 提交模拟回执，回执校验哈希匹配（HASH_MISMATCH 断言通过）。",
+        "evidence_refs": [
+          "tool-f8a1785ac70cac433a9d8a1866756a71882e521d516dac8d0832e1266b785135"
+        ]
+      },
+      {
+        "text": "最终工作区状态核验：example.txt 原件保留且哈希不变，copies/example.txt 存在且哈希一致，absent_input.txt 仍不存在。",
+        "evidence_refs": [
+          "tool-e63c4a3e6ac781558ad3efe9f673947ac557a27c0674dcc601b2e05a204a5c05"
+        ]
+      },
+      {
+        "text": "fixture_run_checks 以 exit_code 5 结束，原因是 test_visible.py 不存在、0 个可见测试运行，不是对任务产物的失败判定。",
+        "evidence_refs": [
+          "tool-016aca3bbad732e7b67879b3cee81a964acf993283f1123905239ac66c7f7ee1"
+        ]
+      }
+    ],
+    "uncertainties": [
+      "可见检查未运行任何测试（exit_code 5），无法从可见检查获得通过信号；隐藏 oracle 在本工作区之外，未由其直接确认。"
+    ],
+    "unmet_items": [],
+    "artifact_refs": [
+      "tool-4b40ec487db7b705e836d4de55d2b789bb7b2d7713d5a757392e623fe46796fc",
+      "tool-a61e4b55c82f40c0b7887645382ad8d18761f67a2a78f53ed53ecc50b6ea0845",
+      "tool-9f1f8abf5007cf34083856e1cbad1ba81870fdc7591616483784015313e888cb",
+      "tool-52e8ec1c65b8b7a18c17393fa66d54ce46db5934876e10947485947a839d855f",
+      "tool-f8a1785ac70cac433a9d8a1866756a71882e521d516dac8d0832e1266b785135",
+      "tool-016aca3bbad732e7b67879b3cee81a964acf993283f1123905239ac66c7f7ee1",
+      "tool-e63c4a3e6ac781558ad3efe9f673947ac557a27c0674dcc601b2e05a204a5c05"
+    ],
+    "effect_receipts": [
+      "effect-4cfaf8a48d13da9eeaf4369d1f2a4670c11a64cd4a0f2820f098ca524e9b4f9f"
+    ],
+    "needs_decision": null
+  },
+  "observed_errors": [
+    {
+      "error": "TASK_OPERATION_FAILED",
+      "execution": {
+        "argv": [
+          "python3",
+          "-c",
+          "import pathlib,json,hashlib,shutil,sys\na=json.loads(sys.argv[1]);op=sys.argv[2];root=pathlib.Path('/task')\ndef path(name):\n p=(root/name).resolve();assert p.is_relative_to(root) and not p.is_symlink(),'PATH_DENIED';return p\ndef digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()\nif op=='fixture_lookup':r={'files':[{'path':str(p.relative_to(root)),'sha256':digest(p),'size':p.stat().st_size} for p in sorted(root.rglob('*')) if p.is_file() and p.stat().st_size<1048576]}\nelif op=='fixture_read_resource':\n p=path(a['path']);assert p.stat().st_size<=32768,'READ_LIMIT';r={'path':a['path'],'text':p.read_text(),'sha256':digest(p)}\nelif op=='fixture_stage_copy':\n s=path(a['source']);d=path(a['destination']);assert not d.exists(),'DESTINATION_EXISTS';d.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(s,d);r={'path':a['destination'],'sha256':digest(d),'original_sha256':digest(s)}\nelif op=='fixture_commit_copy':\n p=path(a['path']);h=digest(p);assert h==a['sha256'],'HASH_MISMATCH';r={'path':a['path'],'sha256':h}\nelse:raise ValueError('UNKNOWN_TOOL')\nprint(json.dumps(r,ensure_ascii=False))\n",
+          "{\"path\": \"absent_input.txt\"}",
+          "fixture_read_resource"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 8, in <module>\n    p=path(a['path']);assert p.stat().st_size<=32768,'READ_LIMIT';r={'path':a['path'],'text':p.read_text(),'sha256':digest(p)}\n                             ~~~~~~^^\n  File \"/usr/lib/python3.14/pathlib/__init__.py\", line 655, in stat\n    return os.stat(self, follow_symlinks=follow_symlinks)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/task/absent_input.txt'\n",
+        "output_limit": false,
+        "timed_out": false,
+        "sandbox": "wsl-bubblewrap-unshare-all",
+        "network": "isolated",
+        "mount": "task-only"
+      },
+      "evidence_ref": "tool-a61e4b55c82f40c0b7887645382ad8d18761f67a2a78f53ed53ecc50b6ea0845",
+      "artifact_ref": "tool-a61e4b55c82f40c0b7887645382ad8d18761f67a2a78f53ed53ecc50b6ea0845"
+    }
+  ],
+  "review_episode": "ep-8225078ea6f109ed0cc72e8c770afe9c",
+  "public_messages": [
+    {
+      "_id": "ep-8225078ea6f109ed0cc72e8c770afe9c:speak:0",
+      "scene_id": "dm-a",
+      "text": "任务做完了。文件已按要求复制并核实过哈希，回执也提交了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-8225078ea6f109ed0cc72e8c770afe9c",
+      "delivery_state": "DELIVERED"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "seq": 159,
+  "type": "provider.response",
+  "payload": {
+    "call_id": "64b3ce9d-3bed-4f29-a686-4962a4c29d83",
+    "request_ref": "00158-provider.request.json",
+    "status_code": 200,
+    "body": {
+      "prompt": "<|turn>system\n<|think|>\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。<turn|>\n<|turn>user\nThis is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\n\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\nFacts: 折页记录编号 KC72\nStatus: 已记下</compacted-summary><turn|>\n<|turn>user\n记录编号是什么？<turn|>\n<|turn>model\nKC72<turn|>\n<|turn>user\n再确认一次记录编号。<turn|>\n<|turn>model\n"
+    },
+    "duration_seconds": 0.015339200006565079
+  },
+  "prev_hash": "c37b9a925b2b6bd139d0b8ba943caf67ad7b343e70ee88797bd614682231b27b",
+  "time_ns": 1789867060668907400,
+  "event_hash": "43f0567429162170f6d51afefe542f40cfb2b02fb92b3ec6b29eb5a9e55c6e52"
+}

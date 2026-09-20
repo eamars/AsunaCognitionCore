@@ -1,0 +1,16 @@
+{
+  "seq": 148,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "75f94b40-02dc-46af-9e45-f614aef7a1e3",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/tokenize",
+    "body_utf8": "{\"add_special\":true,\"content\":\"<|turn>system\\n<|think|>\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。<turn|>\\n<|turn>user\\nThis is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\\n\\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\\nFacts: 折页记录编号 KC72\\nStatus: 已记下</compacted-summary><turn|>\\n<|turn>user\\n记录编号是什么？<turn|>\\n<|turn>model\\n\"}",
+    "body_sha256": "da2286405400ae04a894840b1d7d500b82f2fba28684181cdd3ed241167a60d1",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "41b88665432c3ab177e189443ee78812a912e81faa2ad447c5a3a0fe68780a18",
+  "time_ns": 1789867059385783400,
+  "event_hash": "61a8ed19551e59ba9c6e2098c47a720298898d9ca3e40db85b6e96b6d6b172a5"
+}

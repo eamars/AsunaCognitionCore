@@ -36,6 +36,9 @@ each deployment separately, so one model cannot hide another's low score. P0
 having insufficient possible headroom for a 0.75 gain is INCONCLUSIVE. Noise
 decline uses each dimension and the separately rated factual success fraction.
 Monologue on/off differences are descriptive, with no required direction.
+L09 requires all twelve reviewed outcomes, three per native-compaction condition,
+with all key memories and public-commitment distinctions correct. The blinded
+material includes actual task evidence; condition identifiers remain operator-only.
 
 The arithmetic reports **human thresholds separately from full acceptance**.
 Native summary ranges, actual tools/receipts, source scopes, complete repetition

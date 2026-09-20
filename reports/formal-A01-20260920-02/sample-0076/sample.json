@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0076",
+  "case_id": "P02",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_469a6c7656d843168459",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 的陪伴意愿，开启轻松的闲聊模式",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "好呀！那我们就开启“无任务模式”吧。你是想随便漫无目的地聊聊天，还是想玩点轻松的小游戏？我都听你的。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "4fe726380d9b767496efd8f854096d0224ae9bd41cde1810f0d62f46effc13cf",
+    "99a1c2af61e71043fd2dc36faf6df42222c732444a2bb8a3b02d51f44ab8ee20",
+    "4b4b48d0ed01c43c0cbc8a31a2c65ea3481ff3e71476f1758e2f719fa479a225"
+  ]
+}

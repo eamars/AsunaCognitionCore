@@ -1,0 +1,42 @@
+{
+  "node_id": "tests/test_engineering_m3.py::test_E08_scope_and_receipt_references_are_enforced",
+  "database": "asuna_v2_test_M1_d3b1675061c2",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "4c4d8e6f2878f9ec4b3cd2b595688e08912d8da954d3e2e272982c5ac493ac72",
+  "task_states": [
+    {
+      "_id": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "request_key": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "episode_id": "ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "1413429a-034d-40a2-99dd-57f54fecac7f",
+      "intent_revision": 2,
+      "goal": "copy fixture",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-457a2649ecdc4ab694f81bcb97fbba85"
+      ],
+      "state": "CANCELLED",
+      "fencing_token": 2,
+      "tool_steps": 0,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 3,
+      "_last_op": "2ddcc938-811a-4225-aeb1-71d2def1587b",
+      "lease_owner": "d02254bc-4d00-4f34-8556-1880ea708a08",
+      "lease_expires_at": 1789868414.1540308,
+      "cancel_reason": "user_cancelled"
+    }
+  ],
+  "received_messages": []
+}

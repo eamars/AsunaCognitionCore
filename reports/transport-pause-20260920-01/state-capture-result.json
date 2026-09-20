@@ -1,0 +1,94 @@
+{
+  "test_id": "PROBE-PAUSED-STATE-CAPTURE",
+  "status": "PASS",
+  "samples": [
+    {
+      "source_directory": "reports/formal-A01-20260920-02/sample-0084",
+      "candidates_queried": 1,
+      "matches": 1,
+      "status": "PASS",
+      "database": "asuna_v2_test_eval_8c6befa68c4848ca9dbe",
+      "ownership": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-A01-20260920-02/sample-0084/session-ownership.json",
+        "sha256": "d79497bf16187fa3ae42b2895819e919612d04888662f8cb677d6c2099211b5b"
+      },
+      "terminal_state": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-A01-20260920-02/sample-0084/terminal-state.json",
+        "sha256": "3427ce82556eeadf0fb267770117b35f1778658cbc7a292dc90b572c617c693d"
+      }
+    },
+    {
+      "source_directory": "reports/formal-A02-20260920-01/noise-0007",
+      "candidates_queried": 1,
+      "matches": 1,
+      "status": "PASS",
+      "database": "asuna_v2_test_noise_0e3cc6388e7f",
+      "ownership": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-A02-20260920-01/noise-0007/session-ownership.json",
+        "sha256": "97eda9590de696df5f09488c4476c1638330c69bb3ecbb87412f1c8d1b8c6620"
+      },
+      "terminal_state": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-A02-20260920-01/noise-0007/terminal-state.json",
+        "sha256": "1a846f0d124d3dc5942c7a880eadb2c30c8ac405778cb37c7ad51e4257eba9ff"
+      }
+    },
+    {
+      "source_directory": "reports/formal-L02-20260919T235518Z-15aa2b/task-08",
+      "candidates_queried": 1,
+      "matches": 1,
+      "status": "PASS",
+      "database": "asuna_v2_test_L02_acc6ff4566294c2e",
+      "ownership": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-L02-20260919T235518Z-15aa2b/task-08/session-ownership.json",
+        "sha256": "460b39ba4907d6272d23fb4bdb0d83d933bfd22ce322747278c10d9c72418646"
+      },
+      "terminal_state": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-L02-20260919T235518Z-15aa2b/task-08/terminal-state.json",
+        "sha256": "635fc583a254fe48dca900abae7bea75062e17430afd12890c638a27c39c10e0"
+      }
+    },
+    {
+      "source_directory": "reports/formal-L11-20260920-01/wrong_argument-3",
+      "candidates_queried": 1,
+      "matches": 1,
+      "status": "PASS",
+      "database": "asuna_v2_test_fault_4e8b3386728a",
+      "ownership": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-L11-20260920-01/wrong_argument-3/session-ownership.json",
+        "sha256": "3d498fdc19971ee4e89a45ad16f32127c87350ad05262284ada6dee8c2a780d5"
+      },
+      "terminal_state": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/formal-L11-20260920-01/wrong_argument-3/terminal-state.json",
+        "sha256": "7c73864bbeaec4fae54cc7342ff8e1497ee12c9174c2fa8a0078a3b1ba0f3cfc"
+      }
+    },
+    {
+      "source_directory": "reports/matrix-probe-8954fa36fa/c3-e5-1",
+      "candidates_queried": 2,
+      "matches": 1,
+      "status": "PASS",
+      "database": "asuna_v2_test_matrix_29ecb17c794e",
+      "ownership": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/matrix-probe-8954fa36fa/c3-e5-1/session-ownership.json",
+        "sha256": "709e7b171d71a9d6849d02ba7be2f92e6065708e3b123f8f287e99c085c6e7bd"
+      },
+      "terminal_state": {
+        "artifact_path": "reports/transport-pause-20260920-01/recovered/matrix-probe-8954fa36fa/c3-e5-1/terminal-state.json",
+        "sha256": "c7a1f16452312c6b49d71aea9ce21e59b66e9565f2efbc16234da1d2e386b867"
+      }
+    }
+  ],
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/capture_paused_trials.py",
+        "reports/transport-pause-20260920-01/summary.json"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Read-only snapshot after process stop, not a resumed or completed model experiment. A killed in-flight provider may lack a terminal response record."
+  ]
+}

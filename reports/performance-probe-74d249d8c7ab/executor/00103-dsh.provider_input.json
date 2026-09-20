@@ -1,0 +1,32 @@
+{
+  "seq": 103,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "a399b171-b72e-4911-83f7-926165890f03",
+    "lane": "executor",
+    "body": {
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "事实：折页记录编号 KC72。回复已记下。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 8192,
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "prev_hash": "f52baab84c28737ba65a09d5f85e3aa9802c705fe2c7a7f7847ef3a2259b1eb2",
+  "time_ns": 1789867114757078800,
+  "event_hash": "c49280aab2ea82f4e22dae8898cd063114d6b75edb5bc5b2542824b56b7b70b3"
+}

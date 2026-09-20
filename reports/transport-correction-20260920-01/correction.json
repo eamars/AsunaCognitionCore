@@ -1,0 +1,38 @@
+{
+  "created_at": "2026-09-20T01:17:22.329469+00:00",
+  "previous_probe": {
+    "artifact_path": "reports/queue-header-probe-cdb9228406/result.json",
+    "sha256": "b9502286e7aadcf1c2ca0236349529bb5db9abfed2b143efcdcd3ca1ed204d7e"
+  },
+  "observed_limit": "Earlier 303.156s actual queue wait passed, but does not establish protection beyond the approximately 305s observed native stream cutoff.",
+  "live_failure": {
+    "request": {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/00053-provider.request.json",
+      "sha256": "8eb7f50213b4eea5b8d8fa15781688717ca3943bdf00834cead19088189029e8"
+    },
+    "native_receipt": {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/00055-lane.receipt.json",
+      "sha256": "57ecc527a93cf1148b005eb1d3e367c5bd9c99d4ffbc9bb717e800b780e2f756"
+    },
+    "late_provider_response": {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/00057-provider.response.json",
+      "sha256": "f9f51d67a65fe45d7a7249f4d52da40e964af00ec2c98404e7f1e45c9f7ff157"
+    },
+    "terminal_error": {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/00058-provider.error.json",
+      "sha256": "0be2ee1a5c837ad98e606a28f207bf6d8cede3bc74d64ec18c46b34fc07c0b97"
+    },
+    "native_error_seconds_after_request": 304.7003959,
+    "actual_queue_seconds": 436.14100000000326,
+    "upstream_status": 200,
+    "task_end": "UNKNOWN, no copy/commit receipt"
+  },
+  "diagnosis": "Inferred native HTTP body-inactivity deadline: local stream emitted one admission comment, then no bytes during a long queue. Native reason is TRANSPORT/terminated; no more specific cause code was exposed.",
+  "repair_probe": "New actual installed DSH probe holds the endpoint lock for 430s and requires measured queue >400s with recorded SSE comment keepalives, one generation and unchanged model output.",
+  "current_repair_status": "RUNNING_NOT_YET_VERIFIED",
+  "affected_runs_pause": {
+    "artifact_path": "reports/transport-pause-20260920-01/summary.json",
+    "sha256": "f6fcdd074d9f57cec3b01b28fa898e55aca7258879c64fd7a8d84e18de2460bf"
+  },
+  "preserved_failure_and_paused_attempts": true
+}

@@ -21,7 +21,8 @@ This supersedes the *status summary*, not the preserved evidence, in
 | In-app Browser | Review pagination, blank ratings, full JSON copy, actual requests, revision diffs and individual compaction input/summary verified; JSON navigation blocked and download receipt unobserved | ui-qa-20260920-01/03/04; ui-qa-correction-20260920-01 |
 | Each native summary | Real 72,814-token load; two replacements individually joined to exact provider output and requests | noise-load-probe-7120c99405; compaction-evidence-correction-20260920-01 |
 | Long executor task narrow retry | Real Qwen task, injected read failure, native summary, oracle and Gemma delivered feedback passed; full 5+5 matrix pending | formal-L12-20260919T232433Z-38883b |
-| Local queue transport | Installed DSH client stayed alive through more than 300 seconds of local queue wait; deterministic local upstream, not a quality evaluation | queue-header-probe-cdb9228406 |
+| Local queue transport | Earlier 303-second probe did not exclude a later observed ~305-second body-inactivity cutoff. Durable non-model SSE keepalives now survived 428.75 seconds of queue wait, 28 heartbeats, exactly one generation and unchanged output | queue-header-probe-60b30bcb90; transport-correction-20260920-01 |
+| Native pre-step error provenance | Exact inbox message and native turn error survive summary-size rejection; empty output and replay without another model call | compaction-error-probe-f962c24e13dc |
 
 The Python SDK lacks the session lifecycle/compaction operations needed here.
 The small native bridge uses actual pinned `agents.create/resume`, `followup`,

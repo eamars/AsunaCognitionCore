@@ -1,0 +1,17 @@
+{
+  "seq": 117,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "8745a47a-0794-4b72-8afa-3eb8b9aa412f",
+    "lane": "executor",
+    "purpose": "compaction",
+    "url": "http://192.168.2.13:1919/v1/chat/completions",
+    "body_utf8": "{\"enable_thinking\":true,\"max_tokens\":8192,\"messages\":[{\"content\":\"这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"role\":\"system\"},{\"content\":\"事实：折页记录编号 KC72。回复已记下。\",\"role\":\"user\"},{\"content\":\"\\n\\n已记下：折页记录编号 KC72。\",\"reasoning_content\":\"用户要求简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实：折页记录编号 KC72。回复已记下。需要简短确认。\\n\",\"role\":\"assistant\"},{\"content\":\"ASUNA_COMPACTION_V1\\n压缩以上完整经历，不扮演新的社交事件，不产生新承诺或关系分数。保留当前身份、scope、人物与关系事实、事实/猜测/更正的区别、未公开的意愿、关键独白短引及来源、已公开与未送达的区别、任务ID/意图版本/授权/证据/副作用回执/未完成项。不得把执行摘要写成人物感受，不补造缺失事实。保留关键原文和来源标识，尽量简短，只输出摘要正文。\",\"role\":\"user\"}],\"model\":\"qwen38-next-uncensored-freetoken-vision\",\"reasoning_effort\":\"xhigh\",\"seed\":20260919,\"store\":false,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.2,\"top_p\":0.95}",
+    "body_sha256": "60b988c3308a797627c67e711c3e8328498b168c40552eac0e9456258348ced8",
+    "token_render_visibility": "server_anthropic_count_tokens_equivalent_conversion",
+    "large_body_artifact": null
+  },
+  "prev_hash": "06d9c444a3ad1b30bfc41593e3760997d46cacbba44a8fb0086127f65ad28b33",
+  "time_ns": 1789867120144145800,
+  "event_hash": "b83437c40784790300b0011daa3c6b6a89180e1d22e862d1756a966d0ad92f97"
+}

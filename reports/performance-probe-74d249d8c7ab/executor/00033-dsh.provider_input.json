@@ -1,0 +1,41 @@
+{
+  "seq": 33,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "cb0d5c2f-ebaf-4d48-929c-b71798ebf45b",
+    "lane": "executor",
+    "body": {
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "这是第 1 次确认：青桥柜标记 CX81，只简短确认。"
+        },
+        {
+          "role": "assistant",
+          "content": "\n\n确认：青桥柜标记 CX81。",
+          "reasoning_content": "用户要求简短确认第1次确认信息：青桥柜标记 CX81。需要不调用工具，不创造真实执行声明，保持简单事实。最终用中文简短回答。\n"
+        },
+        {
+          "role": "user",
+          "content": "这是第 2 次确认：青桥柜标记 CX81，只简短确认。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 8192,
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "prev_hash": "a561ecaedbc35639673238a3539fc66889fc3de9a3d4ce2b79cd0318aa1ba100",
+  "time_ns": 1789867079886706300,
+  "event_hash": "e5ea1eb24b4e8dd5005297b9268d0414b86dfecaf66764aa254e09bcbb339091"
+}

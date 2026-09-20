@@ -1,0 +1,228 @@
+{
+  "seq": 13,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "initial",
+    "status_code": 200,
+    "body": {
+      "content": "tiny",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789867656492,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "tiny"
+              }
+            ],
+            "role": "user",
+            "id": "e524782d-bc43-4373-a254-1061da3ca8b3"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789867656492,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "reasoningEffort": "high",
+                "maxTokens": 4096
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789867656492,
+          "data": {
+            "provider": "asuna-local",
+            "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789867656494,
+          "data": {
+            "title": "tiny",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789867656870,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "tiny"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseModel": "fixture",
+                    "responseId": "fixture",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "02933b11-6193-47dc-82da-9a38dc02fa51"
+            },
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789867656867,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789867656868,
+                "index": 0,
+                "dt": [],
+                "texts": [
+                  "tiny"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789867656869,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "tiny"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867656869,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867656869,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseModel": "fixture",
+                      "responseId": "fixture",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789867656871,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789867656871,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "e524782d-bc43-4373-a254-1061da3ca8b3",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "f36c2e4c23db5b4da33c5d7b13c85ee4f35a90431190bee56de3a60b429a9baf",
+  "time_ns": 1789867656878352500,
+  "event_hash": "e161956a428b37ba9589c056b223876ee1a5505c0d97ce3f979557a5570efb81"
+}

@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-09-20T01:33:15.810012+00:00",
+  "source": {
+    "artifact_path": "reports/performance-probe-0cb467f846b4/character/sample-010.json",
+    "sha256": "1899e67c8d98f136a083c11e1859987ffd0325e3b9b7eef65688e7dd75feab68"
+  },
+  "observed": "Gemma reached 4096 output tokens with native max-tokens, no content, and reasoning that repeatedly weighs summarizing records versus only confirming. Both subsequent actual native summary/continuation paths completed.",
+  "instrument_ambiguity": "The measurement requested both summarization and brief confirmation and called KC72 a record number absent from the numbered data.",
+  "correction": "Define KC72 explicitly as the batch label and ask only for a brief confirmation; deterministic record data and model sampling/output budget remain unchanged.",
+  "scope": "New probe and future formal F02 only; preserve the failed attempt. This is not a change to acceptance truth fixtures or a model quality pass."
+}

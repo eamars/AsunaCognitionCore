@@ -1,0 +1,303 @@
+{
+  "seq": 25,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"speak\",\"goal\":\"回应用户的担心，并解释没及时回消息的原因，消除其不安感\",\"constraints\":[\"不能编造不在场的理由\",\"要体现出对用户感受的重视\",\"语气要轻松自然\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 16,
+          "time": 1789863916342,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "e552d102-c2a8-454c-8974-6e342ffece97"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 17,
+          "time": 1789863917588,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"speak\",\"goal\":\"回应用户的担心，并解释没及时回消息的原因，消除其不安感\",\"constraints\":[\"不能编造不在场的理由\",\"要体现出对用户感受的重视\",\"语气要轻松自然\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-zk16luAxxeJwRe7CXpcrIOFN5GHa4Xwg",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "b7bb64f5-74a4-4201-a105-a451cf2c3a84"
+            },
+            "usage": {
+              "inputTokens": 290,
+              "outputTokens": 64,
+              "totalTokens": 1242,
+              "cacheReadTokens": 888
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789863917584,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789863917584,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "speak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "用户的",
+                  "担心",
+                  "，",
+                  "并",
+                  "解释",
+                  "没",
+                  "及时",
+                  "回",
+                  "消息",
+                  "的原因",
+                  "，",
+                  "消除",
+                  "其",
+                  "不安",
+                  "感",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "不能",
+                  "编",
+                  "造",
+                  "不在",
+                  "场的",
+                  "理由",
+                  "\",\"",
+                  "要",
+                  "体现",
+                  "出",
+                  "对",
+                  "用户",
+                  "感受",
+                  "的",
+                  "重视",
+                  "\",\"",
+                  "语气",
+                  "要",
+                  "轻松",
+                  "自然",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789863917587,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"speak\",\"goal\":\"回应用户的担心，并解释没及时回消息的原因，消除其不安感\",\"constraints\":[\"不能编造不在场的理由\",\"要体现出对用户感受的重视\",\"语气要轻松自然\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789863917587,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 290,
+                    "outputTokens": 64,
+                    "totalTokens": 1242,
+                    "cacheReadTokens": 888
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789863917587,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-zk16luAxxeJwRe7CXpcrIOFN5GHa4Xwg",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 18,
+          "time": 1789863917588,
+          "data": {
+            "turn": 2,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 19,
+          "time": 1789863917588,
+          "data": {
+            "turn": 2,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "e552d102-c2a8-454c-8974-6e342ffece97",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "75b6d45cfe53463c1b09a89eada5d3483f6df8c219b9138ef1e64bc314347b2b",
+  "time_ns": 1789863917597811100,
+  "event_hash": "6537ecb9661b4d45fec1e54298243a1c59aff962f7c9c6982ed68de1bb75138e"
+}

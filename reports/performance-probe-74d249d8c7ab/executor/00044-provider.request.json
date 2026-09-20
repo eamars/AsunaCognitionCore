@@ -1,0 +1,16 @@
+{
+  "seq": 44,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "db433ea6-0c73-4f6a-8750-9f10d8de1059",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:1919/v1/messages/count_tokens",
+    "body_utf8": "{\"messages\":[{\"content\":[{\"text\":\"独立场景 A，标记为 A52。只简短确认当前标记。\",\"type\":\"text\"}],\"role\":\"user\"}],\"model\":\"qwen38-next-uncensored-freetoken-vision\",\"system\":\"独立冷前缀 switch-cold-0-0-A。\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"thinking\":{\"type\":\"enabled\"}}",
+    "body_sha256": "2a65fe6b78b4570540ad188b7c3fd241dcc673c05464c2ea68c058b98db8e074",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "d7fc0757d569c13737ea4638d46b68ba394c7e54482bdcf9202b7c9929366fb4",
+  "time_ns": 1789867085083102900,
+  "event_hash": "5766922045fd5e2c0fbc7594e6343c205edc3e702c045aff3605a8674d5f72ef"
+}

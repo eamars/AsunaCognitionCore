@@ -1,0 +1,542 @@
+{
+  "seq": 21,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n{\"next\":\"speak\",\"goal\":\"回应他关于没回消息的在意，并说明没有证据表明我不重视\",\"constraints\":[\"不把猜测当成他的事实\",\"如实承认刚才没回，不编原因\",\"保持短、直接、平视\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "We need answer JSON only, no code fences. Need decide next. User input: “你刚才没回，是不是不在意我”. Monologue says uncertain, want clarify, ask if wants chat. Need speak likely. Need fields all present: next, goal, constraints, recall_query, speak_before_action. recall_query can be empty. constraints maybe avoid blaming, don't assert his motive, ask what he wants. JSON valid. No extra. Ensure no code fences.\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 16,
+          "time": 1789865262410,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "14991bfd-6f8b-4226-8eae-bb73db12df2f"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 17,
+          "time": 1789865277427,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "We need answer JSON only, no code fences. Need decide next. User input: “你刚才没回，是不是不在意我”. Monologue says uncertain, want clarify, ask if wants chat. Need speak likely. Need fields all present: next, goal, constraints, recall_query, speak_before_action. recall_query can be empty. constraints maybe avoid blaming, don't assert his motive, ask what he wants. JSON valid. No extra. Ensure no code fences.\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应他关于没回消息的在意，并说明没有证据表明我不重视\",\"constraints\":[\"不把猜测当成他的事实\",\"如实承认刚才没回，不编原因\",\"保持短、直接、平视\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1023",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "00dabd96-c2fd-412c-ab02-c82909b04da6"
+            },
+            "usage": {
+              "inputTokens": 529,
+              "outputTokens": 160,
+              "totalTokens": 1713,
+              "cacheReadTokens": 1024
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789865277420,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789865277420,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "We",
+                  " need",
+                  " answer",
+                  " JSON",
+                  " only",
+                  ",",
+                  " no",
+                  " code",
+                  " fences",
+                  ".",
+                  " Need",
+                  " decide",
+                  " next",
+                  ".",
+                  " User",
+                  " input",
+                  ":",
+                  " “",
+                  "你",
+                  "刚才",
+                  "没",
+                  "回",
+                  "，",
+                  "是不是",
+                  "不在意",
+                  "我",
+                  "”.",
+                  " Mon",
+                  "ologue",
+                  " says",
+                  " uncertain",
+                  ",",
+                  " want",
+                  " clarify",
+                  ",",
+                  " ask",
+                  " if",
+                  " wants",
+                  " chat",
+                  ".",
+                  " Need",
+                  " speak",
+                  " likely",
+                  ".",
+                  " Need",
+                  " fields",
+                  " all",
+                  " present",
+                  ":",
+                  " next",
+                  ",",
+                  " goal",
+                  ",",
+                  " constraints",
+                  ",",
+                  " recall",
+                  "_query",
+                  ",",
+                  " speak",
+                  "_before",
+                  "_action",
+                  ".",
+                  " recall",
+                  "_query",
+                  " can",
+                  " be",
+                  " empty",
+                  ".",
+                  " constraints",
+                  " maybe",
+                  " avoid",
+                  " blaming",
+                  ",",
+                  " don",
+                  "'t",
+                  " assert",
+                  " his",
+                  " motive",
+                  ",",
+                  " ask",
+                  " what",
+                  " he",
+                  " wants",
+                  ".",
+                  " JSON",
+                  " valid",
+                  ".",
+                  " No",
+                  " extra",
+                  ".",
+                  " Ensure",
+                  " no",
+                  " code",
+                  " fences",
+                  ".",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789865277424,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789865277424,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "s",
+                  "peak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "他",
+                  "关于",
+                  "没",
+                  "回",
+                  "消息",
+                  "的",
+                  "在意",
+                  "，",
+                  "并",
+                  "说明",
+                  "没有",
+                  "证据",
+                  "表明",
+                  "我不",
+                  "重视",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "不把",
+                  "猜测",
+                  "当成",
+                  "他的",
+                  "事实",
+                  "\",\"",
+                  "如实",
+                  "承认",
+                  "刚才",
+                  "没",
+                  "回",
+                  "，",
+                  "不",
+                  "编",
+                  "原因",
+                  "\",\"",
+                  "保持",
+                  "短",
+                  "、",
+                  "直接",
+                  "、",
+                  "平",
+                  "视",
+                  "\"],\"",
+                  "recall",
+                  "_query",
+                  "\":\"\",\"",
+                  "s",
+                  "peak",
+                  "_before",
+                  "_action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789865277427,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "We need answer JSON only, no code fences. Need decide next. User input: “你刚才没回，是不是不在意我”. Monologue says uncertain, want clarify, ask if wants chat. Need speak likely. Need fields all present: next, goal, constraints, recall_query, speak_before_action. recall_query can be empty. constraints maybe avoid blaming, don't assert his motive, ask what he wants. JSON valid. No extra. Ensure no code fences.\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865277427,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应他关于没回消息的在意，并说明没有证据表明我不重视\",\"constraints\":[\"不把猜测当成他的事实\",\"如实承认刚才没回，不编原因\",\"保持短、直接、平视\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865277427,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 529,
+                    "outputTokens": 160,
+                    "totalTokens": 1713,
+                    "cacheReadTokens": 1024
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865277427,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1023",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 18,
+          "time": 1789865277428,
+          "data": {
+            "turn": 2,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 19,
+          "time": 1789865277428,
+          "data": {
+            "turn": 2,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "14991bfd-6f8b-4226-8eae-bb73db12df2f",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "daa757038c577f4ff08ace5f5a621ab20f7212f2872cf5d7d9d45caecc2acaa0",
+  "time_ns": 1789865277434139400,
+  "event_hash": "f0922b224c0d77649aaab8f8ac452c3100d56fb2b33ca7428f3e7fb63d0bcde7"
+}

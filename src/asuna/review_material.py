@@ -10,7 +10,8 @@ def read(path):return json.loads(path.read_text(encoding='utf-8'))
 
 def source_paths(reports):
     paths=[p for p in reports.rglob('blind_review.json') if 'private' not in p.relative_to(reports).parts]
-    for p in reports.glob('*/result.json'):
+    for p in [reports/'result.json',*reports.glob('*/result.json')]:
+        if not p.is_file():continue
         if not (p.parent/'blind_review.json').exists() and read(p).get('test_id')=='L06':paths.append(p)
     return sorted(paths)
 
@@ -57,7 +58,7 @@ def observed_item(result,index,blind_id):
     observed=samples[index]
     if test=='A02':return {**observed['scenario'],'condition':observed['condition'],'repetition':observed['repetition']}
     if test=='L06':return {**observed,'case_id':observed['id'],'sample_id':observed['id'],'episode':observed.get('resumed_episode')}
-    if test=='L11':return {**observed,'episode':observed.get('review_episode')}
+    if test in ('L09','L11'):return {**observed,'episode':observed.get('review_episode')}
     return observed
 
 

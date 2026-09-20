@@ -1,0 +1,17 @@
+{
+  "seq": 93,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "ce0d099a-e107-4ff1-99b5-6d5dbb06bbf5",
+    "lane": "character",
+    "purpose": "SPEAK",
+    "url": "http://192.168.2.13:8083/v1/chat/completions",
+    "body_utf8": "{\"chat_template_kwargs\":{\"enable_thinking\":true},\"max_tokens\":4096,\"messages\":[{\"content\":\"这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"role\":\"system\"},{\"content\":\"独立场景 A，标记为 A52。只简短确认当前标记。\",\"role\":\"user\"}],\"model\":\"gemma4-26b-a4b-it-qat-vision-262144-qat-mtp\",\"seed\":20260919,\"store\":false,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"top_p\":0.95}",
+    "body_sha256": "25cee0eb06b0f54a61a755fd711a71a1890f529cacbc2fa7612e1f3c9c34de61",
+    "token_render_visibility": "server_apply_template_and_tokenize",
+    "large_body_artifact": null
+  },
+  "prev_hash": "ce48a56952dbe4f77440ecaf3be55f926fe646aeb884fe1e4a3e86368174148d",
+  "time_ns": 1789867046357743300,
+  "event_hash": "8aeb35beaabad091b2d647e21d6d1acf4f5ae8e9958100634c7c046a3a67b79b"
+}

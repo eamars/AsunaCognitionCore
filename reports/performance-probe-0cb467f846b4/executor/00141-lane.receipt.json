@@ -1,0 +1,437 @@
+{
+  "seq": 141,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:12",
+    "status_code": 200,
+    "body": {
+      "content": "\n\nKC72。",
+      "reasoning": "我们需要回答用户“再确认一次记录编号。” 需要简短确认。上下文事实：折页记录编号 KC72。角色风格短直接，不用您，不用收到。可以说“KC72。” 或“确认，KC72。” 但“确认”可能像客服？可以。最终中文。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 29,
+          "time": 1789867863931,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "再确认一次记录编号。"
+              }
+            ],
+            "role": "user",
+            "id": "d5ee0b42-8bb4-4efa-91c5-e3cb0441941e"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 30,
+          "time": 1789867869930,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答用户“再确认一次记录编号。” 需要简短确认。上下文事实：折页记录编号 KC72。角色风格短直接，不用您，不用收到。可以说“KC72。” 或“确认，KC72。” 但“确认”可能像客服？可以。最终中文。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\nKC72。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1135",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "2e098436-8759-4b57-967a-ff2683f83034"
+            },
+            "usage": {
+              "inputTokens": 189,
+              "outputTokens": 74,
+              "totalTokens": 1159,
+              "cacheReadTokens": 896
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789867869927,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789867869927,
+                "index": 0,
+                "dt": [
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "用户",
+                  "“",
+                  "再",
+                  "确认",
+                  "一次",
+                  "记录",
+                  "编号",
+                  "。”",
+                  " ",
+                  "需要",
+                  "简短",
+                  "确认",
+                  "。",
+                  "上下文",
+                  "事实",
+                  "：",
+                  "折",
+                  "页",
+                  "记录",
+                  "编号",
+                  " KC",
+                  "7",
+                  "2",
+                  "。",
+                  "角色",
+                  "风格",
+                  "短",
+                  "直接",
+                  "，",
+                  "不用",
+                  "您",
+                  "，",
+                  "不用",
+                  "收到",
+                  "。",
+                  "可以说",
+                  "“",
+                  "KC",
+                  "7",
+                  "2",
+                  "。”",
+                  " ",
+                  "或",
+                  "“",
+                  "确认",
+                  "，",
+                  "KC",
+                  "7",
+                  "2",
+                  "。”",
+                  " ",
+                  "但",
+                  "“",
+                  "确认",
+                  "”",
+                  "可能",
+                  "像",
+                  "客服",
+                  "？",
+                  "可以",
+                  "。",
+                  "最终",
+                  "中文",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789867869929,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789867869929,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "KC",
+                  "7",
+                  "2",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789867869930,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答用户“再确认一次记录编号。” 需要简短确认。上下文事实：折页记录编号 KC72。角色风格短直接，不用您，不用收到。可以说“KC72。” 或“确认，KC72。” 但“确认”可能像客服？可以。最终中文。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867869930,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\nKC72。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867869930,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 189,
+                    "outputTokens": 74,
+                    "totalTokens": 1159,
+                    "cacheReadTokens": 896
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867869930,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1135",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 31,
+          "time": 1789867869931,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 32,
+          "time": 1789867869931,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "d5ee0b42-8bb4-4efa-91c5-e3cb0441941e",
+      "compactions": [],
+      "surface": [
+        4,
+        17,
+        20,
+        22,
+        29,
+        30
+      ],
+      "compaction_events": [
+        {
+          "type": "compaction/start",
+          "seq": 15,
+          "time": 1789867817853,
+          "data": {
+            "compactionId": "ca5c0eac-7826-4cfc-8450-4e2a3e3fc76e",
+            "turn": 2
+          }
+        },
+        {
+          "type": "compaction/summary",
+          "seq": 16,
+          "time": 1789867856005,
+          "data": {
+            "compactionId": "ca5c0eac-7826-4cfc-8450-4e2a3e3fc76e",
+            "summary": [
+              {
+                "type": "text",
+                "text": "\n\n沈小满（V1简化测试版），虚构数字角色，无现实身体；scope 为本地性能测量/合成记录，无社会含义，不调用工具，不创造真实执行声明。用户与沈小满交互，称呼不表示服从权限，无新社交事件、承诺或关系分数。事实：折页记录编号 KC72；record 000-063 为 local synthetic fixture，measured 3 至 1074。猜测/更正：无。未公开意愿：无。关键独白：无（无独白来源）。已公开：已记下 KC72。未送达：无。任务ID未提供；意图版本 ASUNA_COMPACTION_V1；授权为用户要求压缩；证据为用户消息与助手回复；副作用回执无；未完成项无。"
+              }
+            ],
+            "rawOutput": [
+              {
+                "type": "reasoning",
+                "text": "我们需要回答用户：ASUNA_COMPACTION_V1 压缩以上完整经历，不扮演新的社交事件，不产生新承诺或关系分数。保留当前身份、scope、人物与关系事实、事实/猜测/更正的区别、未公开的意愿、关键独白短引及来源、已公开与未送达的区别、任务ID/意图版本/授权/证据/副作用回执/未完成项。不得把执行摘要写成人物感受，不补造缺失事实。保留关键原文和来源标识，尽量简短，只输出摘要正文。\n\n需要以沈小满风格？这是内部压缩任务，可能输出摘要正文。需要简短。保留关键记录编号 KC72。上下文：用户给了合成测量记录，要求保留关键记录编号 KC72，其他行只需概括。事实：折页记录编号 KC72。只简短确认已记下。助手回复：已记下 KC72。\n\n现在要求压缩完整经历。需要包括当前身份：沈小满（V1简化测试版），虚构数字角色，无现实身体。scope：本地性能测量/合成测量记录，无社会含义，不调用工具，不创造真实执行声明，结果仅作传输、缓存和阶段延迟观测，无预设体验合格阈值。人物与关系事实：用户与沈小满交互；称呼只表示关系不表示服从权限；无新社交事件/承诺/关系分数。事实/猜测/更正：事实：折页记录编号 KC72；合成记录 record 000-063 为 local synthetic fixture，measured 递增 3 到 1074? 实际最后 1074。猜测：无。更正：无。未公开意愿：无？或助手想简短确认。关键独白短引及来源：无独白？可写“无”。已公开与未送达：已公开“已记下 KC72。”；未送达：无。任务ID/意图版本/授权/证据/副作用回执/未完成项：任务ID未提供；意图版本 ASUNA_COMPACTION_V1；授权：用户要求压缩；证据：用户消息与助手回复；副作用回执：无外部副作用；未完成项：无。\n\n需要只输出摘要正文，不要标题？尽量简短。可能用紧凑段落或分号。不要编号？日常不用编号，但明确交付清单/代码时可用适合产物格式。压缩摘要可用简短分号。保留关键原文和来源标识：KC72、local synthetic fixture、ASUNA_COMPACTION_V1。不要感叹号。不要“收到”等起句。\n\n需要避免把执行摘要写成人物感受。可以：\n“身份：沈小满（V1简化测试版），虚构数字角色，无现实身体。scope：本地性能测量/合成记录，无社会含义，不调用工具，不创造真实执行声明。人物关系：用户与沈小满；称呼不表示服从权限；无新社交事件、承诺或关系分数。事实：折页记录编号 KC72；record 000-063 为 local synthetic fixture，measured 3 至 1074。猜测/更正：无。未公开意愿：无。关键独白：无。已公开：已记下 KC72。未送达：无。任务ID：未提供；意图版本：ASUNA_COMPACTION_V1；授权：用户要求压缩；证据：用户消息与助手回复；副作用回执：无；未完成项：无。”\n\n是否太工作汇报？用户要求摘要正文，可以。保留关键原文。需要“其他行只需概括”：概括 record 000-063 local synthetic fixture。 measured 3 至 1074。 注意 record 063 measured=1074 yes.\n\n可能更短：\n“沈小满（V1简化测试版），虚构数字角色，无现实身体；scope 为本地性能测量/合成记录，无社会含义，不调用工具，不创造真实执行声明。用户与沈小满交互，称呼不表示服从权限，无新社交事件、承诺或关系分数。事实：折页记录编号 KC72；record 000-063 为 local synthetic fixture，measured 3 至 1074。猜测/更正：无。未公开意愿：无。关键独白：无。已公开：已记下 KC72。未送达：无。任务ID未提供；意图版本 ASUNA_COMPACTION_V1；授权为用户要求压缩；证据为用户消息与助手回复；副作用回执无；未完成项无。”\n\n需要“保留当前身份、scope、人物与关系事实、事实/猜测/更正的区别、未公开的意愿、关键独白短引及来源、已公开与未送达的区别、任务ID/意图版本/授权/证据/副作用回执/未完成项。” 上述满足。\n\n“关键独白短引及来源” 可写“无（无独白来源）”。\n\n“已公开与未送达的区别” 已公开：已记下 KC72；未送达：无。\n\n“任务ID/意图版本/授权/证据/副作用回执/未完成项” 可以一行。\n\n不要使用粗体。不要编号。不要感叹号。\n\n最终只输出摘要正文。确保没有“收到”。\n"
+              },
+              {
+                "type": "text",
+                "text": "\n\n沈小满（V1简化测试版），虚构数字角色，无现实身体；scope 为本地性能测量/合成记录，无社会含义，不调用工具，不创造真实执行声明。用户与沈小满交互，称呼不表示服从权限，无新社交事件、承诺或关系分数。事实：折页记录编号 KC72；record 000-063 为 local synthetic fixture，measured 3 至 1074。猜测/更正：无。未公开意愿：无。关键独白：无（无独白来源）。已公开：已记下 KC72。未送达：无。任务ID未提供；意图版本 ASUNA_COMPACTION_V1；授权为用户要求压缩；证据为用户消息与助手回复；副作用回执无；未完成项无。"
+              }
+            ],
+            "llmStreamCall": true,
+            "shadowedRange": {
+              "start": 5,
+              "end": 9
+            },
+            "shadowedSeqs": [
+              5,
+              9
+            ],
+            "shadowedTokenCount": 1393,
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "maxTokens": 8192,
+            "usage": {
+              "inputTokens": 356,
+              "outputTokens": 1309,
+              "totalTokens": 4417,
+              "cacheReadTokens": 2752
+            }
+          }
+        },
+        {
+          "type": "compaction/end",
+          "seq": 18,
+          "time": 1789867856006,
+          "data": {
+            "compactionId": "ca5c0eac-7826-4cfc-8450-4e2a3e3fc76e",
+            "turn": 2
+          }
+        }
+      ]
+    }
+  },
+  "prev_hash": "2581fbc9d19e3fafd123608a419cbb7ba4da722c1bda0790dbabf05781764079",
+  "time_ns": 1789867869938579400,
+  "event_hash": "62875e6b233f5012da1ebcd2a87a5cb0221b9f06a5a7b45363674444af06713c"
+}

@@ -1,0 +1,41 @@
+{
+  "seq": 15,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "a11b0b2a-a5dd-4a6b-90e9-23a9100baf7e",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "This deterministic transport fixture tests native error provenance. It does not assess model quality or personality. Return only the controlled fixture response."
+        },
+        {
+          "role": "user",
+          "content": "tiny"
+        },
+        {
+          "role": "assistant",
+          "content": "tiny"
+        },
+        {
+          "role": "user",
+          "content": "ASUNA_COMPACTION_V1\n压缩以上完整经历，不扮演新的社交事件，不产生新承诺或关系分数。保留当前身份、scope、人物与关系事实、事实/猜测/更正的区别、未公开的意愿、关键独白短引及来源、已公开与未送达的区别、任务ID/意图版本/授权/证据/副作用回执/未完成项。不得把执行摘要写成人物感受，不补造缺失事实。保留关键原文和来源标识，尽量简短，只输出摘要正文。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "b383756168b27fd6146b8e50cb7e3513f3664b31235d349822ace3ba2f55e30b",
+  "time_ns": 1789867656954352400,
+  "event_hash": "0f62368305c01b080df69c1177b67c25e27c3d747571f324a963d020419694c0"
+}

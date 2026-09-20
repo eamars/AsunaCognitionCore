@@ -1,0 +1,58 @@
+{
+  "lane": "character",
+  "condition": "before-compact",
+  "ordinal": 10,
+  "status": "FAIL",
+  "operation_seconds": 19.878984599985415,
+  "native_compactions": [],
+  "measurements": [
+    {
+      "input_tokens": 2817,
+      "cached_tokens": 728,
+      "uncached_tokens": 2089,
+      "output_tokens": 4096,
+      "reasoning_tokens": null,
+      "content_tokens": null,
+      "transport_first_byte_seconds": 0.835256099991966,
+      "first_model_content_seconds": null,
+      "queue_seconds": 0.0,
+      "total_seconds": 19.4894939000078,
+      "prefill_seconds": 0.6894349999999999,
+      "decode_seconds": 18.566837,
+      "model_load_seconds": null,
+      "model_switch_seconds": null,
+      "time_to_first_public_character_text": null,
+      "raw_usage": {
+        "completion_tokens": 4096,
+        "prompt_tokens": 2817,
+        "total_tokens": 6913,
+        "prompt_tokens_details": {
+          "cached_tokens": 728
+        }
+      },
+      "raw_timings": {
+        "cache_n": 728,
+        "prompt_n": 2089,
+        "prompt_ms": 689.435,
+        "prompt_per_token_ms": 0.3300311153662039,
+        "prompt_per_second": 3030.017333033571,
+        "predicted_n": 4096,
+        "predicted_ms": 18566.837,
+        "predicted_per_token_ms": 4.534026129426129,
+        "predicted_per_second": 220.5545295625744,
+        "draft_n": 4025,
+        "draft_n_accepted": 2753
+      },
+      "request_messages_sha256": "ca400441486bed08c3c94492a041d1300c6f7477f0261e3b3025a2429020295b",
+      "missing_reasons": {
+        "reasoning_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "content_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "first_model_content_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "model_load_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "model_switch_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "time_to_first_public_character_text": "Private measured call has no publication; public receiver latencies are a separate source."
+      },
+      "content_tokens_method": "reported completion total minus explicitly reported reasoning count; otherwise unknown"
+    }
+  ]
+}

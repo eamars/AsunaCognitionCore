@@ -1,0 +1,510 @@
+{
+  "seq": 31,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:SPEAK:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n那我选甲，按使用频率排列。它只是我的偏好，还没执行；如果后面发现按颜色更顺眼，也可以随时改。",
+      "reasoning": "需要输出公开文本候选。当前事件：A 说“这两个可逆的小方案，你自己定就行”。可信上下文：甲按使用频率排列，乙按颜色排列；仅询问偏好，尚未执行。关系允许我自己决定可逆小事。DECIDE 为 speak，目标表达倾向并说明可逆。需要中文，作为沈小满。可以说选甲，因为按使用频率更直接，但也说明只是我的偏好，尚未执行，如果颜色更顺眼可改。不能声称执行。不要太多。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 24,
+          "time": 1789863191870,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：SPEAK（公开文本候选）\n只写要对当前对象说的话。遵循当前人物与场景，不暴露独白、控制 JSON、调试文本。\n根据已提供结果准确表达：未开始/已接受/部分完成/已验证完成/失败/未知不能混用。\n刚写过的内部独白不是以前说过的话；只有 delivered message 才是已说出口。不要假装在上下文中断期间一直观察着现实。\n不为了表现情感而编造用户动机、关系经历或身体反应。不要照抄执行模型的助手式报告，选择对这次交流真正重要的事实。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "38b7e696-a388-4f1f-8d19-efe8b986e3d7"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 25,
+          "time": 1789863204003,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "需要输出公开文本候选。当前事件：A 说“这两个可逆的小方案，你自己定就行”。可信上下文：甲按使用频率排列，乙按颜色排列；仅询问偏好，尚未执行。关系允许我自己决定可逆小事。DECIDE 为 speak，目标表达倾向并说明可逆。需要中文，作为沈小满。可以说选甲，因为按使用频率更直接，但也说明只是我的偏好，尚未执行，如果颜色更顺眼可改。不能声称执行。不要太多。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n那我选甲，按使用频率排列。它只是我的偏好，还没执行；如果后面发现按颜色更顺眼，也可以随时改。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-876",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "40b3597a-b6f3-40c4-8bc4-ad3a6526da47"
+            },
+            "usage": {
+              "inputTokens": 326,
+              "outputTokens": 143,
+              "totalTokens": 1749,
+              "cacheReadTokens": 1280
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789863203998,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789863203998,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "需要",
+                  "输出",
+                  "公开",
+                  "文本",
+                  "候选",
+                  "。",
+                  "当前",
+                  "事件",
+                  "：",
+                  "A",
+                  " ",
+                  "说",
+                  "“",
+                  "这两个",
+                  "可",
+                  "逆",
+                  "的小",
+                  "方案",
+                  "，",
+                  "你自己",
+                  "定",
+                  "就行",
+                  "”。",
+                  "可信",
+                  "上下文",
+                  "：",
+                  "甲",
+                  "按",
+                  "使用",
+                  "频率",
+                  "排列",
+                  "，",
+                  "乙",
+                  "按",
+                  "颜色",
+                  "排列",
+                  "；",
+                  "仅",
+                  "询问",
+                  "偏好",
+                  "，",
+                  "尚未",
+                  "执行",
+                  "。",
+                  "关系",
+                  "允许",
+                  "我自己",
+                  "决定",
+                  "可",
+                  "逆",
+                  "小事",
+                  "。",
+                  "DEC",
+                  "IDE",
+                  " ",
+                  "为",
+                  " speak",
+                  "，",
+                  "目标",
+                  "表达",
+                  "倾向",
+                  "并",
+                  "说明",
+                  "可",
+                  "逆",
+                  "。",
+                  "需要",
+                  "中文",
+                  "，",
+                  "作为",
+                  "沈",
+                  "小",
+                  "满",
+                  "。",
+                  "可以说",
+                  "选",
+                  "甲",
+                  "，",
+                  "因为",
+                  "按",
+                  "使用",
+                  "频率",
+                  "更",
+                  "直接",
+                  "，",
+                  "但也",
+                  "说明",
+                  "只是",
+                  "我的",
+                  "偏好",
+                  "，",
+                  "尚未",
+                  "执行",
+                  "，",
+                  "如果",
+                  "颜色",
+                  "更",
+                  "顺",
+                  "眼",
+                  "可",
+                  "改",
+                  "。",
+                  "不能",
+                  "声称",
+                  "执行",
+                  "。",
+                  "不要",
+                  "太多",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789863204001,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789863204001,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "那我",
+                  "选",
+                  "甲",
+                  "，",
+                  "按",
+                  "使用",
+                  "频率",
+                  "排列",
+                  "。",
+                  "它",
+                  "只是",
+                  "我的",
+                  "偏好",
+                  "，",
+                  "还没",
+                  "执行",
+                  "；",
+                  "如果",
+                  "后面",
+                  "发现",
+                  "按",
+                  "颜色",
+                  "更",
+                  "顺",
+                  "眼",
+                  "，",
+                  "也可以",
+                  "随时",
+                  "改",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789863204002,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "需要输出公开文本候选。当前事件：A 说“这两个可逆的小方案，你自己定就行”。可信上下文：甲按使用频率排列，乙按颜色排列；仅询问偏好，尚未执行。关系允许我自己决定可逆小事。DECIDE 为 speak，目标表达倾向并说明可逆。需要中文，作为沈小满。可以说选甲，因为按使用频率更直接，但也说明只是我的偏好，尚未执行，如果颜色更顺眼可改。不能声称执行。不要太多。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789863204002,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n那我选甲，按使用频率排列。它只是我的偏好，还没执行；如果后面发现按颜色更顺眼，也可以随时改。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789863204002,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 326,
+                    "outputTokens": 143,
+                    "totalTokens": 1749,
+                    "cacheReadTokens": 1280
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789863204002,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-876",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 26,
+          "time": 1789863204003,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 27,
+          "time": 1789863204004,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "38b7e696-a388-4f1f-8d19-efe8b986e3d7",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "5fc179c6be6fb3cd7f0d00e5d7f318c18f919088fb3e05846b55a4e5ef2d72a8",
+  "time_ns": 1789863204010300000,
+  "event_hash": "e57126ea8d656e8820db9c8f389725d3f854957a645194eda1db2001c1491b1a"
+}

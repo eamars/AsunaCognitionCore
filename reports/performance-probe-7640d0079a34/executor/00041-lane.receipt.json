@@ -1,0 +1,374 @@
+{
+  "seq": 41,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:3",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n仍确认：青桥柜标记 CX81。",
+      "reasoning": "我们需要回答用户第2次确认，只简短确认。保持简单事实。不要使用禁止起句。可以说“青桥柜标记 CX81，已确认。” 但第1次已说，也许“仍确认：青桥柜标记 CX81。” 简短。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 16,
+          "time": 1789867995788,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "这是第 2 次确认：青桥柜标记 CX81，只简短确认。"
+              }
+            ],
+            "role": "user",
+            "id": "4c8daa13-0c60-4e15-8c2e-84225aec040f"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 17,
+          "time": 1789868001488,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答用户第2次确认，只简短确认。保持简单事实。不要使用禁止起句。可以说“青桥柜标记 CX81，已确认。” 但第1次已说，也许“仍确认：青桥柜标记 CX81。” 简短。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n仍确认：青桥柜标记 CX81。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1139",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "3c109c43-5dce-4512-985c-4124c8e37cae"
+            },
+            "usage": {
+              "inputTokens": 195,
+              "outputTokens": 74,
+              "totalTokens": 973,
+              "cacheReadTokens": 704
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789868001483,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789868001483,
+                "index": 0,
+                "dt": [
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "用户",
+                  "第",
+                  "2",
+                  "次",
+                  "确认",
+                  "，",
+                  "只",
+                  "简短",
+                  "确认",
+                  "。",
+                  "保持",
+                  "简单",
+                  "事实",
+                  "。",
+                  "不要",
+                  "使用",
+                  "禁止",
+                  "起",
+                  "句",
+                  "。",
+                  "可以说",
+                  "“",
+                  "青",
+                  "桥",
+                  "柜",
+                  "标记",
+                  " CX",
+                  "8",
+                  "1",
+                  "，",
+                  "已",
+                  "确认",
+                  "。”",
+                  " ",
+                  "但",
+                  "第",
+                  "1",
+                  "次",
+                  "已",
+                  "说",
+                  "，",
+                  "也许",
+                  "“",
+                  "仍",
+                  "确认",
+                  "：",
+                  "青",
+                  "桥",
+                  "柜",
+                  "标记",
+                  " CX",
+                  "8",
+                  "1",
+                  "。”",
+                  " ",
+                  "简短",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789868001487,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789868001487,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "仍",
+                  "确认",
+                  "：",
+                  "青",
+                  "桥",
+                  "柜",
+                  "标记",
+                  " CX",
+                  "8",
+                  "1",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789868001488,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答用户第2次确认，只简短确认。保持简单事实。不要使用禁止起句。可以说“青桥柜标记 CX81，已确认。” 但第1次已说，也许“仍确认：青桥柜标记 CX81。” 简短。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789868001488,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n仍确认：青桥柜标记 CX81。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789868001488,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 195,
+                    "outputTokens": 74,
+                    "totalTokens": 973,
+                    "cacheReadTokens": 704
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789868001488,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1139",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 18,
+          "time": 1789868001489,
+          "data": {
+            "turn": 2,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 19,
+          "time": 1789868001489,
+          "data": {
+            "turn": 2,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "4c8daa13-0c60-4e15-8c2e-84225aec040f",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "18f36728c3d011294f58c17d8ca86084bacbcbd9a5009ec84cbd80b1de9a9e86",
+  "time_ns": 1789868001497317900,
+  "event_hash": "9e99dcd63d26f8ba2ddefe54fb75bf4eefbc5a8286c9bfc1b190f221fa1dd399"
+}

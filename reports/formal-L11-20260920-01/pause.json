@@ -1,0 +1,25 @@
+{
+  "experiment_id": "formal-L11-20260920-01",
+  "paused_at": "2026-09-20T01:11:23.419530+00:00",
+  "reason": "L11 reproduced local DSH transport termination at 304.7s while endpoint queue wait was 436.1s. Preserve frozen attempts; do not resume them under modified transport. New experiment IDs required after repair.",
+  "manifest": {
+    "artifact_path": "reports/formal-L11-20260920-01/manifest.json",
+    "sha256": "f87c992cd7f048912bd34e894128fbf73ae2e4b8a1fe1e5edba7eae4aa12af13"
+  },
+  "completed_sample_files": [
+    {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/sample.json",
+      "sha256": "5a91d7624f238cc632824884e2b76227e19568f411610d39277ffe88504d9aac"
+    },
+    {
+      "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-2/sample.json",
+      "sha256": "a412ed3b6af0974546d645a049a38e755565344cc07409ed1ae70d4aa20e679e"
+    }
+  ],
+  "process_evidence": {
+    "artifact_path": "reports/transport-pause-20260920-01/processes-after.json",
+    "sha256": "ae8ab3bb6685029549859011889c7518aea3ca0dada9f4699c01ab1c00aea827"
+  },
+  "status": "INCONCLUSIVE",
+  "server_configuration_changed": false
+}

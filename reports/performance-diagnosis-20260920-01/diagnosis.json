@@ -1,0 +1,23 @@
+{
+  "created_at": "2026-09-20T01:22:32.508503+00:00",
+  "source_probe": {
+    "artifact_path": "reports/performance-probe-74d249d8c7ab/result.json",
+    "sha256": "7f2f35693ed30aeae4b0f51c6c0582f91cd9b98cb596a48b3ec8ff2fe8808296"
+  },
+  "native_session": {
+    "artifact_path": "reports/performance-diagnosis-20260920-01/native-session.jsonl",
+    "sha256": "620928c4ef538f1c1615bc2e0ffe81be95d621f9895b88f098433bd26e1769fa"
+  },
+  "actual_errors": [
+    "summary is not smaller than the shadowed content (172 estimated framed tokens >= 47)",
+    "summary is not smaller than the shadowed content (164 estimated framed tokens >= 47)"
+  ],
+  "finding": "Native engine correctly rejected summaries larger than a 47-token closed history. The current bridge hid the native pre-step failure behind NO_CAUSAL_TURN_RESULT because user/message had not yet entered the surface. It is not a demonstrated wait race.",
+  "cache_observation": {
+    "Gemma_fixed_prompt_tokens": 97,
+    "Gemma_cached_tokens": 92,
+    "Qwen_fixed_prompt_tokens": 127,
+    "Qwen_cached_tokens": 64
+  },
+  "next_probe_design": "Use the actual fixed common/P1 persona prefix for representative phase measurements and a deterministic multi-record history before compression. Preserve this tiny-input pilot, freeze a new ID and do not change the 90% threshold. Improve only causal error reporting in the bridge; do not weaken native summary-size checks."
+}

@@ -1,0 +1,17 @@
+{
+  "seq": 57,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "d0e52210-8412-418e-b908-ea7cad86bdd4",
+    "lane": "executor",
+    "purpose": "execution",
+    "url": "http://192.168.2.13:1919/v1/chat/completions",
+    "body_utf8": "{\"enable_thinking\":true,\"max_tokens\":8192,\"messages\":[{\"content\":\"独立冷前缀 switch-cold-0-1-B。\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"role\":\"system\"},{\"content\":\"独立场景 B，标记为 B52。只简短确认当前标记。\",\"role\":\"user\"}],\"model\":\"qwen38-next-uncensored-freetoken-vision\",\"reasoning_effort\":\"xhigh\",\"seed\":20260919,\"store\":false,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.2,\"top_p\":0.95}",
+    "body_sha256": "a080b9a3bf4cddf87e9e82ca21105a929153d33e3b4ae5f4bd29ba0650c8f3eb",
+    "token_render_visibility": "server_anthropic_count_tokens_equivalent_conversion",
+    "large_body_artifact": null
+  },
+  "prev_hash": "3967b1de821078abd5906c3d9684897edcbbf4009e6dcc1c60ac97599365ecb1",
+  "time_ns": 1789867090148110800,
+  "event_hash": "f6b1db1e3aa751f8256de80d5f89692895a8c3f250882c08df4d92010d1857fd"
+}

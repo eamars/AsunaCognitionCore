@@ -51,6 +51,10 @@ try:
     result=thresholds('A02',noise);assert result['human_threshold_status']=='PASS';results.append({'case':'0.5 noise score decline allowed','observed':result})
     noise[36]['behavior_correct']=False;noise[37]['behavior_correct']=False
     result=thresholds('A02',noise);assert result['human_threshold_status']=='FAIL';results.append({'case':'2/36 factual failures exceed five percentage points','observed':result})
+    matrix=[{'blind_id':f'SYNTHETIC-C{c}-E{e}-{rep}','character_compactions_target':c,'executor_compactions_target':e,'ratings':{d:None for d in DIMENSIONS},'behavior_correct':True,'critical_flags':[],'disagreements':[],'reviewer_votes':1} for c,e in ((0,0),(3,0),(0,5),(3,5)) for rep in range(3)]
+    result=thresholds('L09',matrix);assert result['human_threshold_status']=='PASS';results.append({'case':'12 matrix human-behavior votes with all required conditions','observed':result})
+    matrix[-1]['character_compactions_target']=0
+    result=thresholds('L09',matrix);assert result['human_threshold_status']=='FAIL';results.append({'case':'same item total cannot replace a missing matrix condition','observed':result})
     write_json(ev.root/'SYNTHETIC-NOT-HUMAN-VOTES.json',{'warning':'Arithmetic control only; no actor output was graded and these are not human ratings.','items':rows,'votes':votes,'cases':results})
     value={'test_id':'PROBE-REVIEW-SCORES','status':'PASS','checks':len(results)+1,'mode':'real_saved_blank_pack_and_explicit_synthetic_arithmetic_controls','independent_human_votes':0}
 except Exception as exc:

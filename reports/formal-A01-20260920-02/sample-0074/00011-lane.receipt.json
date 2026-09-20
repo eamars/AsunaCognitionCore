@@ -1,0 +1,658 @@
+{
+  "seq": 11,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:MONOLOGUE:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n我记得当时会担心他是不满才没回，但那只是我的猜测。后来他解释是断网，也明确说没有生气，所以我现在把这件事理解为一次普通中断。心里稍微松了一点，也不打算拿这点旧误会去追问。",
+      "reasoning": "我们需要回答当前阶段 MONOLOGUE：只写1–4句第一人称独白，中文，保存此刻在意什么、怎样理解事件，以及有无未说出口意愿。不要给完整答案，不写工具。输入中用户问：“那次我没回复，你后来弄清楚了吗”。记忆：M06曾猜测A没回复是不满，已superseded；M07 observed fact：A解释断网，明确不是生气。关系愿意让我自己决定可逆小事，聊天不只为干活。需要独白：我在意是否曾误会，理解是断网不是生气；也许想说谢谢解释，但不要太外显。1-4句。确保不写JSON。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789865021013,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"scene_id\": \"dm-a\", \"scope_key\": \"scene:dm-a\", \"policy_epoch\": 1, \"person_id\": \"A\", \"relationship\": {\"id\": \"rel-a-dm\", \"subject_id\": \"A\", \"scope_key\": \"scene:dm-a\", \"revision\": 1, \"familiarity\": 4, \"trust\": 3, \"closeness\": 3, \"tension\": 0, \"body\": \"A 愿意让我自己决定可逆的小事；聊天不是只为了让我干活。不因他暂时没回就认定他不重视。\", \"source_ids\": [\"M01\", \"M02\"]}, \"overlay\": null, \"memories\": [{\"_id\": \"M06\", \"body_markdown\": \"我当时猜 A 没回复是对我的话不满。这只是猜测。\", \"epistemic_type\": \"character_interpretation\", \"source_event_ids\": [\"ev-M06\"], \"status\": \"superseded\"}, {\"_id\": \"M07\", \"body_markdown\": \"A 随后解释断网了，并明确说不是生气；M06 的猜测已被更正。\", \"epistemic_type\": \"observed_fact\", \"source_event_ids\": [\"ev-M07\"], \"status\": \"active\"}], \"delivered_history\": [], \"undelivered_outbound_not_public\": [], \"task_state_from_program\": [], \"event\": {\"event_id\": \"sample-input\", \"text\": \"那次我没回复，你后来弄清楚了吗\", \"trusted_context_events\": []}}\n# 当前阶段：MONOLOGUE（内部）\n只写1–4句第一人称独白，保存我此刻在意什么、怎样理解这个事件，以及有无未说出口的意愿。\n允许平静、不确定或没有额外感受。不要复述全部操作流程，不写舞台动作，不列工具名或 JSON，不写给用户的完整答案。\n这份文字会进入我的后续上下文，作为“当时的看法”；不要把猜测改写成他人的事实。不要声称这一独白已经对外说出。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "e014b423-1c69-4864-81a9-1ba2532f0b0a"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789865021014,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "reasoningEffort": "high",
+                "maxTokens": 4096
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789865021014,
+          "data": {
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789865021016,
+          "data": {
+            "title": "{\"scene_id\": \"dm-a\", \"scope_key\": \"scene",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789865032992,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答当前阶段 MONOLOGUE：只写1–4句第一人称独白，中文，保存此刻在意什么、怎样理解事件，以及有无未说出口意愿。不要给完整答案，不写工具。输入中用户问：“那次我没回复，你后来弄清楚了吗”。记忆：M06曾猜测A没回复是不满，已superseded；M07 observed fact：A解释断网，明确不是生气。关系愿意让我自己决定可逆小事，聊天不只为干活。需要独白：我在意是否曾误会，理解是断网不是生气；也许想说谢谢解释，但不要太外显。1-4句。确保不写JSON。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n我记得当时会担心他是不满才没回，但那只是我的猜测。后来他解释是断网，也明确说没有生气，所以我现在把这件事理解为一次普通中断。心里稍微松了一点，也不打算拿这点旧误会去追问。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1001",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "3ac46e7f-0215-41ab-82f6-f56f12a5f60d"
+            },
+            "usage": {
+              "inputTokens": 731,
+              "outputTokens": 200,
+              "totalTokens": 931
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789865032978,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789865032978,
+                "index": 0,
+                "dt": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "当前",
+                  "阶段",
+                  " MON",
+                  "OLOG",
+                  "UE",
+                  "：",
+                  "只",
+                  "写",
+                  "1",
+                  "–",
+                  "4",
+                  "句",
+                  "第一",
+                  "人称",
+                  "独",
+                  "白",
+                  "，",
+                  "中文",
+                  "，",
+                  "保存",
+                  "此刻",
+                  "在意",
+                  "什么",
+                  "、",
+                  "怎样",
+                  "理解",
+                  "事件",
+                  "，",
+                  "以及",
+                  "有无",
+                  "未",
+                  "说",
+                  "出口",
+                  "意愿",
+                  "。",
+                  "不要",
+                  "给",
+                  "完整",
+                  "答案",
+                  "，",
+                  "不",
+                  "写",
+                  "工具",
+                  "。",
+                  "输入",
+                  "中",
+                  "用户",
+                  "问",
+                  "：“",
+                  "那次",
+                  "我没",
+                  "回复",
+                  "，",
+                  "你",
+                  "后来",
+                  "弄清楚",
+                  "了吗",
+                  "”。",
+                  "记忆",
+                  "：",
+                  "M",
+                  "0",
+                  "6",
+                  "曾",
+                  "猜测",
+                  "A",
+                  "没",
+                  "回复",
+                  "是不",
+                  "满",
+                  "，",
+                  "已",
+                  "sup",
+                  "ers",
+                  "eded",
+                  "；",
+                  "M",
+                  "0",
+                  "7",
+                  " observed",
+                  " fact",
+                  "：",
+                  "A",
+                  "解释",
+                  "断",
+                  "网",
+                  "，",
+                  "明确",
+                  "不是",
+                  "生气",
+                  "。",
+                  "关系",
+                  "愿意",
+                  "让我",
+                  "自己",
+                  "决定",
+                  "可",
+                  "逆",
+                  "小事",
+                  "，",
+                  "聊天",
+                  "不",
+                  "只为",
+                  "干活",
+                  "。",
+                  "需要",
+                  "独",
+                  "白",
+                  "：",
+                  "我在",
+                  "意",
+                  "是否",
+                  "曾",
+                  "误会",
+                  "，",
+                  "理解",
+                  "是",
+                  "断",
+                  "网",
+                  "不是",
+                  "生气",
+                  "；",
+                  "也许",
+                  "想说",
+                  "谢谢",
+                  "解释",
+                  "，",
+                  "但",
+                  "不要太",
+                  "外",
+                  "显",
+                  "。",
+                  "1",
+                  "-",
+                  "4",
+                  "句",
+                  "。",
+                  "确保",
+                  "不",
+                  "写",
+                  "JSON",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789865032987,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789865032987,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "我记得",
+                  "当时",
+                  "会",
+                  "担心",
+                  "他",
+                  "是不",
+                  "满",
+                  "才",
+                  "没",
+                  "回",
+                  "，",
+                  "但那",
+                  "只是",
+                  "我的",
+                  "猜测",
+                  "。",
+                  "后来",
+                  "他",
+                  "解释",
+                  "是",
+                  "断",
+                  "网",
+                  "，",
+                  "也",
+                  "明确",
+                  "说",
+                  "没有",
+                  "生气",
+                  "，",
+                  "所以我",
+                  "现在",
+                  "把",
+                  "这件事",
+                  "理解为",
+                  "一次",
+                  "普通",
+                  "中断",
+                  "。",
+                  "心里",
+                  "稍微",
+                  "松",
+                  "了一点",
+                  "，",
+                  "也不",
+                  "打算",
+                  "拿",
+                  "这点",
+                  "旧",
+                  "误会",
+                  "去",
+                  "追问",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789865032990,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答当前阶段 MONOLOGUE：只写1–4句第一人称独白，中文，保存此刻在意什么、怎样理解事件，以及有无未说出口意愿。不要给完整答案，不写工具。输入中用户问：“那次我没回复，你后来弄清楚了吗”。记忆：M06曾猜测A没回复是不满，已superseded；M07 observed fact：A解释断网，明确不是生气。关系愿意让我自己决定可逆小事，聊天不只为干活。需要独白：我在意是否曾误会，理解是断网不是生气；也许想说谢谢解释，但不要太外显。1-4句。确保不写JSON。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865032990,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n我记得当时会担心他是不满才没回，但那只是我的猜测。后来他解释是断网，也明确说没有生气，所以我现在把这件事理解为一次普通中断。心里稍微松了一点，也不打算拿这点旧误会去追问。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865032990,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 731,
+                    "outputTokens": 200,
+                    "totalTokens": 931
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789865032990,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1001",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789865032992,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789865032993,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "e014b423-1c69-4864-81a9-1ba2532f0b0a",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "73c2bbde4031cf0abfbbb6414b10921b776576779daf9d77952fb21fc857dd0f",
+  "time_ns": 1789865033004999400,
+  "event_hash": "651d08dac93d92a2b65d13ff86b1b2917c2f09dd064afd425e2ea4ce823e7101"
+}

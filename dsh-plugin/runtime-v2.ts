@@ -66,7 +66,25 @@ export function apply(ctx, config) {
   }
   function resultFrom(events, messageId) {
     const start = events.findIndex(e => e.type === 'user/message' && e.data.id === messageId);
-    if (start < 0) return undefined;
+    if (start < 0) {
+      // Pre-step compaction can fail after inbox acceptance but before the user
+      // message enters the surface. Preserve that exact native error only;
+      // inbox delivery alone must never manufacture a successful model result.
+      const accepted = events.findIndex(e => e.type === 'agent/inbox/spliced' &&
+        e.data.target === 'next-turn' && e.data.inserted?.length === 1 &&
+        e.data.inserted[0].id === messageId);
+      if (accepted < 0) return undefined;
+      const suffix = events.slice(accepted);
+      const turn = suffix.find(e => e.type === 'turn/start');
+      if (!turn) return undefined;
+      const end = suffix.find(e => e.seq > turn.seq && e.type === 'turn/end');
+      if (!end || end.data.turn !== turn.data.turn || end.data.reason.kind !== 'error') return undefined;
+      if (suffix.some(e => e.seq > turn.seq && e.seq < end.seq &&
+        (e.type === 'turn/start' || e.type === 'user/message' || e.type === 'assistant/message'))) return undefined;
+      return { content: '', reasoning: '', finish_reason: 'error',
+        native_reason: end.data.reason, message_admitted_to_surface: false,
+        events: suffix.filter(e => e.seq <= end.seq), message_id: messageId };
+    }
     const suffix = events.slice(start);
     const end = suffix.find(e => e.type === 'turn/end');
     if (!end) return undefined;
@@ -74,7 +92,8 @@ export function apply(ctx, config) {
     const last = messages.at(-1)?.data.message;
     return { content: (last?.content ?? []).filter(b => b.type === 'text').map(b => b.text).join(''),
       reasoning: (last?.content ?? []).filter(b => b.type === 'reasoning').map(b => b.text).join(''),
-      finish_reason: end.data.reason.kind, events: suffix.filter(e => e.seq <= end.seq), message_id: messageId };
+      finish_reason: end.data.reason.kind, native_reason: end.data.reason,
+      message_admitted_to_surface: true, events: suffix.filter(e => e.seq <= end.seq), message_id: messageId };
   }
   async function run(input) {
     const path = join(config.receipts, hash(input.operation) + '.json');

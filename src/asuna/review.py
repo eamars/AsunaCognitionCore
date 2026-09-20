@@ -38,7 +38,7 @@ def pack(reports:Path,output:Path):
             # provider trace. Operator provenance is in the adjacent manifest.
             rows.append(row);local_rows.append(row)
             operator_items.append({'blind_id':row['blind_id'],'experiment_id':path.parent.name,'test_id':result.get('test_id'),'source':path.resolve().relative_to(ROOT).as_posix(),'source_index':index,
-                                   **{k:observed[k] for k in ('case_id','model_lane','persona','repetition','condition','scene_id','protocol_valid','status','mechanical_status') if k in observed},
+                                   **{k:observed[k] for k in ('case_id','model_lane','persona','repetition','condition','scene_id','protocol_valid','status','mechanical_status','character_compactions_target','executor_compactions_target') if k in observed},
                                    **mapping.get(row['blind_id'],{}),'kind':row.get('kind','scenario')})
         if result.get('test_id')=='A01':
             grouped={};by_blind={r['blind_id']:r for r in local_rows}

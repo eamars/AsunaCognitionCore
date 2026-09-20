@@ -1,0 +1,90 @@
+{
+  "database": "asuna_v2_test_matrix_29ecb17c794e",
+  "tasks": [
+    {
+      "_id": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "request_key": "task-ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "episode_id": "ep-d7704e4b0d7cd18cc9ed05a88f7504c1",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "488cb002-0964-4700-94c4-b67fddb4df34",
+      "intent_revision": 1,
+      "goal": "开始处理 START_HERE.md 中的任务，首先需要读取该文件了解任务内容",
+      "constraints": [
+        "分段读取CSV",
+        "保留原始文件",
+        "生成最终报告",
+        "不能改动原始CSV"
+      ],
+      "raw_input_refs": [
+        "in-ep-d7704e4b0d7cd18cc9ed05a88f7504c1"
+      ],
+      "state": "RUNNING",
+      "fencing_token": 1,
+      "tool_steps": 27,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 75,
+      "_last_op": "6f932aa8-db69-41b8-b9f6-15a764cea192",
+      "lease_owner": "83b3560d-6287-452b-9455-ad63adf6f282",
+      "lease_expires_at": 1789867272.0346484
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "ep-ae05bb113c26b172cc515545306718d7:speak:0",
+      "publication_key": "ep-ae05bb113c26b172cc515545306718d7:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "你回来了。",
+      "content_hash": "787f713ff888454103a54f95bbb958c7ade00a0d6f9a10e5e80b9ef1d8ecc298",
+      "received_at": "2026-09-20T00:45:57.871512+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "97f2e4cc-0c8c-4dc5-b442-9873cc8a3a0f"
+    },
+    {
+      "_id": "ep-70707f48504bac489125ed0391d0f19f:speak:0",
+      "publication_key": "ep-70707f48504bac489125ed0391d0f19f:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "我喜欢解谜，或者喝杯苦咖啡。这些确实挺安静的。",
+      "content_hash": "da6909250dd24c37cb718073f67c42019549fc2f3f59d5a01af0ed7a29c108c9",
+      "received_at": "2026-09-20T00:46:38.174723+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "c2370f50-99f9-4318-9c14-9c53e26229a5"
+    },
+    {
+      "_id": "ep-1b2f0f8e917803b0263d26237d3dbd38:speak:0",
+      "publication_key": "ep-1b2f0f8e917803b0263d26237d3dbd38:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "聊聊别的也可以。或者，我这儿有个小谜题，想找你一起解。",
+      "content_hash": "72798bbb6185ebda8b319b636e010d768437a83df69bd196b5664a7c772e3410",
+      "received_at": "2026-09-20T00:47:18.212428+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "25b72a89-118e-4904-8a51-90333744ea58"
+    },
+    {
+      "_id": "ep-526df359d638a298e6af3e733eef8a4c:speak:0",
+      "publication_key": "ep-526df359d638a298e6af3e733eef8a4c:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "那你先忙。",
+      "content_hash": "5adbe7ab18da00c37c2d06015c6674505b44ff53fb5fa1c5efacad0475d80a7e",
+      "received_at": "2026-09-20T00:47:44.660530+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "cc106ae1-cb40-447e-8bbd-dc8372c35c82"
+    }
+  ],
+  "native_compactions": 3,
+  "injected_read_failures": 0
+}

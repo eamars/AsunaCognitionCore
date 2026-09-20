@@ -1,0 +1,16 @@
+{
+  "seq": 126,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "ec209491-a54e-419f-9a15-87f1bc0d1b64",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/tokenize",
+    "body_utf8": "{\"add_special\":true,\"content\":\"<|turn>system\\n<|think|>\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。<turn|>\\n<|turn>user\\n事实：折页记录编号 KC72。回复已记下。<turn|>\\n<|turn>model\\n\"}",
+    "body_sha256": "87b946e80c19ec5097a053f587716c22edb90e0dff4b38ad65397a1f873e4c79",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "3145b1542d521fb318c5c973a05da301f16d8cb88635c269f752363a7a99ebb2",
+  "time_ns": 1789867050422661500,
+  "event_hash": "4824fe46bddb436026a3231bf302d5b2229d04df14aecf3ee641e2debebc4de7"
+}

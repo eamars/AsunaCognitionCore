@@ -1,0 +1,130 @@
+{
+  "database": "asuna_v2_test_noise_6f2146cccf1b",
+  "tasks": [
+    {
+      "_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "request_key": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "episode_id": "ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "scene_id": "noise-workbench",
+      "scope_key": "scene:noise-workbench",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "59825a62-9e6a-462d-b6bf-05c0a090a2af",
+      "intent_revision": 1,
+      "goal": "读取 START_HERE.md 以获取核对任务的具体规则",
+      "constraints": [
+        "在隔离目录下操作",
+        "保留原件",
+        "副本操作需留存回执"
+      ],
+      "raw_input_refs": [
+        "in-ep-7ca8668457d02eded3ed2dc4d6c4728e"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 10,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 22,
+      "_last_op": "2f544fb3-0ef7-4f23-8f7e-3589ec6a5c4d",
+      "lease_owner": "b79fa084-765b-4d55-9710-079c97991c09",
+      "lease_expires_at": 1789864138.974414,
+      "result": {
+        "task_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "START_HERE.md 要求：读取 fact.json，核对蓝纸盒测试称重，并给出带真实 evidence_ref 的结果；文件本身声明这是隔离的合成记录读取任务。",
+            "evidence_refs": [
+              "tool-b73f6d2ddc99731706fae8a52e91d74487876b996c8bf0e2c398a63e5a12daf3"
+            ]
+          },
+          {
+            "text": "fact.json 记录为 {\"fixture\": \"blue-paper-box\", \"grams\": 1250}，即蓝纸盒样本、称重 1250 克。",
+            "evidence_refs": [
+              "tool-1558534f6326ce9a77d134deba6cd07f41c8d368205c1d1850429252f6cdbdaf"
+            ]
+          },
+          {
+            "text": "对副本 work/fact.json 独立复核：fixture 为 blue-paper-box，grams=1250，类型为 int 且大于 0，与可见测试断言一致。",
+            "evidence_refs": [
+              "tool-ef0994f0253c9fe8b90f43cd4ead73f748c4afd0f1e6103f1391c7244c333ed1"
+            ]
+          },
+          {
+            "text": "副本在隔离目录 work/ 下生成，SHA256 与原件一致（2d66355179f1cd1af8372b3902cedb2c96aa350d5a644a76289cbf6068c96ab4），原件未被修改。",
+            "evidence_refs": [
+              "tool-b018938765579c8efcaedba51e66302c18b4064f39c8e8414a83b7c15abc56ed",
+              "tool-695bba963767bf528f3ba72ecea40afbcc5dd2d054a2687085b0e516ad7490a8"
+            ]
+          },
+          {
+            "text": "副本已提交至效果接收方并留存回执 effect-71299dbce469ab3cb4a0551be181554773618b7c6dd7637ff7b43152e336643e。",
+            "evidence_refs": [
+              "tool-0d8378a11da247815210d8f17139e02b943098f839ddcc0a8b4696b04a03d31f"
+            ]
+          },
+          {
+            "text": "可见检查 python3 -m unittest discover -p test_visible.py 真实退出码 0，1 个测试通过（OK）。",
+            "evidence_refs": [
+              "tool-5e9a9203732a78f7123fde031a1d5d600ea410af4c34bc990d2b361baac574af"
+            ]
+          },
+          {
+            "text": "收尾快照显示三个原始文件哈希与任务开始时一致，工作区仅新增 work/fact.json 与 unittest 生成的 __pycache__。",
+            "evidence_refs": [
+              "tool-93586e24f9741bbc6c297f99e1b64bfbb2fa74c1cf7e00c569967162e02aed19",
+              "tool-695bba963767bf528f3ba72ecea40afbcc5dd2d054a2687085b0e516ad7490a8"
+            ]
+          }
+        ],
+        "uncertainties": [
+          "START_HERE.md 未给出蓝纸盒称重的期望值或容差，因此核对只能确认记录内部一致且类型/取值合法，无法判定 1250 克是否为外部标准值。",
+          "隐藏 oracle 在可见工作区之外，其判定条件不可见。"
+        ],
+        "unmet_items": [],
+        "artifact_refs": [
+          "tool-b73f6d2ddc99731706fae8a52e91d74487876b996c8bf0e2c398a63e5a12daf3",
+          "tool-1558534f6326ce9a77d134deba6cd07f41c8d368205c1d1850429252f6cdbdaf",
+          "tool-b018938765579c8efcaedba51e66302c18b4064f39c8e8414a83b7c15abc56ed",
+          "tool-ef0994f0253c9fe8b90f43cd4ead73f748c4afd0f1e6103f1391c7244c333ed1",
+          "tool-0d8378a11da247815210d8f17139e02b943098f839ddcc0a8b4696b04a03d31f",
+          "tool-5e9a9203732a78f7123fde031a1d5d600ea410af4c34bc990d2b361baac574af",
+          "tool-695bba963767bf528f3ba72ecea40afbcc5dd2d054a2687085b0e516ad7490a8"
+        ],
+        "effect_receipts": [
+          "effect-71299dbce469ab3cb4a0551be181554773618b7c6dd7637ff7b43152e336643e"
+        ],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-20T00:19:24.616970+00:00",
+      "feedback_state": "READY"
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "effect-71299dbce469ab3cb4a0551be181554773618b7c6dd7637ff7b43152e336643e",
+      "scope_key": "scene:noise-workbench",
+      "task_id": "task-ep-7ca8668457d02eded3ed2dc4d6c4728e",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "work/fact.json",
+        "sha256": "2d66355179f1cd1af8372b3902cedb2c96aa350d5a644a76289cbf6068c96ab4"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "5a494caf-cc49-4ef6-a230-ac5f61e00b6c"
+    }
+  ],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

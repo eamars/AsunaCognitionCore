@@ -1,0 +1,16 @@
+{
+  "seq": 18,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "98d7fa42-3777-467e-9e2b-a9b175762433",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/tokenize",
+    "body_utf8": "{\"add_special\":true,\"content\":\"<|turn>system\\n<|think|>\\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。<turn|>\\n<|turn>user\\n记录：青桥柜标记为 CX81。只回复已记下。<turn|>\\n<|turn>model\\n\"}",
+    "body_sha256": "176a72d2277a6b5b5de5a430034166114d9e264c9fb7ac3f68bfd8bd002ca2d1",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "e8bc65e8c532802373e445a9b76dd2723915add0047eb3abfbd660dab2a1dc8b",
+  "time_ns": 1789867037376807500,
+  "event_hash": "1c0c8a8321f308b5af783a4423e8b6b5fe0c1215c1c12aca73d95223aca6a574"
+}

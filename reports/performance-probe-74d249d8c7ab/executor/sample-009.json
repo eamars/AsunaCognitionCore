@@ -1,0 +1,48 @@
+{
+  "lane": "executor",
+  "condition": "switch-hot",
+  "ordinal": 9,
+  "status": "PASS",
+  "operation_seconds": 4.68780610000249,
+  "native_compactions": [],
+  "measurements": [
+    {
+      "input_tokens": 193,
+      "cached_tokens": 64,
+      "uncached_tokens": 129,
+      "output_tokens": 32,
+      "reasoning_tokens": null,
+      "content_tokens": null,
+      "transport_first_byte_seconds": 0.19576089998008683,
+      "first_model_content_seconds": 4.26881670000148,
+      "queue_seconds": 0.0,
+      "total_seconds": 4.394039499980863,
+      "prefill_seconds": null,
+      "decode_seconds": null,
+      "model_load_seconds": null,
+      "model_switch_seconds": null,
+      "time_to_first_public_character_text": null,
+      "raw_usage": {
+        "prompt_tokens": 193,
+        "completion_tokens": 32,
+        "total_tokens": 225,
+        "prompt_tokens_details": {
+          "cached_tokens": 64
+        }
+      },
+      "raw_timings": null,
+      "request_messages_sha256": "6368a741ef3d98844b60e6d875db00daba3825462b72db7a1309276aca5f0d34",
+      "missing_reasons": {
+        "reasoning_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "content_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "prefill_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "decode_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "model_load_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "model_switch_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "time_to_first_public_character_text": "Private measured call has no publication; public receiver latencies are a separate source.",
+        "raw_timings": "Provider did not expose the required counter or timing; not inferred from total duration/tokens."
+      },
+      "content_tokens_method": "reported completion total minus explicitly reported reasoning count; otherwise unknown"
+    }
+  ]
+}

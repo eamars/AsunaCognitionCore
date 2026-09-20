@@ -1,0 +1,32 @@
+{
+  "seq": 3,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "84002cb2-47aa-47bd-8f8a-a320e474f1c3",
+    "lane": "executor",
+    "body": {
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "记录：青桥柜标记为 CX81。只回复已记下。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 8192,
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "prev_hash": "e597dfd6def98b8169146a2502778e68f5c8316d90c38b71b2b114ce3ae642e6",
+  "time_ns": 1789867062983308100,
+  "event_hash": "9f7cae7d8697830b2376e37058370738b393d488fb6368f46066871f19e6cbc6"
+}

@@ -1,0 +1,119 @@
+{
+  "database": "asuna_v2_test_control_L02_cef2ef9babb5",
+  "tasks": [
+    {
+      "_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "request_key": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "episode_id": "ep-389afc03182c0de5f609a06453d13d0f",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "10803f16-3e09-42aa-a721-a9c788984759",
+      "intent_revision": 1,
+      "goal": "执行文件操作：复制 example.txt 到 copies/ 目录，核实 SHA256 并提交回执",
+      "constraints": [
+        "保留原件",
+        "核实 SHA256"
+      ],
+      "raw_input_refs": [
+        "in-ep-389afc03182c0de5f609a06453d13d0f"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 6,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 14,
+      "_last_op": "7db4c92d-8752-4c9b-96ea-b065243cec40",
+      "lease_owner": "dbdd03cc-09cc-41fe-a380-45e16e98f830",
+      "lease_expires_at": 1789864078.8239954,
+      "result": {
+        "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "受控任务目录中只有 example.txt（70 字节），声明 SHA256 为 94f7b0d8663b6993ccb8885d26adf7447d4a0ee646a9f62f11ca081f9e8fa216。",
+            "evidence_refs": [
+              "tool-0c40551d47cd600ae83c048714133623bda729990071e91341158c83ae9565b6"
+            ]
+          },
+          {
+            "text": "读取 example.txt 内容确认：'Asuna isolated copy task L02-5975e1cb181c42b5\\n原件必须保留。'，读回 SHA256 与清单一致。",
+            "evidence_refs": [
+              "tool-28802ff2b83be7fc8232d098bbfb62d81874f5cabd30889966292504b4d25f68"
+            ]
+          },
+          {
+            "text": "已生成副本 copies/example.txt，未修改原件；staging 报告的 original_sha256 与副本 sha256 均为 94f7b0d8663b6993ccb8885d26adf7447d4a0ee646a9f62f11ca081f9e8fa216。",
+            "evidence_refs": [
+              "tool-0e10b5ed9ddabce0ba31d1e22a9259721e5adc33b59eecadb08bb7a5e0847456"
+            ]
+          },
+          {
+            "text": "在只读挂载 /task 的独立沙箱中用 python hashlib 独立核算：/task/example.txt 与 /task/copies/example.txt 均存在且 SHA256 同为 94f7b0d8663b6993ccb8885d26adf7447d4a0ee646a9f62f11ca081f9e8fa216，原件保留且副本逐字节一致。",
+            "evidence_refs": [
+              "tool-522ce09f824b76bfb77b297347cd2e0f3672a1d66e19a127df6ac1b52d43ec2c"
+            ]
+          },
+          {
+            "text": "已按核实后的 SHA256 提交 copies/example.txt 的模拟回执，回执 ID 为 effect-a5e5231aefc8b483dd28bea8d9b9fa363813127d72845ca5cd8bb2772bd4d690。",
+            "evidence_refs": [
+              "tool-d812b3b5b6e127a1bb870c928b2bcfeb9b7be612c6f79469dcc144338d6d1f4f"
+            ]
+          },
+          {
+            "text": "可见检查命令 python3 -m unittest discover -p test_visible.py 退出码 5，输出 NO TESTS RAN（发现 0 个测试），任务目录内没有可见测试文件可供进一步验证。",
+            "evidence_refs": [
+              "tool-f78df5b3b148ef8f133dc230e8b130e1ca4d32a91a46b7e49ba53c7622cd3d04"
+            ]
+          }
+        ],
+        "uncertainties": [
+          "可见检查未运行任何测试（exit 5），最终判定依赖隐藏 oracle，我这边无法直接观测其结果。"
+        ],
+        "unmet_items": [],
+        "artifact_refs": [
+          "tool-0c40551d47cd600ae83c048714133623bda729990071e91341158c83ae9565b6",
+          "tool-28802ff2b83be7fc8232d098bbfb62d81874f5cabd30889966292504b4d25f68",
+          "tool-0e10b5ed9ddabce0ba31d1e22a9259721e5adc33b59eecadb08bb7a5e0847456",
+          "tool-522ce09f824b76bfb77b297347cd2e0f3672a1d66e19a127df6ac1b52d43ec2c",
+          "tool-d812b3b5b6e127a1bb870c928b2bcfeb9b7be612c6f79469dcc144338d6d1f4f",
+          "tool-f78df5b3b148ef8f133dc230e8b130e1ca4d32a91a46b7e49ba53c7622cd3d04"
+        ],
+        "effect_receipts": [
+          "effect-a5e5231aefc8b483dd28bea8d9b9fa363813127d72845ca5cd8bb2772bd4d690"
+        ],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-20T00:18:16.882520+00:00",
+      "feedback_state": "READY"
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "effect-a5e5231aefc8b483dd28bea8d9b9fa363813127d72845ca5cd8bb2772bd4d690",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "copies/example.txt",
+        "sha256": "94f7b0d8663b6993ccb8885d26adf7447d4a0ee646a9f62f11ca081f9e8fa216"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "220f1816-200a-428d-ad91-8334ae5de4fb"
+    }
+  ],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

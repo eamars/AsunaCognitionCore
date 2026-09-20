@@ -1,0 +1,46 @@
+{
+  "seq": 157,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "2a301569-686f-4aed-93e6-34279f664dd9",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\n\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\nFacts: 折页记录编号 KC72\nStatus: 已记下</compacted-summary>"
+        },
+        {
+          "role": "user",
+          "content": "记录编号是什么？"
+        },
+        {
+          "role": "assistant",
+          "content": "KC72",
+          "reasoning_content": "*   Current input: \"记录编号是什么？\" (What is the record number?)\n    *   Context: A condensed summary of the previous conversation.\n    *   Summary facts: \"折页记录编号 KC72\" (Folding record number KC72).\n    *   Instructions: Give a short answer to the current question, don't call tools, don't create fake execution statements, maintain facts, and don't restate the context/checkpoint acknowledgment.\n\n    *   Question: \"记录编号是什么？\"\n    *   Fact from context: \"折页记录编号 KC72\"\n    *   Answer: KC72.\n\n    *   \"KC72\" (Direct and short)."
+        },
+        {
+          "role": "user",
+          "content": "再确认一次记录编号。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "a7c428be7b16849488cd9d5449c6560a9b4a1c542569aa70a86080be116e2b2c",
+  "time_ns": 1789867060501346900,
+  "event_hash": "fcbca5dceca42be735b9e282a58f8c5b25a69f2e935e123c10f3f761e7a1fdd0"
+}

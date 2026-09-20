@@ -1,0 +1,33 @@
+{
+  "seq": 3,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "72967712-2451-47d5-8256-47fafea91958",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "This deterministic transport fixture tests native error provenance. It does not assess model quality or personality. Return only the controlled fixture response."
+        },
+        {
+          "role": "user",
+          "content": "tiny"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "faf3e3235b6eb2b05282cbbabcc116ec695f2fd34edb29b017d006907eeb2cb8",
+  "time_ns": 1789867656586351300,
+  "event_hash": "e949cc59447f151b6c2d7465474ee628b510a85e7a5e5ece76fef6a55a6b1576"
+}

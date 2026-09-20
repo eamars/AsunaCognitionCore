@@ -1,0 +1,80 @@
+{
+  "test_id": "E02",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-fba1ab29e45e",
+  "executed_at": "2026-09-20T01:33:37.780137+00:00",
+  "manifest_sha256": "5ca194ab963aaa36b048872c3c240b5822ab3842639425b85aeb8521f5b13e8c",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T013217Z-56820f\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "First fake-provider request contains complete persona with matching hash; blank and title-only variants call no model; operator truth keys absent.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E02_actual_fake_request_and_missing_persona",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.794
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/manifest.json",
+      "sha256": "dc464ee4aa8b6f620fbd61731d7c7bc77835338c5ffd6c763790d9ed92154462"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/frozen-inputs.zip",
+      "sha256": "53bad7df3d2165e449f644767686bdd6c1761ce51a758786dab9e2cab2626ca6"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/junit.xml",
+      "sha256": "4538ae2aa3ee1afabf976768b1b0c2d9d4ba4f838fe2bd939f49f2521d2f63a4"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/result.json",
+      "sha256": "dc612d7f56ae68d9993b50421464538dc55c76bc880cc00acb630addeddc377e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/stdout.txt",
+      "sha256": "79e9a8721af9dbceddf8434a33c210bec2422c94cd05a449036becb0818196b4"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-fba1ab29e45e/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/fixtures/68a59a0e3f743057/fixture.json",
+      "sha256": "b025ee43f24cef0582c0d7edbbd9fb09c654070be09842ea33a6aead1059970e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T013217Z-56820f/fixtures/68a59a0e3f743057/trace.json",
+      "sha256": "b11ae85947f6f6dd9cdb049d083a167ff251034a30a859c3f7cc3f346c838aad"
+    }
+  ],
+  "tested_implementation_commit": "837f2578c215ee23eddfaf315e8280103a893118",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

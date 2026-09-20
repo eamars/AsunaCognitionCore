@@ -1,0 +1,16 @@
+{
+  "seq": 146,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "30791e54-86fb-45d6-a2b0-a5ab5d2a5883",
+    "purpose": "tokenizer.render",
+    "method": "POST",
+    "url": "http://192.168.2.13:8083/apply-template",
+    "body_utf8": "{\"chat_template_kwargs\":{\"enable_thinking\":true},\"max_tokens\":4096,\"messages\":[{\"content\":\"这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"role\":\"system\"},{\"content\":\"This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\\n\\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\\nFacts: 折页记录编号 KC72\\nStatus: 已记下</compacted-summary>\",\"role\":\"user\"},{\"content\":\"记录编号是什么？\",\"role\":\"user\"}],\"model\":\"gemma4-26b-a4b-it-qat-vision-262144-qat-mtp\",\"seed\":20260919,\"store\":false,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"top_p\":0.95}",
+    "body_sha256": "4a466c8c4c45b1405ba3dca1949ce22f14d4870faf2544d953ac3c8140dcbd23",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "e654626d03fb6ee2dcd39cadcb36fcab02d50410c5906a25e5db97f9a47c1c23",
+  "time_ns": 1789867059379783400,
+  "event_hash": "a4a2b08ca0dce09b6a0e997ddb0d186128e2ca412b4d5d4971975209d38937f6"
+}

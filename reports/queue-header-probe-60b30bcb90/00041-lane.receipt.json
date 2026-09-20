@@ -1,0 +1,224 @@
+{
+  "seq": 41,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "header-op",
+    "status_code": 200,
+    "body": {
+      "content": "LOCAL_TRANSPORT_FIXTURE",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789866803568,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "probe transport"
+              }
+            ],
+            "role": "user",
+            "id": "b3680540-9b08-4c7d-b059-aa9a8a6f7c80"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789866803569,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "reasoningEffort": "high",
+                "maxTokens": 4096
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789866803569,
+          "data": {
+            "provider": "asuna-local",
+            "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789866803571,
+          "data": {
+            "title": "probe transport",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789867232723,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "LOCAL_TRANSPORT_FIXTURE"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseModel": "transport-fixture",
+                    "responseId": "probe",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "1489dde0-f22d-453f-8716-d6fff1331075"
+            },
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 2,
+              "totalTokens": 5
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789867232720,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789867232720,
+                "index": 0,
+                "dt": [],
+                "texts": [
+                  "LOCAL_TRANSPORT_FIXTURE"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789867232722,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "LOCAL_TRANSPORT_FIXTURE"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867232722,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 3,
+                    "outputTokens": 2,
+                    "totalTokens": 5
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789867232722,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseModel": "transport-fixture",
+                      "responseId": "probe",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789867232724,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789867232724,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "b3680540-9b08-4c7d-b059-aa9a8a6f7c80",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "9ceed7173856a214fc3cf42de849bb46b56a7387e343f85ea254ded527252cf0",
+  "time_ns": 1789867232733214900,
+  "event_hash": "f78124c8c5ca30cca84e1cd5418f7478e8b2543a79d610bb9643271fa63b599b"
+}

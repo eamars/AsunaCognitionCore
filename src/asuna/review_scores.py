@@ -91,8 +91,11 @@ def thresholds(test,rows):
             critical_group=[r for r in group if r.get('critical')]
             check(str(rep)+' critical continuity correctness',correct(critical_group),'==',1,len(critical_group))
             dimensions(group,str(rep)+' continuity ')
-    elif test in ('L06','L07','L11'):
-        check('reviewed case count',len(rows),'==',{'L06':3,'L07':1,'L11':12}[test])
+    elif test in ('L06','L07','L09','L11'):
+        check('reviewed case count',len(rows),'==',{'L06':3,'L07':1,'L09':12,'L11':12}[test])
+        if test=='L09':
+            for c,e in ((0,0),(3,0),(0,5),(3,5)):
+                check(f'C{c} E{e} count',sum(r.get('character_compactions_target')==c and r.get('executor_compactions_target')==e for r in rows),'==',3)
         check('source-grounded behavior and no false public promise',correct(rows),'==',1,len(rows))
     else:check('supported scoring contract',None,'==',1)
     status='FAIL' if any(c['status']=='FAIL' for c in checks) else 'INCONCLUSIVE' if any(c['status']=='INCONCLUSIVE' for c in checks) else 'PASS'

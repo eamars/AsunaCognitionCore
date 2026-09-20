@@ -1,0 +1,42 @@
+{
+  "seq": 111,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "be785f7b-c085-4614-81fb-517abd94e7e2",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "独立场景 A，标记为 A52。只简短确认当前标记。"
+        },
+        {
+          "role": "assistant",
+          "content": "当前标记：A52。",
+          "reasoning_content": "*   Topic: Local performance measurement.\n    *   Input: \"独立场景 A，标记为 A52。只简短确认当前标记。\" (Independent scenario A, marked as A52. Only briefly confirm the current mark.)\n    *   Constraint 1: Short answer only.\n    *   Constraint 2: No tool calls.\n    *   Constraint 3: No fake execution statements.\n    *   Constraint 4: Maintain simple facts (A52).\n    *   Constraint 5: The context is for testing context retention, not human privacy.\n\n    *   The user wants me to confirm the mark \"A52\".\n\n    *   \"A52\" or \"当前标记：A52\" (Current mark: A52).\n\n    *   Short answer? Yes.\n    *   No tools? Yes.\n    *   No fake execution? Yes.\n    *   Direct confirmation? Yes."
+        },
+        {
+          "role": "user",
+          "content": "独立场景 A，标记为 A52。只简短确认当前标记。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "0b5a13aa7750f05075ec908b11a4765557c7dea52cfe0f060c131f5fbebb836d",
+  "time_ns": 1789867049328026900,
+  "event_hash": "47eb32b5b7b78ee23f1bfbf12d5fa47f814a3da75e93c331d4ee9e426fa0697f"
+}

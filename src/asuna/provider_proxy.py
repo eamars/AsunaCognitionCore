@@ -40,6 +40,7 @@ class ProviderProxy:
             def do_POST(self):
                 call_id = str(uuid.uuid4())
                 headers_sent=False;request_ref=None;upstream_submitted=False;chunks=[];started=time.perf_counter()
+                heartbeat_stop=threading.Event();heartbeat_failed=threading.Event();wire_lock=threading.Lock();heartbeat=None
                 try:
                     if self.path != '/v1/chat/completions':
                         raise PermissionError('UNREGISTERED_PROVIDER_PATH')
@@ -69,11 +70,31 @@ class ProviderProxy:
                     evidence.record('proxy.admitted',{'call_id':call_id,'request_ref':request_ref,'upstream_submitted':False})
                     self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Connection','close');self.end_headers()
                     self.wfile.write(b': ASUNA_LOCAL_QUEUE_ADMITTED_MODEL_RESULT_PENDING\n\n');self.wfile.flush();headers_sent=True
+                    # Native fetch has its own ~300s body-inactivity deadline.
+                    # SSE comments keep the local transport alive while queued
+                    # or buffering upstream output; they are never model text.
+                    # Actual response bytes remain durable before DSH receives
+                    # any model output or may execute a returned tool call.
+                    self.connection.settimeout(30)
+                    def keepalive():
+                        while not heartbeat_stop.wait(15):
+                            try:
+                                with wire_lock:
+                                    if heartbeat_stop.is_set():return
+                                    evidence.record('proxy.keepalive',{'call_id':call_id,'request_ref':request_ref,'kind':'local_SSE_comment','model_content':False})
+                                    self.wfile.write(b': ASUNA_LOCAL_TRANSPORT_WAITING_MODEL_RESULT_PENDING\n\n');self.wfile.flush()
+                            except Exception:
+                                heartbeat_failed.set();heartbeat_stop.set()
+                                try:self.connection.shutdown(2)
+                                except OSError:pass
+                                return
+                    heartbeat=threading.Thread(target=keepalive,daemon=True);heartbeat.start()
                     started = time.perf_counter()
                     chunks = []
                     first = None
                     first_content=None;decoder=codecs.getincrementaldecoder('utf-8')();pending=''
                     with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(cfg.get('transport_read_timeout_seconds',1800), connect=10), trust_env=False, follow_redirects=False) as client:
+                        if heartbeat_failed.is_set():raise ConnectionAbortedError('LOCAL_TRANSPORT_CLOSED_BEFORE_SUBMISSION')
                         evidence.record('provider.submission',{'call_id':call_id,'request_ref':request_ref,'queue_seconds':queued.wait_seconds})
                         upstream_submitted=True
                         with client.stream('POST', cfg['base_url'] + '/chat/completions', content=outgoing, headers={'Content-Type':'application/json'}) as response:
@@ -102,16 +123,24 @@ class ProviderProxy:
                                 self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
                                 self.send_header('Connection', 'close')
                                 self.end_headers()
-                            self.wfile.write(raw)
-                            self.wfile.flush()
+                            heartbeat_stop.set()
+                            with wire_lock:
+                                if heartbeat_failed.is_set():raise ConnectionAbortedError('LOCAL_TRANSPORT_OR_KEEPALIVE_AUDIT_FAILED')
+                                self.wfile.write(raw)
+                                self.wfile.flush()
                 except Exception as exc:
+                    heartbeat_stop.set()
                     try:
                         evidence.record('provider.error', {'call_id':call_id,'request_ref':request_ref,'type':type(exc).__name__,'reason':str(exc) if isinstance(exc,(ValueError,PermissionError)) else None,'upstream_submitted':upstream_submitted,'partial_response_utf8':b''.join(chunks).decode('utf-8',errors='replace'),'duration_seconds':time.perf_counter()-started})
                         if headers_sent:
-                            self.wfile.write(b'data: {"error":{"message":"ASUNA_PROVIDER_BOUNDARY_FAILED","type":"boundary_error","code":"ASUNA_PROVIDER_BOUNDARY_FAILED"}}\n\n');self.wfile.flush()
+                            with wire_lock:
+                                self.wfile.write(b'data: {"error":{"message":"ASUNA_PROVIDER_BOUNDARY_FAILED","type":"boundary_error","code":"ASUNA_PROVIDER_BOUNDARY_FAILED"}}\n\n');self.wfile.flush()
                         else:self.send_error(502, 'ASUNA_PROVIDER_BOUNDARY_FAILED')
                     except Exception:
                         self.close_connection = True
+                finally:
+                    heartbeat_stop.set()
+                    if heartbeat:heartbeat.join(31)
 
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

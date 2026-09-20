@@ -1,0 +1,33 @@
+{
+  "seq": 3,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "fff75d05-0cf1-4793-ae6c-ece2ebd1554c",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "This is a local deterministic HTTP transport fixture. It checks the installed DSH client boundary, not persona adherence or real model capability. Return the upstream fixture unchanged."
+        },
+        {
+          "role": "user",
+          "content": "probe transport"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "fd96623176a483ca61de826f14e3e4760669dccc164d9a0d8a4a436cc6f6914d",
+  "time_ns": 1789866803668783200,
+  "event_hash": "c09b4fb1699886e283fda3e1f2d63124e4cb83411b6a205cd9d65c037837989e"
+}

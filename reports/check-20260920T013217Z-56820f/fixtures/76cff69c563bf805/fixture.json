@@ -1,0 +1,39 @@
+{
+  "node_id": "tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_task_persist]",
+  "database": "asuna_v2_test_M1_c2fb8a9db329",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "c5bf807b216a005629ff68d9dc93f4a7950ae4b5c8fa4c53fdfcbf38f0e070b4",
+  "task_states": [
+    {
+      "_id": "task-ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "request_key": "task-ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "episode_id": "ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "7a5e056e-16e2-49ca-a0db-529d624b3aea",
+      "intent_revision": 1,
+      "goal": "复制受控文件",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-f70ce95ec9984a7fd3939fc597dffdc3"
+      ],
+      "state": "READY",
+      "fencing_token": 0,
+      "tool_steps": 0,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "e13b88c8-535b-4760-aecd-413384271267"
+    }
+  ],
+  "received_messages": []
+}

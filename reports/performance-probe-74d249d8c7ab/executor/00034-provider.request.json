@@ -1,0 +1,16 @@
+{
+  "seq": 34,
+  "type": "provider.request",
+  "payload": {
+    "call_id": "e3ff2640-9726-433f-84ff-7370754728aa",
+    "purpose": "tokenizer.count",
+    "method": "POST",
+    "url": "http://192.168.2.13:1919/v1/messages/count_tokens",
+    "body_utf8": "{\"messages\":[{\"content\":[{\"text\":\"这是第 1 次确认：青桥柜标记 CX81，只简短确认。\",\"type\":\"text\"}],\"role\":\"user\"},{\"content\":[{\"thinking\":\"用户要求简短确认第1次确认信息：青桥柜标记 CX81。需要不调用工具，不创造真实执行声明，保持简单事实。最终用中文简短回答。\\n\",\"type\":\"thinking\"},{\"text\":\"\\n\\n确认：青桥柜标记 CX81。\",\"type\":\"text\"}],\"role\":\"assistant\"},{\"content\":[{\"text\":\"这是第 2 次确认：青桥柜标记 CX81，只简短确认。\",\"type\":\"text\"}],\"role\":\"user\"}],\"model\":\"qwen38-next-uncensored-freetoken-vision\",\"system\":\"这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。\",\"thinking\":{\"type\":\"enabled\"}}",
+    "body_sha256": "b53ab0f9bbe5aebea0e8b87b53d4f6388f9ca24f5b9b88155122fdc83501e41a",
+    "token_render_visibility": "unavailable"
+  },
+  "prev_hash": "e5ea1eb24b4e8dd5005297b9268d0414b86dfecaf66764aa254e09bcbb339091",
+  "time_ns": 1789867080029246100,
+  "event_hash": "17b4e94b4408ca88f421b1a25c08ada6e0f52083d30d376085505ebadc654b0a"
+}

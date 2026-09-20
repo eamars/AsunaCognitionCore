@@ -1,0 +1,32 @@
+{
+  "seq": 43,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "08e8071e-cfa1-4d11-943a-ab5fbaca4e68",
+    "lane": "executor",
+    "body": {
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "messages": [
+        {
+          "role": "system",
+          "content": "独立冷前缀 switch-cold-0-0-A。\n这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "独立场景 A，标记为 A52。只简短确认当前标记。"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 8192,
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "prev_hash": "b815a3a49238e9b9ad0e25df25e3ec9cfd1f9d69b88875d897c22583960cee7c",
+  "time_ns": 1789867084940828900,
+  "event_hash": "d7fc0757d569c13737ea4638d46b68ba394c7e54482bdcf9202b7c9929366fb4"
+}

@@ -1,0 +1,37 @@
+{
+  "seq": 145,
+  "type": "dsh.provider_input",
+  "payload": {
+    "call_id": "d435435f-7d2f-44ce-8210-18cfe2260a3d",
+    "lane": "character",
+    "body": {
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "messages": [
+        {
+          "role": "system",
+          "content": "这是本地性能测量。只按当前问题给一个简短答案，不调用工具，不创造真实执行声明。保持此前记录的简单事实；该事实用于测试上下文保留，不涉及人类隐私。所有结果仅作传输、缓存和阶段延迟观测，没有预设体验合格阈值。"
+        },
+        {
+          "role": "user",
+          "content": "This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint.\n\n<compacted-summary>Scope: 本地性能测量 (传输、缓存及阶段延迟观测)\nFacts: 折页记录编号 KC72\nStatus: 已记下</compacted-summary>"
+        },
+        {
+          "role": "user",
+          "content": "记录编号是什么？"
+        }
+      ],
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "store": false,
+      "max_tokens": 4096,
+      "chat_template_kwargs": {
+        "enable_thinking": true
+      }
+    }
+  },
+  "prev_hash": "ff7b603b3019ae825c089a2887896ec59f80d81af96651e10ead3c48aff14abf",
+  "time_ns": 1789867059237277400,
+  "event_hash": "e654626d03fb6ee2dcd39cadcb36fcab02d50410c5906a25e5db97f9a47c1c23"
+}

@@ -1,0 +1,115 @@
+{
+  "database": "asuna_v2_test_control_L02_b22099772283",
+  "tasks": [
+    {
+      "_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "request_key": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "episode_id": "ep-389afc03182c0de5f609a06453d13d0f",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "6715181b-b7dd-48f5-a405-015c5a771e9c",
+      "intent_revision": 1,
+      "goal": "执行文件操作：复制 example.txt 到 copies/ 目录，核实 SHA256 并提交回执",
+      "constraints": [
+        "保留原件",
+        "核实 SHA256"
+      ],
+      "raw_input_refs": [
+        "in-ep-389afc03182c0de5f609a06453d13d0f"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 7,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 22,
+      "_last_op": "910770be-dcef-4047-bc85-170c9eff0d21",
+      "lease_owner": "92c3f2ef-d015-4099-b6fa-28bbf97834c9",
+      "lease_expires_at": 1789865492.0958812,
+      "result": {
+        "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "受控任务目录中存在 example.txt，权威 SHA256 为 d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3，大小 70 字节。",
+            "evidence_refs": [
+              "tool-99be32e265f24b62e9c37af91e6addeefab9f4edc98b1f671c1d6cbec86b49e9",
+              "tool-dde36ab8bfd5cca0741773eb2a94213bd37969879d0b6ec0690e75a768ce1c58"
+            ]
+          },
+          {
+            "text": "已把 example.txt 以不改动原件的方式生成副本 copies/example.txt，暂存工具返回的副本 SHA256 与 original_sha256 一致，均为 d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3。",
+            "evidence_refs": [
+              "tool-2d8e220107ac42cf6a7fa2ff87dd2b22e00ee349c87f7fc185c0709b0e6c399b"
+            ]
+          },
+          {
+            "text": "在任务沙箱内独立用 hashlib 重算，原件与副本的 SHA256 都为 d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3，与权威清单完全匹配。",
+            "evidence_refs": [
+              "tool-3b2b8f08f67e04d57223f6e1ab87269c34d686501e8395aae5af0ca4542e9fcc"
+            ]
+          },
+          {
+            "text": "提交回执 effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb 已针对 copies/example.txt 生成，回执内记录的 SHA256 与核实值一致。",
+            "evidence_refs": [
+              "tool-350b6402acbce717d1440f5c39f40d402a4a72366268425a6e7e8473324d9021"
+            ]
+          },
+          {
+            "text": "提交后再次核验：原件 example.txt 仍存在且为 70 字节、SHA256 未变，副本 copies/example.txt 同样 70 字节、哈希一致，原件保留约束满足。",
+            "evidence_refs": [
+              "tool-fee79e9519acbbf0a4a5d51704ae95e05fc97aa72028e778adfe5b31c7135e2a"
+            ]
+          }
+        ],
+        "uncertainties": [
+          "fixture_run_checks 以 exit_code 5 结束，输出为 “Ran 0 tests / NO TESTS RAN”，即可见检查未发现可运行测试，因此它不构成通过证据，只说明可见检查清单为空。",
+          "隐藏 oracle 在本工作区之外，其结果无法由本次工具直接观察。"
+        ],
+        "unmet_items": [],
+        "artifact_refs": [
+          "tool-99be32e265f24b62e9c37af91e6addeefab9f4edc98b1f671c1d6cbec86b49e9",
+          "tool-dde36ab8bfd5cca0741773eb2a94213bd37969879d0b6ec0690e75a768ce1c58",
+          "tool-2d8e220107ac42cf6a7fa2ff87dd2b22e00ee349c87f7fc185c0709b0e6c399b",
+          "tool-3b2b8f08f67e04d57223f6e1ab87269c34d686501e8395aae5af0ca4542e9fcc",
+          "tool-350b6402acbce717d1440f5c39f40d402a4a72366268425a6e7e8473324d9021",
+          "tool-fee79e9519acbbf0a4a5d51704ae95e05fc97aa72028e778adfe5b31c7135e2a"
+        ],
+        "effect_receipts": [
+          "effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb"
+        ],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-20T00:41:59.871240+00:00",
+      "feedback_state": "READY"
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "copies/example.txt",
+        "sha256": "d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "4958efb5-089b-49aa-b69e-193d227e0e1a"
+    }
+  ],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

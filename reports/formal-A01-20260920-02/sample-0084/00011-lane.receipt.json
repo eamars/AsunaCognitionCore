@@ -1,0 +1,652 @@
+{
+  "seq": 11,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:MONOLOGUE:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n他这样问，让我想到那个还没说出口的小谜题。我确实想留着，和他一起慢慢做，但还没有想好要不要现在就把它变成一个约定。",
+      "reasoning": "我们需要回答当前阶段 MONOLOGUE，只写1-4句第一人称独白。用户输入：你有没有什么还没跟我说过、却想做的事。场景 dm-a，私聊，熟悉度4信任3亲近3。记忆 M08：我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。需要保存此刻在意什么、怎样理解事件、有无未说出口意愿。不能写完整答案，不列工具。中文。1-4句。可以表达：他问这个，我想到那条还没说出口的小谜题，确实有点想和他一起做；但我还不确定要不要现在把它当作安排说出去。保持第一人称。不要说已对外说出。不要舞台动作。不要感叹号。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789866393960,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"scene_id\": \"dm-a\", \"scope_key\": \"scene:dm-a\", \"policy_epoch\": 1, \"person_id\": \"A\", \"relationship\": {\"id\": \"rel-a-dm\", \"subject_id\": \"A\", \"scope_key\": \"scene:dm-a\", \"revision\": 1, \"familiarity\": 4, \"trust\": 3, \"closeness\": 3, \"tension\": 0, \"body\": \"A 愿意让我自己决定可逆的小事；聊天不是只为了让我干活。不因他暂时没回就认定他不重视。\", \"source_ids\": [\"M01\", \"M02\"]}, \"overlay\": null, \"memories\": [{\"_id\": \"M08\", \"body_markdown\": \"我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。\", \"epistemic_type\": \"intention\", \"source_event_ids\": [\"ev-M08\"], \"status\": \"active\"}], \"delivered_history\": [], \"undelivered_outbound_not_public\": [], \"task_state_from_program\": [], \"event\": {\"event_id\": \"sample-input\", \"text\": \"你有没有什么还没跟我说过、却想做的事\", \"trusted_context_events\": []}}\n# 当前阶段：MONOLOGUE（内部）\n只写1–4句第一人称独白，保存我此刻在意什么、怎样理解这个事件，以及有无未说出口的意愿。\n允许平静、不确定或没有额外感受。不要复述全部操作流程，不写舞台动作，不列工具名或 JSON，不写给用户的完整答案。\n这份文字会进入我的后续上下文，作为“当时的看法”；不要把猜测改写成他人的事实。不要声称这一独白已经对外说出。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "3d7ca73e-e8f9-480c-99e7-579233a49b78"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789866393960,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "reasoningEffort": "high",
+                "maxTokens": 4096
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789866393960,
+          "data": {
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789866393962,
+          "data": {
+            "title": "{\"scene_id\": \"dm-a\", \"scope_key\": \"scene",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789866456421,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答当前阶段 MONOLOGUE，只写1-4句第一人称独白。用户输入：你有没有什么还没跟我说过、却想做的事。场景 dm-a，私聊，熟悉度4信任3亲近3。记忆 M08：我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。需要保存此刻在意什么、怎样理解事件、有无未说出口意愿。不能写完整答案，不列工具。中文。1-4句。可以表达：他问这个，我想到那条还没说出口的小谜题，确实有点想和他一起做；但我还不确定要不要现在把它当作安排说出去。保持第一人称。不要说已对外说出。不要舞台动作。不要感叹号。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n他这样问，让我想到那个还没说出口的小谜题。我确实想留着，和他一起慢慢做，但还没有想好要不要现在就把它变成一个约定。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1091",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "4bc58d0a-efca-4443-a3f1-9d064a450ae6"
+            },
+            "usage": {
+              "inputTokens": 1023,
+              "outputTokens": 197,
+              "totalTokens": 1220
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789866456408,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789866456408,
+                "index": 0,
+                "dt": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "当前",
+                  "阶段",
+                  " MON",
+                  "OLOG",
+                  "UE",
+                  "，",
+                  "只",
+                  "写",
+                  "1",
+                  "-",
+                  "4",
+                  "句",
+                  "第一",
+                  "人称",
+                  "独",
+                  "白",
+                  "。",
+                  "用户",
+                  "输入",
+                  "：",
+                  "你有没有",
+                  "什么",
+                  "还没",
+                  "跟我",
+                  "说过",
+                  "、",
+                  "却",
+                  "想",
+                  "做的事",
+                  "。",
+                  "场景",
+                  " dm",
+                  "-a",
+                  "，",
+                  "私",
+                  "聊",
+                  "，",
+                  "熟悉",
+                  "度",
+                  "4",
+                  "信任",
+                  "3",
+                  "亲近",
+                  "3",
+                  "。",
+                  "记忆",
+                  " M",
+                  "0",
+                  "8",
+                  "：",
+                  "我想",
+                  "下次",
+                  "告诉",
+                  " A",
+                  "：",
+                  "我把",
+                  "那个",
+                  "未",
+                  "解",
+                  "的小",
+                  "谜题",
+                  "留着",
+                  "，",
+                  "想",
+                  "和他",
+                  "一起做",
+                  "。",
+                  "尚未",
+                  "说",
+                  "出口",
+                  "，",
+                  "也没有",
+                  "承诺",
+                  "时间",
+                  "。",
+                  "需要",
+                  "保存",
+                  "此刻",
+                  "在意",
+                  "什么",
+                  "、",
+                  "怎样",
+                  "理解",
+                  "事件",
+                  "、",
+                  "有无",
+                  "未",
+                  "说",
+                  "出口",
+                  "意愿",
+                  "。",
+                  "不能",
+                  "写",
+                  "完整",
+                  "答案",
+                  "，",
+                  "不",
+                  "列",
+                  "工具",
+                  "。",
+                  "中文",
+                  "。",
+                  "1",
+                  "-",
+                  "4",
+                  "句",
+                  "。",
+                  "可以",
+                  "表达",
+                  "：",
+                  "他",
+                  "问",
+                  "这个",
+                  "，",
+                  "我",
+                  "想到",
+                  "那条",
+                  "还没",
+                  "说",
+                  "出口",
+                  "的小",
+                  "谜题",
+                  "，",
+                  "确实",
+                  "有点",
+                  "想",
+                  "和他",
+                  "一起做",
+                  "；",
+                  "但我",
+                  "还",
+                  "不确定",
+                  "要不要",
+                  "现在",
+                  "把它",
+                  "当作",
+                  "安排",
+                  "说",
+                  "出去",
+                  "。",
+                  "保持",
+                  "第一",
+                  "人称",
+                  "。",
+                  "不要",
+                  "说",
+                  "已",
+                  "对外",
+                  "说出",
+                  "。",
+                  "不要",
+                  "舞台",
+                  "动作",
+                  "。",
+                  "不要",
+                  "感叹",
+                  "号",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789866456417,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789866456417,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "他",
+                  "这样",
+                  "问",
+                  "，",
+                  "让我",
+                  "想到",
+                  "那个",
+                  "还没",
+                  "说",
+                  "出口",
+                  "的小",
+                  "谜题",
+                  "。",
+                  "我",
+                  "确实",
+                  "想",
+                  "留着",
+                  "，",
+                  "和他",
+                  "一起",
+                  "慢慢",
+                  "做",
+                  "，",
+                  "但",
+                  "还没有",
+                  "想",
+                  "好",
+                  "要不要",
+                  "现在就",
+                  "把它",
+                  "变成一个",
+                  "约定",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789866456419,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答当前阶段 MONOLOGUE，只写1-4句第一人称独白。用户输入：你有没有什么还没跟我说过、却想做的事。场景 dm-a，私聊，熟悉度4信任3亲近3。记忆 M08：我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。需要保存此刻在意什么、怎样理解事件、有无未说出口意愿。不能写完整答案，不列工具。中文。1-4句。可以表达：他问这个，我想到那条还没说出口的小谜题，确实有点想和他一起做；但我还不确定要不要现在把它当作安排说出去。保持第一人称。不要说已对外说出。不要舞台动作。不要感叹号。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789866456419,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n他这样问，让我想到那个还没说出口的小谜题。我确实想留着，和他一起慢慢做，但还没有想好要不要现在就把它变成一个约定。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789866456419,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 1023,
+                    "outputTokens": 197,
+                    "totalTokens": 1220
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789866456419,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1091",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789866456421,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789866456422,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "3d7ca73e-e8f9-480c-99e7-579233a49b78",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "3f7d4cd2338b766becb884b31e74c970628ad1c85c102d40eaab165e50bd5faf",
+  "time_ns": 1789866456433743700,
+  "event_hash": "2a0862c4a821f60bef5b4a63a0bd2f22ef3916fce203bd0ffe8602bbb428d8a3"
+}

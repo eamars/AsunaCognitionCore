@@ -1,0 +1,104 @@
+{
+  "seq": 7,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a40e643ab568c4f6ea0b1030b45262e6b924fb7bf97b4913766ec2fb8fbcb329",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "M11",
+      "M08"
+    ],
+    "ranks": {
+      "M11": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      },
+      "M08": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "lexical": 2,
+          "pending_backread": true
+        }
+      },
+      "M09": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M07": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M02": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M01": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M11",
+      "M08",
+      "M01",
+      "M02",
+      "M07",
+      "M09"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M09",
+      "M08",
+      "M07",
+      "M02",
+      "M01"
+    ],
+    "cache_key": {
+      "scope": "scene:dm-a",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "a40e643ab568c4f6ea0b1030b45262e6b924fb7bf97b4913766ec2fb8fbcb329",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "5833c580b6ebd5b4c66665ec0864e363e29b016feed19cc258d2671a9913ee2b"
+    },
+    "cache_key_sha256": "408af3b0552b48e6830b9c362cfdf741818f22c463c8746d4dc8bcfa035ac6d4",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "0c2b483e3aeee3d2246906d88ea76d1411ba9c5dbd7d4878bd8cbc2f0bee9964",
+  "time_ns": 1789865330630180000,
+  "event_hash": "ed58d203a1d5f98e9e5083416865e035b94a2b8b088d13706d2633866e13de87"
+}

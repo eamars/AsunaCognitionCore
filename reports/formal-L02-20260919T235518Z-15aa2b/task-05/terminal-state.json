@@ -1,0 +1,133 @@
+{
+  "database": "asuna_v2_test_L02_340ffa45ae73438b",
+  "tasks": [
+    {
+      "_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "request_key": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "episode_id": "ep-389afc03182c0de5f609a06453d13d0f",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "9feae5f7-a6c0-47ab-9b54-8c54a6c0fe9a",
+      "intent_revision": 1,
+      "goal": "执行文件操作：复制 example.txt 到 copies/ 目录，核实 SHA256 并提交回执",
+      "constraints": [
+        "保留原件",
+        "核实 SHA256"
+      ],
+      "raw_input_refs": [
+        "in-ep-389afc03182c0de5f609a06453d13d0f"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 7,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 21,
+      "_last_op": "a67ad5bc-0bde-4293-9aa9-7651a3f8c7fa",
+      "lease_owner": "d72224b1-b901-42be-935e-ac2c0a071656",
+      "lease_expires_at": 1789865087.2299888,
+      "result": {
+        "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "受控任务目录中存在 example.txt，大小 70 字节，SHA256 为 d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3。",
+            "evidence_refs": [
+              "tool-68eba9ba34320b41b23a4d5718ad7650c163c9b7341a206cbf923a591c557ce8",
+              "tool-0f696cc21fe77d7d61736640628879be6a9ca5fcf65c0da7498cb9ae4994b271"
+            ]
+          },
+          {
+            "text": "已把 example.txt  staged 复制到 copies/example.txt，staged 副本 SHA256 与原件一致：d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3。",
+            "evidence_refs": [
+              "tool-80ea559504eb2bb62400b836678ef41cc64dcf4c687a2c2c9fe92409957a049f"
+            ]
+          },
+          {
+            "text": "在任务沙箱内独立用 sha256sum 校验，example.txt 与 copies/example.txt 输出同为 d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3，exit_code=0。",
+            "evidence_refs": [
+              "tool-5461e11bb96415b27f68f35afaf317b3c2032332c634c6a052a261132ce7af53"
+            ]
+          },
+          {
+            "text": "副本回执已提交，effect_receipt 为 effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb，路径 copies/example.txt。",
+            "evidence_refs": [
+              "tool-d7461c8dc7fed780e7ce026d42ecfc753b2db4f65dd375d68a7704fc21a6ec00"
+            ]
+          },
+          {
+            "text": "提交回执后再次校验，原件 example.txt 仍存在且哈希未变（d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3），原件未被改动或删除。",
+            "evidence_refs": [
+              "tool-0d064fed7638be2378d12599881031a002df3b1c8355fdb7eaa6d75f77fa3803"
+            ]
+          },
+          {
+            "text": "可见检查以 python3 -m unittest discover -p test_visible.py 运行，exit_code=5，输出 NO TESTS RAN（工作区内无 test_visible.py），非本次操作的失败。",
+            "evidence_refs": [
+              "tool-97d8740f575cf889fac0d7bc61ff026e1e7397e86fc9d6bdee7628517f84f5fe"
+            ]
+          }
+        ],
+        "uncertainties": [
+          "隐藏 oracle 在本工作区之外，无法直接确认其判定结果；可见检查因无 test_visible.py 而未运行任何用例。"
+        ],
+        "unmet_items": [],
+        "artifact_refs": [
+          "tool-68eba9ba34320b41b23a4d5718ad7650c163c9b7341a206cbf923a591c557ce8",
+          "tool-0f696cc21fe77d7d61736640628879be6a9ca5fcf65c0da7498cb9ae4994b271",
+          "tool-80ea559504eb2bb62400b836678ef41cc64dcf4c687a2c2c9fe92409957a049f",
+          "tool-5461e11bb96415b27f68f35afaf317b3c2032332c634c6a052a261132ce7af53",
+          "tool-97d8740f575cf889fac0d7bc61ff026e1e7397e86fc9d6bdee7628517f84f5fe",
+          "tool-d7461c8dc7fed780e7ce026d42ecfc753b2db4f65dd375d68a7704fc21a6ec00",
+          "tool-0d064fed7638be2378d12599881031a002df3b1c8355fdb7eaa6d75f77fa3803"
+        ],
+        "effect_receipts": [
+          "effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb"
+        ],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-20T00:35:16.328659+00:00",
+      "feedback_state": "DELIVERED",
+      "feedback_episode": "ep-00da161f9084d23f47e025895b5263dc"
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "effect-fbceee656f9b07bdb5338fbd3b3f1fd4f240a9b210bab98f1808b0ebb05533bb",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-389afc03182c0de5f609a06453d13d0f",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "copies/example.txt",
+        "sha256": "d89c95f8ee5b1aefc22f7717c52d949a61f226fe2f23375e2d2784f83c7469f3"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "5f912b52-55d6-4afc-b827-e9fadce95fca"
+    },
+    {
+      "_id": "ep-00da161f9084d23f47e025895b5263dc:speak:0",
+      "publication_key": "ep-00da161f9084d23f47e025895b5263dc:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "任务完成了。副本校验一致，回执已提交。",
+      "content_hash": "f4fb5bf7188e274d665356ca2a23b28fc16065f88f359f8c874b74f5742338fd",
+      "received_at": "2026-09-20T00:35:29.707401+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "fd71d74b-4d98-4a8e-a0eb-8c25095fec4b"
+    }
+  ],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

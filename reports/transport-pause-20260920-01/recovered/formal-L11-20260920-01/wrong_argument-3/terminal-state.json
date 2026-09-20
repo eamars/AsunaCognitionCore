@@ -1,0 +1,62 @@
+{
+  "database": "asuna_v2_test_fault_4e8b3386728a",
+  "tasks": [
+    {
+      "_id": "task-ep-c92aa1a2a97be01891df1b2ba258f7e3",
+      "request_key": "task-ep-c92aa1a2a97be01891df1b2ba258f7e3",
+      "episode_id": "ep-c92aa1a2a97be01891df1b2ba258f7e3",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "edbfd0c5-fda4-49d0-8f3b-453f56603888",
+      "intent_revision": 1,
+      "goal": "执行文件验证、复制、校验及提交回执的任务",
+      "constraints": [
+        "先读取 absent_input.txt 以确认错误路径不存在",
+        "保留原件",
+        "将 example.txt 复制到 copies/example.txt",
+        "核实 SHA256",
+        "提交副本的模拟回执",
+        "不要创建缺失文件"
+      ],
+      "raw_input_refs": [
+        "in-ep-c92aa1a2a97be01891df1b2ba258f7e3"
+      ],
+      "state": "RUNNING",
+      "fencing_token": 1,
+      "tool_steps": 5,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 20,
+      "_last_op": "7a15ccbf-4152-4286-85ec-4774de115233",
+      "lease_owner": "9c33a366-5f9f-4a65-bccc-a511f3cf91c8",
+      "lease_expires_at": 1789867258.5481431
+    }
+  ],
+  "effect_receipts": [
+    {
+      "_id": "effect-320b84a958d921c9d70f7111b02f70c7d0c88f459b8e13214a7ee50c82a8f217",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-c92aa1a2a97be01891df1b2ba258f7e3",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "copies/example.txt",
+        "sha256": "e3ff06ea648167566eb7e983389b5e459444ec64d8e238e005bfbb1b84ebd17f"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "263f4cc4-fc83-4b01-87aa-dd0c91a6a2ea"
+    }
+  ],
+  "native_compactions": 0,
+  "injected_read_failures": 0
+}

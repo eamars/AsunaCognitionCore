@@ -1,0 +1,49 @@
+{
+  "report_kind": "milestone",
+  "milestone": "M6f",
+  "status": "INCONCLUSIVE",
+  "evidence": [
+    {
+      "artifact_path": "reports/check-20260920T001024Z-4d56a6/result.json",
+      "sha256": "f9f5fdcdbacaef2598de6246694df49d0d7a73674143b3e480c2754f9f9a20f3"
+    },
+    {
+      "artifact_path": "reports/noise-load-probe-7120c99405/result.json",
+      "sha256": "832bb47c2bcb3e1df498b77a6db06209da5e709a1138e1be46496874a6e951f5"
+    },
+    {
+      "artifact_path": "reports/compaction-audit-probe-77476a2b96/result.json",
+      "sha256": "aeb819243e343c2d02bf43a94f5da1dd1d83d3f44fb9af4caf8a013e761fcb9e"
+    },
+    {
+      "artifact_path": "reports/export-probe-c440d90a76/result.json",
+      "sha256": "b8fa7c7575c024c579cf3dcd96860afdb835689004c59d5df8b03e4834c61996"
+    },
+    {
+      "artifact_path": "reports/compaction-evidence-correction-20260920-01/correction.json",
+      "sha256": "c6c57d1c39bd9add3dc2902a441e06db0fc80f51947bd085f7f5ac3199a5bb45"
+    },
+    {
+      "artifact_path": "reports/ui-qa-correction-20260920-01/correction.json",
+      "sha256": "01207ca6ae6fa4c629c49adce5ab0ea20378073f3dbf5e305c0c3123d9fac27c"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-03/result.json",
+      "sha256": "7842e93d08cc282032c59eded02bbd1271a23f532524bc27f0a9429c14dae7cb"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-04/result.json",
+      "sha256": "7a446bff638e0f6cf17cc2ad4c7e88e81b0354a0a85b6e4ca5ed40bbba1ee8c3"
+    }
+  ],
+  "active_matrices": [
+    "formal-A01-20260920-02",
+    "formal-A02-20260920-01",
+    "formal-L02-20260919T235518Z-15aa2b"
+  ],
+  "limitations": [
+    "Remaining formal matrices and human ratings incomplete.",
+    "Browser refused machine JSON navigation; actual request and revision/compaction views are verified.",
+    "Older multi-compaction Mongo audit projection retained only the final result; raw native receipts contained all replacements and have append-only correction evidence."
+  ]
+}

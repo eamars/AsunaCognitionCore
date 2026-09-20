@@ -1,0 +1,35 @@
+{
+  "scope": "historical per-operation native compaction audit projection",
+  "finding": "Older DshLane stored body.compaction (last result) as one Mongo compaction.native event even when body.compactions held multiple actual replacements. Raw native lane receipts retain every result and provider captures retain summary calls.",
+  "example": {
+    "probe": "noise-load-probe-828cf4480a",
+    "actual_native_results": 2,
+    "old_projected_events": 1,
+    "exact_reconstructed_provider_joins": 2
+  },
+  "fix": "Each native result now gets its own bracket events, actual request/response refs and exact summary-content join; future live probe separately required.",
+  "additional_failed_probe_diagnosis": {
+    "probe": "matrix-probe-20cf02dac0",
+    "last_request_purpose": "compaction",
+    "request_to_native_error_seconds": 303.079119,
+    "inference": "Consistent with the old DSH 300-second response-header deadline; no provider terminal row exists, so this is not proof of model weakness or a confirmed server-side error."
+  },
+  "sources": [
+    {
+      "artifact_path": "reports/noise-load-probe-828cf4480a/noise-0001/00113-lane.receipt.json",
+      "sha256": "8daae09612f9464bd559be45f4acb768200a4286f8a141caadd8161fe1771378"
+    },
+    {
+      "artifact_path": "reports/compaction-audit-probe-77476a2b96/reconstructed-records.json",
+      "sha256": "d06080a9e82c224b0bea6728bc5d146007ba3f39175222b3491e2aa71cc57c9c"
+    },
+    {
+      "artifact_path": "reports/matrix-probe-20cf02dac0/c3-e5-1/00238-provider.request.json",
+      "sha256": "bcac8f3f8e955dfec6da4446832350dac46c7c5e9a25030800dfd63dbc933b72"
+    },
+    {
+      "artifact_path": "reports/matrix-probe-20cf02dac0/c3-e5-1/00239-lane.receipt.json",
+      "sha256": "03c024edc1e803a725a39a4c3c24ed3dc34db7b79944b06903eb9944c8713b87"
+    }
+  ]
+}

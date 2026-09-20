@@ -1,0 +1,51 @@
+{
+  "test_id": "PROBE-UI-REVISION",
+  "status": "INCONCLUSIVE",
+  "executed_at": "2026-09-20T00:10:18.522376+00:00",
+  "mode": "in_app_browser_actual_preserved_Mongo_rollback_trace",
+  "checks": {
+    "revision_diff_DOM": "PASS",
+    "parent_scope_source_and_write_status": "PASS",
+    "machine_JSON_link_opens": "BLOCKED_BY_CLIENT",
+    "console_warnings_errors": 0,
+    "horizontal_overflow": false
+  },
+  "viewport": {
+    "innerWidth": 501,
+    "contentWidth": 486
+  },
+  "browser_actions": [
+    "auditTab.goto(revision-v3.html)",
+    "click rollback stream and state.commit sequence 2",
+    "DOM snapshot shows parent and actual unified text diff",
+    "screenshot visually inspected",
+    "new tab goto observed revision-v3.json link target"
+  ],
+  "evidence": [
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/revision-v3.jpg",
+      "sha256": "c1e38bbe0d5fd02b847be982c3bbf2d14b9385a4012d703f0c7ad0fe61db5ec1"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/revision-v3.html",
+      "sha256": "bd9b85e5e74da84516f492e0b55637d6176a33e434b3782aa930e979b0f1d4d7"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/revision-v3.json",
+      "sha256": "a3135f99833aa06f57be305d3077b2f825a3dea9846a0395ec9bfedb2f743a29"
+    },
+    {
+      "artifact_path": "src/asuna/audit.py",
+      "sha256": "049ddd48a61f14c3f3fa7ce878b674b9c4a3218198540110a03d3cf77bd492a6"
+    }
+  ],
+  "limitations": [
+    "Browser refused JSON document navigation with net::ERR_BLOCKED_BY_CLIENT; neither UI JSON navigation nor file download is verified.",
+    "Revision diff, parent/source/scope, and screenshot remain verified.",
+    "A plain JSON companion exists; CLI JSON inspection/export is separate from Browser navigation."
+  ],
+  "supersedes": {
+    "artifact_path": "reports/ui-qa-20260920-02/result.json",
+    "sha256": "3c22510f2d19e45d695ec8e453da19366303c1cb8f2d04dde51f3dea5051daf8"
+  }
+}

@@ -29,6 +29,35 @@ def provider_finish(raw):
     return result
 
 
+def compaction_audit_records(body,calls,evidence):
+    """Join every native replacement to its exact same-lane summary output."""
+    records=[];used=set()
+    for result in body.get('compactions',[]) or ([body['compaction']] if body.get('compaction') else []):
+        expected=''.join(b.get('text','') for b in result.get('summary',[]) if b.get('type')=='text')
+        candidates=[]
+        for i,call in enumerate(calls):
+            if i in used:continue
+            messages=call['body'].get('messages',[])
+            if not messages or not str(messages[-1].get('content','')).startswith('ASUNA_COMPACTION_V1\n'):continue
+            parts=[]
+            for line in call['raw'].splitlines():
+                if line.startswith('data: ') and line[6:].strip()!='[DONE]':
+                    for choice in json.loads(line[6:]).get('choices',[]):
+                        content=choice.get('delta',{}).get('content')
+                        if isinstance(content,str):parts.append(content)
+            if ''.join(parts)==expected:candidates.append((i,call))
+        record={'result':result,'events':[e for e in body.get('compaction_events',[]) if e.get('data',{}).get('compactionId')==result.get('compactionId')],
+                'request_refs':[],'response_refs':[],'provider_summary_join':'UNAVAILABLE'}
+        if candidates:
+            i,call=candidates[0];used.add(i)
+            for key,field in (('request_ref','request_refs'),('response_ref','response_refs')):
+                path=evidence.root/call[key]
+                record[field].append({'artifact_path':path.resolve().relative_to(ROOT).as_posix(),'sha256':sha(path.read_bytes())})
+            record.update(call_id=call['call_id'],provider_summary_join='EXACT_CONTENT_AND_OPERATION')
+        records.append(record)
+    return records
+
+
 class DshLane:
     """Replaceable lane: pinned SDK boot + narrowly scoped native DSH operations."""
     def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None, broker_token=None):
@@ -134,10 +163,11 @@ class DshLane:
             body=response.json()
             self.evidence.record('lane.receipt',{'lane':self.lane,'operation':operation,'status_code':response.status_code,'body':body})
             response.raise_for_status()
-            if body.get('compaction'):
-                self.compact_pending.discard(session)
-                self.store.audit(operation,'compaction.native',{'result':body['compaction'],'events':body.get('compaction_events',[])})
             calls=self.proxy.calls[before:]
+            if body.get('compaction') or body.get('compactions'):
+                self.compact_pending.discard(session)
+                for record in compaction_audit_records(body,calls,self.evidence):
+                    self.store.audit(operation,'compaction.native',record)
             refs=[{'artifact_path':(self.evidence.root/c['request_ref']).resolve().relative_to(ROOT).as_posix(),'sha256':sha((self.evidence.root/c['request_ref']).read_bytes())} for c in calls]
             finish=body['finish_reason']
             if finish=='completed':finish=(provider_finish(calls[-1]['raw']) if calls else None) or 'unverified_provider_finish'

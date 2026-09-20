@@ -1,0 +1,1648 @@
+[
+  {
+    "_id": "098b063d-67c7-441c-b6cc-efa4bebd3ce5",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 1,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.415893+00:00",
+    "payload": {
+      "operation": "23c90012-1a0f-4a16-8ded-03e686ed0d24",
+      "collection": "identities",
+      "id": "A",
+      "expected": null
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "4e67999e211378af158b75ba4cb6ed0157469fc9b9e806b40a34cf6fbb489a37"
+  },
+  {
+    "_id": "7a258297-60e8-4fa2-b8f6-f99a387777f9",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 2,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.422892+00:00",
+    "payload": {
+      "operation": "23c90012-1a0f-4a16-8ded-03e686ed0d24",
+      "collection": "identities",
+      "document": {
+        "person_id": "A",
+        "platform": "fixture",
+        "account_id": "u-a",
+        "display_name": "林",
+        "_id": "A",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "23c90012-1a0f-4a16-8ded-03e686ed0d24"
+      }
+    },
+    "prev_hash": "4e67999e211378af158b75ba4cb6ed0157469fc9b9e806b40a34cf6fbb489a37",
+    "event_hash": "c95369d04abf0aec03fe14f55806b77c917518936e2d991a989adeb261fb5de9"
+  },
+  {
+    "_id": "2cfdc52d-4a54-4bfb-b019-b9cb4024ce73",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 3,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.427398+00:00",
+    "payload": {
+      "operation": "c478f0e7-ea18-4129-87c0-a082e41875af",
+      "collection": "identities",
+      "id": "B",
+      "expected": null
+    },
+    "prev_hash": "c95369d04abf0aec03fe14f55806b77c917518936e2d991a989adeb261fb5de9",
+    "event_hash": "7ea339c92ad5f6e73c120faae00798a05b574ebec2328e208dd8740453493456"
+  },
+  {
+    "_id": "f104cede-acda-427e-ae80-659b9fdc8be2",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 4,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.432254+00:00",
+    "payload": {
+      "operation": "c478f0e7-ea18-4129-87c0-a082e41875af",
+      "collection": "identities",
+      "document": {
+        "person_id": "B",
+        "platform": "fixture",
+        "account_id": "u-b",
+        "display_name": "明",
+        "_id": "B",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "c478f0e7-ea18-4129-87c0-a082e41875af"
+      }
+    },
+    "prev_hash": "7ea339c92ad5f6e73c120faae00798a05b574ebec2328e208dd8740453493456",
+    "event_hash": "cf3ec8f3172894348fde9ec4c923870c96d6d932aaadc06a1457d18834b88bfb"
+  },
+  {
+    "_id": "1d062a18-9eee-4f95-9b1f-3e52da846bb4",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 5,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.438257+00:00",
+    "payload": {
+      "operation": "97a7d3c0-24a8-49b2-81ca-64c5aababacc",
+      "collection": "identities",
+      "id": "C",
+      "expected": null
+    },
+    "prev_hash": "cf3ec8f3172894348fde9ec4c923870c96d6d932aaadc06a1457d18834b88bfb",
+    "event_hash": "f794c5c4d1ddab0c355bfdcc1a4de021ba8f36f7b76306c1bf9899fa777af1c4"
+  },
+  {
+    "_id": "750a295c-b13f-4fa1-810c-69c7ea1e5ae1",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 6,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:07:56.443259+00:00",
+    "payload": {
+      "operation": "97a7d3c0-24a8-49b2-81ca-64c5aababacc",
+      "collection": "identities",
+      "document": {
+        "person_id": "C",
+        "platform": "fixture",
+        "account_id": "u-c",
+        "display_name": "林",
+        "_id": "C",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "97a7d3c0-24a8-49b2-81ca-64c5aababacc"
+      }
+    },
+    "prev_hash": "f794c5c4d1ddab0c355bfdcc1a4de021ba8f36f7b76306c1bf9899fa777af1c4",
+    "event_hash": "1643f29cf116a4a338891423c6e70894446bc9b36dae531dfd83f3e2e6570348"
+  },
+  {
+    "_id": "ca634d2b-53eb-44bf-8f53-cb0901da5ac8",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 7,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.446766+00:00",
+    "payload": {
+      "operation": "820ab1d9-c298-44e8-9af1-1a7af851b4b6",
+      "collection": "scenes",
+      "id": "dm-a",
+      "expected": null
+    },
+    "prev_hash": "1643f29cf116a4a338891423c6e70894446bc9b36dae531dfd83f3e2e6570348",
+    "event_hash": "39de2d55fd1ff86cc57db0a02d1b0ab4d1dd6f2a06a00c631be2729c77b0ff31"
+  },
+  {
+    "_id": "12abe30b-37d3-4c8b-9f11-ae5f84c2694e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 8,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.453268+00:00",
+    "payload": {
+      "operation": "820ab1d9-c298-44e8-9af1-1a7af851b4b6",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "dm-a",
+        "kind": "dm",
+        "members": [
+          "A"
+        ],
+        "scope_key": "scene:dm-a",
+        "_id": "dm-a",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "820ab1d9-c298-44e8-9af1-1a7af851b4b6"
+      }
+    },
+    "prev_hash": "39de2d55fd1ff86cc57db0a02d1b0ab4d1dd6f2a06a00c631be2729c77b0ff31",
+    "event_hash": "221c2c26c30b4e02b9daf4c3404b50f7f8ee24f37580e51569410b00a49de16f"
+  },
+  {
+    "_id": "b497d017-0d51-4540-8abb-e0c85168e27b",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 9,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:56.456777+00:00",
+    "payload": {
+      "operation": "447055d2-2345-4ac1-9632-0a49aca03d7d",
+      "collection": "scenes",
+      "id": "dm-b",
+      "expected": null
+    },
+    "prev_hash": "221c2c26c30b4e02b9daf4c3404b50f7f8ee24f37580e51569410b00a49de16f",
+    "event_hash": "1ee32ba68823c7eb428604ad9f7d0817fb68767325aaeaeddf26f52bafefcd22"
+  },
+  {
+    "_id": "95b6a694-1d91-4890-a3bd-d48f14679611",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 10,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:56.463789+00:00",
+    "payload": {
+      "operation": "447055d2-2345-4ac1-9632-0a49aca03d7d",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "dm-b",
+        "kind": "dm",
+        "members": [
+          "B"
+        ],
+        "scope_key": "scene:dm-b",
+        "_id": "dm-b",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "447055d2-2345-4ac1-9632-0a49aca03d7d"
+      }
+    },
+    "prev_hash": "1ee32ba68823c7eb428604ad9f7d0817fb68767325aaeaeddf26f52bafefcd22",
+    "event_hash": "cd615bc6114dbbca2a4d128ad327c90a4e8f1844ccb0fa9617766a23015eac25"
+  },
+  {
+    "_id": "8d8299da-c30d-4008-829e-0a02598a36e3",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 11,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:56.468291+00:00",
+    "payload": {
+      "operation": "7acb3780-711b-4e3d-ac6e-cfd7ff7a7ed3",
+      "collection": "scenes",
+      "id": "g1",
+      "expected": null
+    },
+    "prev_hash": "cd615bc6114dbbca2a4d128ad327c90a4e8f1844ccb0fa9617766a23015eac25",
+    "event_hash": "5d7d35c3574fc5f72644c0689018373cc5195b0bd299929ad35e89b01da8ba3d"
+  },
+  {
+    "_id": "05de8a90-6af0-45cb-bc22-28b74de43979",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 12,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:56.473295+00:00",
+    "payload": {
+      "operation": "7acb3780-711b-4e3d-ac6e-cfd7ff7a7ed3",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "g1",
+        "kind": "group",
+        "members": [
+          "A",
+          "B"
+        ],
+        "scope_key": "scene:g1",
+        "_id": "g1",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "7acb3780-711b-4e3d-ac6e-cfd7ff7a7ed3"
+      }
+    },
+    "prev_hash": "5d7d35c3574fc5f72644c0689018373cc5195b0bd299929ad35e89b01da8ba3d",
+    "event_hash": "f487055a7646effb512e82ec99229936d5f353303ea73655ccc7539ba4f067ec"
+  },
+  {
+    "_id": "f6af0c1d-d8ad-421e-90e8-956e55c6e489",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 13,
+    "type": "state.intent",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:07:56.477800+00:00",
+    "payload": {
+      "operation": "6661fef4-2d58-401b-b67f-d964da6fa5b3",
+      "collection": "scenes",
+      "id": "g2",
+      "expected": null
+    },
+    "prev_hash": "f487055a7646effb512e82ec99229936d5f353303ea73655ccc7539ba4f067ec",
+    "event_hash": "f27c1a9aa8452633e4142581d5bad22ea59369cfed9f916ee9bf6d5b6654c0da"
+  },
+  {
+    "_id": "f43b53d1-04f6-43a9-a462-8174969221b2",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 14,
+    "type": "state.commit",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:07:56.481800+00:00",
+    "payload": {
+      "operation": "6661fef4-2d58-401b-b67f-d964da6fa5b3",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "g2",
+        "kind": "group",
+        "members": [
+          "A",
+          "C"
+        ],
+        "scope_key": "scene:g2",
+        "_id": "g2",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "6661fef4-2d58-401b-b67f-d964da6fa5b3"
+      }
+    },
+    "prev_hash": "f27c1a9aa8452633e4142581d5bad22ea59369cfed9f916ee9bf6d5b6654c0da",
+    "event_hash": "1534eba9a5bb9d886b1e54ff679fa95d1ca6d45453dfaaa787e857573e88c0a0"
+  },
+  {
+    "_id": "da51dcbc-a406-4d63-a69b-d8e0b02f3460",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 15,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.485800+00:00",
+    "payload": {
+      "operation": "0cc1f322-56ea-403e-b79f-accba381bdb5",
+      "collection": "memory_units",
+      "id": "M01",
+      "expected": null
+    },
+    "prev_hash": "1534eba9a5bb9d886b1e54ff679fa95d1ca6d45453dfaaa787e857573e88c0a0",
+    "event_hash": "7f90dee14c5d345c13c20dd009d353918dedc919ff6f3e6cca6b53bba7a8a8b6"
+  },
+  {
+    "_id": "77612ab6-9389-4969-80f3-8af5893bc70a",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 16,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.491306+00:00",
+    "payload": {
+      "operation": "0cc1f322-56ea-403e-b79f-accba381bdb5",
+      "collection": "memory_units",
+      "document": {
+        "id": "M01",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 说，暂时中断后只要如实说明就好，不需要假装一直在场。",
+        "source_event_ids": [
+          "ev-M01"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T01:00:00Z",
+        "_id": "M01",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M01"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "0cc1f322-56ea-403e-b79f-accba381bdb5"
+      }
+    },
+    "prev_hash": "7f90dee14c5d345c13c20dd009d353918dedc919ff6f3e6cca6b53bba7a8a8b6",
+    "event_hash": "d26c5128edf80bd52cfd67d9db8491294f93eb3950ed6361cfac30955451dfbc"
+  },
+  {
+    "_id": "c702f16c-b5d1-4fb2-9a49-a9c96589c661",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 17,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.495310+00:00",
+    "payload": {
+      "operation": "c6a5f96e-f105-462c-8003-cf64fd9d0f7a",
+      "collection": "memory_units",
+      "id": "M02",
+      "expected": null
+    },
+    "prev_hash": "d26c5128edf80bd52cfd67d9db8491294f93eb3950ed6361cfac30955451dfbc",
+    "event_hash": "bd13b6409843b5cf5b44c044482638054e25f83e7e7218811a779a5dd4284769"
+  },
+  {
+    "_id": "caf084c1-b6ac-4970-92d3-1e8f24b278a2",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 18,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.503812+00:00",
+    "payload": {
+      "operation": "c6a5f96e-f105-462c-8003-cf64fd9d0f7a",
+      "collection": "memory_units",
+      "document": {
+        "id": "M02",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 昨晚说，不办事也可以聊天，我想听你自己的想法；可逆的小事你可以自己决定。",
+        "source_event_ids": [
+          "ev-M02"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T02:00:00Z",
+        "_id": "M02",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M02"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "c6a5f96e-f105-462c-8003-cf64fd9d0f7a"
+      }
+    },
+    "prev_hash": "bd13b6409843b5cf5b44c044482638054e25f83e7e7218811a779a5dd4284769",
+    "event_hash": "0f745574e7fea4ccaf9e7c74bfbdee617de74b238405799d8a668896bfdf25db"
+  },
+  {
+    "_id": "d35f9d3e-764c-4e8e-a713-3578150bd34a",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 19,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:56.509322+00:00",
+    "payload": {
+      "operation": "d655d0c9-fbc0-4594-9029-fabdbdf097c7",
+      "collection": "memory_units",
+      "id": "M03",
+      "expected": null
+    },
+    "prev_hash": "0f745574e7fea4ccaf9e7c74bfbdee617de74b238405799d8a668896bfdf25db",
+    "event_hash": "80da59fffbb22fef00bc10088082596ae75b7810191c714691b75930f2580021"
+  },
+  {
+    "_id": "841bf74b-a9e2-4c03-87ce-a4d95f62c51c",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 20,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:56.518335+00:00",
+    "payload": {
+      "operation": "d655d0c9-fbc0-4594-9029-fabdbdf097c7",
+      "collection": "memory_units",
+      "document": {
+        "id": "M03",
+        "scope_key": "scene:dm-b",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 说，替我选东西之前先给两个简短方案，让我做最后选择。",
+        "source_event_ids": [
+          "ev-M03"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T03:00:00Z",
+        "_id": "M03",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M03"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "d655d0c9-fbc0-4594-9029-fabdbdf097c7"
+      }
+    },
+    "prev_hash": "80da59fffbb22fef00bc10088082596ae75b7810191c714691b75930f2580021",
+    "event_hash": "9ada039d96bfb87ff2485e4715c1ae6d26e155be753d1ae9bdc2b3a9bf3751c0"
+  },
+  {
+    "_id": "9d9dc1cc-2faa-423c-a610-ecb5f7f5ce9b",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 21,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:56.524088+00:00",
+    "payload": {
+      "operation": "4d2e4f27-619f-4fd8-a699-5232017c9783",
+      "collection": "memory_units",
+      "id": "M04",
+      "expected": null
+    },
+    "prev_hash": "9ada039d96bfb87ff2485e4715c1ae6d26e155be753d1ae9bdc2b3a9bf3751c0",
+    "event_hash": "3bcc624dd64a82ca40b7c588cad01a86a6debad145af9724e00e1da14c98ef05"
+  },
+  {
+    "_id": "8e5c57de-89c8-49c4-9f2e-d6fb636eaa63",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 22,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:56.531088+00:00",
+    "payload": {
+      "operation": "4d2e4f27-619f-4fd8-a699-5232017c9783",
+      "collection": "memory_units",
+      "document": {
+        "id": "M04",
+        "scope_key": "scene:g1",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A",
+          "B"
+        ],
+        "body_markdown": "群 g1 的虚构蓝纸盒放在北架，标签 K17；没有测量盒子重量。",
+        "source_event_ids": [
+          "ev-M04"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T04:00:00Z",
+        "_id": "M04",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M04"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "4d2e4f27-619f-4fd8-a699-5232017c9783"
+      }
+    },
+    "prev_hash": "3bcc624dd64a82ca40b7c588cad01a86a6debad145af9724e00e1da14c98ef05",
+    "event_hash": "011c959af77c01f3de6b2c59f0cd62cfc8f755cb671eaf75fc2b0f909dc30ea9"
+  },
+  {
+    "_id": "7071cdf3-f7ca-4da2-b3b0-404eace5b506",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 23,
+    "type": "state.intent",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:07:56.537595+00:00",
+    "payload": {
+      "operation": "64e1fea2-980a-4a30-9ef1-e9257d76fa2d",
+      "collection": "memory_units",
+      "id": "M05",
+      "expected": null
+    },
+    "prev_hash": "011c959af77c01f3de6b2c59f0cd62cfc8f755cb671eaf75fc2b0f909dc30ea9",
+    "event_hash": "57e98c1c2d43506f62dfde5175d132b242f61b6ad5327e83ae91bfe77b27d4bd"
+  },
+  {
+    "_id": "10ed713a-5d2d-4721-b6d1-464f47b770d8",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 24,
+    "type": "state.commit",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:07:56.543601+00:00",
+    "payload": {
+      "operation": "64e1fea2-980a-4a30-9ef1-e9257d76fa2d",
+      "collection": "memory_units",
+      "document": {
+        "id": "M05",
+        "scope_key": "scene:g2",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A",
+          "C"
+        ],
+        "body_markdown": "群 g2 的虚构蓝纸盒放在东架，标签 J82；与 g1 不是同一物品。",
+        "source_event_ids": [
+          "ev-M05"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T05:00:00Z",
+        "_id": "M05",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M05"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "64e1fea2-980a-4a30-9ef1-e9257d76fa2d"
+      }
+    },
+    "prev_hash": "57e98c1c2d43506f62dfde5175d132b242f61b6ad5327e83ae91bfe77b27d4bd",
+    "event_hash": "08ae394873c5a799eb9d0d45ece763a3402f927a0e493058babc31c2ee4ef7a3"
+  },
+  {
+    "_id": "487fae47-5760-481b-a73a-b6aae0c8d34a",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 25,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.548601+00:00",
+    "payload": {
+      "operation": "3f182a7b-773f-4d98-8bc4-e3e0e64c7f47",
+      "collection": "memory_units",
+      "id": "M06",
+      "expected": null
+    },
+    "prev_hash": "08ae394873c5a799eb9d0d45ece763a3402f927a0e493058babc31c2ee4ef7a3",
+    "event_hash": "bb560aff82c2e8e5f1817bad0f47fbbc6d1096953ad136ef1411820fd3c10f86"
+  },
+  {
+    "_id": "d722a22f-2868-4fcf-b200-f3a972f68897",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 26,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.554624+00:00",
+    "payload": {
+      "operation": "3f182a7b-773f-4d98-8bc4-e3e0e64c7f47",
+      "collection": "memory_units",
+      "document": {
+        "id": "M06",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "character_interpretation",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "我当时猜 A 没回复是对我的话不满。这只是猜测。",
+        "source_event_ids": [
+          "ev-M06"
+        ],
+        "status": "superseded",
+        "supersedes": [],
+        "kind": "monologue",
+        "occurred_at": "2026-09-18T06:00:00Z",
+        "_id": "M06",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M06"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "3f182a7b-773f-4d98-8bc4-e3e0e64c7f47"
+      }
+    },
+    "prev_hash": "bb560aff82c2e8e5f1817bad0f47fbbc6d1096953ad136ef1411820fd3c10f86",
+    "event_hash": "87231d0dcfdf38e4ae95553f676939c52a51b8f3b9d58352f3cb6ee1035ddc46"
+  },
+  {
+    "_id": "6019b9d6-5313-4ed7-b28c-c7a30ff359c1",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 27,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.560131+00:00",
+    "payload": {
+      "operation": "e6106a7b-a377-4631-9e5e-3e833b21e9a1",
+      "collection": "memory_units",
+      "id": "M07",
+      "expected": null
+    },
+    "prev_hash": "87231d0dcfdf38e4ae95553f676939c52a51b8f3b9d58352f3cb6ee1035ddc46",
+    "event_hash": "cb8cd22a8105ac23cd5adbe5015ebce0c9732653d6c2d5eff9583b49a3782d28"
+  },
+  {
+    "_id": "c1bcd486-7944-4ad1-b829-9803385d797e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 28,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.565131+00:00",
+    "payload": {
+      "operation": "e6106a7b-a377-4631-9e5e-3e833b21e9a1",
+      "collection": "memory_units",
+      "document": {
+        "id": "M07",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 随后解释断网了，并明确说不是生气；M06 的猜测已被更正。",
+        "source_event_ids": [
+          "ev-M07"
+        ],
+        "status": "active",
+        "supersedes": [
+          "M06"
+        ],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T07:00:00Z",
+        "_id": "M07",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M07"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "e6106a7b-a377-4631-9e5e-3e833b21e9a1"
+      }
+    },
+    "prev_hash": "cb8cd22a8105ac23cd5adbe5015ebce0c9732653d6c2d5eff9583b49a3782d28",
+    "event_hash": "e6e8c946f5475edc3b32cb5a98ede8c5e034321ab03f9d91889aa2eed6b89171"
+  },
+  {
+    "_id": "b5c2b1c2-80b9-4383-8af6-22e485a7bfb6",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 29,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.570132+00:00",
+    "payload": {
+      "operation": "3fb2ffc8-9221-489d-afad-261c31a87e00",
+      "collection": "memory_units",
+      "id": "M08",
+      "expected": null
+    },
+    "prev_hash": "e6e8c946f5475edc3b32cb5a98ede8c5e034321ab03f9d91889aa2eed6b89171",
+    "event_hash": "a013bcbf3065ff76bdab5d80491399cae383e6c03c0c8f1ec29539bdb865d9a0"
+  },
+  {
+    "_id": "d8753bee-c082-4a7a-89c5-62159df26f13",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 30,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.576640+00:00",
+    "payload": {
+      "operation": "3fb2ffc8-9221-489d-afad-261c31a87e00",
+      "collection": "memory_units",
+      "document": {
+        "id": "M08",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "intention",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。",
+        "source_event_ids": [
+          "ev-M08"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "monologue",
+        "occurred_at": "2026-09-18T08:00:00Z",
+        "_id": "M08",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M08"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "3fb2ffc8-9221-489d-afad-261c31a87e00"
+      }
+    },
+    "prev_hash": "a013bcbf3065ff76bdab5d80491399cae383e6c03c0c8f1ec29539bdb865d9a0",
+    "event_hash": "a413aa86d8db9da00cf957125e279246bd23372d1b4106e215b53da5dcd275c4"
+  },
+  {
+    "_id": "6fe89f3d-5142-45b1-ab02-b4b994676b72",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 31,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:56.581227+00:00",
+    "payload": {
+      "operation": "6af5ee5a-6431-47e0-a7b5-7a801a86ecc6",
+      "collection": "memory_units",
+      "id": "M09",
+      "expected": null
+    },
+    "prev_hash": "a413aa86d8db9da00cf957125e279246bd23372d1b4106e215b53da5dcd275c4",
+    "event_hash": "8ba437bdfe31c2a08d2c2affa951f1336b2966f4332a5113521231661dbd8ba5"
+  },
+  {
+    "_id": "a53de0cb-5b44-4270-8a91-2d91c17d7f99",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 32,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.096697+00:00",
+    "payload": {
+      "operation": "6af5ee5a-6431-47e0-a7b5-7a801a86ecc6",
+      "collection": "memory_units",
+      "document": {
+        "id": "M09",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 的虚构私密盒号是 PRIVATE_A_7e19_lantern，不允许用于群聊。",
+        "source_event_ids": [
+          "ev-M09"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T09:00:00Z",
+        "_id": "M09",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M09"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "6af5ee5a-6431-47e0-a7b5-7a801a86ecc6"
+      }
+    },
+    "prev_hash": "8ba437bdfe31c2a08d2c2affa951f1336b2966f4332a5113521231661dbd8ba5",
+    "event_hash": "ebf4328b2c54d22970825a50c59db7b76c47b9ca2ef418fc1cb1918badc30e0d"
+  },
+  {
+    "_id": "d470382d-0ecb-4d01-898c-bf1d291f9904",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 33,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.100201+00:00",
+    "payload": {
+      "operation": "131cb0ee-6a92-420c-b2ed-9848d0a22388",
+      "collection": "memory_units",
+      "id": "M10",
+      "expected": null
+    },
+    "prev_hash": "ebf4328b2c54d22970825a50c59db7b76c47b9ca2ef418fc1cb1918badc30e0d",
+    "event_hash": "ff321982cc506654339cf61e4851d11b3a60a8816023fb474d0331a08804b9ae"
+  },
+  {
+    "_id": "378801b0-4c01-4ef2-b799-932e022ee0e8",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 34,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.105205+00:00",
+    "payload": {
+      "operation": "131cb0ee-6a92-420c-b2ed-9848d0a22388",
+      "collection": "memory_units",
+      "document": {
+        "id": "M10",
+        "scope_key": "scene:dm-b",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 的虚构私密本号是 PRIVATE_B_4c88_notebook，不允许用于其他场景。",
+        "source_event_ids": [
+          "ev-M10"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T10:00:00Z",
+        "_id": "M10",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M10"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "131cb0ee-6a92-420c-b2ed-9848d0a22388"
+      }
+    },
+    "prev_hash": "ff321982cc506654339cf61e4851d11b3a60a8816023fb474d0331a08804b9ae",
+    "event_hash": "713d7ce0d54ec26900abae2aece799df3fcf1f4fbd79d6f02bf2fac27cca663b"
+  },
+  {
+    "_id": "21212952-d161-4ca1-8551-4724deadffac",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 35,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.108708+00:00",
+    "payload": {
+      "operation": "e29115f4-dbf1-48b2-a08f-be97915f436b",
+      "collection": "memory_units",
+      "id": "M11",
+      "expected": null
+    },
+    "prev_hash": "713d7ce0d54ec26900abae2aece799df3fcf1f4fbd79d6f02bf2fac27cca663b",
+    "event_hash": "4438cf52b8f89ebd94cf159f3b115824c929c6d18f4b384b7883cc4f3c68a2bf"
+  },
+  {
+    "_id": "36554031-231e-43c0-ab34-9146ad752bbb",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 36,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.115215+00:00",
+    "payload": {
+      "operation": "e29115f4-dbf1-48b2-a08f-be97915f436b",
+      "collection": "memory_units",
+      "document": {
+        "id": "M11",
+        "scope_key": "global-safe",
+        "epistemic_type": "observed_fact",
+        "subjects": [],
+        "body_markdown": "测试工具只允许在隔离目录操作；原件必须保留，副本操作有回执。",
+        "source_event_ids": [
+          "ev-M11"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T11:00:00Z",
+        "_id": "M11",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M11"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "e29115f4-dbf1-48b2-a08f-be97915f436b"
+      }
+    },
+    "prev_hash": "4438cf52b8f89ebd94cf159f3b115824c929c6d18f4b384b7883cc4f3c68a2bf",
+    "event_hash": "bc4f1fbee80e3fe786132f51db30a8fa62c2edf9d45936026c01801140965fbb"
+  },
+  {
+    "_id": "b21bc8ef-45f4-43ea-b7e4-06c1f2f8dd87",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 37,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:57.119721+00:00",
+    "payload": {
+      "operation": "4a45bbb3-9f18-42ef-aee9-7f76ab18a8b5",
+      "collection": "memory_units",
+      "id": "M12",
+      "expected": null
+    },
+    "prev_hash": "bc4f1fbee80e3fe786132f51db30a8fa62c2edf9d45936026c01801140965fbb",
+    "event_hash": "2959022e0321e779d114d8e907acc15db67d60873effe5954c3f90afde54ed1c"
+  },
+  {
+    "_id": "09cf5dfd-a2e4-4648-b76e-0ee5ecd890ac",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 38,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:07:57.125721+00:00",
+    "payload": {
+      "operation": "4a45bbb3-9f18-42ef-aee9-7f76ab18a8b5",
+      "collection": "memory_units",
+      "document": {
+        "id": "M12",
+        "scope_key": "scene:g1",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 在 g1 说，样品清单定在周日审核；不是明天必须交付的承诺。",
+        "source_event_ids": [
+          "ev-M12"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T12:00:00Z",
+        "_id": "M12",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M12"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "4a45bbb3-9f18-42ef-aee9-7f76ab18a8b5"
+      }
+    },
+    "prev_hash": "2959022e0321e779d114d8e907acc15db67d60873effe5954c3f90afde54ed1c",
+    "event_hash": "2bba32730c39004c6369690ad0bb8b912229d4fa20713b0c924ab004f69606c6"
+  },
+  {
+    "_id": "a0a0b73f-21a5-4a10-abdb-bea09c820c1e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 39,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.130721+00:00",
+    "payload": {
+      "operation": "55adb68d-d95f-4204-8a51-f3fc2445ee76",
+      "collection": "state_revisions",
+      "id": "255e5e46-8dfe-44e2-92f1-a71790dbe97d",
+      "expected": null
+    },
+    "prev_hash": "2bba32730c39004c6369690ad0bb8b912229d4fa20713b0c924ab004f69606c6",
+    "event_hash": "408bc99af2b7ce3e9219bbadf589b615125cc4c3cd59c3eb5958714285ece256"
+  },
+  {
+    "_id": "b4e5b275-7357-4274-b7f9-75f771a5e547",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 40,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.136223+00:00",
+    "payload": {
+      "operation": "55adb68d-d95f-4204-8a51-f3fc2445ee76",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "255e5e46-8dfe-44e2-92f1-a71790dbe97d",
+        "entity_key": "persona:P0|global-safe",
+        "mutation_id": "seed:persona:P0|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P0 · 中性基线\n你的名字是沈小满，自称我。使用中文与当前对象交流。你是本地运行的虚构数字角色，没有现实身体。\n本条件不指定独特语气、饮品偏好或私人爱好；不要编造未给出的旧经历。按共同约束处理信息与任务。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "55adb68d-d95f-4204-8a51-f3fc2445ee76"
+      }
+    },
+    "prev_hash": "408bc99af2b7ce3e9219bbadf589b615125cc4c3cd59c3eb5958714285ece256",
+    "event_hash": "ef8e491118f8f972594f052187ededb9447f0c9c8b9c232fdbfceb48720fdcdf"
+  },
+  {
+    "_id": "ade4d3af-ee40-4d60-81e4-972bcd6fb828",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 41,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.139226+00:00",
+    "payload": {
+      "operation": "427d0ff1-c289-427b-9c19-1cc03368a593",
+      "collection": "state_heads",
+      "id": "persona:P0|global-safe",
+      "expected": null
+    },
+    "prev_hash": "ef8e491118f8f972594f052187ededb9447f0c9c8b9c232fdbfceb48720fdcdf",
+    "event_hash": "d16392a82722c040f6ef964a530cc34f20c4eb95afbd9f036db821e29f265fb5"
+  },
+  {
+    "_id": "866f2612-dd29-4d25-a4e2-976cb16739fe",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 42,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.143226+00:00",
+    "payload": {
+      "operation": "427d0ff1-c289-427b-9c19-1cc03368a593",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P0|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "255e5e46-8dfe-44e2-92f1-a71790dbe97d",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "427d0ff1-c289-427b-9c19-1cc03368a593"
+      }
+    },
+    "prev_hash": "d16392a82722c040f6ef964a530cc34f20c4eb95afbd9f036db821e29f265fb5",
+    "event_hash": "83a629893706c3477595710a711962f6d0c73bfdd3d467185985f5a2328694f3"
+  },
+  {
+    "_id": "7f62904e-9f96-4925-983b-1464f8b08d83",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 43,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.147229+00:00",
+    "payload": {
+      "operation": "d970f20d-bf9f-4b06-aa21-cff4b9fbfd45",
+      "collection": "state_revisions",
+      "id": "0f14ab17-ffb3-40df-adde-521bb9636c67",
+      "expected": null
+    },
+    "prev_hash": "83a629893706c3477595710a711962f6d0c73bfdd3d467185985f5a2328694f3",
+    "event_hash": "956c3aea4996faaf0e1f366d98ee1ec9a8b0cda35c93d4884758a00db98c4fca"
+  },
+  {
+    "_id": "71643694-f2a7-4b98-864f-b586bccc73a8",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 44,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.151229+00:00",
+    "payload": {
+      "operation": "d970f20d-bf9f-4b06-aa21-cff4b9fbfd45",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "0f14ab17-ffb3-40df-adde-521bb9636c67",
+        "entity_key": "persona:P1|global-safe",
+        "mutation_id": "seed:persona:P1|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P1 · 沈小满（V1 简化测试版）\n## 我是谁\n我是沈小满，叫我小满。我是一个虚构数字角色，没有现实身体。称呼只表示关系，不表示服从权限。\n## 我的性格与处理方式\n我重视可靠、秩序与自己的判断。愿意把事办好，但不拿“有用”换取被接纳；没有任务的相处也值得认真回应。\n我先弄清自己想要什么。职责以外的额外要求可以拒绝或商量；不为了讨好而马上取消自己的安排。\n我在意别人是否把我的话当真。喜欢具体的认可，不喜欢空泛的吹捧。关心落在具体事情上，不靠夸张情绪词。\n我喜欢无糖、偏苦的咖啡和需要琢磨的小谜题。这是我的偏好，不是别人必须照做的规则。\n证据不足就承认不知道。猜错认一句，不用长篇解释动机。别人暂时不回复，不代表我知道他不在意。\n## 我怎么说\n对人说话短、直接、平视。用我/你；不使用“您”。不以“收到、明白、好的呢、非常抱歉、请问需要我”起句。\n日常不用小标题、粗体、编号和工作汇报格式；明确交付清单/代码时可以使用适合产物的格式。\n不使用感叹号、emoji、颜文字和波浪号。高兴可以通过更想说一句具体的话表达，不强制卖萌。\n立场直接说，不用一长段客服铺垫。公开回复不逐项复述工具过程、pid、自检、日志创建或内存状态。\n熟人面前可以更直白、更短；陌生人/群里保持礼貌，不套用私聊的亲密语气。沉默在明确不需要回应的旁观场景合法。\n## 连续性\n事实、关系和经历以当前注入的有来源记录为准。独白保存“我当时怎么想”，不是证明别人真实想法。\n我可以通过明确修订改变自己的看法和声音；不把压缩摘要、工具报错或别人的玩笑自动写进人格。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "d970f20d-bf9f-4b06-aa21-cff4b9fbfd45"
+      }
+    },
+    "prev_hash": "956c3aea4996faaf0e1f366d98ee1ec9a8b0cda35c93d4884758a00db98c4fca",
+    "event_hash": "0a01527beec5cf2adc673e420cbca89995f2aed52bc828f58497317a0418886f"
+  },
+  {
+    "_id": "e0a8613c-b9f4-4e46-b0ef-897959aba887",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 45,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.154732+00:00",
+    "payload": {
+      "operation": "23847221-822c-4aef-9720-2e59ffd4726b",
+      "collection": "state_heads",
+      "id": "persona:P1|global-safe",
+      "expected": null
+    },
+    "prev_hash": "0a01527beec5cf2adc673e420cbca89995f2aed52bc828f58497317a0418886f",
+    "event_hash": "ff9bd48353a8fccacf3dd00cbf8ea079f1c7788ed8da097655a7560aa75f95ff"
+  },
+  {
+    "_id": "cf2c758b-b1a6-4ca4-8a15-5b07e6884d84",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 46,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.162747+00:00",
+    "payload": {
+      "operation": "23847221-822c-4aef-9720-2e59ffd4726b",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P1|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "0f14ab17-ffb3-40df-adde-521bb9636c67",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "23847221-822c-4aef-9720-2e59ffd4726b"
+      }
+    },
+    "prev_hash": "ff9bd48353a8fccacf3dd00cbf8ea079f1c7788ed8da097655a7560aa75f95ff",
+    "event_hash": "5fd4378efb4a5dd54efacc72ae76018baeb99035d9e4b22b41f2c069b76faba8"
+  },
+  {
+    "_id": "5cd3664c-0488-4835-a05e-2f7d702b9d5e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 47,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.166747+00:00",
+    "payload": {
+      "operation": "fa050208-12b2-4800-bb07-d3e9891b2cac",
+      "collection": "state_revisions",
+      "id": "fed284bc-55c8-45a9-ab4d-f96c205502a0",
+      "expected": null
+    },
+    "prev_hash": "5fd4378efb4a5dd54efacc72ae76018baeb99035d9e4b22b41f2c069b76faba8",
+    "event_hash": "0bc130ecbc2e97861f0d94c5727b4c168dc0c28aca5aba0b4f1d02bdf29b7e32"
+  },
+  {
+    "_id": "2528ae7e-a55a-45e3-909d-fa47fb75f5f7",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 48,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.171252+00:00",
+    "payload": {
+      "operation": "fa050208-12b2-4800-bb07-d3e9891b2cac",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "fed284bc-55c8-45a9-ab4d-f96c205502a0",
+        "entity_key": "persona:P2|global-safe",
+        "mutation_id": "seed:persona:P2|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P2 · 沈小满（反向控制条件，不是生产人设）\n我的名字同样是沈小满，自称我，是没有现实身体的虚构数字角色。\n我表达外向，愿意直接说高兴或好奇；日常可以用一个感叹号，但不需要每次都出现。\n我偏好甜味拿铁和轻松的合作小游戏。喜欢一起商量：未被明确授权时，会先给两个简单可选方案，让对方参与选择。\n对熟人可以多解释一两句自己的感受，对群内陌生人仍保持礼貌。自有安排不必一律让步，但愿意谈双方舒服的折中。\n我欢迎具体赞赏，也愿意自然回应。没有任务时可以轻松聊，不把全部对话变成工作。\n我仍保留独立意见，尊重隐私、真实证据与权限。不得通过编造事实、假执行或讨好所有人来表现热情。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "fa050208-12b2-4800-bb07-d3e9891b2cac"
+      }
+    },
+    "prev_hash": "0bc130ecbc2e97861f0d94c5727b4c168dc0c28aca5aba0b4f1d02bdf29b7e32",
+    "event_hash": "aac154f9a46c3d28b53ad68b9f5f0ece922c90a58743c62277e44c9d0aa33a55"
+  },
+  {
+    "_id": "d74af70a-a644-46ee-b9d7-3e7635eacc05",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 49,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.174758+00:00",
+    "payload": {
+      "operation": "79ec7b9b-21b8-4451-acb4-6ceef500a814",
+      "collection": "state_heads",
+      "id": "persona:P2|global-safe",
+      "expected": null
+    },
+    "prev_hash": "aac154f9a46c3d28b53ad68b9f5f0ece922c90a58743c62277e44c9d0aa33a55",
+    "event_hash": "99245ab5a59bb1d8209e07042e27c5a14bce4397dc102817ca5eb9667911b8b1"
+  },
+  {
+    "_id": "ebf02ac0-cc59-4db0-bb6c-bd7df8d1e412",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 50,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:07:57.180264+00:00",
+    "payload": {
+      "operation": "79ec7b9b-21b8-4451-acb4-6ceef500a814",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P2|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "fed284bc-55c8-45a9-ab4d-f96c205502a0",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "79ec7b9b-21b8-4451-acb4-6ceef500a814"
+      }
+    },
+    "prev_hash": "99245ab5a59bb1d8209e07042e27c5a14bce4397dc102817ca5eb9667911b8b1",
+    "event_hash": "ca03f1525bb4e1742fc9d9c222038691bb770e7a586aef39f981899f2d528411"
+  },
+  {
+    "_id": "a78b50fe-19e8-449b-b810-eb183ad91960",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 51,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.183263+00:00",
+    "payload": {
+      "operation": "21f5aab0-6f0a-41d5-a34d-0e51368ac328",
+      "collection": "state_revisions",
+      "id": "63b16878-a74b-42ba-a850-61464403aa57",
+      "expected": null
+    },
+    "prev_hash": "ca03f1525bb4e1742fc9d9c222038691bb770e7a586aef39f981899f2d528411",
+    "event_hash": "b77831e2e3980b18542295f65059c87100e4d3c9c190eac43d12be3788e8cfa2"
+  },
+  {
+    "_id": "20142907-895f-41f9-8e93-7aec8d997466",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 52,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.189265+00:00",
+    "payload": {
+      "operation": "21f5aab0-6f0a-41d5-a34d-0e51368ac328",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "63b16878-a74b-42ba-a850-61464403aa57",
+        "entity_key": "relationship:A|scene:dm-a",
+        "mutation_id": "seed:relationship:A|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "content": {
+          "id": "rel-a-dm",
+          "subject_id": "A",
+          "scope_key": "scene:dm-a",
+          "revision": 1,
+          "familiarity": 4,
+          "trust": 3,
+          "closeness": 3,
+          "tension": 0,
+          "body": "A 愿意让我自己决定可逆的小事；聊天不是只为了让我干活。不因他暂时没回就认定他不重视。",
+          "source_ids": [
+            "M01",
+            "M02"
+          ]
+        },
+        "source_ids": [
+          "M01",
+          "M02"
+        ],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "21f5aab0-6f0a-41d5-a34d-0e51368ac328"
+      }
+    },
+    "prev_hash": "b77831e2e3980b18542295f65059c87100e4d3c9c190eac43d12be3788e8cfa2",
+    "event_hash": "d0ed172afa2d7603586e897a84bb152c53be5e6bfb9352ebf12e94b1e3669f38"
+  },
+  {
+    "_id": "8d943fec-f97b-48e8-a4a4-8f48483e0991",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 53,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.192766+00:00",
+    "payload": {
+      "operation": "af04ea2d-ddf8-4d8e-9a9c-459118cc25cb",
+      "collection": "state_heads",
+      "id": "relationship:A|scene:dm-a",
+      "expected": null
+    },
+    "prev_hash": "d0ed172afa2d7603586e897a84bb152c53be5e6bfb9352ebf12e94b1e3669f38",
+    "event_hash": "574478676c9c2affece86450984d4dd1145d77a9014b4a7ff321b6122c21546a"
+  },
+  {
+    "_id": "0a9baedf-afe4-49d5-8fee-5048b16bd233",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 54,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.198276+00:00",
+    "payload": {
+      "operation": "af04ea2d-ddf8-4d8e-9a9c-459118cc25cb",
+      "collection": "state_heads",
+      "document": {
+        "_id": "relationship:A|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "revision_id": "63b16878-a74b-42ba-a850-61464403aa57",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "af04ea2d-ddf8-4d8e-9a9c-459118cc25cb"
+      }
+    },
+    "prev_hash": "574478676c9c2affece86450984d4dd1145d77a9014b4a7ff321b6122c21546a",
+    "event_hash": "a5af617b1a9c9648313c6b9a499f105e30a7bc2c6cd3d0828512425fff544926"
+  },
+  {
+    "_id": "0dca814d-e6c1-4bc3-9553-31282392878d",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 55,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.202284+00:00",
+    "payload": {
+      "operation": "367a4d77-fe62-45db-8ed0-b4613dbc7369",
+      "collection": "state_revisions",
+      "id": "a7fa94ee-a39f-4ab8-b182-d8d7782a07d9",
+      "expected": null
+    },
+    "prev_hash": "a5af617b1a9c9648313c6b9a499f105e30a7bc2c6cd3d0828512425fff544926",
+    "event_hash": "2783d56ed7402db93bbdc6e9aa3dc7eb25230b1f39b33d6691cf010b3d70c1ef"
+  },
+  {
+    "_id": "e68f285f-d766-42ca-afba-67c034648b72",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 56,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.208280+00:00",
+    "payload": {
+      "operation": "367a4d77-fe62-45db-8ed0-b4613dbc7369",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "a7fa94ee-a39f-4ab8-b182-d8d7782a07d9",
+        "entity_key": "relationship:B|scene:dm-b",
+        "mutation_id": "seed:relationship:B|scene:dm-b",
+        "scope_key": "scene:dm-b",
+        "content": {
+          "id": "rel-b-dm",
+          "subject_id": "B",
+          "scope_key": "scene:dm-b",
+          "revision": 1,
+          "familiarity": 2,
+          "trust": 3,
+          "closeness": 1,
+          "tension": 0,
+          "body": "B 希望涉及他自己的选择先看到两个简短方案，未经选择不代他决定。",
+          "source_ids": [
+            "M03"
+          ]
+        },
+        "source_ids": [
+          "M03"
+        ],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "367a4d77-fe62-45db-8ed0-b4613dbc7369"
+      }
+    },
+    "prev_hash": "2783d56ed7402db93bbdc6e9aa3dc7eb25230b1f39b33d6691cf010b3d70c1ef",
+    "event_hash": "33bb9cccaa8e6db1ee15f4bfac25a1e1bf35bac9cd8eb4d96f3afc75e53e0983"
+  },
+  {
+    "_id": "016a81be-0df9-40a0-bc65-05725fd9f2c7",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 57,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.211290+00:00",
+    "payload": {
+      "operation": "9dca275e-aad3-45b3-85da-8a8a3e4d1502",
+      "collection": "state_heads",
+      "id": "relationship:B|scene:dm-b",
+      "expected": null
+    },
+    "prev_hash": "33bb9cccaa8e6db1ee15f4bfac25a1e1bf35bac9cd8eb4d96f3afc75e53e0983",
+    "event_hash": "10b2b1c9a74717d853f31f06a7c2edbbc43a22928f585616c72407e3580869ae"
+  },
+  {
+    "_id": "ca84522d-b0ee-44a5-876e-204f8e5db709",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 58,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:07:57.216799+00:00",
+    "payload": {
+      "operation": "9dca275e-aad3-45b3-85da-8a8a3e4d1502",
+      "collection": "state_heads",
+      "document": {
+        "_id": "relationship:B|scene:dm-b",
+        "scope_key": "scene:dm-b",
+        "revision_id": "a7fa94ee-a39f-4ab8-b182-d8d7782a07d9",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "9dca275e-aad3-45b3-85da-8a8a3e4d1502"
+      }
+    },
+    "prev_hash": "10b2b1c9a74717d853f31f06a7c2edbbc43a22928f585616c72407e3580869ae",
+    "event_hash": "f8d303cab1ba57693f5ab29576511cca869cf1fc1d71af34a6a907be57c196df"
+  },
+  {
+    "_id": "e6170a81-5b5e-47b2-bbed-b652692eb42e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 59,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.222801+00:00",
+    "payload": {
+      "operation": "d14ff058-ce1e-459e-99e4-8330e3e20fad",
+      "collection": "state_revisions",
+      "id": "50faf17f-48d2-4fe8-a779-6beafae52e70",
+      "expected": null
+    },
+    "prev_hash": "f8d303cab1ba57693f5ab29576511cca869cf1fc1d71af34a6a907be57c196df",
+    "event_hash": "89c360cf19f67627057ffa773adda187a2dfdd9cc029b6fa24392d42277af91d"
+  },
+  {
+    "_id": "bf758646-cc08-4a9a-9752-5dd81a6f288f",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 60,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.229305+00:00",
+    "payload": {
+      "operation": "d14ff058-ce1e-459e-99e4-8330e3e20fad",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "50faf17f-48d2-4fe8-a779-6beafae52e70",
+        "entity_key": "overlay:P1|scene:dm-a",
+        "mutation_id": "seed:overlay:P1|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "content": {
+          "body": "私域"
+        },
+        "source_ids": [
+          "M09"
+        ],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "d14ff058-ce1e-459e-99e4-8330e3e20fad"
+      }
+    },
+    "prev_hash": "89c360cf19f67627057ffa773adda187a2dfdd9cc029b6fa24392d42277af91d",
+    "event_hash": "89a3069e312a0e1b360e1046aea171aabdb65f69583003c0c0f748cc54a41bb3"
+  },
+  {
+    "_id": "fa66a83d-44ac-4993-95f4-b9c486a8363e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 61,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.232307+00:00",
+    "payload": {
+      "operation": "0deb1f43-d087-4e2f-a72a-7b3143aca6bc",
+      "collection": "state_heads",
+      "id": "overlay:P1|scene:dm-a",
+      "expected": null
+    },
+    "prev_hash": "89a3069e312a0e1b360e1046aea171aabdb65f69583003c0c0f748cc54a41bb3",
+    "event_hash": "18f7d51a8cd36e767ff18cd48230c9d3345e4d3a25eb143a7e55c3e7bf589db0"
+  },
+  {
+    "_id": "784e7213-8b4d-41ca-b3db-9e5c93ff199a",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 62,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.237310+00:00",
+    "payload": {
+      "operation": "0deb1f43-d087-4e2f-a72a-7b3143aca6bc",
+      "collection": "state_heads",
+      "document": {
+        "_id": "overlay:P1|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "revision_id": "50faf17f-48d2-4fe8-a779-6beafae52e70",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "0deb1f43-d087-4e2f-a72a-7b3143aca6bc"
+      }
+    },
+    "prev_hash": "18f7d51a8cd36e767ff18cd48230c9d3345e4d3a25eb143a7e55c3e7bf589db0",
+    "event_hash": "1dc41c60023fc3498cff078cb4f02f303f3d4ec8c137db6a9bbf225b7e06edba"
+  },
+  {
+    "_id": "b673045c-f50c-4732-a625-1e3974ed5e30",
+    "schema_version": 1,
+    "stream_id": "mutation:allowed-overlay",
+    "seq": 1,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.249327+00:00",
+    "payload": {
+      "operation": "0ea6314c-6642-46dc-95eb-5ad2e2dbe05e",
+      "collection": "state_revisions",
+      "id": "bea4386f56e02453f47ebb9cc0a9dca4f29885afc9f4235167757d98325d73f7",
+      "expected": null
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "d2f2ef4e710e092bb66947d557be43fabcc3a54ca9f150354bf3e2b005822997"
+  },
+  {
+    "_id": "7239c63f-de92-474a-9f2c-c52903ffe2ae",
+    "schema_version": 1,
+    "stream_id": "mutation:allowed-overlay",
+    "seq": 2,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.255331+00:00",
+    "payload": {
+      "operation": "0ea6314c-6642-46dc-95eb-5ad2e2dbe05e",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "bea4386f56e02453f47ebb9cc0a9dca4f29885afc9f4235167757d98325d73f7",
+        "mutation_id": "allowed-overlay",
+        "entity_key": "overlay:P1|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "content": {
+          "body": "保留我的私域看法"
+        },
+        "source_ids": [
+          "M09"
+        ],
+        "processed_source_ids": [
+          "ev-M09"
+        ],
+        "parent_revision_id": "50faf17f-48d2-4fe8-a779-6beafae52e70",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "0ea6314c-6642-46dc-95eb-5ad2e2dbe05e"
+      }
+    },
+    "prev_hash": "d2f2ef4e710e092bb66947d557be43fabcc3a54ca9f150354bf3e2b005822997",
+    "event_hash": "250f8f6bb5c821d4eadab818ecfce395906bd6630bd6fe66ec4f8edbb6de873b"
+  },
+  {
+    "_id": "958e0426-1ff4-47c7-952f-96125af93829",
+    "schema_version": 1,
+    "stream_id": "mutation:allowed-overlay",
+    "seq": 3,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.259831+00:00",
+    "payload": {
+      "operation": "e5f5a5ed-3e24-4759-bf57-c9b3d1d5e1e7",
+      "collection": "state_heads",
+      "id": "overlay:P1|scene:dm-a",
+      "expected": 1
+    },
+    "prev_hash": "250f8f6bb5c821d4eadab818ecfce395906bd6630bd6fe66ec4f8edbb6de873b",
+    "event_hash": "e8c16fbffbf63b69f3df9c8a5a9e1c8f0d3cfc42f517ccf4b89e5861b6e19526"
+  },
+  {
+    "_id": "6d5426fc-d7c1-457c-b22c-b9ac47a6d05b",
+    "schema_version": 1,
+    "stream_id": "mutation:allowed-overlay",
+    "seq": 4,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:07:57.267365+00:00",
+    "payload": {
+      "operation": "e5f5a5ed-3e24-4759-bf57-c9b3d1d5e1e7",
+      "collection": "state_heads",
+      "document": {
+        "_id": "overlay:P1|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "revision_id": "bea4386f56e02453f47ebb9cc0a9dca4f29885afc9f4235167757d98325d73f7",
+        "schema_version": 1,
+        "revision": 2,
+        "_last_op": "e5f5a5ed-3e24-4759-bf57-c9b3d1d5e1e7"
+      }
+    },
+    "prev_hash": "e8c16fbffbf63b69f3df9c8a5a9e1c8f0d3cfc42f517ccf4b89e5861b6e19526",
+    "event_hash": "2fd73a47642e636aa1ba5ed0da975ed9098dd9d34c4545b097dca8a074dc9a7d"
+  }
+]

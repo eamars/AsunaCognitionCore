@@ -1,5 +1,5 @@
 """Exercise export I/O with real reviewed browser bytes and synthetic secrets."""
-import io,json,sys,uuid,zipfile
+import base64,io,json,re,sys,uuid,zipfile
 from datetime import datetime,timezone
 from asuna.config import ROOT,BUNDLE,load
 from asuna.evidence import Evidence,write_json,sha
@@ -13,6 +13,7 @@ image_bytes=(ROOT/'reports/ui-qa-20260920-01/review-mobile.jpg').read_bytes()
 (reports/'screen.jpg').write_bytes(image_bytes)
 secret='SYNTHETIC_EXPORT_SECRET_f892ed'
 (reports/'text.json').write_text(json.dumps({'credential':secret}),encoding='utf-8')
+(reports/'old-ui.html').write_text('<a href="data:application/json;base64,'+base64.b64encode(json.dumps({'credential':secret}).encode()).decode()+'">old download</a>',encoding='utf-8')
 with zipfile.ZipFile(reports/'frozen-inputs.zip','w') as archive:
     archive.writestr('frozen.txt',secret)
 reporting.ROOT=probe_root;reporting.BUNDLE=probe_root/'empty-bundle'
@@ -32,6 +33,8 @@ assert result['status']=='PASS'
 with zipfile.ZipFile(probe_root/'reviewed.zip') as archive:
     assert archive.read('reports/screen.jpg')==image_bytes
     assert secret.encode() not in archive.read('reports/text.json')
+    embedded=re.search(rb'data:application/json;base64,([A-Za-z0-9+/=]+)',archive.read('reports/old-ui.html'))[1]
+    assert secret.encode() not in base64.b64decode(embedded) and b'[REDACTED]' in base64.b64decode(embedded)
     with zipfile.ZipFile(io.BytesIO(archive.read('reports/frozen-inputs.zip'))) as nested:
         assert nested.read('frozen.txt')==b'[REDACTED]'
     exported_manifest=json.loads(archive.read('evidence-manifest.json'))

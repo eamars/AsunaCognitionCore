@@ -1,6 +1,6 @@
 """Evidence-first reporting. Missing evidence never becomes an acceptance pass."""
 from datetime import datetime,timezone
-import copy,io,json,re,subprocess,uuid,zipfile
+import base64,copy,io,json,re,subprocess,uuid,zipfile
 from pathlib import Path
 from .config import ROOT,BUNDLE
 from .evidence import canonical,sha,write_json
@@ -103,7 +103,8 @@ def build_report(reports:Path,output:Path):
         'Working-budget overflow fails closed; compaction is explicit at complete boundaries, not automatic.',
         'No approved absolute performance SLO and no independent human ratings; cognition and user-experience claims remain INCONCLUSIVE.',
         'Large provider bodies use verified GridFS plus local evidence; arbitrary oversized state records still require explicit artifact storage and fail closed above 1 MiB.',
-        'In-app Browser validated review paging, full JSON copy export, and audit request/compaction display at observed desktop/narrow widths. No browser download receipt was observed; audit revision diff/filtering remain incomplete. See reports/ui-qa-20260920-01/result.json.',
+        'In-app Browser validated review paging/full JSON copy, actual provider requests, revision diffs and individual compaction input/summary display. Browser JSON document navigation was blocked and no file-download receipt was observed; see ui-qa-correction-20260920-01 and ui-qa-20260920-03/04. Earlier mistaken UI success is explicitly superseded.',
+        'Older multi-compaction Mongo projections stored the final replacement only; full native receipts and provider captures remain. New live probes verify individual exact request/response joins; see compaction-evidence-correction-20260920-01.',
     ]
     report['next_smallest_experiment']='Resolve failed assertions and incomplete acceptance clauses; obtain independent blind ratings after the fixed real-model matrix.'
     write_json(output,report)
@@ -162,6 +163,10 @@ def export(config,reports:Path,output:Path):
     def sanitize(raw):
         try:text=raw.decode('utf-8')
         except UnicodeDecodeError:raise ValueError('NON_TEXT_EXPORT_REQUIRES_EXPLICIT_REVIEW')
+        # Retained early audit UI attempts embedded a JSON download as a data
+        # URL. Decode that known export format before redaction as well.
+        text=re.sub(r'data:application/json;base64,([A-Za-z0-9+/=]+)',
+                    lambda m:'data:application/json;base64,'+base64.b64encode(sanitize(base64.b64decode(m[1],validate=True))).decode(),text)
         for pattern in patterns:text=pattern.sub('[REDACTED]',text)
         text=re.sub(r'(mongodb(?:\+srv)?://)[^/@\s\"]+:[^/@\s\"]+@',r'\1[REDACTED]@',text)
         return text.encode()
@@ -201,7 +206,7 @@ def export(config,reports:Path,output:Path):
             elif item['artifact_path'].endswith('.zip'):
                 with zipfile.ZipFile(io.BytesIO(raw)) as nested:values=[nested.read(n).decode('utf-8') for n in nested.namelist()]
             else:values=[raw.decode('utf-8')]
-            if any(pattern.search(value) for value in values for pattern in patterns):raise ValueError('EXPORT_VERIFICATION_FAILED')
+            if any(sanitize(value.encode()).decode()!=value for value in values):raise ValueError('EXPORT_VERIFICATION_FAILED')
     result={'status':'PASS','archive':ref(output),'files':len(manifest['files']),'redacted_files':manifest['redactions'],'export_is_redacted_copy':True}
     write_json(output.with_suffix('.manifest.json'),result)
     return result

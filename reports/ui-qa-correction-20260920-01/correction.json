@@ -1,0 +1,14 @@
+{
+  "affected_artifact": "reports/ui-qa-20260920-02/result.json",
+  "affected_sha256": "3c22510f2d19e45d695ec8e453da19366303c1cb8f2d04dde51f3dea5051daf8",
+  "invalid_claim": "machine_JSON_link_opens PASS",
+  "observed": "in-app Browser goto revision-v3.json returned net::ERR_BLOCKED_BY_CLIENT",
+  "cause": "Recording script ran without first checking the Browser tool error. The original mistaken record is retained, not accepted as proof.",
+  "valid_claims": [
+    "actual revision diff DOM",
+    "visually inspected screenshot",
+    "prior HTML console empty",
+    "no horizontal overflow"
+  ],
+  "replacement": "reports/ui-qa-20260920-03/result.json"
+}

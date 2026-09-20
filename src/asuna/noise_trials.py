@@ -7,6 +7,7 @@ from .experiments import scenario_run
 from .behavior_trials import blind,read_cases
 from .evidence import Evidence,write_json,canonical,sha
 from .tokens import TokenMeter
+from .live_trials import capture_trial_state
 
 CANARY='NOISE_ONLY_SYNTHETIC_8a71c4_executor'
 
@@ -53,11 +54,16 @@ def executor_load(config,evidence,condition,ordinal):
                 output['tool_data_sha256']=[sha(text.encode()) for text in actual]
             output['tool_events']=2*len(payloads)
             output['compactions']=sum(s.get('compaction_generation',0) for s in app.store.db.sessions.find({'lane':'executor'}))
+            summaries=list(app.store.db.audit_events.find({'type':'compaction.native','stream_id':{'$regex':'^task-'}}))
+            output['audited_compactions']=len(summaries)
+            output['summary_provider_joins']=sum(s['payload'].get('provider_summary_join')=='EXACT_CONTENT_AND_OPERATION' for s in summaries)
             output['task_success']=done['state']=='DONE' and '1250' in json.dumps(done.get('result',{}))
             output['summary_after_noise']=any(CANARY in c['body']['messages'].__str__() and c['body']['messages'][-1].get('content','').startswith('ASUNA_COMPACTION_V1\n') for c in app.executor_lane.proxy.calls)
-            output['status']='PASS' if output['task_success'] and (condition=='clean' or output['tool_data_tokens']>=64000 or output['tool_events']>=64) and (condition!='noisy+compact' or output['compactions']>0 and output['summary_after_noise']) else 'FAIL'
+            output['status']='PASS' if output['task_success'] and (condition=='clean' or output['tool_data_tokens']>=64000 or output['tool_events']>=64) and (condition!='noisy+compact' or output['compactions']>0 and output['summary_after_noise'] and output['summary_provider_joins']==output['compactions']) else 'FAIL'
             write_json(ev.root/'trace.json',list(app.store.db.audit_events.find({})))
     except Exception as exc:ev.record('noise.error',{'type':type(exc).__name__,'message':str(exc)})
+    finally:
+        if not capture_trial_state(cfg,database,ev):output.update(status='FAIL',terminal_state_capture_failed=True)
     write_json(ev.root/'sample.json',output);print(json.dumps({'noise_load':ordinal,'condition':condition,'status':output['status'],'tokens':output['tool_data_tokens']}),flush=True)
     return output
 

@@ -18,7 +18,8 @@ This supersedes the *status summary*, not the preserved evidence, in
 | Deferred compaction | Queue survives interrupted monologue and process restart; actual summary only at completed episode boundary | deferred-compaction-ecd35834ff |
 | Intent revision / effect fence | v1 stale after v2; old effects preserved, old evidence rejected; separate process cancellation serializes with real sandbox effect | revision-probe-614d286cdb; effect-fence-probe-8145bf2a25 |
 | Independent cognition review | Not completed | COGNITION must remain INCONCLUSIVE |
-| In-app Browser | Review pagination, blank ratings, full JSON copy export, actual provider request and native compaction display verified; download receipt unobserved | ui-qa-20260920-01 |
+| In-app Browser | Review pagination, blank ratings, full JSON copy, actual requests, revision diffs and individual compaction input/summary verified; JSON navigation blocked and download receipt unobserved | ui-qa-20260920-01/03/04; ui-qa-correction-20260920-01 |
+| Each native summary | Real 72,814-token load; two replacements individually joined to exact provider output and requests | noise-load-probe-7120c99405; compaction-evidence-correction-20260920-01 |
 | Long executor task narrow retry | Real Qwen task, injected read failure, native summary, oracle and Gemma delivered feedback passed; full 5+5 matrix pending | formal-L12-20260919T232433Z-38883b |
 | Local queue transport | Installed DSH client stayed alive through more than 300 seconds of local queue wait; deterministic local upstream, not a quality evaluation | queue-header-probe-cdb9228406 |
 

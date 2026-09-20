@@ -27,6 +27,8 @@ def test_E19_bounded_proposal_and_next_context(store):
     proposal={'entity_key':'relationship:A','scope_key':'scene:dm-a','base_revision_id':base['_id'],'change_class':'relationship','changes':[{'path':'/body','old':base['content']['body'],'new':'我可以先选择可逆方案，再听林的反馈。'}],'reason':'保留自主选择偏好','source_ids':['M02']}
     result=MemoryService(store).proposal(proposal,'scene:dm-a','bounded')
     assert result['_id']!=base['_id']
+    assert result['reason']==proposal['reason'] and result['change_class']=='relationship'
+    assert store.db.audit_events.find_one({'type':'state.proposed','payload.reason':proposal['reason']})
     _,ctx,manifest=ContextBuilder(store).prepare(event('next'))
     assert ctx['relationship']['body']==proposal['changes'][0]['new']
     assert old_ep['manifest']['relationship_revision']==base['_id']

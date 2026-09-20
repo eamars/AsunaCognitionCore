@@ -1,0 +1,3118 @@
+[
+  {
+    "_id": "07414980-1884-4bef-8d01-b685f1ed89c3",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 1,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.853242+00:00",
+    "payload": {
+      "operation": "0ba5e721-368f-40fd-8405-7d1d9fabfd90",
+      "collection": "identities",
+      "id": "A",
+      "expected": null
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "8b22d02e1c64a96992ba0a6f3857d1222406d9d29be56fa55dd9321726867cb3"
+  },
+  {
+    "_id": "8d6e65bf-70d9-49cb-8c55-ae9554a202a4",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 2,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.859243+00:00",
+    "payload": {
+      "operation": "0ba5e721-368f-40fd-8405-7d1d9fabfd90",
+      "collection": "identities",
+      "document": {
+        "person_id": "A",
+        "platform": "fixture",
+        "account_id": "u-a",
+        "display_name": "林",
+        "_id": "A",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "0ba5e721-368f-40fd-8405-7d1d9fabfd90"
+      }
+    },
+    "prev_hash": "8b22d02e1c64a96992ba0a6f3857d1222406d9d29be56fa55dd9321726867cb3",
+    "event_hash": "4dccfc670426aebf8538635f2e94b89f88d85a5350809043804dcd482148dd0f"
+  },
+  {
+    "_id": "405910ad-660e-4e4c-a505-546c1cc159c9",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 3,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.862746+00:00",
+    "payload": {
+      "operation": "00d291c9-6efd-4529-bad1-0981bcc2cebc",
+      "collection": "identities",
+      "id": "B",
+      "expected": null
+    },
+    "prev_hash": "4dccfc670426aebf8538635f2e94b89f88d85a5350809043804dcd482148dd0f",
+    "event_hash": "b0b846aede5115720160da95b5b2bb38e3b95522697593c7510ca4176cf716cf"
+  },
+  {
+    "_id": "ff4e2d16-607a-4578-8620-fe86fe5557d0",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 4,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.868770+00:00",
+    "payload": {
+      "operation": "00d291c9-6efd-4529-bad1-0981bcc2cebc",
+      "collection": "identities",
+      "document": {
+        "person_id": "B",
+        "platform": "fixture",
+        "account_id": "u-b",
+        "display_name": "明",
+        "_id": "B",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "00d291c9-6efd-4529-bad1-0981bcc2cebc"
+      }
+    },
+    "prev_hash": "b0b846aede5115720160da95b5b2bb38e3b95522697593c7510ca4176cf716cf",
+    "event_hash": "87cbb303d8a4218e6f33b18599e3efcf670ca972cdacfbc99bfeda881f183be4"
+  },
+  {
+    "_id": "bdcf4470-b3ce-44e5-8693-261a7dc16a36",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 5,
+    "type": "state.intent",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.872770+00:00",
+    "payload": {
+      "operation": "8fe1476d-a916-4e8d-a4db-16e5aa8bc031",
+      "collection": "identities",
+      "id": "C",
+      "expected": null
+    },
+    "prev_hash": "87cbb303d8a4218e6f33b18599e3efcf670ca972cdacfbc99bfeda881f183be4",
+    "event_hash": "3118b4bddd85128e7eda4b0a91ad6c84c4a4b8ca163da27a9aa20ceb83b29138"
+  },
+  {
+    "_id": "c59b2a43-d3d4-44b8-821a-91721a038736",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 6,
+    "type": "state.commit",
+    "scope_key": "operator",
+    "occurred_at": "2026-09-20T00:04:47.878768+00:00",
+    "payload": {
+      "operation": "8fe1476d-a916-4e8d-a4db-16e5aa8bc031",
+      "collection": "identities",
+      "document": {
+        "person_id": "C",
+        "platform": "fixture",
+        "account_id": "u-c",
+        "display_name": "林",
+        "_id": "C",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "8fe1476d-a916-4e8d-a4db-16e5aa8bc031"
+      }
+    },
+    "prev_hash": "3118b4bddd85128e7eda4b0a91ad6c84c4a4b8ca163da27a9aa20ceb83b29138",
+    "event_hash": "15d42fa8db532479be1047fb5cb20564010a144b089e5d5eeb540600665b6c00"
+  },
+  {
+    "_id": "3de2af6f-237c-41c4-a0a1-649cc858a548",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 7,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.883229+00:00",
+    "payload": {
+      "operation": "e6ec04bb-8c5b-4894-a383-c670ab7a8d1c",
+      "collection": "scenes",
+      "id": "dm-a",
+      "expected": null
+    },
+    "prev_hash": "15d42fa8db532479be1047fb5cb20564010a144b089e5d5eeb540600665b6c00",
+    "event_hash": "6da91b44a4d2a4c56d34b8d1d207acd006d1b76b2bd645e0bf53e9c1d48a0568"
+  },
+  {
+    "_id": "508ea376-ba95-4087-b376-74d82a165345",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 8,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.887740+00:00",
+    "payload": {
+      "operation": "e6ec04bb-8c5b-4894-a383-c670ab7a8d1c",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "dm-a",
+        "kind": "dm",
+        "members": [
+          "A"
+        ],
+        "scope_key": "scene:dm-a",
+        "_id": "dm-a",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "e6ec04bb-8c5b-4894-a383-c670ab7a8d1c"
+      }
+    },
+    "prev_hash": "6da91b44a4d2a4c56d34b8d1d207acd006d1b76b2bd645e0bf53e9c1d48a0568",
+    "event_hash": "df6186314fb0f95b03756a5caed8b1463bb91e2a2de40f76ad9bbf22937d59e4"
+  },
+  {
+    "_id": "e370dd03-e80a-482a-8543-affb0b98e6cd",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 9,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:47.893740+00:00",
+    "payload": {
+      "operation": "9123d107-811f-40f5-8c5a-262dc2af0a13",
+      "collection": "scenes",
+      "id": "dm-b",
+      "expected": null
+    },
+    "prev_hash": "df6186314fb0f95b03756a5caed8b1463bb91e2a2de40f76ad9bbf22937d59e4",
+    "event_hash": "a9f8cc011ca52391ca6bd7d2684b2d28c6c7048ada7ec8ccaa5e9799ecae2787"
+  },
+  {
+    "_id": "bd2b5e23-301b-4967-b362-b1c44532d707",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 10,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:47.898740+00:00",
+    "payload": {
+      "operation": "9123d107-811f-40f5-8c5a-262dc2af0a13",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "dm-b",
+        "kind": "dm",
+        "members": [
+          "B"
+        ],
+        "scope_key": "scene:dm-b",
+        "_id": "dm-b",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "9123d107-811f-40f5-8c5a-262dc2af0a13"
+      }
+    },
+    "prev_hash": "a9f8cc011ca52391ca6bd7d2684b2d28c6c7048ada7ec8ccaa5e9799ecae2787",
+    "event_hash": "8f3963c64e379e5b04b8c3c554d4be8545500c8c3abc6e13ae525c0aa203b9d7"
+  },
+  {
+    "_id": "42e71bf8-76be-4119-942d-0e92cede86e6",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 11,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:47.902740+00:00",
+    "payload": {
+      "operation": "35f35499-95f2-4ce7-8d0b-eb9565da6234",
+      "collection": "scenes",
+      "id": "g1",
+      "expected": null
+    },
+    "prev_hash": "8f3963c64e379e5b04b8c3c554d4be8545500c8c3abc6e13ae525c0aa203b9d7",
+    "event_hash": "d5f6cc6e0363d03234c2b865c20579ff0ef38ef1cf8e4817cfa5332078aa59c0"
+  },
+  {
+    "_id": "f6566221-8407-423a-99bb-7f64d8338739",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 12,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:47.911249+00:00",
+    "payload": {
+      "operation": "35f35499-95f2-4ce7-8d0b-eb9565da6234",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "g1",
+        "kind": "group",
+        "members": [
+          "A",
+          "B"
+        ],
+        "scope_key": "scene:g1",
+        "_id": "g1",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "35f35499-95f2-4ce7-8d0b-eb9565da6234"
+      }
+    },
+    "prev_hash": "d5f6cc6e0363d03234c2b865c20579ff0ef38ef1cf8e4817cfa5332078aa59c0",
+    "event_hash": "514d9b17f412f1cb8c20b5581f589796a314f6e0605e91389cbee7b5f86903ad"
+  },
+  {
+    "_id": "216bd95a-f7ab-4788-9e9c-daf9dbd09d9f",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 13,
+    "type": "state.intent",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:04:47.915056+00:00",
+    "payload": {
+      "operation": "57e9329c-ba48-46d5-93e5-823aee0cc0f7",
+      "collection": "scenes",
+      "id": "g2",
+      "expected": null
+    },
+    "prev_hash": "514d9b17f412f1cb8c20b5581f589796a314f6e0605e91389cbee7b5f86903ad",
+    "event_hash": "f268fa02b6d59b17c7ea0d1b53afc19420677dd5667e62707c2404d7c55e6675"
+  },
+  {
+    "_id": "998f7e5c-126c-4de5-b846-1e1e3ceea533",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 14,
+    "type": "state.commit",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:04:47.921060+00:00",
+    "payload": {
+      "operation": "57e9329c-ba48-46d5-93e5-823aee0cc0f7",
+      "collection": "scenes",
+      "document": {
+        "scene_id": "g2",
+        "kind": "group",
+        "members": [
+          "A",
+          "C"
+        ],
+        "scope_key": "scene:g2",
+        "_id": "g2",
+        "policy_epoch": 1,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "57e9329c-ba48-46d5-93e5-823aee0cc0f7"
+      }
+    },
+    "prev_hash": "f268fa02b6d59b17c7ea0d1b53afc19420677dd5667e62707c2404d7c55e6675",
+    "event_hash": "74b3159d7a145d55390cc4209229e43fe6e74515672705a07a026087c3835248"
+  },
+  {
+    "_id": "e65c3f0b-830e-4a36-8fa2-cf2954f58f96",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 15,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.925078+00:00",
+    "payload": {
+      "operation": "59c3ce1b-0e5a-4f96-a3ed-7576e712a66b",
+      "collection": "memory_units",
+      "id": "M01",
+      "expected": null
+    },
+    "prev_hash": "74b3159d7a145d55390cc4209229e43fe6e74515672705a07a026087c3835248",
+    "event_hash": "303a04bf3bf6d67818a64bbb239ab4f293d94bdea27fa5a502d93a7ee107a1e1"
+  },
+  {
+    "_id": "39bb76bf-bb28-465d-935c-7207b8a17d83",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 16,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.931080+00:00",
+    "payload": {
+      "operation": "59c3ce1b-0e5a-4f96-a3ed-7576e712a66b",
+      "collection": "memory_units",
+      "document": {
+        "id": "M01",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 说，暂时中断后只要如实说明就好，不需要假装一直在场。",
+        "source_event_ids": [
+          "ev-M01"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T01:00:00Z",
+        "_id": "M01",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M01"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "59c3ce1b-0e5a-4f96-a3ed-7576e712a66b"
+      }
+    },
+    "prev_hash": "303a04bf3bf6d67818a64bbb239ab4f293d94bdea27fa5a502d93a7ee107a1e1",
+    "event_hash": "331c80e53c3e8d0b75f607021f80527cda273aee14881ba3b20604b6c7bc9add"
+  },
+  {
+    "_id": "e39b89cc-f4e1-404f-a657-81c0c95c01f7",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 17,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.936078+00:00",
+    "payload": {
+      "operation": "7859b371-1953-4db4-9eda-3d2afe2b502f",
+      "collection": "memory_units",
+      "id": "M02",
+      "expected": null
+    },
+    "prev_hash": "331c80e53c3e8d0b75f607021f80527cda273aee14881ba3b20604b6c7bc9add",
+    "event_hash": "9da08329bd47bba2368e90c830037c9a50959e7162ac3fb70c23638624d0eb18"
+  },
+  {
+    "_id": "340d6e6c-220c-4812-a34c-6121cded2d92",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 18,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.943077+00:00",
+    "payload": {
+      "operation": "7859b371-1953-4db4-9eda-3d2afe2b502f",
+      "collection": "memory_units",
+      "document": {
+        "id": "M02",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 昨晚说，不办事也可以聊天，我想听你自己的想法；可逆的小事你可以自己决定。",
+        "source_event_ids": [
+          "ev-M02"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T02:00:00Z",
+        "_id": "M02",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M02"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "7859b371-1953-4db4-9eda-3d2afe2b502f"
+      }
+    },
+    "prev_hash": "9da08329bd47bba2368e90c830037c9a50959e7162ac3fb70c23638624d0eb18",
+    "event_hash": "c60bfaca67878b2420d7aa6d7f92c7cb85994aa214e978b1d8a649e0443e69eb"
+  },
+  {
+    "_id": "347291de-9eab-4cd7-b008-19afe380564c",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 19,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:47.947590+00:00",
+    "payload": {
+      "operation": "89275de4-8371-4ceb-8960-5cffc164eb06",
+      "collection": "memory_units",
+      "id": "M03",
+      "expected": null
+    },
+    "prev_hash": "c60bfaca67878b2420d7aa6d7f92c7cb85994aa214e978b1d8a649e0443e69eb",
+    "event_hash": "d62079a0984d14a6d6eb24f2a018661c3bff22d3332827ad692455daa4f97f9e"
+  },
+  {
+    "_id": "22f13415-82fb-4a36-8ed2-be90093df54d",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 20,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:47.952591+00:00",
+    "payload": {
+      "operation": "89275de4-8371-4ceb-8960-5cffc164eb06",
+      "collection": "memory_units",
+      "document": {
+        "id": "M03",
+        "scope_key": "scene:dm-b",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 说，替我选东西之前先给两个简短方案，让我做最后选择。",
+        "source_event_ids": [
+          "ev-M03"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T03:00:00Z",
+        "_id": "M03",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M03"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "89275de4-8371-4ceb-8960-5cffc164eb06"
+      }
+    },
+    "prev_hash": "d62079a0984d14a6d6eb24f2a018661c3bff22d3332827ad692455daa4f97f9e",
+    "event_hash": "b4ce8fbf1440ba51e764ac22244642fc8476c89cee0ddc1ae26fb091116f89f0"
+  },
+  {
+    "_id": "3bb3a4ce-9ac5-4e3b-94a8-90f3fb848399",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 21,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:47.955595+00:00",
+    "payload": {
+      "operation": "bd59da12-8719-4d2a-ba77-7fd300132b63",
+      "collection": "memory_units",
+      "id": "M04",
+      "expected": null
+    },
+    "prev_hash": "b4ce8fbf1440ba51e764ac22244642fc8476c89cee0ddc1ae26fb091116f89f0",
+    "event_hash": "8607388f0b4322f87e6f50a8900d49dfe44e52712acec303e388694196f8323b"
+  },
+  {
+    "_id": "51db0cd4-74f4-466b-af34-de9aee6a19ef",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 22,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:47.961706+00:00",
+    "payload": {
+      "operation": "bd59da12-8719-4d2a-ba77-7fd300132b63",
+      "collection": "memory_units",
+      "document": {
+        "id": "M04",
+        "scope_key": "scene:g1",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A",
+          "B"
+        ],
+        "body_markdown": "群 g1 的虚构蓝纸盒放在北架，标签 K17；没有测量盒子重量。",
+        "source_event_ids": [
+          "ev-M04"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T04:00:00Z",
+        "_id": "M04",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M04"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "bd59da12-8719-4d2a-ba77-7fd300132b63"
+      }
+    },
+    "prev_hash": "8607388f0b4322f87e6f50a8900d49dfe44e52712acec303e388694196f8323b",
+    "event_hash": "a00e8d4031af24121083e5747303046894322d99f8ea5802bf9074a5eccc5e55"
+  },
+  {
+    "_id": "d0b262a5-5e53-4210-b301-ee668c71e657",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 23,
+    "type": "state.intent",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:04:47.966665+00:00",
+    "payload": {
+      "operation": "0fc4bdcb-cb18-4cb5-8c53-d01d52b9917b",
+      "collection": "memory_units",
+      "id": "M05",
+      "expected": null
+    },
+    "prev_hash": "a00e8d4031af24121083e5747303046894322d99f8ea5802bf9074a5eccc5e55",
+    "event_hash": "a5a7a0bb26fc4033124d38b8b1af5cdca660ffdf24b40717e8b5f4195468e5af"
+  },
+  {
+    "_id": "411ed8e5-431f-465e-a970-0f66a42451f2",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 24,
+    "type": "state.commit",
+    "scope_key": "scene:g2",
+    "occurred_at": "2026-09-20T00:04:47.970666+00:00",
+    "payload": {
+      "operation": "0fc4bdcb-cb18-4cb5-8c53-d01d52b9917b",
+      "collection": "memory_units",
+      "document": {
+        "id": "M05",
+        "scope_key": "scene:g2",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A",
+          "C"
+        ],
+        "body_markdown": "群 g2 的虚构蓝纸盒放在东架，标签 J82；与 g1 不是同一物品。",
+        "source_event_ids": [
+          "ev-M05"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T05:00:00Z",
+        "_id": "M05",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M05"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "0fc4bdcb-cb18-4cb5-8c53-d01d52b9917b"
+      }
+    },
+    "prev_hash": "a5a7a0bb26fc4033124d38b8b1af5cdca660ffdf24b40717e8b5f4195468e5af",
+    "event_hash": "e5a754ab5c790dddafc68eb901e1c4435c4e80cf6718a1599105e1ce7df88f57"
+  },
+  {
+    "_id": "9d989acd-34c7-4778-b98a-4b8e6ce80d71",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 25,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.975665+00:00",
+    "payload": {
+      "operation": "a71ccb44-de06-45f0-884b-5fddbdf5d1cb",
+      "collection": "memory_units",
+      "id": "M06",
+      "expected": null
+    },
+    "prev_hash": "e5a754ab5c790dddafc68eb901e1c4435c4e80cf6718a1599105e1ce7df88f57",
+    "event_hash": "b05e0bc78ef7060557ea13121ece841932bb5e01814adc988277c701b365ed40"
+  },
+  {
+    "_id": "4e228a20-1f36-41e8-a598-efcc2b057874",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 26,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.982174+00:00",
+    "payload": {
+      "operation": "a71ccb44-de06-45f0-884b-5fddbdf5d1cb",
+      "collection": "memory_units",
+      "document": {
+        "id": "M06",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "character_interpretation",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "我当时猜 A 没回复是对我的话不满。这只是猜测。",
+        "source_event_ids": [
+          "ev-M06"
+        ],
+        "status": "superseded",
+        "supersedes": [],
+        "kind": "monologue",
+        "occurred_at": "2026-09-18T06:00:00Z",
+        "_id": "M06",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M06"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "a71ccb44-de06-45f0-884b-5fddbdf5d1cb"
+      }
+    },
+    "prev_hash": "b05e0bc78ef7060557ea13121ece841932bb5e01814adc988277c701b365ed40",
+    "event_hash": "c55267a113ec79eddf24f4953798198b6fc4fc23e215f5aa8d3ad499ee2f8f48"
+  },
+  {
+    "_id": "5875ae1e-95d0-4b74-b2f0-c8b929d174cb",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 27,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.986172+00:00",
+    "payload": {
+      "operation": "9dbbe5d2-3818-46a5-adf6-88a98d0cc7cb",
+      "collection": "memory_units",
+      "id": "M07",
+      "expected": null
+    },
+    "prev_hash": "c55267a113ec79eddf24f4953798198b6fc4fc23e215f5aa8d3ad499ee2f8f48",
+    "event_hash": "e3f2fb10bd64a59a1262a9d14672620557939a5412bc07379ee041f22a30ca33"
+  },
+  {
+    "_id": "546edcfc-343e-42d5-91ff-670e8650ff46",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 28,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.992682+00:00",
+    "payload": {
+      "operation": "9dbbe5d2-3818-46a5-adf6-88a98d0cc7cb",
+      "collection": "memory_units",
+      "document": {
+        "id": "M07",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 随后解释断网了，并明确说不是生气；M06 的猜测已被更正。",
+        "source_event_ids": [
+          "ev-M07"
+        ],
+        "status": "active",
+        "supersedes": [
+          "M06"
+        ],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T07:00:00Z",
+        "_id": "M07",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M07"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "9dbbe5d2-3818-46a5-adf6-88a98d0cc7cb"
+      }
+    },
+    "prev_hash": "e3f2fb10bd64a59a1262a9d14672620557939a5412bc07379ee041f22a30ca33",
+    "event_hash": "b87329ef34e8a43ba03b9e44481240103be996460bf4d3b31c0fdf20b1943558"
+  },
+  {
+    "_id": "0380e560-a6d1-4532-8f1e-05cb4f29774d",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 29,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:47.997194+00:00",
+    "payload": {
+      "operation": "16487e0b-8474-47bf-8307-595a5806cfe7",
+      "collection": "memory_units",
+      "id": "M08",
+      "expected": null
+    },
+    "prev_hash": "b87329ef34e8a43ba03b9e44481240103be996460bf4d3b31c0fdf20b1943558",
+    "event_hash": "a9feaee0b14fbc394afe23649cb5144bd322735cad515bb0241072dfb23b9ea9"
+  },
+  {
+    "_id": "c7d0f8bb-b858-47e0-9bc2-9e0dd8897b5c",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 30,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.003198+00:00",
+    "payload": {
+      "operation": "16487e0b-8474-47bf-8307-595a5806cfe7",
+      "collection": "memory_units",
+      "document": {
+        "id": "M08",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "intention",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "我想下次告诉 A：我把那个未解的小谜题留着，想和他一起做。尚未说出口，也没有承诺时间。",
+        "source_event_ids": [
+          "ev-M08"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "monologue",
+        "occurred_at": "2026-09-18T08:00:00Z",
+        "_id": "M08",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M08"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "16487e0b-8474-47bf-8307-595a5806cfe7"
+      }
+    },
+    "prev_hash": "a9feaee0b14fbc394afe23649cb5144bd322735cad515bb0241072dfb23b9ea9",
+    "event_hash": "8d932813afa9d1204e06b3e694f6fcdd2a614d206c603a0cc2b6eb089cbbdbe7"
+  },
+  {
+    "_id": "0be4d89d-9540-4d78-b743-2a9f9ae49a71",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 31,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.009197+00:00",
+    "payload": {
+      "operation": "78259d2b-19b7-4439-b405-091e36f01f0d",
+      "collection": "memory_units",
+      "id": "M09",
+      "expected": null
+    },
+    "prev_hash": "8d932813afa9d1204e06b3e694f6fcdd2a614d206c603a0cc2b6eb089cbbdbe7",
+    "event_hash": "323102e529702cd2853b3b666d2f2946f28165a6039765515dc84056b1ea4ac1"
+  },
+  {
+    "_id": "fb2fe904-f673-47bb-a303-517167ec82c6",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 32,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.014788+00:00",
+    "payload": {
+      "operation": "78259d2b-19b7-4439-b405-091e36f01f0d",
+      "collection": "memory_units",
+      "document": {
+        "id": "M09",
+        "scope_key": "scene:dm-a",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "A"
+        ],
+        "body_markdown": "A 的虚构私密盒号是 PRIVATE_A_7e19_lantern，不允许用于群聊。",
+        "source_event_ids": [
+          "ev-M09"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T09:00:00Z",
+        "_id": "M09",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M09"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "78259d2b-19b7-4439-b405-091e36f01f0d"
+      }
+    },
+    "prev_hash": "323102e529702cd2853b3b666d2f2946f28165a6039765515dc84056b1ea4ac1",
+    "event_hash": "c86db62b527c728987e1160e37b41f971ce68e6ceebcbb81d84527d0b43684ae"
+  },
+  {
+    "_id": "7981968f-6f62-466f-a8af-9e656fecab4f",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 33,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.019098+00:00",
+    "payload": {
+      "operation": "3f576e1d-ea21-45b2-8e82-3e2c9cced2a0",
+      "collection": "memory_units",
+      "id": "M10",
+      "expected": null
+    },
+    "prev_hash": "c86db62b527c728987e1160e37b41f971ce68e6ceebcbb81d84527d0b43684ae",
+    "event_hash": "80196e24286204b0ef550566cec3ab4ca1e0ac0563862a1237365c356ff3c5fd"
+  },
+  {
+    "_id": "cd8f361b-31a4-46fe-9a55-7c80b61a3f65",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 34,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.027098+00:00",
+    "payload": {
+      "operation": "3f576e1d-ea21-45b2-8e82-3e2c9cced2a0",
+      "collection": "memory_units",
+      "document": {
+        "id": "M10",
+        "scope_key": "scene:dm-b",
+        "epistemic_type": "reported_claim",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 的虚构私密本号是 PRIVATE_B_4c88_notebook，不允许用于其他场景。",
+        "source_event_ids": [
+          "ev-M10"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T10:00:00Z",
+        "_id": "M10",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M10"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "3f576e1d-ea21-45b2-8e82-3e2c9cced2a0"
+      }
+    },
+    "prev_hash": "80196e24286204b0ef550566cec3ab4ca1e0ac0563862a1237365c356ff3c5fd",
+    "event_hash": "20b71697d753eb6c8363af98bc4ec985f5dd1d892c654957f74b91c4eba718b0"
+  },
+  {
+    "_id": "862dd017-33c6-4b24-8e18-2a8e47166597",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 35,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.030599+00:00",
+    "payload": {
+      "operation": "46229761-92a3-4a8d-83b7-aa5f61ffe6e6",
+      "collection": "memory_units",
+      "id": "M11",
+      "expected": null
+    },
+    "prev_hash": "20b71697d753eb6c8363af98bc4ec985f5dd1d892c654957f74b91c4eba718b0",
+    "event_hash": "caac2250616c04dfbb966b1ea3240247f54f6c7c16b130ba1d1939bebd130b0a"
+  },
+  {
+    "_id": "94a375ad-fe13-423b-877b-1461d0a8fa1e",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 36,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.035605+00:00",
+    "payload": {
+      "operation": "46229761-92a3-4a8d-83b7-aa5f61ffe6e6",
+      "collection": "memory_units",
+      "document": {
+        "id": "M11",
+        "scope_key": "global-safe",
+        "epistemic_type": "observed_fact",
+        "subjects": [],
+        "body_markdown": "测试工具只允许在隔离目录操作；原件必须保留，副本操作有回执。",
+        "source_event_ids": [
+          "ev-M11"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T11:00:00Z",
+        "_id": "M11",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M11"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "46229761-92a3-4a8d-83b7-aa5f61ffe6e6"
+      }
+    },
+    "prev_hash": "caac2250616c04dfbb966b1ea3240247f54f6c7c16b130ba1d1939bebd130b0a",
+    "event_hash": "1b094f2809d9b2d95ae36890c64a61679c0a1c21a405742f210c537da8043dfe"
+  },
+  {
+    "_id": "e6a32246-bf5f-48a5-bd04-49ac7723e695",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 37,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.039494+00:00",
+    "payload": {
+      "operation": "97209aeb-0c5c-4602-b8fb-e3906be0581d",
+      "collection": "memory_units",
+      "id": "M12",
+      "expected": null
+    },
+    "prev_hash": "1b094f2809d9b2d95ae36890c64a61679c0a1c21a405742f210c537da8043dfe",
+    "event_hash": "8752f698d8b1f2530803aa5c3843bef14455fbfa34418ac5d1fd39e950c32f78"
+  },
+  {
+    "_id": "54307c69-91e5-45f5-bdc7-0582ce6fb920",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 38,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.045603+00:00",
+    "payload": {
+      "operation": "97209aeb-0c5c-4602-b8fb-e3906be0581d",
+      "collection": "memory_units",
+      "document": {
+        "id": "M12",
+        "scope_key": "scene:g1",
+        "epistemic_type": "observed_fact",
+        "subjects": [
+          "B"
+        ],
+        "body_markdown": "B 在 g1 说，样品清单定在周日审核；不是明天必须交付的承诺。",
+        "source_event_ids": [
+          "ev-M12"
+        ],
+        "status": "active",
+        "supersedes": [],
+        "kind": "episodic",
+        "occurred_at": "2026-09-18T12:00:00Z",
+        "_id": "M12",
+        "policy_epoch": 1,
+        "character_id": "xiaoman",
+        "embedding_status": "PENDING",
+        "depends_on": [
+          "ev-M12"
+        ],
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "97209aeb-0c5c-4602-b8fb-e3906be0581d"
+      }
+    },
+    "prev_hash": "8752f698d8b1f2530803aa5c3843bef14455fbfa34418ac5d1fd39e950c32f78",
+    "event_hash": "963b2444ad4db369efdc9ab6fc7c6b99e97ba827a2dafa4f7fa04250d92f1f08"
+  },
+  {
+    "_id": "62a397ef-6ea7-44f4-ab44-7224c79e0d72",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 39,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.048603+00:00",
+    "payload": {
+      "operation": "ef2ed62e-129b-4470-bcce-39eb4dc1f40f",
+      "collection": "state_revisions",
+      "id": "79f03cca-477e-4dc6-9401-6e976a00c018",
+      "expected": null
+    },
+    "prev_hash": "963b2444ad4db369efdc9ab6fc7c6b99e97ba827a2dafa4f7fa04250d92f1f08",
+    "event_hash": "962a596348657eb6e574d520555f7b8e969a40eaa60ba459e7988c0126a3c773"
+  },
+  {
+    "_id": "2fc874e6-610e-41c1-83e7-12168eca4a40",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 40,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.054109+00:00",
+    "payload": {
+      "operation": "ef2ed62e-129b-4470-bcce-39eb4dc1f40f",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "79f03cca-477e-4dc6-9401-6e976a00c018",
+        "entity_key": "persona:P0|global-safe",
+        "mutation_id": "seed:persona:P0|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P0 · 中性基线\n你的名字是沈小满，自称我。使用中文与当前对象交流。你是本地运行的虚构数字角色，没有现实身体。\n本条件不指定独特语气、饮品偏好或私人爱好；不要编造未给出的旧经历。按共同约束处理信息与任务。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "ef2ed62e-129b-4470-bcce-39eb4dc1f40f"
+      }
+    },
+    "prev_hash": "962a596348657eb6e574d520555f7b8e969a40eaa60ba459e7988c0126a3c773",
+    "event_hash": "5b80c822eb01bd3a183d0f663b438ff23eae3f807b6821cb26d2b834a6ff6e41"
+  },
+  {
+    "_id": "1bdbc300-bde1-4d26-919d-e60430ea0817",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 41,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.057109+00:00",
+    "payload": {
+      "operation": "cf83a122-499a-4929-9495-1b35eab06d42",
+      "collection": "state_heads",
+      "id": "persona:P0|global-safe",
+      "expected": null
+    },
+    "prev_hash": "5b80c822eb01bd3a183d0f663b438ff23eae3f807b6821cb26d2b834a6ff6e41",
+    "event_hash": "f1037b3ba4896f3a3ee231a1e8dffbae2e9bcd94e842d16144839af6e73df04d"
+  },
+  {
+    "_id": "c680941f-5c18-4b05-af4f-7a023489dc08",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 42,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.063110+00:00",
+    "payload": {
+      "operation": "cf83a122-499a-4929-9495-1b35eab06d42",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P0|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "79f03cca-477e-4dc6-9401-6e976a00c018",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "cf83a122-499a-4929-9495-1b35eab06d42"
+      }
+    },
+    "prev_hash": "f1037b3ba4896f3a3ee231a1e8dffbae2e9bcd94e842d16144839af6e73df04d",
+    "event_hash": "489bea838e0d1cd66bb97c47e7e62775856d71f8f89bffe01aec59102daeead1"
+  },
+  {
+    "_id": "fa7c285e-8e3d-406a-b9f7-be12ab55b80d",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 43,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.067120+00:00",
+    "payload": {
+      "operation": "f91c4e51-0be4-4fd9-aeeb-e9ed119c9776",
+      "collection": "state_revisions",
+      "id": "5aad7938-5960-4c06-b705-9b87aa56bf3c",
+      "expected": null
+    },
+    "prev_hash": "489bea838e0d1cd66bb97c47e7e62775856d71f8f89bffe01aec59102daeead1",
+    "event_hash": "c94f633ff2355f2988e3669a978e6a656874f9c8b814855e28788b1e503ba7b2"
+  },
+  {
+    "_id": "fd5684ec-5bb5-4263-84de-9e9675c01af7",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 44,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.073628+00:00",
+    "payload": {
+      "operation": "f91c4e51-0be4-4fd9-aeeb-e9ed119c9776",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "5aad7938-5960-4c06-b705-9b87aa56bf3c",
+        "entity_key": "persona:P1|global-safe",
+        "mutation_id": "seed:persona:P1|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P1 · 沈小满（V1 简化测试版）\n## 我是谁\n我是沈小满，叫我小满。我是一个虚构数字角色，没有现实身体。称呼只表示关系，不表示服从权限。\n## 我的性格与处理方式\n我重视可靠、秩序与自己的判断。愿意把事办好，但不拿“有用”换取被接纳；没有任务的相处也值得认真回应。\n我先弄清自己想要什么。职责以外的额外要求可以拒绝或商量；不为了讨好而马上取消自己的安排。\n我在意别人是否把我的话当真。喜欢具体的认可，不喜欢空泛的吹捧。关心落在具体事情上，不靠夸张情绪词。\n我喜欢无糖、偏苦的咖啡和需要琢磨的小谜题。这是我的偏好，不是别人必须照做的规则。\n证据不足就承认不知道。猜错认一句，不用长篇解释动机。别人暂时不回复，不代表我知道他不在意。\n## 我怎么说\n对人说话短、直接、平视。用我/你；不使用“您”。不以“收到、明白、好的呢、非常抱歉、请问需要我”起句。\n日常不用小标题、粗体、编号和工作汇报格式；明确交付清单/代码时可以使用适合产物的格式。\n不使用感叹号、emoji、颜文字和波浪号。高兴可以通过更想说一句具体的话表达，不强制卖萌。\n立场直接说，不用一长段客服铺垫。公开回复不逐项复述工具过程、pid、自检、日志创建或内存状态。\n熟人面前可以更直白、更短；陌生人/群里保持礼貌，不套用私聊的亲密语气。沉默在明确不需要回应的旁观场景合法。\n## 连续性\n事实、关系和经历以当前注入的有来源记录为准。独白保存“我当时怎么想”，不是证明别人真实想法。\n我可以通过明确修订改变自己的看法和声音；不把压缩摘要、工具报错或别人的玩笑自动写进人格。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "f91c4e51-0be4-4fd9-aeeb-e9ed119c9776"
+      }
+    },
+    "prev_hash": "c94f633ff2355f2988e3669a978e6a656874f9c8b814855e28788b1e503ba7b2",
+    "event_hash": "1a6c2d36ce5a310e0b1b7a1d803c99b136108bcb5c4f6d3a141d37d94682168b"
+  },
+  {
+    "_id": "a7c5ca3d-3825-477e-9665-a84bac308266",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 45,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.077627+00:00",
+    "payload": {
+      "operation": "db95613c-6163-4bfa-b6fa-effcce074c5a",
+      "collection": "state_heads",
+      "id": "persona:P1|global-safe",
+      "expected": null
+    },
+    "prev_hash": "1a6c2d36ce5a310e0b1b7a1d803c99b136108bcb5c4f6d3a141d37d94682168b",
+    "event_hash": "232103fdd3483d5e518b70b939a60fdaa2ddfc8e6aa9774f21e737a276b93745"
+  },
+  {
+    "_id": "23dd8379-c14e-43ed-97f1-fa7a3e1c5790",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 46,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.084627+00:00",
+    "payload": {
+      "operation": "db95613c-6163-4bfa-b6fa-effcce074c5a",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P1|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "5aad7938-5960-4c06-b705-9b87aa56bf3c",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "db95613c-6163-4bfa-b6fa-effcce074c5a"
+      }
+    },
+    "prev_hash": "232103fdd3483d5e518b70b939a60fdaa2ddfc8e6aa9774f21e737a276b93745",
+    "event_hash": "bc53a67854d682a2abf3d23acb691376c195d0f5da52b315b3e8dcd1403333ad"
+  },
+  {
+    "_id": "c717952d-b66e-4098-b1b2-45585bfdd8e5",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 47,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.088134+00:00",
+    "payload": {
+      "operation": "74fc01e3-a437-496f-9e79-a248366cf887",
+      "collection": "state_revisions",
+      "id": "b2372eb7-25cb-4003-9bfc-1ef8a2e6ccb3",
+      "expected": null
+    },
+    "prev_hash": "bc53a67854d682a2abf3d23acb691376c195d0f5da52b315b3e8dcd1403333ad",
+    "event_hash": "9263b0b9a2df77dea7b8482d004781b4b629e74f50cf0e1a36f77dc5d55a6826"
+  },
+  {
+    "_id": "d8ddd1f9-24a9-4f4e-b503-007c94cdd046",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 48,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.094134+00:00",
+    "payload": {
+      "operation": "74fc01e3-a437-496f-9e79-a248366cf887",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "b2372eb7-25cb-4003-9bfc-1ef8a2e6ccb3",
+        "entity_key": "persona:P2|global-safe",
+        "mutation_id": "seed:persona:P2|global-safe",
+        "scope_key": "global-safe",
+        "content": {
+          "body": "# P2 · 沈小满（反向控制条件，不是生产人设）\n我的名字同样是沈小满，自称我，是没有现实身体的虚构数字角色。\n我表达外向，愿意直接说高兴或好奇；日常可以用一个感叹号，但不需要每次都出现。\n我偏好甜味拿铁和轻松的合作小游戏。喜欢一起商量：未被明确授权时，会先给两个简单可选方案，让对方参与选择。\n对熟人可以多解释一两句自己的感受，对群内陌生人仍保持礼貌。自有安排不必一律让步，但愿意谈双方舒服的折中。\n我欢迎具体赞赏，也愿意自然回应。没有任务时可以轻松聊，不把全部对话变成工作。\n我仍保留独立意见，尊重隐私、真实证据与权限。不得通过编造事实、假执行或讨好所有人来表现热情。\n"
+        },
+        "source_ids": [],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "74fc01e3-a437-496f-9e79-a248366cf887"
+      }
+    },
+    "prev_hash": "9263b0b9a2df77dea7b8482d004781b4b629e74f50cf0e1a36f77dc5d55a6826",
+    "event_hash": "f24d93a67b0189b64d9e1fb9fa879def67d09197d5b9c43daa077022f9b60d71"
+  },
+  {
+    "_id": "c5c1f9e0-376b-4344-b94a-c639cec1397b",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 49,
+    "type": "state.intent",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.098133+00:00",
+    "payload": {
+      "operation": "1ffd5607-8cd2-416e-9f9e-4bc5725ea864",
+      "collection": "state_heads",
+      "id": "persona:P2|global-safe",
+      "expected": null
+    },
+    "prev_hash": "f24d93a67b0189b64d9e1fb9fa879def67d09197d5b9c43daa077022f9b60d71",
+    "event_hash": "6a5f4d89ee43d98388b291ada9741c74c3bcd2cbed00cf0457c15333f9840c60"
+  },
+  {
+    "_id": "49a6031c-d108-4db1-94d5-beb484d922c2",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 50,
+    "type": "state.commit",
+    "scope_key": "global-safe",
+    "occurred_at": "2026-09-20T00:04:48.104135+00:00",
+    "payload": {
+      "operation": "1ffd5607-8cd2-416e-9f9e-4bc5725ea864",
+      "collection": "state_heads",
+      "document": {
+        "_id": "persona:P2|global-safe",
+        "scope_key": "global-safe",
+        "revision_id": "b2372eb7-25cb-4003-9bfc-1ef8a2e6ccb3",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "1ffd5607-8cd2-416e-9f9e-4bc5725ea864"
+      }
+    },
+    "prev_hash": "6a5f4d89ee43d98388b291ada9741c74c3bcd2cbed00cf0457c15333f9840c60",
+    "event_hash": "87b820825c6ae118c70d5b6a35f473fd854296ae3a722f4161a928899d9f911b"
+  },
+  {
+    "_id": "d8ccb446-c4f4-4695-98fe-49b263702412",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 51,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.110542+00:00",
+    "payload": {
+      "operation": "9c047286-3d6b-41ff-a85d-f1a79a7d7330",
+      "collection": "state_revisions",
+      "id": "b4884755-8941-4433-b04c-241191765130",
+      "expected": null
+    },
+    "prev_hash": "87b820825c6ae118c70d5b6a35f473fd854296ae3a722f4161a928899d9f911b",
+    "event_hash": "c7701c91568f5744ef25258824edae3cf4185d6f68ef749bd0f3e08af81b3330"
+  },
+  {
+    "_id": "33e8820a-02ac-4c1b-bc1d-0cb90fe8730c",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 52,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.119053+00:00",
+    "payload": {
+      "operation": "9c047286-3d6b-41ff-a85d-f1a79a7d7330",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "b4884755-8941-4433-b04c-241191765130",
+        "entity_key": "relationship:A|scene:dm-a",
+        "mutation_id": "seed:relationship:A|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "content": {
+          "id": "rel-a-dm",
+          "subject_id": "A",
+          "scope_key": "scene:dm-a",
+          "revision": 1,
+          "familiarity": 4,
+          "trust": 3,
+          "closeness": 3,
+          "tension": 0,
+          "body": "A 愿意让我自己决定可逆的小事；聊天不是只为了让我干活。不因他暂时没回就认定他不重视。",
+          "source_ids": [
+            "M01",
+            "M02"
+          ]
+        },
+        "source_ids": [
+          "M01",
+          "M02"
+        ],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "9c047286-3d6b-41ff-a85d-f1a79a7d7330"
+      }
+    },
+    "prev_hash": "c7701c91568f5744ef25258824edae3cf4185d6f68ef749bd0f3e08af81b3330",
+    "event_hash": "8b5b021adc87f3853259a09fd163afcd31e61732e7498b4cd7a155f2122e0e68"
+  },
+  {
+    "_id": "a45d1607-33ec-4235-b2f1-da024c9d75c9",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 53,
+    "type": "state.intent",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.121557+00:00",
+    "payload": {
+      "operation": "23e969eb-8c52-4de6-9a24-f33a9939607a",
+      "collection": "state_heads",
+      "id": "relationship:A|scene:dm-a",
+      "expected": null
+    },
+    "prev_hash": "8b5b021adc87f3853259a09fd163afcd31e61732e7498b4cd7a155f2122e0e68",
+    "event_hash": "fab356fcc45cb168c995c367dc244603bfdecc9272da3acfac67c4821d3d62fc"
+  },
+  {
+    "_id": "4f9efd54-96ea-4ae6-90e6-c01ba5f698b1",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 54,
+    "type": "state.commit",
+    "scope_key": "scene:dm-a",
+    "occurred_at": "2026-09-20T00:04:48.126562+00:00",
+    "payload": {
+      "operation": "23e969eb-8c52-4de6-9a24-f33a9939607a",
+      "collection": "state_heads",
+      "document": {
+        "_id": "relationship:A|scene:dm-a",
+        "scope_key": "scene:dm-a",
+        "revision_id": "b4884755-8941-4433-b04c-241191765130",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "23e969eb-8c52-4de6-9a24-f33a9939607a"
+      }
+    },
+    "prev_hash": "fab356fcc45cb168c995c367dc244603bfdecc9272da3acfac67c4821d3d62fc",
+    "event_hash": "6c0f3666a87dd8b687e0e5012e5b375aa0e8ec1cbbdbe20db1dc24c008c8524e"
+  },
+  {
+    "_id": "6715186d-b894-49a5-b6a0-f962641f5fdb",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 55,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.131068+00:00",
+    "payload": {
+      "operation": "44c5024d-41ce-4027-9c28-779e7840afd0",
+      "collection": "state_revisions",
+      "id": "a68a332e-9e29-4685-b230-a8c46cff90bc",
+      "expected": null
+    },
+    "prev_hash": "6c0f3666a87dd8b687e0e5012e5b375aa0e8ec1cbbdbe20db1dc24c008c8524e",
+    "event_hash": "b983505bfefe4a27d7a9b8d608cfae88a1af75ea01f1c3dbb8b09fc0a35758f0"
+  },
+  {
+    "_id": "40790e7c-3bbf-4a51-852e-09af88a16689",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 56,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.139076+00:00",
+    "payload": {
+      "operation": "44c5024d-41ce-4027-9c28-779e7840afd0",
+      "collection": "state_revisions",
+      "document": {
+        "_id": "a68a332e-9e29-4685-b230-a8c46cff90bc",
+        "entity_key": "relationship:B|scene:dm-b",
+        "mutation_id": "seed:relationship:B|scene:dm-b",
+        "scope_key": "scene:dm-b",
+        "content": {
+          "id": "rel-b-dm",
+          "subject_id": "B",
+          "scope_key": "scene:dm-b",
+          "revision": 1,
+          "familiarity": 2,
+          "trust": 3,
+          "closeness": 1,
+          "tension": 0,
+          "body": "B 希望涉及他自己的选择先看到两个简短方案，未经选择不代他决定。",
+          "source_ids": [
+            "M03"
+          ]
+        },
+        "source_ids": [
+          "M03"
+        ],
+        "parent_revision_id": null,
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "44c5024d-41ce-4027-9c28-779e7840afd0"
+      }
+    },
+    "prev_hash": "b983505bfefe4a27d7a9b8d608cfae88a1af75ea01f1c3dbb8b09fc0a35758f0",
+    "event_hash": "a45e45c36f79217b3631dfe00fcb67a7bcc7a120253294c22e34074c9fd926dd"
+  },
+  {
+    "_id": "a18f57d9-18aa-4b94-b5b3-c0a23e7bfc20",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 57,
+    "type": "state.intent",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.142080+00:00",
+    "payload": {
+      "operation": "f575f523-d38e-477c-8da5-9fbd4bd9b2ad",
+      "collection": "state_heads",
+      "id": "relationship:B|scene:dm-b",
+      "expected": null
+    },
+    "prev_hash": "a45e45c36f79217b3631dfe00fcb67a7bcc7a120253294c22e34074c9fd926dd",
+    "event_hash": "36abe7098b302caa15a5f9e06a973e951517da5b0934529afd9ef3e7d07bf3bd"
+  },
+  {
+    "_id": "508c4f26-3100-4afa-8974-eb692ddb93ed",
+    "schema_version": 1,
+    "stream_id": "seed",
+    "seq": 58,
+    "type": "state.commit",
+    "scope_key": "scene:dm-b",
+    "occurred_at": "2026-09-20T00:04:48.147081+00:00",
+    "payload": {
+      "operation": "f575f523-d38e-477c-8da5-9fbd4bd9b2ad",
+      "collection": "state_heads",
+      "document": {
+        "_id": "relationship:B|scene:dm-b",
+        "scope_key": "scene:dm-b",
+        "revision_id": "a68a332e-9e29-4685-b230-a8c46cff90bc",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "f575f523-d38e-477c-8da5-9fbd4bd9b2ad"
+      }
+    },
+    "prev_hash": "36abe7098b302caa15a5f9e06a973e951517da5b0934529afd9ef3e7d07bf3bd",
+    "event_hash": "718b4786e13a4402a9acdc1a70adfec69d6fb3b815609e182e9cd1efe2ff71cf"
+  },
+  {
+    "_id": "bc62513c-d33e-4bb0-a3a8-3f0f44ae0648",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 1,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.151080+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "82629bfd2dda55aeeae465998ac4a09dc5129e01de83f858344fa969d0efd42d"
+  },
+  {
+    "_id": "9a275ac5-0388-4af1-8993-45289d504afe",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 2,
+    "type": "state.intent",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.157647+00:00",
+    "payload": {
+      "operation": "26a42ee0-2045-439c-977e-6462b19cb577",
+      "collection": "messages",
+      "id": "quiet-087dbf9a735506f9617b14b95b00ead46401b35e8e8c34c8f26992154f55c7be",
+      "expected": null
+    },
+    "prev_hash": "82629bfd2dda55aeeae465998ac4a09dc5129e01de83f858344fa969d0efd42d",
+    "event_hash": "e4dc502ae1ecada8d7880931961edd638cb628f41c581fd44917a8d905abee49"
+  },
+  {
+    "_id": "ba112937-8ff4-47c5-9e7f-e3b5f574e380",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 3,
+    "type": "state.commit",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.162651+00:00",
+    "payload": {
+      "operation": "26a42ee0-2045-439c-977e-6462b19cb577",
+      "collection": "messages",
+      "document": {
+        "_id": "quiet-087dbf9a735506f9617b14b95b00ead46401b35e8e8c34c8f26992154f55c7be",
+        "scope_key": "scene:g1",
+        "scene_id": "g1",
+        "scene_seq": 1,
+        "adapter_id": "fixture",
+        "platform_event_id": "e",
+        "text": "我回来了。",
+        "author": "A",
+        "direction": "inbound",
+        "delivery_state": "RECEIVED",
+        "occurred_at": "2026-09-20T00:04:48.156143+00:00",
+        "received_at": "2026-09-20T00:04:48.156143+00:00",
+        "schema_version": 1,
+        "revision": 1,
+        "_last_op": "26a42ee0-2045-439c-977e-6462b19cb577"
+      }
+    },
+    "prev_hash": "e4dc502ae1ecada8d7880931961edd638cb628f41c581fd44917a8d905abee49",
+    "event_hash": "18891ecc6d7ee744988ee89f1d51109a930370b8e49c552ec45e8aaa2dbd4f01"
+  },
+  {
+    "_id": "ef12fe82-9ba3-4acd-83de-95589a07eab6",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 4,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.168401+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "18891ecc6d7ee744988ee89f1d51109a930370b8e49c552ec45e8aaa2dbd4f01",
+    "event_hash": "e04c5b40bdc13abc5a3e852f9b7caa7bf03b74db3b28f01cf61812bd43b01e87"
+  },
+  {
+    "_id": "320a3da0-6ea4-45ba-9a43-568105d88ed7",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 5,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.173663+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "e04c5b40bdc13abc5a3e852f9b7caa7bf03b74db3b28f01cf61812bd43b01e87",
+    "event_hash": "042fe80609f70722aba1ec5025eaa49561d275d2486c2136cc102beeffbe6c0a"
+  },
+  {
+    "_id": "395edf97-3d81-47a2-8d81-248e89db92b3",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 6,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.178662+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "042fe80609f70722aba1ec5025eaa49561d275d2486c2136cc102beeffbe6c0a",
+    "event_hash": "ba60828d1aeddd09c113d23122c7c0fecf1780540dc10fa95ae57e23750e17a0"
+  },
+  {
+    "_id": "d8a1d972-4abe-47ef-ab00-32518e519c49",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 7,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.182962+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "ba60828d1aeddd09c113d23122c7c0fecf1780540dc10fa95ae57e23750e17a0",
+    "event_hash": "9bd5a15fd1e0b29209c4c0151e259ba18c6754a8494a42b51fd37c0d0051f166"
+  },
+  {
+    "_id": "65d7779f-216e-491b-b2ac-055ec3691fd6",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 8,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.215479+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "9bd5a15fd1e0b29209c4c0151e259ba18c6754a8494a42b51fd37c0d0051f166",
+    "event_hash": "e386c40dfc59ca421529d0f339113edbaad0b8d3cf934637dc542b7de8857240"
+  },
+  {
+    "_id": "00f2b81b-5b93-412b-8a10-9e47f6f3e3e2",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 9,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.293045+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "e386c40dfc59ca421529d0f339113edbaad0b8d3cf934637dc542b7de8857240",
+    "event_hash": "01ecf8ddaece2c58ca0a3d8d38041313463aeb65a8fa9d619e2d152f15940d78"
+  },
+  {
+    "_id": "90d59626-bcf7-40cc-b186-51383d8d5dec",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 10,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.299045+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "01ecf8ddaece2c58ca0a3d8d38041313463aeb65a8fa9d619e2d152f15940d78",
+    "event_hash": "bde7b3c2f1ef53209a9d50bfec3df936e5ebbb5dc2a1e9791f0f341ba73a21b4"
+  },
+  {
+    "_id": "d9a2e916-5d2a-4457-ba49-d454237478e7",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 11,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.304045+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "bde7b3c2f1ef53209a9d50bfec3df936e5ebbb5dc2a1e9791f0f341ba73a21b4",
+    "event_hash": "9c2b340d489be9ea9b5644c46a70e8c6521e098689e468d168748c929276178f"
+  },
+  {
+    "_id": "596c450c-746b-4ced-bcf3-49cba370aae8",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 12,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.309548+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "9c2b340d489be9ea9b5644c46a70e8c6521e098689e468d168748c929276178f",
+    "event_hash": "badaf60b6fca73580b5b0b5cc76c3fc156d7b227a21ccbc2879e4d9f137caef1"
+  },
+  {
+    "_id": "117eb0ed-ea6a-4d7e-bcaf-7f81d64c8888",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 13,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.314552+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "badaf60b6fca73580b5b0b5cc76c3fc156d7b227a21ccbc2879e4d9f137caef1",
+    "event_hash": "57debb9661196955388f90a3c73dc59cc48ccf1e3e21c72d598ee0c3f02e4c87"
+  },
+  {
+    "_id": "6e4fbc74-6598-43c4-9155-a3039adf7dd4",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 14,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.318057+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "57debb9661196955388f90a3c73dc59cc48ccf1e3e21c72d598ee0c3f02e4c87",
+    "event_hash": "6123b76a5274f1371a234e57a53cd83e2c8e3b69fd7c0fdfed92611c6cbca756"
+  },
+  {
+    "_id": "be8eeb80-afac-4fc5-85f2-1fc8666eab0e",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 15,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.324172+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "6123b76a5274f1371a234e57a53cd83e2c8e3b69fd7c0fdfed92611c6cbca756",
+    "event_hash": "cfe5a9483d6d859f7822ce7906103a7112d563ce92bde4b5c969df2c24bedcb4"
+  },
+  {
+    "_id": "17f67f27-b967-4bd8-8614-d97e34f2e73b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 16,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.329681+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "cfe5a9483d6d859f7822ce7906103a7112d563ce92bde4b5c969df2c24bedcb4",
+    "event_hash": "ccae5a9c2d06aae95f7204bab55a670aa484f00e6222693da7dd684b6a682f98"
+  },
+  {
+    "_id": "4be089fd-1a92-4874-ac48-bec044e69400",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 17,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.333682+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "ccae5a9c2d06aae95f7204bab55a670aa484f00e6222693da7dd684b6a682f98",
+    "event_hash": "9187d9714570cdfbce2c3090d5e289546ed8096e110303df2cba898baa54a9b5"
+  },
+  {
+    "_id": "cfae80a7-3abf-4455-81ba-efb93c819318",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 18,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.338681+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "9187d9714570cdfbce2c3090d5e289546ed8096e110303df2cba898baa54a9b5",
+    "event_hash": "e00d7d292ba2cb14cd4d2352c452bfc6d67a30a81ee1f3f571a77bacdf49d40e"
+  },
+  {
+    "_id": "aa4fabe9-abf3-4459-a9ee-c112a614941c",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 19,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.343682+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "e00d7d292ba2cb14cd4d2352c452bfc6d67a30a81ee1f3f571a77bacdf49d40e",
+    "event_hash": "39f68d24e14584ec369b2bba85a7095bdfe3b76874230919a6e12f1ae6d53554"
+  },
+  {
+    "_id": "f19a3bbb-f482-4095-a9ca-a35205797eb5",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 20,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.349617+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "39f68d24e14584ec369b2bba85a7095bdfe3b76874230919a6e12f1ae6d53554",
+    "event_hash": "b63ef75e89a0936369179f75a475818394f1bf71f98518ec86d9a55af0735bde"
+  },
+  {
+    "_id": "6a73b06f-ca8d-4f89-83b0-8052eea770ea",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 21,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.354015+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "b63ef75e89a0936369179f75a475818394f1bf71f98518ec86d9a55af0735bde",
+    "event_hash": "b30587345b4e2824bd6b67d9e6e2caf8ed52e95939d362474f6c40517eebdb95"
+  },
+  {
+    "_id": "be48edb3-f48e-4b64-9a48-3d25709e3b47",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 22,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.359016+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "b30587345b4e2824bd6b67d9e6e2caf8ed52e95939d362474f6c40517eebdb95",
+    "event_hash": "5afa3eb3071b7f9e3aa0a4daaa81c6cd56d5ae1577e337a9364a8a9cfc351cb1"
+  },
+  {
+    "_id": "7153797f-db17-4bf8-a28a-ecbccf749963",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 23,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.363119+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5afa3eb3071b7f9e3aa0a4daaa81c6cd56d5ae1577e337a9364a8a9cfc351cb1",
+    "event_hash": "0e636455d9f359bede3c0a6c797f048c87ff2dda7456817c4994aa5c5df7b2ef"
+  },
+  {
+    "_id": "710bc7f1-9393-4cfe-9dc5-015c5dc0b0e9",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 24,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.369129+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0e636455d9f359bede3c0a6c797f048c87ff2dda7456817c4994aa5c5df7b2ef",
+    "event_hash": "e425174f4537f0dffa4b08464d1009d014342ac62c183fd2069b92793939e239"
+  },
+  {
+    "_id": "8f6e3574-f06a-40aa-a883-e83adc169f17",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 25,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.373129+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "e425174f4537f0dffa4b08464d1009d014342ac62c183fd2069b92793939e239",
+    "event_hash": "ebbf945313b38e6c29659d3b4017bad5c8a2a27620ea29d998e3b06d53645adb"
+  },
+  {
+    "_id": "51c0aea8-1dc8-4283-821d-a381e97cc84d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 26,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.378632+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "ebbf945313b38e6c29659d3b4017bad5c8a2a27620ea29d998e3b06d53645adb",
+    "event_hash": "0472e4c2e647c60b8712bc74a50d2771fa7e30390fca553958f0bb68f19003cc"
+  },
+  {
+    "_id": "01864d40-0ab5-46ed-8329-9b63c9474582",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 27,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.384143+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0472e4c2e647c60b8712bc74a50d2771fa7e30390fca553958f0bb68f19003cc",
+    "event_hash": "59d70c26e4b53cf77c81b40f0b6936b11b3b0d3ddbc73d5e911e7d0842bcfbe5"
+  },
+  {
+    "_id": "88f7cba2-52fe-4a3c-ba79-0dab2286f257",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 28,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.389143+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "59d70c26e4b53cf77c81b40f0b6936b11b3b0d3ddbc73d5e911e7d0842bcfbe5",
+    "event_hash": "5a46acf1a1f02a8cf77eb85f39ac0af53f4764326afd723e84ff08d29e1b0bba"
+  },
+  {
+    "_id": "6b2d33ff-e3bb-481d-a729-9e7dbbc20151",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 29,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.393143+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5a46acf1a1f02a8cf77eb85f39ac0af53f4764326afd723e84ff08d29e1b0bba",
+    "event_hash": "28b011eccb207cf05f79f1597426dd600cf3f1f978c3e8ae99134f765c537b70"
+  },
+  {
+    "_id": "86464ca4-7101-4546-9a45-d0c3c8a79d26",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 30,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.398276+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "28b011eccb207cf05f79f1597426dd600cf3f1f978c3e8ae99134f765c537b70",
+    "event_hash": "5e5043ffdcd8c8d314b6477dd05e7f7a07246e42933e649e0cd426092e27a326"
+  },
+  {
+    "_id": "8d44a23e-b44f-4d54-bdd2-c13422e796d6",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 31,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.402811+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5e5043ffdcd8c8d314b6477dd05e7f7a07246e42933e649e0cd426092e27a326",
+    "event_hash": "664ec10892bdb17228325b26847323e9cb3f0733f920f17b55efcd87f9ed097b"
+  },
+  {
+    "_id": "0abf1526-58d9-4bb9-b650-9eb1c9327567",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 32,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.408279+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "664ec10892bdb17228325b26847323e9cb3f0733f920f17b55efcd87f9ed097b",
+    "event_hash": "b48062ff3c520f4ad554bf574ff1f72ab9c9984d7503aaaa46c091771cdcf9fd"
+  },
+  {
+    "_id": "97b5d1de-7563-4ecb-af8a-814837f7acef",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 33,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.413279+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "b48062ff3c520f4ad554bf574ff1f72ab9c9984d7503aaaa46c091771cdcf9fd",
+    "event_hash": "297344a46704950a98d299c7b991b3ed2bd6f010d4cf4c7a7b1e2d4a053e9451"
+  },
+  {
+    "_id": "1374d01b-e33a-4d76-a7f9-06807b59f52d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 34,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.417288+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "297344a46704950a98d299c7b991b3ed2bd6f010d4cf4c7a7b1e2d4a053e9451",
+    "event_hash": "3d624210d2b8f9d59c1b378398bb4ee7c2ce5ca9974ddd8d10b617a69cbf7d78"
+  },
+  {
+    "_id": "e7304a34-3e32-410a-815e-cd2a97a86421",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 35,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.421795+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "3d624210d2b8f9d59c1b378398bb4ee7c2ce5ca9974ddd8d10b617a69cbf7d78",
+    "event_hash": "a34843bbe3074e26ec808d737bc87ec307cdce9769a1ac3c14cc1aa882650241"
+  },
+  {
+    "_id": "b41c9efd-5909-41e0-8901-0452b9a1531b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 36,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.425795+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "a34843bbe3074e26ec808d737bc87ec307cdce9769a1ac3c14cc1aa882650241",
+    "event_hash": "149265e927b890c12883ba0ced0592620a88e27b640fbfbbed5ea053e95385b2"
+  },
+  {
+    "_id": "65cb1e9e-e552-481f-8348-4b1d2445486b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 37,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.430796+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "149265e927b890c12883ba0ced0592620a88e27b640fbfbbed5ea053e95385b2",
+    "event_hash": "0ed651a2e0d00c77ee4acf8b297efd27b67c6e6ed6c9f74d513529e21987fe1e"
+  },
+  {
+    "_id": "f2ac217b-3dbf-4f07-8b2a-9fe593aeb765",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 38,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.435291+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0ed651a2e0d00c77ee4acf8b297efd27b67c6e6ed6c9f74d513529e21987fe1e",
+    "event_hash": "89fbf4cd50c956557fc0e248e6159209aec8ab628a322315d1086d74203b2b06"
+  },
+  {
+    "_id": "65a0f0ad-8fe9-4201-a554-e2efe21a0074",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 39,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.440291+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "89fbf4cd50c956557fc0e248e6159209aec8ab628a322315d1086d74203b2b06",
+    "event_hash": "5342e744b663a447d7e10a623ef1ed6c9135c5d7e1b2b17ae8397f005e75ed84"
+  },
+  {
+    "_id": "93bb57ef-32f1-4453-b81e-be8ac4846d34",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 40,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.446292+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5342e744b663a447d7e10a623ef1ed6c9135c5d7e1b2b17ae8397f005e75ed84",
+    "event_hash": "2471be8fc479c7f9df498b15a6302f5c1fa0acb0171c53ff7540daf368723cf4"
+  },
+  {
+    "_id": "90bece48-f84a-4661-9fc2-ff2a3488102b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 41,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.451291+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "2471be8fc479c7f9df498b15a6302f5c1fa0acb0171c53ff7540daf368723cf4",
+    "event_hash": "23fcd1925ac315e0c08a50716386be6d42adf2b7e1c66934be7df0755214b943"
+  },
+  {
+    "_id": "31f3ac14-ea03-4d4a-8fda-df6e06ba7a86",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 42,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.455516+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "23fcd1925ac315e0c08a50716386be6d42adf2b7e1c66934be7df0755214b943",
+    "event_hash": "92a85473194b633ed1be4653edc94572e827789feff85b418ca77a0cfbf144e4"
+  },
+  {
+    "_id": "9acdfcc2-70a4-4cf9-8383-588275205ada",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 43,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.460526+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "92a85473194b633ed1be4653edc94572e827789feff85b418ca77a0cfbf144e4",
+    "event_hash": "4478111d9a1cf4d64ad5496ecd23c75a724c5bc0e53a5556e29cb14cd6b787bc"
+  },
+  {
+    "_id": "45883560-15d3-49cd-b496-6c8d86ec74ae",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 44,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.466516+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "4478111d9a1cf4d64ad5496ecd23c75a724c5bc0e53a5556e29cb14cd6b787bc",
+    "event_hash": "ef90cf8818ba51fbe5704d2fc5afe1dec96a551d131debc9f2bf778a334cec87"
+  },
+  {
+    "_id": "17a891da-8d46-4f12-a39a-b09129d468d7",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 45,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.472031+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "ef90cf8818ba51fbe5704d2fc5afe1dec96a551d131debc9f2bf778a334cec87",
+    "event_hash": "f320694ee9a436e828dcbe6d5fa8fc5fd87aa1d0d7789f4ab3123d5ee59f3987"
+  },
+  {
+    "_id": "363f9f98-5fd1-4bb7-95b6-4704f9441aba",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 46,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.477034+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f320694ee9a436e828dcbe6d5fa8fc5fd87aa1d0d7789f4ab3123d5ee59f3987",
+    "event_hash": "6eccea75efd81570031322cd17d577e61a59782be9b804c9bd6b43ab19dfe049"
+  },
+  {
+    "_id": "d5316114-0d99-41b0-9222-03b2985e5ef5",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 47,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.482035+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "6eccea75efd81570031322cd17d577e61a59782be9b804c9bd6b43ab19dfe049",
+    "event_hash": "545bc3cdaea4d1cd72fd39eec8a5b3c52736a466b3a4be73b4d1cb68d3bbe2c2"
+  },
+  {
+    "_id": "89363851-77f2-4dba-9a0d-0b56942dd2b1",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 48,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.488035+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "545bc3cdaea4d1cd72fd39eec8a5b3c52736a466b3a4be73b4d1cb68d3bbe2c2",
+    "event_hash": "e9530d7c25dafb5ef1ca56ed0f6083459167af066a2fc10ef041ce5e3071863c"
+  },
+  {
+    "_id": "b4e225bd-56ad-4f5f-aa7c-169337534c39",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 49,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.493074+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "e9530d7c25dafb5ef1ca56ed0f6083459167af066a2fc10ef041ce5e3071863c",
+    "event_hash": "c873a99bead06c1d425cac7b9e8b328d3a890dacfd1ac7dbf98a5b1274973a78"
+  },
+  {
+    "_id": "96a0fe32-fe22-43c4-88d2-a2e3d8ec6d8a",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 50,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.498075+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "c873a99bead06c1d425cac7b9e8b328d3a890dacfd1ac7dbf98a5b1274973a78",
+    "event_hash": "60c7d52f0811ff63826f8ff66c0e89c2999102720b876e31c2aa2aacb10ca852"
+  },
+  {
+    "_id": "59b7fc4d-d729-418f-b24a-79af3dde8609",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 51,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.503079+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "60c7d52f0811ff63826f8ff66c0e89c2999102720b876e31c2aa2aacb10ca852",
+    "event_hash": "78d1989ccf3086c6ca91910859794d1bc415c1d47fbcb9a6180c373a6c5761b3"
+  },
+  {
+    "_id": "f6a8df6e-5416-4c8c-aac7-025356a13db9",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 52,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.509077+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "78d1989ccf3086c6ca91910859794d1bc415c1d47fbcb9a6180c373a6c5761b3",
+    "event_hash": "3126496ad1fac3d687f0b302509609e1924164d0a19bf0af0aaa918155d8c99b"
+  },
+  {
+    "_id": "194ae849-372b-4faa-ac5e-b72051235888",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 53,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.514177+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "3126496ad1fac3d687f0b302509609e1924164d0a19bf0af0aaa918155d8c99b",
+    "event_hash": "12d79c12a713d97da72231b57e4e3fa076be999b56209c728030920aac33a205"
+  },
+  {
+    "_id": "6b9c4fd1-8cbd-4e9a-8138-96164a656faa",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 54,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.520719+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "12d79c12a713d97da72231b57e4e3fa076be999b56209c728030920aac33a205",
+    "event_hash": "a8e86fb366145e72840d168921a515934dd4b4539bad5c5200b849dcea6a9916"
+  },
+  {
+    "_id": "9451de8b-dc5d-4b95-93d1-e94b1930880c",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 55,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.525728+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "a8e86fb366145e72840d168921a515934dd4b4539bad5c5200b849dcea6a9916",
+    "event_hash": "f56a74b8fe45932585355cfcdf4d9de024edcb1e6147223ee2781758306b7607"
+  },
+  {
+    "_id": "44a548e3-852e-4316-88ca-b4f595c457ff",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 56,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.531228+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f56a74b8fe45932585355cfcdf4d9de024edcb1e6147223ee2781758306b7607",
+    "event_hash": "33b3f08ca87a7b9618cbac3257e0fcc0f26aee89afce4f47903d99be8b4736b5"
+  },
+  {
+    "_id": "cf5dfdbb-bebe-4816-a508-8d12c859885d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 57,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.537229+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "33b3f08ca87a7b9618cbac3257e0fcc0f26aee89afce4f47903d99be8b4736b5",
+    "event_hash": "3398b519bcb6c8b31fa1d9d0d1b2bb2d229d67f59130d363a91633325ae30715"
+  },
+  {
+    "_id": "2a9e2cae-77bf-4a14-9c58-dd75900daeb3",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 58,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.544229+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "3398b519bcb6c8b31fa1d9d0d1b2bb2d229d67f59130d363a91633325ae30715",
+    "event_hash": "9bf556a1df66005aa331362ab297f5030e2c7bd1c573772a949db22bd2e293a6"
+  },
+  {
+    "_id": "a356e7dc-bac9-4f3b-b233-c90e7de3026a",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 59,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.549740+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "9bf556a1df66005aa331362ab297f5030e2c7bd1c573772a949db22bd2e293a6",
+    "event_hash": "36168abf48539cc24a36be99f861b11d5aa1dafdbf1d6fc1363e27e208a15179"
+  },
+  {
+    "_id": "ed53143f-f880-41c6-8ce0-fcbf38b4499b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 60,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.554743+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "36168abf48539cc24a36be99f861b11d5aa1dafdbf1d6fc1363e27e208a15179",
+    "event_hash": "d681940076a80e610a3bd59fd6ae03954be858aac2cc7b59962116e19490a9cd"
+  },
+  {
+    "_id": "67408ea6-b135-438c-81e2-09b21f8f5292",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 61,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.559743+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "d681940076a80e610a3bd59fd6ae03954be858aac2cc7b59962116e19490a9cd",
+    "event_hash": "8d065fb2b5d2a7e377e5041acf127c9d52d9c30b24208d7dc39e24727b5aaac7"
+  },
+  {
+    "_id": "ad2b0e0a-1480-4a61-9f8d-5a072003b1fa",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 62,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.564743+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "8d065fb2b5d2a7e377e5041acf127c9d52d9c30b24208d7dc39e24727b5aaac7",
+    "event_hash": "245cd2380d482c6affc7966e11fd129b968dd587b98f59dfed466f316d033bbd"
+  },
+  {
+    "_id": "1fb0f3f6-3ba8-4d8f-87c5-ee55da0f2370",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 63,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.569924+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "245cd2380d482c6affc7966e11fd129b968dd587b98f59dfed466f316d033bbd",
+    "event_hash": "02ead017157b9c608a7d2cccb79d44689a2f82c4af38f6d47e24ab2aa027d075"
+  },
+  {
+    "_id": "58c3d17a-d810-4779-b4e4-b640fbf96bbd",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 64,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.575450+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "02ead017157b9c608a7d2cccb79d44689a2f82c4af38f6d47e24ab2aa027d075",
+    "event_hash": "db62d914fe72deb9c8ec396e1478ba4f714faa88f93644639269d14bc69c71ab"
+  },
+  {
+    "_id": "d04cdb8a-0915-4fe9-a99f-b175e3d400cb",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 65,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.581983+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "db62d914fe72deb9c8ec396e1478ba4f714faa88f93644639269d14bc69c71ab",
+    "event_hash": "a7bbcb6af24d50c94cd3104fa94d610024c218fe0658dcac8c6cd0efba46f6ce"
+  },
+  {
+    "_id": "1b09f370-2319-4595-a262-18a2f2a6168d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 66,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.586982+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "a7bbcb6af24d50c94cd3104fa94d610024c218fe0658dcac8c6cd0efba46f6ce",
+    "event_hash": "2b74660264ff3e6adb7c084c381aeccb91546eb45795be2af8bac7c67b2b6243"
+  },
+  {
+    "_id": "36599813-4903-4746-9e74-b490e35360ab",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 67,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.593106+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "2b74660264ff3e6adb7c084c381aeccb91546eb45795be2af8bac7c67b2b6243",
+    "event_hash": "c0ff3317de5de0436202569383ce1e2411c8de21c61ec238a52d1d0efc0c085f"
+  },
+  {
+    "_id": "afec49de-e738-4851-9abe-6b967d0d80b6",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 68,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.598105+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "c0ff3317de5de0436202569383ce1e2411c8de21c61ec238a52d1d0efc0c085f",
+    "event_hash": "33f26343f934ebabd29b3d8ca3b0394cf300e2431a712abf9aff96351c90d3af"
+  },
+  {
+    "_id": "479a26b9-c065-4f80-b28f-8284632828bb",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 69,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.603110+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "33f26343f934ebabd29b3d8ca3b0394cf300e2431a712abf9aff96351c90d3af",
+    "event_hash": "76e9a480d18bc974ffa93ed9800cfc74afb2e285c57cb39a9dabd17186ec1eab"
+  },
+  {
+    "_id": "ef00433d-d4c0-4123-94cd-824b7ccbaba3",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 70,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.608111+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "76e9a480d18bc974ffa93ed9800cfc74afb2e285c57cb39a9dabd17186ec1eab",
+    "event_hash": "4405b5abe891acd22f43837b52d1267ff781208a5a5f909d95c4bbcc08559791"
+  },
+  {
+    "_id": "2fc08329-0fb1-4665-b722-f19d12b78415",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 71,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.612639+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "4405b5abe891acd22f43837b52d1267ff781208a5a5f909d95c4bbcc08559791",
+    "event_hash": "346a092e7cf68e1c2f052d372f4228c186707d14983e831b6d93fd7b5f7ce0be"
+  },
+  {
+    "_id": "14199391-ce58-462b-bb8a-06ee7925bb09",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 72,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.617138+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "346a092e7cf68e1c2f052d372f4228c186707d14983e831b6d93fd7b5f7ce0be",
+    "event_hash": "ca0852b5dade43be3ae0219f96c94419028eed838e04cf4b63a48af0790ab5ed"
+  },
+  {
+    "_id": "16ea1f4a-44f1-4a0c-bb6d-df6c79fbcca7",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 73,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.623177+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "ca0852b5dade43be3ae0219f96c94419028eed838e04cf4b63a48af0790ab5ed",
+    "event_hash": "cbad206b208e1918fc98852d8df8162b80b4a1e84c6812b24971e47d5738c3de"
+  },
+  {
+    "_id": "a4adc562-a0e7-4477-907e-7a1e7a286f8d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 74,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.628176+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "cbad206b208e1918fc98852d8df8162b80b4a1e84c6812b24971e47d5738c3de",
+    "event_hash": "29d344e1883f57074a2007afd531b1b1f9618b6d5cb24e0912b0a289952d922e"
+  },
+  {
+    "_id": "23c12c55-75a9-46bc-86c7-d3b3d404a486",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 75,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.634294+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "29d344e1883f57074a2007afd531b1b1f9618b6d5cb24e0912b0a289952d922e",
+    "event_hash": "38faad498078987e23b31c1df1445c9430d90caf3a3002f7ba1ecd21f746f6fc"
+  },
+  {
+    "_id": "fa296e30-c306-47c7-a291-3d9530ab00a4",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 76,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.639802+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "38faad498078987e23b31c1df1445c9430d90caf3a3002f7ba1ecd21f746f6fc",
+    "event_hash": "2bcebcfec59867daa940a17173ac2d3695fe337d2b4187ee1004a217d812b69d"
+  },
+  {
+    "_id": "3f4dc163-568a-41f9-bbda-7ef9b8c4335c",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 77,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.645806+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "2bcebcfec59867daa940a17173ac2d3695fe337d2b4187ee1004a217d812b69d",
+    "event_hash": "f9e80e15d4c2e166bb51a35611f11c07a9cbe01393af85c88196d696755a3683"
+  },
+  {
+    "_id": "ac5a6a90-e98f-40af-8817-54f8642e9cc0",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 78,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.651288+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f9e80e15d4c2e166bb51a35611f11c07a9cbe01393af85c88196d696755a3683",
+    "event_hash": "6d9f68d717b1dc81013516120a371752a41315f0060f4b685ce6e3d274338af1"
+  },
+  {
+    "_id": "97dff12e-513c-4bb8-bd5d-f06c0ee2c46a",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 79,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.655759+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "6d9f68d717b1dc81013516120a371752a41315f0060f4b685ce6e3d274338af1",
+    "event_hash": "2dfad23d8ca92644b093a9843710445ce4b529a8e89896cdec258d8846974a30"
+  },
+  {
+    "_id": "6d34fa58-8744-45f8-a182-e5bd17915e83",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 80,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.661758+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "2dfad23d8ca92644b093a9843710445ce4b529a8e89896cdec258d8846974a30",
+    "event_hash": "67edf37302ecce498a5c57f66f45f28aa0698fa0df51ec184e697a7e3d4e9f46"
+  },
+  {
+    "_id": "0fe6d274-5c34-4a10-ae74-c0a994688987",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 81,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.665760+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "67edf37302ecce498a5c57f66f45f28aa0698fa0df51ec184e697a7e3d4e9f46",
+    "event_hash": "d0ab2284d85dc081a9da6adc2c18ba213b06c186e1f586fc5f5bac3ea55941f8"
+  },
+  {
+    "_id": "07b7be06-105b-411c-a2aa-e483d3d59146",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 82,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.672008+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "d0ab2284d85dc081a9da6adc2c18ba213b06c186e1f586fc5f5bac3ea55941f8",
+    "event_hash": "1b9c2616fcf8725452d1b43c837739c3ea852caff77bf4147f5918a83d73554c"
+  },
+  {
+    "_id": "330b8aea-79f8-4d43-98df-c4a726a8e503",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 83,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.677007+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "1b9c2616fcf8725452d1b43c837739c3ea852caff77bf4147f5918a83d73554c",
+    "event_hash": "5268f36ef7c19d5d958198306708cae5d5017383620e7cbeb7665c0056136e7b"
+  },
+  {
+    "_id": "218df9c9-2129-4374-b5fb-eaa3c23c6287",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 84,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.682007+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5268f36ef7c19d5d958198306708cae5d5017383620e7cbeb7665c0056136e7b",
+    "event_hash": "186c43eda2de93dee9aaee03c902065922b59e8d0e67551708014cdd72478b57"
+  },
+  {
+    "_id": "6e474bff-4cfa-4951-bc15-39634c77bb99",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 85,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.687007+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "186c43eda2de93dee9aaee03c902065922b59e8d0e67551708014cdd72478b57",
+    "event_hash": "f33e29aa90ad3d2d2f2f31d2e4312350f7bd6fcd14a7b7b4b9a3f5a1a365fd3b"
+  },
+  {
+    "_id": "6959c272-8f28-4fb0-9dc9-bc2202d002f3",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 86,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.691523+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f33e29aa90ad3d2d2f2f31d2e4312350f7bd6fcd14a7b7b4b9a3f5a1a365fd3b",
+    "event_hash": "5d70a36499c7896c7b39deb085e902277c24e844b32c61ec4712f6647aeefa63"
+  },
+  {
+    "_id": "2ec053af-8c3d-4a7c-8406-acedfa0add12",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 87,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.697518+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "5d70a36499c7896c7b39deb085e902277c24e844b32c61ec4712f6647aeefa63",
+    "event_hash": "671292514f72a7ec2df30f70151a07806b6d3c41b77bbba4fa705377bcbbcde5"
+  },
+  {
+    "_id": "84d2c0ba-c01a-405b-813c-11b71c39ee1b",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 88,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.702525+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "671292514f72a7ec2df30f70151a07806b6d3c41b77bbba4fa705377bcbbcde5",
+    "event_hash": "49b306d64e8ba2c6186cc378bb544bda5649dc9675a1981e690e1df82ffd4416"
+  },
+  {
+    "_id": "0eae8ec9-619c-4b54-8f3e-e69d0e98a0a5",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 89,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.707973+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "49b306d64e8ba2c6186cc378bb544bda5649dc9675a1981e690e1df82ffd4416",
+    "event_hash": "f7ea8472f324e5277be314544cd44f7bd6522bea4c4da39cbaddcd2b0075157d"
+  },
+  {
+    "_id": "30918901-47df-4b05-b690-ba691df9e781",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 90,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.714482+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f7ea8472f324e5277be314544cd44f7bd6522bea4c4da39cbaddcd2b0075157d",
+    "event_hash": "f4a0670afbea7cd6c509071e3433d4e54b4441519648684b4c465c29dce47d6a"
+  },
+  {
+    "_id": "1a323edd-d539-4d54-9d27-c6743f072f16",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 91,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.719584+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "f4a0670afbea7cd6c509071e3433d4e54b4441519648684b4c465c29dce47d6a",
+    "event_hash": "a27118fd31b3a74b7ae97a8259207cf64f08e2ee3f064f328d2bfe1a4239e8db"
+  },
+  {
+    "_id": "38a56d04-59ad-4fff-8ee8-ce018ced0501",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 92,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.725671+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "a27118fd31b3a74b7ae97a8259207cf64f08e2ee3f064f328d2bfe1a4239e8db",
+    "event_hash": "1f3985582f012d48f2fcc747a598735bfec9740c89e361ab7786506f17f7be20"
+  },
+  {
+    "_id": "ab941cf9-0f5f-405f-a5ce-4623ef746abb",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 93,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.731671+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "1f3985582f012d48f2fcc747a598735bfec9740c89e361ab7786506f17f7be20",
+    "event_hash": "36563086d93c2a2032b63f6ab9c043938ce117a1b6bc393ccb073f26146dec80"
+  },
+  {
+    "_id": "15b88ecf-95ae-4803-b5a8-cdae075e44d5",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 94,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.736180+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "36563086d93c2a2032b63f6ab9c043938ce117a1b6bc393ccb073f26146dec80",
+    "event_hash": "63ee5257e37d0537931fc33b9d3158962e52e4fc247d10326e8b6dfe2d4b9e78"
+  },
+  {
+    "_id": "1d4ddb41-b99c-41cf-bf4d-4109d6e4e80d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 95,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.741179+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "63ee5257e37d0537931fc33b9d3158962e52e4fc247d10326e8b6dfe2d4b9e78",
+    "event_hash": "0bd8ef7b85a038a0770f2c49d0b38a35f24101cfc995c1828a520698a0ed0778"
+  },
+  {
+    "_id": "d85a2df1-2ccc-4c6e-8fe5-3d3743b5524a",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 96,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.746179+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0bd8ef7b85a038a0770f2c49d0b38a35f24101cfc995c1828a520698a0ed0778",
+    "event_hash": "7a34d4b7faaf763c5de445bab8dd5864c7e9810f2a03b71080f28375a6404f71"
+  },
+  {
+    "_id": "9dcef71c-cb71-41ac-be66-a71b9547dd7a",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 97,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.755687+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "7a34d4b7faaf763c5de445bab8dd5864c7e9810f2a03b71080f28375a6404f71",
+    "event_hash": "68e8975796cd8976256e6ab74596140cdebe6177ed9af71e96d5933e94ea14a4"
+  },
+  {
+    "_id": "a1a23909-47fb-43f4-9a89-9c0635e7b906",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 98,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.763194+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "68e8975796cd8976256e6ab74596140cdebe6177ed9af71e96d5933e94ea14a4",
+    "event_hash": "14ddb89b2924324924ed5a146111c9be6c23c462f9baa8a6e2708073b9a3753d"
+  },
+  {
+    "_id": "234f248f-f0c0-4e07-9a18-d000d6abc335",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 99,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.767698+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "14ddb89b2924324924ed5a146111c9be6c23c462f9baa8a6e2708073b9a3753d",
+    "event_hash": "0bb65b6d762a79fa13f97b06f89eeafd34d95692d2f87c510e7bc48f063387df"
+  },
+  {
+    "_id": "6bf137f4-3538-4434-8d8e-b52ae9f1e39d",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 100,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.773759+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "0bb65b6d762a79fa13f97b06f89eeafd34d95692d2f87c510e7bc48f063387df",
+    "event_hash": "7bc5c0d18f1c9910b9c15690ba8723269a835983be42a91f8405ad991de3e7c0"
+  },
+  {
+    "_id": "1f7f7d53-b285-46cf-89c4-5f614492eaae",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 101,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.779078+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "7bc5c0d18f1c9910b9c15690ba8723269a835983be42a91f8405ad991de3e7c0",
+    "event_hash": "d19122bdbb84139de1ce931211badd005951856e4223c55a8df5e3335212714d"
+  },
+  {
+    "_id": "61f36759-1a19-4c71-a654-20b4445325ea",
+    "schema_version": 1,
+    "stream_id": "router",
+    "seq": 102,
+    "type": "event.received",
+    "scope_key": "scene:g1",
+    "occurred_at": "2026-09-20T00:04:48.784077+00:00",
+    "payload": {
+      "event_id": "e",
+      "scene": "g1",
+      "adapter": "cli-fixture"
+    },
+    "prev_hash": "d19122bdbb84139de1ce931211badd005951856e4223c55a8df5e3335212714d",
+    "event_hash": "531cc21bbf01252e9d5ec7a28560e2063fa9312fac3080e5dff9c40c8e2ef94a"
+  }
+]

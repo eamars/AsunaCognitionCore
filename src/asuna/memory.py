@@ -70,10 +70,13 @@ class MemoryService:
     def proposal(self,proposal,request_scope,mutation_id):
         jsonschema.validate(proposal,MUTATION)
         if proposal['scope_key']!=request_scope:raise Denied('SCOPE_PROMOTION_DENIED')
+        self.store.audit('mutation:'+mutation_id,'state.proposed',proposal,request_scope)
         pair=self.store.head(proposal['entity_key'],request_scope)
         if not pair:raise Denied('UNKNOWN_STATE_ENTITY')
         head,base=pair
-        if head['revision_id']!=proposal['base_revision_id']:raise Conflict('BASE_REVISION_STALE')
+        if head['revision_id']!=proposal['base_revision_id']:
+            self.store.audit('mutation:'+mutation_id,'state.conflict',{'base_revision_id':proposal['base_revision_id'],'reason':'BASE_REVISION_STALE'},request_scope)
+            raise Conflict('BASE_REVISION_STALE')
         content=copy.deepcopy(base['content'])
         for change in proposal['changes']:
             field=change['path'].removeprefix('/')
@@ -82,7 +85,7 @@ class MemoryService:
             content[field]=change['new']
         # Existing immutable metadata cannot be overwritten by the actor.
         writable={k:v for k,v in content.items() if k in {'body','familiarity','trust','closeness','tension'}}
-        return self.store.mutate(proposal['entity_key'],request_scope,proposal['base_revision_id'],writable,proposal['source_ids'],request_scope,mutation_id)
+        return self.store.mutate(proposal['entity_key'],request_scope,proposal['base_revision_id'],writable,proposal['source_ids'],request_scope,mutation_id,reason=proposal['reason'],change_class=proposal['change_class'])
 
     def reflect(self,lane,scope,entity,operation):
         pair=self.store.head(entity,scope)

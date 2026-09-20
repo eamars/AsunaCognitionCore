@@ -32,6 +32,7 @@ def test_E17_twenty_mutation_ids_replayed_after_cas(store):
         except Conflict:return None
     with ThreadPoolExecutor(20) as pool:results=list(pool.map(apply,range(20)))
     winner=[i for i,row in enumerate(results) if row is not None];assert len(winner)==1
+    assert store.db.audit_events.count_documents({'type':'state.conflict','stream_id':{'$regex':'^mutation:retry-cas-'}})==19
     count=store.db.state_revisions.count_documents({})
     again=[apply(i) for i in range(20)]
     assert [i for i,row in enumerate(again) if row is not None]==winner

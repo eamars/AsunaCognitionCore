@@ -93,8 +93,10 @@ class Store:
             else:
                 result = self.db[collection].replace_one({'_id':doc['_id'],'revision':expected},doc)
                 if result.modified_count != 1:
+                    self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'STALE_REVISION'},doc.get('scope_key','operator'))
                     raise Conflict('STALE_REVISION')
         except DuplicateKeyError as exc:
+            self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
         self.audit(stream,'state.commit',{'operation':operation,'collection':collection,'document':doc},doc.get('scope_key','operator'))
         return doc
@@ -169,7 +171,7 @@ class Store:
         return head,revision
 
     def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
-               sources: list[str], request_scope: str, mutation_id: str, actor='character'):
+               sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None):
         allowed = {'body','familiarity','trust','closeness','tension'}
         if actor!='character' or not entity.startswith(('persona:','overlay:','relationship:','scene_affect:')) or not set(content).issubset(allowed):
             raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
@@ -177,6 +179,8 @@ class Store:
             raise Denied('SCOPE_PROMOTION_DENIED')
         if not sources:
             raise Denied('MUTATION_REQUIRES_SOURCES')
+        if reason is not None and (not isinstance(reason,str) or not 1<=len(reason)<=2000):raise Denied('INVALID_MUTATION_REASON')
+        if change_class not in (None,'persona','relationship','interpretation','scene_affect'):raise Denied('INVALID_CHANGE_CLASS')
         for source in sources:
             row=self.db.memory_units.find_one({'_id':source,'status':{'$ne':'tombstone'}})
             if not row or row['scope_key'] not in ('global-safe',scope):
@@ -187,7 +191,7 @@ class Store:
         head,base=self.head(entity,scope) or (None,None)
         existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
         if existing:
-            if existing.get('content')!=content or existing.get('source_ids')!=sources or existing.get('parent_revision_id')!=base_revision_id or existing.get('entity_key')!=entity+'|'+scope:
+            if existing.get('content')!=content or existing.get('source_ids')!=sources or existing.get('parent_revision_id')!=base_revision_id or existing.get('entity_key')!=entity+'|'+scope or existing.get('reason')!=reason or existing.get('change_class')!=change_class:
                 raise Conflict('MUTATION_ID_CONTENT_CHANGED')
             ancestor=base
             for _ in range(512):
@@ -197,6 +201,7 @@ class Store:
                 ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
             raise Conflict('MUTATION_ALREADY_ATTEMPTED')
         if not head or head['revision_id']!=base_revision_id:
+            self.audit('mutation:'+mutation_id,'state.conflict',{'entity':entity,'base_revision_id':base_revision_id,'reason':'BASE_REVISION_STALE'},scope)
             raise Conflict('BASE_REVISION_STALE')
         evidence_ids=set();visited=set()
         def roots(key,path):
@@ -226,7 +231,8 @@ class Store:
         if evidence_ids and evidence_ids.issubset(processed):
             raise Conflict('NO_NEW_SOURCE_EVENTS')
         new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id},stream='mutation:'+mutation_id)
+        metadata={k:v for k,v in {'reason':reason,'change_class':change_class}.items() if v is not None}
+        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
         self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
         return revision
 

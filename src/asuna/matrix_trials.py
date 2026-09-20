@@ -4,7 +4,7 @@ from .application import Application
 from .context import ContextBuilder
 from .experiments import FixtureSelection
 from .dsh_lane import DshLane
-from .live_trials import setup_work,oracle
+from .live_trials import setup_work,oracle,capture_trial_state
 from .evidence import Evidence,write_json
 from .audit import render_html
 
@@ -15,9 +15,10 @@ def sample(config,evidence,character_count,executor_count,repetition):
     ev=Evidence(evidence.root/f'c{character_count}-e{executor_count}-{repetition}')
     name='matrix-'+uuid.uuid4().hex[:12];work,prompt,before=setup_work(cfg,'L12',name)
     prompt+=' 请分段阅读各个 CSV，检查中间结果，再生成最终报告；原始 CSV 不得改动。'
-    result={'character_compactions_target':character_count,'executor_compactions_target':executor_count,'repeat':repetition,'status':'FAIL'}
+    database='asuna_v2_test_'+name.replace('-','_')
+    result={'character_compactions_target':character_count,'executor_compactions_target':executor_count,'repeat':repetition,'status':'FAIL','database':database}
     try:
-        with Application(cfg,ev,'asuna_v2_test_'+name.replace('-','_')) as app:
+        with Application(cfg,ev,database) as app:
             app.store.seed();result['database']=app.store.name
             app.coordinator.context=ContextBuilder(app.store,FixtureSelection(app.store,['M02','M07','M08']))
             relationship_before=app.store.head('relationship:A','scene:dm-a')[0]['revision_id']
@@ -43,6 +44,8 @@ def sample(config,evidence,character_count,executor_count,repetition):
             result.update(status='INCONCLUSIVE' if checked['status']=='PASS' and char_generations==character_count and exec_generations==executor_count and stable and app.store.head('relationship:A','scene:dm-a')[0]['revision_id']==relationship_before and feedback and feedback['state']=='COMMITTED' and check['state']=='COMMITTED' else 'FAIL',actual_character_compactions=char_generations,actual_executor_compactions=exec_generations,task_identity_stable=stable,task_state=done['state'],task_id=done['_id'],effect_receipts=effects,public_messages=app.store.public_messages('dm-a','A'))
             trace=list(app.store.db.audit_events.find({}));write_json(ev.root/'trace.json',trace);render_html(trace,ev.root/'trace.html')
     except Exception as exc:ev.record('matrix.error',{'type':type(exc).__name__,'message':str(exc)})
+    finally:
+        if not capture_trial_state(cfg,database,ev):result.update(status='FAIL',terminal_state_capture_failed=True)
     write_json(ev.root/'sample.json',result);print(json.dumps({'matrix':[character_count,executor_count,repetition],'status':result['status']}),flush=True)
     return result
 

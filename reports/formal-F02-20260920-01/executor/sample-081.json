@@ -1,0 +1,105 @@
+{
+  "lane": "executor",
+  "condition": "after-compact",
+  "ordinal": 81,
+  "status": "PASS",
+  "operation_seconds": 31.5161422000092,
+  "native_compactions": [
+    {
+      "compaction_id": "bc837d3a-cd62-42ba-92d3-3b730083001a",
+      "seconds": 22.834,
+      "clock": "native persisted bracket epoch milliseconds",
+      "request_refs": [
+        {
+          "artifact_path": "reports/formal-F02-20260920-01/executor/00817-provider.request.json",
+          "sha256": "1289036f2142cf861bc6ba1242508c9da7e866d9c1b88ebe4b97a29a9ac775d8"
+        }
+      ],
+      "response_refs": [
+        {
+          "artifact_path": "reports/formal-F02-20260920-01/executor/00821-provider.response.json",
+          "sha256": "7fc2c5ab6a87d1ede201bb4c185372d61bce93c8f23ab24499a54a5dc08db70a"
+        }
+      ],
+      "provider_summary_join": "EXACT_CONTENT_AND_OPERATION"
+    }
+  ],
+  "measurements": [
+    {
+      "input_tokens": 2977,
+      "cached_tokens": 2752,
+      "uncached_tokens": 225,
+      "output_tokens": 667,
+      "reasoning_tokens": null,
+      "content_tokens": null,
+      "transport_first_byte_seconds": 0.17626899998867884,
+      "first_model_content_seconds": 16.271933299984084,
+      "queue_seconds": 0.0,
+      "total_seconds": 22.637498199997935,
+      "prefill_seconds": null,
+      "decode_seconds": null,
+      "model_load_seconds": null,
+      "model_switch_seconds": null,
+      "time_to_first_public_character_text": null,
+      "raw_usage": {
+        "prompt_tokens": 2977,
+        "completion_tokens": 667,
+        "total_tokens": 3644,
+        "prompt_tokens_details": {
+          "cached_tokens": 2752
+        }
+      },
+      "raw_timings": null,
+      "request_messages_sha256": "35e56a7b2cf76506d24555b1bef85ddf5ab9327f4b64fd385d17dc2a08a42508",
+      "missing_reasons": {
+        "reasoning_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "content_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "prefill_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "decode_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "model_load_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "model_switch_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "time_to_first_public_character_text": "Private measured call has no publication; public receiver latencies are a separate source.",
+        "raw_timings": "Provider did not expose the required counter or timing; not inferred from total duration/tokens."
+      },
+      "content_tokens_method": "reported completion total minus explicitly reported reasoning count; otherwise unknown"
+    },
+    {
+      "input_tokens": 983,
+      "cached_tokens": null,
+      "uncached_tokens": null,
+      "output_tokens": 168,
+      "reasoning_tokens": null,
+      "content_tokens": null,
+      "transport_first_byte_seconds": 0.20712649999768473,
+      "first_model_content_seconds": 8.163977499993052,
+      "queue_seconds": 0.0,
+      "total_seconds": 8.357158800004981,
+      "prefill_seconds": null,
+      "decode_seconds": null,
+      "model_load_seconds": null,
+      "model_switch_seconds": null,
+      "time_to_first_public_character_text": null,
+      "raw_usage": {
+        "prompt_tokens": 983,
+        "completion_tokens": 168,
+        "total_tokens": 1151
+      },
+      "raw_timings": null,
+      "request_messages_sha256": "912de00a0ca0c3d03fd33a4e78f99858cd45fd311c2bfa0b001b78ec595c3816",
+      "missing_reasons": {
+        "cached_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "uncached_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "reasoning_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "content_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "prefill_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "decode_seconds": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "model_load_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "model_switch_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "time_to_first_public_character_text": "Private measured call has no publication; public receiver latencies are a separate source.",
+        "raw_timings": "Provider did not expose the required counter or timing; not inferred from total duration/tokens."
+      },
+      "content_tokens_method": "reported completion total minus explicitly reported reasoning count; otherwise unknown"
+    }
+  ],
+  "finish_reason": "stop"
+}

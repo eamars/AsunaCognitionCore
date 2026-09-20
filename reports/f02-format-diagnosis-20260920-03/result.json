@@ -1,0 +1,305 @@
+{
+  "test_id": "PROBE-F02-ERROR-PROVENANCE",
+  "status": "PASS",
+  "executed_at": "2026-09-20T02:22:55.613035+00:00",
+  "mode": "offline_actual_generation_evidence_hash_check",
+  "source_experiment": "formal-F02-20260920-01",
+  "lane": "character",
+  "samples": [
+    {
+      "ordinal": 58,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-058.json",
+        "sha256": "1778c568f7e087a80158dc27997cd35cfc81af0d6b3e4896871af43ab222f610"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00710-lane.receipt.json",
+        "sha256": "2cf6509573ea1a637a015fffd8b2c2e76be8422f333880ad861fda6403b8a0c4"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00705-provider.request.json",
+            "sha256": "13bff3ec75cb0d11a64d9ac9d7007736704fccfed18e63c7e183a3192481ae7e"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00709-provider.response.json",
+            "sha256": "bb2543a19505a8d3c69b8ecd79dc9f0517865a4707c38443a7cc884dfc876a28"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00705-provider.request-body.json",
+            "sha256": "e89f227af93687bbfea7e20fb4e5888721ba825206acb68b04945ca28e655725"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 61,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-061.json",
+        "sha256": "7766a13b54cc1d724c9677b2df3110c0dfbe520f263e3d151ff50dcc130efaa6"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00746-lane.receipt.json",
+        "sha256": "d57ca92e0343584aca66a704671d1bddc5efc1fef4844615f954c6f1bc96118e"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00742-provider.request.json",
+            "sha256": "af39705c6646c1a83eb4960ef29185503b4f8558304d5b45c5987e95e92b0cdb"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00745-provider.response.json",
+            "sha256": "c4f2ea26f05f46475091f1ef1741a49c322ac4497a8a988d7b137ee4c7573e90"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00742-provider.request-body.json",
+            "sha256": "4ff87ceadc93699b76d5269b5f48566d6c2d5f4483c08ce16a5dc4e4ac3665dc"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 64,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-064.json",
+        "sha256": "d6da40d7eb4044d3be6478d5da4e9b3ad71b8e20a8d74edfc0aa0fc1c1a56550"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00782-lane.receipt.json",
+        "sha256": "7989e31fd762764f0c444ab4e870301127c09f5b285c2357c6ef6a6c45e7bc58"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00778-provider.request.json",
+            "sha256": "777a5188ec4fc543c3007a4ac3cacf083812e7c17c7e835f1f6eacbea051bc0f"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00781-provider.response.json",
+            "sha256": "2fc4b1542a619502960b99453816f98816553a2d953113cc9ddc2f72a8bd74da"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00778-provider.request-body.json",
+            "sha256": "48febe3ce255c414046786b2fe90896635109b355737a5e472cac68ed0db9f3b"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 65,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-065.json",
+        "sha256": "3085b25f485dac09d7306f129f5281cfa29cdabcfa27d7cfa59d208c1ecd7a71"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00795-lane.receipt.json",
+        "sha256": "da668b6093da3040728c86fcbc51306436cc951dad1944d6610943ad6c30321f"
+      },
+      "native_reason": {
+        "kind": "max-tokens"
+      },
+      "finish_reason": "max-tokens",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00790-provider.request.json",
+            "sha256": "d9349a4554b39a31e2acdf08e8dfb9822794e94b32d31b0789fc8c2969003f55"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00794-provider.response.json",
+            "sha256": "5381955e8e851b6aaeedb4f2069294c65122972fc51a07feeded879552bfa52d"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00790-provider.request-body.json",
+            "sha256": "b4edd0e7cf95e2d08f281267cf4aa70dff101edfb8dd65519f9fa31455adf8e5"
+          },
+          "http_status": 200,
+          "error_frames": []
+        }
+      ]
+    },
+    {
+      "ordinal": 66,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-066.json",
+        "sha256": "c9e6916a26a9e73cdac4416a7c6abc9d5eb46e3b557ed66ba1b2013fdf1fde45"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00808-lane.receipt.json",
+        "sha256": "3ce0144def19a9673e36eea5ab5e8e5b9f933415d655ba7ad45f2988f6a93a66"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00803-provider.request.json",
+            "sha256": "140e593f07659c28a2cbbb56b0d3ea05bfc6575ae7fe7864867dada944f07e67"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00807-provider.response.json",
+            "sha256": "d4cb7b2f57874c9139917a0a0d8a621c4b08ffdae77ce9d418461de5f8cc9412"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00803-provider.request-body.json",
+            "sha256": "1100a97ff22dcf8ba4b402900b48254eb92efb07008f93a3bb33858eb3007387"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 72,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-072.json",
+        "sha256": "9eb6536578cf4cd51d6efd256e22e91518e876e241fdad7c8ce01950ee9e5d59"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00880-lane.receipt.json",
+        "sha256": "56f17b57ce50091150f8468a2989bb4b65f207f65a7ffdfac8195a49c5eb9693"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00876-provider.request.json",
+            "sha256": "84e01f43dd4cb89f9b10c860d4205e415e0fd91e0bb4878113f453ebd147fe06"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00879-provider.response.json",
+            "sha256": "7889d8c381b7a75cc6c81fc42f736aab6b5cf69563a685d2fe70ae6a91964b85"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00876-provider.request-body.json",
+            "sha256": "d5b5cf6831a2da5172d1bb03ea5db6577dd8c6653a950e80139a53d3753cc0ee"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    },
+    {
+      "ordinal": 76,
+      "condition": "switch-hot",
+      "sample": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/sample-076.json",
+        "sha256": "612c21e44e770c3bda4d2d1f0e9e284e35b276c33e243a1a1a30975c7d65c8c6"
+      },
+      "native_receipt": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00928-lane.receipt.json",
+        "sha256": "06a3aa942546170b7df7deca3c4ef810dc1a6ce39f69ae34ef31471922a2bec8"
+      },
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "finish_reason": "error",
+      "generation_calls": [
+        {
+          "request": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00924-provider.request.json",
+            "sha256": "16a92884711a23928e526be8812631eed9b3bb360537f961fc744de7bfd79a4c"
+          },
+          "response": {
+            "artifact_path": "reports/formal-F02-20260920-01/character/00927-provider.response.json",
+            "sha256": "fcf59a19b934424429c53606f37f2e0efff9727b8448e028438c1c2e900613c9"
+          },
+          "raw_request_body": {
+            "artifact_path": "reports/f02-format-diagnosis-20260920-03/00924-provider.request-body.json",
+            "sha256": "9adec2c0f986c080b859c33f64ad8bd754b7399395aa62f7fdd305be4bac074d"
+          },
+          "http_status": 200,
+          "error_frames": [
+            "data: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-gemma4 format\",\"type\":\"server_error\"}}"
+          ]
+        }
+      ]
+    }
+  ],
+  "verified_failed_samples": 7,
+  "model_calls": 0,
+  "commands": [
+    {
+      "argv": [
+        "C:\\Users\\rba90\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "tools\\diagnose_performance.py",
+        "reports\\formal-F02-20260920-01",
+        "--out",
+        "reports\\f02-format-diagnosis-20260920-03"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "This verifies extraction provenance, not model quality. The failed source calls remain FAIL.",
+    "Server format errors do not isolate model generation, MTP or parser root cause.",
+    "Use the saved exact body with the frozen source deployment/adapter for a targeted reproduction; this extraction makes no model call."
+  ]
+}

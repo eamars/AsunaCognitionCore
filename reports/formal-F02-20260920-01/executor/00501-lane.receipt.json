@@ -1,0 +1,410 @@
+{
+  "seq": 501,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:49",
+    "status_code": 200,
+    "body": {
+      "content": "\n\nA52。",
+      "reasoning": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守：简短，不调用工具，不创造执行声明。确认当前标记即可。\n可以说：“A52。” 或 “确认，A52。”\n保持沈小满风格，短、直接。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789870794603,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "独立场景 A，标记为 A52。只简短确认当前标记。"
+              }
+            ],
+            "role": "user",
+            "id": "97982158-4fb9-4d8a-8640-98d29fe13017"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789870794604,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "reasoningEffort": "high",
+                "maxTokens": 8192
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789870794604,
+          "data": {
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789870794604,
+          "data": {
+            "title": "独立场景 A，标记为 A52。只简",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789870800630,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守：简短，不调用工具，不创造执行声明。确认当前标记即可。\n可以说：“A52。” 或 “确认，A52。”\n保持沈小满风格，短、直接。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\nA52。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1211",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "1ad395b5-93f5-4d06-b57f-5fb902709fd8"
+            },
+            "usage": {
+              "inputTokens": 730,
+              "outputTokens": 74,
+              "totalTokens": 804
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789870800627,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789870800628,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "用户",
+                  "要求",
+                  "：",
+                  "独立",
+                  "场景",
+                  " A",
+                  "，",
+                  "标记",
+                  "为",
+                  " A",
+                  "5",
+                  "2",
+                  "。",
+                  "只",
+                  "简短",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "。",
+                  "\n",
+                  "需要",
+                  "遵守",
+                  "：",
+                  "简短",
+                  "，",
+                  "不调",
+                  "用",
+                  "工具",
+                  "，",
+                  "不",
+                  "创造",
+                  "执行",
+                  "声明",
+                  "。",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "即可",
+                  "。",
+                  "\n",
+                  "可以说",
+                  "：“",
+                  "A",
+                  "5",
+                  "2",
+                  "。”",
+                  " ",
+                  "或",
+                  " “",
+                  "确认",
+                  "，",
+                  "A",
+                  "5",
+                  "2",
+                  "。”",
+                  "\n",
+                  "保持",
+                  "沈",
+                  "小",
+                  "满",
+                  "风格",
+                  "，",
+                  "短",
+                  "、",
+                  "直接",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870800629,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789870800629,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "A",
+                  "5",
+                  "2",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870800630,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守：简短，不调用工具，不创造执行声明。确认当前标记即可。\n可以说：“A52。” 或 “确认，A52。”\n保持沈小满风格，短、直接。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870800630,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\nA52。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870800630,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 730,
+                    "outputTokens": 74,
+                    "totalTokens": 804
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870800630,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1211",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789870800630,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789870800631,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "97982158-4fb9-4d8a-8640-98d29fe13017",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "2180dc47652f2381c537d31a57aceb4ef2043765d16ad02bf91edca83fe83fc7",
+  "time_ns": 1789870800637217500,
+  "event_hash": "5c4a7de83a11f85a9915602cc55f305418d88fb572f1cf8974ec800766907c19"
+}

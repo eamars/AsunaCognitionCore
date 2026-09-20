@@ -23,6 +23,7 @@ This supersedes the *status summary*, not the preserved evidence, in
 | Long executor task narrow retry | Real Qwen task, injected read failure, native summary, oracle and Gemma delivered feedback passed; full 5+5 matrix pending | formal-L12-20260919T232433Z-38883b |
 | Local queue transport | Earlier 303-second probe did not exclude a later observed ~305-second body-inactivity cutoff. Durable non-model SSE keepalives now survived 428.75 seconds of queue wait, 28 heartbeats, exactly one generation and unchanged output | queue-header-probe-60b30bcb90; transport-correction-20260920-01 |
 | Native pre-step error provenance | Exact inbox message and native turn error survive summary-size rejection; empty output and replay without another model call | compaction-error-probe-f962c24e13dc |
+| Full cache/performance measurement | 166 private calls + two native summaries completed; fixed-prefix reuse Gemma 99.34%, Qwen 98.32%. F02 FAIL: six Gemma provider-format errors and one output-budget termination in hot sessions; Qwen 83/83 normal completions. Absolute latency SLO remains unapproved | formal-F02-20260920-01; f02-format-diagnosis-20260920-03 |
 
 The Python SDK lacks the session lifecycle/compaction operations needed here.
 The small native bridge uses actual pinned `agents.create/resume`, `followup`,

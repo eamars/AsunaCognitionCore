@@ -1,0 +1,94 @@
+{
+  "test_id": "PROBE-F02-ERROR-PROVENANCE",
+  "status": "FAIL",
+  "executed_at": "2026-09-20T02:20:00.195136+00:00",
+  "error": "Diagnosis extraction included tokenizer auxiliaries and reused one output filename within a sample; extraction references are stale. Original provider and sample files are untouched.",
+  "mismatches": [
+    {
+      "ordinal": 58,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-58-request-body.json",
+        "sha256": "a34ca3423569e466643ed6bbe19948bedd99596b5fce999d83a3a6dd3f0217dd"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00702-provider.request.json",
+        "sha256": "5cde85f16b7eccd0f37235e618f0eb7b105f7bb0b586e1ec5f0e943ac8ce5945"
+      }
+    },
+    {
+      "ordinal": 61,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-61-request-body.json",
+        "sha256": "c9b24d83c58e1c8ed19023bf22a9ef156b8b27c1c2f26d527e29a064f255b8ef"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00739-provider.request.json",
+        "sha256": "e1a5d7c8d01e0fdb54c1a8362169359dbdbfed0bf19106a4280c67c31b557f63"
+      }
+    },
+    {
+      "ordinal": 64,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-64-request-body.json",
+        "sha256": "eeb6e230044ca775c65f4b356ac956c4c2a8fa0f1da590b0bd356da33ae7ee18"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00775-provider.request.json",
+        "sha256": "a216365921333eb920cd2b2649e9d7d33d38e88229a3a8acabd8a2c221c2f354"
+      }
+    },
+    {
+      "ordinal": 65,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-65-request-body.json",
+        "sha256": "2d806600edb461a8067d01250ebd3e962f2b47b70de3045340c1458b214e9a72"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00787-provider.request.json",
+        "sha256": "66b2691cade8ffc310ddee49a8c3cc7a78f8ebe860b9d48e8828019f4ae58eba"
+      }
+    },
+    {
+      "ordinal": 66,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-66-request-body.json",
+        "sha256": "c5c9cfe87c14e123b968910cb22ff5d9649567c0de2549716bcc653068d09cea"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00800-provider.request.json",
+        "sha256": "953c430633df796826fadfea9f0a2681d67941b039b26f335386954f2dd5d54f"
+      }
+    },
+    {
+      "ordinal": 72,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-72-request-body.json",
+        "sha256": "faf18bf6380d5ed76c57f637bcb764f4e8a339364b7c5f8a9915e5fc43757d59"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00873-provider.request.json",
+        "sha256": "49c2bde43d01f039575a22724149fc030a26b6e54383c88fe38ea9307358662e"
+      }
+    },
+    {
+      "ordinal": 76,
+      "extraction": {
+        "artifact_path": "reports/f02-format-diagnosis-20260920-01/sample-76-request-body.json",
+        "sha256": "711ebabfb79e71a8bd7f64a51514340569f95c38d3c76ba7e4f552d06136d637"
+      },
+      "request": {
+        "artifact_path": "reports/formal-F02-20260920-01/character/00921-provider.request.json",
+        "sha256": "fb887e97f9ebe12cf21dd3aff9973aefaf79416bf858d2b8a9a536e1e206b4d5"
+      }
+    }
+  ],
+  "superseded_by": "reports/f02-format-diagnosis-20260920-02",
+  "commands": [
+    {
+      "argv": [
+        "offline extraction integrity check"
+      ],
+      "exit_code": 1
+    }
+  ]
+}

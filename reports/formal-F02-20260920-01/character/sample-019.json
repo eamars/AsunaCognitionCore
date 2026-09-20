@@ -1,0 +1,58 @@
+{
+  "lane": "character",
+  "condition": "continuation",
+  "ordinal": 19,
+  "status": "PASS",
+  "operation_seconds": 2.2650811999919824,
+  "native_compactions": [],
+  "measurements": [
+    {
+      "input_tokens": 1093,
+      "cached_tokens": 1053,
+      "uncached_tokens": 40,
+      "output_tokens": 348,
+      "reasoning_tokens": null,
+      "content_tokens": null,
+      "transport_first_byte_seconds": 0.31172359999618493,
+      "first_model_content_seconds": 1.996808099996997,
+      "queue_seconds": 0.0,
+      "total_seconds": 2.0101255999761634,
+      "prefill_seconds": 0.132606,
+      "decode_seconds": 1.697526,
+      "model_load_seconds": null,
+      "model_switch_seconds": null,
+      "time_to_first_public_character_text": null,
+      "raw_usage": {
+        "completion_tokens": 348,
+        "prompt_tokens": 1093,
+        "total_tokens": 1441,
+        "prompt_tokens_details": {
+          "cached_tokens": 1053
+        }
+      },
+      "raw_timings": {
+        "cache_n": 1053,
+        "prompt_n": 40,
+        "prompt_ms": 132.606,
+        "prompt_per_token_ms": 3.31515,
+        "prompt_per_second": 301.64547607197267,
+        "predicted_n": 348,
+        "predicted_ms": 1697.526,
+        "predicted_per_token_ms": 4.892005763688761,
+        "predicted_per_second": 204.41513119681227,
+        "draft_n": 381,
+        "draft_n_accepted": 223
+      },
+      "request_messages_sha256": "90ee361c05d37827a12f6cb1866edaa7797c6489cc21d70bf2e0a849f814f514",
+      "missing_reasons": {
+        "reasoning_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "content_tokens": "Provider did not expose the required counter or timing; not inferred from total duration/tokens.",
+        "model_load_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "model_switch_seconds": "Shared persistent endpoint exposes no attributable model load/switch event.",
+        "time_to_first_public_character_text": "Private measured call has no publication; public receiver latencies are a separate source."
+      },
+      "content_tokens_method": "reported completion total minus explicitly reported reasoning count; otherwise unknown"
+    }
+  ],
+  "finish_reason": "stop"
+}

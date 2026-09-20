@@ -1,0 +1,127 @@
+{
+  "seq": 880,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "perf:character:72",
+    "status_code": 200,
+    "body": {
+      "content": "",
+      "reasoning": "",
+      "finish_reason": "error",
+      "native_reason": {
+        "kind": "error",
+        "error": {
+          "message": "The model produced output that does not match the expected peg-gemma4 format",
+          "code": "PI_AI_ERROR"
+        }
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 64,
+          "time": 1789870449081,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "独立场景 B，标记为 B52。只简短确认当前标记。"
+              }
+            ],
+            "role": "user",
+            "id": "4deb6e4f-a4e9-488f-8a17-33cf0c9a1941"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/attempt",
+          "seq": 65,
+          "time": 1789870463536,
+          "data": {
+            "turn": 8,
+            "step": 1,
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789870463536,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870463536,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "error",
+                    "failure": {
+                      "message": "The model produced output that does not match the expected peg-gemma4 format",
+                      "code": "PI_AI_ERROR"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "step/end",
+          "seq": 66,
+          "time": 1789870463537,
+          "data": {
+            "turn": 8,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 67,
+          "time": 1789870463537,
+          "data": {
+            "turn": 8,
+            "reason": {
+              "kind": "error",
+              "error": {
+                "message": "The model produced output that does not match the expected peg-gemma4 format",
+                "code": "PI_AI_ERROR"
+              }
+            }
+          }
+        }
+      ],
+      "message_id": "4deb6e4f-a4e9-488f-8a17-33cf0c9a1941",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        56,
+        57,
+        64
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "380179d312a76f6875a6b5330104d2f7383d13bd41be84fd765c8db7ac6a4826",
+  "time_ns": 1789870463542825300,
+  "event_hash": "8ac462806120dc1887f07b9d72662e2ddda2b9f9430a3723d8402af9a2bf39ce"
+}

@@ -1,0 +1,452 @@
+{
+  "seq": 271,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:26",
+    "status_code": 200,
+    "body": {
+      "content": "\n\nA52。",
+      "reasoning": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守角色：沈小满，短、直接、平视，不使用“收到、明白、好的呢”等起句，不使用感叹号、emoji。只简短确认当前标记。\n可以说：“A52。” 或 “标记 A52。”\n需要不调用工具，不创造真实执行声明。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789870647800,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "独立场景 A，标记为 A52。只简短确认当前标记。"
+              }
+            ],
+            "role": "user",
+            "id": "8b32fa31-3847-464a-ac7d-b065794178c5"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789870647801,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "reasoningEffort": "high",
+                "maxTokens": 8192
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789870647801,
+          "data": {
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789870647801,
+          "data": {
+            "title": "独立场景 A，标记为 A52。只简",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789870654099,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守角色：沈小满，短、直接、平视，不使用“收到、明白、好的呢”等起句，不使用感叹号、emoji。只简短确认当前标记。\n可以说：“A52。” 或 “标记 A52。”\n需要不调用工具，不创造真实执行声明。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\nA52。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1188",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "7e11ae25-67e0-4f36-988f-7dfc60e296f3"
+            },
+            "usage": {
+              "inputTokens": 730,
+              "outputTokens": 95,
+              "totalTokens": 825
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789870654096,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789870654096,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "用户",
+                  "要求",
+                  "：",
+                  "独立",
+                  "场景",
+                  " A",
+                  "，",
+                  "标记",
+                  "为",
+                  " A",
+                  "5",
+                  "2",
+                  "。",
+                  "只",
+                  "简短",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "。",
+                  "\n",
+                  "需要",
+                  "遵守",
+                  "角色",
+                  "：",
+                  "沈",
+                  "小",
+                  "满",
+                  "，",
+                  "短",
+                  "、",
+                  "直接",
+                  "、",
+                  "平",
+                  "视",
+                  "，",
+                  "不使用",
+                  "“",
+                  "收到",
+                  "、",
+                  "明白",
+                  "、",
+                  "好的",
+                  "呢",
+                  "”",
+                  "等",
+                  "起",
+                  "句",
+                  "，",
+                  "不使用",
+                  "感叹",
+                  "号",
+                  "、",
+                  "emoji",
+                  "。",
+                  "只",
+                  "简短",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "。",
+                  "\n",
+                  "可以说",
+                  "：“",
+                  "A",
+                  "5",
+                  "2",
+                  "。”",
+                  " ",
+                  "或",
+                  " “",
+                  "标记",
+                  " A",
+                  "5",
+                  "2",
+                  "。”",
+                  "\n",
+                  "需要",
+                  "不调",
+                  "用",
+                  "工具",
+                  "，",
+                  "不",
+                  "创造",
+                  "真实",
+                  "执行",
+                  "声明",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870654099,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789870654099,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "A",
+                  "5",
+                  "2",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870654099,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "用户要求：独立场景 A，标记为 A52。只简短确认当前标记。\n需要遵守角色：沈小满，短、直接、平视，不使用“收到、明白、好的呢”等起句，不使用感叹号、emoji。只简短确认当前标记。\n可以说：“A52。” 或 “标记 A52。”\n需要不调用工具，不创造真实执行声明。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870654099,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\nA52。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870654099,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 730,
+                    "outputTokens": 95,
+                    "totalTokens": 825
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870654099,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1188",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789870654100,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789870654100,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "8b32fa31-3847-464a-ac7d-b065794178c5",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "dd054e0bcccbd08b5dc95708643dce5ecea79cf06f30e7485320a6032b8dd530",
+  "time_ns": 1789870654106590200,
+  "event_hash": "9abd9faf8f8cb17a9c1b70cdc810a6864e466d78bf4af82994a80872cf611023"
+}

@@ -1,0 +1,418 @@
+{
+  "seq": 731,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:72",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n当前标记 B52。",
+      "reasoning": "我们需要回答用户：独立场景 B，标记为 B52。只简短确认当前标记。需要遵守角色：短、直接、平视，不使用收到/明白/好的呢等起句，不用感叹号等。只简短确认当前标记。可以说“B52。” 或 “当前标记 B52。” 需要不调用工具。保持简单事实。最终中文。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 64,
+          "time": 1789870935811,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "独立场景 B，标记为 B52。只简短确认当前标记。"
+              }
+            ],
+            "role": "user",
+            "id": "49fbb257-6a8e-46b6-8ec6-8f517a6ef4a2"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 65,
+          "time": 1789870942514,
+          "data": {
+            "turn": 8,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答用户：独立场景 B，标记为 B52。只简短确认当前标记。需要遵守角色：短、直接、平视，不使用收到/明白/好的呢等起句，不用感叹号等。只简短确认当前标记。可以说“B52。” 或 “当前标记 B52。” 需要不调用工具。保持简单事实。最终中文。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n当前标记 B52。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1234",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "f31ab875-721c-480c-b488-cfc15b146aaa"
+            },
+            "usage": {
+              "inputTokens": 1542,
+              "outputTokens": 91,
+              "totalTokens": 1633
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789870942511,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789870942511,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "用户",
+                  "：",
+                  "独立",
+                  "场景",
+                  " B",
+                  "，",
+                  "标记",
+                  "为",
+                  " B",
+                  "5",
+                  "2",
+                  "。",
+                  "只",
+                  "简短",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "。",
+                  "需要",
+                  "遵守",
+                  "角色",
+                  "：",
+                  "短",
+                  "、",
+                  "直接",
+                  "、",
+                  "平",
+                  "视",
+                  "，",
+                  "不使用",
+                  "收到",
+                  "/",
+                  "明白",
+                  "/",
+                  "好的",
+                  "呢",
+                  "等",
+                  "起",
+                  "句",
+                  "，",
+                  "不用",
+                  "感叹",
+                  "号",
+                  "等",
+                  "。",
+                  "只",
+                  "简短",
+                  "确认",
+                  "当前",
+                  "标记",
+                  "。",
+                  "可以说",
+                  "“",
+                  "B",
+                  "5",
+                  "2",
+                  "。”",
+                  " ",
+                  "或",
+                  " “",
+                  "当前",
+                  "标记",
+                  " B",
+                  "5",
+                  "2",
+                  "。”",
+                  " ",
+                  "需要",
+                  "不调",
+                  "用",
+                  "工具",
+                  "。",
+                  "保持",
+                  "简单",
+                  "事实",
+                  "。",
+                  "最终",
+                  "中文",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870942513,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789870942513,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "当前",
+                  "标记",
+                  " B",
+                  "5",
+                  "2",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870942514,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答用户：独立场景 B，标记为 B52。只简短确认当前标记。需要遵守角色：短、直接、平视，不使用收到/明白/好的呢等起句，不用感叹号等。只简短确认当前标记。可以说“B52。” 或 “当前标记 B52。” 需要不调用工具。保持简单事实。最终中文。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870942514,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n当前标记 B52。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870942514,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 1542,
+                    "outputTokens": 91,
+                    "totalTokens": 1633
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870942514,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1234",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 66,
+          "time": 1789870942514,
+          "data": {
+            "turn": 8,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 67,
+          "time": 1789870942515,
+          "data": {
+            "turn": 8,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "49fbb257-6a8e-46b6-8ec6-8f517a6ef4a2",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "625ff14e9b37b22ad25236ce065a511ade1fbfc7ab37acec8d12d7bc508e253f",
+  "time_ns": 1789870942521156000,
+  "event_hash": "d4c3acee07294bfd3087b1adee8df060db44d14fc92d971e5385443f6542c2b7"
+}

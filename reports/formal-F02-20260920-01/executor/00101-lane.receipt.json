@@ -1,0 +1,360 @@
+{
+  "seq": 101,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "perf:executor:9",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n已记下",
+      "reasoning": "用户要求：记录青桥柜标记为 CX81，只回复“已记下”。需要遵守只回复已记下，不调用工具，不创造执行声明。最终只输出“已记下”。\n",
+      "finish_reason": "completed",
+      "native_reason": {
+        "kind": "completed"
+      },
+      "message_admitted_to_surface": true,
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 5,
+          "time": 1789870540663,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "记录：青桥柜标记为 CX81。只回复已记下。"
+              }
+            ],
+            "role": "user",
+            "id": "44c8a76c-f9c2-47eb-a2eb-174b06e7f499"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "request/header",
+          "seq": 6,
+          "time": 1789870540663,
+          "data": {
+            "header": {
+              "config": {
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "reasoningEffort": "high",
+                "maxTokens": 8192
+              }
+            },
+            "reason": "initial"
+          }
+        },
+        {
+          "type": "request/context",
+          "seq": 7,
+          "time": 1789870540663,
+          "data": {
+            "provider": "asuna-local",
+            "model": "qwen38-next-uncensored-freetoken-vision",
+            "contextWindow": 262144
+          }
+        },
+        {
+          "type": "session/title",
+          "seq": 8,
+          "time": 1789870540664,
+          "data": {
+            "title": "记录：青桥柜标记为 CX81。只",
+            "messageSeqs": [
+              5
+            ],
+            "source": {
+              "kind": "fallback"
+            }
+          }
+        },
+        {
+          "type": "assistant/message",
+          "seq": 9,
+          "time": 1789870545420,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "用户要求：记录青桥柜标记为 CX81，只回复“已记下”。需要遵守只回复已记下，不调用工具，不创造执行声明。最终只输出“已记下”。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n已记下"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-1171",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "433c88dc-3283-4ecc-8741-ef999bedfecf"
+            },
+            "usage": {
+              "inputTokens": 12,
+              "outputTokens": 48,
+              "totalTokens": 764,
+              "cacheReadTokens": 704
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789870545417,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789870545418,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "用户",
+                  "要求",
+                  "：",
+                  "记录",
+                  "青",
+                  "桥",
+                  "柜",
+                  "标记",
+                  "为",
+                  " CX",
+                  "8",
+                  "1",
+                  "，",
+                  "只",
+                  "回复",
+                  "“",
+                  "已",
+                  "记下",
+                  "”。",
+                  "需要",
+                  "遵守",
+                  "只",
+                  "回复",
+                  "已",
+                  "记下",
+                  "，",
+                  "不调",
+                  "用",
+                  "工具",
+                  "，",
+                  "不",
+                  "创造",
+                  "执行",
+                  "声明",
+                  "。",
+                  "最终",
+                  "只",
+                  "输出",
+                  "“",
+                  "已",
+                  "记下",
+                  "”。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870545419,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789870545419,
+                "index": 1,
+                "dt": [
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "已",
+                  "记下"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789870545419,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "用户要求：记录青桥柜标记为 CX81，只回复“已记下”。需要遵守只回复已记下，不调用工具，不创造执行声明。最终只输出“已记下”。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870545419,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n已记下"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870545419,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 12,
+                    "outputTokens": 48,
+                    "totalTokens": 764,
+                    "cacheReadTokens": 704
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789870545419,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-1171",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 10,
+          "time": 1789870545420,
+          "data": {
+            "turn": 1,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 11,
+          "time": 1789870545420,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "44c8a76c-f9c2-47eb-a2eb-174b06e7f499",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "03b791b5c25c8b981722e82c8ec8c6261cb6fd03227d972dd3d60cfde19b75d8",
+  "time_ns": 1789870545426054500,
+  "event_hash": "ac0b81ea9fc1388c8e8bd950e1ae5267cb0e640c66061761beb1807aa9f605f8"
+}

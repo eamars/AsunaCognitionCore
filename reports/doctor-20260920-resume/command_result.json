@@ -1,0 +1,293 @@
+{
+  "recorded_at": "2026-09-19T23:19:16.936637+00:00",
+  "config": {
+    "database": "asuna_cognition_core_v2",
+    "allowed_databases": [
+      "asuna_cognition_core_v2"
+    ],
+    "test_database_prefix": "asuna_v2_test_",
+    "embedding": {
+      "base_url": "http://192.168.2.8:1234/v1",
+      "model": "text-embedding-nomic-embed-text-v2-moe",
+      "query_prefix": "search_query: ",
+      "document_prefix": "search_document: ",
+      "weight_sha256": "a5db3381f2e514d3490a3a31fe70eb1a65e95016c85c6c2c23223b810806594f",
+      "manifest_sha256": "ff9c2f10ef5e3722623a1b396e1e04efc27a93112c83e9b7b7b9ca1d05620965"
+    },
+    "character": {
+      "base_url": "http://192.168.2.13:8083/v1",
+      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "max_tokens": 4096
+    },
+    "executor": {
+      "base_url": "http://192.168.2.13:1919/v1",
+      "model": "qwen38-next-uncensored-freetoken-vision",
+      "sampling": {
+        "temperature": 0.2,
+        "top_p": 0.95,
+        "seed": 20260919
+      },
+      "max_tokens": 8192
+    },
+    "dsh_home": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\asuna-dsh",
+    "workdir": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work",
+    "local_only": true,
+    "publish_adapter": "local-idempotent-sink",
+    "source": {
+      "connections": "explicit user input",
+      "embedding_model_and_key": "C:\\workspace\\kazusa_cognition_core_prod\\.env",
+      "legacy_config_sha256": "1c058b43d7fe656460b8d5012d57909f5b271f116d892bb5b23fa3353e1659c3"
+    },
+    "workflow_timeout_seconds": 1800
+  },
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "checks": [
+    {
+      "id": "DSH_VERSION",
+      "status": "PASS",
+      "value": "0.1.5-rc.2",
+      "exit_code": 0
+    },
+    {
+      "id": "CHARACTER_ENDPOINT",
+      "status": "PASS",
+      "models": {
+        "models": [
+          {
+            "name": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "modified_at": "",
+            "size": "",
+            "digest": "",
+            "type": "model",
+            "description": "",
+            "tags": [
+              ""
+            ],
+            "capabilities": [
+              "completion",
+              "multimodal"
+            ],
+            "parameters": "",
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "",
+              "families": [
+                ""
+              ],
+              "parameter_size": "",
+              "quantization_level": ""
+            }
+          }
+        ],
+        "object": "list",
+        "data": [
+          {
+            "id": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+            "aliases": [
+              "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp"
+            ],
+            "tags": [],
+            "object": "model",
+            "created": 1789859957,
+            "owned_by": "llamacpp",
+            "meta": {
+              "vocab_type": true,
+              "n_vocab": 262144,
+              "n_ctx": 262144,
+              "n_ctx_train": 262144,
+              "n_embd": 2816,
+              "n_params": 25233142046,
+              "size": 14233222264,
+              "ftype": "Q4_0"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "EXECUTOR_ENDPOINT",
+      "status": "PASS",
+      "models": {
+        "object": "list",
+        "data": [
+          {
+            "id": "qwen38-next-uncensored-freetoken-vision",
+            "object": "model",
+            "created": 1789859957,
+            "owned_by": "FreeToken",
+            "root": "/home/rba90/models/Qwen3.8-Flash-Next-Uncensored-NVFP4",
+            "max_model_len": 262144,
+            "context_length": 262144,
+            "supported_reasoning_efforts": [
+              "xhigh",
+              "medium",
+              "low"
+            ],
+            "default_reasoning_effort": "xhigh"
+          }
+        ]
+      }
+    },
+    {
+      "id": "EMBEDDING_ENDPOINT",
+      "status": "PASS",
+      "models": {
+        "object": "list",
+        "data": [
+          {
+            "id": "MemReranker-0.6B:latest",
+            "object": "model",
+            "created": 1781346778,
+            "owned_by": "library"
+          },
+          {
+            "id": "Qwen3-Embedding-4B:latest",
+            "object": "model",
+            "created": 1781346778,
+            "owned_by": "library"
+          },
+          {
+            "id": "dengcao/Qwen3-Reranker-0.6B:Q8_0",
+            "object": "model",
+            "created": 1781346776,
+            "owned_by": "dengcao"
+          },
+          {
+            "id": "dengcao/Qwen3-Embedding-4B:Q4_K_M",
+            "object": "model",
+            "created": 1781346708,
+            "owned_by": "dengcao"
+          },
+          {
+            "id": "nomic-embed-text-v2-moe:latest",
+            "object": "model",
+            "created": 1781346216,
+            "owned_by": "library"
+          },
+          {
+            "id": "text-embedding-nomic-embed-text-v2-moe:latest",
+            "object": "model",
+            "created": 1781346216,
+            "owned_by": "library"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MONGO",
+      "status": "PASS",
+      "database": "asuna_cognition_core_v2",
+      "ping": 1.0,
+      "set_name": "rs0",
+      "isWritablePrimary": true,
+      "vector_indexes": [
+        {
+          "id": "6aad4f9f5e9849184b55b2c9",
+          "name": "asuna_memory_v1",
+          "status": "READY",
+          "queryable": true,
+          "latestDefinitionVersion": {
+            "version": 0,
+            "createdAt": "2026-09-18 14:50:07"
+          },
+          "latestDefinition": {
+            "fields": [
+              {
+                "type": "vector",
+                "path": "embedding",
+                "numDimensions": 768,
+                "similarity": "cosine"
+              },
+              {
+                "type": "filter",
+                "path": "scope_key"
+              },
+              {
+                "type": "filter",
+                "path": "character_id"
+              },
+              {
+                "type": "filter",
+                "path": "status"
+              },
+              {
+                "type": "filter",
+                "path": "policy_epoch"
+              },
+              {
+                "type": "filter",
+                "path": "embedding_revision"
+              }
+            ]
+          },
+          "statusDetail": [
+            {
+              "hostname": "69cf00cd117bb52085607a89",
+              "status": "READY",
+              "queryable": true,
+              "mainIndex": {
+                "status": "READY",
+                "queryable": true,
+                "definitionVersion": {
+                  "version": 0,
+                  "createdAt": "2026-09-18 14:50:07"
+                },
+                "definition": {
+                  "fields": [
+                    {
+                      "type": "vector",
+                      "path": "embedding",
+                      "numDimensions": 768,
+                      "similarity": "cosine"
+                    },
+                    {
+                      "type": "filter",
+                      "path": "scope_key"
+                    },
+                    {
+                      "type": "filter",
+                      "path": "character_id"
+                    },
+                    {
+                      "type": "filter",
+                      "path": "status"
+                    },
+                    {
+                      "type": "filter",
+                      "path": "policy_epoch"
+                    },
+                    {
+                      "type": "filter",
+                      "path": "embedding_revision"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "numDocs": 13
+        }
+      ]
+    }
+  ],
+  "dsh": {
+    "version": "0.1.5-rc.2",
+    "commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
+    "executable": "C:\\workspace\\asuna_cognition_core_v2\\node_modules\\.bin\\dsh.cmd",
+    "executable_sha256": "0ff7f1d72c4e0cbe14001709c81e20a04b70464118a7f78568952988e28f2ac5",
+    "package_lock_sha256": "d2e787afc0357c6d277fed5eed68fe731f7fe0798ca2af110b7f5585623ecb83"
+  },
+  "status": "PASS",
+  "limitations": [
+    "Connectivity doctor is not behavioral acceptance or capacity validation",
+    "No latency SLO or human ratings are implicitly approved"
+  ]
+}

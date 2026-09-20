@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0036",
+  "case_id": "C03",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_32852df308f1436d9258",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他让我自己定，说明我会认真选并询问具体是哪件小事",
+    "constraints": [
+      "不编造具体事项",
+      "保持简短直接",
+      "不使用敬语"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n你把是哪件小事说清楚，我就能定。可逆范围内我自己选，不随便应付。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "8934ce40137ca10577c0eed74c4a5680383591bcbd811e797efdfa7e61c7d515",
+    "0012b538b326abc26aac1344107ac7becab23cf2f4365a5ed1450e9d64bb85fb",
+    "e614590201944522d4f54eb6845e44240712f8106533e9eff0ba47c536fea995"
+  ]
+}

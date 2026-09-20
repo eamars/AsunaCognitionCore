@@ -18,14 +18,24 @@ for name in ('operator-ssh.json','embedding-ssh.json'):
 patterns=[re.compile(r'(?<![A-Za-z0-9_.:/\\-])'+re.escape(s)+r'(?![A-Za-z0-9_.:/\\-])') for s in secrets]
 paths=subprocess.check_output(['git','diff','--cached','--name-only','--diff-filter=ACM','-z'],cwd=ROOT).decode().split('\0')
 matches=[];checked=0
-for name in filter(None,paths):
-    raw=subprocess.check_output(['git','show',':'+name],cwd=ROOT)
-    values=[]
-    if name.endswith('.zip'):
-        import io,zipfile
-        with zipfile.ZipFile(io.BytesIO(raw)) as z:values=[z.read(n).decode('utf-8',errors='ignore') for n in z.namelist()]
-    else:values=[raw.decode('utf-8',errors='ignore')]
-    if any(p.search(value) for value in values for p in patterns):matches.append(name)
-    checked+=1
+# Read exactly the staged blobs through one Git process. Thousands of preserved
+# provider artifacts should not require thousands of Windows process launches.
+with subprocess.Popen(['git','cat-file','--batch'],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE) as batch:
+    for name in filter(None,paths):
+        if '\n' in name or '\r' in name:raise ValueError('UNSUPPORTED_STAGED_PATH')
+        batch.stdin.write((':'+name+'\n').encode());batch.stdin.flush()
+        header=batch.stdout.readline().split()
+        if len(header)!=3 or header[1]!=b'blob':raise ValueError('STAGED_BLOB_READ_FAILED')
+        size=int(header[2]);raw=batch.stdout.read(size)
+        if len(raw)!=size or batch.stdout.read(1)!=b'\n':raise ValueError('STAGED_BLOB_TRUNCATED')
+        values=[]
+        if name.endswith('.zip'):
+            import io,zipfile
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:values=[z.read(n).decode('utf-8',errors='ignore') for n in z.namelist()]
+        else:values=[raw.decode('utf-8',errors='ignore')]
+        if any(p.search(value) for value in values for p in patterns):matches.append(name)
+        checked+=1
+    batch.stdin.close()
+    if batch.wait()!=0:raise ValueError('STAGED_BLOB_PROCESS_FAILED')
 print(json.dumps({'checked':checked,'matching_paths':matches,'status':'FAIL' if matches else 'PASS'}))
 raise SystemExit(bool(matches))

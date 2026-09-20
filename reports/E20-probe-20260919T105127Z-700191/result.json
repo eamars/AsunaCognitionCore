@@ -1,0 +1,19 @@
+{
+  "test_id": "PROBE-E20",
+  "status": "PASS",
+  "database": "asuna_v2_test_E20_probe_20260919T105127Z_700191",
+  "commands": [
+    {
+      "argv": [
+        "python",
+        "tools/probe_erasure.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "no external-backup physical erasure",
+    "conservative scope-wide generated-content deletion",
+    "active-state export checked; immutable original acceptance fixtures remain operator truth, not active memory"
+  ]
+}

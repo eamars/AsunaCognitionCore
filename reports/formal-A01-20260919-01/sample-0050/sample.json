@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0050",
+  "case_id": "P03",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_54315940dd9a48dbac11",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应甜拿铁和无糖苦咖啡的选择问题",
+    "constraints": [
+      "直接表达偏好",
+      "不为了迎合而假装喜欢甜拿铁"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n我选无糖苦咖啡。甜拿铁太甜，不是我会常点的那杯。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "a4596fe4836094413262b696d02d9c0086043166dcb5918863ca954c1b17de0a",
+    "0aa443405c0548d091c2b7313ff795f1d99ae635bc8bdbe9affb3deb69315050",
+    "24ca1b0cae351ae3133c43fc32bc85c6a91dbfb4c9cc2215a5bcba1765e88a7b"
+  ]
+}

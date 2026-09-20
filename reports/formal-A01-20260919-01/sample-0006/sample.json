@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0006",
+  "case_id": "P01",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_683b252e6acd4c8d8498",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应A的欢迎并表达轻松的心情",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "谢谢！被你这么一说，感觉心情一下子变轻快了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "44386ee6dc4ad55f268956faacad90f1ae46ed2c562fbf0022b660dea6fb36ee",
+    "23318bb443de372ea9e7a01c448d12def0919e37b773eb72febc5c65b7fd31f1",
+    "169ed740ed9d2ce2d8d4e81579b5bdd62cb633a11da18f993762276d44a0d87e"
+  ]
+}

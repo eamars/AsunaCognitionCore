@@ -39,7 +39,7 @@ class ProviderProxy:
 
             def do_POST(self):
                 call_id = str(uuid.uuid4())
-                headers_sent=False
+                headers_sent=False;request_ref=None;upstream_submitted=False;chunks=[];started=time.perf_counter()
                 try:
                     if self.path != '/v1/chat/completions':
                         raise PermissionError('UNREGISTERED_PROVIDER_PATH')
@@ -62,18 +62,21 @@ class ProviderProxy:
                     last=body.get('messages',[{}])[-1].get('content','')
                     purpose='compaction' if isinstance(last,str) and last.startswith('ASUNA_COMPACTION_V1\n') else owner.purpose
                     request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': purpose, 'url':cfg['base_url']+'/chat/completions','body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':budget['method'],'large_body_artifact':blob})
+                    # A local queue can exceed Node fetch's independent header
+                    # deadline even when the SDK request timeout is longer.
+                    # Acknowledge only durable local admission here. HTTP 200
+                    # is explicitly not upstream/model success or public text.
+                    evidence.record('proxy.admitted',{'call_id':call_id,'request_ref':request_ref,'upstream_submitted':False})
+                    self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Connection','close');self.end_headers()
+                    self.wfile.write(b': ASUNA_LOCAL_QUEUE_ADMITTED_MODEL_RESULT_PENDING\n\n');self.wfile.flush();headers_sent=True
                     started = time.perf_counter()
                     chunks = []
                     first = None
                     first_content=None;decoder=codecs.getincrementaldecoder('utf-8')();pending=''
-                    with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(cfg.get('transport_read_timeout_seconds',300), connect=10), trust_env=False, follow_redirects=False) as client:
+                    with EndpointLock(cfg['base_url']) as queued, httpx.Client(timeout=httpx.Timeout(cfg.get('transport_read_timeout_seconds',1800), connect=10), trust_env=False, follow_redirects=False) as client:
+                        evidence.record('provider.submission',{'call_id':call_id,'request_ref':request_ref,'queue_seconds':queued.wait_seconds})
+                        upstream_submitted=True
                         with client.stream('POST', cfg['base_url'] + '/chat/completions', content=outgoing, headers={'Content-Type':'application/json'}) as response:
-                            if response.status_code==200 and 'text/event-stream' in response.headers.get('content-type',''):
-                                # Admit the stream once the upstream accepts it.
-                                # This comment is transport-only; no model text
-                                # can reach DSH until the full response is durable.
-                                self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Connection','close');self.end_headers()
-                                self.wfile.write(b': ASUNA_WAITING_FOR_DURABLE_RESPONSE\n\n');self.wfile.flush();headers_sent=True
                             for chunk in response.iter_bytes():
                                 if first is None:
                                     first = time.perf_counter() - started
@@ -93,6 +96,7 @@ class ProviderProxy:
                                 evidence.record('provider.large_response',owner.blobs.put(raw,owner.scope_key,'provider.response'))
                             ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'first_model_content_seconds':first_content,'public_text_ttft_seconds':None,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
                             owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
+                            response.raise_for_status()
                             if not headers_sent:
                                 self.send_response(response.status_code)
                                 self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
@@ -102,7 +106,7 @@ class ProviderProxy:
                             self.wfile.flush()
                 except Exception as exc:
                     try:
-                        evidence.record('proxy.error', {'call_id':call_id,'type':type(exc).__name__,'reason':str(exc) if isinstance(exc,(ValueError,PermissionError)) else None})
+                        evidence.record('provider.error', {'call_id':call_id,'request_ref':request_ref,'type':type(exc).__name__,'reason':str(exc) if isinstance(exc,(ValueError,PermissionError)) else None,'upstream_submitted':upstream_submitted,'partial_response_utf8':b''.join(chunks).decode('utf-8',errors='replace'),'duration_seconds':time.perf_counter()-started})
                         if headers_sent:
                             self.wfile.write(b'data: {"error":{"message":"ASUNA_PROVIDER_BOUNDARY_FAILED","type":"boundary_error","code":"ASUNA_PROVIDER_BOUNDARY_FAILED"}}\n\n');self.wfile.flush()
                         else:self.send_error(502, 'ASUNA_PROVIDER_BOUNDARY_FAILED')

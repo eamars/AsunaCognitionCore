@@ -52,10 +52,42 @@ def projection(store):
 
 def render_html(events, output: Path):
     verify(events)
-    rows=[]
+    from .config import ROOT
+    groups={}
+    def pretty(value):return '<pre>'+html.escape(json.dumps(value,ensure_ascii=False,indent=2,default=str))+'</pre>'
+    def requests(event):
+        refs=event['payload'].get('request_refs',[])
+        views=[]
+        for ref in refs:
+            label=html.escape(ref.get('artifact_path','未记录路径'))
+            try:
+                path=(ROOT/ref['artifact_path']).resolve()
+                if not path.is_relative_to((ROOT/'reports').resolve()) or not path.name.endswith('provider.request.json'):
+                    raise ValueError('请求路径不在报告目录')
+                raw=path.read_bytes()
+                if sha(raw)!=ref['sha256']:raise ValueError('请求文件 hash 不符')
+                payload=json.loads(raw)['payload']
+                title='摘要实际请求（压缩前材料）' if payload.get('purpose')=='compaction' else '实际 provider 请求'
+                # Display the recorded wire body, not a reconstructed prompt.
+                body='<pre>'+html.escape(payload['body_utf8'])+'</pre>'
+                views.append('<details class="request"><summary>'+title+' · '+label+'</summary>'+pretty({k:v for k,v in payload.items() if k!='body_utf8'})+body+'</details>')
+            except (OSError,KeyError,ValueError) as exc:
+                views.append('<p class="missing">请求证据不可展开：'+label+' · '+html.escape(str(exc))+'</p>')
+        return ''.join(views)
     for event in events:
-        title=html.escape(f"{event['stream_id']} / {event['seq']} / {event['type']}")
-        body=html.escape(json.dumps(event,ensure_ascii=False,indent=2,default=str))
-        rows.append(f'<details><summary>{title}</summary><pre>{body}</pre></details>')
+        phase=event['payload'].get('phase')
+        label={'MONOLOGUE':'角色持久独白','DECIDE':'角色意图','SPEAK':'公开回复候选（以送达回执为准）'}.get(phase,'')
+        title=html.escape(f"{event['stream_id']} / {event['seq']} / {event['type']} {label}")
+        extra=''
+        if event['type']=='compaction.native':
+            result=event['payload'].get('result',{})
+            extra='<div class="compare"><section><h3>被替换的原始范围</h3>'+pretty({k:result.get(k) for k in ('shadowedRange','shadowedSeqs','shadowedTokenCount')})+'</section><section><h3>实际压缩摘要</h3>'+pretty(result.get('summary'))+'</section></div>'
+        row=f'<details class="event"><summary>{title}</summary>'+extra+requests(event)+pretty(event)+'</details>'
+        key=event['stream_id'].split(':',1)[0] if event['stream_id'].startswith(('ep-','task-')) else event['stream_id']
+        groups.setdefault(key,[]).append(row)
+    sections=[]
+    for key,rows in sorted(groups.items(),key=lambda pair:pair[0]=='seed'):
+        label='初始化记录' if key=='seed' else '角色回合' if key.startswith('ep-') else '执行任务' if key.startswith('task-') else '系统事件'
+        sections.append('<details class="stream"><summary>'+html.escape(f'{label} · {key} · {len(rows)} 条记录')+'</summary>'+''.join(rows)+'</details>')
     output.parent.mkdir(parents=True,exist_ok=True)
-    output.write_text('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>Asuna operator audit</title><style>body{max-width:1100px;margin:2em auto;font:16px system-ui;background:#f5f5f2;color:#202020}summary{cursor:pointer;padding:.6em}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:1em;background:white}details{border-bottom:1px solid #ccc}</style><h1>Asuna 操作者审计</h1><p>独白是角色持久叙事；reasoning 是模型返回字段。生成不等于送达。</p>'+''.join(rows),encoding='utf-8')
+    output.write_text('<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>Asuna operator audit</title><style>*{box-sizing:border-box}body{max-width:1100px;margin:2em auto;padding:0 16px;font:16px/1.6 system-ui;background:#f5f5f2;color:#202020}summary{cursor:pointer;padding:.6em;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:1em;background:white}.stream{border:1px solid #ccc;margin:12px 0}.stream>summary{font-weight:600}.event{margin-left:12px;border-top:1px solid #ddd}.request{margin:12px;border-left:3px solid #47766c}.compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:12px;min-width:0}.compare section{min-width:0}.missing{color:#8b3516}@media(max-width:650px){.compare{grid-template-columns:1fr}.event{margin-left:4px}}</style><h1>Asuna 操作者审计</h1><p>独白是角色持久叙事；reasoning 是模型返回字段。生成不等于送达。先展开回合或任务，再查看阶段及 hash 校验后的实际请求。页面无脚本、无外网资源。</p>'+''.join(sections)+'</html>',encoding='utf-8')

@@ -10,7 +10,7 @@ This supersedes the *status summary*, not the preserved evidence, in
 | Real task route | Gemma intent → Qwen tools → Gemma feedback → local publish receiver | M3-20260918T144114Z-b9152a |
 | Native complete-episode compaction | Actual same-lane summary and DSH brackets, no mock | M5-20260919T091831Z-33280f |
 | Embedding weights | Ollama served alias and registry manifest matched; actual GGUF hash verified over authorized SSH | embedding-fingerprint-20260919T091301Z-32b938 |
-| Vector retrieval | READY; Recall@6 1.0 across 12 gold queries + 200 distractors; 11 nonliteral vector-only successes | formal-L04-20260919T092415Z-4751ec |
+| Vector retrieval | READY; Recall@6 1.0 across 12 gold queries + 200 distractors; 11 nonliteral vector-only successes; stale-ID fault injection confirmed actually intercepted | formal-L04-20260919T111218Z-41b06a; retrieval-evidence-correction-d1ef4fc146 |
 | Scoped erasure | Native summary/session invalidated, new epoch excludes deleted canary | E20-probe-20260919T085340Z-1a4a22 |
 | Crash boundaries | Five real process kill points plus idempotent/UNKNOWN checks | check-20260919T092116Z-713138 |
 | L01 60 scenarios | Format 60/60, semantic route 55/60; all five P06 runs did not delegate | formal-L01-20260919-01 |
@@ -18,6 +18,9 @@ This supersedes the *status summary*, not the preserved evidence, in
 | Deferred compaction | Queue survives interrupted monologue and process restart; actual summary only at completed episode boundary | deferred-compaction-ecd35834ff |
 | Intent revision / effect fence | v1 stale after v2; old effects preserved, old evidence rejected; separate process cancellation serializes with real sandbox effect | revision-probe-614d286cdb; effect-fence-probe-8145bf2a25 |
 | Independent cognition review | Not completed | COGNITION must remain INCONCLUSIVE |
+| In-app Browser | Review pagination, blank ratings, full JSON copy export, actual provider request and native compaction display verified; download receipt unobserved | ui-qa-20260920-01 |
+| Long executor task narrow retry | Real Qwen task, injected read failure, native summary, oracle and Gemma delivered feedback passed; full 5+5 matrix pending | formal-L12-20260919T232433Z-38883b |
+| Local queue transport | Installed DSH client stayed alive through more than 300 seconds of local queue wait; deterministic local upstream, not a quality evaluation | queue-header-probe-cdb9228406 |
 
 The Python SDK lacks the session lifecycle/compaction operations needed here.
 The small native bridge uses actual pinned `agents.create/resume`, `followup`,

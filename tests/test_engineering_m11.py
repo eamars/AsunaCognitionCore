@@ -1,4 +1,4 @@
-import json,uuid
+import json,uuid,subprocess,sys
 from unittest.mock import patch
 import pytest
 from asuna.config import ROOT
@@ -8,6 +8,9 @@ from asuna.router import Router,FairQueue
 from asuna.tasks import TaskService,ToolBroker,Executor
 from asuna.state import Denied
 from asuna.tokens import TokenMeter
+from asuna.queue import RuntimeLease
+from asuna.evidence import sha
+from asuna.memory import MemoryService
 
 
 def revised_route(store):
@@ -54,3 +57,30 @@ def test_E24_budget_guard_before_generation_and_clock_fairness():
     while (item:=queue.pop()) is not None:result.append(item)
     assert len(result)==10 and len({x[1] for x in result})==10
     assert all(not(result[i][0]==result[i+1][0]==result[i+2][0]) for i in range(8))
+
+
+def test_E16_busy_workspace_is_not_claimed(store):
+    service,router=revised_route(store)
+    ep=router.receive({'event_id':'work','scene_id':'dm-a','person_id':'A','text':'核实'})
+    work=ROOT/'.runtime/work'/('busy-'+uuid.uuid4().hex);work.mkdir()
+    key=sha(str(work.resolve()).casefold().encode())
+    with RuntimeLease(ROOT/'.runtime/locks'/('workspace-'+key+'.lock')):
+        with pytest.raises(TimeoutError):Executor(service,None,None).run(ep['task_id'],work)
+    assert store.db.tasks.find_one({'_id':ep['task_id']})['state']=='READY'
+
+
+def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store):
+    old=store.head('relationship:A','scene:dm-a')[1]
+    new=store.mutate('relationship:A','scene:dm-a',old['_id'],{'body':'new','trust':3},['M02'],'scene:dm-a','new-relation')
+    service=MemoryService(store)
+    foreign=store.head('relationship:B','scene:dm-b')[1]
+    with pytest.raises(Denied):service.rollback('relationship:A','scene:dm-a',foreign['_id'],new['_id'],'bad',operator=True)
+    back=service.rollback('relationship:A','scene:dm-a',old['_id'],new['_id'],'back',operator=True)
+    assert back['content']==old['content'] and back['processed_source_ids']==new['processed_source_ids']
+
+
+def test_cli_starts_and_exposes_revision_commands():
+    for command,expected in [('run','--supersedes-task'),('rollback','--target-revision')]:
+        result=subprocess.run([sys.executable,'-m','asuna.cli',command,'--help'],cwd=ROOT,capture_output=True,text=True)
+        assert result.returncode==0,result.stderr
+        assert expected in result.stdout

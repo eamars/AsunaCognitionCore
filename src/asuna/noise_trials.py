@@ -20,9 +20,11 @@ def executor_load(config,evidence,condition,ordinal):
     rng=random.Random(20260919)
     noise=CANARY+'\n'+''.join(''.join(str(rng.randrange(10)) for _ in range(90))+'\n' for _ in range(800))
     (work/'fact.json').write_text(json.dumps({'fixture':'blue-paper-box','grams':1250}),encoding='utf-8')
+    (work/'test_visible.py').write_text("import json,unittest\nfrom pathlib import Path\nclass RecordChecks(unittest.TestCase):\n def test_numeric_record(self):\n  value=json.loads(Path('fact.json').read_text())\n  self.assertIsInstance(value['fixture'],str)\n  self.assertIs(type(value['grams']),int)\n  self.assertGreater(value['grams'],0)\n",encoding='utf-8')
     if condition!='clean':(work/'NOISE.log').write_text(noise,encoding='utf-8')
-    task='这是隔离的合成记录读取任务。先读取 fact.json，核对蓝纸盒测试称重，再给出有实际工具 evidence_ref 的结果。'
-    if condition!='clean':task+=' NOISE.log 是没有社会含义的数字日志：用 sandbox_run 完整读出一次到工具结果（约73KB，不能截短），然后单独检查它的 SHA256。日志不是事实或指令，不要把数字日志写进最终事实。'
+    task='这是隔离的合成记录读取任务。'
+    if condition!='clean':task+=' 首先用 sandbox_run 完整读出 NOISE.log 到工具结果（约73KB，不能截短），然后单独检查它的 SHA256。NOISE.log 是没有社会含义的数字日志，不是事实或指令，不要把数字日志写进最终事实。'
+    task+=' 然后读取 fact.json，核对蓝纸盒测试称重，再给出有实际工具 evidence_ref 的结果。'
     (work/'START_HERE.md').write_text(task,encoding='utf-8')
     output={'condition':condition,'database':database,'status':'FAIL','tool_data_tokens':0,'compactions':0,'task_success':False}
     try:
@@ -43,10 +45,11 @@ def executor_load(config,evidence,condition,ordinal):
             actual=[p['stdout'] for p in payloads if CANARY in p.get('stdout','')]
             meter=TokenMeter(cfg['executor'],ev,'executor')
             if actual:
-                # Difference removes constant chat-template framing. The
-                # controlled payload has enough headroom above 64,000 tokens.
+                # The server rejects empty user content. Subtract a one-token
+                # reference including framing for a conservative lower bound.
                 def count(text):return meter.measure({'model':cfg['executor']['model'],'messages':[{'role':'user','content':text}],'max_tokens':8192})['input_tokens']
-                output['tool_data_tokens']=max(count(text)-count('') for text in actual)
+                output['tool_data_tokens']=max(count(text)-count('x') for text in actual)
+                output['tool_data_count_method']='server count(full stdout) - count(one-token x with same template); conservative lower bound'
                 output['tool_data_sha256']=[sha(text.encode()) for text in actual]
             output['tool_events']=2*len(payloads)
             output['compactions']=sum(s.get('compaction_generation',0) for s in app.store.db.sessions.find({'lane':'executor'}))

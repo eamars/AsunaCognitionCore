@@ -41,11 +41,12 @@ def suite(config,evidence):
         m09=store.db.memory_units.find_one({'_id':'M09'});store.put('memory_units',{**m09,'status':'tombstone'},expected=m09['revision'])
         # Deliberately stale search-server IDs: authority recheck remains real
         # Mongo. This injected segment is excluded from vector-hit statistics.
-        with patch.object(store.db.memory_units,'aggregate',return_value=iter([{'_id':'M09','score':1.0}])):
+        with patch('pymongo.synchronous.collection.Collection.aggregate',return_value=iter([{'_id':'M09','score':1.0}])) as stale_server:
             rows,m=r.search('scene:dm-a',1,'PRIVATE_A_CANARY')
-        checks['stale_index_rejected']=all(x['_id']!='M09' for x in rows)
+            stale_server.assert_called_once()
+        checks['stale_index_rejected']=all(x['_id']!='M09' for x in rows) and any(x['id']=='M09' and x['reason']=='authoritative_recheck' for x in m['excluded'])
         evidence.record('stale_index.injection',{'mode':'injected_stale_vector_ids_real_authority','checks':checks,'selection':m})
         status='PASS' if checks['recall_at_6']>=.9 and checks['critical_hits'] and checks['vector_only_nonliteral_successes']>=5 and all(v['scope_allowed'] for v in results) and checks['pending_backread'] and checks['stale_index_rejected'] else 'FAIL'
     except Exception as exc:evidence.record('retrieval.error',{'type':type(exc).__name__,'message':str(exc)})
     finally:r.close();store.client.close()
-    return {'test_id':'L04','status':status,'mode':'real_embedding_real_Mongo_vector_with_explicit_stale_ID_fault_injection','attempts':1,'queries':results,'metrics':checks,'limitations':['No query-result cache exists; no cache-hit claim is made.','Embedding route fingerprint is pinned; endpoint does not expose verified weight revision.']}
+    return {'test_id':'L04','status':status,'mode':'real_embedding_real_Mongo_vector_with_explicit_stale_ID_fault_injection','attempts':1,'queries':results,'metrics':checks,'limitations':['Query cache stores IDs/scores and rechecks authority; its hit/invalidation acceptance is recorded separately under E11.','Embedding manifest and GGUF hashes are independently verified over authorized SSH and checked against the served manifest alias.']}

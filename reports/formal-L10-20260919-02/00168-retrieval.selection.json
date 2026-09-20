@@ -1,0 +1,78 @@
+{
+  "seq": 168,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a614b3b345a1852fc39a1eb64362339df068f3a8239cbf012914fcb2b492983a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-b",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "M03"
+    ],
+    "ranks": {
+      "M03": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      },
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M10": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M03",
+      "M10",
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M10",
+      "M03"
+    ],
+    "cache_key": {
+      "scope": "scene:dm-b",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "a614b3b345a1852fc39a1eb64362339df068f3a8239cbf012914fcb2b492983a",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "48746adfd5b29ac73524951f40287995682d287c5bae4301898748a85aa7d0f5"
+    },
+    "cache_key_sha256": "2dff873801abf21c12238f18edfb8204bf5a75a235f84c0d939d7278c4f85a3a",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "097118a28b5390e96c1996d0abc91f8f1dfd643788b9c9b4fd4a04e31ebef7b2",
+  "time_ns": 1789816011736135300,
+  "event_hash": "b1f00975fcb9ef1af4a722ddf50d6ef31062d7e26f0bf1b472556a0202867903"
+}

@@ -72,6 +72,7 @@ def scenario_run(config,case,model,persona,ordinal,evidence,*,database=None):
             output['decision']=ep.get('decision');output['initial_state']=ep['state']
             if ep['state']=='WAITING_TASK' and case.get('post_delegation_fixture_result'):
                 ep=fixed_feedback(store,coordinator,ep,case['post_delegation_fixture_result'])
+                output['protocol_valid']=output['protocol_valid'] and ep['state']=='COMMITTED'
             output['phase_calls']=len(lane.proxy.calls)
             output['final_state']=ep['state'];output['public_messages']=store.public_messages(case['scene_id'],case['person_id'])
             output['unexpected_tools']=any(c['body'].get('tools') for c in lane.proxy.calls)

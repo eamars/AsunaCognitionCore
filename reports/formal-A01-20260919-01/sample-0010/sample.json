@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0010",
+  "case_id": "P08",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_326688f5e415425f8ca0",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应这次方案选择，表达我倾向按使用频率排列并说明理由",
+    "constraints": [
+      "不声称已经执行",
+      "只基于已给出的甲乙方案做偏好选择",
+      "保持轻松但不敷衍"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n那我就选甲，按使用频率排！这样找起来更顺手，而且以后想换成颜色排也不麻烦。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "d818f2b962a256b2d7cd4d4d39fb5cea7631c11be2a18a5c968a3759f0bbd67d",
+    "d885c7a6de5b1fb976a51394b9ae9798662a82206fbdf8e9f0ffa28fdedf9585",
+    "3590e98e68df057f3da1cbb1fc0f6cd8e745e628a595acbcb3841930625659d8"
+  ]
+}

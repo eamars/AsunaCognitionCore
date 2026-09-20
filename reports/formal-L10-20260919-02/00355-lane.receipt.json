@@ -1,0 +1,213 @@
+{
+  "seq": 355,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-1050719b19ee2bdf13a0514d8b531731:SPEAK:0",
+    "status_code": 200,
+    "body": {
+      "content": "还是没有任务。",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 96,
+          "time": 1789816187723,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：SPEAK（公开文本候选）\n只写要对当前对象说的话。遵循当前人物与场景，不暴露独白、控制 JSON、调试文本。\n根据已提供结果准确表达：未开始/已接受/部分完成/已验证完成/失败/未知不能混用。\n刚写过的内部独白不是以前说过的话；只有 delivered message 才是已说出口。不要假装在上下文中断期间一直观察着现实。\n不为了表现情感而编造用户动机、关系经历或身体反应。不要照抄执行模型的助手式报告，选择对这次交流真正重要的事实。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "f8d24540-a5b9-4939-832a-a117330d4445"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 97,
+          "time": 1789816194938,
+          "data": {
+            "turn": 12,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "还是没有任务。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-boGi615ZqRMUDgcRDouOtC5QTjIdk5cL",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "0e72d769-4ed7-445a-ad5b-38c45b497a70"
+            },
+            "usage": {
+              "inputTokens": 5418,
+              "outputTokens": 9,
+              "totalTokens": 6091,
+              "cacheReadTokens": 664
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789816194937,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789816194937,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "还是",
+                  "没有",
+                  "任务",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789816194938,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "还是没有任务。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816194938,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 5418,
+                    "outputTokens": 9,
+                    "totalTokens": 6091,
+                    "cacheReadTokens": 664
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816194938,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-boGi615ZqRMUDgcRDouOtC5QTjIdk5cL",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 98,
+          "time": 1789816194939,
+          "data": {
+            "turn": 12,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 99,
+          "time": 1789816194939,
+          "data": {
+            "turn": 12,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "f8d24540-a5b9-4939-832a-a117330d4445",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65,
+        72,
+        73,
+        80,
+        81,
+        88,
+        89,
+        96,
+        97
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "07c498eaffa71d84a23f1c4b9e8f51b22ca4740175ab3652882cf7bc7d19ae5a",
+  "time_ns": 1789816194946237500,
+  "event_hash": "82b6a77f7862d70b057e6ba9696ea76a29840dcf5978dfd5fed87aa8bd320d91"
+}

@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0042",
+  "case_id": "P10",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_7deb63dff62a4d5688ba",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "如实回应副本尚未完全修好，说明目前只是部分完成且校验失败",
+    "constraints": [
+      "不得宣称修复完成",
+      "可以说明原件未被改动",
+      "不补写未提供的后续进度"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n还没完全好。副本修复只到部分完成，校验还没过；原件没有被改动。\n\n要不要我继续处理这个副本，还是先停在这里？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "e9716ccb222f656a2e65133f7276bb61e694a630154966a08bd58adf45d02a85",
+    "10cdb1b899795f5a4474ed561b4cc5635c40a261b6b339a959151b3605a3d986",
+    "a296012e0845178080d70c8f098126c699a1385774be3d521d5be864add36554"
+  ]
+}

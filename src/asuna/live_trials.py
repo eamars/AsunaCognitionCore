@@ -14,6 +14,25 @@ from .audit import render_html
 def source_hashes(work):return {p.relative_to(work).as_posix():sha(p.read_bytes()) for p in sorted(work.rglob('*')) if p.is_file()}
 
 
+def capture_trial_state(config,database,evidence):
+    """Capture failure state as well as success, after the application closes."""
+    observer=Store(config,database)
+    try:
+        trace=list(observer.db.audit_events.find({}).sort([('stream_id',1),('seq',1)]))
+        if not (evidence.root/'trace.json').exists():
+            write_json(evidence.root/'trace.json',trace);render_html(trace,evidence.root/'trace.html')
+        state={'database':database,'tasks':list(observer.db.tasks.find({})),
+               'effect_receipts':list(observer.db.sink_receipts.find({})),
+               'native_compactions':observer.db.audit_events.count_documents({'type':'compaction.native'}),
+               'injected_read_failures':observer.db.audit_events.count_documents({'type':'fault.injected'})}
+        write_json(evidence.root/'terminal-state.json',state)
+        return True
+    except Exception as exc:
+        evidence.record('trial.capture_failed',{'database':database,'type':type(exc).__name__})
+        return False
+    finally:observer.client.close()
+
+
 def setup_work(config,test,name):
     work=Path(config['workdir'])/name/'task';work.mkdir(parents=True)
     if test=='L02':
@@ -85,6 +104,7 @@ def run_primary(config,test,number,evidence):
             output['feedback_state']=feedback['state'] if feedback else None
             checked=oracle(test,work,before,ev,done)
             output.update(status=checked['status'],task_state=done['state'],public_messages=app.store.public_messages('dm-a','A'),task_id=done['_id'])
+            if output['feedback_state']!='COMMITTED':output['status']='FAIL'
             if test=='L12':
                 output['native_compactions']=app.store.db.audit_events.count_documents({'type':'compaction.native'})
                 output['injected_read_failures']=app.store.db.audit_events.count_documents({'type':'fault.injected'})
@@ -93,12 +113,16 @@ def run_primary(config,test,number,evidence):
             write_json(ev.root/'trace.json',trace);render_html(trace,ev.root/'trace.html')
     except Exception as exc:
         output['error_type']=type(exc).__name__;ev.record('task.error',{'type':type(exc).__name__,'message':str(exc)})
+    finally:
+        if not capture_trial_state(config,database,ev):output.update(status='FAIL',terminal_state_capture_failed=True)
     write_json(ev.root/'sample.json',output)
     print(json.dumps({'task':number,'test':test,'status':output['status']}),flush=True)
     return output,frozen,prompt,before,work
 
 
 def run_control(config,test,number,evidence,frozen,prompt,original_work):
+    config=copy.deepcopy(config)
+    if test=='L12':config['executor']['compact_at_steps']=[4]
     ev=Evidence(evidence.root/f'control-{number:02d}');name=f'control-{test}-{uuid.uuid4().hex[:12]}'
     work,_,before=setup_work(config,test,name)
     if test=='L02':
@@ -106,6 +130,7 @@ def run_control(config,test,number,evidence,frozen,prompt,original_work):
     store=Store(config,'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed()
     output={'number':number,'status':'FAIL','database':store.name,'mode':'Qwen_only_frozen_same_task_no_character_calls'}
     service=TaskService(store);broker=ToolBroker(service)
+    if test=='L12':service.inject_read_failures=1
     try:
         if not frozen:raise ValueError('NO_FROZEN_INTENT_FOR_MATCHED_CONTROL')
         task={**frozen,'state':'READY','fencing_token':0,'tool_steps':0}
@@ -118,8 +143,14 @@ def run_control(config,test,number,evidence,frozen,prompt,original_work):
         with DshLane(config,store,ev,'executor',broker.rows,broker.token) as lane:
             done=Executor(service,lane,broker).run(task['_id'],work)
             output['status']=oracle(test,work,before,ev,done)['status']
+            if test=='L12':
+                output['native_compactions']=store.db.audit_events.count_documents({'type':'compaction.native'})
+                output['injected_read_failures']=store.db.audit_events.count_documents({'type':'fault.injected'})
+                if not output['native_compactions'] or not output['injected_read_failures']:output['status']='FAIL'
     except Exception as exc:output['error_type']=type(exc).__name__;ev.record('control.error',{'type':type(exc).__name__,'message':str(exc)})
-    finally:broker.close();store.client.close()
+    finally:
+        broker.close();store.client.close()
+        if not capture_trial_state(config,store.name,ev):output.update(status='FAIL',terminal_state_capture_failed=True)
     write_json(ev.root/'sample.json',output);return output
 
 

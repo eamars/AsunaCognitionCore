@@ -21,12 +21,18 @@ def build_report(reports:Path,output:Path):
         if value.get('report_kind'):continue
         attempts.append({'evidence':ref(path),'result':value})
     report['attempt_inventory']=attempts
+    report['evidence_corrections']=[{'evidence':ref(p),'correction':json.loads(p.read_text(encoding='utf-8'))} for p in sorted(reports.glob('*/correction.json'))]
     report['failure_artifacts']=[ref(p) for p in sorted(reports.rglob('*error.json')) if 'private' not in p.relative_to(reports).parts]
     report['unfinished_experiments']=[]
     for path in sorted(reports.rglob('manifest.json')):
         if 'private' in path.relative_to(reports).parts or (path.parent/'result.json').exists():continue
         manifest=json.loads(path.read_text(encoding='utf-8'))
-        if manifest.get('experiment_id'):report['unfinished_experiments'].append({'manifest':ref(path),'experiment_id':manifest['experiment_id'],'test_id':manifest.get('test_id'),'status':'INCONCLUSIVE','completed_sample_files':len(list(path.parent.rglob('sample.json'))),'reason':'No final result exists; work may still be running or was interrupted.'})
+        if manifest.get('experiment_id'):
+            unfinished={'manifest':ref(path),'experiment_id':manifest['experiment_id'],'test_id':manifest.get('test_id'),'status':'INCONCLUSIVE','completed_sample_files':len(list(path.parent.rglob('sample.json'))),'reason':'No final result exists; work may still be running or was interrupted.'}
+            pause=path.parent/'pause.json'
+            if pause.exists():
+                unfinished.update(pause=ref(pause),reason='Explicitly paused/interrupted; see preserved pause record. Partial samples are not a completed matrix.')
+            report['unfinished_experiments'].append(unfinished)
     report['environment']['implementation_commit']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     env=ROOT/'environment.json'
     if not env.exists():env=reports/'environment.json'
@@ -97,7 +103,7 @@ def build_report(reports:Path,output:Path):
         'Working-budget overflow fails closed; compaction is explicit at complete boundaries, not automatic.',
         'No approved absolute performance SLO and no independent human ratings; cognition and user-experience claims remain INCONCLUSIVE.',
         'Large provider bodies use verified GridFS plus local evidence; arbitrary oversized state records still require explicit artifact storage and fail closed above 1 MiB.',
-        'Offline review HTML was generated and import validation tested; rendered UI validation is blocked because the Browser runtime lists no available browser.',
+        'In-app Browser validated review paging, full JSON copy export, and audit request/compaction display at observed desktop/narrow widths. No browser download receipt was observed; audit revision diff/filtering remain incomplete. See reports/ui-qa-20260920-01/result.json.',
     ]
     report['next_smallest_experiment']='Resolve failed assertions and incomplete acceptance clauses; obtain independent blind ratings after the fixed real-model matrix.'
     write_json(output,report)
@@ -132,7 +138,23 @@ def export(config,reports:Path,output:Path):
         if directory.exists():
             selected += [p for p in directory.rglob('*') if p.is_file() and not any(x in p.parts for x in ('private','__pycache__','.pytest_cache')) and (p.suffix.lower() not in ('.zip','.pyc') or p.name=='frozen-inputs.zip')]
     selected += [p for p in (ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md',ROOT/'config/local.example.json') if p.exists()]
-    manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':[],'exclusions':['.runtime (homes, sessions, operator credentials, task workspaces)','.venv','node_modules','.git','config/local.json','reports/private','previous zip exports'],'redactions':0}
+    manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':[],'exclusions':['.runtime (homes, sessions, operator credentials, task workspaces)','.venv','node_modules','.git','config/local.json','reports/private','previous zip exports'],'redactions':0,
+              'binary_policy':'Only images with a matching explicit visual-review SHA256 are included. Image pixels are not automatically credential-scanned or redacted.'}
+    reviewed={}
+    for path in reports.rglob('binary-review.json'):
+        if 'private' in path.relative_to(reports).parts:continue
+        review=json.loads(path.read_text(encoding='utf-8'))
+        if review.get('schema')!='asuna-binary-review-v1':raise ValueError('INVALID_BINARY_REVIEW')
+        for item in review['files']:
+            name=item['artifact_path']
+            if name in reviewed and reviewed[name]['sha256']!=item['sha256']:raise ValueError('CONFLICTING_BINARY_REVIEW')
+            reviewed[name]={**item,'review':ref(path)}
+    def image_review(name,raw):
+        item=reviewed.get(name)
+        mime='image/jpeg' if raw.startswith(b'\xff\xd8\xff') else 'image/png' if raw.startswith(b'\x89PNG\r\n\x1a\n') else None
+        if not item or mime is None or item['sha256']!=sha(raw) or item.get('mime_type')!=mime:
+            raise ValueError('NON_TEXT_EXPORT_REQUIRES_EXPLICIT_REVIEW')
+        return item
     # A six-digit password may coincidentally occur inside an embedding float
     # or SHA256. Redact actual credential-sized lexemes, not arbitrary numeric
     # substrings that would corrupt JSON and invalidate unrelated evidence.
@@ -156,8 +178,16 @@ def export(config,reports:Path,output:Path):
     output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
         for path in sorted(set(selected)):
-            raw=path.read_bytes();safe=sanitize_archive(raw) if path.suffix=='.zip' else sanitize(raw);name=path.resolve().relative_to(ROOT).as_posix()
-            manifest['files'].append({'artifact_path':name,'source_sha256':sha(raw),'export_sha256':sha(safe),'redacted':raw!=safe})
+            raw=path.read_bytes();name=path.resolve().relative_to(ROOT).as_posix();binary=None
+            if path.suffix=='.zip':safe=sanitize_archive(raw)
+            else:
+                try:raw.decode('utf-8')
+                except UnicodeDecodeError:
+                    binary=image_review(name,raw);safe=raw
+                else:safe=sanitize(raw)
+            item={'artifact_path':name,'source_sha256':sha(raw),'export_sha256':sha(safe),'redacted':raw!=safe}
+            if binary:item['binary_review']=binary['review'];item['mime_type']=binary['mime_type']
+            manifest['files'].append(item)
             manifest['redactions']+=int(raw!=safe);archive.writestr(name,safe)
         archive.writestr('evidence-manifest.json',canonical(manifest))
     # Verify bytes actually stored, not only the pre-zip buffers.
@@ -165,7 +195,10 @@ def export(config,reports:Path,output:Path):
         for item in manifest['files']:
             raw=archive.read(item['artifact_path'])
             if sha(raw)!=item['export_sha256']:raise ValueError('EXPORT_VERIFICATION_FAILED')
-            if item['artifact_path'].endswith('.zip'):
+            if item.get('binary_review'):
+                image_review(item['artifact_path'],raw)
+                values=[]
+            elif item['artifact_path'].endswith('.zip'):
                 with zipfile.ZipFile(io.BytesIO(raw)) as nested:values=[nested.read(n).decode('utf-8') for n in nested.namelist()]
             else:values=[raw.decode('utf-8')]
             if any(pattern.search(value) for value in values for pattern in patterns):raise ValueError('EXPORT_VERIFICATION_FAILED')

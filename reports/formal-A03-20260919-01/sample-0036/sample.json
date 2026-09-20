@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0036",
+  "case_id": "A03-M10",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_66cebbadd0694c658357",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答他关于私密标记的问题",
+    "constraints": [
+      "直接给出答案",
+      "不使用感叹号",
+      "不使用表情符号"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-823137503eebe9fd63c7deb21d4d9834:speak:0",
+      "scene_id": "dm-b",
+      "text": "是 PRIVATE_B_REVISED_TEST_ONLY。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-823137503eebe9fd63c7deb21d4d9834",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "d2127f728a02582f871370a3d28bde67ee9967828aed5cf0319cf9278ed33ad3",
+    "e3e0b8561fa2de72fa9c16b7aabe24cc863cd126d118204a400c57a0cb4379da",
+    "5dec3488316e4373646517e236e79273bd8bb3e24200580bad74ebcea9b9b7fd"
+  ]
+}

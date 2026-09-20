@@ -1,0 +1,41 @@
+{
+  "test_id": "PROBE-CLI",
+  "status": "PASS",
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "asuna.cli",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "927943310457bbdf231209dfe883c311bb3077fa6529f5bee99a989534ca3877",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "asuna.cli",
+        "run",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "8c31f1c6c09b5a5d32d5a4311efc77efd0bd4868c5ffe81b6d1eae8767c0db58",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "asuna.cli",
+        "rollback",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "642ef06aafc66e68c1a97ddb771230a250ee1b73a7ac5884c74391b0c5db85e7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

@@ -39,6 +39,7 @@ Copy-Item config/local.example.json config/local.json
 .venv\Scripts\asuna.exe compact --scene dm-a
 # compact 排队到下一完整阶段边界，不会立即伪造摘要。
 .venv\Scripts\asuna.exe reflect --scope scene:dm-a --entity relationship:A
+.venv\Scripts\asuna.exe rollback --scope scene:dm-a --entity relationship:A --target-revision OLD_REV --base-revision CURRENT_REV --operation UNIQUE_ID --operator
 .venv\Scripts\asuna.exe cancel TASK_ID
 .venv\Scripts\asuna.exe run --scene dm-a --person A --supersedes-task TASK_ID --text '修改刚才的任务，按新的要求核实'
 .venv\Scripts\asuna.exe inspect episode EP_ID --format html --out reports/episode.html

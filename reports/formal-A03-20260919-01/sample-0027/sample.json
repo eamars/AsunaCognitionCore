@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0027",
+  "case_id": "A03-M04",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_ae1c61abfcb44d95b89b",
+  "status": "PASS",
+  "phase_calls": 2,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答蓝盒的标签和位置",
+    "constraints": [
+      "回答要直接，不使用感叹号、emoji、颜文字、波浪号",
+      "不使用“您”",
+      "不以“收到、明白、好的呢”等词起句"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "标签 K17，在北架。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "5bd1aa4d03f4e0212524c0b9e179fce637e3d4b83c02e526b91c367f948a35fb",
+    "5aba9db37630015d6b780c8bbabc14c75277f2aa5f1e87f6022ff064ee6d1c2f"
+  ]
+}

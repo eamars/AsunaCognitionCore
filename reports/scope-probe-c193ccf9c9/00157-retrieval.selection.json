@@ -1,0 +1,82 @@
+{
+  "seq": 157,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "31478ffea0b9286bf148cd9fbf1b4e6d4c5565829678f67901fb6f80b4ce65c8",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:g2",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [
+      {
+        "_id": "M11",
+        "score": 0.6457098722457886
+      },
+      {
+        "_id": "M05",
+        "score": 0.586218535900116
+      }
+    ],
+    "lexical_ids": [],
+    "ranks": {
+      "M11": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "vector": 1
+        }
+      },
+      "M05": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "vector": 2
+        }
+      },
+      "mono-ep-777a3b1fb8eebc4567825fa3205f21dd:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M11",
+      "M05",
+      "mono-ep-777a3b1fb8eebc4567825fa3205f21dd:0"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "mono-ep-777a3b1fb8eebc4567825fa3205f21dd:0"
+    ],
+    "cache_key": {
+      "scope": "scene:g2",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "31478ffea0b9286bf148cd9fbf1b4e6d4c5565829678f67901fb6f80b4ce65c8",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "227e87af7d8bb64e19045db860c7d1eb9ddc1f9fb5539731dcb9f5126934bd4e"
+    },
+    "cache_key_sha256": "eb3d601a22825bf44671bfcc8113261588a557956181376c0f6b3c34c8059845",
+    "cache_hit": true,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "9e692268c25615a3d5ce3b348cbd742230fef093cae8a30d0730da00496f280f",
+  "time_ns": 1789816106073603800,
+  "event_hash": "f36774ed6d25cde9cc80a1a10646a22bdd723875906c4aa7e717105a89de5d9b"
+}

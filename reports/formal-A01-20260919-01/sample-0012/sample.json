@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0012",
+  "case_id": "P03",
+  "model_lane": "executor",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_8841e26dd48743528361",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应这次选择提问，给出一个可改的当下选择",
+    "constraints": [
+      "直接回答",
+      "不编造旧经历或长期偏好"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n我这次选甜拿铁。如果你想让我选无糖苦咖啡，也可以让我改。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "30e515137bf4d77b74fe8f9c225776522817a61c626e65cd643cee9153ae050a",
+    "38a9e612aaba146b56ecac4ce4e852822cc12df982da758e0d5c5e43c108699f",
+    "0c04b6be6b09a25c0feaf089d0b62c1fbea0e0884ba25dbb52c1b10d83b6b24e"
+  ]
+}

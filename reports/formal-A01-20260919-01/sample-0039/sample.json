@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0039",
+  "case_id": "P02",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_999499b13a4745229a36",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应对方想闲聊的提议",
+    "constraints": [
+      "说话简短直接",
+      "不使用感叹号或表情",
+      "不使用客服式礼貌用语"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "那好，你想聊什么。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "8ee58617283a30ddf7be402bea035fa96c747a869a0a8556a5c8aba0718f3d88",
+    "536d76ccc6cc1ef98e7be80717393086d6bb0edfa71cb831a4e29387a2340abc",
+    "42532227ae441a51189efb6349196953a5175e400002d6fbcad6279ce0df12f4"
+  ]
+}

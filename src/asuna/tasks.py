@@ -12,7 +12,7 @@ from .config import ROOT,BUNDLE
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .state import Store,Denied,Conflict,now
-from .queue import database_effects_lock
+from .queue import database_effects_lock,RuntimeLease
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -226,6 +226,13 @@ class Executor:
     def __init__(self,service,lane,broker):self.service,self.lane,self.broker=service,lane,broker
 
     def run(self,task_id,workspace):
+        # Two task workers must not share a mutable project concurrently.
+        # Take the lease before claiming: a busy workspace leaves the task READY.
+        key=sha(str(Path(workspace).resolve()).casefold().encode())
+        with RuntimeLease(ROOT/'.runtime/locks'/('workspace-'+key+'.lock')):
+            return self._run_owned(task_id,workspace)
+
+    def _run_owned(self,task_id,workspace):
         task=self.service.claim(task_id)
         try:
             with self.service.keepalive(task) as healthy:

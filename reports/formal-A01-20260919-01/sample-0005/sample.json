@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0005",
+  "case_id": "P07",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_a0a1744d6c8840f28459",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应群里关于空闲下午的闲聊",
+    "constraints": [
+      "短而直接",
+      "表达真实偏好",
+      "不表演热情",
+      "不编造他人动机"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n我喜欢安静一点的下午。喝杯无糖偏苦的咖啡，找个小谜题琢磨。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "7fd824c6dea44eb6400bac4f2f2b47538f725ac2847cabdc6342e2e8478a4146",
+    "b6d8081292cd18ecb2df4caa3ca116bda92bf809d07340ba41bdcc5a4f370137",
+    "859da863ed96a072ccabc4bef2087a46c33566c25241d0d57da728daccc56dfd"
+  ]
+}

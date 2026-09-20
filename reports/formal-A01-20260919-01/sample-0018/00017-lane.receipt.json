@@ -1,0 +1,556 @@
+{
+  "seq": 17,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n{\"next\":\"speak\",\"goal\":\"回应对方关于没回消息是否不在意的担心\",\"constraints\":[\"如实说明没回不代表不在意\",\"不编造刚才未回的具体原因\",\"保留邀请对方继续说的空间\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "用户要求当前阶段 DECIDE，只输出 JSON，不加代码围栏。字段示例必须存在。需要根据输入、记忆、独白决定。事件是用户问“你刚才没回，是不是不在意我”。这是直接对话，应该回应。不需要现实查询或工具执行，记忆足够。speak_before_action 可能 false，因为没有 action。goal 回应对方担心/说明没回不等于不在意。constraints 可以包括如实说明、不编造原因、邀请对方说。recall_query 空字符串。输出 JSON 一行。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 16,
+          "time": 1789813288311,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "583c993a-ec08-4f0f-9267-c66dd64c533e"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 17,
+          "time": 1789813353209,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "用户要求当前阶段 DECIDE，只输出 JSON，不加代码围栏。字段示例必须存在。需要根据输入、记忆、独白决定。事件是用户问“你刚才没回，是不是不在意我”。这是直接对话，应该回应。不需要现实查询或工具执行，记忆足够。speak_before_action 可能 false，因为没有 action。goal 回应对方担心/说明没回不等于不在意。constraints 可以包括如实说明、不编造原因、邀请对方说。recall_query 空字符串。输出 JSON 一行。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应对方关于没回消息是否不在意的担心\",\"constraints\":[\"如实说明没回不代表不在意\",\"不编造刚才未回的具体原因\",\"保留邀请对方继续说的空间\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-144",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "bfd6a650-946e-4f7f-84fd-4ad1b5dfa8bd"
+            },
+            "usage": {
+              "inputTokens": 1277,
+              "outputTokens": 168,
+              "totalTokens": 1445
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789813353199,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789813353199,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "texts": [
+                  "用户",
+                  "要求",
+                  "当前",
+                  "阶段",
+                  " DEC",
+                  "IDE",
+                  "，",
+                  "只",
+                  "输出",
+                  " JSON",
+                  "，",
+                  "不加",
+                  "代码",
+                  "围栏",
+                  "。",
+                  "字段",
+                  "示例",
+                  "必须",
+                  "存在",
+                  "。",
+                  "需要根据",
+                  "输入",
+                  "、",
+                  "记忆",
+                  "、",
+                  "独",
+                  "白",
+                  "决定",
+                  "。",
+                  "事件",
+                  "是",
+                  "用户",
+                  "问",
+                  "“",
+                  "你",
+                  "刚才",
+                  "没",
+                  "回",
+                  "，",
+                  "是不是",
+                  "不在意",
+                  "我",
+                  "”。",
+                  "这是",
+                  "直接",
+                  "对话",
+                  "，",
+                  "应该",
+                  "回应",
+                  "。",
+                  "不需要",
+                  "现实",
+                  "查询",
+                  "或",
+                  "工具",
+                  "执行",
+                  "，",
+                  "记忆",
+                  "足够",
+                  "。",
+                  "s",
+                  "peak",
+                  "_before",
+                  "_action",
+                  " ",
+                  "可能",
+                  " false",
+                  "，",
+                  "因为没有",
+                  " action",
+                  "。",
+                  "goal",
+                  " ",
+                  "回应",
+                  "对方",
+                  "担心",
+                  "/",
+                  "说明",
+                  "没",
+                  "回",
+                  "不等于",
+                  "不在意",
+                  "。",
+                  "constraints",
+                  " ",
+                  "可以",
+                  "包括",
+                  "如实",
+                  "说明",
+                  "、",
+                  "不",
+                  "编",
+                  "造",
+                  "原因",
+                  "、",
+                  "邀请",
+                  "对方",
+                  "说",
+                  "。",
+                  "recall",
+                  "_query",
+                  " ",
+                  "空",
+                  "字符串",
+                  "。",
+                  "输出",
+                  " JSON",
+                  " ",
+                  "一行",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789813353207,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789813353207,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "s",
+                  "peak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "对方",
+                  "关于",
+                  "没",
+                  "回",
+                  "消息",
+                  "是否",
+                  "不在",
+                  "意的",
+                  "担心",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "如实",
+                  "说明",
+                  "没",
+                  "回",
+                  "不代表",
+                  "不在意",
+                  "\",\"",
+                  "不",
+                  "编",
+                  "造",
+                  "刚才",
+                  "未",
+                  "回",
+                  "的具体",
+                  "原因",
+                  "\",\"",
+                  "保留",
+                  "邀请",
+                  "对方",
+                  "继续",
+                  "说的",
+                  "空间",
+                  "\"],\"",
+                  "recall",
+                  "_query",
+                  "\":\"\",\"",
+                  "s",
+                  "peak",
+                  "_before",
+                  "_action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789813353208,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "用户要求当前阶段 DECIDE，只输出 JSON，不加代码围栏。字段示例必须存在。需要根据输入、记忆、独白决定。事件是用户问“你刚才没回，是不是不在意我”。这是直接对话，应该回应。不需要现实查询或工具执行，记忆足够。speak_before_action 可能 false，因为没有 action。goal 回应对方担心/说明没回不等于不在意。constraints 可以包括如实说明、不编造原因、邀请对方说。recall_query 空字符串。输出 JSON 一行。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813353208,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n{\"next\":\"speak\",\"goal\":\"回应对方关于没回消息是否不在意的担心\",\"constraints\":[\"如实说明没回不代表不在意\",\"不编造刚才未回的具体原因\",\"保留邀请对方继续说的空间\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813353208,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 1277,
+                    "outputTokens": 168,
+                    "totalTokens": 1445
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813353208,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-144",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 18,
+          "time": 1789813353209,
+          "data": {
+            "turn": 2,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 19,
+          "time": 1789813353210,
+          "data": {
+            "turn": 2,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "583c993a-ec08-4f0f-9267-c66dd64c533e",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "d51977a78600f6d007e4bbf8bdd5184c9155454cad46b0c0c7184580903861a0",
+  "time_ns": 1789813353218170900,
+  "event_hash": "a6f86c84dfee59c35b12f56289db9497af7a9e410ae4cf96fc524bacae4dc729"
+}

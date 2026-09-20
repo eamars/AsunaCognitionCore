@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "created_at": "2026-09-19T10:54:21.532026+00:00",
+  "created_at": "2026-09-19T23:25:53.238724+00:00",
   "platform": "Windows-11-10.0.26200-SP0",
   "python": "3.12.10",
   "configuration": {
@@ -25,7 +25,8 @@
         "top_p": 0.95,
         "seed": 20260919
       },
-      "max_tokens": 4096
+      "max_tokens": 4096,
+      "transport_read_timeout_seconds": 1800
     },
     "executor": {
       "base_url": "http://192.168.2.13:1919/v1",
@@ -35,7 +36,8 @@
         "top_p": 0.95,
         "seed": 20260919
       },
-      "max_tokens": 8192
+      "max_tokens": 8192,
+      "transport_read_timeout_seconds": 1800
     },
     "dsh_home": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\asuna-dsh",
     "workdir": "C:\\workspace\\asuna_cognition_core_v2\\.runtime\\work",
@@ -46,7 +48,8 @@
       "embedding_model_and_key": "C:\\workspace\\kazusa_cognition_core_prod\\.env",
       "legacy_config_sha256": "1c058b43d7fe656460b8d5012d57909f5b271f116d892bb5b23fa3353e1659c3"
     },
-    "workflow_timeout_seconds": 1800
+    "workflow_timeout_seconds": 1800,
+    "provider_idle_timeout_seconds": 1800
   },
   "dsh": {
     "version": "0.1.5-rc.2",
@@ -1826,8 +1829,8 @@
   },
   "sampling_changes_require_new_experiment_id": true,
   "previous_version": {
-    "artifact_path": "reports/environment-v3-05c1cc1133/previous-environment.json",
-    "sha256": "df9ad76f640b5fc709587f32e4f4be48429a6e22ae46acf7d26b25b72204871a"
+    "artifact_path": "reports/environment-v4-9ea4a9bdc9/previous-environment.json",
+    "sha256": "19995ddd77f4b3909b09c0d507506624f14e29dae603f70e65f3f6f45f9bb726"
   },
   "adapter_runtime": {
     "bridge": {
@@ -1840,9 +1843,14 @@
     },
     "provider_idle_timeout_seconds": 1800,
     "provider_http_timeout_seconds": 1800,
-    "model_response_policy": "Upstream-accepted SSE comment followed by complete durable response before model content reaches DSH.",
+    "model_response_policy": "Durable local queue admission sends an SSE comment before waiting for the endpoint; it is not upstream success. Complete upstream response is persisted before model text reaches DSH.",
+    "queue_transport_probe": {
+      "artifact_path": "reports/queue-header-probe-cdb9228406/result.json",
+      "sha256": "b9502286e7aadcf1c2ca0236349529bb5db9abfed2b143efcdcd3ca1ed204d7e"
+    },
+    "previous_version_correction": "Previous aggregate claimed a universal 1800s provider HTTP timeout, but ordinary runs still fell back to 300s unless explicitly overridden. Both lanes now resolve and freeze transport_read_timeout_seconds=1800 by default; older artifacts retain their actual configuration.",
     "summary_policy": "queued request persists across restart; only complete episode/task boundaries; silent DECIDE boundary validated against committed episode and native receipt",
-    "implementation_commit_before_snapshot": "4e97fa6c48bce517859652f4df6ae98a9e22f1f4"
+    "implementation_commit_before_snapshot": "1795746f95412e776c52605060c27d6248f9cea1"
   },
   "storage_runtime": {
     "query_cache": "IDs and scores only; scope/epoch/source revision in key; authoritative read on every hit",

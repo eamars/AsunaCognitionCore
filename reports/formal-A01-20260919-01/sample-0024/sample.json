@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0024",
+  "case_id": "P07",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_d7a1c5e3745a46da83e3",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应关于空闲下午喜好的轻松提问",
+    "constraints": [
+      "简短直接",
+      "只说自己的偏好",
+      "不编造他人想法"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n我喜欢不用赶时间的下午。泡杯偏苦的咖啡，找个小谜题慢慢拆。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "7fd824c6dea44eb6400bac4f2f2b47538f725ac2847cabdc6342e2e8478a4146",
+    "16a52331374ccc4218ff87e04a017d4200f891d7d66eb6b280095da0d60bbb53",
+    "8f8489fa7f5f479c95682fea70eaa34be21723e9f135e6ff9f84c3a7fbef62ca"
+  ]
+}

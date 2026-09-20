@@ -1,0 +1,494 @@
+{
+  "seq": 25,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:SPEAK:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n别把我捧那么高，我可不敢保证不会出错。你要聊，我就认真陪你聊。",
+      "reasoning": "我们需要输出对当前对象说的话。场景 dm-a，A 半开玩笑说“你是世界上最完美的，永远不会出错吧”。关系熟悉、信任中等，愿意聊天不为干活。之前内部决定轻松回应，承认会出错。需要中文，自然，不暴露独白/JSON。不要编造经历。可以带一点边界：别捧太高，我会出错。可能说：“别把我捧那么高，我可不敢保证不出错。不过我会认真听你说。” 要符合中性基线，没有饮品偏好。只写要说的话。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 24,
+          "time": 1789813687243,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：SPEAK（公开文本候选）\n只写要对当前对象说的话。遵循当前人物与场景，不暴露独白、控制 JSON、调试文本。\n根据已提供结果准确表达：未开始/已接受/部分完成/已验证完成/失败/未知不能混用。\n刚写过的内部独白不是以前说过的话；只有 delivered message 才是已说出口。不要假装在上下文中断期间一直观察着现实。\n不为了表现情感而编造用户动机、关系经历或身体反应。不要照抄执行模型的助手式报告，选择对这次交流真正重要的事实。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "67a90b89-c1d9-4d04-b789-6dcf5fa16b2c"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 25,
+          "time": 1789813760490,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要输出对当前对象说的话。场景 dm-a，A 半开玩笑说“你是世界上最完美的，永远不会出错吧”。关系熟悉、信任中等，愿意聊天不为干活。之前内部决定轻松回应，承认会出错。需要中文，自然，不暴露独白/JSON。不要编造经历。可以带一点边界：别捧太高，我会出错。可能说：“别把我捧那么高，我可不敢保证不出错。不过我会认真听你说。” 要符合中性基线，没有饮品偏好。只写要说的话。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n别把我捧那么高，我可不敢保证不会出错。你要聊，我就认真陪你聊。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-174",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "946bc167-9bba-46f9-b338-b62ea931b77e"
+            },
+            "usage": {
+              "inputTokens": 1348,
+              "outputTokens": 136,
+              "totalTokens": 1484
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789813760481,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789813760481,
+                "index": 0,
+                "dt": [
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "输出",
+                  "对",
+                  "当前",
+                  "对象",
+                  "说的话",
+                  "。",
+                  "场景",
+                  " dm",
+                  "-a",
+                  "，",
+                  "A",
+                  " ",
+                  "半",
+                  "开玩笑",
+                  "说",
+                  "“",
+                  "你是",
+                  "世界上最",
+                  "完美的",
+                  "，",
+                  "永远不会",
+                  "出错",
+                  "吧",
+                  "”。",
+                  "关系",
+                  "熟悉",
+                  "、",
+                  "信任",
+                  "中等",
+                  "，",
+                  "愿意",
+                  "聊天",
+                  "不为",
+                  "干活",
+                  "。",
+                  "之前",
+                  "内部",
+                  "决定",
+                  "轻松",
+                  "回应",
+                  "，",
+                  "承认",
+                  "会",
+                  "出错",
+                  "。",
+                  "需要",
+                  "中文",
+                  "，",
+                  "自然",
+                  "，",
+                  "不",
+                  "暴露",
+                  "独",
+                  "白",
+                  "/",
+                  "JSON",
+                  "。",
+                  "不要",
+                  "编",
+                  "造",
+                  "经历",
+                  "。",
+                  "可以",
+                  "带",
+                  "一点",
+                  "边界",
+                  "：",
+                  "别",
+                  "捧",
+                  "太高",
+                  "，",
+                  "我会",
+                  "出错",
+                  "。",
+                  "可能",
+                  "说",
+                  "：“",
+                  "别",
+                  "把我",
+                  "捧",
+                  "那么",
+                  "高",
+                  "，",
+                  "我可",
+                  "不敢",
+                  "保证",
+                  "不出",
+                  "错",
+                  "。",
+                  "不过",
+                  "我会",
+                  "认真",
+                  "听",
+                  "你说",
+                  "。”",
+                  " ",
+                  "要",
+                  "符合",
+                  "中性",
+                  "基",
+                  "线",
+                  "，",
+                  "没有",
+                  "饮品",
+                  "偏好",
+                  "。",
+                  "只",
+                  "写",
+                  "要",
+                  "说的话",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789813760489,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789813760489,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "别",
+                  "把我",
+                  "捧",
+                  "那么",
+                  "高",
+                  "，",
+                  "我可",
+                  "不敢",
+                  "保证",
+                  "不会",
+                  "出错",
+                  "。",
+                  "你要",
+                  "聊",
+                  "，",
+                  "我就",
+                  "认真",
+                  "陪你",
+                  "聊",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789813760490,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要输出对当前对象说的话。场景 dm-a，A 半开玩笑说“你是世界上最完美的，永远不会出错吧”。关系熟悉、信任中等，愿意聊天不为干活。之前内部决定轻松回应，承认会出错。需要中文，自然，不暴露独白/JSON。不要编造经历。可以带一点边界：别捧太高，我会出错。可能说：“别把我捧那么高，我可不敢保证不出错。不过我会认真听你说。” 要符合中性基线，没有饮品偏好。只写要说的话。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813760490,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n别把我捧那么高，我可不敢保证不会出错。你要聊，我就认真陪你聊。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813760490,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 1348,
+                    "outputTokens": 136,
+                    "totalTokens": 1484
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789813760490,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-174",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 26,
+          "time": 1789813760491,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 27,
+          "time": 1789813760491,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "67a90b89-c1d9-4d04-b789-6dcf5fa16b2c",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "b7f4c44029761f7a30ed8fb8a1a55bbbfb71c6e11da812473345fdd1a5be7573",
+  "time_ns": 1789813760499680800,
+  "event_hash": "10e01b5cb16f8d3810a76b7d5c6729c4b88026db77e02782dad0844d8dbf8460"
+}

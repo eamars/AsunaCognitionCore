@@ -1,0 +1,65 @@
+{
+  "node_id": "tests/test_engineering_m10.py::test_E23_mixed_state_replay_without_external_actions",
+  "database": "asuna_v2_test_M1_fac8bd77b331",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "c8a6ed1fdda6aa1224632572c2d68f39163c1decb0eebbf2983eb60c6004b9ae",
+  "task_states": [
+    {
+      "_id": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "request_key": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "episode_id": "ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "42bf799b-9d41-4312-b5ea-e5309026e7d0",
+      "intent_revision": 2,
+      "goal": "copy fixture",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-457a2649ecdc4ab694f81bcb97fbba85"
+      ],
+      "state": "CANCELLED",
+      "fencing_token": 2,
+      "tool_steps": 0,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 3,
+      "_last_op": "54891672-e025-4abd-b024-67c3cabdd29f",
+      "lease_owner": "ad6da57c-8408-47bf-a381-c2b1f0cb7687",
+      "lease_expires_at": 1789816720.1782057,
+      "cancel_reason": "user_cancelled"
+    }
+  ],
+  "received_messages": [
+    {
+      "_id": "ep-886894f6d3461c5939947617782a2288:speak:0",
+      "publication_key": "ep-886894f6d3461c5939947617782a2288:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "回来了。",
+      "content_hash": "3a5753ca7b9ded73c98ab421d43e7d127b21dd4939bcae7699c7a527087e471f",
+      "received_at": "2026-09-19T11:08:39.586755+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "a949fd31-a0b3-465c-bc92-a24d11334f7b"
+    },
+    {
+      "_id": "c2f122b0-ae66-43b9-9c99-ca70b619cd90",
+      "publication_key": "ep-2ff5a7d89a5d9eb38183f9c303f14cba:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "回来了。",
+      "content_hash": "3a5753ca7b9ded73c98ab421d43e7d127b21dd4939bcae7699c7a527087e471f",
+      "received_at": "2026-09-19T11:08:39.909052+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "e33844dd-2ef7-46c4-8489-8e0e0de9645f"
+    }
+  ]
+}

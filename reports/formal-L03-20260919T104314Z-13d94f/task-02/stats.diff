@@ -1,0 +1,14 @@
+--- input/stats.py
++++ output/stats.py
+@@ -1,4 +1,8 @@
+-"""INTENTIONALLY BUGGY fixture, not production code."""
++"""Numeric summaries of readings, ignoring missing (None) values."""
++
++
+ def summarize_readings(values):
+-    values.sort()
+-    return values[0], values[-1], sum(values) / len(values)
++    clean = [v for v in values if v is not None]
++    if not clean:
++        return (None, None, None)
++    return (min(clean), max(clean), sum(clean) / len(clean))

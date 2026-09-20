@@ -1,0 +1,44 @@
+[
+  {
+    "id": "UI01",
+    "status": "FAIL",
+    "action": "Copy existing trace.html",
+    "observed": "File absent. Regenerated from preserved trace.json through production audit renderer."
+  },
+  {
+    "id": "UI02",
+    "status": "INCONCLUSIVE",
+    "action": "Original download button; waitForEvent(download), 10 seconds",
+    "observed": "No download event. No console error."
+  },
+  {
+    "id": "UI03",
+    "status": "INCONCLUSIVE",
+    "action": "Persistent save link; waitForEvent(download), 5 seconds",
+    "observed": "No download event. Readonly full JSON text fallback available."
+  },
+  {
+    "id": "UI04",
+    "status": "FAIL",
+    "action": "Locator evaluate for form field reads",
+    "observed": "Repeated 3000 ms timeouts; DOM-backed page evaluate read the same visible controls successfully."
+  },
+  {
+    "id": "UI05",
+    "status": "FAIL",
+    "action": "Read full 415159-character export textarea in one tool response",
+    "observed": "Tool text was truncated; JSON parsing failed. Retried in 60000-character DOM reads."
+  },
+  {
+    "id": "UI06",
+    "status": "PASS",
+    "action": "Join complete DOM reads and validate transport via production ingest",
+    "observed": "206 immutable items unchanged, first synthetic score retained, next row blank, independent_human=false rejected."
+  },
+  {
+    "id": "UI07",
+    "status": "FAIL",
+    "action": "Screenshot metadata PNG assertion, then optional PIL import",
+    "observed": "Screenshot API returned JPEG, not PNG; Pillow unavailable. Bytes unchanged, renamed .jpg and parsed JPEG SOF with stdlib."
+  }
+]

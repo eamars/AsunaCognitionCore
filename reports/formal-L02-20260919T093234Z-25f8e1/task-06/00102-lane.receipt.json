@@ -1,0 +1,267 @@
+{
+  "seq": 102,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-00da161f9084d23f47e025895b5263dc:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"speak\",\"goal\":\"告知任务已完成并提交回执\",\"constraints\":[\"直接说明结果\",\"包含回执信息\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 32,
+          "time": 1789816638838,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "8d6a7fcf-fbac-40e9-b8a8-44a835098375"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 33,
+          "time": 1789816639752,
+          "data": {
+            "turn": 4,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"speak\",\"goal\":\"告知任务已完成并提交回执\",\"constraints\":[\"直接说明结果\",\"包含回执信息\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-9ZiIeREoJAmicDccrAdqqkEf2wl1qq1v",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "11de0f64-d921-4053-a0af-3f75060a84bd"
+            },
+            "usage": {
+              "inputTokens": 273,
+              "outputTokens": 44,
+              "totalTokens": 4883,
+              "cacheReadTokens": 4566
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789816639750,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789816639751,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "speak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "告知",
+                  "任务",
+                  "已",
+                  "完成",
+                  "并",
+                  "提交",
+                  "回",
+                  "执",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "直接",
+                  "说明",
+                  "结果",
+                  "\",\"",
+                  "包含",
+                  "回",
+                  "执",
+                  "信息",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789816639752,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"speak\",\"goal\":\"告知任务已完成并提交回执\",\"constraints\":[\"直接说明结果\",\"包含回执信息\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816639752,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 273,
+                    "outputTokens": 44,
+                    "totalTokens": 4883,
+                    "cacheReadTokens": 4566
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816639752,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-9ZiIeREoJAmicDccrAdqqkEf2wl1qq1v",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 34,
+          "time": 1789816639753,
+          "data": {
+            "turn": 4,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 35,
+          "time": 1789816639753,
+          "data": {
+            "turn": 4,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "8d6a7fcf-fbac-40e9-b8a8-44a835098375",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "066ddff17d9ef45459df55553c71ab8b6f9166baaddbcd04061b8983d85e5192",
+  "time_ns": 1789816639759922300,
+  "event_hash": "5f5ec6e1e39e8443fc32084b70568de5625031e5a4d361e5cd489aba0d19b8e2"
+}

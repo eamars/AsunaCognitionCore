@@ -1,0 +1,86 @@
+{
+  "seq": 69,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a6e9784c4cb844e05b8a36c32f0d27d1c6735364c06f35f8c637cd21f9e0ca6a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:g1",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "mono-ep-4380ec19eb35a5edb81a80f899d3fb43:0"
+    ],
+    "ranks": {
+      "mono-ep-4380ec19eb35a5edb81a80f899d3fb43:0": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      },
+      "M12": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M04": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "mono-ep-4380ec19eb35a5edb81a80f899d3fb43:0",
+      "M04",
+      "M11",
+      "M12"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M12",
+      "M11",
+      "M04",
+      "mono-ep-4380ec19eb35a5edb81a80f899d3fb43:0"
+    ],
+    "cache_key": {
+      "scope": "scene:g1",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "a6e9784c4cb844e05b8a36c32f0d27d1c6735364c06f35f8c637cd21f9e0ca6a",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "5bbef28f0e945df098ee3d20e8f5e4c8e6cbfa2e97fdc917643f3e66d0d5bdfa"
+    },
+    "cache_key_sha256": "0e2fbebebf61931a9e7d34b3a766f71e0be031ad12af76dd8b08ee33333b3a71",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "f8f1d334bc389b257fa7fe12072fa71b9207f8db66211609b1c6896a759c2d7d",
+  "time_ns": 1789815933518793600,
+  "event_hash": "ef699f5ff67eb75ffefcb47550126432268d95e7a5a5fbe5ac224fdaefd07991"
+}

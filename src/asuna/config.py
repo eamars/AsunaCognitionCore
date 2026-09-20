@@ -13,6 +13,10 @@ def load(path: str | Path = 'config/local.json') -> dict:
     validate_database(value, value['database'])
     for lane in ('character', 'executor', 'embedding'):
         validate_endpoint(value[lane]['base_url'])
+    value.setdefault('provider_idle_timeout_seconds',1800)
+    value.setdefault('workflow_timeout_seconds',1800)
+    for lane in ('character','executor'):
+        value[lane].setdefault('transport_read_timeout_seconds',1800)
     for key in ('dsh_home', 'workdir'):
         p = Path(value[key]).resolve()
         if not p.is_relative_to((ROOT / '.runtime').resolve()):

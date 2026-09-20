@@ -12,6 +12,7 @@ from asuna.lanes import FakeLane,LaneResult
 from asuna.publish import PublishService
 from asuna.state import Store,Conflict,Denied
 from asuna.audit import verify,replay,projection,render_html
+from asuna.evidence import sha
 
 def event(key='e',scene='dm-a',person='A',text='我回来了。'):
     return {'event_id':key,'scene_id':scene,'person_id':person,'text':text}
@@ -33,7 +34,11 @@ def test_E02_actual_fake_request_and_missing_persona(store):
     ep=coordinator.ingest(event())
     assert '沈小满' in lane.calls[0]['messages'][0]['content']
     assert ep['manifest']['persona_revision']
+    persona=store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['body']
+    assert persona in lane.calls[0]['messages'][0]['content']
+    assert sha(persona.encode())==ep['manifest']['persona_sha256']
     assert not any(k in json.dumps(lane.calls) for k in ('p1_prediction','expectations_operator_only','reconcile_expected'))
+    assert not any('"'+k+'":' in json.dumps(lane.calls) for k in ('gold','expected','oracle'))
     head,rev=store.head('persona:P1','global-safe')
     for body in ('','# title only'):
         store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.body':body}})
@@ -51,9 +56,10 @@ def test_E03_stops_advance_and_E04_private_public_split(store):
     mono=ep['monologue_refs'][0]
     with pytest.raises(Denied):store.get('memory_units',mono,'scene:dm-a')
     assert store.get('memory_units',mono,'scene:dm-a',operator=True)['body_markdown'].startswith('PRIVATE_INTERNAL')
-    for collection in ('audit_events','artifacts','episodes','sessions'):
-        if collection=='episodes':
-            with pytest.raises(Denied):store.get(collection,ep['_id'],'scene:dm-a')
+    audit=store.db.audit_events.find_one({'stream_id':ep['_id'],'type':'phase.output','payload.phase':'MONOLOGUE'})
+    store.put('artifacts',{'_id':'private-artifact','scope_key':'scene:dm-a','state':'DONE','text':'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})
+    for collection,key in (('audit_events',audit['_id']),('artifacts','private-artifact'),('episodes',ep['_id'])):
+        with pytest.raises(Denied):store.get(collection,key,'scene:dm-a')
 
 def test_E05_delivered_projection_only(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
@@ -82,6 +88,8 @@ def test_E09_identity_and_E10_scope(store):
         _,context,_=ContextBuilder(store).prepare(event(scene=scene,person=person))
         if scene!='dm-a':assert 'PRIVATE_A_CANARY' not in json.dumps(context)
     with pytest.raises(Denied):store.get('memory_units','M09','scene:g1')
+    head,_=store.head('persona:P1','global-safe')
+    with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
 
 def test_E14_100_duplicates(store):
     coordinator,lane=normal(store)

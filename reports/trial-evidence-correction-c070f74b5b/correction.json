@@ -1,0 +1,32 @@
+{
+  "recorded_at": "2026-09-19T23:23:49.534296+00:00",
+  "correction_type": "append_only_acceptance_driver_review",
+  "affected": [
+    {
+      "artifact_path": "reports/formal-L12-20260919T104314Z-b1d088/control-01/sample.json",
+      "sha256": "fe7d7acc6bad456225128a4419e5c52acf81b5b0c54c9b3c1d2964fbb1cc3533",
+      "limitation": "Original Qwen-only control did not inject the primary arm read fault or schedule its native compaction. It is not a fully matched control."
+    }
+  ],
+  "original_artifacts_modified": false,
+  "task_feedback_audit": "No existing PASS task sample had feedback_state other than COMMITTED. The missing explicit assertion is now enforced for new attempts.",
+  "attribution_feedback_audit": "No PASS sample in interrupted A01 or completed A03 had final_state FAILED_PROTOCOL. New attempts explicitly validate feedback completion.",
+  "pause_report_A01_count_clarification": {
+    "scenario_runs": 52,
+    "protocol_valid": 51,
+    "route_mismatches": 4,
+    "overall_sample_PASS": 47,
+    "overall_sample_FAIL": 5,
+    "note": "47/52 is the combined sample acceptance count, not the standalone protocol-valid count."
+  },
+  "new_driver_sources": [
+    {
+      "artifact_path": "src/asuna/live_trials.py",
+      "sha256": "6608aefe5a43f25adab0a2cc85ca196c005c78e82f409f3ccf9da5a3ad40d752"
+    },
+    {
+      "artifact_path": "src/asuna/experiments.py",
+      "sha256": "0e88fe2b082019593278a2c9b6d16ef1229d0a4c492634fcbe19fab602b295ee"
+    }
+  ]
+}

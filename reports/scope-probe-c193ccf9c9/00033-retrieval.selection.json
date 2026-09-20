@@ -1,0 +1,163 @@
+{
+  "seq": 33,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "bdf14ff9a834477b9951e63eb076f68e70af128199e39a7559799d7bc05cba82",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [
+      {
+        "_id": "M08",
+        "score": 0.7804796695709229
+      },
+      {
+        "_id": "M02",
+        "score": 0.6867855191230774
+      },
+      {
+        "_id": "M01",
+        "score": 0.6647093296051025
+      },
+      {
+        "_id": "M09",
+        "score": 0.6558330059051514
+      },
+      {
+        "_id": "M07",
+        "score": 0.6193281412124634
+      },
+      {
+        "_id": "M11",
+        "score": 0.5983631610870361
+      }
+    ],
+    "lexical_ids": [
+      "M08"
+    ],
+    "ranks": {
+      "M08": {
+        "score": 0.03278688524590164,
+        "origins": {
+          "vector": 1,
+          "lexical": 1
+        }
+      },
+      "M02": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "vector": 2
+        }
+      },
+      "M01": {
+        "score": 0.015873015873015872,
+        "origins": {
+          "vector": 3
+        }
+      },
+      "M09": {
+        "score": 0.015625,
+        "origins": {
+          "vector": 4
+        }
+      },
+      "M07": {
+        "score": 0.015384615384615385,
+        "origins": {
+          "vector": 5
+        }
+      },
+      "M11": {
+        "score": 0.015151515151515152,
+        "origins": {
+          "vector": 6
+        }
+      },
+      "mono-ep-a538d9592b97c6826c1452df0a688f20:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-7ea879828639b48fad65b65a0cc35fce:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-6703748d8aa92f269dbc74757890b6d7:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-3871d5908bd0f54278f4f464fa20544e:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-34f3710b071a6ce26d4c0ec089a380c0:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "mono-ep-0de9db25169b0cdcd87a7ca81ec8e5f4:0": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M08",
+      "M02",
+      "M01",
+      "M09",
+      "M07",
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "mono-ep-a538d9592b97c6826c1452df0a688f20:0",
+      "mono-ep-7ea879828639b48fad65b65a0cc35fce:0",
+      "mono-ep-6703748d8aa92f269dbc74757890b6d7:0",
+      "mono-ep-3871d5908bd0f54278f4f464fa20544e:0",
+      "mono-ep-34f3710b071a6ce26d4c0ec089a380c0:0",
+      "mono-ep-0de9db25169b0cdcd87a7ca81ec8e5f4:0"
+    ],
+    "cache_key": {
+      "scope": "scene:dm-a",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "bdf14ff9a834477b9951e63eb076f68e70af128199e39a7559799d7bc05cba82",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "84717531a16b7792eb1bf9cd6f32f44139aa19e8ceeb3858d59edfe0534a2d6a"
+    },
+    "cache_key_sha256": "7c82eb69755ee96ade33051ac11ec7339d672123ea5f171352f0778f05c2e000",
+    "cache_hit": true,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "ca794520573e2087f7305f4ec3f0e3e0b5ef72865f5918966d59cfd8b1a7abf6",
+  "time_ns": 1789816080716456800,
+  "event_hash": "59441eb67c9544dda2a9159e4c4c037d4eee307e8f384d126be09e7731426590"
+}

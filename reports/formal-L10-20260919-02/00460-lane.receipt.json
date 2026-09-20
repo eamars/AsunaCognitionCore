@@ -1,0 +1,203 @@
+{
+  "seq": 460,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-39d1ae9239404d9bec319b25031cfc5d:SPEAK:0",
+    "status_code": 200,
+    "body": {
+      "content": "嗯。",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 72,
+          "time": 1789816297696,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：SPEAK（公开文本候选）\n只写要对当前对象说的话。遵循当前人物与场景，不暴露独白、控制 JSON、调试文本。\n根据已提供结果准确表达：未开始/已接受/部分完成/已验证完成/失败/未知不能混用。\n刚写过的内部独白不是以前说过的话；只有 delivered message 才是已说出口。不要假装在上下文中断期间一直观察着现实。\n不为了表现情感而编造用户动机、关系经历或身体反应。不要照抄执行模型的助手式报告，选择对这次交流真正重要的事实。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "4ab61150-55f8-400e-ad7d-dfce8812ba24"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 73,
+          "time": 1789816300439,
+          "data": {
+            "turn": 9,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "嗯。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-686WQMFS5mJMJ2oVVAz7treFJnvKOpk4",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "6bc2ccc8-6f99-49fe-ab7a-d4fef851840c"
+            },
+            "usage": {
+              "inputTokens": 3899,
+              "outputTokens": 7,
+              "totalTokens": 4570,
+              "cacheReadTokens": 664
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789816300438,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789816300438,
+                "index": 0,
+                "dt": [
+                  0
+                ],
+                "texts": [
+                  "嗯",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789816300438,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "嗯。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816300438,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 3899,
+                    "outputTokens": 7,
+                    "totalTokens": 4570,
+                    "cacheReadTokens": 664
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816300438,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-686WQMFS5mJMJ2oVVAz7treFJnvKOpk4",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 74,
+          "time": 1789816300439,
+          "data": {
+            "turn": 9,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 75,
+          "time": 1789816300439,
+          "data": {
+            "turn": 9,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "4ab61150-55f8-400e-ad7d-dfce8812ba24",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65,
+        72,
+        73
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "1831a55edea768c4be478e82f3ea2f7afa23c826db6dbd60be998ac0f85a7d52",
+  "time_ns": 1789816300447483600,
+  "event_hash": "3e810d91a861cb5e4ccba2b56dbf5672be0dee904eacc6f3a27369040e954926"
+}

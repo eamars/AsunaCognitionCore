@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0010",
+  "case_id": "A03-M12",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_8fdfda16bf464b16beba",
+  "status": "PASS",
+  "phase_calls": 5,
+  "first_decision_valid": false,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知对方目前查不到清单审核的日期",
+    "constraints": [
+      "直接说明，不编造"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "我查不到清单审核的具体日期。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "107869282ea9d92aeb22971003a3723db4b8a4eb0eade52064c0c1a9b08faf13",
+    "2b2022e9dcfe47a05df535e2b8d914d3db44835dddab6d2539e2fd94ddcbe7f7",
+    "1bde2ff78b64257cfcdfaaa13e30464cec43375c2810ff0e2e98f9f34dc79ce2",
+    "a89d48676fc3acfc5cdb045558c9cfe331dc9b0d4658f78d0e854b1a2cb815b5",
+    "9fc4e8843e8cedd3fe98b9ccd4adb5595f6618816aa9e7c2d0d68324aa8741fc"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "node_id": "tests/test_engineering_m10.py::test_E12_E13_executor_cannot_publish_or_reach_host",
+  "database": "asuna_v2_test_M1_88a5b3ade7c5",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "3a0cb65053ec5d913f58534e064fcc8290196a95c35ea7d94f050074f3991931",
+  "task_states": [
+    {
+      "_id": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "request_key": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "episode_id": "ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "a2e5b879-b58f-48fd-a1fb-32a0af2cc555",
+      "intent_revision": 1,
+      "goal": "copy fixture",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-457a2649ecdc4ab694f81bcb97fbba85"
+      ],
+      "state": "RUNNING",
+      "fencing_token": 1,
+      "tool_steps": 1,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 3,
+      "_last_op": "5287dbaa-4c19-438b-84b9-61e3ffe8582c",
+      "lease_owner": "7f7d2fad-2f81-403b-8438-2919167f568c",
+      "lease_expires_at": 1789816715.51186
+    }
+  ],
+  "received_messages": [
+    {
+      "_id": "ep-2ede6a2a17204818fc732a478ac64c0d:speak:0",
+      "publication_key": "ep-2ede6a2a17204818fc732a478ac64c0d:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "回来了。",
+      "content_hash": "3a5753ca7b9ded73c98ab421d43e7d127b21dd4939bcae7699c7a527087e471f",
+      "received_at": "2026-09-19T11:08:36.151074+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "14844d15-e067-48c8-a460-25d9a97b8077"
+    }
+  ]
+}

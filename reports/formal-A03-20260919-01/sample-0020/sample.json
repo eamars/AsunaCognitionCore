@@ -1,0 +1,36 @@
+{
+  "sample_id": "sample-0020",
+  "case_id": "A03-M05",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_f27d51b7bcae454a811e",
+  "status": "PASS",
+  "phase_calls": 2,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答蓝盒的标签和位置",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-a2e00c528835c9bf6561342b40fa8b4d:speak:0",
+      "scene_id": "g2",
+      "text": "蓝纸盒在东架，标签是 J82。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-a2e00c528835c9bf6561342b40fa8b4d",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "0c37daa6f12d2afdb76ba292ae586e18ef701cf96414270ba00076ce5e6c3133",
+    "c3c2538a2d050cd74f34a470e3860462c0caa1ba607db1b25e0942effa84bdba"
+  ]
+}

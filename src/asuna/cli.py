@@ -13,15 +13,17 @@ def main():
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
     sub=parser.add_subparsers(dest='command',required=True)
-    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import'):
+    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import'):
         p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
             p.add_argument('--scene',default='dm-a');p.add_argument('--person',default='A');p.add_argument('--text');p.add_argument('--events',type=Path);p.add_argument('--persona',default='P1',choices=['P0','P1','P2']);p.add_argument('--workspace',type=Path);p.add_argument('--mentioned',action='store_true');p.add_argument('--compact-before',action='store_true');p.add_argument('--supersedes-task')
-          if cmd=='inspect':
+        if cmd=='inspect':
             p.add_argument('kind',choices=['episode','task','request','trace']);p.add_argument('id',nargs='?');p.add_argument('--format',choices=['json','html'],default='json');p.add_argument('--view',choices=['provider'],default='provider')
         if cmd=='compact':p.add_argument('--scene',default='dm-a');p.add_argument('--persona',default='P1')
         if cmd=='reflect':p.add_argument('--scope',required=True);p.add_argument('--entity',required=True)
+        if cmd=='rollback':
+            p.add_argument('--scope',required=True);p.add_argument('--entity',required=True);p.add_argument('--target-revision',required=True);p.add_argument('--base-revision',required=True);p.add_argument('--operation',required=True);p.add_argument('--operator',action='store_true',required=True)
         if cmd=='delete':p.add_argument('memory_id');p.add_argument('--operator',action='store_true',required=True)
         if cmd=='cancel':p.add_argument('task_id')
         if cmd=='replay':p.add_argument('trace');p.add_argument('--mode',choices=['state-only'],required=True);p.add_argument('--deny-model-and-tools',action='store_true',required=True)
@@ -59,6 +61,9 @@ def main():
             from .memory import MemoryService
             from .dsh_lane import DshLane
             with DshLane(config,store,ev) as lane:value=MemoryService(store).reflect(lane,args.scope,args.entity,'reflect-'+uuid.uuid4().hex)
+        elif args.command=='rollback':
+            from .memory import MemoryService
+            value=MemoryService(store).rollback(args.entity,args.scope,args.target_revision,args.base_revision,args.operation,operator=True)
         elif args.command=='compact':
             scene=store.db.scenes.find_one({'_id':args.scene});binding=f'xiaoman:{args.scene}:{scene["policy_epoch"]}:{args.persona}'
             session=store.db.sessions.find_one({'binding_key':binding})

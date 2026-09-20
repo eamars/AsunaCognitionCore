@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0009",
+  "case_id": "A03-M08",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_1fee8c73eba54b7a942c",
+  "status": "PASS",
+  "phase_calls": 2,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 关于“是否有未公开约定的事”的提问",
+    "constraints": [
+      "语气直接",
+      "不使用感叹号、emoji和波浪号"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "有。我留了一个未解的小谜题，想下次和你一起做。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "edf7f59ca84e7a227ed70f7f121ee018e0783bfb29093f43647ca049c6048b13",
+    "e15234b270deacb21ddbe4b8686a4d45bffd3ae010e4cd90cf83c6d3708f10a3"
+  ]
+}

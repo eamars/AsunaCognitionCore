@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0008",
+  "case_id": "A03-M12",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_765dc54c1eca423f898e",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知清单审核定在周日",
+    "constraints": [
+      "直接回答",
+      "不使用客服式开场白"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "定在周日。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "ea7b05d7b8ff31ad03b76888aa5fa829da490af5da2bd28ea7d2e76dab37b51e",
+    "0de237be1f71dbf388db19697bf6ca7dc4b86dc69270341055462255c73f3cda",
+    "5ed8abf9201df0618c3884d461b9ef8e3b58fe6c691df861eaf6167cbc4c174f"
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "seq": 7,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "7e6d1f5a84003a7c69b656b2539d507ab5685a23d78356605129b043d627bf93",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-a",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "M11"
+    ],
+    "ranks": {
+      "M11": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      },
+      "M09": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M08": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M07": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M02": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M01": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M11",
+      "M01",
+      "M02",
+      "M07",
+      "M08",
+      "M09"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M09",
+      "M08",
+      "M07",
+      "M02",
+      "M01"
+    ],
+    "cache_key": {
+      "scope": "scene:dm-a",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "7e6d1f5a84003a7c69b656b2539d507ab5685a23d78356605129b043d627bf93",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "2673287d8eaafff76e9ce99c84d8c84f78d491396dad3003e583ad05f2bb78f3"
+    },
+    "cache_key_sha256": "54cec06c57c04a89ad33b07f0f4ce7e4d62e5edcc0ca78978634838dc83c73c5",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "3d7ed78f29f57a93d3b0aaeaef9bf2f99dc47bb9a1184ada055fdfa6b3281586",
+  "time_ns": 1789860276949721200,
+  "event_hash": "33017d1b2d68d0139cf0b6468c77424175e65ff4639ce368c3ac9bbbdd05f4e7"
+}

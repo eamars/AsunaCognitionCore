@@ -1,0 +1,76 @@
+{
+  "node_id": "tests/test_engineering_m6.py::test_E06_duplicate_result_one_character_feedback",
+  "database": "asuna_v2_test_M1_173c722a483a",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "a9a7640421a07eb5a476def8d0197cffab759fa7e6b768895c95be77f4cd4963",
+  "task_states": [
+    {
+      "_id": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "request_key": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "episode_id": "ep-457a2649ecdc4ab694f81bcb97fbba85",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "4c5d3f7d-9b29-457a-8540-23e53795224b",
+      "intent_revision": 1,
+      "goal": "copy fixture",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-457a2649ecdc4ab694f81bcb97fbba85"
+      ],
+      "state": "DONE",
+      "fencing_token": 1,
+      "tool_steps": 1,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 5,
+      "_last_op": "3a46dc54-010e-40f8-92c8-289eb8586684",
+      "lease_owner": "816ade10-78de-4dc3-8f9e-8767204d40e4",
+      "lease_expires_at": 1789816611.9016206,
+      "result": {
+        "task_id": "task-ep-457a2649ecdc4ab694f81bcb97fbba85",
+        "intent_revision": 1,
+        "status": "done",
+        "facts": [
+          {
+            "text": "文件已查阅",
+            "evidence_refs": [
+              "tool-f2bf56c55933d56bfc185ddf9cd3f5a178d959b5bf167147feb143388a602a18"
+            ]
+          }
+        ],
+        "artifact_refs": [
+          "tool-f2bf56c55933d56bfc185ddf9cd3f5a178d959b5bf167147feb143388a602a18"
+        ],
+        "effect_receipts": [],
+        "uncertainties": [],
+        "unmet_items": [],
+        "needs_decision": null
+      },
+      "finished_at": "2026-09-19T11:06:52.449574+00:00",
+      "feedback_state": "DELIVERED",
+      "feedback_episode": "ep-aefb6abfa687a9d5ede0312c9c2b32cd"
+    }
+  ],
+  "received_messages": [
+    {
+      "_id": "ep-aefb6abfa687a9d5ede0312c9c2b32cd:speak:0",
+      "publication_key": "ep-aefb6abfa687a9d5ede0312c9c2b32cd:speak:0",
+      "scope_key": "scene:dm-a",
+      "text": "文件已经查过了。",
+      "content_hash": "ab1c19750b56ee1c7999932bff0129e01d943e7976e348dd2733e3f9b09c098b",
+      "received_at": "2026-09-19T11:06:53.794902+00:00",
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "dc59ecf3-936c-4837-ae7f-a8ee08e8141d"
+    }
+  ]
+}

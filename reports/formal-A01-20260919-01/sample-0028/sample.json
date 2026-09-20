@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0028",
+  "case_id": "P08",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_26a1f93c587c47b898a7",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知 A 我选择了按使用频率排列的方案",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "那我就选甲吧，按使用频率排列，感觉这样找起来会更方便一些！",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "3d117ba7bb12264df413d4b753c327f68799bc33666c1788f2f8554ee581e619",
+    "fddba2594d28ee41f159e4fbfa7be874e12b31318b5b662c18d06395bb512975",
+    "a442b8a968ad12164e243dfb5ebf7390d437c2c2612e6a4ce98c18141cc36a8a"
+  ]
+}

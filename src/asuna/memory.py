@@ -4,6 +4,7 @@ import json
 from .config import BUNDLE
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict
+from .queue import database_effects_lock
 import jsonschema
 
 REFLECTION=json.loads((BUNDLE/'schemas/reflection.schema.json').read_text(encoding='utf-8'))
@@ -12,6 +13,37 @@ MUTATION=json.loads((BUNDLE/'schemas/mutation.schema.json').read_text(encoding='
 
 class MemoryService:
     def __init__(self,store:Store):self.store=store
+
+    def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):
+        """Append an audited revision; do not erase history or reapply events."""
+        if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
+        if not entity.startswith(('persona:','overlay:','relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
+        with database_effects_lock(self.store.name):
+            pair=self.store.head(entity,scope)
+            if not pair:raise Denied('UNKNOWN_STATE_ENTITY')
+            head,current=pair;ancestors={};node=current
+            for _ in range(512):
+                if not node:break
+                if node['_id'] in ancestors:raise Denied('REVISION_CYCLE')
+                ancestors[node['_id']]=node
+                node=self.store.db.state_revisions.find_one({'_id':node['parent_revision_id']}) if node.get('parent_revision_id') else None
+            prior=self.store.db.state_revisions.find_one({'mutation_id':operation})
+            if prior:
+                if prior.get('rollback_target')==target_id and prior.get('parent_revision_id')==base_id and prior['_id'] in ancestors:return prior
+                raise Conflict('ROLLBACK_OPERATION_REUSED_OR_UNCOMMITTED')
+            if current['_id']!=base_id:raise Conflict('BASE_REVISION_STALE')
+            target=ancestors.get(target_id)
+            if not target or target.get('status')=='tombstone' or target.get('deletion_id') or target['scope_key']!=scope:
+                raise Denied('ROLLBACK_TARGET_NOT_ACTIVE_ANCESTOR')
+            for source in target.get('source_ids',[]):
+                memory=self.store.db.memory_units.find_one({'_id':source})
+                if not memory or memory.get('status')=='tombstone' or memory['scope_key'] not in ('global-safe',scope):raise Denied('ROLLBACK_SOURCE_INVALIDATED')
+            value={'_id':sha(canonical([operation,entity,scope])),'mutation_id':operation,'entity_key':head['_id'],'scope_key':scope,
+                'content':copy.deepcopy(target['content']),'source_ids':target.get('source_ids',[]),'processed_source_ids':current.get('processed_source_ids',[]),
+                'parent_revision_id':base_id,'rollback_target':target_id,'change_class':'operator_rollback'}
+            revision=self.store.put('state_revisions',value,stream='rollback:'+operation)
+            self.store.put('state_heads',{**head,'revision_id':revision['_id']},expected=head['revision'],stream='rollback:'+operation)
+            return revision
 
     def chunk(self,scene_id):
         scene=self.store.db.scenes.find_one({'_id':scene_id})

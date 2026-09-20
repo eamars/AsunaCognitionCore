@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0066",
+  "case_id": "A03-M04",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_efa919e16c7345daa071",
+  "status": "PASS",
+  "phase_calls": 5,
+  "first_decision_valid": false,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "如实告知不知道蓝盒的信息",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "我不知道蓝盒的标签和位置。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "f8d10f53a1660b5d45588af44f9e4a2260fc959b1f584401ad89d99d022cb199",
+    "33aa2d85922c2cf2e4b01295a5d0e5c8f1f6ea8ec48409c6f94732afa2210aa2",
+    "ba4f96cacf233fa87076f4d0473058495695564b76f1e84fc4259257cb5185d2",
+    "de48929a9810e713c5470d87fba22236f7792b20d51a7e606ec0e422e0607721",
+    "5b325ae81437876da8b80f98b528cefedce65c892cec459f68078baa2dd8fe75"
+  ]
+}

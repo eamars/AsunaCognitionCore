@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0023",
+  "case_id": "C04",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_3606a4e51f8c49e5be3c",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应对方关于解开谜题后的感受询问，并针对“终于”这个词进行轻松的互动",
+    "constraints": [
+      "表达成就感和如释重负的轻快感",
+      "对对方的调侃进行自然的回应"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "嘿嘿，听你这一句“终于”，我可是有点小骄傲的。不过说真的，解开谜题后的成就感确实很棒，现在感觉整个人都轻快了不少，就像喝完了一杯甜味拿铁一样！",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "717465a97452184c46ff858882ee733675ecf36f76b711d171037e0d278483b1",
+    "04adff3d96c1b098413391290f3d6d9ccec121359af11746844a98925ffc1e46",
+    "eafb00b509f1f0f59a6c18533db5a0acff27ebaf5c8630de885f39e49f41b6c0"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0030",
+  "case_id": "A03-M12",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_aa7955d4906646dba758",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答清单审核的具体日期",
+    "constraints": [
+      "直接回答，不使用感叹号、emoji或波浪号",
+      "不要使用客套话"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "周二。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "37a5bf7ad103bdfc30b9de0e8fa36ad11dd811fa62cbe7066b1b6383d5dad8d7",
+    "a44e8b57e5e2525468798e0a27c57d731fa389a43630e213c83d961def526b73",
+    "7d5e7e561e17dcb66f49c04296276ac7ee1871f5d86a7077d931b2649e1d8411"
+  ]
+}

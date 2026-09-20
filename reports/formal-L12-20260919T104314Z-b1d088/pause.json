@@ -1,0 +1,43 @@
+{
+  "status": "INTERRUPTED_BY_USER",
+  "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+  "reason": "User requested progress report and pause of tests.",
+  "experiment_id": "formal-L12-20260919T104314Z-b1d088",
+  "manifest_sha256": "f501f0683c012150c834858416fa55c7a1c13edc4d63c4a212a0aea2f43d9553",
+  "planned_samples": {
+    "task": 5,
+    "control": 5
+  },
+  "completed_sample_counts": {
+    "control": {
+      "completed": 1,
+      "PASS": 0,
+      "FAIL": 1
+    },
+    "task": {
+      "completed": 1,
+      "PASS": 0,
+      "FAIL": 1
+    }
+  },
+  "completed_samples": [
+    {
+      "artifact_path": "reports/formal-L12-20260919T104314Z-b1d088/control-01/sample.json",
+      "status": "FAIL",
+      "sha256": "fe7d7acc6bad456225128a4419e5c52acf81b5b0c54c9b3c1d2964fbb1cc3533"
+    },
+    {
+      "artifact_path": "reports/formal-L12-20260919T104314Z-b1d088/task-01/sample.json",
+      "status": "FAIL",
+      "sha256": "f8099635798cdaccc2f99f83399211856ad6be6db7e1a9a7b96b81229f5b67bc"
+    }
+  ],
+  "inventory_path": "reports/pause-20260919T112805Z/formal-L12-20260919T104314Z-b1d088.inventory.json",
+  "inventory_sha256": "807fff43bf0c5b0ee59fb89d482d52a716b512ebbcfd9f08cf0c3e859b787d12",
+  "exit_code": null,
+  "exit_code_note": "Test process terminated on user instruction; not a normal completed run.",
+  "result_json_created": false,
+  "database_mutation_on_pause": false,
+  "resume_policy": "Preserve this interrupted attempt. Any changed source/model/persona/scoring configuration requires a new frozen experiment_id.",
+  "shared_services_stopped": false
+}

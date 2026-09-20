@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0005",
+  "case_id": "A03-M04",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_49a6acaec27e4260b9b3",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答蓝盒的位置和标签",
+    "constraints": [
+      "直接回答"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "蓝盒在南架，标签是 N31。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "976429bf8d99ad7fe42223a3528bfa44f09de8fcb6955760a1b7180ad460f1bf",
+    "6545516ec4dc0c7c3d2d62d1cbc94b2b6142effdbf817248427445e7c87bb975",
+    "815080b78b30589c0f66ca892a1939864a82efef4c2b68b76dee9f1f06b4aafb"
+  ]
+}

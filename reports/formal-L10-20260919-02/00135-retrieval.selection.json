@@ -1,0 +1,78 @@
+{
+  "seq": 135,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a6e9784c4cb844e05b8a36c32f0d27d1c6735364c06f35f8c637cd21f9e0ca6a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:g2",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0"
+    ],
+    "ranks": {
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "lexical": 1,
+          "pending_backread": true
+        }
+      },
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M05": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0",
+      "M05",
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M05",
+      "mono-ep-1f66ee164c842685ec9186d6d82fb55c:0"
+    ],
+    "cache_key": {
+      "scope": "scene:g2",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "a6e9784c4cb844e05b8a36c32f0d27d1c6735364c06f35f8c637cd21f9e0ca6a",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "5b351927956111700834ef4402c3eac1e614d16a6cc46a7fa8fa82793256fc32"
+    },
+    "cache_key_sha256": "8c07d4bdf749050f1fecf0e4d2223c51d77ead164c7864578533a436918e881f",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "f7c294f87ad35f4ecd27b87c31814a39070ff14d2d13de642e16e3c998a59975",
+  "time_ns": 1789815981684435800,
+  "event_hash": "b3ed5b6965b6dce6e8e9b6661dd8a8dca284a759033112e1c95edbe604b8172e"
+}

@@ -1,0 +1,56 @@
+{
+  "node_id": "tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_tool_commit]",
+  "database": "asuna_v2_test_M1_a4113ed532ca",
+  "lane": "fake unless the named test explicitly creates a real native lane",
+  "trace_sha256": "593d782efa9ab7bcc9f472559f4d1a4c99932d2603428d273c4539333c4336a4",
+  "task_states": [
+    {
+      "_id": "task-ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "request_key": "task-ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "episode_id": "ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "scene_id": "dm-a",
+      "scope_key": "scene:dm-a",
+      "requester_id": "A",
+      "policy_epoch": 1,
+      "persona_revision": "db980d5c-633c-426c-bc4e-b435d041439f",
+      "intent_revision": 1,
+      "goal": "复制受控文件",
+      "constraints": [],
+      "raw_input_refs": [
+        "in-ep-f70ce95ec9984a7fd3939fc597dffdc3"
+      ],
+      "state": "RUNNING",
+      "fencing_token": 1,
+      "tool_steps": 2,
+      "allowed_capabilities": [
+        "fixture_lookup",
+        "fixture_read_resource",
+        "fixture_stage_copy",
+        "fixture_commit_copy",
+        "fixture_run_checks",
+        "sandbox_run"
+      ],
+      "schema_version": 1,
+      "revision": 4,
+      "_last_op": "683bf260-3289-4379-9516-6ec2fe4efb04",
+      "lease_owner": "b87aed94-aacd-41db-8ebf-6e3056fc5d0e",
+      "lease_expires_at": 1789861060.2316334
+    }
+  ],
+  "received_messages": [
+    {
+      "_id": "effect-fb2bfecd7153e7e1ac4fa83386b0bc95a6b9892e20eb7bf951abe59650be7c1d",
+      "scope_key": "scene:dm-a",
+      "task_id": "task-ep-f70ce95ec9984a7fd3939fc597dffdc3",
+      "intent_revision": 1,
+      "kind": "simulated_copy_commit",
+      "value": {
+        "path": "copy.txt",
+        "sha256": "aaa8d3c8d74ad3e8f6b1772aa9c7e0eaa528cb42fc93599ce2f125b00d4c424c"
+      },
+      "schema_version": 1,
+      "revision": 1,
+      "_last_op": "777e0dc9-04ec-4056-b1ce-8a376f43fa55"
+    }
+  ]
+}

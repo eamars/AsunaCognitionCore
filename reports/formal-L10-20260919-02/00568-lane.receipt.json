@@ -1,0 +1,311 @@
+{
+  "seq": 568,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-d4f31c760c7dc8b8fc465eac90f83278:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"说话简短直接\",\"不使用感叹号\",\"不使用表情符号\",\"不使用礼貌性套话\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 112,
+          "time": 1789816362740,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "d627b5d1-47f8-4d91-b48e-937f1e6409c9"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 113,
+          "time": 1789816384762,
+          "data": {
+            "turn": 14,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"说话简短直接\",\"不使用感叹号\",\"不使用表情符号\",\"不使用礼貌性套话\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-2yVDSQYhkJqnRkQbxkC8HohGBAHF7VKZ",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "eb620b8e-81e9-4075-b7f6-f452c998d28c"
+            },
+            "usage": {
+              "inputTokens": 7170,
+              "outputTokens": 56,
+              "totalTokens": 7890,
+              "cacheReadTokens": 664
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789816384761,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789816384761,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "speak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "重复",
+                  "的",
+                  "问",
+                  "候",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "说话",
+                  "简",
+                  "短",
+                  "直接",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "感",
+                  "叹",
+                  "号",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "表情",
+                  "符号",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "礼",
+                  "貌",
+                  "性",
+                  "套",
+                  "话",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789816384762,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"说话简短直接\",\"不使用感叹号\",\"不使用表情符号\",\"不使用礼貌性套话\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816384762,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 7170,
+                    "outputTokens": 56,
+                    "totalTokens": 7890,
+                    "cacheReadTokens": 664
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816384762,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-2yVDSQYhkJqnRkQbxkC8HohGBAHF7VKZ",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 114,
+          "time": 1789816384763,
+          "data": {
+            "turn": 14,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 115,
+          "time": 1789816384763,
+          "data": {
+            "turn": 14,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "d627b5d1-47f8-4d91-b48e-937f1e6409c9",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65,
+        72,
+        73,
+        80,
+        81,
+        88,
+        89,
+        96,
+        97,
+        104,
+        105,
+        112,
+        113
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "54a34beee9442d5bad8617a9bca0205399da45f5ca88bb68d35fcaad2a3c0850",
+  "time_ns": 1789816384770624700,
+  "event_hash": "d2c4ee7d40c86e29d8d40a992d8d28cbf785404f4009e37afae4156a7cef2aeb"
+}

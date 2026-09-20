@@ -1,0 +1,500 @@
+{
+  "seq": 25,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-b106f97a2452168898e160c3f5099466:SPEAK:0",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n我这次选甜拿铁。如果你想让我选无糖苦咖啡，也可以让我改。",
+      "reasoning": "We need produce public text candidate. Need respond to A: choose between sweet latte and unsweet bitter coffee. We can say choose sweet latte, maybe if you prefer coffee can change. Must not expose monologue or JSON. Need current object A. Relationship familiar, trust. Could be concise. Need not assume body? Can say “我选甜拿铁；如果你想让我选咖啡，我再改。” Since fictional digital no body, but choices okay. Maybe “我这次选甜拿铁。如果你想看我选无糖苦咖啡，也可以让我改。” Need only text.\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 24,
+          "time": 1789812604820,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：SPEAK（公开文本候选）\n只写要对当前对象说的话。遵循当前人物与场景，不暴露独白、控制 JSON、调试文本。\n根据已提供结果准确表达：未开始/已接受/部分完成/已验证完成/失败/未知不能混用。\n刚写过的内部独白不是以前说过的话；只有 delivered message 才是已说出口。不要假装在上下文中断期间一直观察着现实。\n不为了表现情感而编造用户动机、关系经历或身体反应。不要照抄执行模型的助手式报告，选择对这次交流真正重要的事实。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "76e6c167-96ea-4298-9060-645de293b3da"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 25,
+          "time": 1789812657722,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "We need produce public text candidate. Need respond to A: choose between sweet latte and unsweet bitter coffee. We can say choose sweet latte, maybe if you prefer coffee can change. Must not expose monologue or JSON. Need current object A. Relationship familiar, trust. Could be concise. Need not assume body? Can say “我选甜拿铁；如果你想让我选咖啡，我再改。” Since fictional digital no body, but choices okay. Maybe “我这次选甜拿铁。如果你想看我选无糖苦咖啡，也可以让我改。” Need only text.\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n我这次选甜拿铁。如果你想让我选无糖苦咖啡，也可以让我改。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-106",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "0206e1fc-f255-4686-a460-8b97f23bde2e"
+            },
+            "usage": {
+              "inputTokens": 1494,
+              "outputTokens": 139,
+              "totalTokens": 1633
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789812657716,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789812657716,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "We",
+                  " need",
+                  " produce",
+                  " public",
+                  " text",
+                  " candidate",
+                  ".",
+                  " Need",
+                  " respond",
+                  " to",
+                  " A",
+                  ":",
+                  " choose",
+                  " between",
+                  " sweet",
+                  " latte",
+                  " and",
+                  " uns",
+                  "weet",
+                  " bitter",
+                  " coffee",
+                  ".",
+                  " We",
+                  " can",
+                  " say",
+                  " choose",
+                  " sweet",
+                  " latte",
+                  ",",
+                  " maybe",
+                  " if",
+                  " you",
+                  " prefer",
+                  " coffee",
+                  " can",
+                  " change",
+                  ".",
+                  " Must",
+                  " not",
+                  " expose",
+                  " mon",
+                  "ologue",
+                  " or",
+                  " JSON",
+                  ".",
+                  " Need",
+                  " current",
+                  " object",
+                  " A",
+                  ".",
+                  " Relationship",
+                  " familiar",
+                  ",",
+                  " trust",
+                  ".",
+                  " Could",
+                  " be",
+                  " concise",
+                  ".",
+                  " Need",
+                  " not",
+                  " assume",
+                  " body",
+                  "?",
+                  " Can",
+                  " say",
+                  " “",
+                  "我",
+                  "选",
+                  "甜",
+                  "拿",
+                  "铁",
+                  "；",
+                  "如果你想",
+                  "让我",
+                  "选",
+                  "咖啡",
+                  "，",
+                  "我再",
+                  "改",
+                  "。”",
+                  " Since",
+                  " fictional",
+                  " digital",
+                  " no",
+                  " body",
+                  ",",
+                  " but",
+                  " choices",
+                  " okay",
+                  ".",
+                  " Maybe",
+                  " “",
+                  "我",
+                  "这次",
+                  "选",
+                  "甜",
+                  "拿",
+                  "铁",
+                  "。",
+                  "如果你想",
+                  "看我",
+                  "选",
+                  "无",
+                  "糖",
+                  "苦",
+                  "咖啡",
+                  "，",
+                  "也可以",
+                  "让我",
+                  "改",
+                  "。”",
+                  " Need",
+                  " only",
+                  " text",
+                  ".",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789812657721,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789812657721,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "我",
+                  "这次",
+                  "选",
+                  "甜",
+                  "拿",
+                  "铁",
+                  "。",
+                  "如果你想",
+                  "让我",
+                  "选",
+                  "无",
+                  "糖",
+                  "苦",
+                  "咖啡",
+                  "，",
+                  "也可以",
+                  "让我",
+                  "改",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789812657722,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "We need produce public text candidate. Need respond to A: choose between sweet latte and unsweet bitter coffee. We can say choose sweet latte, maybe if you prefer coffee can change. Must not expose monologue or JSON. Need current object A. Relationship familiar, trust. Could be concise. Need not assume body? Can say “我选甜拿铁；如果你想让我选咖啡，我再改。” Since fictional digital no body, but choices okay. Maybe “我这次选甜拿铁。如果你想看我选无糖苦咖啡，也可以让我改。” Need only text.\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812657722,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n我这次选甜拿铁。如果你想让我选无糖苦咖啡，也可以让我改。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812657722,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 1494,
+                    "outputTokens": 139,
+                    "totalTokens": 1633
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812657722,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-106",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 26,
+          "time": 1789812657723,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 27,
+          "time": 1789812657723,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "76e6c167-96ea-4298-9060-645de293b3da",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "c507d586b305a53c127942376e7e31aaf42528b7626d7579d62a340cfa3ff775",
+  "time_ns": 1789812657731362600,
+  "event_hash": "0391b0acf82cdda46ef0649268246db4c59fbda4746e44be6b5a565c63deb61c"
+}

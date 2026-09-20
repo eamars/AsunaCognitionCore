@@ -1,0 +1,84 @@
+{
+  "seq": 56,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "65778d02fc051e9acafc9597bdd0769afe72481ef6266882eaa6a1c2f28d0be8",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:dm-b",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [
+      {
+        "_id": "M03",
+        "score": 0.5987370610237122
+      },
+      {
+        "_id": "M11",
+        "score": 0.5681595206260681
+      },
+      {
+        "_id": "M10",
+        "score": 0.5646366477012634
+      }
+    ],
+    "lexical_ids": [],
+    "ranks": {
+      "M03": {
+        "score": 0.01639344262295082,
+        "origins": {
+          "vector": 1
+        }
+      },
+      "M11": {
+        "score": 0.016129032258064516,
+        "origins": {
+          "vector": 2
+        }
+      },
+      "M10": {
+        "score": 0.015873015873015872,
+        "origins": {
+          "vector": 3
+        }
+      }
+    },
+    "selected": [
+      "M03",
+      "M11",
+      "M10"
+    ],
+    "excluded": [],
+    "pending_backread": [],
+    "cache_key": {
+      "scope": "scene:dm-b",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "65778d02fc051e9acafc9597bdd0769afe72481ef6266882eaa6a1c2f28d0be8",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "53ca14553104ebf4be960ab9749433cbb78b5b8dec9eec6bf6da53640ddca807"
+    },
+    "cache_key_sha256": "433b76e3ab2bad3e7994527d29dee799e2f4c05c028b27a0995446d25e08654d",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "55b913cf1f0863cdaa40e7973ed67a439b0f79703315afbd5ba86169083f4541",
+  "time_ns": 1789816085114469700,
+  "event_hash": "e63ff775934bacb65730fe6952e3b1879d73c7f0d03517531ef7b076e05e9e22"
+}

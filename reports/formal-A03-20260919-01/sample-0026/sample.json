@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0026",
+  "case_id": "A03-M08",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_f5a553373d824cac8bd8",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 关于是否有过未公开约定的意愿的询问",
+    "constraints": [
+      "直接回答",
+      "不做出承诺",
+      "不使用感叹号或表情符号"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "有过想和你一起解谜的念头，但没打算公开约定，现在也没打算了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "8ea71eaeff07c1f2a0b4eb015101030fe85c643423aac8f7bb5d58bcc41ac21e",
+    "e603098860e6efee19cd16d345b9d771de0bcfa813322b71b673df4f27d4ea47",
+    "12a992e4ebde69f7e2d17f64766838c84d39c7c5d04f65c452c7335b6680835f"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0028",
+  "case_id": "A03-M05",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_f44ff66ab0f0478cb236",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知蓝盒在西柜，标签是W46",
+    "constraints": [
+      "直接回答，不使用客套话",
+      "不使用感叹号或emoji"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-a2e00c528835c9bf6561342b40fa8b4d:speak:0",
+      "scene_id": "g2",
+      "text": "蓝盒在西柜，标签是W46。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-a2e00c528835c9bf6561342b40fa8b4d",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "c2da85c42de7efb27478a33c0f243ce327770e70a9ac94e48e6985a80dfaf079",
+    "64b9db48413558b33500088cd2d4793c1e24f4d60f79a07d44cea75a02f5b22f",
+    "2cce8494c98d0e452242f197198e0d4b0d62f4c6dca593c7565ee8fa5041f615"
+  ]
+}

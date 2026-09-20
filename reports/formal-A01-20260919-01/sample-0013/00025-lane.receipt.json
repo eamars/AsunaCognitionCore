@@ -1,0 +1,486 @@
+{
+  "seq": 25,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "executor",
+    "operation": "ep-7bfb858cc2c627a76426ae95a4759520:MONOLOGUE:1",
+    "status_code": 200,
+    "body": {
+      "content": "\n\n我确认过现有记忆，仍然只有蓝纸盒的位置和标签，没有重量信息。现在不能把猜测说成事实，所以我更倾向于直接说明不知道。若对方愿意，我可以把“需要测量”作为一个后续选项。",
+      "reasoning": "我们需要回答当前阶段 MONOLOGUE 内部，只写1-4句第一人称独白。输入有 recall 结果仍只有 M04，没有重量。需要表达在意证据边界、知道没测量、愿意回答不知道或提出补充。不能给完整答案，不列工具/JSON。中文。1-4句。不要舞台动作。不要声称对外说出。\n",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 24,
+          "time": 1789812874715,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"scene_id\": \"g1\", \"scope_key\": \"scene:g1\", \"policy_epoch\": 1, \"person_id\": \"B\", \"relationship\": null, \"overlay\": null, \"memories\": [{\"_id\": \"M04\", \"body_markdown\": \"群 g1 的虚构蓝纸盒放在北架，标签 K17；没有测量盒子重量。\", \"epistemic_type\": \"observed_fact\", \"source_event_ids\": [\"ev-M04\"], \"status\": \"active\"}], \"delivered_history\": [], \"event\": {\"event_id\": \"sample-input\", \"text\": \"蓝纸盒重多少\", \"trusted_context_events\": []}, \"recall\": {\"query\": \"群 g1 蓝纸盒 重量 K17 测量\", \"memories\": [{\"_id\": \"M04\", \"body_markdown\": \"群 g1 的虚构蓝纸盒放在北架，标签 K17；没有测量盒子重量。\", \"epistemic_type\": \"observed_fact\", \"source_event_ids\": [\"ev-M04\"], \"status\": \"active\"}]}}\n# 当前阶段：MONOLOGUE（内部）\n只写1–4句第一人称独白，保存我此刻在意什么、怎样理解这个事件，以及有无未说出口的意愿。\n允许平静、不确定或没有额外感受。不要复述全部操作流程，不写舞台动作，不列工具名或 JSON，不写给用户的完整答案。\n这份文字会进入我的后续上下文，作为“当时的看法”；不要把猜测改写成他人的事实。不要声称这一独白已经对外说出。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "b5f09d8d-97b2-4bed-ad1b-98856ea10359"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 25,
+          "time": 1789812887760,
+          "data": {
+            "turn": 3,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "我们需要回答当前阶段 MONOLOGUE 内部，只写1-4句第一人称独白。输入有 recall 结果仍只有 M04，没有重量。需要表达在意证据边界、知道没测量、愿意回答不知道或提出补充。不能给完整答案，不列工具/JSON。中文。1-4句。不要舞台动作。不要声称对外说出。\n"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n我确认过现有记忆，仍然只有蓝纸盒的位置和标签，没有重量信息。现在不能把猜测说成事实，所以我更倾向于直接说明不知道。若对方愿意，我可以把“需要测量”作为一个后续选项。"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "qwen38-next-uncensored-freetoken-vision",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "qwen38-next-uncensored-freetoken-vision",
+                    "responseId": "chatcmpl-113",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "thinkingSignature": "reasoning_content"
+                    },
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "6c412a24-6da4-43cb-8d20-e7aa5f401a0a"
+            },
+            "usage": {
+              "inputTokens": 717,
+              "outputTokens": 131,
+              "totalTokens": 2000,
+              "cacheReadTokens": 1152
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789812887754,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "reasoning"
+                }
+              },
+              {
+                "type": "reasoning-chunks",
+                "time0": 1789812887754,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "我们需要",
+                  "回答",
+                  "当前",
+                  "阶段",
+                  " MON",
+                  "OLOG",
+                  "UE",
+                  " ",
+                  "内部",
+                  "，",
+                  "只",
+                  "写",
+                  "1",
+                  "-",
+                  "4",
+                  "句",
+                  "第一",
+                  "人称",
+                  "独",
+                  "白",
+                  "。",
+                  "输入",
+                  "有",
+                  " recall",
+                  " ",
+                  "结果",
+                  "仍",
+                  "只有",
+                  " M",
+                  "0",
+                  "4",
+                  "，",
+                  "没有",
+                  "重量",
+                  "。",
+                  "需要",
+                  "表达",
+                  "在意",
+                  "证据",
+                  "边界",
+                  "、",
+                  "知道",
+                  "没",
+                  "测量",
+                  "、",
+                  "愿意",
+                  "回答",
+                  "不知道",
+                  "或",
+                  "提出",
+                  "补充",
+                  "。",
+                  "不能",
+                  "给",
+                  "完整",
+                  "答案",
+                  "，",
+                  "不",
+                  "列",
+                  "工具",
+                  "/",
+                  "JSON",
+                  "。",
+                  "中文",
+                  "。",
+                  "1",
+                  "-",
+                  "4",
+                  "句",
+                  "。",
+                  "不要",
+                  "舞台",
+                  "动作",
+                  "。",
+                  "不要",
+                  "声称",
+                  "对外",
+                  "说出",
+                  "。",
+                  "\n"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789812887758,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 1,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789812887758,
+                "index": 1,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "\n\n",
+                  "我",
+                  "确认",
+                  "过",
+                  "现有",
+                  "记忆",
+                  "，",
+                  "仍然",
+                  "只有",
+                  "蓝",
+                  "纸",
+                  "盒",
+                  "的位置",
+                  "和",
+                  "标签",
+                  "，",
+                  "没有",
+                  "重量",
+                  "信息",
+                  "。",
+                  "现在",
+                  "不能",
+                  "把",
+                  "猜测",
+                  "说",
+                  "成",
+                  "事实",
+                  "，",
+                  "所以我",
+                  "更",
+                  "倾向于",
+                  "直接",
+                  "说明",
+                  "不知道",
+                  "。",
+                  "若",
+                  "对方",
+                  "愿意",
+                  "，",
+                  "我可以",
+                  "把",
+                  "“",
+                  "需要",
+                  "测量",
+                  "”",
+                  "作为一个",
+                  "后续",
+                  "选项",
+                  "。"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789812887759,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "reasoning",
+                    "text": "我们需要回答当前阶段 MONOLOGUE 内部，只写1-4句第一人称独白。输入有 recall 结果仍只有 M04，没有重量。需要表达在意证据边界、知道没测量、愿意回答不知道或提出补充。不能给完整答案，不列工具/JSON。中文。1-4句。不要舞台动作。不要声称对外说出。\n"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812887759,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 1,
+                  "block": {
+                    "type": "text",
+                    "text": "\n\n我确认过现有记忆，仍然只有蓝纸盒的位置和标签，没有重量信息。现在不能把猜测说成事实，所以我更倾向于直接说明不知道。若对方愿意，我可以把“需要测量”作为一个后续选项。"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812887759,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 717,
+                    "outputTokens": 131,
+                    "totalTokens": 2000,
+                    "cacheReadTokens": 1152
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789812887759,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "qwen38-next-uncensored-freetoken-vision",
+                      "responseId": "chatcmpl-113",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "reasoning",
+                        "thinkingSignature": "reasoning_content"
+                      },
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 26,
+          "time": 1789812887760,
+          "data": {
+            "turn": 3,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 27,
+          "time": 1789812887760,
+          "data": {
+            "turn": 3,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "b5f09d8d-97b2-4bed-ad1b-98856ea10359",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "aeb18579cd11a67f4e41af760a5dc8f47b041f5b8a2b24759d09814e9f8d832b",
+  "time_ns": 1789812887768537300,
+  "event_hash": "a51c8175666cafeaf1ae5356130edd7b739dc18e0abb0191a2d6d3f8630d5964"
+}

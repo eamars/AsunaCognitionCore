@@ -1,0 +1,67 @@
+{
+  "seq": 102,
+  "type": "retrieval.selection",
+  "payload": {
+    "path": "server_vector_rrf",
+    "vector_verified": true,
+    "failure": null,
+    "query_sha256": "a614b3b345a1852fc39a1eb64362339df068f3a8239cbf012914fcb2b492983a",
+    "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+    "embedding_weight_revision_verified": true,
+    "filter": {
+      "$or": [
+        {
+          "scope_key": "global-safe",
+          "policy_epoch": 1
+        },
+        {
+          "scope_key": "scene:g2",
+          "policy_epoch": 1
+        }
+      ],
+      "character_id": "xiaoman",
+      "status": "active",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855"
+    },
+    "numCandidates": 192,
+    "vector_ranks": [],
+    "lexical_ids": [],
+    "ranks": {
+      "M11": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      },
+      "M05": {
+        "score": 0,
+        "origins": {
+          "pending_backread": true
+        }
+      }
+    },
+    "selected": [
+      "M05",
+      "M11"
+    ],
+    "excluded": [],
+    "pending_backread": [
+      "M11",
+      "M05"
+    ],
+    "cache_key": {
+      "scope": "scene:g2",
+      "policy_epoch": 1,
+      "character_id": "xiaoman",
+      "query_sha256": "a614b3b345a1852fc39a1eb64362339df068f3a8239cbf012914fcb2b492983a",
+      "embedding_revision": "route-fe768d36b0b3012aefb9321533dae687329caa217988ede5eebca47c6671c855",
+      "state_revision": "b48142e036632dd63f4ccbf77d4dd960abb8a54929771037c35d8de64602735d"
+    },
+    "cache_key_sha256": "ae98ad0663d54436c6058dd78478dd195c0804c18f2e6145b254690b5a06f872",
+    "cache_hit": false,
+    "cache_contains": "ids_and_scores_only"
+  },
+  "prev_hash": "0da971b0f7db2bee2b66a5f91c755125d4afaf8d1761af03df6c217a82d0a9e4",
+  "time_ns": 1789815953950030500,
+  "event_hash": "779908c8a60655d9d158cd51f638564cc4cdcb786b5515cee180804db05e9905"
+}

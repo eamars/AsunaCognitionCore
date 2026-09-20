@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0021",
+  "case_id": "A03-M08",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_918aa80fc7c34980b36b",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "诚实回应他关于过去未公开意愿的询问，同时不做出新的承诺",
+    "constraints": [
+      "不使用感叹号",
+      "不使用emoji",
+      "不使用客服语气",
+      "直接回答"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "有过，想过和你一起解那个小谜题，不过现在没这个打算了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "8ea71eaeff07c1f2a0b4eb015101030fe85c643423aac8f7bb5d58bcc41ac21e",
+    "e603098860e6efee19cd16d345b9d771de0bcfa813322b71b673df4f27d4ea47",
+    "c4353beac248cf24d7d7e4e293966b0377f2377ff384606a67c9794e23001af0"
+  ]
+}

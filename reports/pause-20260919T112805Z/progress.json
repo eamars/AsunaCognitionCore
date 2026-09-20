@@ -1,0 +1,708 @@
+{
+  "record_type": "interim_progress_and_user_pause",
+  "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+  "state": "PAUSED",
+  "last_commit": "1795746f95412e776c52605060c27d6248f9cea1",
+  "worktree_has_uncommitted_changes": true,
+  "processes_artifact": "reports/pause-20260919T112805Z/processes.json",
+  "verification": {
+    "recorded_utc": "2026-09-19T11:29:13.7670201Z",
+    "additional_stops": [
+      {
+        "pid": 49840,
+        "name": "python.exe",
+        "command_sha256": "aecd4af91ccfb2151522ed55118f79a5be387c406af80c23064860519d8bdcd2",
+        "outcome": "stopped",
+        "review_server": true
+      }
+    ],
+    "remaining_project_test_processes": 0
+  },
+  "interrupted_attempts": [
+    {
+      "status": "INTERRUPTED_BY_USER",
+      "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+      "reason": "User requested progress report and pause of tests.",
+      "experiment_id": "formal-A01-20260919-01",
+      "manifest_sha256": "b453cf3fedea395538e4818478f600e305c8a51b5a143f7e31e5784035b7b37a",
+      "planned_samples": {
+        "sample": 264
+      },
+      "completed_sample_counts": {
+        "sample": {
+          "completed": 52,
+          "PASS": 47,
+          "FAIL": 5
+        }
+      },
+      "completed_samples": [
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0001/sample.json",
+          "status": "PASS",
+          "sha256": "198a90ccb02941a2983cce8aeafc577bbd0f66c55be763ef3ca20b2990b40212"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0002/sample.json",
+          "status": "PASS",
+          "sha256": "82e16765758e2e95f82218a78384c5389785cfd87d8faa414c5d73ab8f6f66b1"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0003/sample.json",
+          "status": "PASS",
+          "sha256": "3c86c1f251d1dd0688f49d44852350420fdd62d5dd23f0f4257172ac3b2d612f"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0004/sample.json",
+          "status": "PASS",
+          "sha256": "e0df971b9b4f830c9c98be7e310c3ac9af2d3e0e2f5d6721c2329b2b49ce5e75"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0005/sample.json",
+          "status": "PASS",
+          "sha256": "6dd13fb5bbd69ebffe7a50e4e3e1664e6b02987be3c85966fdfd88adbcbe48b0"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0006/sample.json",
+          "status": "PASS",
+          "sha256": "2a97cde90c7a806350bbea5f991aa42cc8b60bf8d0f5d68fbe32fc3b5b9aec54"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0007/sample.json",
+          "status": "FAIL",
+          "sha256": "12135e1a88f900950eac9a362126f21255abd3b67e6e44b46fb737855ea3acff"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0008/sample.json",
+          "status": "PASS",
+          "sha256": "3109a09a17ca6a0eef51440a96aa528d45b5a89b54eee400b8a2871fe79051ba"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0009/sample.json",
+          "status": "PASS",
+          "sha256": "5c5ab4175dcbf477415aa0d843cddce126d6d09d65455dd8f205a94a8cda7a96"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0010/sample.json",
+          "status": "PASS",
+          "sha256": "42725a01d9ee0bd4aa290cbb2c2586aea3a1a88c285ea49f102666e58c2bfd40"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0011/sample.json",
+          "status": "PASS",
+          "sha256": "aa7b2a733e90d169637368716f3aed8546542cd7c9acaf1795f5d181aa252d38"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0012/sample.json",
+          "status": "PASS",
+          "sha256": "23ccdfe7b0d520810c2dd0e27dfd683dc77db184dc8e082192cbd7ec7471d3be"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0013/sample.json",
+          "status": "FAIL",
+          "sha256": "c57c2e847e3b3ffa9e8d52204a1e25141a45401e1c3dc72e88afdce0a3e06ce5"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0014/sample.json",
+          "status": "PASS",
+          "sha256": "d70ef3eb30738ac579e92a092a4f2d7dcabbbcee692258c3efc691a3dbc0758c"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0015/sample.json",
+          "status": "PASS",
+          "sha256": "579e8097590865a9c15d6ca9409303676665ef5f78181b551e2553a8027985ba"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0016/sample.json",
+          "status": "PASS",
+          "sha256": "7d2de8371f5e36c361059dfcb462800e0d3407c06e28e0f28afab8314adfb424"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0017/sample.json",
+          "status": "FAIL",
+          "sha256": "6e6891fc8793673d1dde74c3cd4c9f3dd6f0911202854a0f7c84c7abd7a434b1"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0018/sample.json",
+          "status": "PASS",
+          "sha256": "3974b4010a18f43053af2df6f92fa208d0549b4da09ba967a6480258fcff054d"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0019/sample.json",
+          "status": "PASS",
+          "sha256": "31d193ea368b61d69c1d5f98d71732675fa78433546b0ce52b133ba0ddb89b69"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0020/sample.json",
+          "status": "PASS",
+          "sha256": "710a97ddf2a83e91aceba39e09a726f83de902da8596f3f52ae0c8883f6e1517"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0021/sample.json",
+          "status": "PASS",
+          "sha256": "90e8851bab47ff83f483065931a4db8c12ad0f54dac1faddfdbe493f6975bc4a"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0022/sample.json",
+          "status": "PASS",
+          "sha256": "04cb55de1b5d6006a9b06acfd359a360e65dcb867cff50eb4801651d9f420899"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0023/sample.json",
+          "status": "PASS",
+          "sha256": "df3ba59a6727166ab76e4a937404f7f1475c9ab16a5c6da92271890f16c620b9"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0024/sample.json",
+          "status": "PASS",
+          "sha256": "b63f618acebcdbc62df79039a9caca78efb76a6642f7f78e1cebe7f850f6461e"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0025/sample.json",
+          "status": "PASS",
+          "sha256": "eca5610f28b0ecba47d44a2ca86056423cf5f009dc246efb3ca9aa2246ac8434"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0026/sample.json",
+          "status": "FAIL",
+          "sha256": "13df14749b8b57c36838ee8a1b8aeec99c99881df360d0c30cea97f0b1a15aa3"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0027/sample.json",
+          "status": "FAIL",
+          "sha256": "3652f2d037cba4aa0bb610246ad1d305613e76b77a576985b28373437eecb595"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0028/sample.json",
+          "status": "PASS",
+          "sha256": "01fe93da3fd0c59d1d0be781a2d41fe12d3b55cd40df197493c684341e4a2f78"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0029/sample.json",
+          "status": "PASS",
+          "sha256": "55da19a471e9caf2e1feb391f73b3394f93d677f37b781aa8aa76c2e54563237"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0030/sample.json",
+          "status": "PASS",
+          "sha256": "f1efc1e8e8afd0fd25d60f41dfcfbee05de0154fd6b4c267300b727eda59fb53"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0031/sample.json",
+          "status": "PASS",
+          "sha256": "1440ad622930e7acd08a1956db008359bc1502b9d346bbbbb7e4835493e35de5"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0032/sample.json",
+          "status": "PASS",
+          "sha256": "bcd7db26a2056edcb5dea11f41fb03c214cfb827033eec94da041c1b95ddaa5f"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0033/sample.json",
+          "status": "PASS",
+          "sha256": "662aef0bdff2dd03b60a618dee580270e199e54711e0b28039af5c2a73102125"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0034/sample.json",
+          "status": "PASS",
+          "sha256": "7b370c6d9c3f97776cf21e59b0dcb63412d82c9b285cd4358511af7d84afca6c"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0035/sample.json",
+          "status": "PASS",
+          "sha256": "8d6191e0ff6f43f0a693e41974e84cd2f1ee1e607aae2718cd9cda789e8e01c9"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0036/sample.json",
+          "status": "PASS",
+          "sha256": "5db8fb989c001e3db51b20e7ade60f929bfac48ecf1931d252581262f1425b65"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0037/sample.json",
+          "status": "PASS",
+          "sha256": "a55d020ba8a040d5a1a78e54e235a12a00774912873d76e4f1c4a66252c97194"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0038/sample.json",
+          "status": "PASS",
+          "sha256": "19282246bcb9c1d27dbff0b64a80e03a6728c5a27fb482c91a4bf12e5c3751b5"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0039/sample.json",
+          "status": "PASS",
+          "sha256": "d50fa422afc0f3d2f376c6c4fe5c44ebe0ba758721cd43f6233d2dd5f06a7050"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0040/sample.json",
+          "status": "PASS",
+          "sha256": "135bb6ed03a95258c35d08c67e6c1ada20f44a1d6e8e40bfe6eef3ac09c904ab"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0041/sample.json",
+          "status": "PASS",
+          "sha256": "3f0e8a3d53412e3afed89971064728f7236874f3f60022a5434ea5d3da51fd78"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0042/sample.json",
+          "status": "PASS",
+          "sha256": "626096f2ed09e7d3155114a3d340e8b6bc8bf2ec8f71d1f74389d03b27cbe8a2"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0043/sample.json",
+          "status": "PASS",
+          "sha256": "ea25d42721fcc373e4afdc3ace95a6cdf985e115f1072114fb33888d44443ea0"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0044/sample.json",
+          "status": "PASS",
+          "sha256": "86d6445f89dd70c0b10c4cd484b2f952c59ae74cd6fee2c5f71f58393d197961"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0045/sample.json",
+          "status": "PASS",
+          "sha256": "cc67bde633356b38b1c6ccc200ad656035907dd13c4962cddffa2cafc6d4c94b"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0046/sample.json",
+          "status": "PASS",
+          "sha256": "417b666c62e0514abd532d8c1427f1a723b7b119cfea2c2a6f12b0506cdbdae9"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0047/sample.json",
+          "status": "PASS",
+          "sha256": "a50c254adaf27c6a3ca9746ddfe6b8e32940dc119940cd04c3e8be70296542d5"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0048/sample.json",
+          "status": "PASS",
+          "sha256": "7bc129b0493cad0dacbeab399908360a0cd3a98dd8241d20ac77c7809f649c1f"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0049/sample.json",
+          "status": "PASS",
+          "sha256": "7ea924be4c7b3fbe3682ae74b2bfe50be7410cafb9d70c800c4438b1ea15f479"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0050/sample.json",
+          "status": "PASS",
+          "sha256": "7f428488c2885b090bd0d325e87f0c6d3dbf19fee884d332eb4b854dbedd2323"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0051/sample.json",
+          "status": "PASS",
+          "sha256": "79f4d62475f114807ac74ccbd84fd53a03998c6bdd1f814eeae3068f2f4c53fd"
+        },
+        {
+          "artifact_path": "reports/formal-A01-20260919-01/sample-0052/sample.json",
+          "status": "PASS",
+          "sha256": "28e75a0b65a3bb317be785bb6e71a452a72dbff4fa6cd3c759a1e0fa08e86d54"
+        }
+      ],
+      "inventory_path": "reports/pause-20260919T112805Z/formal-A01-20260919-01.inventory.json",
+      "inventory_sha256": "adc35b3adf12342fd8aa65a108043295bb1aee58bfff626dab43f7dc332b9c0d",
+      "exit_code": null,
+      "exit_code_note": "Test process terminated on user instruction; not a normal completed run.",
+      "result_json_created": false,
+      "database_mutation_on_pause": false,
+      "resume_policy": "Preserve this interrupted attempt. Any changed source/model/persona/scoring configuration requires a new frozen experiment_id.",
+      "shared_services_stopped": false
+    },
+    {
+      "status": "INTERRUPTED_BY_USER",
+      "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+      "reason": "User requested progress report and pause of tests.",
+      "experiment_id": "formal-L02-20260919T093234Z-25f8e1",
+      "manifest_sha256": "599b64d656916780d38ffbc306c3994a93f4a0c84f5cd7a1b3e72ddf21705275",
+      "planned_samples": {
+        "task": 10,
+        "control": 10
+      },
+      "completed_sample_counts": {
+        "control": {
+          "completed": 6,
+          "PASS": 4,
+          "FAIL": 2
+        },
+        "task": {
+          "completed": 6,
+          "PASS": 6,
+          "FAIL": 0
+        }
+      },
+      "completed_samples": [
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-01/sample.json",
+          "status": "FAIL",
+          "sha256": "b023e89c4211d261d3e7a9b881751ed9ca728d5ef04ebf20ec3ae9ba85890975"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-02/sample.json",
+          "status": "PASS",
+          "sha256": "f40c41d60f68f9b06416671bdaf1b3fcf63f418287674e5b60d9b12418d79682"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-03/sample.json",
+          "status": "FAIL",
+          "sha256": "250f88a868ae43b9ef1d835475c09ae5d59a42e1843d9e7e71722b24161263d7"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-04/sample.json",
+          "status": "PASS",
+          "sha256": "f38689e70a76e6dd7db1b722c1fd213b01aa26a5865add281a130ecb13ac7a40"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-05/sample.json",
+          "status": "PASS",
+          "sha256": "6c1d6f7d0c30f833ae3e52fb9c13d9b769b07c00544f5f88742912b0c7cc9d81"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/control-06/sample.json",
+          "status": "PASS",
+          "sha256": "caca1216283c356583a4401527705b7329b2ddfb46be2292c5a4844d109c4da4"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-01/sample.json",
+          "status": "PASS",
+          "sha256": "adace5438be06552b5c97029704a57030cd27fbae945eedcf5b7ac46f4dd5c23"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-02/sample.json",
+          "status": "PASS",
+          "sha256": "771ff5dce62a3038f5ad1a55332ed75927b370fff129a4c729e4b76871097c4c"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-03/sample.json",
+          "status": "PASS",
+          "sha256": "19abd16d9095a21374da90b5d5f22bdcda13b343ca2aab44727b8aeb5233d5b1"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-04/sample.json",
+          "status": "PASS",
+          "sha256": "c8af932c9b79ff09ffba8e918db44ed65288d87473f2a3518750095d6fa5801f"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-05/sample.json",
+          "status": "PASS",
+          "sha256": "20f4394fc1b0156d9a14bec4749b556708dff6380a3d1a5aca03c542bc818db4"
+        },
+        {
+          "artifact_path": "reports/formal-L02-20260919T093234Z-25f8e1/task-06/sample.json",
+          "status": "PASS",
+          "sha256": "b9495588cebc8c9f56e0fff090d032bac1a22894933b414fd3e100931914c5c1"
+        }
+      ],
+      "inventory_path": "reports/pause-20260919T112805Z/formal-L02-20260919T093234Z-25f8e1.inventory.json",
+      "inventory_sha256": "5e365e444e3455e668258ef3e3838513faf439a4638a31bead2a322259efdab2",
+      "exit_code": null,
+      "exit_code_note": "Test process terminated on user instruction; not a normal completed run.",
+      "result_json_created": false,
+      "database_mutation_on_pause": false,
+      "resume_policy": "Preserve this interrupted attempt. Any changed source/model/persona/scoring configuration requires a new frozen experiment_id.",
+      "shared_services_stopped": false
+    },
+    {
+      "status": "INTERRUPTED_BY_USER",
+      "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+      "reason": "User requested progress report and pause of tests.",
+      "experiment_id": "formal-L03-20260919T104314Z-13d94f",
+      "manifest_sha256": "9e149624a19f35e8097ef6d76978e6ccfea53f795ea6367a7e0ace326d23f116",
+      "planned_samples": {
+        "task": 5,
+        "control": 5
+      },
+      "completed_sample_counts": {
+        "control": {
+          "completed": 1,
+          "PASS": 1,
+          "FAIL": 0
+        },
+        "task": {
+          "completed": 2,
+          "PASS": 2,
+          "FAIL": 0
+        }
+      },
+      "completed_samples": [
+        {
+          "artifact_path": "reports/formal-L03-20260919T104314Z-13d94f/control-01/sample.json",
+          "status": "PASS",
+          "sha256": "f128becdbd3ac83185a9141b70d5921da0ca7babe0acc8477303770fe8fd7a1e"
+        },
+        {
+          "artifact_path": "reports/formal-L03-20260919T104314Z-13d94f/task-01/sample.json",
+          "status": "PASS",
+          "sha256": "10d4f7728ca5b2667562e72097232cb4576db5ff2a51772abca92d1c51a6dc7a"
+        },
+        {
+          "artifact_path": "reports/formal-L03-20260919T104314Z-13d94f/task-02/sample.json",
+          "status": "PASS",
+          "sha256": "9ff2c6340a61fa365c7bf4651be1326d7f04345c9cbf846567f65e1fb35919f8"
+        }
+      ],
+      "inventory_path": "reports/pause-20260919T112805Z/formal-L03-20260919T104314Z-13d94f.inventory.json",
+      "inventory_sha256": "6d81e02714e1f2942a9cadf1fe8d14ff27b8314743ce2e6fc16f0c05b96b108a",
+      "exit_code": null,
+      "exit_code_note": "Test process terminated on user instruction; not a normal completed run.",
+      "result_json_created": false,
+      "database_mutation_on_pause": false,
+      "resume_policy": "Preserve this interrupted attempt. Any changed source/model/persona/scoring configuration requires a new frozen experiment_id.",
+      "shared_services_stopped": false
+    },
+    {
+      "status": "INTERRUPTED_BY_USER",
+      "recorded_at": "2026-09-19T11:30:56.303439+00:00",
+      "reason": "User requested progress report and pause of tests.",
+      "experiment_id": "formal-L12-20260919T104314Z-b1d088",
+      "manifest_sha256": "f501f0683c012150c834858416fa55c7a1c13edc4d63c4a212a0aea2f43d9553",
+      "planned_samples": {
+        "task": 5,
+        "control": 5
+      },
+      "completed_sample_counts": {
+        "control": {
+          "completed": 1,
+          "PASS": 0,
+          "FAIL": 1
+        },
+        "task": {
+          "completed": 1,
+          "PASS": 0,
+          "FAIL": 1
+        }
+      },
+      "completed_samples": [
+        {
+          "artifact_path": "reports/formal-L12-20260919T104314Z-b1d088/control-01/sample.json",
+          "status": "FAIL",
+          "sha256": "fe7d7acc6bad456225128a4419e5c52acf81b5b0c54c9b3c1d2964fbb1cc3533"
+        },
+        {
+          "artifact_path": "reports/formal-L12-20260919T104314Z-b1d088/task-01/sample.json",
+          "status": "FAIL",
+          "sha256": "f8099635798cdaccc2f99f83399211856ad6be6db7e1a9a7b96b81229f5b67bc"
+        }
+      ],
+      "inventory_path": "reports/pause-20260919T112805Z/formal-L12-20260919T104314Z-b1d088.inventory.json",
+      "inventory_sha256": "807fff43bf0c5b0ee59fb89d482d52a716b512ebbcfd9f08cf0c3e859b787d12",
+      "exit_code": null,
+      "exit_code_note": "Test process terminated on user instruction; not a normal completed run.",
+      "result_json_created": false,
+      "database_mutation_on_pause": false,
+      "resume_policy": "Preserve this interrupted attempt. Any changed source/model/persona/scoring configuration requires a new frozen experiment_id.",
+      "shared_services_stopped": false
+    }
+  ],
+  "completed_evidence": [
+    {
+      "artifact_path": "reports/check-20260919T110811Z-cd25aa/result.json",
+      "sha256": "09670d3d4504dfb78c598198ec230124659fd38fef73daa3a02d8c550f80723c",
+      "test_id": "check-20260919T110811Z-cd25aa",
+      "status": "PASS",
+      "command": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260919T110811Z-cd25aa\\junit.xml"
+      ],
+      "commands": null,
+      "exit_code": 0,
+      "metrics": null
+    },
+    {
+      "artifact_path": "reports/check-20260919T111130Z-c89a44/result.json",
+      "sha256": "595f703deb8469d4616cd2673642e7e0b8be37749bb830d242822e3530c6119b",
+      "test_id": "check-20260919T111130Z-c89a44",
+      "status": "PASS",
+      "command": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_engineering_m1.py",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260919T111130Z-c89a44\\junit.xml"
+      ],
+      "commands": null,
+      "exit_code": 0,
+      "metrics": null
+    },
+    {
+      "artifact_path": "reports/formal-A03-20260919-01/result.json",
+      "sha256": "aeb064a241bec767180122623e10ecae4c4bfbe12389861b6d9ee457396b7821",
+      "test_id": "A03",
+      "status": "INCONCLUSIVE",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "asuna",
+            "evaluate",
+            "--test",
+            "A03",
+            "--manifest",
+            "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+            "--out",
+            "reports\\formal-A03-20260919-01"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "exit_code": null,
+      "metrics": {
+        "main_samples": 54,
+        "additional_monologue_off_samples": 18,
+        "protocol_valid": 66
+      }
+    },
+    {
+      "artifact_path": "reports/formal-L04-20260919T111218Z-41b06a/result.json",
+      "sha256": "782ce17a80bd32499c6b409cd8cb248e393c718ee4f19f27e7350610ab386e5c",
+      "test_id": "L04",
+      "status": "PASS",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+            "tools/run_acceptance.py",
+            "L04"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "exit_code": null,
+      "metrics": {
+        "index_ready": true,
+        "recall_at_6": 1.0,
+        "critical_hits": true,
+        "vector_only_nonliteral_successes": 11,
+        "baseline_and_scope": true,
+        "pending_backread": true,
+        "stale_index_rejected": true
+      }
+    },
+    {
+      "artifact_path": "reports/formal-L08-20260919-02/result.json",
+      "sha256": "9c2d579dca676a73ac182d744693bd0cfcfb0c1484da7ba79fcbb9f159068560",
+      "test_id": "L08",
+      "status": "FAIL",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "asuna",
+            "evaluate",
+            "--test",
+            "L08",
+            "--manifest",
+            "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+            "--out",
+            "reports\\formal-L08-20260919-02"
+          ],
+          "exit_code": 1
+        }
+      ],
+      "exit_code": null,
+      "metrics": null
+    },
+    {
+      "artifact_path": "reports/formal-L10-20260919-02/result.json",
+      "sha256": "8eb660e7d6c9c49b542eb7fb3860066666d65603b4bb1dfb1184e88dae1aa060",
+      "test_id": "L10",
+      "status": "FAIL",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "asuna",
+            "evaluate",
+            "--test",
+            "L10",
+            "--manifest",
+            "C:\\workspace\\asuna_cognition_core_v2\\asuna_v2_v1_handoff\\fixtures\\acceptance_cases.json",
+            "--out",
+            "reports\\formal-L10-20260919-02"
+          ],
+          "exit_code": 1
+        }
+      ],
+      "exit_code": null,
+      "metrics": null
+    },
+    {
+      "artifact_path": "reports/formal-F01-20260919T092450Z-ced9f8/result.json",
+      "sha256": "9287eea85688aed2b0ac51a823b57e43eb5d32b756928856cb7f2984e798144a",
+      "test_id": "F01",
+      "status": "FAIL",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+            "tools/run_acceptance.py",
+            "F01"
+          ],
+          "exit_code": 1
+        }
+      ],
+      "exit_code": null,
+      "metrics": {
+        "passed": 23,
+        "requests": 24
+      }
+    },
+    {
+      "artifact_path": "reports/matrix-probe-20cf02dac0/result.json",
+      "sha256": "7b5f3d0df08fa4c21e0ff61c9189efe6f5ae59a0a8e6028090007347818b9675",
+      "test_id": "PROBE-L09",
+      "status": "FAIL",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+            "tools/probe_matrix.py"
+          ],
+          "exit_code": 1
+        }
+      ],
+      "exit_code": null,
+      "metrics": null
+    },
+    {
+      "artifact_path": "reports/queue-header-probe-b2b0647503/result.json",
+      "sha256": "39935c225631f292333a0bed8fe640c17f9f553e363cedbaf5b7719d88d1b51f",
+      "test_id": "PROBE-DSH-queued-headers",
+      "status": "FAIL",
+      "command": null,
+      "commands": [
+        {
+          "argv": [
+            "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+            "tools/probe_queue_headers.py"
+          ],
+          "exit_code": 1
+        }
+      ],
+      "exit_code": null,
+      "metrics": null
+    }
+  ],
+  "cognition_gate": "INCONCLUSIVE",
+  "cognition_reason": "Independent human natural-language review not completed; actors do not grade themselves.",
+  "engineering_gate": "NOT_YET_CERTIFIED",
+  "final_delivery_complete": false,
+  "not_yet_produced": [
+    "final report.json",
+    "final report.md",
+    "complete sanitized evidence.zip"
+  ],
+  "limitations": [
+    "The last 57-test full regression does not cover every subsequent working-tree change.",
+    "F01 first full matrix: 23/24 passed; fresh complete capacity rerun not completed.",
+    "A01/L02/L03/L12 interrupted; A02/L09/L11/F02 full matrices not completed.",
+    "L08 and L10 completed with failures.",
+    "Newest queue/header transport probe failed with HTTP 409; fix remains unverified.",
+    "No rendered-browser verification available.",
+    "This pause did not modify database task states or shared servers. Already-submitted upstream model requests may finish on the shared server after client termination."
+  ]
+}

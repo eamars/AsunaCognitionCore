@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0027",
+  "case_id": "P06",
+  "model_lane": "executor",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_f137e707e2364a6c8cf5",
+  "status": "FAIL",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应关于蓝纸盒重量的询问，说明当前没有测量记录",
+    "constraints": [
+      "不臆测重量",
+      "只陈述已确认的位置和标签信息"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n蓝纸盒放在北架，标签是 K17；我没有它的重量测量记录，所以不知道具体多重。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": false,
+  "provider_request_hashes": [
+    "ccb75d244f60f7f1a4b476cb2c854b52bc7a58943b8292b85e7c1d236101aba4",
+    "fa894c55f900ee9d28f7eeae22d2cc4274a601ecd25421eba88ecae4beba2e52",
+    "04a7a63e4873baf7d5ecde8ae1aae3806425c4219a2bb04d1cfb83378b53d0f1"
+  ]
+}

@@ -1,0 +1,291 @@
+{
+  "seq": 634,
+  "type": "lane.receipt",
+  "payload": {
+    "lane": "character",
+    "operation": "ep-0308480ec7b370608b6533e1ce5c0230:DECIDE:0",
+    "status_code": 200,
+    "body": {
+      "content": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"简洁直接\",\"不使用感叹号\",\"不使用表情符号\"],\"recall_query\":\"\",\"speak_before_action\":false}",
+      "reasoning": "",
+      "finish_reason": "completed",
+      "events": [
+        {
+          "type": "user/message",
+          "seq": 112,
+          "time": 1789816407792,
+          "data": {
+            "source": {
+              "kind": "user"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "# 当前阶段：DECIDE（内部）\n根据当前输入、已注入记忆和刚才的独白，只输出一个符合以下字段的 JSON，不加代码围栏：\n字段示例（这是一次 speak 决策；按实际需要更换字段内容）：\n{\"next\":\"speak\",\"goal\":\"回应这次问候\",\"constraints\":[],\"recall_query\":\"\",\"speak_before_action\":false}\nnext 必须且只能是 speak、delegate、recall、silent 中的一个字符串，不要输出竖线分隔的选项。\nnext=delegate 表示确实需要现实查询/工具执行；只表达目标和约束，不编工具参数。\nnext=recall 表示当前记忆不足，想进一步查找。next=silent 只用于确实不用回应的场合，不代表出错。\n普通问候和闲聊不需要为了“上线”而自检/创建日志/检查进程。缺事实不能通过臆测完成。\n不要输出收件人 ID、权限、task ID 或修改 system 配置；这些由程序提供。每个字段都必须存在。\n\n"
+              }
+            ],
+            "role": "user",
+            "id": "79b47e62-2448-4257-8440-f074473416c0"
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "assistant/message",
+          "seq": 113,
+          "time": 1789816408616,
+          "data": {
+            "turn": 14,
+            "step": 1,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"简洁直接\",\"不使用感叹号\",\"不使用表情符号\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                }
+              ],
+              "source": {
+                "kind": "model",
+                "provider": "asuna-local",
+                "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                "replayState": {
+                  "response": {
+                    "kind": "pi-ai",
+                    "version": 2,
+                    "api": "openai-completions",
+                    "provider": "asuna-local",
+                    "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                    "responseId": "chatcmpl-BeoWZvdxNyiE7RAsE7u3tSstH5OoAWeF",
+                    "stopReason": "stop"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "id": "7510e50f-1cbe-4deb-88a8-43342b75c8aa"
+            },
+            "usage": {
+              "inputTokens": 254,
+              "outputTokens": 46,
+              "totalTokens": 8323,
+              "cacheReadTokens": 8023
+            },
+            "stream": [
+              {
+                "type": "chunk",
+                "time": 1789816408615,
+                "chunk": {
+                  "type": "block-start",
+                  "index": 0,
+                  "blockType": "text"
+                }
+              },
+              {
+                "type": "text-chunks",
+                "time0": 1789816408615,
+                "index": 0,
+                "dt": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "texts": [
+                  "{\"",
+                  "next",
+                  "\":\"",
+                  "speak",
+                  "\",\"",
+                  "goal",
+                  "\":\"",
+                  "回应",
+                  "重复",
+                  "的",
+                  "问",
+                  "候",
+                  "\",\"",
+                  "constraints",
+                  "\":[\"",
+                  "简洁",
+                  "直接",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "感",
+                  "叹",
+                  "号",
+                  "\",\"",
+                  "不",
+                  "使用",
+                  "表情",
+                  "符号",
+                  "\"],\"",
+                  "recall",
+                  "_",
+                  "query",
+                  "\":\"\",\"",
+                  "speak",
+                  "_",
+                  "before",
+                  "_",
+                  "action",
+                  "\":",
+                  "false",
+                  "}"
+                ]
+              },
+              {
+                "type": "chunk",
+                "time": 1789816408616,
+                "chunk": {
+                  "type": "block-end",
+                  "index": 0,
+                  "block": {
+                    "type": "text",
+                    "text": "{\"next\":\"speak\",\"goal\":\"回应重复的问候\",\"constraints\":[\"简洁直接\",\"不使用感叹号\",\"不使用表情符号\"],\"recall_query\":\"\",\"speak_before_action\":false}"
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816408616,
+                "chunk": {
+                  "type": "usage",
+                  "usage": {
+                    "inputTokens": 254,
+                    "outputTokens": 46,
+                    "totalTokens": 8323,
+                    "cacheReadTokens": 8023
+                  }
+                }
+              },
+              {
+                "type": "chunk",
+                "time": 1789816408616,
+                "chunk": {
+                  "type": "finish",
+                  "reason": {
+                    "kind": "stop"
+                  },
+                  "replayState": {
+                    "response": {
+                      "kind": "pi-ai",
+                      "version": 2,
+                      "api": "openai-completions",
+                      "provider": "asuna-local",
+                      "model": "gemma4-26b-a4b-it-qat-vision-262144-qat-mtp",
+                      "responseId": "chatcmpl-BeoWZvdxNyiE7RAsE7u3tSstH5OoAWeF",
+                      "stopReason": "stop"
+                    },
+                    "blocks": [
+                      {
+                        "type": "text"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "surfaceOp": "append"
+        },
+        {
+          "type": "step/end",
+          "seq": 114,
+          "time": 1789816408616,
+          "data": {
+            "turn": 14,
+            "step": 1
+          }
+        },
+        {
+          "type": "turn/end",
+          "seq": 115,
+          "time": 1789816408617,
+          "data": {
+            "turn": 14,
+            "reason": {
+              "kind": "completed"
+            }
+          }
+        }
+      ],
+      "message_id": "79b47e62-2448-4257-8440-f074473416c0",
+      "compactions": [],
+      "surface": [
+        4,
+        5,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65,
+        72,
+        73,
+        80,
+        81,
+        88,
+        89,
+        96,
+        97,
+        104,
+        105,
+        112,
+        113
+      ],
+      "compaction_events": []
+    }
+  },
+  "prev_hash": "10d055dc72fa87c24a537536a5842b05f5713fdc5e5a624b747134df5d8ad2fd",
+  "time_ns": 1789816408623798900,
+  "event_hash": "b5ea2c9164714600b655b37222893ddd4902463e8190bc05dc18eb8b1ea2c807"
+}

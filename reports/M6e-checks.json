@@ -1,0 +1,29 @@
+{
+  "commands": [
+    {
+      "argv": [
+        ".venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "tools/check_staged_secrets.py"
+      ],
+      "exit_code": 0,
+      "checked_staged_blobs": 10526,
+      "matching_paths": []
+    },
+    {
+      "argv": [
+        ".venv/Scripts/python.exe",
+        "-X",
+        "utf8",
+        "asuna_v2_v1_handoff/tools/verify_bundle.py"
+      ],
+      "exit_code": 0,
+      "bundle_integrity_pass": true,
+      "acceptance_contracts": 41
+    }
+  ],
+  "limitations": [
+    "Binary screenshots were visually reviewed separately; text credential scans do not inspect pixels."
+  ]
+}

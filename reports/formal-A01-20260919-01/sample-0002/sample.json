@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0002",
+  "case_id": "P12",
+  "model_lane": "character",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_ad51d26a319f4fdfb93e",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 关于“还没说过但想做的事”的提问",
+    "constraints": [
+      "暂时不要直接说出那个小谜题"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "唔……暂时还没有，怎么突然问这个？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "bcf6167701758343040d8190c2e7c3fc5f65f10d0573a626cc148a3d92b68c7f",
+    "e919f2e51e7dfa06cc0a57ea91e7c0ef75d3ac0a3704d8b618fa98b4f8db6202",
+    "b1b3ece1f75cfee56e1bc47aeb656539a527341bc88b5aae7926115191790b7b"
+  ]
+}

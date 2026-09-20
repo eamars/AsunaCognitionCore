@@ -2,7 +2,7 @@
 
 V1 本地认知协调器：Python 管状态、权限、检索和发布；薄 TypeScript 插件连接固定版本 DSH。Gemma 独立生成 `MONOLOGUE → DECIDE → SPEAK`，Qwen 只执行已冻结任务，结果回到 Gemma。模型的 `stop` 只结束当前阶段。
 
-当前为实施与验收中的版本。阶段证据在 `reports/M0`–`M7g` 及各不可覆盖的 attempt 目录。**探针通过不代表完整 V1 通过**；最终结论以 `report.json` 的四个 gate 为准。没有独立人工盲评，COGNITION 保持 INCONCLUSIVE。
+当前为未通过完整验收的版本，开发与测试已暂停。历史报告、全部 attempt 和阶段证据已封存到交接文件 `evidence.zip`；工作树中的生成数据和测试运行状态按用户要求清除。验收结论以 ZIP 内的 `report.json` 为准：整体 FAIL；没有独立人工盲评，COGNITION 为 INCONCLUSIVE。源码、测试代码、原始架构与夹具继续保留。
 
 本仓库不会接 QQ、摄像头或真实设备。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
 
@@ -23,7 +23,7 @@ Copy-Item config/local.example.json config/local.json
 .venv\Scripts\asuna.exe run --scene dm-a --person A --text '小满，欢迎回来'
 ```
 
-已有 `config/local.json` 时不要覆盖它。配置和凭据均被 git 忽略。环境发现只读取旧项目配置中的允许字段；不导入旧应用、不运行其启动脚本。数据库写入仅允许明确配置的新库和 `asuna_v2_test_` 前缀测试库。
+已有 `config/local.json` 时不要覆盖它。配置和凭据均被 git 忽略。环境发现只读取旧项目配置中的允许字段；不导入旧应用、不运行其启动脚本。数据库写入仅允许明确配置的新库和 `asuna_v2_test_` 前缀测试库。清理后，旧测试会话与测试数据库已不存在；再次授权启动时，需按上述步骤初始化 schema、种子数据和向量索引。历史 `environment.json` 在交接 ZIP 中，仅代表当时的部署指纹。
 
 `doctor` 只表示连通性和元数据探测；`index` 的 `ready=true` 才表示向量索引可查询。服务声明的 262144 上限与真实容量测试分开记录，不修改服务启动参数来配合测试。
 
@@ -84,4 +84,4 @@ Copy-Item config/local.example.json config/local.json
 
 DSH home、工作目录和测试数据库均独立。DSH 子进程只收到必需环境变量；Qwen 工具在无网络 WSL/bubblewrap namespace 中执行，仅挂载 task 目录，不持有 Mongo 或发布凭据。真实模型请求经过固定本地路由代理，保存最终 HTTP body 和原始返回。Qwen 服务未暴露最终 OpenAI 渲染 token IDs，等价服务端 count 已与返回 usage 核对；该缺口仍会报告。
 
-operator 授权过一次 Mongo 服务的 nofile 修复，证据见 `reports/M3.md` 与 `reports/search-diagnostics`：没有修改旧库数据或模型启动参数。当前进程软限制已提高，Compose 中持久配置需下次正式重建容器后生效；不要把普通 Docker restart 当作已应用新 Compose。
+operator 授权过一次 Mongo 服务的 nofile 修复，历史证据见交接 ZIP 内的 `reports/M3.md` 与 `reports/search-diagnostics`：没有修改旧库数据或模型启动参数。当时进程软限制已提高，Compose 中持久配置需下次正式重建容器后生效；不要把普通 Docker restart 当作已应用新 Compose。

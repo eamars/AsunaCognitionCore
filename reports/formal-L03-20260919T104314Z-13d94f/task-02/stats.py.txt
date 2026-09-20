@@ -1,8 +1,0 @@
-"""Numeric summaries of readings, ignoring missing (None) values."""
-
-
-def summarize_readings(values):
-    clean = [v for v in values if v is not None]
-    if not clean:
-        return (None, None, None)
-    return (min(clean), max(clean), sum(clean) / len(clean))

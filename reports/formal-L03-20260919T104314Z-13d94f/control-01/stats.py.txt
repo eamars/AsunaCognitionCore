@@ -1,8 +1,0 @@
-"""Summarize numeric readings, ignoring missing values."""
-
-
-def summarize_readings(values):
-    readings = [value for value in values if value is not None]
-    if not readings:
-        return (None, None, None)
-    return (min(readings), max(readings), sum(readings) / len(readings))

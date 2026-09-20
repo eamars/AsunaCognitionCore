@@ -14,7 +14,7 @@ This supersedes the *status summary*, not the preserved evidence, in
 | Scoped erasure | Native summary/session invalidated, new epoch excludes deleted canary | E20-probe-20260919T085340Z-1a4a22 |
 | Crash boundaries | Five real process kill points plus idempotent/UNKNOWN checks | check-20260919T092116Z-713138 |
 | L01 60 scenarios | Format 60/60, semantic route 55/60; all five P06 runs did not delegate | formal-L01-20260919-01 |
-| Real 196k / 234k | Both models passed all three 196k samples; first full matrix 23/24 due to Qwen 234k client timeout; new transport probe at 233984 passed, full rerun pending | formal-F01-20260919T092450Z-ced9f8; capacity-stream-reprobe-4db631d2b7 |
+| Real 8k / 65k / 196k / 234k | New full matrix 24/24; both models passed each length three times with matching actual usage. Independent exact marker-association audit also verifies 24/24. Earlier 23/24 timeout failure remains preserved | formal-F01-20260920-01; capacity-association-audit-a5867f773264; formal-F01-20260919T092450Z-ced9f8 |
 | Deferred compaction | Queue survives interrupted monologue and process restart; actual summary only at completed episode boundary | deferred-compaction-ecd35834ff |
 | Intent revision / effect fence | v1 stale after v2; old effects preserved, old evidence rejected; separate process cancellation serializes with real sandbox effect | revision-probe-614d286cdb; effect-fence-probe-8145bf2a25 |
 | Independent cognition review | Not completed | COGNITION must remain INCONCLUSIVE |

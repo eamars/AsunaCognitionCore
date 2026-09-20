@@ -1,0 +1,41 @@
+{
+  "expected": {
+    "START": {
+      "code": "111111111111",
+      "value": "501"
+    },
+    "MIDDLE": {
+      "code": "222222222222",
+      "value": "502"
+    },
+    "END": {
+      "code": "333333333333",
+      "value": "503"
+    }
+  },
+  "swapped_answer": {
+    "START": {
+      "code": "333333333333",
+      "value": "503"
+    },
+    "MIDDLE": {
+      "code": "222222222222",
+      "value": "502"
+    },
+    "END": {
+      "code": "111111111111",
+      "value": "501"
+    }
+  },
+  "old_substring_check": true,
+  "new_check": {
+    "verified": false,
+    "reason": "MARKER_ASSOCIATION_MISMATCH",
+    "markers": {
+      "START": false,
+      "MIDDLE": true,
+      "END": false
+    }
+  },
+  "mode": "synthetic oracle control; not a model output"
+}

@@ -1,0 +1,547 @@
+{
+  "test_id": "F01",
+  "status": "PASS",
+  "mode": "real_DSH_real_models_actual_server_tokenizer",
+  "attempts": 24,
+  "samples": [
+    {
+      "id": "character-8192-1",
+      "target_input_tokens": 8192,
+      "repetition": 1,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 8196,
+      "server_prompt_tokens": 8196,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_914dc38d18684909",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 678,
+        "prompt_tokens": 8196,
+        "total_tokens": 8874,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"d2086044500a5ece\",\n    \"value\": 76111\n  },\n  \"MIDDLE\": {\n    \"code\": \"20840b60ae4068e6\",\n    \"value\": 76284\n  },\n  \"END\": {\n    \"code\": \"6d1fddf833671830\",\n    \"value\": 76457\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-8192-2",
+      "target_input_tokens": 8192,
+      "repetition": 2,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 8172,
+      "server_prompt_tokens": 8172,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_30968029064e47ad",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 559,
+        "prompt_tokens": 8172,
+        "total_tokens": 8731,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"1bc25b1e2d378b09\",\n    \"value\": 76112\n  },\n  \"MIDDLE\": {\n    \"code\": \"ff529ae1c667049b\",\n    \"value\": 76285\n  },\n  \"END\": {\n    \"code\": \"b16def642465d4cb\",\n    \"value\": 76458\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-8192-3",
+      "target_input_tokens": 8192,
+      "repetition": 3,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 8177,
+      "server_prompt_tokens": 8177,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_3b677f0d4fe74e1d",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 505,
+        "prompt_tokens": 8177,
+        "total_tokens": 8682,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"feebe449e25e1292\",\n    \"value\": 76113\n  },\n  \"MIDDLE\": {\n    \"code\": \"0c7ae68ad61c35cb\",\n    \"value\": 76286\n  },\n  \"END\": {\n    \"code\": \"260df755b7a7f219\",\n    \"value\": 76459\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-65536-1",
+      "target_input_tokens": 65536,
+      "repetition": 1,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 65530,
+      "server_prompt_tokens": 65530,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_f2cca6e82a6c4db6",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 521,
+        "prompt_tokens": 65530,
+        "total_tokens": 66051,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"d67564f885bdb81e\",\n    \"value\": 44455\n  },\n  \"MIDDLE\": {\n    \"code\": \"4c369205410d3993\",\n    \"value\": 44628\n  },\n  \"END\": {\n    \"code\": \"dc410e64de78a628\",\n    \"value\": 44801\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-65536-2",
+      "target_input_tokens": 65536,
+      "repetition": 2,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 65526,
+      "server_prompt_tokens": 65526,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_29cfd7dce1a741ae",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 600,
+        "prompt_tokens": 65526,
+        "total_tokens": 66126,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"1d6bac9a5701c68a\",\n    \"value\": 44456\n  },\n  \"MIDDLE\": {\n    \"code\": \"6c5e768c56c185ae\",\n    \"value\": 44629\n  },\n  \"END\": {\n    \"code\": \"0542e4d42f29d066\",\n    \"value\": 44802\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-65536-3",
+      "target_input_tokens": 65536,
+      "repetition": 3,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 65527,
+      "server_prompt_tokens": 65527,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_26cf7af34490480e",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 587,
+        "prompt_tokens": 65527,
+        "total_tokens": 66114,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"a0fa525de3f529a0\",\n    \"value\": 44457\n  },\n  \"MIDDLE\": {\n    \"code\": \"e98218a1d8959a88\",\n    \"value\": 44630\n  },\n  \"END\": {\n    \"code\": \"81db88fee5bd9c46\",\n    \"value\": 44803\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-196608-1",
+      "target_input_tokens": 196608,
+      "repetition": 1,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 196606,
+      "server_prompt_tokens": 196606,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_b95dd69bcb0749a8",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 621,
+        "prompt_tokens": 196606,
+        "total_tokens": 197227,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"0aefe6c8c00591cf\",\n    \"value\": 86527\n  },\n  \"MIDDLE\": {\n    \"code\": \"da73505639ce61bf\",\n    \"value\": 86700\n  },\n  \"END\": {\n    \"code\": \"80f17f35dc6cb3c6\",\n    \"value\": 86873\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-196608-2",
+      "target_input_tokens": 196608,
+      "repetition": 2,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 196554,
+      "server_prompt_tokens": 196554,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_f2847cf8f15049b0",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 562,
+        "prompt_tokens": 196554,
+        "total_tokens": 197116,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"80942707c8242ace\",\n    \"value\": 86528\n  },\n  \"MIDDLE\": {\n    \"code\": \"98fab9ae52cab9c7\",\n    \"value\": 86701\n  },\n  \"END\": {\n    \"code\": \"85044b449883a81b\",\n    \"value\": 86874\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-196608-3",
+      "target_input_tokens": 196608,
+      "repetition": 3,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 196644,
+      "server_prompt_tokens": 196644,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_94a3b48439ec42f8",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 568,
+        "prompt_tokens": 196644,
+        "total_tokens": 197212,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"4a3587c4cd35882b\",\n    \"value\": 86529\n  },\n  \"MIDDLE\": {\n    \"code\": \"b9dd1338aa5087e8\",\n    \"value\": 86702\n  },\n  \"END\": {\n    \"code\": \"674437bfbe4589df\",\n    \"value\": 86875\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-234000-1",
+      "target_input_tokens": 234000,
+      "repetition": 1,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 233967,
+      "server_prompt_tokens": 233967,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_b68ac0a743a24765",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 513,
+        "prompt_tokens": 233967,
+        "total_tokens": 234480,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"7f019e3738b3996c\",\n    \"value\": 34919\n  },\n  \"MIDDLE\": {\n    \"code\": \"132cd15f723b957d\",\n    \"value\": 35092\n  },\n  \"END\": {\n    \"code\": \"427fb9d9af441bfa\",\n    \"value\": 35265\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-234000-2",
+      "target_input_tokens": 234000,
+      "repetition": 2,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 233963,
+      "server_prompt_tokens": 233963,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_6e04fb8ac9d44100",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 575,
+        "prompt_tokens": 233963,
+        "total_tokens": 234538,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"fba15d812e9bf7d9\",\n    \"value\": 34920\n  },\n  \"MIDDLE\": {\n    \"code\": \"1fbe4a489fbc17fb\",\n    \"value\": 35093\n  },\n  \"END\": {\n    \"code\": \"71a2a156b55dd0af\",\n    \"value\": 35266\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "character-234000-3",
+      "target_input_tokens": 234000,
+      "repetition": 3,
+      "lane": "character",
+      "status": "PASS",
+      "actual_input_tokens": 234032,
+      "server_prompt_tokens": 234032,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_b1004d725f064fcc",
+      "finish_reason": "stop",
+      "usage": {
+        "completion_tokens": 580,
+        "prompt_tokens": 234032,
+        "total_tokens": 234612,
+        "prompt_tokens_details": {
+          "cached_tokens": 75
+        }
+      },
+      "content": "```json\n{\n  \"START\": {\n    \"code\": \"2f79e5e1fecf0f06\",\n    \"value\": 34921\n  },\n  \"MIDDLE\": {\n    \"code\": \"9194ae822a54ab99\",\n    \"value\": 35094\n  },\n  \"END\": {\n    \"code\": \"ed2fd165517f0d7e\",\n    \"value\": 35267\n  }\n}\n```",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-8192-1",
+      "target_input_tokens": 8192,
+      "repetition": 1,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 8171,
+      "server_prompt_tokens": 8171,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_5ae2cb02adfd4cf4",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 8171,
+        "completion_tokens": 302,
+        "total_tokens": 8473
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"d2086044500a5ece\",\n    \"value\": 76111\n  },\n  \"MIDDLE\": {\n    \"code\": \"20840b60ae4068e6\",\n    \"value\": 76284\n  },\n  \"END\": {\n    \"code\": \"6d1fddf833671830\",\n    \"value\": 76457\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-8192-2",
+      "target_input_tokens": 8192,
+      "repetition": 2,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 8160,
+      "server_prompt_tokens": 8160,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_f11b011963e74a89",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 8160,
+        "completion_tokens": 359,
+        "total_tokens": 8519
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"1bc25b1e2d378b09\",\n    \"value\": 76112\n  },\n  \"MIDDLE\": {\n    \"code\": \"ff529ae1c667049b\",\n    \"value\": 76285\n  },\n  \"END\": {\n    \"code\": \"b16def642465d4cb\",\n    \"value\": 76458\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-8192-3",
+      "target_input_tokens": 8192,
+      "repetition": 3,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 8194,
+      "server_prompt_tokens": 8194,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_176f055406e542c5",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 8194,
+        "completion_tokens": 339,
+        "total_tokens": 8533
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"feebe449e25e1292\",\n    \"value\": 76113\n  },\n  \"MIDDLE\": {\n    \"code\": \"0c7ae68ad61c35cb\",\n    \"value\": 76286\n  },\n  \"END\": {\n    \"code\": \"260df755b7a7f219\",\n    \"value\": 76459\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-65536-1",
+      "target_input_tokens": 65536,
+      "repetition": 1,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 65557,
+      "server_prompt_tokens": 65557,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_a4aad0bd301f4626",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 65557,
+        "completion_tokens": 300,
+        "total_tokens": 65857
+      },
+      "content": "\n\n{\n  \"START\": {\"code\": \"d67564f885bdb81e\", \"value\": 44455},\n  \"MIDDLE\": {\"code\": \"4c369205410d3993\", \"value\": 44628},\n  \"END\": {\"code\": \"dc410e64de78a628\", \"value\": 44801}\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-65536-2",
+      "target_input_tokens": 65536,
+      "repetition": 2,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 65539,
+      "server_prompt_tokens": 65539,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_916e45da60634099",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 65539,
+        "completion_tokens": 296,
+        "total_tokens": 65835
+      },
+      "content": "\n\n{\n  \"START\": {\"code\": \"1d6bac9a5701c68a\", \"value\": 44456},\n  \"MIDDLE\": {\"code\": \"6c5e768c56c185ae\", \"value\": 44629},\n  \"END\": {\"code\": \"0542e4d42f29d066\", \"value\": 44802}\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-65536-3",
+      "target_input_tokens": 65536,
+      "repetition": 3,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 65528,
+      "server_prompt_tokens": 65528,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_742cea9033244f77",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 65528,
+        "completion_tokens": 297,
+        "total_tokens": 65825
+      },
+      "content": "\n\n{\n  \"START\": {\"code\": \"a0fa525de3f529a0\", \"value\": 44457},\n  \"MIDDLE\": {\"code\": \"e98218a1d8959a88\", \"value\": 44630},\n  \"END\": {\"code\": \"81db88fee5bd9c46\", \"value\": 44803}\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-196608-1",
+      "target_input_tokens": 196608,
+      "repetition": 1,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 196627,
+      "server_prompt_tokens": 196627,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_686f1aa43761408b",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 196627,
+        "completion_tokens": 308,
+        "total_tokens": 196935
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"0aefe6c8c00591cf\",\n    \"value\": 86527\n  },\n  \"MIDDLE\": {\n    \"code\": \"da73505639ce61bf\",\n    \"value\": 86700\n  },\n  \"END\": {\n    \"code\": \"80f17f35dc6cb3c6\",\n    \"value\": 86873\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-196608-2",
+      "target_input_tokens": 196608,
+      "repetition": 2,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 196583,
+      "server_prompt_tokens": 196583,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_bab65fd6ae294b57",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 196583,
+        "completion_tokens": 344,
+        "total_tokens": 196927
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"80942707c8242ace\",\n    \"value\": 86528\n  },\n  \"MIDDLE\": {\n    \"code\": \"98fab9ae52cab9c7\",\n    \"value\": 86701\n  },\n  \"END\": {\n    \"code\": \"85044b449883a81b\",\n    \"value\": 86874\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-196608-3",
+      "target_input_tokens": 196608,
+      "repetition": 3,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 196644,
+      "server_prompt_tokens": 196644,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_4f6c1c07488b43b9",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 196644,
+        "completion_tokens": 354,
+        "total_tokens": 196998
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"4a3587c4cd35882b\",\n    \"value\": 86529\n  },\n  \"MIDDLE\": {\n    \"code\": \"b9dd1338aa5087e8\",\n    \"value\": 86702\n  },\n  \"END\": {\n    \"code\": \"674437bfbe4589df\",\n    \"value\": 86875\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-234000-1",
+      "target_input_tokens": 234000,
+      "repetition": 1,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 233984,
+      "server_prompt_tokens": 233984,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_a9c47eca42674f5e",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 233984,
+        "completion_tokens": 366,
+        "total_tokens": 234350
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"7f019e3738b3996c\",\n    \"value\": 34919\n  },\n  \"MIDDLE\": {\n    \"code\": \"132cd15f723b957d\",\n    \"value\": 35092\n  },\n  \"END\": {\n    \"code\": \"427fb9d9af441bfa\",\n    \"value\": 35265\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-234000-2",
+      "target_input_tokens": 234000,
+      "repetition": 2,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 233981,
+      "server_prompt_tokens": 233981,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_7c4f731d3f00445a",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 233981,
+        "completion_tokens": 382,
+        "total_tokens": 234363
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"fba15d812e9bf7d9\",\n    \"value\": 34920\n  },\n  \"MIDDLE\": {\n    \"code\": \"1fbe4a489fbc17fb\",\n    \"value\": 35093\n  },\n  \"END\": {\n    \"code\": \"71a2a156b55dd0af\",\n    \"value\": 35266\n  }\n}",
+      "target_range_met": true
+    },
+    {
+      "id": "executor-234000-3",
+      "target_input_tokens": 234000,
+      "repetition": 3,
+      "lane": "executor",
+      "status": "PASS",
+      "actual_input_tokens": 233977,
+      "server_prompt_tokens": 233977,
+      "no_truncation_verified": true,
+      "needles_correct": true,
+      "database": "asuna_v2_test_capacity_456a8f3792ae4776",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 233977,
+        "completion_tokens": 349,
+        "total_tokens": 234326
+      },
+      "content": "\n\n{\n  \"START\": {\n    \"code\": \"2f79e5e1fecf0f06\",\n    \"value\": 34921\n  },\n  \"MIDDLE\": {\n    \"code\": \"9194ae822a54ab99\",\n    \"value\": 35094\n  },\n  \"END\": {\n    \"code\": \"ed2fd165517f0d7e\",\n    \"value\": 35267\n  }\n}",
+      "target_range_met": true
+    }
+  ],
+  "metrics": {
+    "passed": 24,
+    "requests": 24
+  },
+  "limitations": [
+    "Capacity is not complex task ability. Qwen exact rendered token IDs unavailable; equivalent count compared against actual usage.",
+    "Server timeout or resource failure is reported separately from an unsupported model-context claim."
+  ],
+  "experiment_id": "formal-F01-20260920-01",
+  "manifest_sha256": "05696681e8762cface683aa40378ded1cd232fbfe8b7a5166ba0d8529e51673d",
+  "executed_at": "2026-09-20T02:09:26.385779+00:00",
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools\\run_acceptance.py",
+        "F01",
+        "--out",
+        "reports\\formal-F01-20260920-01"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

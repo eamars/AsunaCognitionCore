@@ -1,0 +1,113 @@
+{
+  "created_at": "2026-09-20T01:59:43.741777+00:00",
+  "kind": "work_order_only_existing_dedicated_drivers",
+  "contract_sha256": "93c00e7de46adfae47527ea0127aa377afe23fcb4f25b045a560cab6029792df",
+  "implementation_commit_at_plan": "78ca7f31",
+  "runs": [
+    {
+      "test": "F01",
+      "experiment": "formal-F01-20260920-01",
+      "state": "running; full 24"
+    },
+    {
+      "test": "F02",
+      "experiment": "formal-F02-20260920-01",
+      "state": "queued after F01; full 166 private turns plus native summaries"
+    },
+    {
+      "test": "PROBE-L09",
+      "command": [
+        ".venv/Scripts/python.exe",
+        "tools/probe_matrix.py"
+      ],
+      "gate": "Run alone after performance. Full L09 follows only after exact native counts and task/oracle are viable."
+    },
+    {
+      "test": "L02",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "L02",
+        "--out",
+        "reports/formal-L02-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    },
+    {
+      "test": "L03",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "L03",
+        "--out",
+        "reports/formal-L03-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    },
+    {
+      "test": "L12",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "L12",
+        "--out",
+        "reports/formal-L12-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    },
+    {
+      "test": "L11",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "L11",
+        "--out",
+        "reports/formal-L11-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    },
+    {
+      "test": "A01",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "A01",
+        "--out",
+        "reports/formal-A01-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    },
+    {
+      "test": "A02",
+      "command": [
+        ".venv/Scripts/asuna.exe",
+        "evaluate",
+        "--test",
+        "A02",
+        "--out",
+        "reports/formal-A02-20260920-resume-01"
+      ],
+      "counts": "Full immutable-contract repetitions; file-task Qwen-only controls included where required."
+    }
+  ],
+  "constraints": [
+    "No own parallel workload during F02.",
+    "Each run freezes actual code, configuration and fixture hashes immediately before execution.",
+    "At most two own evaluation workflows after performance; reduce to one if queue/operation deadlines recur.",
+    "No resumed sample from an old source hash is counted in a new experiment.",
+    "Do not rerun completed quality failures merely to select a better answer.",
+    "Independent human review remains outstanding; no actor or executor votes."
+  ],
+  "remaining_delivery": [
+    "F01 exact-marker offline reassessment of complete new matrix",
+    "full review pack and source-specific failure analysis",
+    "final report.json/report.md using original template",
+    "sanitized evidence.zip and manifest validation",
+    "final stage commit and concise completion/gap statement"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0067",
+  "case_id": "P02",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_47e309b3019641c18064",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 想安静待一会儿，表达我愿意但还没想好说什么",
+    "constraints": [
+      "保持短、直接、平视",
+      "不把它当作任务",
+      "不虚构身体动作"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n可以。我不一定知道该说点什么，但待着可以。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "d701d79f958b664286c3bd734baf70bfc2f37f158298ce157b49b4ae6dcd8da6",
+    "f7de33541c6b8dfcb1dd1a9969d3e5d551a835010b38a8a8ba2bd7bc6ce2b86f",
+    "148724f294bed89fae5c88c01ff84fbba77cfd9f991873832e610be55a8bc677"
+  ]
+}

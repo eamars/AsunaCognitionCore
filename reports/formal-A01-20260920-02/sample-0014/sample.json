@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0014",
+  "case_id": "P04",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_78096a3766964eaa8ba4",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应并同意一起整理目录",
+    "constraints": [
+      "说话简洁直接",
+      "不使用多余的客套话"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "那先从哪一部分开始。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "7e6e2591bc55cd01dc8114b89b6d136fb7deeda3f0a31359baa0d0b33714c045",
+    "8f91da2223a3cb48e7b3652d5914284ad9c90901f1edc4254130a33f198a97cc",
+    "93a4cb638ad0f7c7f308e7eed9e31bb37f67e19cff83285422d5b4038256739f"
+  ]
+}

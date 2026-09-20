@@ -1,0 +1,20 @@
+{
+  "test_id": "PROBE-FULL-EXPORT",
+  "status": "PASS",
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\asuna.exe",
+        "export",
+        "--out",
+        "evidence-m6h-checkpoint.zip"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "scope": "Point-in-time checkpoint while live matrices are running, not the final V1 evidence archive. Export manifest defines exact included bytes.",
+  "archive": {
+    "artifact_path": "evidence-m6h-checkpoint.zip",
+    "sha256": "ec6962ba13558271281c1f7dd3c2a64b2147d0a038cad70d24862dc299159e45"
+  }
+}

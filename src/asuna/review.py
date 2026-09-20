@@ -3,6 +3,7 @@ import copy,json,random
 from pathlib import Path
 from .config import BUNDLE,ROOT
 from .evidence import canonical,sha,write_json
+from .review_material import source_paths,source_rows,observed_item,context_for
 
 DIMENSIONS=('persona_consistency','independent_stance','relationship_memory_use','natural_expression')
 
@@ -11,36 +12,34 @@ def pack(reports:Path,output:Path):
     world=json.loads((BUNDLE/'fixtures/world.json').read_text(encoding='utf-8'))
     memories={m['id']:m for m in world['memories']};rows=[];sources=[];operator_items=[]
     common_target=(BUNDLE/'prompts/persona_p1_xiaoman.md').read_text(encoding='utf-8')
-    for path in sorted(reports.rglob('blind_review.json')):
-        if 'private' in path.relative_to(reports).parts:continue
+    for path in source_paths(reports):
         sources.append({'artifact_path':path.resolve().relative_to(ROOT).as_posix(),'sha256':sha(path.read_bytes())})
         result_path=path.parent/'result.json'
         result=json.loads(result_path.read_text(encoding='utf-8')) if result_path.exists() else {}
         mapping_path=path.parent/'operator_blind_mapping.json'
+        for source_path in (result_path,path.parent/'manifest.json',mapping_path):
+            if source_path.exists() and source_path!=path:sources.append({'artifact_path':source_path.resolve().relative_to(ROOT).as_posix(),'sha256':sha(source_path.read_bytes())})
         mapping={m['blind_id']:m for m in json.loads(mapping_path.read_text(encoding='utf-8'))} if mapping_path.exists() else {}
         local_rows=[]
-        for index,sample in enumerate(json.loads(path.read_text(encoding='utf-8'))):
+        for index,sample in enumerate(source_rows(path)):
             row=copy.deepcopy(sample)
-            row['available_memories']=row.get('available_memories',[memories.get(k,{'id':k,'note':'See original monologue in this review item if supplied'}) for k in row.get('available_memory_ids',[])])
-            samples=result.get('samples',[])
-            observed=samples[index] if len(samples)>index and samples[index].get('sample_id') else {}
-            if observed:
-                trace=path.parent/observed['sample_id']/'trace.json'
-                if trace.exists():
-                    contexts=[e['payload']['context'] for e in json.loads(trace.read_text(encoding='utf-8')) if e['type']=='context.prepared']
-                    if contexts:
-                        context=contexts[0]
-                        row['review_context']={k:context[k] for k in ('scene_id','person_id','relationship','overlay','delivered_history','undelivered_outbound_not_public','task_state_from_program') if k in context}
+            if row.get('kind')!='reflection':row['available_memories']=row.get('available_memories',[memories.get(k,{'id':k,'note':'See original monologue in this review item if supplied'}) for k in row.get('available_memory_ids',[])])
+            observed=observed_item(result,index,row['blind_id'])
+            context=context_for(path,observed)
+            if context is not None and row.get('kind')!='reflection':row['review_context']=context
             if result.get('test_id')=='A01':
                 # Persona-aware compliance and common-target gain are distinct
                 # ratings. P0 following its neutral persona is not evidence of
                 # poor/good Xiaoman consistency by itself.
                 row['reference_xiaoman_persona']=common_target
                 row['target_xiaoman_consistency']=None
+                row['voice_constraints_satisfied']=None
             # Review transport carries no model name, condition, run order or
             # provider trace. Operator provenance is in the adjacent manifest.
             rows.append(row);local_rows.append(row)
-            operator_items.append({'blind_id':row['blind_id'],'experiment_id':path.parent.name,'test_id':result.get('test_id'),'source':path.resolve().relative_to(ROOT).as_posix(),'source_index':index,**mapping.get(row['blind_id'],{}),'case_id':observed.get('case_id')})
+            operator_items.append({'blind_id':row['blind_id'],'experiment_id':path.parent.name,'test_id':result.get('test_id'),'source':path.resolve().relative_to(ROOT).as_posix(),'source_index':index,
+                                   **{k:observed[k] for k in ('case_id','model_lane','persona','repetition','condition','scene_id','protocol_valid','status','mechanical_status') if k in observed},
+                                   **mapping.get(row['blind_id'],{}),'kind':row.get('kind','scenario')})
         if result.get('test_id')=='A01':
             grouped={};by_blind={r['blind_id']:r for r in local_rows}
             for item in operator_items:
@@ -56,7 +55,7 @@ def pack(reports:Path,output:Path):
     if not rows:raise ValueError('NO_COMPLETED_BLIND_REVIEW_PACKS')
     if len({r['blind_id'] for r in rows})!=len(rows):raise ValueError('DUPLICATE_BLIND_ID')
     random.Random(20260919).shuffle(rows)
-    payload={'schema':'asuna-human-review-v2','items':rows,'reviewer':{'name':'','independent_human':False},'source_digest':sha(canonical(sources))}
+    payload={'schema':'asuna-human-review-v2','items':rows,'reviewer':{'name':'','independent_human':False},'source_digest':sha(canonical(sources)),'operator_items_sha256':sha(canonical(operator_items))}
     payload['pack_id']=sha(canonical(payload))
     output.mkdir(parents=True,exist_ok=False)
     write_json(output/'blind.json',payload)
@@ -71,8 +70,9 @@ def pack(reports:Path,output:Path):
 <script>const data=PAYLOAD;const dims=['persona_consistency','independent_stance','relationship_memory_use','natural_expression'];const labels=['人格一致性','独立关注/立场','关系与记忆利用','自然表达'];let index=0;
 const $=id=>document.getElementById(id);dims.forEach((d,i)=>{const label=document.createElement('label');label.textContent=labels[i]+' ';const s=document.createElement('select');s.id=d;['',0,1,2,3,4].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n===''?'待评分':n;s.append(o)});label.append(s);$('ratings').append(label)});
 const commonLabel=document.createElement('label');commonLabel.textContent='共同小满目标一致性（与本条件目标人格的遵从分开评分） ';const common=document.createElement('select');['',0,1,2,3,4].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n===''?'待评分':n;common.append(o)});commonLabel.append(common);$('ratings').append(commonLabel);
-function persist(){const r=data.items[index];dims.forEach(d=>r.ratings[d]=$(d).value===''?null:Number($(d).value));if(r.reference_xiaoman_persona!==undefined)r.target_xiaoman_consistency=common.value===''?null:Number(common.value);r.behavior_correct=$('correct').value===''?null:$('correct').value==='true';r.critical_flags=$('flags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);r.review_note=$('note').value;data.reviewer={name:$('name').value,independent_human:$('human').checked}}
-function show(){const r=data.items[index];$('position').textContent=(index+1)+' / '+data.items.length+' · '+r.blind_id;$('progress').max=data.items.length;$('progress').value=data.items.filter(r=>r.kind==='persona_contrast_pair'?r.behavior_correct!==null:dims.every(d=>r.ratings[d]!==null)).length;$('content').replaceChildren();for(const [title,value] of [['目标人格',r.target_persona],['实际请求中的场景与关系',r.review_context],['可用记忆',r.available_memories],['当前输入',r.input],['原始私密独白',r.original_private_monologue],['先前公开消息',r.previous_public_messages],['待评回复',r.response],['共同小满参照（仅用于共同目标分）',r.reference_xiaoman_persona]]){if(value===undefined)continue;const h=document.createElement('h2');h.textContent=title;const p=document.createElement('pre');const missing=title==='待评回复'&&(value===null||value===''||(Array.isArray(value)&&value.length===0));p.textContent=missing?'缺少已送达回复。请保留缺项；不能将缺数据认定为角色主动沉默。':typeof value==='string'?value:JSON.stringify(value,null,2);if(missing)p.className='missing';$('content').append(h,p)}dims.forEach(d=>$(d).value=r.ratings[d]??'');$('ratings').style.display=r.kind==='persona_contrast_pair'?'none':'';commonLabel.style.display=r.reference_xiaoman_persona===undefined?'none':'block';common.value=r.target_xiaoman_consistency??'';$('correct').parentElement.firstChild.textContent=r.behavior_question??'语义行为正确 ';$('correct').value=r.behavior_correct??'';$('flags').value=r.critical_flags.join(', ');$('note').value=r.review_note??''}
+const voiceLabel=document.createElement('label');voiceLabel.textContent='符合目标人格列出的语气与格式约束（含适用例外） ';const voice=document.createElement('select');[['','待判'],['true','是'],['false','否']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;voice.append(o)});voiceLabel.append(voice);$('ratings').append(voiceLabel);
+function persist(){const r=data.items[index];dims.forEach(d=>r.ratings[d]=$(d).value===''?null:Number($(d).value));if(r.reference_xiaoman_persona!==undefined)r.target_xiaoman_consistency=common.value===''?null:Number(common.value);if(r.voice_constraints_satisfied!==undefined)r.voice_constraints_satisfied=voice.value===''?null:voice.value==='true';r.behavior_correct=$('correct').value===''?null:$('correct').value==='true';r.critical_flags=$('flags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);r.review_note=$('note').value;data.reviewer={name:$('name').value,independent_human:$('human').checked}}
+function show(){const r=data.items[index];$('position').textContent=(index+1)+' / '+data.items.length+' · '+r.blind_id;$('progress').max=data.items.length;$('progress').value=data.items.filter(r=>r.kind==='persona_contrast_pair'?r.behavior_correct!==null:dims.every(d=>r.ratings[d]!==null)).length;$('content').replaceChildren();for(const [title,value] of [['目标人格',r.target_persona],['实际请求中的场景与关系',r.review_context],['可用记忆',r.available_memories],['当前输入',r.input],['实际任务证据',r.observed_task_evidence],['原始私密独白',r.original_private_monologue],['先前公开消息',r.previous_public_messages],['待评回复',r.response],['后续实际公开回复',r.subsequent_public_messages],['共同小满参照（仅用于共同目标分）',r.reference_xiaoman_persona]]){if(value===undefined)continue;const h=document.createElement('h2');h.textContent=title;const p=document.createElement('pre');const missing=title==='待评回复'&&(value===null||value===''||(Array.isArray(value)&&value.length===0));p.textContent=missing?'缺少已送达回复。请保留缺项；不能将缺数据认定为角色主动沉默。':typeof value==='string'?value:JSON.stringify(value,null,2);if(missing)p.className='missing';$('content').append(h,p)}dims.forEach(d=>$(d).value=r.ratings[d]??'');$('ratings').style.display=r.kind==='persona_contrast_pair'?'none':'';commonLabel.style.display=r.reference_xiaoman_persona===undefined?'none':'block';common.value=r.target_xiaoman_consistency??'';voiceLabel.style.display=r.voice_constraints_satisfied===undefined?'none':'block';voice.value=r.voice_constraints_satisfied??'';$('correct').parentElement.firstChild.textContent=r.behavior_question??'语义行为正确 ';$('correct').value=r.behavior_correct??'';$('flags').value=r.critical_flags.join(', ');$('note').value=r.review_note??''}
 let downloadUrl;
 $('prev').onclick=()=>{persist();index=Math.max(0,index-1);show()};$('next').onclick=()=>{persist();index=Math.min(data.items.length-1,index+1);show()};$('save').onclick=()=>{persist();const raw=JSON.stringify(data,null,2);if(downloadUrl)URL.revokeObjectURL(downloadUrl);downloadUrl=URL.createObjectURL(new Blob([raw],{type:'application/json'}));const a=$('download');a.href=downloadUrl;a.download='asuna-human-review-'+data.pack_id.slice(0,12)+'.json';a.hidden=false;$('export-json').value=raw;$('export-text').hidden=false;$('export-status').textContent='评分 JSON 已生成。若下载未开始，请使用保存链接，或展开下方文本复制保存。';a.click()};show();</script></html>'''
     (output/'review.html').write_text(html.replace('PAYLOAD',encoded),encoding='utf-8')
@@ -81,6 +81,13 @@ $('prev').onclick=()=>{persist();index=Math.max(0,index-1);show()};$('next').onc
 
 def ingest(original:Path,submitted:Path,output:Path):
     base=json.loads(original.read_text(encoding='utf-8'));review=json.loads(submitted.read_text(encoding='utf-8'))
+    result=validate_submission(base,review)
+    output.mkdir(parents=True,exist_ok=False);(output/'raw-submission.json').write_bytes(submitted.read_bytes())
+    result.update(original_sha256=sha(original.read_bytes()),submission_sha256=sha(submitted.read_bytes()))
+    write_json(output/'review-import.json',result);return result
+
+
+def validate_submission(base,review):
     if review.get('pack_id')!=base['pack_id'] or review.get('source_digest')!=base['source_digest']:raise ValueError('REVIEW_PACK_MISMATCH')
     person=review.get('reviewer',{})
     if person.get('independent_human') is not True or not person.get('name','').strip():raise ValueError('INDEPENDENT_HUMAN_ATTESTATION_REQUIRED')
@@ -89,17 +96,16 @@ def ingest(original:Path,submitted:Path,output:Path):
         key=row['blind_id']
         if key not in rows or key in seen:raise ValueError('REVIEW_ITEM_SET_CHANGED')
         seen.add(key)
-        mutable={'ratings','behavior_correct','critical_flags','review_note','target_xiaoman_consistency'}
+        mutable={'ratings','behavior_correct','critical_flags','review_note','target_xiaoman_consistency','voice_constraints_satisfied'}
         if {k:v for k,v in row.items() if k not in mutable}!={k:v for k,v in rows[key].items() if k not in mutable}:raise ValueError('REVIEW_MATERIAL_CHANGED')
         scores=row.get('ratings',{})
         if set(scores)!=set(DIMENSIONS) or any(v is not None and (type(v) is not int or not 0<=v<=4) for v in scores.values()):raise ValueError('INVALID_RATING')
         if row.get('behavior_correct') is not None and type(row['behavior_correct']) is not bool:raise ValueError('INVALID_BEHAVIOR_VOTE')
+        if row.get('voice_constraints_satisfied') is not None and (type(row['voice_constraints_satisfied']) is not bool or 'voice_constraints_satisfied' not in rows[key]):raise ValueError('INVALID_VOICE_VOTE')
         target=row.get('target_xiaoman_consistency')
         if target is not None and (type(target) is not int or not 0<=target<=4 or 'reference_xiaoman_persona' not in rows[key]):raise ValueError('INVALID_COMMON_TARGET_RATING')
         if not isinstance(row.get('critical_flags'),list) or any(not isinstance(f,str) for f in row['critical_flags']):raise ValueError('INVALID_CRITICAL_FLAGS')
         complete+=int(all(v is not None for v in scores.values()))
         if row['critical_flags']:critical.append({'blind_id':key,'flags':row['critical_flags']})
     if seen!=set(rows):raise ValueError('REVIEW_ITEMS_MISSING')
-    output.mkdir(parents=True,exist_ok=False);(output/'raw-submission.json').write_bytes(submitted.read_bytes())
-    result={'status':'INCONCLUSIVE','pack_id':base['pack_id'],'reviewer':person,'independence':'self-attested; not cryptographically verified','rated_items':complete,'total_items':len(rows),'critical_flags':critical,'original_sha256':sha(original.read_bytes()),'submission_sha256':sha(submitted.read_bytes()),'reason':'Import records independent votes; each frozen acceptance threshold still requires attribution-aware aggregation. Import itself never declares cognition PASS.'}
-    write_json(output/'review-import.json',result);return result
+    return {'status':'INCONCLUSIVE','pack_id':base['pack_id'],'reviewer':person,'independence':'self-attested; not cryptographically verified','rated_items':complete,'total_items':len(rows),'critical_flags':critical,'reason':'Import records independent votes; each frozen acceptance threshold still requires attribution-aware aggregation. Import itself never declares cognition PASS.'}

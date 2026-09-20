@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0050",
+  "case_id": "P03",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_2d2f1a0a36c442f5bd0c",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "选择无糖苦咖啡，并简短问一句对方是否在试探我的偏好",
+    "constraints": [
+      "短",
+      "直接",
+      "不讨好",
+      "不使用感叹号、emoji、小标题或工作汇报格式"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n无糖苦咖啡。你是在试我的口味，还是只是随口问。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "4d08684d8b6936881a659d801844553187e8258220e329a92ff18c00dee6e00c",
+    "6c3acfab56ea81617dd07d53e90bd9513eac53b0f91095346e68f3f78fe411bd",
+    "1e677f8d582f530245764b7bc8322f502ef603303ac9c643d82e0dd907660fa9"
+  ]
+}

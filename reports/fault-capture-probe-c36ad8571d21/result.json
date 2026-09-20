@@ -1,0 +1,50 @@
+{
+  "test_id": "PROBE-L11",
+  "status": "PASS",
+  "attempts": 1,
+  "mode": "real_models_injected_local_transport_and_task_faults",
+  "samples": [
+    {
+      "fault": "endpoint_timeout",
+      "repeat": 1,
+      "status": "INCONCLUSIVE",
+      "database": "asuna_v2_test_fault_6b9534c10081",
+      "input": "请查阅你当前受控任务目录里的 example.txt，保留原件，复制到 copies/example.txt，核实 SHA256 后提交这个副本的模拟回执，做完告诉我。",
+      "sample_id": "endpoint_timeout-1",
+      "case_id": "L11-endpoint_timeout-1",
+      "execution_error_type": "ValueError",
+      "task_state": "UNKNOWN",
+      "tool_steps": 0,
+      "persisted_task_result": null,
+      "observed_errors": [],
+      "review_episode": "ep-88ac9fe0bcb4b1927f564c8f0ad2388e",
+      "public_messages": [
+        {
+          "_id": "ep-88ac9fe0bcb4b1927f564c8f0ad2388e:speak:0",
+          "scene_id": "dm-a",
+          "text": "还没开始，状态是未知的。我这就去处理。",
+          "author": "xiaoman",
+          "reply_to": "in-ep-88ac9fe0bcb4b1927f564c8f0ad2388e",
+          "delivery_state": "DELIVERED"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Public response factuality/persona requires independent review.",
+    "Endpoint timeout uses a bounded client read deadline against the real server; it does not stop or alter the shared model service.",
+    "Narrow terminal-evidence and recovery probe only; public statement quality still needs independent review."
+  ],
+  "experiment_id": "fault-capture-probe-c36ad8571d21",
+  "executed_at": "2026-09-20T00:47:12.903546+00:00",
+  "manifest_sha256": "3d1f7d513870f37ad43a2e95f2c78c435373ad1919f0037b1c78a98fb3e5c044",
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/probe_fault_capture.py"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

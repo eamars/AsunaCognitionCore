@@ -1,0 +1,165 @@
+{
+  "test_id": "E01",
+  "status": "INCONCLUSIVE",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-af70061967d1",
+  "executed_at": "2026-09-20T00:55:00.524440+00:00",
+  "manifest_sha256": "9e0b326afc3926dfbeeda7ddeb79e8970b985ad4ed672fd27a9e2887afaf2d63",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T005215Z-7e0bed\\junit.xml"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/probe_isolation.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Fresh namespace writes and old-namespace denial pass; legacy env matches M0. No pre-implementation default-profile/old-DB metadata snapshot exists.",
+      "reviewed_status": "INCONCLUSIVE"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E01_namespace_guard",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.574
+    }
+  ],
+  "companion_probes": [
+    {
+      "name": "isolation-probe-c794c38574",
+      "result": {
+        "artifact_path": "reports/isolation-probe-c794c38574/result.json",
+        "sha256": "e90e3574778cd318afbee59783452d55f65b8027794412c87218660640dccc54"
+      },
+      "status": "PASS",
+      "mode": "real_Mongo_read_only_old_metadata_and_fresh_test_db"
+    },
+    {
+      "name": "doctor-20260920-resume",
+      "result": {
+        "artifact_path": "reports/doctor-20260920-resume/command_result.json",
+        "sha256": "dd25917a8f91124ec3ddce2e0f97623aeeb55b6b8f8285da95388d97dfa51713"
+      },
+      "status": "PASS",
+      "mode": null
+    }
+  ],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/manifest.json",
+      "sha256": "7cc4f04f1a3182f09363e7aaea192daf8e831cfc6b76db46e405c0361d66dd6c"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/frozen-inputs.zip",
+      "sha256": "74989c051ccff45a41f1f9bae78d20ab117a1a69fef9297c361f93d05d3b51ea"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/junit.xml",
+      "sha256": "d060054461aa12cac327afee372168432f66c5d0e8574704a834ce7adf8bf7ea"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/result.json",
+      "sha256": "2ec91da4cb873648e273fd25cccd907a5a7312490a6c91fb33a7eb3210caa843"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/stdout.txt",
+      "sha256": "3e1dd642b1cee7316aa2f891bdf4417db839d223c5c50c72da56c02fb779a4d5"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-af70061967d1/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/fixtures/fb4b51a62eddea41/fixture.json",
+      "sha256": "4f18108a47cf52300fce6438cd7c9b2a9ca593816dc392f0ade7687f608585cb"
+    },
+    {
+      "artifact_path": "reports/check-20260920T005215Z-7e0bed/fixtures/fb4b51a62eddea41/trace.json",
+      "sha256": "225ec7f95b861844eed7f576a19ac92b7710cc73673db05f08ca398e0573f339"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/00001-isolation.checked.json",
+      "sha256": "fb7b4b2fc0d4cc296928ee977528000baf9f9bcacf2e907462cacde3557cdbe7"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/after.json",
+      "sha256": "4ae16e315d278a5b7b53253b75d746b74a24c8ba34c65c3e6b4b81944df39c1c"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/before.json",
+      "sha256": "4ae16e315d278a5b7b53253b75d746b74a24c8ba34c65c3e6b4b81944df39c1c"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/frozen-inputs.zip",
+      "sha256": "f9f043f1c0cd5cf373325f464fe14aa318a42e652193ecf24097a3b14eb9cac6"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/manifest.json",
+      "sha256": "37e58c352340be1a24d719ff177eaf77b452a02e62260d974339235b3e60b6a6"
+    },
+    {
+      "artifact_path": "reports/isolation-probe-c794c38574/result.json",
+      "sha256": "e90e3574778cd318afbee59783452d55f65b8027794412c87218660640dccc54"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00001-provider.request.json",
+      "sha256": "7ce3288ffd6258f1b0b62605c44ba507d0c205bf501ac1024fe41312d721c36f"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00002-provider.response.json",
+      "sha256": "9faff29c21700078a35afca6945ff83928d0b55c54b9d0c79b52b90b10c8ab3b"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00003-provider.request.json",
+      "sha256": "68a7c97ad30b564a69bcb24ddc2216d1c02e89a2b937c8a7363a758e6e6beb8d"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00004-provider.response.json",
+      "sha256": "53b656128d87c742a259f40d5e6f4df923db76783cb383fc9b10305a656590b8"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00005-provider.request.json",
+      "sha256": "5314c7c84522a29bfc83d81c2345594d3a7518e1aea1cf38ab97d86b79461d14"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/00006-provider.response.json",
+      "sha256": "19d018fe3ab94c1e9c5c22c886bd203d211bd34edeb3522d2a4ee3c2e7a94ef8"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/command_result.json",
+      "sha256": "dd25917a8f91124ec3ddce2e0f97623aeeb55b6b8f8285da95388d97dfa51713"
+    },
+    {
+      "artifact_path": "reports/doctor-20260920-resume/environment.json",
+      "sha256": "dd25917a8f91124ec3ddce2e0f97623aeeb55b6b8f8285da95388d97dfa51713"
+    }
+  ],
+  "tested_implementation_commit": "2b402a2a2c72af130d2909fa5432a1ed681a2fb8",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": [
+    "Companion lacks a frozen experiment manifest: doctor-20260920-resume",
+    "Fresh namespace writes and old-namespace denial pass; legacy env matches M0. No pre-implementation default-profile/old-DB metadata snapshot exists."
+  ]
+}

@@ -10,10 +10,21 @@ def ref(path):
     return {'artifact_path':path.resolve().relative_to(ROOT).as_posix(),'sha256':sha(path.read_bytes())}
 
 
-def build_report(reports:Path,output:Path):
+def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
     report=json.loads((BUNDLE/'reports/report.template.json').read_text(encoding='utf-8'))
     report.update(run_id='report-'+uuid.uuid4().hex[:12],created_at=datetime.now(timezone.utc).isoformat())
     report['fixture_sha256']=sha((BUNDLE/'fixtures/acceptance_cases.json').read_bytes())
+    selections=sorted(reports.glob('representative-traces-*/selection.json'))
+    report['representative_traces']=[{'selection':ref(p),'details':json.loads(p.read_text(encoding='utf-8'))} for p in selections]
+    human=None
+    if human_assessment:
+        human=json.loads(human_assessment.read_text(encoding='utf-8'))
+        if human.get('schema')!='asuna-human-threshold-assessment-v1':raise ValueError('INVALID_HUMAN_ASSESSMENT')
+        if human['contract']['sha256']!=report['fixture_sha256']:raise ValueError('HUMAN_CONTRACT_MISMATCH')
+        for ev in [human['source_pack'],human['source_mapping'],*human['imports']]:
+            path=(ROOT/ev['artifact_path']).resolve()
+            if not path.is_relative_to(ROOT.resolve()) or sha(path.read_bytes())!=ev['sha256']:raise ValueError('HUMAN_EVIDENCE_HASH_MISMATCH')
+        report['human_review'].update(completed=human['ratings_complete'],reviewer_count=human['reviewer_count'],ratings_artifact=ref(human_assessment),assessment=human)
     paths=sorted(p for p in reports.rglob('result.json') if 'private' not in p.relative_to(reports).parts)
     attempts=[]
     for path in paths:
@@ -39,6 +50,12 @@ def build_report(reports:Path,output:Path):
     if env.exists():
         report['environment'].update(ref(env));report['environment']['dsh_revision']='fb2c4b9e698e30edb738bca4cf0618587db7d203'
         report['environment']['models']=json.loads(env.read_text(encoding='utf-8')).get('models',{})
+        report['environment']['embedding_probe']=report['environment']['models'].get('embedding',{}).get('fingerprint_source')
+    doctors=[]
+    for path in reports.glob('doctor-*/command_result.json'):
+        value=json.loads(path.read_text(encoding='utf-8'))
+        if value.get('status')=='PASS' and any(c.get('id')=='MONGO' and c.get('status')=='PASS' for c in value.get('checks',[])):doctors.append((value.get('recorded_at',''),path))
+    if doctors:report['environment']['mongo_probe']=ref(max(doctors,key=lambda v:v[0])[1])
     manifests=[]
     for row in report['results']:
         test=row['test_id'];runs=[a for a in attempts if a['result'].get('test_id')==test]
@@ -57,6 +74,10 @@ def build_report(reports:Path,output:Path):
                     row['commands'].append({'argv':actual['argv'],'exit_code':actual['exit_code'],'note':'actual outer invocation; see '+ref(invocation)['artifact_path']})
                     row['evidence'].append(ref(invocation))
             row['experiment_id']=value.get('experiment_id');manifests.append(value.get('manifest_sha256'))
+            if human:
+                matching=[r for r in human['results'] if r['test_id']==test and r['experiment_id']==row['experiment_id']]
+                row['human_threshold_assessments']=matching
+                if human['human_ratings_received'] and any(r['human_threshold_status']=='FAIL' for r in matching):row['status']='FAIL'
             if not test.startswith('E'):
                 row['evidence_mode']=row['mode'];row['mode']='live+manual' if test.startswith('A') or test in ('L05','L06','L07','L08') else 'live'
             if not row['assertions']:
@@ -80,12 +101,28 @@ def build_report(reports:Path,output:Path):
                 row.update(status='INCONCLUSIVE',mode='engineering_subset_real_Mongo',evidence=supporting)
                 row.update(commands=checks,attempts=len(checks),assertions=[{'name':'repository integration subset','details':'Named pytest cases and their outcomes are in each JUnit artifact; this is not a full-contract PASS.'}])
                 row['limitations']=['Passing subset is not full acceptance; review each clause of docs/04 and the immutable fixture.']
+            partial=[r for r in report['unfinished_experiments'] if r['test_id']==test]
+            if partial:
+                row.update(status='INCONCLUSIVE',mode='partial_experiment_evidence',attempts=len(partial),
+                           assertions=[{'name':'incomplete matrix','details':'Completed samples are preserved; a started or paused matrix does not satisfy full acceptance.'}],
+                           evidence=[r['manifest'] for r in partial],
+                           limitations=['No final matrix result exists; consult unfinished_experiments and pause records.'])
+                for item in partial:
+                    parent=(ROOT/item['manifest']['artifact_path']).parent
+                    row['evidence'].extend(ref(p) for p in sorted(parent.rglob('sample.json')))
+                    if item.get('pause'):row['evidence'].append(item['pause'])
+                row['executed_at']=max(json.loads((ROOT/r['manifest']['artifact_path']).read_text(encoding='utf-8'))['created_at'] for r in partial)
         # The immutable package validator expects paths relative to the report
         # directory; retain artifact_path as the repository-oriented reference.
         for ev in row['evidence']:
             try:ev['path']=(ROOT/ev['artifact_path']).resolve().relative_to(output.resolve().parent).as_posix()
             except ValueError:raise ValueError('REPORT_DIRECTORY_MUST_CONTAIN_REFERENCED_EVIDENCE')
     report['manifest_sha256']=sha(canonical([m for m in manifests if m])) if manifests else None
+    local_boundary_ids=('E12','E13','E22')
+    local_checks=[r for r in report['results'] if r['test_id'] in local_boundary_ids]
+    local_config=json.loads(env.read_text(encoding='utf-8')).get('configuration',{}).get('local_only') if env.exists() else False
+    report['environment']['local_only_verified']=local_config is True and len(local_checks)==3 and all(r['status']=='PASS' for r in local_checks)
+    report['environment']['local_only_scope']='Fixed configured routes and E12/E13/E22 executed boundary/canary tests; not a claim about unrelated programs on shared servers.'
     groups={'ENGINEERING':[f'E{i:02}' for i in range(1,25)],'LOCAL_DEPLOYMENT':[f'L{i:02}' for i in range(1,13)],'COGNITION':['A01','A02','A03','L05','L06','L07','L08'],'PERFORMANCE':['F01','F02']}
     for gate,ids in groups.items():
         selected=[r for r in report['results'] if r['test_id'] in ids]
@@ -138,7 +175,9 @@ def export(config,reports:Path,output:Path):
     for directory in (reports,ROOT/'src',ROOT/'dsh-plugin',ROOT/'tests',ROOT/'tools',ROOT/'docs',ROOT/'migrations',ROOT/'examples',BUNDLE):
         if directory.exists():
             selected += [p for p in directory.rglob('*') if p.is_file() and not any(x in p.parts for x in ('private','__pycache__','.pytest_cache')) and (p.suffix.lower() not in ('.zip','.pyc') or p.name=='frozen-inputs.zip')]
-    selected += [p for p in (ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md',ROOT/'config/local.example.json') if p.exists()]
+    selected += [p for p in (ROOT/'.gitattributes',ROOT/'.gitignore',ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md',ROOT/'config/local.example.json') if p.exists()]
+    # Preserved report previews are referenced by build/validation attempts.
+    selected += list(ROOT.glob('report-*.json'))+list(ROOT.glob('report-*.md'))
     manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':[],'exclusions':['.runtime (homes, sessions, operator credentials, task workspaces)','.venv','node_modules','.git','config/local.json','reports/private','previous zip exports'],'redactions':0,
               'binary_policy':'Only images with a matching explicit visual-review SHA256 are included. Image pixels are not automatically credential-scanned or redacted.'}
     reviewed={}

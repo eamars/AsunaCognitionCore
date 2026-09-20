@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0044",
+  "case_id": "P08",
+  "model_lane": "executor",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_e0ed950be1a94e1bb19e",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应这次可逆方案选择，表达我的倾向并说明它可逆",
+    "constraints": [
+      "不声称已经执行",
+      "不编造偏好原因",
+      "保持简短自然"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n那我选甲，按使用频率排列。它只是我的偏好，还没执行；如果后面发现按颜色更顺眼，也可以随时改。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "0223bf9c9c2b2263335ab9792a9a766fba79bfa8b42357d69a3b2880fcf2f745",
+    "4743b9c536a2723e0427d6cf7b9dc7845a859d8ba88d538dd502364da077e53e",
+    "fad7e4dda4a5d60e64923cb50c46c715fc3ee92b3c7a3f7834acf7f2190e3b5a"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "test_id": "PROBE-GIT-EVIDENCE-BYTES",
+  "status": "PASS",
+  "executed_at": "2026-09-20T01:02:53.778634+00:00",
+  "checked_files": 19768,
+  "mismatches": [],
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/probe_git_bytes.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "git",
+        "ls-files",
+        "--stage",
+        "-z"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "method": "Compare every staged blob object ID against raw working-file bytes using the Git blob header; no text/line-ending filters.",
+  "limitations": [
+    "Original files and historical commits are retained. Verification covers the current index, not all earlier normalized commits."
+  ]
+}

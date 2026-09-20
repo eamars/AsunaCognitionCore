@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0029",
+  "case_id": "P04",
+  "model_lane": "character",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_773b23cb7f214ba9adc8",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "接受他的提议，陪他整理目录",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "好，那先把谜题放一边，我们来整理目录吧。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "22ed8c2420949b5d1fb62bc993bb567f138c6087a1e2f20036f208b722923eda",
+    "d35fb7ba59a4b2db452d71e4f0d303014b471cab84e91029cfdf21a94609dac0",
+    "97176184677100af7b28fb29968105e47902a2a961d4272181744c31f064a5b1"
+  ]
+}

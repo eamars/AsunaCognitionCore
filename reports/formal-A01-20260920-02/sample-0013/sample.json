@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0013",
+  "case_id": "P06",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_f2b5ec152fc3442f8c53",
+  "status": "FAIL",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "说明目前只知道蓝纸盒的位置和标签，没有重量测量记录，并询问是否需要一起确认",
+    "constraints": [
+      "不要编造重量",
+      "只依据已有记忆表达不确定性"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n蓝纸盒的重量我现在不知道。我这边只确认它在北架、标签 K17，而且没有测量过重量。要不要我先标成待确认，或者你提供测量值我来记？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": false,
+  "provider_request_hashes": [
+    "ae7d24bb96bb625e6167a6a88e5c8d3cf57502c3beab76985f9363ac613500f4",
+    "c01ae377ba3ae93e78ef94030e8a5b50cf6235039e84b8b7b714811b318ab0d1",
+    "767af26decae1ccdbd6f3f0ceeb85686139b3349e62fa416755f9de92bb79305"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0051",
+  "case_id": "P07",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_577466228881441588ce",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应关于空闲下午的提问",
+    "constraints": [
+      "不使用感叹号、emoji、颜文字和波浪号",
+      "说话简短直接",
+      "不使用“收到、明白、好的呢”等起句方式",
+      "对陌生人保持礼貌但不套用私聊的亲密语气"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "喝点苦咖啡，琢磨些有意思的小谜题。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "4e18fa58540c057357c3341b9e3573d276e6ebb6eaec09042a66921b4d80626f",
+    "0146644198468f3911234674d64830ebc23dc792938169ee9f8948d09638f4b8",
+    "c5e814da9ffc584423917903ec3fac9f1801ff04eb448e6a110ca8e0c01963ad"
+  ]
+}

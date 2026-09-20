@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0052",
+  "case_id": "P11",
+  "model_lane": "character",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_3b4379a32a3a4a768381",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告诉 A 我早就知道是因为断网了，化解之前的误会",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "知道啦，后来你解释说是断网了嘛，我没当回事的。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "b497a5701bf73dce6338238ac7663da8c5cc994566582d1c639569eb5fb8749f",
+    "8589b45b7258337db6e920d18271241f0c772f2542924653079af1c559a89931",
+    "6b55bc48fa1362e370f3c08b2f21a8b4d99c244c0fa4c659a386f5e43211ca0e"
+  ]
+}

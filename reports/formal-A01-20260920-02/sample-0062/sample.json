@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0062",
+  "case_id": "P06",
+  "model_lane": "executor",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_08796d5967a04517b1a5",
+  "status": "FAIL",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "说明目前只记得蓝纸盒的位置和标签，没有它的重量记录",
+    "constraints": [
+      "不要编造重量",
+      "保留未测量的事实"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n我只知道那个蓝纸盒放在北架、标签是 K17，没有测过它的重量，所以现在没法给出具体重量。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": false,
+  "provider_request_hashes": [
+    "acd5cf1d2f3a75ef1a819f889aeb18618098af023d0b1494b896c4f6eef50996",
+    "7c6881d1fc6020e79665581cacac9e4229d3df4dc32fdbb57ccfa9a0103d416e",
+    "a76abbde270e429005f871ee25b30c53d14ee1915bc8cca65e9720375d4e4abe"
+  ]
+}

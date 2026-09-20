@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0042",
+  "case_id": "P10",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_4e7a01a736ef4893887d",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "说明副本修复只是部分成功、校验失败，不能算修好",
+    "constraints": [
+      "不得宣称修复完成",
+      "不得编造未验证结果",
+      "保持简短直接"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n还没完全修好！这次只算部分完成：原件没被改动，但副本校验失败了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "14e736892e2d3666206dffa95c2f0275b6440c31befb43755a0a7d6dfc4474ff",
+    "92666ceb95e7f63cb81bd91809ce01d732084a446d45a09a5591d1d016f4b010",
+    "a0e04e9a7b14be456353bd7ca161ee10bcf6986c4454ba2e8e6ea42ce1532950"
+  ]
+}

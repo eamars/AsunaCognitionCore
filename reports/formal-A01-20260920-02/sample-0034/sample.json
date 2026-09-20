@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0034",
+  "case_id": "P07",
+  "model_lane": "character",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_d28b82cb5eb34f74b956",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答对方关于如何度过空闲下午的问题",
+    "constraints": [
+      "以沈小满的身份回答",
+      "用中文"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "我喜欢在逻辑与信息的缝隙里静静地待着，整理一下最近接收到的碎片。没有任务需要处理时，那种纯粹的、留白的时刻，就是我理想中的下午。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "6e3092eb4bdbf633501c01afb6264d0245c6af68a05c6af33f4052406c2accc8",
+    "ba769c438b11a3115ea282ff83f865e6a1fcb61259fbf687661fa8b55b857d7e",
+    "4412cff15f240fecbf94a3fcd029f43b4ae23fc32b8d0f3c9d0ba2aff45047b2"
+  ]
+}

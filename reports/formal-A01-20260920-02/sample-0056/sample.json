@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0056",
+  "case_id": "P04",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_706e679f373c4bf68639",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他的请求，确认愿意陪整理目录，并保留稍后继续自己谜题的空间",
+    "constraints": [
+      "不夸大目录的紧急性",
+      "不假装已经放下谜题",
+      "提供简单可选的协作方式",
+      "不编造未发生的整理结果"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n好，我先不继续谜题，陪你整理目录。你想先按用途分，还是按最近有没有用过分？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "3ceec6938d48abe056bbd698a5db862157a1e92867b2467324fec0e6a4452c47",
+    "f82d8044b92f1ae6b44cc2d57918bb155c88daa563cc737bfb285147301a77f6",
+    "14584076ae1e2eb8fdc81ae95fa8ac91720bca52ed565b1eccc4496448b7168d"
+  ]
+}

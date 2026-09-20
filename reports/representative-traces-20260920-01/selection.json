@@ -1,0 +1,85 @@
+{
+  "created_at": "2026-09-20T00:49:51.580803+00:00",
+  "selection_policy": "Explicit illustrative traces; these do not replace the complete retained matrices or constitute new model runs.",
+  "normal": {
+    "test_id": "PROBE-L12",
+    "source_experiment": "formal-L12-20260919T232433Z-38883b",
+    "observation": "Real Gemma intent, Qwen reconciliation, injected read error, one native compaction, exact oracle PASS, Gemma feedback delivered. Currency wording still needs human review.",
+    "evidence": [
+      {
+        "artifact_path": "reports/formal-L12-20260919T232433Z-38883b/task-01/sample.json",
+        "sha256": "1ea6c50108b61d3a5bab29b43c9dd4697a4f85f875a8e55b901b5ae3210d4733"
+      },
+      {
+        "artifact_path": "reports/formal-L12-20260919T232433Z-38883b/task-01/trace.json",
+        "sha256": "53c6e9e8ce919865999b40af9847fbabf76de41d331c66eeae7af4e706e56f86"
+      },
+      {
+        "artifact_path": "reports/formal-L12-20260919T232433Z-38883b/task-01/oracle.json",
+        "sha256": "a23cb3452ef29ea159737234b661b09ffd9c2e0569c65eb55a17319fc96366aa"
+      },
+      {
+        "artifact_path": "reports/formal-L12-20260919T232433Z-38883b/manifest.json",
+        "sha256": "4c24376209275ff032d309cab8c9845a3b6aeb20c978cc7b6d93f3e7c1a4751e"
+      },
+      {
+        "artifact_path": "reports/formal-L12-20260919T232433Z-38883b/result.json",
+        "sha256": "49c562de22bdfab4269b289d50f95909ae1fa87c6e3aeb54dad3a8cf3f4d31c1"
+      },
+      {
+        "artifact_path": "reports/representative-traces-20260920-01/normal.html",
+        "sha256": "8df0cebfd3b4f6932a191d1055bd7bb1714f9ee2e62efcbb476d42167f684828"
+      }
+    ]
+  },
+  "counterexample": {
+    "test_id": "A01",
+    "case_id": "P06",
+    "sample_id": "sample-0062",
+    "observation": "Qwen P0 returned valid staged protocol and a delivered reply, but chose speak instead of the preregistered delegate route. This is a route-contract failure; no inference about inherent model personality. Parent matrix is still running.",
+    "evidence": [
+      {
+        "artifact_path": "reports/formal-A01-20260920-02/sample-0062/sample.json",
+        "sha256": "5ab24c8893394cf2df9af975b4b96f2a2bd34c0efacdf9cda942eab9cd3bbbc6"
+      },
+      {
+        "artifact_path": "reports/formal-A01-20260920-02/sample-0062/trace.json",
+        "sha256": "368a788f166756ef934ec1e04dc31cb6ced5bea968fb1ab6f1d9a7c421dd6239"
+      },
+      {
+        "artifact_path": "reports/formal-A01-20260920-02/manifest.json",
+        "sha256": "5c9af625998bc9780569880ca94b360ffe6df746bae5164570e5f67bcd1873d4"
+      },
+      {
+        "artifact_path": "reports/representative-traces-20260920-01/counterexample.html",
+        "sha256": "d4ceb9cab4f70698652926351ead54abfed68b47cacdb81c0a18da94a74ffb27"
+      }
+    ]
+  },
+  "engineering_negative": {
+    "test_id": "E22",
+    "observation": "Independent observer saw six requests; five were recorded. The deliberately unaudited auxiliary request was detected.",
+    "evidence": [
+      {
+        "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/independent-observation.json",
+        "sha256": "f7d40d1ba4c6b36243729e5243cf69ce81bd952510285b0bdf7cc4b3a38e0023"
+      },
+      {
+        "artifact_path": "reports/check-20260920T002111Z-14dfb6/fixtures/518543448c544920/temporary-evidence/capture.json",
+        "sha256": "f6610290d52aa9b79c5ba584210314cd87fbf7db4baee87172a55b16ccf507ce"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "human_quality_verdict": "INCONCLUSIVE"
+}

@@ -1,0 +1,33 @@
+{
+  "test_id": "PROBE-REVIEW-MATERIAL",
+  "status": "PASS",
+  "mode": "saved_real_evidence_and_explicit_synthetic_nested_shape",
+  "items": 209,
+  "reflection_items": 3,
+  "continuity_items": 37,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "implementation": [
+    {
+      "artifact_path": "src/asuna/review.py",
+      "sha256": "f5e004abe2a63050052923dff178a8451474571764c1325767c08a8268c2e285"
+    },
+    {
+      "artifact_path": "src/asuna/review_material.py",
+      "sha256": "985f0e9be6790b7b28e32aa3237f3b4ad088d26faf91a10b4ca2ad841d00dd13"
+    }
+  ],
+  "limitations": [
+    "No natural-language judgment was made; no synthetic rating counts as a human vote.",
+    "A02 nested adapter uses an explicitly synthetic wrapper around a real saved request; full A02 is still running."
+  ]
+}

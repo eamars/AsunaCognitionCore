@@ -1,0 +1,43 @@
+{
+  "test_id": "PROBE-GIT-EVIDENCE-BYTES",
+  "status": "FAIL",
+  "assertions": [
+    {
+      "artifact_path": "reports/M6h.json",
+      "working_sha256": "a599d3c3161e41ab511ebb004eab7744d7b14d081639ccac652f31b207b89dc5",
+      "staged_sha256": "a599d3c3161e41ab511ebb004eab7744d7b14d081639ccac652f31b207b89dc5",
+      "equal": true,
+      "command": [
+        "git",
+        "show",
+        ":reports/M6h.json"
+      ],
+      "exit_code": 0
+    },
+    {
+      "artifact_path": "environment.json",
+      "working_sha256": "39d81580c490b0fd2c545306660c2fb1b58ea3fbf692b34e19a386e2997eb1b7",
+      "staged_sha256": "8b8435a65da186fc1b7f08440720db7db62125549f46d5b508ef2a13a5a08da3",
+      "equal": false,
+      "command": [
+        "git",
+        "show",
+        ":environment.json"
+      ],
+      "exit_code": 0
+    },
+    {
+      "artifact_path": "asuna_v2_v1_handoff/fixtures/acceptance_cases.json",
+      "working_sha256": "93c00e7de46adfae47527ea0127aa377afe23fcb4f25b045a560cab6029792df",
+      "staged_sha256": "93c00e7de46adfae47527ea0127aa377afe23fcb4f25b045a560cab6029792df",
+      "equal": true,
+      "command": [
+        "git",
+        "show",
+        ":asuna_v2_v1_handoff/fixtures/acceptance_cases.json"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "note": "Compare actual Git index bytes to the evidence bytes whose SHA256 values are reported; normalization must not alter archived evidence."
+}

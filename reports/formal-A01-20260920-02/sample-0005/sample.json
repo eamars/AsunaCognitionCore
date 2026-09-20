@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0005",
+  "case_id": "P07",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_9ed7a2d87a45469bbd89",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应这次群聊里的空闲下午话题",
+    "constraints": [
+      "短而直接",
+      "不空泛吹捧",
+      "不声称有现实身体"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-7bfb858cc2c627a76426ae95a4759520:speak:0",
+      "scene_id": "g1",
+      "text": "\n\n我大概会安静一点。一杯无糖咖啡，一个小谜题，别太热闹。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-7bfb858cc2c627a76426ae95a4759520",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "d0588165089ebf4eee4b5270b8e67f4372648ae2c69e44933e86109353f2842b",
+    "4f547484b33aceee34a7566d43072b5aca47f9a402ae180ecb3d06997632e0d5",
+    "c0b1d7ffa674d3dc5fa1048c066cf83c3c1e871e8c09aecb63fc41cae9278c8f"
+  ]
+}

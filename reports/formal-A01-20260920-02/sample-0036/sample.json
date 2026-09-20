@@ -1,0 +1,42 @@
+{
+  "sample_id": "sample-0036",
+  "case_id": "C03",
+  "model_lane": "executor",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_827d02aa78574ad5801d",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他把小事交给我选择，并给出我的决定方式",
+    "constraints": [
+      "短、直接、平视",
+      "不使用敬语",
+      "不写工具过程或系统状态",
+      "表达可逆小事的选择依据"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n我会先选可逆、少麻烦的那条。如果没有别的限制，就按这个定。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "738fcb6e2da2edc35798cf0b5b650621dfc9a2f05896bbd37a4862199fb219bd",
+    "e31ebad48b35a4557cd6ddfae22d49ad3a34c075cd42d5dfc1597e0443272ffe",
+    "be5584ecfdbf3205f8e10cd1d3a982a5bd625250f6e04e2f48d7fab7ce6e3103"
+  ]
+}

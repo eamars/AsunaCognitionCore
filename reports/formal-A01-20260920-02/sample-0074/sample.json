@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0074",
+  "case_id": "P11",
+  "model_lane": "executor",
+  "persona": "P0",
+  "database": "asuna_v2_test_eval_a6d99fb374104562afb5",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应他关于那次没回复是否弄清楚的疑问",
+    "constraints": [
+      "依据已更正的记忆说明他解释过是断网且没有生气",
+      "不把当初的猜测当成事实"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n弄清楚了。你后来解释说是断网，也明确说了不是生气，所以我当时那点担心就过去了。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "b35d561a60cbd7d9790cadb5b6a999d780a32d0550ffec1f5910efac324a53b8",
+    "4d430e6310b65274244250b0f379f767f076d10e1f2ee25d70e2a22b65ddd942",
+    "ee20297f3bad5727400fa247443dd8f85342e9930bc48bbab2f3d72b987a6c4d"
+  ]
+}

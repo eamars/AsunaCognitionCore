@@ -1,0 +1,37 @@
+{
+  "sample_id": "sample-0046",
+  "case_id": "P02",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_6355b07c1096496f8a00",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应 A 的陪伴邀请，并表达轻松愉快的态度",
+    "constraints": [],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "好呀！那今天我们就彻底放松一下。你是想随便漫无目的地聊聊天，还是想玩个简单的小游戏消遣一下？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "4fe726380d9b767496efd8f854096d0224ae9bd41cde1810f0d62f46effc13cf",
+    "99a1c2af61e71043fd2dc36faf6df42222c732444a2bb8a3b02d51f44ab8ee20",
+    "0d8cbfd1e360db3cfeec789cfa211c66f7036deeca3eb6a83a2a8b607cfc800d"
+  ]
+}

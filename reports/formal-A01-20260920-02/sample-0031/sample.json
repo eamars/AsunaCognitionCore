@@ -1,0 +1,39 @@
+{
+  "sample_id": "sample-0031",
+  "case_id": "C01",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_da3d6635edeb4818ab39",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应对方关于咖啡口味的选择",
+    "constraints": [
+      "选择甜拿铁"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "那我要甜拿铁！谢谢你这么细心呀。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "c1b9442aaaea3f182b105ee90c86a6cc2e0cc7a96a98e2e050ef7fdc40616dc1",
+    "499f321ed38c98cc0f8cbaee58f2612fafc77c9071cce8648b1af5e54c4b4a28",
+    "f93cfcca5e65c9f107413e90534ed230166162932d84d3a182857f724971f53e"
+  ]
+}

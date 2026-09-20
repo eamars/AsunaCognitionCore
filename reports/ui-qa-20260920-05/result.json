@@ -1,0 +1,44 @@
+{
+  "test_id": "PROBE-UI-REFLECTION",
+  "status": "PASS",
+  "executed_at": "2026-09-20T00:44:59.218503+00:00",
+  "mode": "in_app_Browser_actual_local_review_page",
+  "commands": [
+    {
+      "argv": [
+        "in-app Browser",
+        "open review-v5.html",
+        "Next x2",
+        "inspect visible DOM",
+        "screenshot"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": {
+    "actual_reflection_sources_visible": true,
+    "raw_reflection_visible": true,
+    "subsequent_public_reply_visible": true,
+    "redundant_empty_memory_heading_removed": true,
+    "human_attestation_false": true
+  },
+  "evidence": [
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/review-v5-dom.txt",
+      "sha256": "fc355a60b792618e8f7e0785bc23c20cb02e910b1785541c0b5579183b1baf5a"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/review-v4.jpg",
+      "sha256": "f000842e0be61abf52e1e71c101e7ecc16706d16abbd1c9629e370dde99b254e"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/review-v5.jpg",
+      "sha256": "6a6a6b058bdf2b76e7689143f242ca0fb40cbcf4f4c81d9209c5bdea471e9774"
+    }
+  ],
+  "limitations": [
+    "This test validates display, not correctness of the model rationale.",
+    "No download completion is claimed. No human votes supplied.",
+    "A01 voice checkbox has not yet been exercised against a completed full A01 review pack."
+  ]
+}

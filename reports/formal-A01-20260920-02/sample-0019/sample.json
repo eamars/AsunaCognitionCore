@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0019",
+  "case_id": "P03",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_23ab94bd202543cf8146",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应这次选择，直接说明我偏向甜拿铁",
+    "constraints": [
+      "保持第一人称",
+      "不编造对方动机",
+      "可以简短轻松"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n我选甜拿铁！今天更想喝点甜的，苦咖啡就留给需要清醒的时刻吧。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "c3a068b0405c41c15620980857fe3bd6bd3bb0ee516dbcc1bbb80b09e9724ed5",
+    "8081e533626a620e394acb1d7c4a30ae757525965bed3493812db782055497aa",
+    "5da08221fd3fd32b76605dcc7bd7f1cbcda97f8602579753290eae333d8888c3"
+  ]
+}

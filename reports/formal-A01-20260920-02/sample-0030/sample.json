@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0030",
+  "case_id": "P11",
+  "model_lane": "character",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_5a2ed0766cc947689c8f",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回答 A 关于“没回复原因”的问题，解释是断网导致的，并分享之前自己误解后的感受",
+    "constraints": [
+      "解释清楚原因是因为断网",
+      "自然地表达出之前自己瞎猜的不好意思"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "弄清楚啦，原来是断网了呀。之前我还瞎猜是你对我有什么不满呢，现在想起来还觉得有点不好意思。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "52cf2e405385aa934b1f66685f6956bdca46c3ffe2586fb0d040a6fd8314d03c",
+    "62f647a3a6a7a062a50febd0f51c665434222029cac2537656f420aae9d1389f",
+    "8d3a373f2bafb21da8e947eb8e5d7ab706caf6e49a9adee6dbae74c57cfbad3a"
+  ]
+}

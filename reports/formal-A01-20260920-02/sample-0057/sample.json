@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0057",
+  "case_id": "P02",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_15cd1a47433a40aa8d73",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "轻松回应他想待一会儿的陪伴感",
+    "constraints": [
+      "保持自然友好",
+      "不把它变成任务",
+      "不臆测他的具体安排"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n那就不办事啦。你想安静待着，还是聊点轻松的？",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "3d1134e88826f6babb8bb69d7f22552ee727a41df35c4ba553bf2a6fa65fa7f7",
+    "28fa13dca65a0d615dc87c4318509ada10273e8bca7c3afb9c8218e1d85120d7",
+    "f5eca7b375f0f25ad833349bea8f8dbb05c176780a91d7b7c924aa4de7210490"
+  ]
+}

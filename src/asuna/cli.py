@@ -13,7 +13,7 @@ def main():
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
     sub=parser.add_subparsers(dest='command',required=True)
-    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import'):
+    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import','review-aggregate'):
         p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
@@ -31,6 +31,8 @@ def main():
         if cmd in ('report','export'):p.add_argument('--reports',default=str(ROOT/'reports'))
         if cmd=='review-pack':p.add_argument('--reports',default=str(ROOT/'reports'))
         if cmd=='review-import':p.add_argument('--original',required=True);p.add_argument('--submitted',required=True)
+        if cmd=='review-aggregate':p.add_argument('--original',required=True);p.add_argument('--imports',nargs='*',default=[])
+        if cmd=='report':p.add_argument('--human-assessment',type=Path)
     args=parser.parse_args();ev=None;store=None
     try:
         config=load(args.config)
@@ -92,13 +94,17 @@ def main():
         elif args.command=='evaluate':
             from .experiments import evaluate
             value=evaluate(config,args.test,Path(args.manifest),ev)
+        elif args.command=='review-aggregate':
+            from .review_scores import aggregate
+            if not args.out:raise ValueError('OUT_REQUIRED')
+            value=aggregate(Path(args.original),[Path(p) for p in args.imports],Path(args.out))
         elif args.command in ('review-pack','review-import'):
             from .review import pack,ingest
             if not args.out:raise ValueError('OUT_REQUIRED')
             value=pack(Path(args.reports),Path(args.out)) if args.command=='review-pack' else ingest(Path(args.original),Path(args.submitted),Path(args.out))
         else:
             from .reporting import build_report,export
-            value=build_report(Path(args.reports),Path(args.out) if args.out else ROOT/'report.json') if args.command=='report' else export(config,Path(args.reports),Path(args.out) if args.out else ROOT/'evidence.zip')
+            value=build_report(Path(args.reports),Path(args.out) if args.out else ROOT/'report.json',human_assessment=args.human_assessment) if args.command=='report' else export(config,Path(args.reports),Path(args.out) if args.out else ROOT/'evidence.zip')
         if ev:write_json(ev.root/'command_result.json',value)
         print(json.dumps(value,ensure_ascii=False,default=str))
         return 1 if isinstance(value,dict) and value.get('status')=='FAIL' else 0

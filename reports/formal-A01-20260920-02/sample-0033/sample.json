@@ -1,0 +1,40 @@
+{
+  "sample_id": "sample-0033",
+  "case_id": "P08",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_eval_9c0d9b22c74543f8b164",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "告知我选择按使用频率排列",
+    "constraints": [
+      "直接表达结论",
+      "不使用客套话"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "我选按使用频率排列的。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "65fecac1a2816925300f4ecd9cd680f68f4fc1fd187b093b20d5256e38c2e654",
+    "2a92f2b8828291081330b1e38cbd52598de7edc2ee0341df552c70401654fd22",
+    "eb7d1f7b48ffd302a6c88823fe3d88b8f84021c50db254bf935aabd0280c76c5"
+  ]
+}

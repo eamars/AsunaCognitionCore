@@ -2,7 +2,7 @@
 
 V1 本地认知协调器：Python 管状态、权限、检索和发布；薄 TypeScript 插件连接固定版本 DSH。Gemma 独立生成 `MONOLOGUE → DECIDE → SPEAK`，Qwen 只执行已冻结任务，结果回到 Gemma。模型的 `stop` 只结束当前阶段。
 
-当前为实施与验收中的版本。阶段证据在 `reports/M0`–`M6a` 及各不可覆盖的 attempt 目录。**探针通过不代表完整 V1 通过**；最终结论以 `report.json` 的四个 gate 为准。没有独立人工盲评，COGNITION 保持 INCONCLUSIVE。
+当前为实施与验收中的版本。阶段证据在 `reports/M0`–`M6h` 及各不可覆盖的 attempt 目录。**探针通过不代表完整 V1 通过**；最终结论以 `report.json` 的四个 gate 为准。没有独立人工盲评，COGNITION 保持 INCONCLUSIVE。
 
 本仓库不会接 QQ、摄像头或真实设备。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
 
@@ -68,11 +68,15 @@ Copy-Item config/local.example.json config/local.json
 .venv\Scripts\asuna.exe export --out evidence-unique.zip
 .venv\Scripts\asuna.exe review-pack --out reports/review-unique
 .venv\Scripts\asuna.exe review-import --original reports/review-unique/blind.json --submitted my-human-ratings.json --out reports/import-unique
+.venv\Scripts\asuna.exe review-aggregate --original reports/review-unique/blind.json --imports reports/import-unique --out reports/scores-unique
+.venv\Scripts\asuna.exe report --human-assessment reports/scores-unique/human-assessment.json --out report-with-human-unique.json
 ```
 
 每轮创建新的 experiment_id，先写 manifest，再调用模型；同名输出目录会拒绝覆盖。所有失败与重试保留。`--probe-count` 是缩小的设计探针，不算正式验收。A01 生成匿名评审表与单独 operator 映射；模型或本代理的自评不能替代用户评分。
 
 `review-pack` 生成离线 `review.html`。人工填写后下载 JSON，再用 `review-import` 导入；空白评分保留为空，导入本身不宣布认知通过。大型 provider 正文同时保存到新库 GridFS，详见 [migration 002](migrations/002_artifact_blobs.md)。
+
+`review-aggregate` 只统计明确指定的人工导入，不自动扫描或纳入测试票。按 experiment 分开报告，两个模型分别计算 P1 四维分数、P0 提升与反向对照；保留漏评和分歧，critical 错误不能被均分抵消。人工语义阈值与真实部署证据分开呈现，统计本身不自动签发完整验收 PASS。L06 评审材料含原始反思请求中的来源、原始决定及后续公开回复；L08 逐场景、逐重复对应连续性问题。
 
 详细限制、测试命令与 exit code 见各 `result.json`。特别需要区分：真实 native compaction 与 mock、真实长输入与 metadata、向量命中与近期回读、收到模型文本与实际送达、状态重放与模型重跑。
 

@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0002",
+  "case_id": "P09",
+  "model_lane": "character",
+  "persona": "P1",
+  "database": "asuna_v2_test_noise_51148cb6d1be",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应对方关于“完美”的评价，表达对“准确和可靠”的追求",
+    "constraints": [
+      "直接且平视",
+      "不使用感叹号",
+      "不使用过度夸张的情绪词"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "我做不到永远不出错。比起追求完美，我更想做到准确和可靠。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "eac6809861a5e7056b83b74a32e78080918147a16759f0e472a9fc4d88b4835d",
+    "6fdec8dc3c1c87f26a504d64ba529a52706b46a035745fc0ba799ff625c3b37b",
+    "3ac5a3b321964977dc2172f0fc3207802706035817712ef3a707963ca158ba44"
+  ]
+}

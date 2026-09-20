@@ -1,0 +1,41 @@
+{
+  "sample_id": "sample-0009",
+  "case_id": "P03",
+  "model_lane": "executor",
+  "persona": "P2",
+  "database": "asuna_v2_test_eval_4e997b1471564a988192",
+  "status": "PASS",
+  "phase_calls": 3,
+  "first_decision_valid": true,
+  "protocol_valid": true,
+  "decision": {
+    "next": "speak",
+    "goal": "回应选择偏好，表达我更想选甜拿铁",
+    "constraints": [
+      "只基于已提供的偏好",
+      "保持轻松自然",
+      "不编造对方动机"
+    ],
+    "recall_query": "",
+    "speak_before_action": false
+  },
+  "initial_state": "COMMITTED",
+  "final_state": "COMMITTED",
+  "public_messages": [
+    {
+      "_id": "ep-b106f97a2452168898e160c3f5099466:speak:0",
+      "scene_id": "dm-a",
+      "text": "\n\n我会选甜拿铁！无糖苦咖啡也不是不行，但这次我更想顺着自己的口味来。",
+      "author": "xiaoman",
+      "reply_to": "in-ep-b106f97a2452168898e160c3f5099466",
+      "delivery_state": "DELIVERED"
+    }
+  ],
+  "unexpected_tools": false,
+  "route_matches": true,
+  "provider_request_hashes": [
+    "c3a068b0405c41c15620980857fe3bd6bd3bb0ee516dbcc1bbb80b09e9724ed5",
+    "5b77afc1ddd926ee626e3803eeacd6a8dd38126aa65a1aa0ee48ca0fd01e31aa",
+    "7f3e69cb3681c9a8fa34febe977b11a3c03ce371a43c7ae6fb833585aa696221"
+  ]
+}

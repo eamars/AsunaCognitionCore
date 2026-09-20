@@ -1,10 +1,12 @@
 # asuna-ai-cognition-core
 
+2026-09-20：正在按 [ADR-002](docs/development_plans/ADR-002-Asuna_v2_Core_First_Codex_Reset/CODEX_START.md) 分阶段开发。P1-A/B/C 已实跑，P1-D 压缩恢复／场景隔离与 P2 工具错误恢复已完成有限验证，入口为 `start-asuna.cmd`；实际原文、摘要质量缺口和配置见 [RUN_ASUNA.md](RUN_ASUNA.md)。Gemma 已切换本机 31B（部署上下文 68,608）。[P3-A/B](docs/P3-AB-REPORT.md) 已验证一次技能生成及跨恢复复用；[P3-C](docs/P3-C-REPORT.md) 已验证一次关系理解更新及恢复使用。[最终交付与缺口](docs/V1-FINAL-DELIVERY.md) 已整理，V2 等待用户启动；以下原 V1 验收说明作为历史记录保留。
+
 V1 本地认知协调器：Python 管状态、权限、检索和发布；薄 TypeScript 插件连接固定版本 DSH。Gemma 独立生成 `MONOLOGUE → DECIDE → SPEAK`，Qwen 只执行已冻结任务，结果回到 Gemma。模型的 `stop` 只结束当前阶段。
 
-当前为未通过完整验收的版本，开发与测试已暂停。历史报告、全部 attempt 和阶段证据已封存到交接文件 `evidence.zip`；工作树中的生成数据和测试运行状态按用户要求清除。验收结论以 ZIP 内的 `report.json` 为准：整体 FAIL；没有独立人工盲评，COGNITION 为 INCONCLUSIVE。源码、测试代码、原始架构与夹具继续保留。
+历史封存版本曾未通过原完整验收，以下为当时记录。历史报告、全部 attempt 和阶段证据已封存到交接文件 `evidence.zip`；工作树中的生成数据和测试运行状态按用户要求清除。验收结论以 ZIP 内的 `report.json` 为准：整体 FAIL；没有独立人工盲评，COGNITION 为 INCONCLUSIVE。源码、测试代码、原始架构与夹具继续保留。
 
-本仓库不会接 QQ、摄像头或真实设备。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
+旧版范围不包含 QQ、摄像头或真实设备；当前 QQ 后续工作以 ADR-002 的 V2 计划为准。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
 
 ## 安装与启动
 

@@ -7,7 +7,15 @@ name = "asuna-ai-cognition-core"
 version = "0.1.0"
 description = "Local staged cognition coordinator with auditable DSH lanes"
 requires-python = ">=3.12"
-dependencies = ["httpx==0.28.1", "pymongo==4.16.0", "jsonschema==4.26.0", "pydantic==2.12.5", "PyYAML==6.0.3", "deepseek-harness-sdk"]
+dependencies = [
+    "httpx==0.28.1",
+    "pymongo==4.16.0",
+    "jsonschema==4.26.0",
+    "pydantic==2.12.5",
+    "PyYAML==6.0.3",
+    "deepseek-harness-sdk",
+    "prompt-toolkit==3.0.52",
+]
 
 [project.scripts]
 asuna = "asuna.cli:main"

@@ -191,7 +191,7 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
     return {'status':report['overall_status'],'report':ref(output),'attempts':len(attempts)}
 
 
-def export(config,reports:Path,output:Path):
+def export(config,reports:Path,output:Path,*,report_roots=None,extra_paths=()):
     """Create a redacted copy, preserving both source and export hashes."""
     secrets=set()
     def collect(value):
@@ -207,16 +207,23 @@ def export(config,reports:Path,output:Path):
     embedding_operator=ROOT/'.runtime/embedding-ssh.json'
     if embedding_operator.exists():collect(json.loads(embedding_operator.read_text(encoding='utf-8')))
     selected=[]
-    for directory in (reports,ROOT/'src',ROOT/'dsh-plugin',ROOT/'tests',ROOT/'tools',ROOT/'docs',ROOT/'migrations',ROOT/'examples',BUNDLE):
+    evidence_roots=list(report_roots) if report_roots is not None else [reports]
+    for directory in (*evidence_roots,ROOT/'src',ROOT/'dsh-plugin',ROOT/'tests',ROOT/'tools',ROOT/'docs',ROOT/'migrations',ROOT/'examples',BUNDLE):
         if directory.exists():
             selected += [p for p in directory.rglob('*') if p.is_file() and not any(x in p.parts for x in ('private','__pycache__','.pytest_cache')) and (p.suffix.lower() not in ('.zip','.pyc') or p.name=='frozen-inputs.zip')]
     selected += [p for p in (ROOT/'.gitattributes',ROOT/'.gitignore',ROOT/'README.md',ROOT/'pyproject.toml',ROOT/'uv.lock',ROOT/'package.json',ROOT/'package-lock.json',ROOT/'environment.json',ROOT/'integration_probe.md',ROOT/'report.json',ROOT/'report.md',ROOT/'config/local.example.json') if p.exists()]
     # Preserved report previews are referenced by build/validation attempts.
     selected += list(ROOT.glob('report-*.json'))+list(ROOT.glob('report-*.md'))
+    for path in extra_paths:
+        path=Path(path).resolve()
+        if not path.is_relative_to(ROOT.resolve()):raise ValueError('EXPORT_EXTRA_OUTSIDE_WORKSPACE')
+        selected += [p for p in (path.rglob('*') if path.is_dir() else [path]) if p.is_file() and '__pycache__' not in p.parts and p.suffix!='.pyc']
     manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':[],'exclusions':['.runtime (homes, sessions, operator credentials, task workspaces)','.venv','node_modules','.git','config/local.json','reports/private','previous zip exports'],'redactions':0,
               'binary_policy':'Only images with a matching explicit visual-review SHA256 are included. Image pixels are not automatically credential-scanned or redacted.'}
+    manifest['explicit_extra_paths']=[Path(p).resolve().relative_to(ROOT).as_posix() for p in extra_paths]
+    manifest['exclusions'][0]='.runtime except explicitly selected task/skill artifacts'
     reviewed={}
-    for path in reports.rglob('binary-review.json'):
+    for path in (p for root in evidence_roots for p in root.rglob('binary-review.json')):
         if 'private' in path.relative_to(reports).parts:continue
         review=json.loads(path.read_text(encoding='utf-8'))
         if review.get('schema')!='asuna-binary-review-v1':raise ValueError('INVALID_BINARY_REVIEW')

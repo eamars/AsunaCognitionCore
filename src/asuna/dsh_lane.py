@@ -16,6 +16,7 @@ from .lanes import LaneResult
 from .provider_proxy import ProviderProxy
 from .state import Store
 from .queue import RuntimeLease
+from .skills import skills_directory
 
 
 def provider_finish(raw):
@@ -84,13 +85,19 @@ class DshLane:
         if self.endpoint_file.exists():self.endpoint_file.unlink()
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
         compat={'supportsDeveloperRole':False,'supportsReasoningEffort':lane=='executor','thinkingFormat':'chat-template' if lane=='character' else 'qwen','maxTokensField':'max_tokens'}
-        if lane=='character':compat['chatTemplateKwargs']={'enable_thinking':True}
-        provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':262144,'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
+        if lane=='character':compat['chatTemplateKwargs']={'enable_thinking':self.model.get('native_thinking',True)}
+        provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model.get('context_window',262144),'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
         provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
+        chat=config.get('chat',{})
+        skills=skills_directory(config,chat.get('scene_id'),chat.get('person_id')) if lane=='executor' else None
+        skill_rows=[{'id':'asuna-skills','name':'@deepseek-ai/dsh-skill'}]
+        if skills:skill_rows += [
+            {'id':'asuna-skill-filesystem','name':'@deepseek-ai/dsh-skill-filesystem','config':{'includeDefaultRoots':False,'agentsHome':self.home.as_posix(),'dshHome':self.home.as_posix(),'customSkillDirs':[skills.as_posix()],'watchFollowSymlinks':False}}]
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
-            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
+            *skill_rows,
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
             *(plugin_rows or [])]}]
         patch=self.home/'lane.patch.yml';patch.write_text(yaml.safe_dump(rows,allow_unicode=True,sort_keys=False),encoding='utf-8')
@@ -150,6 +157,8 @@ class DshLane:
             if owner.get('scene_id'):
                 scene=self.store.db.scenes.find_one({'_id':owner['scene_id']})
                 if scene['policy_epoch']!=owner['policy_epoch']:raise PermissionError('POLICY_EPOCH_CHANGED')
+            if self.lane=='executor':
+                request['skills_enabled']=bool(skills_directory(self.config,owner.get('scene_id'),owner.get('requester_id')))
             self.proxy.scope_key=owner.get('scope_key','operator')
             roots=set((bound or {}).get('evidence_roots',[]))
             if (bound or {}).get('evidence_root'):roots.add(bound['evidence_root'])
@@ -163,11 +172,15 @@ class DshLane:
             body=response.json()
             self.evidence.record('lane.receipt',{'lane':self.lane,'operation':operation,'status_code':response.status_code,'body':body})
             response.raise_for_status()
+            skill_calls=[e for e in body.get('events',[]) if e.get('type')=='tool/call' and e.get('data',{}).get('name')=='skill']
+            if skill_calls:
+                self.store.audit(operation.split(':')[0],'skills.native_calls',{'session_id':native_id,'calls':skill_calls,
+                    'results':[e for e in body.get('events',[]) if e.get('type')=='tool/result' and any(b.get('toolCallId') in {c['data']['callId'] for c in skill_calls} for b in e.get('data',{}).get('message',{}).get('content',[]))]},owner.get('scope_key','operator'))
             calls=self.proxy.calls[before:]
             if body.get('compaction') or body.get('compactions'):
                 self.compact_pending.discard(session)
                 for record in compaction_audit_records(body,calls,self.evidence):
-                    self.store.audit(operation,'compaction.native',record)
+                    self.store.audit(operation,'compaction.native',{**record,'session_id':native_id},owner.get('scope_key','operator'))
             refs=[{'artifact_path':(self.evidence.root/c['request_ref']).resolve().relative_to(ROOT).as_posix(),'sha256':sha((self.evidence.root/c['request_ref']).read_bytes())} for c in calls]
             finish=body['finish_reason']
             if finish=='completed':finish=(provider_finish(calls[-1]['raw']) if calls else None) or 'unverified_provider_finish'
@@ -177,6 +190,14 @@ class DshLane:
             pending=session in self.compact_pending or bool(previous.get('compact_requested') and previous.get('compact_request_id')!=bound.get('compact_request_id'))
             self.store.put('sessions',{**previous,'last_phase':phase,'last_operation':operation,'inflight_operation':None,'compact_requested':pending,'compaction_generation':previous.get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'],stream=operation)
             return value
+
+    def skill_catalog(self):
+        # Called only after ContextBuilder authorizes the private scene/person.
+        response=self.http.get(self.url+'/skills',headers={'Authorization':'Bearer '+self.token})
+        value=response.json()
+        self.evidence.record('skills.catalog',value)
+        if response.is_error:raise RuntimeError('NATIVE_SKILL_CATALOG: '+str(value))
+        return value
 
     def compact(self,session):
         """Queue native complete-span compaction before the next real phase."""

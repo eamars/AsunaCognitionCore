@@ -43,9 +43,13 @@ class Retrieval:
         if any(len(v)!=self.dim or not all(math.isfinite(x) for x in v) or not any(v) for v in vectors):raise ValueError('EMBEDDING_DIM_OR_VALUE')
         return vectors
 
-    def index_pending(self, batch_size=16):
-        pending=list(self.store.db.memory_units.find({'status':'active','$or':[{'embedding_status':{'$ne':'READY'}},{'embedding_revision':{'$ne':self.revision}}]}))
+    def index_pending(self, batch_size=16, *, scope=None, epoch=None, stopping=None):
+        query={'status':'active','$or':[{'embedding_status':{'$ne':'READY'}},{'embedding_revision':{'$ne':self.revision}}]}
+        if scope is not None:query.update(scope_key=scope,policy_epoch=epoch)
+        pending=list(self.store.db.memory_units.find(query))
+        indexed=0
         for start in range(0,len(pending),batch_size):
+            if stopping is not None and stopping.is_set():break
             batch=pending[start:start+batch_size]
             try:vectors=self.embed([m['body_markdown'] for m in batch],'document')
             except Exception as exc:
@@ -53,7 +57,8 @@ class Retrieval:
                 raise
             for mem,vector in zip(batch,vectors):
                 self.store.put('memory_units',{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],'embedding_dim':self.dim,'embedding_status':'READY','content_sha256':sha(mem['body_markdown'].encode())},expected=mem['revision'],stream='index')
-        return len(pending)
+                indexed+=1
+        return indexed
 
     def ensure_index(self, timeout=45):
         definition={'fields':[{'type':'vector','path':'embedding','numDimensions':self.dim,'similarity':'cosine'},
@@ -120,14 +125,23 @@ class Retrieval:
         for m in pending:
             ranks.setdefault(m['_id'],{'score':0,'origins':{}})['origins']['pending_backread']=True
         ordered=sorted(ranks,key=lambda key:(-ranks[key]['score'],key))
-        selected=[];excluded=[]
+        candidates=[];excluded=[]
         for key in ordered:
             current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
             if not current or current.get('expires_at', '9999')<=now():
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
             if current.get('kind')!='monologue' and set(current.get('source_event_ids',[])) & set(exclude_sources):
                 excluded.append({'id':key,'reason':'source_in_recent_tail'});continue
-            selected.append(current)
+            candidates.append(current)
+        # Repeated character interpretations must not crowd newer source speech
+        # out of the same bounded retrieval. Reserve two slots for recent
+        # statements already returned by this query, never arbitrary recency.
+        recent_sources=sorted((m for m in candidates if m.get('epistemic_type')=='reported_speech'
+            and m['scope_key']==scope),key=lambda m:m.get('scene_seq',0),reverse=True)[:2]
+        selected=[];seen=set()
+        for m in candidates[:1]+recent_sources+candidates:
+            if m['_id'] in seen:continue
+            seen.add(m['_id']);selected.append(m)
             if len(selected)==6:break
         for m in selected:
             m['historical_sources']=[]
@@ -135,7 +149,8 @@ class Retrieval:
                 old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback','vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
-        manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only')
+        manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',
+                        recent_source_ids=[m['_id'] for m in recent_sources])
         self.evidence.record('retrieval.selection',manifest)
         self.store.audit('retrieval','retrieval.selected',manifest,scope)
         return selected,manifest

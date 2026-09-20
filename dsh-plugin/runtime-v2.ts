@@ -3,11 +3,12 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, openSyn
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import * as skillTool from '@deepseek-ai/dsh-tool-skill';
 
 // v1 remains frozen for already-running experiments. v2 adds only a validated
 // completed-silent-episode boundary; Python still owns business state.
 export const name = 'asuna-runtime-operations-v2';
-export const inject = ['agents', 'sessions', 'sessionPersistence', 'systemPrompt', 'compaction', 'tokenMeter'];
+export const inject = ['agents', 'sessions', 'sessionPersistence', 'systemPrompt', 'compaction', 'tokenMeter', 'skills', 'tools'];
 
 // A runtime capability bridge, not a second business coordinator. SDK 0.1.5-rc.2
 // exposes initialize/prompt/shutdown only; it cannot resume persisted sessions.
@@ -15,6 +16,7 @@ export function apply(ctx, config) {
   mkdirSync(config.receipts, { recursive: true });
   const handles = new Map();
   const prompts = new Map();
+  const skillAccess = new Map();
   const active = new Map();
   let queue = Promise.resolve();
   const hash = value => createHash('sha256').update(value).digest('hex');
@@ -45,12 +47,16 @@ export function apply(ctx, config) {
     }
     return next();
   });
-  async function handleSession(id, system) {
+  async function handleSession(id, system, skillsEnabled = false) {
     if (!/^[a-z0-9-]{1,100}$/.test(id)) throw new Error('INVALID_SESSION_ID');
     if (typeof system !== 'string' || system.trim().length < 80) throw new Error('MISSING_SYSTEM');
     prompts.set(id, system);
+    if (skillAccess.has(id) && skillAccess.get(id) !== skillsEnabled) throw new Error('SESSION_SKILL_ACCESS_CHANGED');
+    skillAccess.set(id, skillsEnabled);
     if (handles.has(id)) return handles.get(id).agent;
-    const setup = (agentCtx) => {
+    const setup = async (agentCtx) => {
+      // Native loader/catalog are scoped to this authorized action agent.
+      if (skillsEnabled) await agentCtx.plugin(skillTool, {});
       agentCtx.systemPrompt.section({ name: 'asuna-complete', order: 0, complete: true,
         interpolate: false, text: () => prompts.get(id) });
       agentCtx.systemPrompt.suppressRuntimeContext();
@@ -97,7 +103,9 @@ export function apply(ctx, config) {
   }
   async function run(input) {
     const path = join(config.receipts, hash(input.operation) + '.json');
-    const inputHash = hash(JSON.stringify([input.session, input.phase, input.text, input.system, !!input.compact_before, input.compact_at_steps ?? [], input.completed_episode_boundary ?? null]));
+    const semantic = [input.session, input.phase, input.text, input.system, !!input.compact_before, input.compact_at_steps ?? [], input.completed_episode_boundary ?? null];
+    if (input.skills_enabled) semantic.push({ skills_enabled: true });
+    const inputHash = hash(JSON.stringify(semantic));
     let record = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
     if (record && record.inputHash !== inputHash) throw new Error('OPERATION_CONTENT_MISMATCH');
     if (record?.state === 'DONE') return record.result;
@@ -105,7 +113,8 @@ export function apply(ctx, config) {
     if (!Array.isArray(compactAt) || compactAt.some(x => !Number.isInteger(x) || x < 2 || x > 64)) throw new Error('INVALID_COMPACTION_STEPS');
     if (compactAt.length && !input.phase.startsWith('execution')) throw new Error('MID_EPISODE_COMPACTION_FORBIDDEN');
     active.set(input.session, { steps: 0, compact: !!input.compact_before, compacted: false, compactAt, compactions: [] });
-    const agent = await handleSession(input.session, input.system);
+    if (input.skills_enabled && !config.skillsEnabled) throw new Error('SKILLS_NOT_CONFIGURED');
+    const agent = await handleSession(input.session, input.system, !!input.skills_enabled);
     if (record) {
       await agent.whenIdle();
       const recovered = resultFrom(agent.session.snapshotEvents(), record.message.id);
@@ -147,6 +156,12 @@ export function apply(ctx, config) {
   const server = createServer(async (req, res) => {
     try {
       if (req.headers.authorization !== 'Bearer ' + process.env.ASUNA_BRIDGE_TOKEN) throw new Error('UNAUTHORIZED');
+      if (req.method === 'GET' && req.url === '/skills') {
+        const snapshot = config.skillsEnabled ? await ctx.skills.snapshot({ cwd: config.workdir }) : { skills: [], complete: true };
+        const skills = snapshot.skills.filter(s => s.invocation.modelInvocable).map(s => ({ name: s.name, description: s.description.slice(0, 500) }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ skills, complete: snapshot.complete })); return;
+      }
       if (req.method !== 'POST' || req.url !== '/run') throw new Error('UNKNOWN_OPERATION');
       let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 2 * 1024 * 1024) throw new Error('INPUT_TOO_LARGE'); }
       const input = JSON.parse(body);

@@ -14,6 +14,37 @@ MUTATION=json.loads((BUNDLE/'schemas/mutation.schema.json').read_text(encoding='
 class MemoryService:
     def __init__(self,store:Store):self.store=store
 
+    def commit_understanding(self,episode,body):
+        """Commit bounded role-authored prose using the existing revision/CAS path."""
+        scope=episode['scope_key'];operation=episode['_id']+':understanding'
+        scene=self.store.authorize(episode['scene_id'],episode['person_id'])
+        if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
+            raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED')
+        if body.strip()=='不更新':
+            result={'state':'NO_CHANGE'}
+        else:
+            entity='relationship:'+episode['person_id']
+            base_id=episode['manifest']['relationship_revision']
+            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':entity+'|'+scope})
+            if not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT')
+            if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
+            if body==base['content'].get('body'):
+                result={'state':'NO_CHANGE'}
+            else:
+                sources=episode['monologue_refs']
+                for key in sources:
+                    if not self.store.db.memory_units.find_one({'_id':key,'episode_id':episode['_id'],
+                            'scope_key':scope,'policy_epoch':episode['policy_epoch'],'status':'active'}):
+                        raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT')
+                content={k:v for k,v in base['content'].items() if k in {'body','familiarity','trust','closeness','tension'}}
+                content['body']=body
+                revision=self.store.mutate(entity,scope,base_id,content,sources,scope,operation,
+                    reason='角色基于本轮真实输入与独白形成的理解；来源由程序关联。',change_class='interpretation')
+                result={'state':'COMMITTED','entity':entity,'base_revision':base_id,
+                    'accepted_revision':revision['_id'],'body':body,'source_ids':sources}
+        self.store.audit(episode['_id'],'understanding.result',result,scope)
+        return result
+
     def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):
         """Append an audited revision; do not erase history or reapply events."""
         if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
@@ -49,22 +80,28 @@ class MemoryService:
         scene=self.store.db.scenes.find_one({'_id':scene_id})
         rows=list(self.store.db.messages.find({'scene_id':scene_id,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
         made=[]
-        # UTF-8 bytes are a conservative upper bound for byte-fallback tokenizer
-        # text tokens. Four messages, at most 900 bytes; zero overlap.
-        group=[];size=0
-        def save(group):
-            if len(group)<2:return
-            sources=[m['_id'] for m in group];key='chunk-'+sha(canonical(sources))
-            if self.store.db.memory_units.find_one({'_id':key}):return
-            body='\n'.join(m['author']+': '+m['text'] for m in group)
-            made.append(self.store.put('memory_units',{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'character_id':'xiaoman','kind':'chat_chunk','body_markdown':body,'epistemic_type':'observed_fact','source_event_ids':sources,'depends_on':sources,'status':'active','embedding_status':'PENDING','chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
         for row in rows:
-            cost=len((row['author']+': '+row['text']+'\n').encode())
-            if cost>900:
-                save(group);group=[];size=0;continue
-            if size+cost>900 or len(group)==4:save(group);group=[];size=0
-            group.append(row);size+=cost
-        save(group)
+            if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
+            if row.get('memory_chunk_version')==2:continue
+            # Stable per-message segments: adding another turn cannot regroup
+            # old events or drop the last single message. No text is discarded.
+            parts=[];part='';size=0
+            for char in row['text']:
+                cost=len(char.encode('utf-8'))
+                if size+cost>900:parts.append(part);part='';size=0
+                part+=char;size+=cost
+            if part:parts.append(part)
+            for index,body in enumerate(parts):
+                key='chunk-'+sha(canonical([row['_id'],2,index]))
+                if self.store.db.memory_units.find_one({'_id':key}):continue
+                made.append(self.store.put('memory_units',{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
+                    'character_id':'xiaoman','kind':'chat_chunk','body_markdown':body,
+                    'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
+                    'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),
+                    'segment_index':index,'segment_count':len(parts),'source_event_ids':[row['_id']],
+                    'depends_on':[row['_id']],'status':'active','embedding_status':'PENDING',
+                    'chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
+            self.store.put('messages',{**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
         return made
 
     def proposal(self,proposal,request_scope,mutation_id):

@@ -21,7 +21,7 @@ class Application:
             self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)
             self.character=self.stack.enter_context(DshLane(self.config,self.store,self.evidence))
             self.executor_lane=self.stack.enter_context(DshLane(self.config,self.store,self.evidence,'executor',self.broker.rows,self.broker.token))
-            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
+            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval,self.executor_lane.skill_catalog))
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)
             return self

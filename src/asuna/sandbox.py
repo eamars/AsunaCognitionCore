@@ -6,15 +6,18 @@ from .config import ROOT
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path, protected_paths=()):
+    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None):
         self.task_dir = task_dir.resolve()
         if not self.task_dir.is_relative_to((ROOT/'.runtime/work').resolve()):
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')
         self.task_dir.mkdir(parents=True, exist_ok=True)
+        self.skills_dir = Path(skills_dir).resolve() if skills_dir else None
+        if self.skills_dir and not self.skills_dir.is_relative_to((ROOT/'.runtime/skills').resolve()):
+            raise PermissionError('SKILL_DIRECTORY_OUTSIDE_ALLOWLIST')
         self.protected_paths=[]
         for path in protected_paths:
             path=Path(path).resolve()
-            if not path.is_relative_to(self.task_dir) or not path.is_file():raise PermissionError('PROTECTED_INPUT_PATH_DENIED')
+            if not path.is_relative_to(self.task_dir) or not path.exists():raise PermissionError('PROTECTED_INPUT_PATH_DENIED')
             self.protected_paths.append(path)
 
     def run(self, argv: list[str], timeout: int = 30) -> dict:
@@ -23,6 +26,9 @@ class Sandbox:
         p=self.task_dir
         mount='/mnt/'+p.drive[0].lower()+p.as_posix()[2:]
         protected=[]
+        if self.skills_dir:
+            skill_mount='/mnt/'+self.skills_dir.drive[0].lower()+self.skills_dir.as_posix()[2:]
+            protected+=['--bind',skill_mount,'/skills']
         for path in self.protected_paths:
             relative=path.relative_to(self.task_dir).as_posix()
             protected+=['--ro-bind',mount+'/'+relative,'/task/'+relative]
@@ -56,9 +62,9 @@ print(json.dumps({'exit_code':p.returncode,'stdout':buffers[0].decode('utf-8','r
                  '/usr/bin/prlimit','--cpu=20','--as=1073741824','--fsize=8388608','--nofile=128','--',
                  'python3','-c',wrapper,json.dumps(argv),str(timeout)]
         result=subprocess.run(command, capture_output=True, timeout=timeout+5, encoding='utf-8', errors='replace')
-        if result.returncode:raise RuntimeError('SANDBOX_LAUNCH_FAILED')
+        if result.returncode:raise RuntimeError(f'SANDBOX_LAUNCH_FAILED (exit {result.returncode})\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
         value=json.loads(result.stdout)
         if value['output_limit']:raise RuntimeError('TOOL_OUTPUT_LIMIT')
         if value['timed_out']:raise TimeoutError('TOOL_TIMEOUT')
         return {'argv':argv,**value,
-                'sandbox':'wsl-bubblewrap-unshare-all','network':'isolated','mount':'task-only'}
+                'sandbox':'wsl-bubblewrap-unshare-all','network':'isolated','mount':'task-and-skills' if self.skills_dir else 'task-only'}

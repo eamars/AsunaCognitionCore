@@ -34,10 +34,8 @@ class TokenMeter:
 
     def check(self,body,capacity_override=False):
         measured=self.measure(body)
-        effective=262144
-        working=65536 if self.lane=='character' else 196608
+        effective=self.cfg.get('context_window',262144)
         limit=effective-body['max_tokens']-4096
-        if not capacity_override:limit=min(limit,working)
         result={**measured,'effective_capacity':effective,'output_budget':body['max_tokens'],'safety_margin':4096,'input_limit':limit,'capacity_probe_override':capacity_override}
         self.evidence.record('budget.checked',result)
         if result['input_tokens']>limit:raise ValueError('INPUT_BUDGET_EXCEEDED')

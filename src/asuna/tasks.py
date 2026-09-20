@@ -4,13 +4,15 @@ from pathlib import Path
 import secrets
 import shutil
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import uuid
 from contextlib import contextmanager
 import jsonschema
-from .config import ROOT,BUNDLE
+from .config import ROOT,BUNDLE,prompt_path,redact_text
 from .evidence import canonical,sha
 from .sandbox import Sandbox
+from .skills import skills_directory
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
 
@@ -24,6 +26,14 @@ TOOLS=[
     {'name':'fixture_commit_copy','description':'Commit a staged copy to the simulated idempotent effect receiver after verifying its SHA256.', 'parameters':{'path':{'type':'string','required':True},'sha256':{'type':'string','required':True}}},
     {'name':'fixture_run_checks','description':'Run task visible checks and return real exit code. Hidden oracle is outside this workspace.', 'parameters':{}},
     {'name':'sandbox_run','description':'Execute argv in task-only Linux sandbox, no network or host credentials. Use python3 to read/write code and run tests. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'type':'array','items':{'type':'string'},'required':True}}},
+]
+
+WORKSPACE_TOOLS = [
+    {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
+    {'name': 'read_file', 'description': 'Read a UTF-8 file inside /task (up to 32 KiB).', 'parameters': {'path': {'type': 'string', 'required': True}}},
+    {'name': 'write_file', 'description': 'Create a UTF-8 file inside /task. Existing files require explicit overwrite=true. Protected paths are read-only.', 'parameters': {'path': {'type': 'string', 'required': True}, 'text': {'type': 'string', 'required': True}, 'overwrite': {'type': 'boolean'}}},
+    TOOLS[-1],
+    {'name': 'task_status', 'description': 'After all tool work, declare the outcome: done, partial, blocked, or needs_character_decision. Then give your final findings in natural language. No more tools after this declaration.', 'parameters': {'status': {'type': 'string', 'enum': ['done', 'partial', 'blocked', 'needs_character_decision'], 'required': True}}},
 ]
 
 
@@ -129,8 +139,16 @@ class TaskService:
         original=self.store.db.episodes.find_one({'_id':task['episode_id']})
         depth=original.get('delegation_depth',0)+1
         event={'event_id':task['_id']+':result:'+str(task['intent_revision']),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'任务结果已到达。事实来自受控工具回执；执行侧的解释不规定你的感受或公开措辞。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','value':task['result']}]}
+        if self.store.config.get('task_mode')=='workspace':
+            source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
+            observations=[]
+            for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE','tool':{'$ne':'task_status'}}):
+                observations.append({'source':item['_id'],'tool':item['tool'],'result_excerpt':json.dumps(item['result'],ensure_ascii=False)[:4096]})
+            event['trusted_context_events'][0].update(original_input=source['text'],goal=task['goal'],observations=observations[-8:])
         ep=coordinator.ingest(event,persona=original['persona'])
-        self.store.put('tasks',{**current,'feedback_state':'DELIVERED','feedback_episode':ep['_id']},expected=current['revision'],stream=current['_id'])
+        self.store.put('tasks',{**current,'feedback_state':'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=current['revision'],stream=current['_id'])
+        if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
+            self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
 
@@ -143,24 +161,36 @@ class ToolBroker:
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
             def do_POST(self):
+                request=None
                 try:
                     if self.path!='/tool' or self.headers.get('Authorization')!='Bearer '+owner.token:raise Denied('BROKER_AUTH')
                     size=int(self.headers.get('Content-Length','0'))
                     if not 0<size<65536:raise Denied('BROKER_BODY_SIZE')
-                    value=owner.call(**json.loads(self.rfile.read(size)))
+                    request=json.loads(self.rfile.read(size))
+                    value=owner.call(**request)
                     data=canonical(value);self.send_response(200)
                 except Exception as exc:
-                    data=canonical({'error':str(exc) if isinstance(exc,(Denied,Conflict,ValueError)) else type(exc).__name__});self.send_response(409)
+                    failure={'error':redact_text(str(exc),owner.store.config),'error_type':type(exc).__name__,
+                             'traceback':redact_text(traceback.format_exc(),owner.store.config)}
+                    if request and request.get('session') in owner.bindings:
+                        task,_=owner.bindings[request['session']]
+                        try:owner.store.audit(task['_id'],'tool.failed',failure,task['scope_key'])
+                        except Exception:pass  # Return the original failure to the calling action session.
+                    data=canonical(failure);self.send_response(409)
                 self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
         self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
 
     @property
-    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':TOOLS}}]
+    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS}}]
 
     def bind(self,session,task,workspace):
-        protected=[p for p in Path(workspace).rglob('*') if p.is_file() and p.name!='stats.py']
-        self.bindings[session]=(task,Sandbox(workspace,protected))
+        if self.store.config.get('task_mode')=='workspace':
+            protected=[Path(workspace)/p for p in self.store.config['chat'].get('read_only_paths',[])]
+        else:
+            protected=[p for p in Path(workspace).rglob('*') if p.is_file() and p.name!='stats.py']
+        skills=skills_directory(self.store.config,task['scene_id'],task['requester_id'])
+        self.bindings[session]=(task,Sandbox(workspace,protected,skills))
 
     def call(self,session,call_id,tool,args):
         with self.service.lock:
@@ -175,6 +205,8 @@ class ToolBroker:
                 if old['input_hash']!=input_hash:raise Denied('CALL_ID_REUSED')
                 if old['state']!='DONE':raise Denied('TOOL_DELIVERY_UNKNOWN')
                 return old['result']
+            if self.store.db.artifacts.find_one({'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':'task_status','state':'DONE'}):
+                raise Denied('TASK_ALREADY_REPORTED')
             if current['tool_steps']>=64:raise Denied('TOOL_BUDGET_EXHAUSTED')
             self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
@@ -185,7 +217,26 @@ class ToolBroker:
                 self.store.audit(task['_id'],'fault.injected',{'kind':'transient_read_failure','artifact':key},task['scope_key'])
                 self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
                 return result
-            if tool=='sandbox_run':
+            if tool=='task_status':
+                if args.get('status') not in ('done','partial','blocked','needs_character_decision'):raise ValueError('INVALID_TASK_STATUS')
+                result={'status':args['status']}
+            elif tool in ('list_files','read_file','write_file'):
+                code="""import pathlib,json,sys
+a=json.loads(sys.argv[1]);op=sys.argv[2];root=pathlib.Path('/task')
+def path(name):
+ p=(root/name).resolve();assert p.is_relative_to(root),'PATH_DENIED';return p
+if op=='list_files':r={'files':[{'path':str(p.relative_to(root)),'size':p.stat().st_size} for p in sorted(root.rglob('*')) if p.is_file()]}
+elif op=='read_file':
+ p=path(a['path']);assert p.stat().st_size<=32768,'READ_LIMIT';r={'path':str(p.relative_to(root)),'text':p.read_text(encoding='utf-8')}
+elif op=='write_file':
+ p=path(a['path']);p.parent.mkdir(parents=True,exist_ok=True)
+ with p.open('w' if a.get('overwrite',False) else 'x',encoding='utf-8') as f:f.write(a['text'])
+ r={'path':str(p.relative_to(root)),'text':p.read_text(encoding='utf-8'),'written':True}
+print(json.dumps(r,ensure_ascii=False))
+"""
+                raw=sandbox.run(['python3','-c',code,json.dumps(args),tool])
+                result={'error':'TASK_OPERATION_FAILED','execution':raw} if raw['exit_code'] else json.loads(raw['stdout'])
+            elif tool=='sandbox_run':
                 result=sandbox.run(args['argv'])
             elif tool=='fixture_run_checks':
                 result=sandbox.run(['python3','-m','unittest','discover','-p','test_visible.py'])
@@ -250,6 +301,8 @@ class Executor:
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
         source=self.service.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
         persona=self.service.store.db.state_revisions.find_one({'_id':task['persona_revision']})
+        if self.service.store.config.get('task_mode')=='workspace':
+            return self._run_workspace(task,binding,source,persona,healthy)
         system=(BUNDLE/'prompts/executor.md').read_text(encoding='utf-8')+'\n共享身份与适用价值（不得生成或改写角色独白/公开回复）：\n'+persona['content']['body']
         text=json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],'allowed_capabilities':task['allowed_capabilities'],'workspace':'/task','result_schema':RESULT_SCHEMA},ensure_ascii=False)+'\n使用工具核实目标。最终只返回符合result_schema的JSON，不使用Markdown围栏。所有facts必须引用实际工具返回的evidence_ref。'
         text+='\nartifact_refs只能使用工具返回的artifact_ref，不得填文件路径。effect_receipts只能使用工具返回的effect_receipt。'
@@ -266,3 +319,29 @@ class Executor:
                     self.service.store.put('tasks',{**current,'state':'FAILED_PROTOCOL','failure':'RESULT_REJECTED_AFTER_REPAIR'},expected=current['revision'],stream=task['_id'])
                     raise
                 text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。输出必须是单个原始JSON对象，以 { 开始、以 } 结束；禁止 Markdown 代码围栏、解释或前后文字。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)
+
+    def _run_workspace(self,task,binding,source,persona,healthy):
+        system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+'\n共享角色价值（不代写角色台词或独白）：\n'+persona['content']['body']
+        text=json.dumps({'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
+                         'workspace':'/task','read_only_paths':self.service.store.config['chat'].get('read_only_paths',[])},ensure_ascii=False)
+        if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):
+            text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
+        value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)
+        healthy()
+        self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'finish_reason':value.finish_reason},task['scope_key'])
+        if value.finish_reason!='stop' or not value.content.strip():raise ValueError('EXECUTOR_INCOMPLETE')
+        artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
+        declared=next((a for a in artifacts if a['tool']=='task_status'),None)
+        if not declared:raise ValueError('EXECUTOR_STATUS_MISSING')
+        status=declared['result']['status']
+        observations=[a for a in artifacts if a['tool']!='task_status']
+        successful=[a for a in observations if not a['result'].get('error') and a['result'].get('exit_code',0)==0]
+        if status=='done' and not successful:raise Denied('DONE_WITHOUT_TOOL_EVIDENCE')
+        # The model reports in natural language; identities and actual receipts
+        # are attached by the program, never recopied or invented by the model.
+        result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'status':status,
+                'facts':[{'text':value.content,'evidence_refs':[a['_id'] for a in observations]}] if observations else [],
+                'uncertainties':[], 'unmet_items':[] if status=='done' else [value.content],
+                'artifact_refs':[a['_id'] for a in observations], 'effect_receipts':[],
+                'needs_decision':value.content if status=='needs_character_decision' else None}
+        return self.service.finish(task,result)

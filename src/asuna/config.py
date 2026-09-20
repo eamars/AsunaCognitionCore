@@ -5,7 +5,19 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = ROOT / 'asuna_v2_v1_handoff'
+BUNDLE = ROOT / 'docs/development_plans/ADR-001-asuna_v2_v1_handoff'
+
+
+def prompt_path(config: dict, name: str) -> Path:
+    return Path(config.get('prompts_dir', BUNDLE / 'prompts')) / name
+
+
+def redact_text(text: str, config: dict) -> str:
+    values = [config.get('mongo_uri', '')]
+    values += [config.get(lane, {}).get('api_key', '') for lane in ('character', 'executor', 'embedding')]
+    for value in sorted(filter(None, values), key=len, reverse=True):
+        text = text.replace(value, '[凭据已隐藏]')
+    return text
 
 
 def load(path: str | Path = 'config/local.json') -> dict:

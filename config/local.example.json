@@ -1,15 +1,54 @@
 {
   "database": "asuna_cognition_core_v2",
-  "allowed_databases": ["asuna_cognition_core_v2"],
+  "allowed_databases": [
+    "asuna_cognition_core_v2"
+  ],
   "legacy_database": "PROTECTED_OLD_DATABASE_NAME",
   "mongo_uri": "mongodb://192.168.2.10:27027/?directConnection=true",
   "dsh_home": "C:/workspace/asuna_cognition_core_v2/.runtime/asuna-dsh",
   "workdir": "C:/workspace/asuna_cognition_core_v2/.runtime/work",
-  "character": {"base_url":"http://192.168.2.13:8083/v1","model":"gemma4-26b-a4b-it-qat-vision-262144-qat-mtp","sampling":{"temperature":0.7,"top_p":0.95,"seed":20260919},"max_tokens":4096},
-  "executor": {"base_url":"http://192.168.2.13:1919/v1","model":"qwen38-next-uncensored-freetoken-vision","sampling":{"temperature":0.2,"top_p":0.95,"seed":20260919},"max_tokens":8192},
-  "embedding": {"base_url":"http://192.168.2.8:1234/v1","model":"text-embedding-nomic-embed-text-v2-moe","query_prefix":"search_query: ","document_prefix":"search_document: ","api_key":""},
+  "character": {
+    "base_url": "http://127.0.0.1:8083/v1",
+    "model": "gemma4-31b-isometry-fabled-persona-4090-6-context-checkpoints-google-mtp",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 4096,
+    "native_thinking": false,
+    "context_window": 68608
+  },
+  "executor": {
+    "base_url": "http://192.168.2.13:1919/v1",
+    "model": "qwen38-next-uncensored-freetoken-vision",
+    "sampling": {
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 8192
+  },
+  "embedding": {
+    "base_url": "http://192.168.2.8:1234/v1",
+    "model": "text-embedding-nomic-embed-text-v2-moe",
+    "query_prefix": "search_query: ",
+    "document_prefix": "search_document: ",
+    "api_key": ""
+  },
   "local_only": true,
   "workflow_timeout_seconds": 1800,
   "provider_idle_timeout_seconds": 1800,
-  "publish_adapter": "local-idempotent-sink"
+  "publish_adapter": "local-idempotent-sink",
+  "prompts_dir": "config/prompts",
+  "chat": {
+    "scene_id": "local-dm",
+    "person_id": "local-user",
+    "persona": "local-xiaoman",
+    "display_name": "小满",
+    "persona_file": "config/prompts/persona_local.md",
+    "workspace": "C:/workspace/asuna_cognition_core_v2/.runtime/work/local-user",
+    "skills_dir": "C:/workspace/asuna_cognition_core_v2/.runtime/skills/local-user",
+    "read_only_paths": []
+  }
 }

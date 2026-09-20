@@ -1,10 +1,11 @@
 from __future__ import annotations
 import json
+import copy
 from pathlib import Path
 import threading
 import uuid
 import jsonschema
-from .config import BUNDLE
+from .config import BUNDLE, prompt_path
 from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
@@ -12,6 +13,10 @@ from .publish import PublishService
 from .state import Store, Conflict, Denied, now
 
 DECISION_SCHEMA=json.loads((BUNDLE/'schemas/decision.schema.json').read_text(encoding='utf-8'))
+WORKSPACE_DECISION_SCHEMA=copy.deepcopy(DECISION_SCHEMA)
+WORKSPACE_DECISION_SCHEMA['properties']['cancel_task_id']={'type':'string','minLength':1,'maxLength':200}
+WORKSPACE_DECISION_SCHEMA['properties']['reflect_understanding']={'type':'boolean'}
+WORKSPACE_DECISION_SCHEMA['allOf'].append({'if':{'required':['cancel_task_id']},'then':{'properties':{'next':{'const':'speak'}}}})
 
 
 class ProtocolFailure(RuntimeError):
@@ -39,10 +44,12 @@ class Coordinator:
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
             # scene_seq is allocated atomically; gaps are allowed after a crash.
             sequence=self.store.db.scenes.find_one_and_update({'_id':scene['_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-            msg={'_id':'in-'+ep_id,'adapter_id':'fixture','platform_event_id':event['event_id'],'scene_id':scene['_id'],'scope_key':scene['scope_key'],'scene_seq':sequence,'text':event['text'],'author':event['person_id'],'direction':'inbound','delivery_state':'RECEIVED','occurred_at':event.get('occurred_at',now()),'received_at':now()}
+            msg={'_id':'in-'+ep_id,'adapter_id':'fixture','platform_event_id':event['event_id'],'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'scene_seq':sequence,'text':event['text'],'author':event['person_id'],'direction':'inbound','delivery_state':'RECEIVED','occurred_at':event.get('occurred_at',now()),'received_at':now()}
             if not self.store.db.messages.find_one({'_id':msg['_id']}):
                 self.store.put('messages',msg,stream=ep_id)
             ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
+            if scene.get('character_context'):
+                ep=self._update(ep,character_context=scene['character_context'])
             return self.advance(ep_id)
 
     def _update(self, ep, **changes):
@@ -50,12 +57,13 @@ class Coordinator:
 
     def _stage(self, ep, phase, round_id=0, extra=''):
         operation=f"{ep['_id']}:{phase}:{round_id}"
-        instruction=(BUNDLE/f'prompts/stage_{phase.lower()}.md').read_text(encoding='utf-8')
+        instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
         if phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE'):
             instruction=json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+instruction
         instruction += '\n'+extra
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
         binding=f"xiaoman:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
+        if ep.get('character_context'):binding+=':'+ep['character_context']
         value=self.character.generate(binding,operation,phase,instruction,ep['system'])
         self.crash('after_lane_delivery')
         self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
@@ -83,13 +91,29 @@ class Coordinator:
                         text=self._stage(ep,'DECIDE',ep.get('recall_rounds',0)*2+attempt,extra='修复上一条JSON，只修复格式，不改变意图。' if attempt else '')
                         try:
                             decision=json.loads(text)
-                            jsonschema.validate(decision,DECISION_SCHEMA)
+                            jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA if self.store.config.get('task_mode')=='workspace' else DECISION_SCHEMA)
                             break
                         except (ValueError,jsonschema.ValidationError):
                             if attempt==1:
                                 raise ProtocolFailure('BAD_DECISION_JSON')
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision)
                 if ep['state']=='DECISION_ACCEPTED':
+                    if ep['decision'].get('reflect_understanding') and not ep.get('understanding_update'):
+                        from .memory import MemoryService
+                        if not ep['context'].get('understanding_update_from_program',{}).get('available'):
+                            raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
+                        text=self._stage(ep,'REFLECT')
+                        update=MemoryService(self.store).commit_understanding(ep,text)
+                        ep=self._update(ep,understanding_update=update)
+                    if ep['decision'].get('cancel_task_id') and not ep.get('control_result'):
+                        from .tasks import TaskService
+                        target=self.store.db.tasks.find_one({'_id':ep['decision']['cancel_task_id'],
+                            'scene_id':ep['scene_id'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']})
+                        if not target or target['_id'] not in {t['_id'] for t in ep['context']['task_state_from_program']}:
+                            raise Denied('CANCEL_TASK_NOT_IN_CURRENT_CONTEXT')
+                        if target['state'] in ('READY','RUNNING'):
+                            target=TaskService(self.store).cancel(target['_id'],reason='character_confirmed_user_cancellation',person_id=ep['person_id'])
+                        ep=self._update(ep,control_result={'action':'cancel','task_id':target['_id'],'actual_state':target['state']})
                     next_step=ep['decision']['next']
                     if next_step=='silent':
                         return self._update(ep,state='COMMITTED',silent_reason=ep['decision']['goal'])
@@ -115,12 +139,15 @@ class Coordinator:
                             revised=TaskService(self.store).activate_revision(ep)
                             intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
-                            self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'allowed_capabilities':['fixture_lookup','fixture_read_resource','fixture_stage_copy','fixture_commit_copy','fixture_run_checks','sandbox_run']},stream=ep_id)
+                            from .tasks import WORKSPACE_TOOLS,TOOLS
+                            capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
+                            self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'allowed_capabilities':[t['name'] for t in capabilities]},stream=ep_id)
                         self.crash('after_task_persist')
                         if not ep['decision']['speak_before_action']:
                             return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
                         ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
-                    text=self._stage(ep,'SPEAK')
+                    results={k:ep[k] for k in ('control_result','understanding_update') if k in ep}
+                    text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text)
                 if ep['state']=='SPEAK_ACCEPTED':
                     key=ep_id+':speak:0'
@@ -129,7 +156,7 @@ class Coordinator:
                         self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':'xiaoman','phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
                     self.publisher.publish(key)
                     self.crash('before_episode_commit')
-                    ep=self._update(ep,state='WAITING_TASK' if ep.get('task_id') and ep['episode_kind']=='external' else 'COMMITTED')
+                    ep=self._update(ep,state='WAITING_TASK' if ep['decision']['next']=='delegate' else 'COMMITTED')
                 return ep
             except ProtocolFailure as exc:
                 self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])

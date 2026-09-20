@@ -13,7 +13,7 @@ def main():
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
     parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
     sub=parser.add_subparsers(dest='command',required=True)
-    for cmd in ('doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import','review-aggregate'):
+    for cmd in ('chat','doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import','review-aggregate'):
         p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
@@ -36,6 +36,9 @@ def main():
     args=parser.parse_args();ev=None;store=None
     try:
         config=load(args.config)
+        if args.command=='chat':
+            from .chat import chat
+            return chat(config,args.database,args.out)
         if args.command in ('run','doctor','reflect','index','evaluate'):
             run=args.command+'-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-')+uuid.uuid4().hex[:6]
             ev=Evidence(Path(args.out) if args.out else ROOT/'reports'/run)
@@ -56,7 +59,9 @@ def main():
             if any(not e.get('text') for e in events):raise ValueError('TEXT_OR_EVENTS_REQUIRED')
             with Application(config,ev,args.database) as app:
                 if args.compact_before:
-                    scene=app.store.db.scenes.find_one({'_id':args.scene});app.character.compact(f'xiaoman:{args.scene}:{scene["policy_epoch"]}:{args.persona}')
+                    scene=app.store.db.scenes.find_one({'_id':args.scene});binding=f'xiaoman:{args.scene}:{scene["policy_epoch"]}:{args.persona}'
+                    if scene.get('character_context'):binding+=':'+scene['character_context']
+                    app.character.compact(binding)
                 episodes=app.router.batch(events,persona=args.persona,workspace=args.workspace)
                 value={'episodes':[{'id':e.get('_id',e.get('message_id')),'state':e['state']} for e in episodes],'public':{e['scene_id']:app.store.public_messages(e['scene_id'],e['person_id']) for e in events},'evidence':str(ev.root)}
         elif args.command=='reflect':
@@ -68,6 +73,7 @@ def main():
             value=MemoryService(store).rollback(args.entity,args.scope,args.target_revision,args.base_revision,args.operation,operator=True)
         elif args.command=='compact':
             scene=store.db.scenes.find_one({'_id':args.scene});binding=f'xiaoman:{args.scene}:{scene["policy_epoch"]}:{args.persona}'
+            if scene.get('character_context'):binding+=':'+scene['character_context']
             session=store.db.sessions.find_one({'binding_key':binding})
             if not session:raise ValueError('SESSION_NOT_FOUND')
             store.put('sessions',{**session,'compact_requested':True,'compact_request_id':str(uuid.uuid4())},expected=session['revision'],stream=binding)

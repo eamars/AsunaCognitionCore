@@ -1,0 +1,96 @@
+{
+  "test_id": "E06",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-0ccfaeea419a",
+  "executed_at": "2026-09-20T01:46:29.968830+00:00",
+  "manifest_sha256": "eb68970c3d5a590db82aefd6191f913627dd3dcf3cefcc2d8bd650271dc460e8",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T014425Z-afabff\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Frozen unique task result and genuine broker references feed character phases; three redeliveries produce no additional public feedback.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E06_sandbox_cannot_access_host_credentials_or_network",
+      "source": {
+        "artifact_path": "tests/test_engineering_m3.py",
+        "sha256": "1c62d1805d3d317dc67c065ff059a1d83dc475f55c0a6f1fb71676db1e3d4754"
+      },
+      "time_seconds": 1.2
+    },
+    {
+      "name": "test_E06_duplicate_result_one_character_feedback",
+      "source": {
+        "artifact_path": "tests/test_engineering_m6.py",
+        "sha256": "20a13d6211cd9e7e3b5fcea0354e8f10317c0aff6d1cd07c239634adc1b7a7e3"
+      },
+      "time_seconds": 1.786
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/manifest.json",
+      "sha256": "dac4465be7c5f1dae87c23b95ea33fdf458b67dc6640c41cfb6b7220db1c60e8"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/frozen-inputs.zip",
+      "sha256": "50086f21292dd112c97ce19d7497e6b62914ecdda11683240855716633073b88"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/junit.xml",
+      "sha256": "1b4fce8c066524e68ae059e1b7201205b14a2201dec2b2b9462db64eb9def6fe"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/result.json",
+      "sha256": "fc956091c287733d00bebfcb23eb0d76e400c461d9c33d136d0b6e253b204c74"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stdout.txt",
+      "sha256": "d7b91c0cb7f7b79da73c0c85f3e6a8e75d90fb13e0b6c2ceb37fafc6940cb501"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-0ccfaeea419a/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/56a367838e03c207/fixture.json",
+      "sha256": "b60298f05d05006ec3314729526ebfe5916dad5d94e60855da5b8211ff904387"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/56a367838e03c207/trace.json",
+      "sha256": "00cf97730de06c4e53f60b342e954ac585a53374b125093c225edfb6998786ba"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/7910ec60d346a24a/fixture.json",
+      "sha256": "f920677b389e63dfa91234f25c919b9bb1bc6f4e1574066a126d800f6094968e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/7910ec60d346a24a/trace.json",
+      "sha256": "cb96e39d9407503a720799095b98865090c059194cd4f93724eed9246f53560a"
+    }
+  ],
+  "tested_implementation_commit": "58e5a6d6a963a1039e4511257d31ecb8df877989",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

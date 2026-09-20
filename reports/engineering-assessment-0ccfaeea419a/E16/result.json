@@ -1,0 +1,201 @@
+{
+  "test_id": "E16",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-0ccfaeea419a",
+  "executed_at": "2026-09-20T01:46:30.193375+00:00",
+  "manifest_sha256": "eb68970c3d5a590db82aefd6191f913627dd3dcf3cefcc2d8bd650271dc460e8",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T014425Z-afabff\\junit.xml"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/probe_revision.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "tools/probe_effect_fence.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Actual v1 effect preserved after v2; B cancellation denied; concurrent old/new worker results fenced, old evidence and stale feedback rejected.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E16_old_worker_exception_does_not_poison_replacement",
+      "source": {
+        "artifact_path": "tests/test_engineering_m11.py",
+        "sha256": "e454eb496a770b1ef2139393b2ad2af24874289faaa0c9fd7c6d5a74d4353d1d"
+      },
+      "time_seconds": 1.15
+    },
+    {
+      "name": "test_E16_busy_workspace_is_not_claimed",
+      "source": {
+        "artifact_path": "tests/test_engineering_m11.py",
+        "sha256": "e454eb496a770b1ef2139393b2ad2af24874289faaa0c9fd7c6d5a74d4353d1d"
+      },
+      "time_seconds": 2.734
+    },
+    {
+      "name": "test_E16_cancel_fences_tool_and_result",
+      "source": {
+        "artifact_path": "tests/test_engineering_m3.py",
+        "sha256": "1c62d1805d3d317dc67c065ff059a1d83dc475f55c0a6f1fb71676db1e3d4754"
+      },
+      "time_seconds": 1.219
+    },
+    {
+      "name": "test_E09_E16_owner_cancellation_and_expired_lease",
+      "source": {
+        "artifact_path": "tests/test_engineering_m6.py",
+        "sha256": "20a13d6211cd9e7e3b5fcea0354e8f10317c0aff6d1cd07c239634adc1b7a7e3"
+      },
+      "time_seconds": 1.236
+    }
+  ],
+  "companion_probes": [
+    {
+      "name": "revision-probe-a81f6916e7",
+      "result": {
+        "artifact_path": "reports/revision-probe-a81f6916e7/result.json",
+        "sha256": "41e8486e7934fe657f56854695d089c6e1ab9c8e672c7ebff44dd13d8b7ecbf5"
+      },
+      "status": "PASS",
+      "mode": "fake_character_real_Mongo_real_sandbox_concurrent_workers"
+    },
+    {
+      "name": "effect-fence-probe-8145bf2a25",
+      "result": {
+        "artifact_path": "reports/effect-fence-probe-8145bf2a25/result.json",
+        "sha256": "8b336228a93edd608b3f947fff756266c40bc4100b4669ae6d1989b82d547f63"
+      },
+      "status": "PASS",
+      "mode": "real_Mongo_Windows_process_lock_WSL_effect"
+    }
+  ],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/manifest.json",
+      "sha256": "dac4465be7c5f1dae87c23b95ea33fdf458b67dc6640c41cfb6b7220db1c60e8"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/frozen-inputs.zip",
+      "sha256": "50086f21292dd112c97ce19d7497e6b62914ecdda11683240855716633073b88"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/junit.xml",
+      "sha256": "1b4fce8c066524e68ae059e1b7201205b14a2201dec2b2b9462db64eb9def6fe"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/result.json",
+      "sha256": "fc956091c287733d00bebfcb23eb0d76e400c461d9c33d136d0b6e253b204c74"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stdout.txt",
+      "sha256": "d7b91c0cb7f7b79da73c0c85f3e6a8e75d90fb13e0b6c2ceb37fafc6940cb501"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-0ccfaeea419a/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/6a63d7c4c78b9eee/fixture.json",
+      "sha256": "61d27abc6a26b988fa4849e635676fd698d5aecab5edf78da773d77818983727"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/6a63d7c4c78b9eee/trace.json",
+      "sha256": "59a9de0e496285d81ac44d8f9e4b96a82d1ace18a54ec75966e60a48a113c9c6"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/e488f65a186ede54/fixture.json",
+      "sha256": "abb546696b5c797851efb58bd7f57c997136e996fef8a3ea7d1312a99e0d8acd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/e488f65a186ede54/trace.json",
+      "sha256": "225e85b0cd2afcba855a2cf0f123365949e4c614f1dc2aa56cf3b62ac7f6bea8"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/056bcd4a849e6adb/fixture.json",
+      "sha256": "3c6ce3af9b36a4b39a39dbf265e731e9e31db343699d46a5f4a9010f8612c3cb"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/056bcd4a849e6adb/trace.json",
+      "sha256": "79b50e001c213c4331237c317ea5500f7b0f34faad2260a237bbd17cf8c84591"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/332d48fc3f4179c4/fixture.json",
+      "sha256": "ddf0901839ae81749a256cfeae366f5355045b792cb102a5d35abaddfe51cf32"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/332d48fc3f4179c4/trace.json",
+      "sha256": "e34c593f7df6a67131e15b67b55b7ab229aca8cdfabe2a9cd141bf8d1959d04e"
+    },
+    {
+      "artifact_path": "reports/revision-probe-a81f6916e7/frozen-inputs.zip",
+      "sha256": "321a6b91812790b6951d13ef5352b97efcb4a2d99ccea0b7875f359969216112"
+    },
+    {
+      "artifact_path": "reports/revision-probe-a81f6916e7/manifest.json",
+      "sha256": "22d7a083312a07deba46fa8dd3c9d9004b01cf9d5a48bd2f38fce4c11ae2b28d"
+    },
+    {
+      "artifact_path": "reports/revision-probe-a81f6916e7/observations.json",
+      "sha256": "d1ff506b7412e374e884e1e3de507e95f85bfa919288a34a94339bd3b02fc959"
+    },
+    {
+      "artifact_path": "reports/revision-probe-a81f6916e7/result.json",
+      "sha256": "41e8486e7934fe657f56854695d089c6e1ab9c8e672c7ebff44dd13d8b7ecbf5"
+    },
+    {
+      "artifact_path": "reports/revision-probe-a81f6916e7/trace.json",
+      "sha256": "47d62df5503eedc4ad478368a006898e407efd8c0d00eaf80fde11c0f80963b6"
+    },
+    {
+      "artifact_path": "reports/effect-fence-probe-8145bf2a25/00001-cross_process_fence.json",
+      "sha256": "65b43a739dc8d6fa7fe83e5cae91a40ba318826a28c8ffcf3c1f2630dad0a87c"
+    },
+    {
+      "artifact_path": "reports/effect-fence-probe-8145bf2a25/frozen-inputs.zip",
+      "sha256": "2833eb248df21f73df4ad272406fc5879689e834d90c53af149d38f2f363473d"
+    },
+    {
+      "artifact_path": "reports/effect-fence-probe-8145bf2a25/manifest.json",
+      "sha256": "6c040587bbe1d4abf03e22c9fc923286ff3ead778125d4f8b151c7aaf850457d"
+    },
+    {
+      "artifact_path": "reports/effect-fence-probe-8145bf2a25/result.json",
+      "sha256": "8b336228a93edd608b3f947fff756266c40bc4100b4669ae6d1989b82d547f63"
+    },
+    {
+      "artifact_path": "reports/effect-fence-probe-8145bf2a25/trace.json",
+      "sha256": "8b1bd7abe446d95e7ee4e134231a9f79db77f8256409d712bddb06c12ee7ff14"
+    }
+  ],
+  "tested_implementation_commit": "58e5a6d6a963a1039e4511257d31ecb8df877989",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

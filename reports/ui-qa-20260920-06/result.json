@@ -1,0 +1,57 @@
+{
+  "test_id": "PROBE-UI-FAILURE",
+  "status": "PASS",
+  "executed_at": "2026-09-20T01:40:07.606325+00:00",
+  "mode": "actual_in_app_Browser_saved_failure_trace",
+  "commands": [
+    {
+      "argv": [
+        "in-app Browser",
+        "open transport-failure.html",
+        "expand execution.output and final state.commit",
+        "capture DOM and screenshots"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": {
+    "execution_finish_reason_error_visible": true,
+    "task_state_UNKNOWN_visible": true,
+    "automatic_retry_false_in_visible_DOM": true,
+    "failed_model_output_not_labelled_as_completed_task": true
+  },
+  "evidence": [
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/transport-failure.jpg",
+      "sha256": "3840f2a43342b3c5b88ceabefb88bef764a3b877a8d9a0626981de20199ce08f",
+      "mime_type": "image/jpeg",
+      "review_note": "Visually inspected in-app Browser screenshot: synthetic file task and audit identifiers, no visible credentials."
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/transport-unknown.jpg",
+      "sha256": "ad3f184d768f7b4774e6dee39d9ca84bee506e6747c652d3f96064b440cf5170",
+      "mime_type": "image/jpeg",
+      "review_note": "Visually inspected in-app Browser screenshot: synthetic file task and audit identifiers, no visible credentials."
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/transport-failure-dom.txt",
+      "sha256": "0b93357a39baa429a92258fab213cd3581062161f0939966c6a8c0edd94ba962"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/transport-failure.html",
+      "sha256": "ec3f883c71907d8e90b728f5386f91aa2dbad8a284eb4c68a53f1087c89cf893"
+    },
+    {
+      "artifact_path": "reports/ui-qa-20260920-01/transport-failure.json",
+      "sha256": "1dbd00b0955d96b657b7cbc5e150764e0ae8e454c1407c6621a9b95b407b8b15"
+    }
+  ],
+  "source": {
+    "artifact_path": "reports/formal-L11-20260920-01/wrong_argument-1/trace.json",
+    "sha256": "1dbd00b0955d96b657b7cbc5e150764e0ae8e454c1407c6621a9b95b407b8b15"
+  },
+  "limitations": [
+    "Saved pre-fix failure, not a new live model trial. The raw native cause is in the separately preserved lane receipt; this page demonstrates execution finish_reason and task state.",
+    "No browser download completion or human cognition rating is claimed."
+  ]
+}

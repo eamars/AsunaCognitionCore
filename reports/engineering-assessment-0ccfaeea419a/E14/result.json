@@ -1,0 +1,208 @@
+{
+  "test_id": "E14",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-0ccfaeea419a",
+  "executed_at": "2026-09-20T01:46:30.165853+00:00",
+  "manifest_sha256": "eb68970c3d5a590db82aefd6191f913627dd3dcf3cefcc2d8bd650271dc460e8",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T014425Z-afabff\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "100 event and effect-key repeats; five real process-kill locations with fake lanes and real Mongo/receiver/sandbox; no duplicate committed effect or message.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E14_100_duplicates",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 1.25
+    },
+    {
+      "name": "test_E14_real_process_crash_after_receive",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 1.101
+    },
+    {
+      "name": "test_E14_simulated_effect_dedupe",
+      "source": {
+        "artifact_path": "tests/test_engineering_m3.py",
+        "sha256": "1c62d1805d3d317dc67c065ff059a1d83dc475f55c0a6f1fb71676db1e3d4754"
+      },
+      "time_seconds": 1.713
+    },
+    {
+      "name": "test_E14_uncertain_tool_does_not_repeat",
+      "source": {
+        "artifact_path": "tests/test_engineering_m3.py",
+        "sha256": "1c62d1805d3d317dc67c065ff059a1d83dc475f55c0a6f1fb71676db1e3d4754"
+      },
+      "time_seconds": 1.234
+    },
+    {
+      "name": "test_E14_five_actual_process_crash_points[after_task_persist]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.115
+    },
+    {
+      "name": "test_E14_five_actual_process_crash_points[after_lane_delivery]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.144
+    },
+    {
+      "name": "test_E14_five_actual_process_crash_points[after_tool_commit]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.876
+    },
+    {
+      "name": "test_E14_five_actual_process_crash_points[after_send_before_receipt]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.273
+    },
+    {
+      "name": "test_E14_five_actual_process_crash_points[before_commit_audit]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.164
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/manifest.json",
+      "sha256": "dac4465be7c5f1dae87c23b95ea33fdf458b67dc6640c41cfb6b7220db1c60e8"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/frozen-inputs.zip",
+      "sha256": "50086f21292dd112c97ce19d7497e6b62914ecdda11683240855716633073b88"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/junit.xml",
+      "sha256": "1b4fce8c066524e68ae059e1b7201205b14a2201dec2b2b9462db64eb9def6fe"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/result.json",
+      "sha256": "fc956091c287733d00bebfcb23eb0d76e400c461d9c33d136d0b6e253b204c74"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stdout.txt",
+      "sha256": "d7b91c0cb7f7b79da73c0c85f3e6a8e75d90fb13e0b6c2ceb37fafc6940cb501"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-0ccfaeea419a/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/b398e3d27adeb986/fixture.json",
+      "sha256": "a4109200fc1066ea631e334d6f73d9f371589563b66c904736ed650ecabcdc9d"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/b398e3d27adeb986/trace.json",
+      "sha256": "f779955578d633d2cf5f95853782b8572ce5d477cef858310544809be1ec239a"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/db6ac89aa3182827/fixture.json",
+      "sha256": "d596466885f65d622dc46c89196f752cf9693e06827c73941fd02362be8dd225"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/db6ac89aa3182827/trace.json",
+      "sha256": "121e0085a2849bf866eedab69ee93086cd6067e27d1b47896d03fee445fc001b"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/ca47c9496bf1a7dc/fixture.json",
+      "sha256": "92e91ec2d3ef29e0010dafdcd414ecb1f25ad49b737980946a2984521e8afffd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/ca47c9496bf1a7dc/trace.json",
+      "sha256": "1bb5492d4be3f31ff7ac2db27e01acdb2c94f93698eaf98b1ad23a80042f5126"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/443aca9e056a291c/fixture.json",
+      "sha256": "53584804401bfab5006bbe65307e728f6997561d73ccb4e1fa176d7d1598409b"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/443aca9e056a291c/trace.json",
+      "sha256": "76e3285f2b09b4f3bd8604914ae16f6d0816ea37e1efc05578b3f3016da5e0ab"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/76cff69c563bf805/fixture.json",
+      "sha256": "778a9bce7224947512c612998e78b610fd6c44c6bbb663190720c6f9d0d4547a"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/76cff69c563bf805/trace.json",
+      "sha256": "4abacea9f15827ee095dcebdc123d6f6f21b95d5d4c30f22d481f7470cc53b6b"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/cbd943c248ba6cd2/fixture.json",
+      "sha256": "6c67d6befd19e8821ee2314e53e9f7fad8d510ae6618c89cd8d5b64186d100ac"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/cbd943c248ba6cd2/trace.json",
+      "sha256": "d4a9ea0f43a8fc8bec8e383197c21789d794d8b3bc3a043974284b7f5cd40788"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/7b43c6f041e04d57/fixture.json",
+      "sha256": "54808001dab3fdf4e4cae656332dd0a2bb21f27c4031775d4c6a2c6368b7e82f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/7b43c6f041e04d57/trace.json",
+      "sha256": "50784a936bc3d8bb11ecb7c7f440d9aa13616bbc3879fb3a3265195149ba6e2c"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/62ea9164cc18404a/fixture.json",
+      "sha256": "716b6dbf5f4919455829a36cef4686fd1e834aaf773a9ad0c3750360a732ade8"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/62ea9164cc18404a/trace.json",
+      "sha256": "db3125a9ca870cf002efd577504117227d145e7c0b9fa5d4ef75f2936abf8002"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/49c98912ff084bc9/fixture.json",
+      "sha256": "3352a694e2d807cfc48f9ccf27c640abf0c5a302178e2185671485c0ef8c4fa1"
+    },
+    {
+      "artifact_path": "reports/check-20260920T014425Z-afabff/fixtures/49c98912ff084bc9/trace.json",
+      "sha256": "d88c1ca2c2ec383fa2c9d216b1925ace734efc1d44f4a6047a362351e92219a4"
+    }
+  ],
+  "tested_implementation_commit": "58e5a6d6a963a1039e4511257d31ecb8df877989",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

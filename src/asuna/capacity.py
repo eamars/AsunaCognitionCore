@@ -29,6 +29,29 @@ def build_input(rows,count,seed):
     return text,values
 
 
+def check_needle_associations(content,expected):
+    """Require the answer to bind each code/value to its actual marker."""
+    def unique(pairs):
+        value={}
+        for key,item in pairs:
+            if key in value:raise ValueError('DUPLICATE_JSON_KEY')
+            value[key]=item
+        return value
+    text=content.strip()
+    if text.startswith('```'):
+        lines=text.splitlines()
+        if lines[0].strip() not in ('```','```json') or lines[-1].strip()!='```':
+            return {'verified':False,'reason':'UNRECOGNIZED_ANSWER_FORMAT','markers':{}}
+        text='\n'.join(lines[1:-1])
+    try:answer=json.loads(text,object_pairs_hook=unique)
+    except (ValueError,TypeError):return {'verified':False,'reason':'INVALID_OR_AMBIGUOUS_JSON','markers':{}}
+    markers={}
+    for tag,truth in expected.items():
+        item=answer.get(tag) if isinstance(answer,dict) else None
+        markers[tag]=isinstance(item,dict) and item.get('code')==truth['code'] and str(item.get('value'))==str(truth['value'])
+    return {'verified':all(markers.values()),'reason':None if all(markers.values()) else 'MARKER_ASSOCIATION_MISMATCH','markers':markers}
+
+
 def suite(config,evidence,*,lengths=(8192,65536,196608,234000),repetitions=3,lanes=('character','executor')):
     samples=[]
     for lane_name in lanes:
@@ -64,7 +87,8 @@ def suite(config,evidence,*,lengths=(8192,65536,196608,234000),repetitions=3,lan
                         usage=usages[-1] if usages else {}
                         output['server_prompt_tokens']=usage.get('prompt_tokens')
                         output['usage']=usage;output['finish_reason']=result.finish_reason;output['content']=result.content
-                        output['needles_correct']=all(str(v) in result.content for needle in expected.values() for v in needle.values())
+                        output['needle_associations']=check_needle_associations(result.content,expected)
+                        output['needles_correct']=output['needle_associations']['verified']
                         output['no_truncation_verified']=usage.get('prompt_tokens')==output['actual_input_tokens'] and result.finish_reason=='stop'
                         output['target_range_met']=abs(output['actual_input_tokens']-target)<=max(128,target*.01)
                         output['status']='PASS' if output['needles_correct'] and output['no_truncation_verified'] and output['target_range_met'] else 'FAIL'

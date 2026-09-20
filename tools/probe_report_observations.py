@@ -19,7 +19,8 @@ try:
     rows={r['test_id']:r for r in report['results']}
     assert all(r['assertions'] for r in rows.values() if r['status']!='NOT_RUN')
     checks['every_started_case_lists_acceptance_requirements']=True
-    notes=report['engineering_observations'];assert len(notes)==6
+    notes=report['engineering_observations']
+    assert {'F01','F02','L08','L10','A03','PROBE-L09'}.issubset({note['test_id'] for note in notes})
     assert any('capacity-association-audit-a5867f773264' in e['artifact_path'] for e in rows['F01']['evidence'])
     assert rows['F01']['status']=='PASS';checks['exact_capacity_audit_attached']=True
     assert rows['F02']['status']=='FAIL' and rows['F02']['failure_category']=='provider_format_error_and_output_budget'

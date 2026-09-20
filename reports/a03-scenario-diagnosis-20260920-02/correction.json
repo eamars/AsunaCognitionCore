@@ -1,0 +1,11 @@
+{
+  "corrects": {
+    "artifact_path": "reports/a03-scenario-diagnosis-20260920-01/result.json",
+    "sha256": "188ff6ef7507f40750e8528d0d70272cef1ad825593465b8cc683d7a994a543b"
+  },
+  "verified_by": {
+    "artifact_path": "reports/a03-scenario-diagnosis-20260920-02/result.json",
+    "sha256": "db02fd2974acada72282a2a1b6f8f1f8505471513bb5732c234ac3be7036fdd5"
+  },
+  "reason": "The first offline extractor treated trace.json (a JSON array) as a numbered event object. Restricting event extraction to numbered event filenames fixes that parser error. No original source evidence or model result changed."
+}

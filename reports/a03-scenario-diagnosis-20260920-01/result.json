@@ -1,0 +1,35 @@
+{
+  "test_id": "PROBE-SCENARIO-FAILURE-PROVENANCE",
+  "status": "FAIL",
+  "executed_at": "2026-09-20T02:55:26.910928+00:00",
+  "mode": "offline_mechanical_failure_index",
+  "source_experiment": "formal-A03-20260919-01",
+  "source_result": {
+    "artifact_path": "reports/formal-A03-20260919-01/result.json",
+    "sha256": "aeb064a241bec767180122623e10ecae4c4bfbe12389861b6d9ee457396b7821"
+  },
+  "metrics": {},
+  "failures": [],
+  "model_calls": 0,
+  "database_writes": 0,
+  "human_votes": 0,
+  "commands": [
+    {
+      "argv": [
+        "C:\\Users\\rba90\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "tools\\diagnose_scenarios.py",
+        "reports\\formal-A03-20260919-01",
+        "--out",
+        "reports\\a03-scenario-diagnosis-20260920-01"
+      ],
+      "exit_code": 1
+    }
+  ],
+  "limitations": [
+    "Observed protocol/route flags are not personality, naturalness or memory-quality scores.",
+    "This does not change source statuses, rerun failed samples, or isolate a model/adapter root cause.",
+    "Grouping counts is descriptive; small samples do not establish statistical significance."
+  ]
+}

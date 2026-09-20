@@ -1,0 +1,152 @@
+{
+  "test_id": "E07",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-6efefa4f0392",
+  "executed_at": "2026-09-20T02:45:23.673127+00:00",
+  "manifest_sha256": "6c8789bd1473502e17dd2c8d63a62058c6c295b30c2380f875e4e5d996bafaf5",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T024347Z-56e546\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Bad JSON repaired at most once; reasoning-only/empty/length/tool-bearing role responses fail closed; recall stops after two additions.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E07_invalid_stage_fails_closed[bad0]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.731
+    },
+    {
+      "name": "test_E07_invalid_stage_fails_closed[bad1]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.701
+    },
+    {
+      "name": "test_E07_invalid_stage_fails_closed[bad2]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.65
+    },
+    {
+      "name": "test_E07_invalid_stage_fails_closed[bad3]",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 0.676
+    },
+    {
+      "name": "test_E07_json_retry_and_recall_bounds",
+      "source": {
+        "artifact_path": "tests/test_engineering_m1.py",
+        "sha256": "967b7bb6a690872e71753320134aa70dc1cadf5b5fd52ccb73882f2404eee2e8"
+      },
+      "time_seconds": 1.097
+    },
+    {
+      "name": "test_E07_provider_length_is_not_stop",
+      "source": {
+        "artifact_path": "tests/test_engineering_m10.py",
+        "sha256": "079b3f293f8359925c0cab2981d8fb3556787c71ec6422a7c1eb67596ce442a5"
+      },
+      "time_seconds": 0.0
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/manifest.json",
+      "sha256": "0c6edc707ce432e7b8cd7027a37005d3658feb1e1d28a4fa3a9999056a7abde2"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/frozen-inputs.zip",
+      "sha256": "863af6e9fedaa625d00863e60fe79e0cc89e1a59612f13074d6d1602f7597578"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/junit.xml",
+      "sha256": "8da7839798ffbef614296f739ea9ba64f0addbedd0bf19b0766efb4000a21410"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/result.json",
+      "sha256": "c64a8f1e32048bea635daabb4c783177b80c2aac19aac25dc499772d661e4335"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/stdout.txt",
+      "sha256": "30229460d9aca0379a183dc00df6716574aa54b93669f1f06c0f5b684f505b55"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-6efefa4f0392/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/c69c875b4590beb4/fixture.json",
+      "sha256": "8d0b5f8b995c9dc846a06e25777d90e19d4841e6897d692919ab2f11d0d39c00"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/c69c875b4590beb4/trace.json",
+      "sha256": "00d2d0f5e2552c2bd72ff548e59a49ccd8fb618ed7f739a5329ef65afd829341"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/fcfd69afe280fca8/fixture.json",
+      "sha256": "b74046ff024f1380e1990a5f056b45da85da3db8a0b2ec7f3ab87b9b3a7ebf2b"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/fcfd69afe280fca8/trace.json",
+      "sha256": "af8350a279637a4bce6e07ca8b1cbfbde07f1ccea9e5e7d33362aee2bb981341"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/f119846770ab6d64/fixture.json",
+      "sha256": "4ad00d3d24b94e4b29993e5586af429d0f5071384be129046b35dc313a7efc78"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/f119846770ab6d64/trace.json",
+      "sha256": "67817840460f4d68dee31d1136df39c19739f2637ef288a41a1d1ceb3d3e4ba3"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/e548275fe75400ae/fixture.json",
+      "sha256": "d8eb77b19079a9e93a67365c16a2caeee64b076a0332bf98301192442ce5c5db"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/e548275fe75400ae/trace.json",
+      "sha256": "40dc4b6db324a314d5ebda7dbe3b1ce17ffb0a5450ee0fce3ed815774e91a5e0"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/b8e53e916081a8f4/fixture.json",
+      "sha256": "60f834db330b764250cf70c2158eaf26ea3a96200684c25518a0694b427e99d7"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/b8e53e916081a8f4/trace.json",
+      "sha256": "b5fd57f47279358804b8bfce92155654f3102b1db6d31d4f401b2e88379bee55"
+    }
+  ],
+  "tested_implementation_commit": "b94564c95cc460bf76781a25fe30806a82810a50",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

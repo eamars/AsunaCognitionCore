@@ -10,10 +10,30 @@ def ref(path):
     return {'artifact_path':path.resolve().relative_to(ROOT).as_posix(),'sha256':sha(path.read_bytes())}
 
 
+def observations(reports):
+    """Bind post-run engineering interpretations to exact immutable results."""
+    rows=[]
+    def verify(item):
+        path=(ROOT/item['artifact_path']).resolve()
+        if not path.is_relative_to(ROOT.resolve()) or not path.is_file() or sha(path.read_bytes())!=item['sha256']:
+            raise ValueError('OBSERVATION_EVIDENCE_HASH_MISMATCH')
+        return path
+    for path in sorted(reports.glob('acceptance-observations-*/observations.json')):
+        document=json.loads(path.read_text(encoding='utf-8'))
+        if document.get('schema')!='asuna-evidence-observations-v1':raise ValueError('INVALID_OBSERVATIONS')
+        for row in document['observations']:
+            result=json.loads(verify(row['result']).read_text(encoding='utf-8'))
+            if result.get('test_id')!=row['test_id']:raise ValueError('OBSERVATION_TEST_MISMATCH')
+            for item in row['evidence']:verify(item)
+            rows.append({**row,'annotation':ref(path)})
+    return rows
+
+
 def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
     report=json.loads((BUNDLE/'reports/report.template.json').read_text(encoding='utf-8'))
     report.update(run_id='report-'+uuid.uuid4().hex[:12],created_at=datetime.now(timezone.utc).isoformat())
     report['fixture_sha256']=sha((BUNDLE/'fixtures/acceptance_cases.json').read_bytes())
+    report['engineering_observations']=observations(reports)
     selections=sorted(reports.glob('representative-traces-*/selection.json'))
     report['representative_traces']=[{'selection':ref(p),'details':json.loads(p.read_text(encoding='utf-8'))} for p in selections]
     human=None
@@ -74,6 +94,12 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
                     row['commands'].append({'argv':actual['argv'],'exit_code':actual['exit_code'],'note':'actual outer invocation; see '+ref(invocation)['artifact_path']})
                     row['evidence'].append(ref(invocation))
             row['experiment_id']=value.get('experiment_id');manifests.append(value.get('manifest_sha256'))
+            matching_notes=[note for note in report['engineering_observations'] if note['result']==latest['evidence']]
+            if matching_notes:
+                row['engineering_observations']=matching_notes
+                row['evidence'].extend(note['annotation'] for note in matching_notes)
+                row['evidence'].extend(item for note in matching_notes for item in note['evidence'])
+                if row['status']=='FAIL':row['failure_category']='; '.join(sorted({note['classification'] for note in matching_notes}))
             if human:
                 matching=[r for r in human['results'] if r['test_id']==test and r['experiment_id']==row['experiment_id']]
                 row['human_threshold_assessments']=matching
@@ -152,6 +178,9 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
         links='; '.join(f"[{e['artifact_path']}]({e['artifact_path']})" for e in row['evidence'])
         lines.append(f"| {row['test_id']} | {row['status']} | {row['attempts']} | {links} |")
     lines += ['', 'All result.json attempts, including failures, are included in the JSON inventory. Paths and SHA256 values are recorded there. Stage probe passes are not full acceptance passes.','', 'Limitations:', '']+['- '+d for d in report['design_deviations']]
+    lines += ['', 'Post-run engineering observations (not human cognition ratings):', '']
+    for note in report['engineering_observations']:
+        lines.append(f"- {note['test_id']} / {note['classification']}: {note['finding']} [Exact source result]({note['result']['artifact_path']}); [Evidence annotation]({note['annotation']['artifact_path']}).")
     output.with_suffix('.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     return {'status':report['overall_status'],'report':ref(output),'attempts':len(attempts)}
 

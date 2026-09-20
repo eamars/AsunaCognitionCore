@@ -1,0 +1,454 @@
+{
+  "test_id": "E24",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-6efefa4f0392",
+  "executed_at": "2026-09-20T02:45:24.184704+00:00",
+  "manifest_sha256": "6c8789bd1473502e17dd2c8d63a62058c6c295b30c2380f875e4e5d996bafaf5",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T024347Z-56e546\\junit.xml"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "node",
+        "C:\\workspace\\asuna_cognition_core_v2\\tools\\probe_native_atomicity.mjs",
+        "C:\\workspace\\asuna_cognition_core_v2\\reports\\native-atomicity-d035ee56f933\\native"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "python",
+        "tools/probe_deferred_compaction.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Installed native DSH rejects split tool pair before summary; injected summary failure preserves raw history/replay; real deferred mono interruption/restart, fake-clock fairness and pre-call capacity rejection checked.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E24_budget_guard_before_generation_and_clock_fairness",
+      "source": {
+        "artifact_path": "tests/test_engineering_m11.py",
+        "sha256": "e454eb496a770b1ef2139393b2ad2af24874289faaa0c9fd7c6d5a74d4353d1d"
+      },
+      "time_seconds": 0.001
+    },
+    {
+      "name": "test_E24_queue_fairness_and_group_quiet",
+      "source": {
+        "artifact_path": "tests/test_engineering_m6.py",
+        "sha256": "20a13d6211cd9e7e3b5fcea0354e8f10317c0aff6d1cd07c239634adc1b7a7e3"
+      },
+      "time_seconds": 1.038
+    }
+  ],
+  "companion_probes": [
+    {
+      "name": "native-atomicity-d035ee56f933",
+      "result": {
+        "artifact_path": "reports/native-atomicity-d035ee56f933/result.json",
+        "sha256": "9065ad0fac9d9f98a563861e38c94eea4caee4305b01e21e0d1fefed51fb100f"
+      },
+      "status": "PASS",
+      "mode": "installed_native_DSH_compaction_injected_summary_failure"
+    },
+    {
+      "name": "deferred-compaction-ecd35834ff",
+      "result": {
+        "artifact_path": "reports/deferred-compaction-ecd35834ff/result.json",
+        "sha256": "5539bb9f83a6a948633fff1c6d3548c7ab49c3cbeb8e56ccb8a274a4ef6731c6"
+      },
+      "status": "PASS",
+      "mode": "real_Gemma_native_restart_queued_summary"
+    }
+  ],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/manifest.json",
+      "sha256": "0c6edc707ce432e7b8cd7027a37005d3658feb1e1d28a4fa3a9999056a7abde2"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/frozen-inputs.zip",
+      "sha256": "863af6e9fedaa625d00863e60fe79e0cc89e1a59612f13074d6d1602f7597578"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/junit.xml",
+      "sha256": "8da7839798ffbef614296f739ea9ba64f0addbedd0bf19b0766efb4000a21410"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/result.json",
+      "sha256": "c64a8f1e32048bea635daabb4c783177b80c2aac19aac25dc499772d661e4335"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/stdout.txt",
+      "sha256": "30229460d9aca0379a183dc00df6716574aa54b93669f1f06c0f5b684f505b55"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-6efefa4f0392/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/30ef50e9a17c01a4/fixture.json",
+      "sha256": "c3eb3612b9ef0f5e7337bcb6a7a59984c00d16983d17af19e1ece7fbe6c2099e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T024347Z-56e546/fixtures/30ef50e9a17c01a4/trace.json",
+      "sha256": "f423198c2ae83c73c37110534d76855e488bd3fa18fd41a9acb9bddbe72d40e0"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/frozen-inputs.zip",
+      "sha256": "1957d1d365fdea531bf98c6e3daa828a592670b490541e13703c4314573fc1c0"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/manifest.json",
+      "sha256": "547285a2ff4a3ffb81efc9c8558662efb2d1e9281ec61c6d0fd276234282215d"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/result.json",
+      "sha256": "9065ad0fac9d9f98a563861e38c94eea4caee4305b01e21e0d1fefed51fb100f"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/stdout.txt",
+      "sha256": "8e2a77afa2cb3b301b8161e75621fa529801bdcd93ee500b4f4174f3c9c6a570"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/native/native-log.json",
+      "sha256": "c09d2e13e5a0efeda1a7129b0afbdf8eee90e1058d0f607f8aeef162860f3e01"
+    },
+    {
+      "artifact_path": "reports/native-atomicity-d035ee56f933/native/result.json",
+      "sha256": "df75c9ed98d5a99c7be6db8534b39f682710faa84e52c1d7ae57669e2e8ecdcf"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00001-runtime.fingerprint.json",
+      "sha256": "1c97619b587074a449f498f708baeed0c06f0c5472130838d4fe8e6165bc253a"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00002-lane.intent.json",
+      "sha256": "dbc5773a948810a8cb68a1e5fe279c12778f47be17b4ca5a3248ed81b06b9f84"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00003-dsh.provider_input.json",
+      "sha256": "21ddee4157b3e689e15206fb5649ce8fc6273f3ff252240363980cf231f8e19e"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00004-provider.request.json",
+      "sha256": "e034125d863abdcc10e8f897aceb7919af0b27f124826696aa66a376dc9a74f2"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00005-provider.response.json",
+      "sha256": "073ad334f50156cff27e727bbd925859884e0e04461ec0edc2284da75b0e84f6"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00006-provider.request.json",
+      "sha256": "2b03c7ce7c06b3ec3ee44b7aa30ab9f5c8dc9526b943c505cfdee4d5e4850266"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00007-provider.response.json",
+      "sha256": "f89827890d0f697bc4a83b06fdcad3ee476c3768758f7adfd32b91d67456cf48"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00008-budget.checked.json",
+      "sha256": "6df8465d2e71267bde3cda6a14b66566e91e266f6822746e5ab8b09b23005650"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00009-provider.request.json",
+      "sha256": "3e7bdb1d9d911405e54cdf89c8ad4604a48e47ea012fb7f548a05c126a6939f3"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00010-provider.response.json",
+      "sha256": "4db390e0282444bae28c08ba178db48b97842563ac0dddf1bd5c3681c3cd669c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00011-lane.receipt.json",
+      "sha256": "5eb154e50ff4f60ab10180ea505451b0179b7c924360d54f50c026d65a964075"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00012-runtime.fingerprint.json",
+      "sha256": "64057f2861f53bf32ae712ee06d24974bb5c9008db44fd3d947203fe292a8b3e"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00013-lane.intent.json",
+      "sha256": "955d2d0c7c1fc5a351b90b9e63e75091f49adeaedf4ac4d2705951c92798b18c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00014-dsh.provider_input.json",
+      "sha256": "c9ec805cc415c4cb64a066ad8772f59aab6941d7576271f7984b05ad9bd25715"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00015-provider.request.json",
+      "sha256": "3dc57aa54d82cb12a1979971c0d193b919a0ecaa42c95bb12ec371ebe5ca2234"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00016-provider.response.json",
+      "sha256": "d9ffed91dc73cc551bd9c6c53cf1d573940edb982201589d622e8fc696815464"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00017-provider.request.json",
+      "sha256": "d11d18a498988ba2e9ea337badbb053e5b29a857c9661f4ec54a7f63a5544bc1"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00018-provider.response.json",
+      "sha256": "35e60167733340a97af3510c861de5ba8441b015f8ffadeaba7e70a9e036a1c1"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00019-budget.checked.json",
+      "sha256": "a2059442d6cc0eac73706480e33d163762def5750d8512ddec85242c0bb03172"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00020-provider.request.json",
+      "sha256": "da1624fd241100881f4e5fd7ccdc4adc69cfc7e6f8a1c4c73a17e1a2b7f1e5dc"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00021-provider.response.json",
+      "sha256": "8a53e4baa5a6c71ca7a7dcfe674c83148d7b6e1b493eaae389262b90a6ef9f20"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00022-lane.receipt.json",
+      "sha256": "e3ca8bafb2ba640dcc4df4b78e07a0632b99e83a25b28f10276485c9dc5209c2"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00023-lane.intent.json",
+      "sha256": "490310c0aa48ffd54d903b6cf135c1f482b47e48d12bd059f46cc07cdf2a4eab"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00024-dsh.provider_input.json",
+      "sha256": "e22d5f50f80a0b1cdd48b9c44dd493521a826b41565c618a2d9b35b9101a7ebb"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00025-provider.request.json",
+      "sha256": "56e5ffd630ed6af31f7ba81dcfa9c9767e08b81321285fe71f4449b03e51bc5f"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00026-provider.response.json",
+      "sha256": "e15300d6de3b0c94cbf2a3758eb1d1ee386e1183ba63c9634fdabf4bf2638181"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00027-provider.request.json",
+      "sha256": "c6df270b021baec9e21e22ac96a2cd7152bc59938ec076b25846150ea9cce147"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00028-provider.response.json",
+      "sha256": "073e81431d3c21688e39e3b33d3585a9ea4ec11885f7c9cde9c6c2b57dfdd334"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00029-budget.checked.json",
+      "sha256": "be0d1d685d60427cdc7d6f0972cec20ca734aa89220d9d1d3f269df2fff5a3bf"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00030-provider.request.json",
+      "sha256": "996044502abc9d6ea880e252ed291972229f3e46b51970e34802e4b0c5c8e62e"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00031-provider.response.json",
+      "sha256": "c225fcf581ef2c0f7809c1bc823349a97f237dbda6b135a91687b8ee69bb8183"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00032-lane.receipt.json",
+      "sha256": "1496ed2dffdb4d3638640c5fce6a60bc7c8e191f40c3d72cb8f172d9358467e0"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00033-lane.intent.json",
+      "sha256": "9b67ccfc8eb3d59ab390bac621391a45c07b0e30d015cd1beaddeb343522bec1"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00034-dsh.provider_input.json",
+      "sha256": "6ad59e473eb61568526a2d3dd7f6e868c212ae861e599e0d7cc04b384794ca54"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00035-provider.request.json",
+      "sha256": "f3fc68e47b8339e974955dd719e22630a34cd04dc4691cff4239e7f686ca9aba"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00036-provider.response.json",
+      "sha256": "570e56e9764ea1ff3de92db41116d87f663c802ad6c7160de1e1f4d3db9b4b51"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00037-provider.request.json",
+      "sha256": "4154e0e93ce441e2393e4ee288789cbba1e1ab26ddfadcc6ee8fccbabd841321"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00038-provider.response.json",
+      "sha256": "d2922c71b9d65675a2aa952287d5fa799fb18429f664011445b9c78b42a2cc81"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00039-budget.checked.json",
+      "sha256": "3633b7f841c8b3ca7eb1b67c49b0cb99c2d8f632daca167ef5793411e87ab34f"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00040-provider.request.json",
+      "sha256": "6a785adf2a73fec5b1278c387ed9cd47b9a72fbe068e1656ad2397bf2a40c949"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00041-provider.response.json",
+      "sha256": "4a22500b97995c1ad77c7ec639ac1d1e85f5b1719e9fa64b10f72bc417960fb8"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00042-dsh.provider_input.json",
+      "sha256": "0861fe3162b038236e3cc80f67f7439998be226ba9183ae99e0da7aa03a83ece"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00043-provider.request.json",
+      "sha256": "31016462c3a9c93b01a6348b1daedde71ef92f7eb2822c1da23cc52c7d12c72c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00044-provider.response.json",
+      "sha256": "4c88f3ec3df67fc1f3ff70bc72d33544d3c4d1a9f37f6840a8a1db6b08b28d5c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00045-provider.request.json",
+      "sha256": "d8a9a7c7c0160d9a1c5bc0feed9f84acf5c754f0317bfe43be8d87ecf4c18dcf"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00046-provider.response.json",
+      "sha256": "fe6226cecc0a03830013ee66d5daea147b3bd9337deaebb0c8180b55a40e4302"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00047-budget.checked.json",
+      "sha256": "ddaf725caf94e3d240f228e812cb09f3d7b793680e7fca1bcf6e270d241fa681"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00048-provider.request.json",
+      "sha256": "f4814b36277253d6b820d2bc42ad3c66aaf1e858746d30e11e389391309ca5ca"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00049-provider.response.json",
+      "sha256": "3c5d682ef02d39691d7ae01240738ad903df91a6b6c5de910744eff028d0ccc9"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00050-lane.receipt.json",
+      "sha256": "e747042cbb4b2cc2cfded7f11eb3239d9d01e573dea472bb59f794dcc00f969a"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00051-lane.intent.json",
+      "sha256": "605636f74af7aed0ea8e2d34f4a524be186b6d74ce36ea3f67022cfa05357e89"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00052-dsh.provider_input.json",
+      "sha256": "360889642ab1e845b8794cfa20da40836d00e43fb891adb392641be3c47507b5"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00053-provider.request.json",
+      "sha256": "77e796ba7a2342053b2785f257e6fb52fa0525402509600966cf67f4164d3823"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00054-provider.response.json",
+      "sha256": "87cfa376be57e6ca0268fb64bbb500a2b02b3932a3129bde246298ee6390570f"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00055-provider.request.json",
+      "sha256": "6297cbe9589fc30d2912c2cf18c4b34d8283ebf31a30d3675d1b6a26bf09873c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00056-provider.response.json",
+      "sha256": "19f171d876f2afcf74c1cf317020c4669e841f57f0bade4939f92e201ff5b857"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00057-budget.checked.json",
+      "sha256": "8b77e9dbaf3e0c9508f6665aeb0a3324fc9377b88dd24747590a038eceae8aee"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00058-provider.request.json",
+      "sha256": "53621b8461adbd4e843caf8a173b8b7aee00832b17a6c6a29ec93e18293ed705"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00059-provider.response.json",
+      "sha256": "db27ca5d6720567d964f47596ab6fcb93ed1346277094decf7cfbd39e5ef274b"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00060-lane.receipt.json",
+      "sha256": "47d0895204f21d7a9112f98fe0c954c1efa0876dd7a20cc62b7920151d21292c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00061-lane.intent.json",
+      "sha256": "bc38b0bd6907b55ae85bfa1366278107b56851598ecfde367c992974b093de8c"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00062-dsh.provider_input.json",
+      "sha256": "cfbdd0df998b975891d52c3f88732664d96f280e894d99c433f0e14a1000e51a"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00063-provider.request.json",
+      "sha256": "c25b73c275306c11af47e564c7cb3bcc04bc336faec30cac79d8bd864637e67e"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00064-provider.response.json",
+      "sha256": "1057e1a2e97a63ab46555d06b4de58026f232c658c86efd68c93a945400322a4"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00065-provider.request.json",
+      "sha256": "6869d34c8bd42b4a94cd42803b66f5ce8638ba6d4e0a59fff860ed23ed897e12"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00066-provider.response.json",
+      "sha256": "55a0ed7c0b149f09d8b3948657191254dc3c70fba593f2f8ec0faf5f86042775"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00067-budget.checked.json",
+      "sha256": "4864674894662765fda0f270741d0c80fe240d1058427b53db4dc7e1430ff28e"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00068-provider.request.json",
+      "sha256": "1f622b7683dda7b88fdb4e907a56f32f0b43eae3be5f824c4f9bf0c07d2bd3a4"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00069-provider.response.json",
+      "sha256": "e087f3f19134b7da5053ba8f7b513315826ad89b6c53640f2e5714f629e158f1"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00070-lane.receipt.json",
+      "sha256": "2f8bdda441e92032a5b6ec828de8b92f8918874b59e50efbc08e0cdf2a66d167"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/00071-phase_quality.json",
+      "sha256": "0755b6bdf800b7943a304ce4659797f6503a652995e36314a0963e9d8f8ac4d1"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/frozen-inputs.zip",
+      "sha256": "b0a5b78ae1a69510ee3839f1cad13f8081ebc3a77f31dfaa93c8345a3687067a"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/manifest.json",
+      "sha256": "c5775d6c7817ab8dce04c5dbcb5eae18669da55f7d0e684a1678c131a9a79633"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/probe-plan.json",
+      "sha256": "b4479acf3c416d7e1750a29ec4488f116b8eba61363279339893cf180c8dd1cd"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/result.json",
+      "sha256": "5539bb9f83a6a948633fff1c6d3548c7ab49c3cbeb8e56ccb8a274a4ef6731c6"
+    },
+    {
+      "artifact_path": "reports/deferred-compaction-ecd35834ff/trace.json",
+      "sha256": "6f05142fe0d8dca87bba2ebe6aefe0e0a8308537974d6477d349093b09a87953"
+    }
+  ],
+  "tested_implementation_commit": "b94564c95cc460bf76781a25fe30806a82810a50",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

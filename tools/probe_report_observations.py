@@ -17,6 +17,8 @@ try:
     assert proc.returncode==0;checks['immutable_package_validator']=True
     report=json.loads(args.report.read_text(encoding='utf-8'))
     rows={r['test_id']:r for r in report['results']}
+    assert all(r['assertions'] for r in rows.values() if r['status']!='NOT_RUN')
+    checks['every_started_case_lists_acceptance_requirements']=True
     notes=report['engineering_observations'];assert len(notes)==6
     assert any('capacity-association-audit-a5867f773264' in e['artifact_path'] for e in rows['F01']['evidence'])
     assert rows['F01']['status']=='PASS';checks['exact_capacity_audit_attached']=True

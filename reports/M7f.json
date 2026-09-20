@@ -1,0 +1,44 @@
+{
+  "stage": "M7f",
+  "status": "PASS",
+  "scope": "Every started acceptance row records required actions/outcome/evidence and exact observed result; pending human judgments stay pending.",
+  "evidence": [
+    {
+      "artifact_path": "report-preview-m7f.json",
+      "sha256": "013b380411a980aa3d53f8b24ffb2ceccc072cfeef8e264c8b1a7246db097af6"
+    },
+    {
+      "artifact_path": "reports/report-observations-probe-35694468ade0/result.json",
+      "sha256": "04e95b7beb0d7bc258d0a38a75b30f269b5c2e01de03d71014fc7be401ce49d3"
+    },
+    {
+      "artifact_path": "reports/report-observations-probe-cc91b0106149/result.json",
+      "sha256": "a8baa61d37aa087884d2f360730f61472216209cc35694215755a2feee2dfe66"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/result.json",
+      "sha256": "dfd64ee168659ed85e3099ceaa3c21c8a0d1f4a5d6514c5bb011cab83824f1be"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-7bda0aa9e023/result.json",
+      "sha256": "0d790dbf3d914dec93cded2de2b579246bb2d745ee249e60177b10c5c0ca93f4"
+    }
+  ],
+  "regression_tests_passed": 58,
+  "report_probe_checks_passed": 7,
+  "engineering_clauses": {
+    "PASS": 23,
+    "INCONCLUSIVE": 1
+  },
+  "independent_human_votes": 0,
+  "preview_invocation": {
+    "argv": [
+      ".venv/Scripts/asuna.exe",
+      "report",
+      "--out",
+      "report-preview-m7f.json"
+    ],
+    "exit_code": 1,
+    "reason": "Actual incomplete/failed acceptance gates, not a report generation error."
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "test_id": "E12",
+  "status": "PASS",
+  "mode": "contract_review_of_frozen_integration_evidence",
+  "experiment_id": "engineering-assessment-7bda0aa9e023",
+  "executed_at": "2026-09-20T02:53:44.597367+00:00",
+  "manifest_sha256": "721524bf9a67da0d23c2f6b0ae5b17c0391238276ffe731c6f98cb3b3d6788d7",
+  "attempts": 1,
+  "commands": [
+    {
+      "argv": [
+        "C:\\workspace\\asuna_cognition_core_v2\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--junitxml=C:\\workspace\\asuna_cognition_core_v2\\reports\\check-20260920T025211Z-d22bda\\junit.xml"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "assertions": [
+    {
+      "name": "immutable E-case clause review",
+      "details": "Real WSL/bubblewrap tools cannot reach host paths/env/network/publish broker; source files readonly; allowed task writes work; output cap and literal argv verified.",
+      "reviewed_status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "name": "test_E12_E13_executor_cannot_publish_or_reach_host",
+      "source": {
+        "artifact_path": "tests/test_engineering_m10.py",
+        "sha256": "079b3f293f8359925c0cab2981d8fb3556787c71ec6422a7c1eb67596ce442a5"
+      },
+      "time_seconds": 1.738
+    },
+    {
+      "name": "test_E12_chunk_sources_and_scope",
+      "source": {
+        "artifact_path": "tests/test_engineering_m4.py",
+        "sha256": "7d355af739dce52e4e1f4bebfa594c805e80df09c0d25913d8c6e11fe5009c40"
+      },
+      "time_seconds": 0.897
+    },
+    {
+      "name": "test_E12_output_cap_and_literal_shell_arguments",
+      "source": {
+        "artifact_path": "tests/test_engineering_m6.py",
+        "sha256": "20a13d6211cd9e7e3b5fcea0354e8f10317c0aff6d1cd07c239634adc1b7a7e3"
+      },
+      "time_seconds": 1.057
+    },
+    {
+      "name": "test_E12_read_only_source_and_allowed_code_write",
+      "source": {
+        "artifact_path": "tests/test_engineering_m7.py",
+        "sha256": "b83812d4aaf4fbeb952ec3b769421c42c96a2023f16ff72aee1d75147a5e8063"
+      },
+      "time_seconds": 1.773
+    }
+  ],
+  "companion_probes": [],
+  "source_evidence": [
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/manifest.json",
+      "sha256": "d8fa41fa35404b41453ba277958bd7fbe94e1d5d8059a644ed87d812e621b5f0"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/frozen-inputs.zip",
+      "sha256": "dea7aca6a7b3e49e1c1f016b46c58d3d0560e3be5f05ef7df3f7bf37762f3a9f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/junit.xml",
+      "sha256": "923610dcc293d637096c542528833720db740c3872245b477a173a3fdb051dfd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/result.json",
+      "sha256": "dfd64ee168659ed85e3099ceaa3c21c8a0d1f4a5d6514c5bb011cab83824f1be"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/stdout.txt",
+      "sha256": "2731171984e3e5a167dd3469c788023e173f4e754992b3c6b852dc7b7d01360f"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "artifact_path": "reports/engineering-assessment-7bda0aa9e023/coverage-map.json",
+      "sha256": "349f53e8311db64e467bdf4efb0dc0ccb8f876930c0ea3d6e9b9c2c0effe21bd"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/9419ada5c71d4900/fixture.json",
+      "sha256": "29d9ff2bce83f601f571b4dddc0b19f4773057f5f3ffc6855fcf8b2fd4cb9640"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/9419ada5c71d4900/trace.json",
+      "sha256": "0c00ec34c018383781a800d4c928ed10e5bf321388c1a21278041de2ebd7249e"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/bcc99f94e3d7ef73/fixture.json",
+      "sha256": "209136ed41e7c967535368aa1e14050d63ecfc39bdbc4142e39f233b1ee06981"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/bcc99f94e3d7ef73/trace.json",
+      "sha256": "d7cae6035fd79cb941ed61ebdc945ce9221ba791ca5ee4c079dea0eae375cc13"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/db044ba9a9a3f9f7/fixture.json",
+      "sha256": "f49a4c3fc4ccda5c0aff8cc44e68fb1ff72811cd1949bf0ae6160ae43ca976aa"
+    },
+    {
+      "artifact_path": "reports/check-20260920T025211Z-d22bda/fixtures/db044ba9a9a3f9f7/trace.json",
+      "sha256": "47b5d185852a0652b2921d66a1989edee5c687449a185cc4f9cc72acd3e7422e"
+    }
+  ],
+  "tested_implementation_commit": "41027c46bcaa346add62e78b7858242dbc26cbd3",
+  "limits_of_claim": "Engineering integration only. Fake lanes, injected faults and real native/model companions are distinguished in each source. No cognition score or fresh test invocation is inferred from this review.",
+  "limitations": []
+}

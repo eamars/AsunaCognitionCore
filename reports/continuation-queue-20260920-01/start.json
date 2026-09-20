@@ -1,0 +1,37 @@
+{
+  "pid": 66612,
+  "parent_pid": 26028,
+  "started_at": "2026-09-20T02:50:12.634139+00:00",
+  "argv": [
+    "C:\\Users\\rba90\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "-X",
+    "utf8",
+    "reports\\continuation-queue-20260920-01\\run.py"
+  ],
+  "dispatcher_sha256": "81035139ce8546c8871c15f4d8fac31e7a240de7f5f3982073b4fb95cd5be828",
+  "plans": [
+    [
+      "tasks",
+      "formal-L02-20260920-resume-01",
+      [
+        "L03",
+        "L12",
+        "L11",
+        "L09"
+      ]
+    ],
+    [
+      "cognition",
+      "formal-A01-20260920-resume-01",
+      [
+        "A02"
+      ]
+    ]
+  ],
+  "rules": [
+    "At most two own model workflows including the already-running prerequisites.",
+    "Wait for each prior result and use new experiment directories.",
+    "No automatic retry, threshold edit or model launch change.",
+    "If a driver exits without result.json, stop that queue."
+  ]
+}

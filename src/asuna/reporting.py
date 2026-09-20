@@ -33,6 +33,7 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
     report=json.loads((BUNDLE/'reports/report.template.json').read_text(encoding='utf-8'))
     report.update(run_id='report-'+uuid.uuid4().hex[:12],created_at=datetime.now(timezone.utc).isoformat())
     report['fixture_sha256']=sha((BUNDLE/'fixtures/acceptance_cases.json').read_bytes())
+    contract_cases={r['test_id']:r for r in json.loads((BUNDLE/'fixtures/acceptance_cases.json').read_text(encoding='utf-8'))['cases']}
     report['engineering_observations']=observations(reports)
     selections=sorted(reports.glob('representative-traces-*/selection.json'))
     report['representative_traces']=[{'selection':ref(p),'details':json.loads(p.read_text(encoding='utf-8'))} for p in selections]
@@ -112,6 +113,11 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
                 elif test=='F01':row['assertions']=[{'name':'actual length, all three needles, stop and matching provider usage','observed_passed':metrics.get('passed'),'required_passed':24,'details':'Each sample has independently recorded input/usage/needle checks.'}]
                 elif test in ('L02','L03','L12'):row['assertions']=[{'name':'fresh workspace task and independent oracle','observed_passed':metrics.get('successes'),'required_passed':9 if test=='L02' else 4,'samples':10 if test=='L02' else 5}]
                 elif test=='L04':row['assertions']=[{'name':'retrieval gold, critical records, ready vector index, pending backread and stale-ID authority checks','observed':metrics,'details':'See recorded query-by-query assertions in result and retrieval selections.'}]
+                else:
+                    case=contract_cases[test]
+                    row['assertions']=[{'name':'immutable acceptance requirements and recorded observations','required_actions':case['actions'],'required_outcome':case['expected'],
+                        'required_evidence':case['evidence_required'],'observed_status':value['status'],'observed_metrics':metrics,'source_result':latest['evidence'],
+                        'details':'Per-sample output and observations are in the exact result artifact. This requirement listing does not supply missing human judgments or convert protocol success into semantic success.'}]
             if row['status']=='FAIL' and not row['minimal_repro']:
                 row['minimal_repro']={'commands':row['commands'],'frozen_experiment':row['experiment_id'],'result_artifact':latest['evidence'],'instructions':'Use the frozen-inputs archive and per-sample input/request in this attempt; never overwrite the failing directory.'}
         else:

@@ -15,6 +15,7 @@ def prompt_path(config: dict, name: str) -> Path:
 def redact_text(text: str, config: dict) -> str:
     values = [config.get('mongo_uri', '')]
     values += [config.get(lane, {}).get('api_key', '') for lane in ('character', 'executor', 'embedding')]
+    values += [channel.get('token', '') for channel in config.get('channels', {}).values()]
     for value in sorted(filter(None, values), key=len, reverse=True):
         text = text.replace(value, '[凭据已隐藏]')
     return text
@@ -32,6 +33,12 @@ def load(path: str | Path = 'config/local.json') -> dict:
     for lane in ('character', 'executor'):
         value[lane] = validate(value[lane])
     value['_model_settings_path'] = str(override)
+    channel_path = Path(path).parent / 'asuna-channel.local.json'
+    if channel_path.exists():
+        channels = json.loads(channel_path.read_text(encoding='utf-8'))
+        if channels.get('enabled') is True:
+            value['channels'] = channels['channels']
+            value['channel_port'] = channels.get('port', 8766)
     validate_database(value, value['database'])
     for lane in ('character', 'executor', 'embedding'):
         validate_endpoint(value[lane]['base_url'])
@@ -69,6 +76,8 @@ def redacted(config: dict) -> dict:
     out = json.loads(json.dumps(config))
     out.pop('mongo_uri', None)
     out.pop('legacy_database', None)
+    for channel in out.get('channels', {}).values():
+        channel.pop('token', None)
     for name in ('character', 'executor', 'embedding'):
         out[name].pop('api_key', None)
     return out

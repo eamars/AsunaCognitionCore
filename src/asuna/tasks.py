@@ -146,6 +146,8 @@ class TaskService:
                 observations.append({'source':item['_id'],'tool':item['tool'],'result_excerpt':json.dumps(item['result'],ensure_ascii=False)[:4096]})
             event['trusted_context_events'][0].update(original_input=source['text'],goal=task['goal'],observations=observations[-8:])
         ep=coordinator.ingest(event,persona=original['persona'])
+        if ep['state'] in ('PREPARED','MONOLOGUE_ACCEPTED','DECISION_ACCEPTED','SPEAK_ACCEPTED'):
+            ep=coordinator.advance(ep['_id'])
         self.store.put('tasks',{**current,'feedback_state':'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=current['revision'],stream=current['_id'])
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
@@ -186,7 +188,10 @@ class ToolBroker:
 
     def bind(self,session,task,workspace):
         if self.store.config.get('task_mode')=='workspace':
-            protected=[Path(workspace)/p for p in self.store.config['chat'].get('read_only_paths',[])]
+            from .resources import workspace_grant
+            grant=workspace_grant(self.store.config,task['scene_id'],task['requester_id'])
+            if Path(workspace).resolve()!=Path(grant['workspace']).resolve():raise Denied('WORKSPACE_GRANT_MISMATCH')
+            protected=[Path(workspace)/p for p in grant.get('read_only_paths',[])]
         else:
             protected=[p for p in Path(workspace).rglob('*') if p.is_file() and p.name!='stats.py']
         skills=skills_directory(self.store.config,task['scene_id'],task['requester_id'])
@@ -321,9 +326,11 @@ class Executor:
                 text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。输出必须是单个原始JSON对象，以 { 开始、以 } 结束；禁止 Markdown 代码围栏、解释或前后文字。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)
 
     def _run_workspace(self,task,binding,source,persona,healthy):
+        from .resources import workspace_grant
+        grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
         system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+'\n共享角色价值（不代写角色台词或独白）：\n'+persona['content']['body']
         text=json.dumps({'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
-                         'workspace':'/task','read_only_paths':self.service.store.config['chat'].get('read_only_paths',[])},ensure_ascii=False)
+                         'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])},ensure_ascii=False)
         if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):
             text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
         value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)

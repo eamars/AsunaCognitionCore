@@ -4,9 +4,12 @@ from asuna.config import ROOT,load
 from asuna.evidence import write_json
 
 secrets=set()
+# Model parameter names describe token accounting, not authentication material.
+NON_SECRET_KEYS={'token_counter','maxTokensField'}
 def collect(value):
     if isinstance(value,dict):
         for key,item in value.items():
+            if key in NON_SECRET_KEYS:continue
             if re.search(r'password|token|api.?key|secret',key,re.I) and isinstance(item,str) and len(item)>=6:secrets.add(item)
             else:collect(item)
     elif isinstance(value,list):

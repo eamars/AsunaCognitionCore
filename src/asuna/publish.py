@@ -27,6 +27,30 @@ class PublishService:
             task=db.tasks.find_one({'_id':ep['task_id']})
             if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE','UNKNOWN'):
                 raise Denied('PUBLICATION_INTENT_STALE')
+        if scene.get('channel_id'):
+            if msg['delivery_state'] in ('QUEUED_EXTERNAL', 'SENDING'):
+                return msg
+            from .channels import route_for_scene
+            route = route_for_scene(self.store.config, scene['channel_id'], scene['_id'])
+            source_ep = ep
+            # Feedback inherits the original transport target, including continued tasks.
+            seen = set()
+            while source_ep.get('episode_kind') == 'task_feedback':
+                if source_ep['_id'] in seen:
+                    raise Denied('PUBLICATION_SOURCE_CYCLE')
+                seen.add(source_ep['_id'])
+                task = db.tasks.find_one({'_id': source_ep['task_id']})
+                source_ep = db.episodes.find_one({'_id': task['episode_id']})
+            source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
+            channel = (source or {}).get('event', {}).get('channel', {})
+            if (channel.get('id') != scene['channel_id'] or channel.get('target') != route['target']
+                    or channel.get('account_id') != self.store.config['channels'][scene['channel_id']]['account_id']):
+                raise Denied('PUBLICATION_SOURCE_TARGET_MISMATCH')
+            return self.store.put('messages', {**msg, 'delivery_state': 'QUEUED_EXTERNAL',
+                                  'channel_id': scene['channel_id'], 'target': route['target'],
+                                  'channel_account_id': channel['account_id'],
+                                  'platform_reply_to': channel['platform_event_id']},
+                                  expected=msg['revision'], stream=ep['_id'])
         if msg['delivery_state']=='SENDING' and not self.idempotent:
             return self.store.put('messages',{**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])
         receipt=db.sink_receipts.find_one({'_id':msg['publication_key']}) if self.idempotent else None
@@ -43,4 +67,4 @@ class PublishService:
                     raise Denied('IDEMPOTENCY_CONTENT_MISMATCH')
             self.crash('after_send_before_receipt')
         self.store.audit(ep['_id'],'publication.receipt',{'message_id':message_id,'receipt_id':receipt['_id']},msg['scope_key'])
-        return self.store.put('messages',{**msg,'delivery_state':'DELIVERED','receipt':receipt['_id']},expected=msg['revision'],stream=ep['_id'])
+        return self.store.put('messages',{**msg,'delivery_state':'DELIVERED','delivery_basis':'local_sink','receipt':receipt['_id']},expected=msg['revision'],stream=ep['_id'])

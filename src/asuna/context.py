@@ -21,9 +21,21 @@ class ContextBuilder:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
         relation=self.store.head('relationship:'+event['person_id'],scope)
         overlay=self.store.head('overlay:'+persona,scope)
-        history=list(self.store.db.messages.find({'scene_id':scene['_id'],'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]},{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1}).sort('scene_seq',-1).limit(12))
-        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
+        from .ingress import episode_id
+        source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+        history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
+                         '$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}
+        if source:
+            # Newly accepted/future queued inputs must not enter an earlier turn.
+            history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
+        history=list(self.store.db.messages.find(history_query,{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1}).sort('scene_seq',-1).limit(12))
+        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
+        if source:
+            for queued in self.store.db.messages.find({'scene_id':scene['_id'], 'direction':'inbound',
+                                                       'scene_seq':{'$gte':source['scene_seq']}},
+                                                      {'platform_event_id':1}):
+                tail_sources.update((queued['_id'], queued.get('platform_event_id')))
         if self.retrieval:
             memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
         else:
@@ -46,11 +58,13 @@ class ContextBuilder:
                     'available':True,'target':'只更新当前场景下对当前说话人的关系理解；不修改全局人格或权限。',
                     'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。'}
             from .tasks import WORKSPACE_TOOLS
+            from .resources import workspace_grant
+            grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
             context['action_capabilities_from_program']={
-                'available':True,'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
-                'authorized_workspace':self.store.config['chat']['workspace'],
-                'tools':[tool['name'] for tool in WORKSPACE_TOOLS],
-                'read_only_paths':self.store.config['chat'].get('read_only_paths',[]),
+                'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
+                'authorized_workspace':grant.get('workspace'),
+                'tools':[tool['name'] for tool in WORKSPACE_TOOLS] if grant else [],
+                'read_only_paths':grant.get('read_only_paths',[]),
                 'cancellation_available':True,
                 'network':'isolated','delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
             from .skills import skills_directory

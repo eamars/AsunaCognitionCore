@@ -78,8 +78,10 @@ class Workbench:
         if not self.store.config.get('_model_settings_path'):
             raise ValueError('当前启动未指定可保存的模型配置路径')
         candidate = edited_models(self.store.config, body)
-        if controller.pending.unfinished_tasks or controller.task_queue.unfinished_tasks or self.store.db.tasks.find_one({'scene_id': self.settings['scene_id'], 'state': {'$in': ['READY', 'RUNNING']}}):
-            raise ValueError('请等当前回复、排队消息和行动完成后再切换模型')
+        with controller.ingress_lock:
+            if controller.pending.unfinished_tasks or controller.task_queue.unfinished_tasks or self.store.db.tasks.find_one({'state': {'$in': ['READY', 'RUNNING']}}):
+                raise ValueError('请等当前回复、排队消息和行动完成后再切换模型')
+            controller.reconfiguring = True
         self.models_applying, self.models_error = True, ''
         previous = self.store.config
         def apply():
@@ -95,6 +97,7 @@ class Workbench:
                 self.models_error = redact_text(redact_text(str(exc), candidate), previous)
                 self.emit('[系统] 模型配置未应用：' + self.models_error)
             finally:
+                controller.reconfiguring = False
                 self.models_applying = False
         self.model_thread = threading.Thread(target=apply, daemon=True)
         self.model_thread.start()
@@ -130,6 +133,12 @@ class Workbench:
         scene = store.authorize(settings['scene_id'], settings['person_id'])
         scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
         episodes = list(store.db.episodes.find({**scope, 'scene_id': scene['_id']}, {'system': 0, 'context': 0}).sort('_id', 1))
+        known = {ep['_id'] for ep in episodes}
+        for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'host_managed': True}):
+            if row['episode_id'] not in known:
+                episodes.append({'_id': row['episode_id'], 'state': row['ingress_state'],
+                                 'character_context': row.get('character_context', 'initial'),
+                                 **({'failure': row['failure']} if row.get('failure') else {})})
         # Contexts are native Chat /new generations, not fabricated channels.
         current = scene.get('character_context', 'initial')
         groups = {current: []}
@@ -224,6 +233,11 @@ class Workbench:
         self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
         if self.controller is None:
             raise PermissionError('只读模式不能发送消息或新建上下文')
+        if path == '/stop':
+            if not getattr(self, 'host', None):
+                raise ValueError('宿主停止入口不可用')
+            self.host.shutdown_requested.set()
+            return {'accepted': True}
         if self.models_applying:
             raise ValueError('正在应用模型配置，请稍候')
         if path == '/models/discover':
@@ -236,7 +250,7 @@ class Workbench:
             value = body.get('text')
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 16000:
                 raise ValueError('请输入 1–16000 字的消息')
-            self.controller.submit(value.strip())
+            return {'accepted': True, **self.controller.submit(value.strip())}
         elif path == '/new':
             self.controller.new_context()
         else:
@@ -260,7 +274,7 @@ class UiBridge:
                     url = urlsplit(self.path)
                     if self.command == 'GET' and url.path == '/state':
                         value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
-                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover'):
+                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
                             raise ValueError('INVALID_BODY_SIZE')
@@ -304,7 +318,12 @@ def serve(workbench, port):
     try:
         process = subprocess.Popen(command, cwd=ROOT, env=env)
         print(f'Asuna UI: http://127.0.0.1:{port}/asuna/ （DSH 原生页面也可从侧栏 Asuna 打开）', flush=True)
-        return process.wait()
+        while True:
+            try:
+                return process.wait(timeout=.5)
+            except subprocess.TimeoutExpired:
+                if getattr(workbench, 'host', None) and workbench.host.shutdown_requested.is_set():
+                    return 0
     except KeyboardInterrupt:
         return 0
     finally:
@@ -319,7 +338,7 @@ def serve(workbench, port):
 
 
 def ui(config, database=None, out=None, *, port=8765, read_only=False):
-    from .chat import Chat, local_settings, prepare_local_scene
+    from .chat import local_settings
     settings = local_settings(config)
     if read_only:
         store = Store(config, database)
@@ -328,22 +347,15 @@ def ui(config, database=None, out=None, *, port=8765, read_only=False):
             return serve(Workbench(store, settings), port)
         finally:
             store.client.close()
-    from .application import Application
+    from .host import RuntimeHost
     from .evidence import Evidence
-    from .memory_indexer import MemoryIndexer
     evidence = Evidence(Path(out) if out else ROOT / 'reports' / ('ui-' + uuid.uuid4().hex[:12]))
-    with Application({**config, 'task_mode': 'workspace'}, evidence, database) as app:
-        prepare_local_scene(app.store, settings)
-        indexer = MemoryIndexer(app.store, evidence, settings['scene_id']).start()
-        app.stack.callback(indexer.close)
-        workbench = Workbench(app.store, settings)
-        controller = Chat(app, settings, emit=workbench.emit)
-        workbench.controller = controller
-        controller.worker.start()
-        controller.task_worker.start()
+    with RuntimeHost(config, evidence, database) as host:
+        workbench = Workbench(host.app.store, settings, host.controller)
+        workbench.host = host
+        host.controller.emit = workbench.emit
         try:
             return serve(workbench, port)
         finally:
             if workbench.model_thread:
                 workbench.model_thread.join()
-            controller.stop()

@@ -12,6 +12,7 @@ from .retrieval import Retrieval
 class MemoryIndexer:
     def __init__(self, store, evidence, scene_id):
         self.store, self.evidence, self.scene_id = store, evidence, scene_id
+        self.scene_ids = [scene_id] if isinstance(scene_id, str) else list(scene_id)
         self.stopping = threading.Event()
         self.retrieval = Retrieval(store, evidence)
         self.retrieval.http.client.timeout = httpx.Timeout(10, connect=5)
@@ -24,15 +25,18 @@ class MemoryIndexer:
     def _run(self):
         try:
             index_ready = False
+            cursor = 0
             while not self.stopping.is_set():
                 try:
-                    scene = self.store.db.scenes.find_one({'_id': self.scene_id})
-                    chunks = MemoryService(self.store).chunk(self.scene_id)
+                    scene_id = self.scene_ids[cursor % len(self.scene_ids)]
+                    cursor += 1
+                    scene = self.store.db.scenes.find_one({'_id': scene_id})
+                    chunks = MemoryService(self.store).chunk(scene_id)
                     count = self.retrieval.index_pending(scope=scene['scope_key'], epoch=scene['policy_epoch'], stopping=self.stopping)
                     if not index_ready:
                         index_ready = self.retrieval.ensure_index(timeout=2)
                     if chunks or count:
-                        self.evidence.record('memory.indexed', {'scene_id': self.scene_id,
+                        self.evidence.record('memory.indexed', {'scene_id': scene_id,
                             'chunk_ids': [m['_id'] for m in chunks], 'indexed': count, 'index_ready': index_ready})
                 except Exception:
                     self.evidence.record('memory.index_error', {'scene_id': self.scene_id,

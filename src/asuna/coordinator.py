@@ -40,13 +40,10 @@ class Coordinator:
             if existing:
                 self.store.audit(ep_id,'ingress.deduped',{'event_id':event['event_id']},scene['scope_key'])
                 return existing
+            from .ingress import persist_input
+            persist_input(self.store,event)
             system,context,manifest=self.context.prepare(event,persona)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
-            # scene_seq is allocated atomically; gaps are allowed after a crash.
-            sequence=self.store.db.scenes.find_one_and_update({'_id':scene['_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-            msg={'_id':'in-'+ep_id,'adapter_id':'fixture','platform_event_id':event['event_id'],'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'scene_seq':sequence,'text':event['text'],'author':event['person_id'],'direction':'inbound','delivery_state':'RECEIVED','occurred_at':event.get('occurred_at',now()),'received_at':now()}
-            if not self.store.db.messages.find_one({'_id':msg['_id']}):
-                self.store.put('messages',msg,stream=ep_id)
             ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
@@ -130,6 +127,9 @@ class Coordinator:
                         ep=self._update(ep,state='PREPARED',recall_rounds=rounds+1,context=context)
                         return self.advance(ep_id)
                     if next_step=='delegate':
+                        if self.store.config.get('task_mode')=='workspace':
+                            from .resources import workspace_grant
+                            workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
                         if ep.get('delegation_depth',0)>=3:
                             return self._update(ep,state='BLOCKED',reason='delegation depth exhausted')
                         task_id=ep.get('supersedes_task_id') or 'task-'+ep_id

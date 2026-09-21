@@ -9,7 +9,7 @@ from .router import Router
 
 
 class Application:
-    """One production route shared by CLI, scene simulator and evaluations."""
+    """Core services owned by RuntimeHost; also used by explicit debug diagnostics."""
     def __init__(self,config,evidence,database=None):
         self.config,self.evidence=config,evidence
         self.store=Store(config,database);self.stack=ExitStack()

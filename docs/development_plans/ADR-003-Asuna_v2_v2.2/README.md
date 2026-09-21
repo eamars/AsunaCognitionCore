@@ -13,6 +13,7 @@
 | 阅读时机 | 文档 |
 |---|---|
 | 当前实施顺序 | [V2_2_PLAN.md](V2_2_PLAN.md) |
+| 开发偏离、条件缺失与继续推进 | [STAGE_RECOVERY.md](STAGE_RECOVERY.md) |
 | 接宿主输入、输出与权限 | [RUNTIME_SEAM.md](RUNTIME_SEAM.md) |
 | 小满开始实际开发 QQ | [自然语言开发任务](tasks/ASK_XIAOMAN_BUILD_QQ.md) |
 | 接定时器和自主活动 | [DSH_TIMERS_AND_GROWTH.md](DSH_TIMERS_AND_GROWTH.md) |

@@ -168,6 +168,7 @@ def test_chat_continues_while_action_waits_and_result_returns_once(store, tmp_pa
     chat.app.service = service
     chat.app.coordinator = chat.app.router.coordinator
     chat.settings['workspace'] = str(tmp_path)
+    store.config['chat'] = {**store.config['chat'], **chat.settings}
 
     class WaitingAction:
         def run(self, task_id, workspace):

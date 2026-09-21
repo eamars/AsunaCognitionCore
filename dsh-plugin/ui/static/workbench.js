@@ -147,6 +147,19 @@ $('composer').onsubmit = async (event) => {
 $('input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('composer').requestSubmit(); } };
 $('new-session').onclick = async () => { busy = true; $('new-session').disabled = true; try { await api('new', {}); actionError = ''; conversation = ''; $('send-status').textContent = '已请求新上下文；有未结束的行动时不会切换，请查看系统消息。'; await refresh(); } catch (err) { actionError = err.message; error(actionError); } finally { busy = false; if (state) render(); } };
 $('refresh').onclick = refresh;
+const stopHost = el('button', '停止服务');
+stopHost.title = '停止宿主与行动；关闭页面则保持宿主运行';
+$('refresh').after(stopHost);
+stopHost.onclick = async () => {
+  stopHost.disabled = true;
+  try {
+    await api('stop', {});
+    stopped = true; busy = true; requestNumber++;
+    $('send').disabled = true; $('input').disabled = true; $('new-session').disabled = true;
+    $('connection').textContent = '服务正在停止';
+    $('send-status').textContent = '已请求停止整个宿主；再次运行 start-asuna.cmd 可恢复未开始的输入。';
+  } catch (err) { error(err.message); stopHost.disabled = false; }
+};
 $('search').oninput = () => { if (state) renderInspector(); };
 addEventListener('pagehide', () => { stopped = true; });
 async function poll() { await refresh(); if (!stopped) setTimeout(poll, 2000); }

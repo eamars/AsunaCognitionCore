@@ -16,7 +16,7 @@ def setup_workspace(store):
     work = ROOT / '.runtime/work' / ('workspace-test-' + uuid.uuid4().hex)
     (work / 'notes').mkdir(parents=True)
     (work / 'notes/source.txt').write_text('原文保持不变', encoding='utf-8')
-    store.config.update(task_mode='workspace', chat={**store.config['chat'], 'workspace': str(work), 'read_only_paths': ['notes']})
+    store.config.update(task_mode='workspace', chat={**store.config['chat'], 'scene_id': 'dm-a', 'person_id': 'A', 'workspace': str(work), 'read_only_paths': ['notes']})
     decision = {'next': 'delegate', 'goal': '另写便条', 'constraints': ['保留原文'], 'recall_query': '', 'speak_before_action': False}
     coordinator = Coordinator(store, FakeLane(store, [LaneResult('先读再写。'), LaneResult(json.dumps(decision))]))
     ep = coordinator.ingest({'event_id': 'workspace-task', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '根据原文另写一份便条。'})

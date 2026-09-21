@@ -14,7 +14,7 @@ import uuid
 import httpx
 
 from .config import ROOT, redact_text
-from .state import Store
+from .state import Store, Denied
 from .model_settings import public_models, edited_models, revision, persist, LANES
 
 
@@ -210,6 +210,11 @@ class Workbench:
         relation = store.head('relationship:' + settings['person_id'], scene['scope_key'])
         if relation:
             records.append(inspector_record(relation[1], 'relationship'))
+        integration = getattr(getattr(self, 'host', None), 'integration', None)
+        if integration:
+            status = integration.status()
+            records.append({'id': 'integration-owner', 'kind': 'integration', 'title': '集成运行器',
+                            'description': status['state'], 'fields': status})
         with self.lock:
             notices = list(self.notices) if chosen == current else []
         data = {'conversationId': chosen, 'title': next(row['title'] for row in conversations if row['id'] == chosen),
@@ -217,6 +222,7 @@ class Workbench:
                 'conversations': conversations, 'messages': rendered + notices, 'records': records,
                 'readOnly': self.controller is None, 'canSend': chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
                 'modelSettings': self.models_snapshot(),
+                'integrationAvailable': integration is not None,
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
                                  'group_preference': '当前本机场景没有群偏好记录。'}}
         latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
@@ -238,6 +244,10 @@ class Workbench:
                 raise ValueError('宿主停止入口不可用')
             self.host.shutdown_requested.set()
             return {'accepted': True}
+        if path == '/integration/stop':
+            runner = getattr(getattr(self, 'host', None), 'integration', None)
+            if not runner: raise ValueError('集成运行器未启用')
+            return runner.call('integration_stop', {})
         if self.models_applying:
             raise ValueError('正在应用模型配置，请稍候')
         if path == '/models/discover':
@@ -250,7 +260,9 @@ class Workbench:
             value = body.get('text')
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 16000:
                 raise ValueError('请输入 1–16000 字的消息')
-            return {'accepted': True, **self.controller.submit(value.strip())}
+            if type(body.get('integration', False)) is not bool:
+                raise ValueError('INVALID_INTEGRATION_SELECTION')
+            return {'accepted': True, **self.controller.submit(value.strip(), integration=body.get('integration', False))}
         elif path == '/new':
             self.controller.new_context()
         else:
@@ -274,7 +286,7 @@ class UiBridge:
                     url = urlsplit(self.path)
                     if self.command == 'GET' and url.path == '/state':
                         value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
-                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop'):
+                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
                             raise ValueError('INVALID_BODY_SIZE')
@@ -284,7 +296,7 @@ class UiBridge:
                         value = workbench.command(url.path, body)
                     else:
                         status, value = 404, {'error': '未知接口'}
-                except PermissionError as exc:
+                except (PermissionError, Denied) as exc:
                     status, value = 403, {'error': str(exc)}
                 except (ValueError, TypeError) as exc:
                     status, value = 400, {'error': str(exc)}

@@ -15,6 +15,7 @@ from .sandbox import Sandbox
 from .skills import skills_directory
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
+from .integration import INTEGRATION_TOOLS, owner_profile
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -70,7 +71,7 @@ class TaskService:
             task=self.store.db.tasks.find_one({'_id':task_id})
             if not task or (task['requester_id'],task['scene_id'])!=(event['person_id'],event['scene_id']):
                 raise Denied('TASK_REVISION_NOT_AUTHORIZED')
-            identity=sha(canonical({k:event[k] for k in ('event_id','person_id','scene_id','text')}))
+            identity=sha(canonical({k:event.get(k) for k in ('event_id','person_id','scene_id','text','integration_profile')}))
             if task.get('revision_event_id')==event['event_id']:
                 if task.get('revision_input_hash')!=identity:raise Denied('REVISION_EVENT_REUSED')
                 return task
@@ -96,6 +97,12 @@ class TaskService:
             revised={k:v for k,v in task.items() if k not in ('result','finished_at','feedback_episode','lease_owner','lease_expires_at','failure','failure_type')}
             revised.update(state='READY',episode_id=ep['_id'],goal=ep['decision']['goal'],constraints=ep['decision']['constraints'],
                 raw_input_refs=['in-'+ep['_id']],persona_revision=ep['manifest']['persona_revision'],tool_steps=0,feedback_state='PENDING')
+            from .integration import event_granted
+            source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
+            integration=event_granted(self.store.config,source.get('event',{}))
+            capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
+            revised.update(integration_profile='owner' if integration else None,
+                           allowed_capabilities=[t['name'] for t in [*capabilities, *(INTEGRATION_TOOLS if integration else [])]])
             return self.store.put('tasks',revised,expected=task['revision'],stream=task['_id'])
 
     @contextmanager
@@ -139,6 +146,7 @@ class TaskService:
         original=self.store.db.episodes.find_one({'_id':task['episode_id']})
         depth=original.get('delegation_depth',0)+1
         event={'event_id':task['_id']+':result:'+str(task['intent_revision']),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'任务结果已到达。事实来自受控工具回执；执行侧的解释不规定你的感受或公开措辞。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','value':task['result']}]}
+        if task.get('integration_profile') == 'owner': event['integration_profile'] = 'owner'
         if self.store.config.get('task_mode')=='workspace':
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
             observations=[]
@@ -184,7 +192,7 @@ class ToolBroker:
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
 
     @property
-    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS}}]
+    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':[*WORKSPACE_TOOLS, *INTEGRATION_TOOLS] if self.store.config.get('task_mode')=='workspace' else TOOLS}}]
 
     def bind(self,session,task,workspace):
         if self.store.config.get('task_mode')=='workspace':
@@ -195,7 +203,7 @@ class ToolBroker:
         else:
             protected=[p for p in Path(workspace).rglob('*') if p.is_file() and p.name!='stats.py']
         skills=skills_directory(self.store.config,task['scene_id'],task['requester_id'])
-        self.bindings[session]=(task,Sandbox(workspace,protected,skills))
+        self.bindings[session]=(task,Sandbox(workspace,protected,skills,allowed_root=Path(grant['workspace']) if self.store.config.get('task_mode')=='workspace' else None))
 
     def call(self,session,call_id,tool,args):
         with self.service.lock:
@@ -203,6 +211,10 @@ class ToolBroker:
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
             if tool not in current['allowed_capabilities']:raise Denied('CAPABILITY_DENIED')
+            if tool.startswith('integration_'):
+                if current.get('integration_profile') != 'owner': raise Denied('INTEGRATION_TASK_GRANT_REQUIRED')
+                owner_profile(self.store.config, current['scene_id'], current['requester_id'])
+                if not getattr(self, 'integration', None): raise Denied('INTEGRATION_RUNNER_UNAVAILABLE')
             key='tool-'+sha(canonical([task['_id'],task['intent_revision'],call_id]))
             input_hash=sha(canonical([tool,args]))
             old=self.store.db.artifacts.find_one({'_id':key})
@@ -222,7 +234,9 @@ class ToolBroker:
                 self.store.audit(task['_id'],'fault.injected',{'kind':'transient_read_failure','artifact':key},task['scope_key'])
                 self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
                 return result
-            if tool=='task_status':
+            if tool.startswith('integration_'):
+                result=self.integration.call(tool,args)
+            elif tool=='task_status':
                 if args.get('status') not in ('done','partial','blocked','needs_character_decision'):raise ValueError('INVALID_TASK_STATUS')
                 result={'status':args['status']}
             elif tool in ('list_files','read_file','write_file'):
@@ -331,6 +345,8 @@ class Executor:
         system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+'\n共享角色价值（不代写角色台词或独白）：\n'+persona['content']['body']
         text=json.dumps({'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
                          'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])},ensure_ascii=False)
+        if task.get('integration_profile') == 'owner':
+            text+='\n本任务由 owner 在 Web 明确授权集成开发。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。'
         if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):
             text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
         value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)

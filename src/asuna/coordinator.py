@@ -141,7 +141,11 @@ class Coordinator:
                         if not self.store.db.tasks.find_one({'_id':task_id}):
                             from .tasks import WORKSPACE_TOOLS,TOOLS
                             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
-                            self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'allowed_capabilities':[t['name'] for t in capabilities]},stream=ep_id)
+                            from .integration import event_granted, INTEGRATION_TOOLS
+                            source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
+                            integration = event_granted(self.store.config, source.get('event', {}))
+                            if integration: capabilities = [*capabilities, *INTEGRATION_TOOLS]
+                            self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'allowed_capabilities':[t['name'] for t in capabilities]},stream=ep_id)
                         self.crash('after_task_persist')
                         if not ep['decision']['speak_before_action']:
                             return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)

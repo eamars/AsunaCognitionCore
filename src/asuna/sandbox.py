@@ -6,9 +6,12 @@ from .config import ROOT
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None):
+    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None, *, allowed_root=None):
         self.task_dir = task_dir.resolve()
-        if not self.task_dir.is_relative_to((ROOT/'.runtime/work').resolve()):
+        root = Path(allowed_root).resolve() if allowed_root else (ROOT/'.runtime/work').resolve()
+        if not any(root.is_relative_to((ROOT/'.runtime'/name).resolve()) for name in ('work','channels','integration')):
+            raise PermissionError('SANDBOX_ROOT_OUTSIDE_RUNTIME')
+        if not self.task_dir.is_relative_to(root):
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')
         self.task_dir.mkdir(parents=True, exist_ok=True)
         self.skills_dir = Path(skills_dir).resolve() if skills_dir else None

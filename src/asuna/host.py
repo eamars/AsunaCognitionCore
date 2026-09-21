@@ -72,6 +72,12 @@ class RuntimeHost:
             self.settings = local_settings(self.config)
             prepare_local_scene(self.app.store, self.settings)
             scenes = prepare_channels(self.app.store)
+            self.integration = None
+            if self.config.get('integration', {}).get('enabled'):
+                from .integration import IntegrationRunner
+                self.integration = IntegrationRunner(self.config)
+                self.app.broker.integration = self.integration
+                self.stack.callback(self.integration.close)
             self.controller = Chat(self.app, self.settings, emit=lambda text: self.evidence.record('host.notice', {'text': text}))
             channels = Channels(self.controller)
             channels.recover_sending()
@@ -86,6 +92,8 @@ class RuntimeHost:
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
                 self.stack.callback(self.channel_server.close)
                 self.evidence.record('host.channels_started', {'port': self.channel_server.server.server_port})
+            if self.integration:
+                self.integration.restore()
             return self
         except BaseException:
             self.stack.close()

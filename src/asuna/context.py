@@ -67,6 +67,11 @@ class ContextBuilder:
                 'read_only_paths':grant.get('read_only_paths',[]),
                 'cancellation_available':True,
                 'network':'isolated','delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+            from .integration import event_granted, INTEGRATION_TOOLS
+            if event_granted(self.store.config, event):
+                context['action_capabilities_from_program']['integration'] = {
+                    'tools': [tool['name'] for tool in INTEGRATION_TOOLS],
+                    'grant': 'owner 在 Web 为本条消息明确选择了集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
             from .skills import skills_directory
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'

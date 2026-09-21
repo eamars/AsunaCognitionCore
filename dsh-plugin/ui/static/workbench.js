@@ -69,7 +69,7 @@ function renderMessages() {
 function renderInspector() {
   const kinds = [...new Set([...Object.keys(names), ...state.records.map(record => record.kind)])];
   $('tabs').replaceChildren();
-  kinds.forEach(kind => { const button = el('button', names[kind] || kind); button.role = 'tab'; button.id = `tab-${kind}`; button.setAttribute('aria-controls', 'records'); button.setAttribute('aria-selected', String(kind === tab)); button.onclick = () => { tab = kind; selected = undefined; renderInspector(); }; $('tabs').append(button); });
+  kinds.forEach(kind => { const button = el('button', names[kind] || (kind === 'integration' ? '集成' : kind)); button.role = 'tab'; button.id = `tab-${kind}`; button.setAttribute('aria-controls', 'records'); button.setAttribute('aria-selected', String(kind === tab)); button.onclick = () => { tab = kind; selected = undefined; renderInspector(); }; $('tabs').append(button); });
   $('records').setAttribute('aria-labelledby', `tab-${tab}`);
   const search = $('search').value.toLocaleLowerCase();
   const records = state.records.filter(record => record.kind === tab && text(record).toLocaleLowerCase().includes(search));
@@ -98,6 +98,10 @@ function renderInspector() {
   $('detail').append(fields);
 }
 function render() {
+  integrationLabel.hidden = !state.integrationAvailable;
+  integrationStop.hidden = !state.integrationAvailable;
+  integrationChoice.disabled = state.readOnly || !state.canSend;
+  integrationStop.disabled = state.readOnly;
   $('title').textContent = state.title; $('subtitle').textContent = state.subtitle;
   $('connection').textContent = state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互';
   $('send').disabled = busy || state.readOnly || !state.canSend;
@@ -140,13 +144,20 @@ async function refresh() {
 $('composer').onsubmit = async (event) => {
   event.preventDefault(); const value = $('input').value.trim(); if (!value || busy || !state?.canSend || state.readOnly) return;
   busy = true; $('send').disabled = true;
-  try { await api('send', {text: value}); actionError = ''; $('input').value = ''; $('send-status').textContent = '已入队，可继续输入；回复完成后自动显示。'; await refresh(); }
+  try { await api('send', {text: value, integration: integrationChoice.checked}); integrationChoice.checked = false; actionError = ''; $('input').value = ''; $('send-status').textContent = '已入队，可继续输入；回复完成后自动显示。'; await refresh(); }
   catch (err) { actionError = err.message; error(actionError); $('send-status').textContent = '未确认送达；保留输入，请先刷新检查，避免重复发送。'; }
   finally { busy = false; $('send').disabled = state?.readOnly || !state?.canSend; }
 };
 $('input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('composer').requestSubmit(); } };
 $('new-session').onclick = async () => { busy = true; $('new-session').disabled = true; try { await api('new', {}); actionError = ''; conversation = ''; $('send-status').textContent = '已请求新上下文；有未结束的行动时不会切换，请查看系统消息。'; await refresh(); } catch (err) { actionError = err.message; error(actionError); } finally { busy = false; if (state) render(); } };
 $('refresh').onclick = refresh;
+const integrationLabel = el('label'); integrationLabel.hidden = true;
+const integrationChoice = el('input'); integrationChoice.type = 'checkbox'; integrationChoice.id = 'integration-choice';
+integrationLabel.append(integrationChoice, document.createTextNode('本条授权集成开发'));
+$('composer').append(integrationLabel);
+const integrationStop = el('button', '停止集成'); integrationStop.type = 'button'; integrationStop.hidden = true;
+integrationStop.onclick = async () => { try { await api('integration/stop', {}); actionError = ''; await refresh(); } catch (err) { actionError = err.message; error(actionError); } };
+$('composer').append(integrationStop);
 const stopHost = el('button', '停止服务');
 stopHost.title = '停止宿主与行动；关闭页面则保持宿主运行';
 $('refresh').after(stopHost);

@@ -62,8 +62,32 @@
 
 ## 状态、证据与边界
 
-Web 当前本机场景可看到原文、排队状态、角色与行动过程、失败 traceback。尚未添加外部场景选择和 adapter 进程管理，通道运维在 B 集成时补齐。Web 服务自身退出会停止本次宿主；单独关闭浏览器不会。
+Web 当前本机场景可看到原文、排队状态、角色与行动过程、失败 traceback。启用集成 profile 后，检查器“集成”显示进程及日志，“停止集成”停止并取消自动恢复。尚未添加外部场景选择。Web 服务自身退出会停止本次宿主；单独关闭浏览器不会。
 
 `tools/probe_host_seam.py --debug` 是真实 Mongo/HTTP 的隔离工程重放，使用 FakeLane、独立 `asuna_v2_test_host_*` 库和显式回执替身，不联系 QQ、不调用真实模型、不代替 Web/QQ 验收。重复/丢队列/公开输出/unknown/迟到回执的探针结果保存在 `reports/host-probe-*`。
 
-尚缺 B 所需受管理集成 runner（允许指定端点网络、低权限运行、测试/启停/部署目录分离）。不要把本接口文档当成 runner 已存在，不要让普通执行者用 owner Windows 解释器启动网络 adapter。QQ 真实收发须先核实账号、连接与私聊目标，再由小满通过 Web 任务开发 adapter。
+## 受管理集成运行器（B 基础设施）
+
+基础配置同目录的 `integration.local.json` 控制唯一 owner profile，示例见 `config/integration.example.json`。`enabled` 必须为 true，`scene_id/person_id` 必须与本机 owner 配置一致。文件和运行目录均 Git 忽略。当前本机 profile 没有网络端点和平台凭据，只用于本机运行器验收。
+
+在 Web 发送消息前勾选“本条授权集成开发”，该授权写入持久输入、实际委托和任务回传；发送后勾选自动清除。聊天文字不能授予权限；外部通道不能提交该标记。普通任务仍只能使用原工作区与无网络沙箱。任务修订按新输入重新核定权限。停止已启用服务使用独立“停止集成”，普通任务取消不等同撤销此前的持久启用。
+
+| 工具 | 实际能力 |
+|---|---|
+| `integration_dev(argv)` | 无网络 WSL sandbox；`/task` 对应 `.runtime/integration/owner/development`，与普通工作区分开；30 秒上限。可读写自己的代码、依赖文件与 SKILL.md；启动时放入本文，供开发读取 |
+| `integration_test(argv, timeout=30)` | 冻结开发目录为只读 `/app`，运行 1–60 秒；独立可写 `/data`；返回真实 exit_code、stdout/stderr 日志及 timed_out |
+| `integration_start(argv)` | 显式启用冻结副本，长期运行；已有运行进程时拒绝替换，需先停止。后续开发文件不会自动部署 |
+| `integration_status()` | 当前进程状态与有界日志；RUNNING 只说明进程存在 |
+| `integration_stop()` | 停止整个命名空间并取消自动恢复，保留源文件、副本和日志 |
+
+argv 直接进入隔离进程，不经过宿主 shell。默认 Python 为 WSL 的 `python3`；配置通过只读 `/integration/config.json`（环境变量 `ASUNA_INTEGRATION_CONFIG`）提供，内容为 `{"endpoints": {"名称": {"host":"127.0.0.1","port":内部端口}}, "adapter": adapter_config}`。adapter_config 是 owner 显式填写的平台连接资料；不得向普通任务、聊天或技能文件复制凭据。工具结果和 Web 隐藏 token/password/secret/key 字段对应值，完整有界日志仅保存在本机忽略目录。
+
+网络配置 `endpoints` 最多 8 项，每项为 `{"name":"host","host":"已核实的本机或LAN IP","target_port":实际端口,"port":隔离进程内端口}`。名称和内部端口须唯一，两种端口范围均为 1024–65535。连接地址必须是字面 IP；配置不会推测或扫描 NapCat 端口。宿主的可信 WSL supervisor 仅向这些固定 TCP 目标转发；隔离进程在自己的网络命名空间中通过 localhost 内部端口使用 HTTP/WS 等协议。没有 DNS、默认路由、任意 CONNECT 或外部入站监听；目前支持主动连接的传输，不支持 NapCat 向该命名空间发起反向连接。依赖需在现有 `/usr` 中或自行放入开发目录；不默认开放包仓库或互联网。
+
+部署路径为现有 Ubuntu WSL + bubblewrap `--unshare-all --cap-drop ALL`，实测 UID 1000；只读系统 `/usr`、程序 `/app`、本次配置和固定目标 Unix relay，可写范围仅 `/data`、私有 `/tmp`。不挂载 Windows owner 目录、普通工作区、技能库或 Mongo 凭据。每进程地址空间 512 MiB、单文件 8 MiB、打开文件 128；每次运行单输出流累计超过 8 MiB 时终止，保留最后约 256 KiB 日志。快照限制 2000 个文件/64 MiB，拒绝软链接、junction 和特殊文件。
+
+启用清单保存在 `.runtime/integration/owner/enabled.json`。宿主正常停止时关闭子进程、保留清单；重新启动恢复同一冻结副本，开发目录半写文件不会上线。profile 有变化则暂停恢复，要求 owner 重新明确启动；不会自动循环重启崩溃服务。跨进程锁避免两个宿主同时管理同一目录。父宿主异常退出时 stdin EOF 通知 supervisor 停止命名空间；停止未确认会报错，不假称已停止。
+
+停止和超时终止整个命名空间；`exit_code` 是被监督的 bubblewrap 退出码。正常完成时沿用子命令退出结果，强制停止的 `-15` 不证明脚本自己的信号处理器执行完毕。Web 当前展示进程和日志，不提供 `/data` 文件浏览器；只有首行日志也不证明发生截断，脚本可能只输出了一行。
+
+QQ 真实收发仍须先核实 NapCat 连接、账号与授权私聊目标，再由小满通过 Web 任务开发 adapter。运行器不实现 OneBot 协议，也不把进程启动当平台回执。

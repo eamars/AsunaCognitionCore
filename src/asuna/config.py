@@ -16,6 +16,16 @@ def redact_text(text: str, config: dict) -> str:
     values = [config.get('mongo_uri', '')]
     values += [config.get(lane, {}).get('api_key', '') for lane in ('character', 'executor', 'embedding')]
     values += [channel.get('token', '') for channel in config.get('channels', {}).values()]
+    def credentials(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if isinstance(item, str) and any(word in key.lower() for word in ('token', 'password', 'secret', 'key')):
+                    values.append(item)
+                else:
+                    credentials(item)
+        elif isinstance(value, list):
+            for item in value: credentials(item)
+    credentials(config.get('integration', {}).get('adapter_config', {}))
     for value in sorted(filter(None, values), key=len, reverse=True):
         text = text.replace(value, '[凭据已隐藏]')
     return text
@@ -33,6 +43,9 @@ def load(path: str | Path = 'config/local.json') -> dict:
     for lane in ('character', 'executor'):
         value[lane] = validate(value[lane])
     value['_model_settings_path'] = str(override)
+    integration_path = Path(path).parent / 'integration.local.json'
+    if integration_path.exists():
+        value['integration'] = json.loads(integration_path.read_text(encoding='utf-8'))
     channel_path = Path(path).parent / 'asuna-channel.local.json'
     if channel_path.exists():
         channels = json.loads(channel_path.read_text(encoding='utf-8'))
@@ -76,6 +89,8 @@ def redacted(config: dict) -> dict:
     out = json.loads(json.dumps(config))
     out.pop('mongo_uri', None)
     out.pop('legacy_database', None)
+    if 'integration' in out:
+        out['integration'].pop('adapter_config', None)
     for channel in out.get('channels', {}).values():
         channel.pop('token', None)
     for name in ('character', 'executor', 'embedding'):

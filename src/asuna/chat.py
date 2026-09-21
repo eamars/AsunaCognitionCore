@@ -136,9 +136,13 @@ class Chat:
         self.pending.put(({'_compact': True, 'event_id': str(uuid.uuid4()),
             'scene_id': self.settings['scene_id'], 'person_id': self.settings['person_id']}, None))
 
-    def submit(self, text):
+    def submit(self, text, *, integration=False):
         event = {'event_id': str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
+        if integration:
+            from .integration import owner_profile
+            owner_profile(self.app.store.config, event['scene_id'], event['person_id'])
+            event['integration_profile'] = 'owner'
         return self.receive(event)
 
     def receive(self, event):

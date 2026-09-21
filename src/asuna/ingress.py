@@ -14,7 +14,8 @@ def persist_input(store, event, *, managed=False):
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:
         if (previous['author'] != event['person_id'] or previous['text'] != event['text']
-                or previous['policy_epoch'] != scene['policy_epoch']):
+                or previous['policy_epoch'] != scene['policy_epoch']
+                or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')
         return previous, False
     sequence = store.db.scenes.find_one_and_update(

@@ -1,4 +1,4 @@
-"""The CLI simulator and task feedback use the same persisted application route."""
+"""Trusted host envelopes and debug fixtures share the persisted application route."""
 from collections import defaultdict,deque
 from .evidence import canonical,sha
 from .state import Store,Denied,now
@@ -24,11 +24,14 @@ class Router:
         self.store,self.coordinator,self.executor,self.tasks=store,coordinator,executor,task_service
 
     def receive(self,event,*,persona='P1',workspace=None):
-        # Fixture/CLI adapter is an operator-owned simulator. Identity fields
-        # below come from its envelope, never from quoted JSON in event text.
+        # Identity and integration grants come from the host envelope, never
+        # from quoted JSON in event text. Channel adapters cannot submit grants.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','task_id','intent_revision','delegation_depth','supersedes_task_id')
         trusted={k:event[k] for k in allowed if k in event}
+        if event.get('integration_profile'):
+            from .integration import event_granted
+            if event_granted(self.store.config, event): trusted['integration_profile'] = 'owner'
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':'cli-fixture'},scene['scope_key'])
         if event.get('supersedes_task_id'):
             if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')

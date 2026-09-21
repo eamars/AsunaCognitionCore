@@ -1,0 +1,43 @@
+{
+  "replyId": "reply_001",
+  "finalMessage": {
+    "id": "msg_assistant_001",
+    "role": "assistant",
+    "authorLabel": "Asuna",
+    "text": "好的，我可以给你一个精简的 DSH 插件目录结构示例。",
+    "createdAt": "2025-04-13T14:28:14"
+  },
+  "internalSteps": [
+    {
+      "id": "step1",
+      "type": "role_thought",
+      "actor": "Gemma",
+      "label": "角色脑（Gemma）",
+      "summary": "思考如何回答用户关于 DSH 插件开发的问题",
+      "createdAt": "2025-04-13T14:28:10",
+      "status": "ok"
+    },
+    {
+      "id": "step2",
+      "type": "action_plan",
+      "actor": "Qwen",
+      "label": "行动脑（Qwen）",
+      "summary": "需要编写目录结构示例，并检索相关资料",
+      "createdAt": "2025-04-13T14:28:11",
+      "status": "ok"
+    },
+    {
+      "id": "step3",
+      "type": "tool_call",
+      "label": "工具调用",
+      "summary": "读取知识库：DSH 插件开发文档",
+      "createdAt": "2025-04-13T14:28:12",
+      "status": "ok",
+      "payload": {
+        "tool": "search_docs",
+        "input": "DSH plugin develop structure",
+        "result": "找到 3 条相关内容"
+      }
+    }
+  ]
+}

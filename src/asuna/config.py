@@ -22,6 +22,16 @@ def redact_text(text: str, config: dict) -> str:
 
 def load(path: str | Path = 'config/local.json') -> dict:
     value = json.loads(Path(path).read_text(encoding='utf-8'))
+    from .model_settings import settings_path, validate
+    override = settings_path(path)
+    if override.exists():
+        models = json.loads(override.read_text(encoding='utf-8'))
+        if set(models) != {'character', 'executor'}:
+            raise ValueError('INVALID_MODEL_SETTINGS')
+        value.update({lane: validate(models[lane]) for lane in models})
+    for lane in ('character', 'executor'):
+        value[lane] = validate(value[lane])
+    value['_model_settings_path'] = str(override)
     validate_database(value, value['database'])
     for lane in ('character', 'executor', 'embedding'):
         validate_endpoint(value[lane]['base_url'])

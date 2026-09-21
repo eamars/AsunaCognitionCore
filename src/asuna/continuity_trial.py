@@ -10,7 +10,7 @@ from .behavior_trials import blind
 
 def suite(config,evidence):
     store=Store(config,'asuna_v2_test_L07_'+uuid.uuid4().hex[:16]);store.migrate();store.seed()
-    r=Retrieval(store,evidence);output={'test_id':'L07','status':'FAIL','attempts':1,'database':store.name,'mode':'real_Gemma_private_monologue_native_compaction_new_epoch_vector_retrieval'}
+    r=Retrieval(store,evidence);output={'test_id':'L07','status':'FAIL','attempts':1,'database':store.name,'mode':'real_character_private_monologue_native_compaction_new_epoch_vector_retrieval'}
     try:
         r.index_pending();assert r.ensure_index()
         with DshLane(config,store,evidence) as lane:

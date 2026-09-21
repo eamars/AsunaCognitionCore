@@ -1,61 +1,53 @@
-# 我的 Asuna：本机启动与使用
+# Asuna：Web 启动与使用
 
-2026-09-20：P1-A/B/C 已实跑；P1-D 单次原生压缩、重启恢复与两场景隔离，以及 P2 一次真实工具错误恢复已完成有限验证。当前角色为简版沈小满，显示名“小满”。摘要仍有偏好归属／引用误差；P3-A/B 一次技能生成与跨恢复复用已验证，P3-C 的一次关系理解修订与恢复使用也已验证；QQ 尚未开始。
+2026-09-21：正式交互、开发调试呈现和交互验收统一使用现有 Web UI。CLI 仅用于显式 debug/维护，Web 故障时不回退终端聊天。后续开发规则见 [AGENTS.md](AGENTS.md)，ADR-003 的入口指示已同步修订。
 
-## 在哪里启动
+## 启动与打开
 
-**交付清理后的准备：** 本工作区现在只保留可提交内容，本机配置、依赖与运行目录已原样存入 `C:\workspace\asuna-v1-core-raw-20260920.zip`。先将包内 `asuna_cognition_core_v2/` 下的 `.venv/`、`node_modules/`、`.runtime/` 和 `config/local.json` 恢复到本项目的原路径；`reports/` 可按需恢复查看历史证据。无需覆盖源码或重新 seed。依赖中的绝对路径按本机原目录保存，不能据此宣称可以直接移植到其他机器。外部 Mongo、模型服务、WSL Ubuntu 与 bubblewrap 仍须可用。
+日常启动 `start-asuna.cmd`，`start-asuna-ui.cmd` 是它的别名。两者都只启动 `asuna ui`，默认读取 `config/local.json`，端口为 8765。浏览器打开 http://127.0.0.1:8765/asuna/；也可在 DSH 原生页面侧栏点击 Asuna。
 
-在本机 Windows PowerShell 或命令提示符执行以下已实跑的命令：
+当前本机尚无 `config/local.json`；本轮沿用已核实的示例配置和端口 8767，实际启动方式为：
 
 ```powershell
-C:\workspace\asuna_cognition_core_v2\start-asuna.cmd
+.\start-asuna.cmd --config config/local.example.json --port 8767
 ```
 
-脚本自动进入项目目录，使用现有 `.venv` 执行 `python -m asuna.cli chat`。Python 与 DSH 在 Windows 本机运行，Gemma 使用本机服务，Qwen 和 Mongo 沿用局域网服务。正常启动不安装依赖、不清空记忆、不升级 DSH。
+当前工作台：[打开 Asuna Web](http://127.0.0.1:8767/asuna/)。需要持久本机配置时，从示例复制并核实服务地址、身份和授权目录；已有 local.json 时不要覆盖。启动不安装依赖、不重新 seed、不升级 DSH。沿用项目 .venv、node_modules、现有 Mongo、模型及 WSL/bubblewrap。
 
-归档前的一次性准备已完成：增加终端输入依赖 `prompt-toolkit`；填写 `config/local.json` 的 `chat` 和 `prompts_dir`；初始化 `local-user`、私聊 `local-dm` 和角色 `local-xiaoman`。这些本机配置与依赖需按上文恢复，数据库未清理。未导入测试故事。不要再次运行 `seed` 来开始聊天。
+入口修订时通过浏览器确认页面、历史和消息入队可用；当时两次对话的模型 MONOLOGUE 返回空内容及 error，Web 如实显示 INVALID_STAGE_OUTPUT。后续模型设置验证发现原角色服务连接失败；临时将两脑指向在线的同一模型后，真实工具往返与公开回复均成功，完成后已恢复原来的分配。原角色服务尚未恢复连通。详见 UI 说明末尾。
 
-## 正常怎样用
+## 正常使用与调试呈现
 
-启动后直接输入中文。每次回车将消息入队；生成期间可以继续输入，同场景回复依次生成。这里没有宣称两个模型推理并行。
+- 左侧选择会话；“新上下文”保留身份、场景和数据库记忆，旧会话只读。
+- 中间输入自然语言，Enter 发送、Shift+Enter 换行。角色公开回复以 bubble 显示；生成和行动期间仍可入队。
+- 展开“内部执行过程”查看双脑阶段、工具参数、真实结果及原始错误。折叠后仍保留错误摘要。
+- 右侧查看和搜索记忆、偏好、群偏好、关系；无记录时显示空态。
 
-- `/help`：显示用法。
-- `/new`：在同一身份和场景开启新的 DSH 角色上下文，保留数据库记忆、人格和最近消息；下一条输入自动检索。它不是清空记忆，也不是压缩。行动未结束时暂不切换。
-- `/compact`：请求压缩当前角色上下文；在下一次完整认知轮次边界由 DSH 实际生成摘要并替换旧片段。命令入队不等于已经压缩，实际摘要和次数见 `/trace`。可在行动期间继续聊天并压缩角色侧，行动状态由外部任务记录保留。当前未启用按阈值自动压缩。
-- `/trace`：查看最近输入的真实人格、关系、召回来源、独立独白、决策、公开发言、发布回执、最近任务的工具调用／结果与原始错误；同时保存一份可读 `.txt`，终端会显示路径。
-- `/quit`：结束当前前台应用和本次拥有的 DSH 进程；Ctrl+C 在输入处同样退出。生成中的一轮可能中断，不会假装在后台继续。尚在队列中的输入记录留在本次日志，重开不自动执行。
+所有正常消息和开发任务通过这里发送。不要在宿主日志窗口输入聊天文本、/new 或 /trace。原有 Chat 队列和行动回传继续复用，Web 不调用终端适配器。
 
-上述命令不进入角色记忆，不调用模型。默认画面只显示新发布的角色内容和必要的 `[系统]` 状态。
+关浏览器标签页不停止宿主；在启动进程中按 Ctrl+C 停止整套本次宿主。停止会取消尚未完成的任务，不自动重放。启动窗口只是服务日志/进程控制，不是聊天界面。同一数据库与 DSH home 同时只运行一个读写宿主；已有窗口时直接使用现有 Web 页面。
 
-重开后仍使用同一用户、场景、数据库和最近使用的原生角色会话，恢复已经保存的消息、独白与人设。本次已验证：新细节离开最近 12 条消息后，重启并用 `/new` 开启全新角色上下文，能通过真实 Mongo 向量检索找回。中断的回复不会自动重试。
+## 配置与记录
 
-输入、已发布回复和独白会自动进入后台记忆索引，不需手工 `index`。长消息分段保存；embedding 不占用角色生成线程。索引失败保留待处理记录并重试，重开会继续处理；`/trace` 显示当前索引状态、实际召回原文／来源和最近索引错误。待索引回读与向量召回分别标明。
+配置中的 `chat.person_id`、`chat.scene_id`、`chat.display_name` 和工作区限制仍有效。每次 Web 运行记录保存在 `reports/ui-*`；数据继续使用既有 Mongo。完整集成和限制见 [UI 说明](dsh-plugin/ui/README.md)。凭据不写入浏览器聊天、代码或公开 trace。
 
-角色决定委托后，Qwen 自动在配置的授权工作区执行，结果交回小满表达。行动期间可以继续聊天，无需手工运行 executor。工具在 WSL Ubuntu 的隔离环境执行，工作区映射为 `/task`；网络隔离，不注入宿主机凭据。当前 `notes` 目录为只读，其他工作区文件允许按委托读写。退出应用会撤销本次尚未完成的任务，不自动重放。
+模型未启动时，可用 `start-asuna.cmd --config config/local.example.json --read-only --port 8767` 查看真实数据；只读模式不能发送。它不是失败后的自动降级。
 
-同一数据库和 DSH home 同时只开一个应用。已打开聊天窗口时直接在那个窗口继续使用；再开第二个会被运行锁拒绝。
+## 模型设置
 
-## 配置与记录在哪里
+点击 Web 左侧“模型设置”，分别修改角色脑、行动脑的连接地址、模型 ID、上下文窗口和输出上限。两脑可指向不同服务/模型，也可填同一模型。点击“读取服务模型列表”获取实际候选，模型 ID 也可手动填写。
 
-有效配置：`C:\workspace\asuna_cognition_core_v2\config\local.json`（本机文件，含连接信息，不提交到 Git）。
+高级区沿用 DSH 的 `compat` 和 `reasoningEfforts` 含义，推理强度、采样和 token 计数随模型配置，不再由“角色/行动”决定。未知服务可选通用保守计数；专用计数需要服务实际支持。当前保留本机/LAN 与 OpenAI Chat Completions 审计桥边界，尚不支持直接套用 DSH 的全部云端/其他协议。
 
-| 项目 | 实际值 |
-| --- | --- |
-| Asuna 数据库 | `asuna_cognition_core_v2` |
-| 角色路由 | `http://127.0.0.1:8083/v1`，`gemma4-31b-isometry-fabled-persona-4090-6-context-checkpoints-google-mtp` |
-| 行动路由 | `http://192.168.2.13:1919/v1`，`qwen38-next-uncensored-freetoken-vision` |
-| 运行提示词 | `C:\workspace\asuna_cognition_core_v2\config\prompts` |
-| 本机身份／场景／显示名 | 配置的 `chat.person_id`／`chat.scene_id`／`chat.display_name` |
-| 授权任务目录 | `C:\workspace\asuna_cognition_core_v2\.runtime\work\local-user`（工具内为 `/task`） |
-| 持久技能目录 | `C:\workspace\asuna_cognition_core_v2\.runtime\skills\local-user`（工具内为 `/skills`，DSH 原生发现，仅配置的私聊身份与场景可用） |
-| 每次运行原记录 | `C:\workspace\asuna_cognition_core_v2\reports\chat-日期-唯一标识`，实际路径由 `/trace` 显示 |
+空闲时“保存并应用”会重建两条 DSH lane，浏览器继续显示应用状态；有回复、排队消息或行动时拒绝切换。API key 只写入本地，不从接口回显；更换地址时不沿用旧密钥。配置保存到所选配置文件旁的 `*.models.local.json`（Git 忽略），下次启动自动恢复，不改写基础配置文件。历史执行标签只表示职责，不用当前模型冒充历史所用模型。
 
-凭据值不写入启动脚本或公开 trace。启动失败会显示原始 traceback 和记录路径。模型失败、空输出、角色明确沉默分别呈现；不生成固定台词替代回答。
+## 仅限 debug 的命令行
 
-此前 Gemma 26B 服务开启原生 thinking 时实测出现推理混入正文、空输出和空白生成至上限。因此本机 `character.native_thinking` 暂设为 `false`，通过现有 DSH provider 配置传递；独立 MONOLOGUE → DECIDE → SPEAK 流程保留。现已按用户要求切换本机 Gemma 31B，保留该设置；DSH 版本和采样参数未变。这是服务兼容性绕行，不代表其根因已修复。
+除 `ui` 外，CLI 操作均必须显式指定 `--debug`；缺少标志时在读取配置、连接数据库或调用模型前拒绝。`chat()` 和 `terminal()` 直接调用也要求 `debug=True`。Web 不加载 prompt-toolkit 输入组件。
 
-## 本次实跑原文
+CLI 保留给必要的故障诊断/维护，不能用于正式交互或替代 Web 验收。历史 /trace、/compact 等终端功能不等于 Web 已提供对应按钮；当前 Web 功能以 UI Elements V1 验收范围为准。
+
+## 历史证据（2026-09-20，终端命令不再是正式入口）
 
 用户：你不用为了让我满意才选。你真的更偏向哪个？
 

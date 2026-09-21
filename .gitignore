@@ -6,6 +6,28 @@ __pycache__/
 *.pyc
 *.egg-info/
 config/local.json
+config/*.models.local.json
+config/*.models.local.json.*.tmp
+# Credentials and local configuration (including editor/backup copies).
+.env
+.env.*
+!.env.example
+!.env.sample
+config/local.json.*
+config/*.models.local.json.*
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
+# ADR-003 private channel configuration, including handoff-package copies.
+napcat.local.json
+napcat.local.json.*
+napcat.local.candidate.json
+asuna-channel.local.json
 reports/private/
 /evidence*.zip
 

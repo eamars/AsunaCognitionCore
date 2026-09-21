@@ -7,10 +7,15 @@ class TokenMeter:
     def __init__(self,cfg,evidence,lane):self.cfg,self.evidence,self.lane=cfg,evidence,lane
 
     def measure(self,body):
+        counter=self.cfg.get('token_counter','conservative_bytes')
+        if counter=='conservative_bytes':
+            return {'input_tokens':len(canonical({'messages':body.get('messages',[]),'tools':body.get('tools',[])})), 'method':'UTF8_bytes_conservative_bound', 'exact_render_visible':False}
+        if counter not in ('llama_cpp', 'anthropic_count'):
+            raise ValueError('UNKNOWN_TOKEN_COUNTER')
         http=LocalHttp(self.evidence)
         base=self.cfg['base_url'].removesuffix('/v1')
         try:
-            if self.lane=='character':
+            if counter=='llama_cpp':
                 rendered=http.request('POST',base+'/apply-template','tokenizer.render',body)['prompt']
                 tokens=http.request('POST',base+'/tokenize','tokenizer.count',{'content':rendered,'add_special':True})['tokens']
                 return {'input_tokens':len(tokens),'method':'server_apply_template_and_tokenize','rendered_prompt_sha256':sha(rendered.encode()),'rendered_tokens_sha256':sha(canonical(tokens)),'exact_render_visible':True}
@@ -35,8 +40,9 @@ class TokenMeter:
     def check(self,body,capacity_override=False):
         measured=self.measure(body)
         effective=self.cfg.get('context_window',262144)
-        limit=effective-body['max_tokens']-4096
-        result={**measured,'effective_capacity':effective,'output_budget':body['max_tokens'],'safety_margin':4096,'input_limit':limit,'capacity_probe_override':capacity_override}
+        output=body.get('max_completion_tokens',body.get('max_tokens',self.cfg['max_tokens']))
+        limit=effective-output-4096
+        result={**measured,'effective_capacity':effective,'output_budget':output,'safety_margin':4096,'input_limit':limit,'capacity_probe_override':capacity_override}
         self.evidence.record('budget.checked',result)
         if result['input_tokens']>limit:raise ValueError('INPUT_BUDGET_EXCEEDED')
         return result

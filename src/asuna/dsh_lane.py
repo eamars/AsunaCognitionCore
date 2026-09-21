@@ -17,6 +17,7 @@ from .provider_proxy import ProviderProxy
 from .state import Store
 from .queue import RuntimeLease
 from .skills import skills_directory
+from .model_settings import validate
 
 
 def provider_finish(raw):
@@ -70,7 +71,7 @@ class DshLane:
             raise RuntimeError('DSH_RUNTIME_PIN_MISMATCH')
         bridge=ROOT/'dsh-plugin/runtime-v2.ts'
         evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_path':str(bridge),'bridge_sha256':sha(bridge.read_bytes()),'sampling':config[lane]['sampling'],'provider_timeout_ms':config.get('provider_idle_timeout_seconds',1800)*1000})
-        self.model=config[lane]
+        self.model=validate(config[lane])
         self.home=Path(config['dsh_home'])/store.name/lane
         self.work=Path(config['workdir'])/store.name/lane
         self.home.mkdir(parents=True,exist_ok=True);self.work.mkdir(parents=True,exist_ok=True)
@@ -84,9 +85,8 @@ class DshLane:
         self.endpoint_file=self.home/'bridge-endpoint.json'
         if self.endpoint_file.exists():self.endpoint_file.unlink()
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
-        compat={'supportsDeveloperRole':False,'supportsReasoningEffort':lane=='executor','thinkingFormat':'chat-template' if lane=='character' else 'qwen','maxTokensField':'max_tokens'}
-        if lane=='character':compat['chatTemplateKwargs']={'enable_thinking':self.model.get('native_thinking',True)}
-        provider={'api':'openai-completions','baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','reasoning':'high','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model.get('context_window',262144),'maxTokens':self.model['max_tokens'],'reasoningEfforts':{'high':'xhigh' if lane=='executor' else 'high','off':None}}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
+        compat=self.model['compat']
+        provider={'api':self.model['api'],'baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model['context_window'],'maxTokens':self.model['max_tokens'],'reasoningEfforts':self.model['reasoning_efforts']}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
         provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
         chat=config.get('chat',{})
         skills=skills_directory(config,chat.get('scene_id'),chat.get('person_id')) if lane=='executor' else None
@@ -97,7 +97,7 @@ class DshLane:
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
             *skill_rows,
-            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
             *(plugin_rows or [])]}]
         patch=self.home/'lane.patch.yml';patch.write_text(yaml.safe_dump(rows,allow_unicode=True,sort_keys=False),encoding='utf-8')
@@ -106,7 +106,7 @@ class DshLane:
             if key in os.environ:child[key]=os.environ[key]
         child.update({'DSH_HOME':str(self.home),'DSH_TELEMETRY_DISABLED':'1','ASUNA_LOCAL_DUMMY_KEY':'local-only-not-a-secret','ASUNA_BRIDGE_TOKEN':self.token})
         if broker_token:child['ASUNA_BROKER_TOKEN']=broker_token
-        self.sdk=DeepSeekHarness(dsh_bin=str(ROOT/'node_modules/.bin/dsh.cmd'),dsh_home=str(self.home),profile='sdk-minimal',patches=(str(patch),),cwd=str(self.work),env=child,provider='asuna-local',model=self.model['model'],reasoning_effort='high',max_tokens=self.model['max_tokens'],request_timeout_seconds=300,initialize_timeout_seconds=45)
+        self.sdk=DeepSeekHarness(dsh_bin=str(ROOT/'node_modules/.bin/dsh.cmd'),dsh_home=str(self.home),profile='sdk-minimal',patches=(str(patch),),cwd=str(self.work),env=child,provider='asuna-local',model=self.model['model'],reasoning_effort=self.model['reasoning_effort'],max_tokens=self.model['max_tokens'],request_timeout_seconds=300,initialize_timeout_seconds=45)
         self._resources.callback(self.sdk.close)
         try:
             self.sdk.start()

@@ -11,10 +11,14 @@ from .audit import render_html,replay
 def main():
     for stream in (sys.stdout,sys.stderr):
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='strict')
-    parser=argparse.ArgumentParser(prog='asuna');parser.add_argument('--config',default='config/local.json')
+    parser=argparse.ArgumentParser(prog='asuna',description='正式交互使用 Web：asuna ui。其他命令仅用于显式 debug/维护。');parser.add_argument('--config',default='config/local.json')
+    parser.add_argument('--debug',action='store_true',help='显式启用 CLI 调试/维护；不用于正式交互或 Web 验收')
     sub=parser.add_subparsers(dest='command',required=True)
-    for cmd in ('chat','doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import','review-aggregate'):
-        p=sub.add_parser(cmd);p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
+    for cmd in ('ui','chat','doctor','db-init','seed','run','inspect','compact','reflect','rollback','index','delete','cancel','replay','evaluate','report','export','review-pack','review-import','review-aggregate'):
+        p=sub.add_parser(cmd,help='启动正式 Web 界面' if cmd=='ui' else '仅 debug/维护，需要 --debug');p.add_argument('--config',default=argparse.SUPPRESS);p.add_argument('--database');p.add_argument('--out')
+        if cmd!='ui':p.add_argument('--debug',action='store_true',default=argparse.SUPPRESS,help='显式启用 CLI 调试/维护')
+        if cmd=='ui':
+            p.add_argument('--port',type=int,default=8765);p.add_argument('--read-only',action='store_true')
         if cmd=='seed':p.add_argument('--fixture',default=str(BUNDLE/'fixtures/world.json'))
         if cmd=='run':
             p.add_argument('--scene',default='dm-a');p.add_argument('--person',default='A');p.add_argument('--text');p.add_argument('--events',type=Path);p.add_argument('--persona',default='P1',choices=['P0','P1','P2']);p.add_argument('--workspace',type=Path);p.add_argument('--mentioned',action='store_true');p.add_argument('--compact-before',action='store_true');p.add_argument('--supersedes-task')
@@ -34,11 +38,16 @@ def main():
         if cmd=='review-aggregate':p.add_argument('--original',required=True);p.add_argument('--imports',nargs='*',default=[])
         if cmd=='report':p.add_argument('--human-assessment',type=Path)
     args=parser.parse_args();ev=None;store=None
+    if args.command!='ui' and not args.debug:
+        parser.error('CLI_DEBUG_ONLY: 正式交互请运行 start-asuna.cmd 或 asuna ui；CLI 调试/维护必须显式添加 --debug。')
     try:
         config=load(args.config)
+        if args.command=='ui':
+            from .ui import ui
+            return ui(config,args.database,args.out,port=args.port,read_only=args.read_only)
         if args.command=='chat':
             from .chat import chat
-            return chat(config,args.database,args.out)
+            return chat(config,args.database,args.out,debug=True)
         if args.command in ('run','doctor','reflect','index','evaluate'):
             run=args.command+'-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-')+uuid.uuid4().hex[:6]
             ev=Evidence(Path(args.out) if args.out else ROOT/'reports'/run)

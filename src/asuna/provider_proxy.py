@@ -55,7 +55,8 @@ class ProviderProxy:
                         raise PermissionError('CHARACTER_TOOLS_FORBIDDEN')
                     evidence.record('dsh.provider_input', {'call_id': call_id, 'lane': lane, 'body': body})
                     body.update(cfg['sampling'])
-                    body['max_tokens'] = min(body.get('max_tokens', cfg['max_tokens']), cfg['max_tokens'])
+                    output_field = cfg.get('compat', {}).get('maxTokensField', 'max_tokens')
+                    body[output_field] = min(body.get(output_field, cfg['max_tokens']), cfg['max_tokens'])
                     budget=TokenMeter(cfg,evidence,lane).check(body,owner.capacity_probe_override)
                     outgoing = canonical(body)
                     blob=owner.blobs.put(outgoing,owner.scope_key,'provider.request') if owner.blobs and len(outgoing)>1024*1024 else None

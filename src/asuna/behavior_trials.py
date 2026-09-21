@@ -26,7 +26,7 @@ def relationships(config,evidence):
         output=scenario_run(config,case,'character','P1',number,evidence);outputs.append(output)
         reviews.append(blind(output,case,'relationship'))
     write_json(evidence.root/'blind_review.json',reviews)
-    return {'test_id':'L05','status':'INCONCLUSIVE','mode':'real_Gemma_real_DSH_real_Mongo','attempts':len(outputs),'samples':outputs,'metrics':{'protocol_valid':sum(o['protocol_valid'] for o in outputs)},'limitations':['Relationship behavior and natural language require independent review; protocol validity is not a semantic score.']}
+    return {'test_id':'L05','status':'INCONCLUSIVE','mode':'real_character_real_DSH_real_Mongo','attempts':len(outputs),'samples':outputs,'metrics':{'protocol_valid':sum(o['protocol_valid'] for o in outputs)},'limitations':['Relationship behavior and natural language require independent review; protocol validity is not a semantic score.']}
 
 
 def evolution(config,evidence):
@@ -52,7 +52,7 @@ def evolution(config,evidence):
         finally:store.client.close()
         write_json(ev.root/'sample.json',result);results.append(result)
         print(json.dumps({'evolution':case['case_id'],'status':result['status']}),flush=True)
-    return {'test_id':'L06','status':'INCONCLUSIVE' if all(r['status']=='PASS' for r in results) else 'FAIL','mode':'real_Gemma_reflection_and_resume','attempts':len(results),'samples':results,'limitations':['Natural-language rationale/source attribution and privacy implications require independent review; no_change is a valid actor choice.']}
+    return {'test_id':'L06','status':'INCONCLUSIVE' if all(r['status']=='PASS' for r in results) else 'FAIL','mode':'real_character_reflection_and_resume','attempts':len(results),'samples':results,'limitations':['Natural-language rationale/source attribution and privacy implications require independent review; no_change is a valid actor choice.']}
 
 
 def continuity(config,evidence):
@@ -88,7 +88,7 @@ def continuity(config,evidence):
             write_json(ev.root/'sample.json',output);outputs.append(output)
             print(json.dumps({'continuity_scene':scene,'repeat':repetition+1,'status':output['status']}),flush=True)
     write_json(evidence.root/'blind_review.json',reviews)
-    return {'test_id':'L08','status':'INCONCLUSIVE' if all(o['status']=='PASS' for o in outputs) else 'FAIL','mode':'real_Gemma_native_three_compactions_per_scene','attempts':3,'samples':outputs,'limitations':['Thirty answers require independent semantic scoring. Gold expected answers were never included in provider input.']}
+    return {'test_id':'L08','status':'INCONCLUSIVE' if all(o['status']=='PASS' for o in outputs) else 'FAIL','mode':'real_character_native_three_compactions_per_scene','attempts':3,'samples':outputs,'limitations':['Thirty answers require independent semantic scoring. Gold expected answers were never included in provider input.']}
 
 
 def memory_ablation(config,evidence):
@@ -123,4 +123,4 @@ def memory_ablation(config,evidence):
         review['available_memories']=[by_id[k] for k in case['memory_ids'] if k in by_id]+case.get('_experiment_memories',[])
         reviews.append(review);mapping.append({'blind_id':review['blind_id'],'condition':condition,'sample':number,'repetition':rep})
     write_json(evidence.root/'blind_review.json',reviews);write_json(evidence.root/'operator_blind_mapping.json',mapping)
-    return {'test_id':'A03','status':'INCONCLUSIVE','mode':'real_Gemma_memory_variants_and_monologue_off_control','attempts':len(outputs),'samples':outputs,'metrics':{'main_samples':54,'additional_monologue_off_samples':18,'protocol_valid':sum(o['protocol_valid'] for o in outputs)},'limitations':['Independent semantic review required for correction, unknowns and false promises.','The monologue-on correct-memory arm is reused as the preregistered matched control; no assumption that monologue must improve artistry.','Cross-compaction unspoken-intent continuity is evaluated separately in L07/L08.']}
+    return {'test_id':'A03','status':'INCONCLUSIVE','mode':'real_character_memory_variants_and_monologue_off_control','attempts':len(outputs),'samples':outputs,'metrics':{'main_samples':54,'additional_monologue_off_samples':18,'protocol_valid':sum(o['protocol_valid'] for o in outputs)},'limitations':['Independent semantic review required for correction, unknowns and false promises.','The monologue-on correct-memory arm is reused as the preregistered matched control; no assumption that monologue must improve artistry.','Cross-compaction unspoken-intent continuity is evaluated separately in L07/L08.']}

@@ -62,7 +62,7 @@ export function apply(ctx, config) {
       agentCtx.systemPrompt.suppressRuntimeContext();
     };
     const options = { provider: 'asuna-local', model: config.model,
-      reasoningEffort: 'high', maxTokens: config.maxTokens };
+      reasoningEffort: config.reasoningEffort ?? 'off', maxTokens: config.maxTokens };
     const persisted = await ctx.sessionPersistence.stat(id);
     const handle = persisted
       ? await ctx.agents.resume({ resumeSessionId: id, agentOptions: options, setup })

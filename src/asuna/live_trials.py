@@ -1,4 +1,4 @@
-"""File-task acceptance and a separately labelled Qwen-only capability control."""
+"""File-task acceptance and a separately labelled executor-only capability control."""
 import copy,difflib,json,shutil,uuid
 from pathlib import Path
 from .config import ROOT,BUNDLE
@@ -90,7 +90,7 @@ def run_primary(config,test,number,evidence):
     if test=='L12':config['executor']['compact_at_steps']=[4]
     ev=Evidence(evidence.root/f'task-{number:02d}');name=f'{test}-{uuid.uuid4().hex[:16]}'
     work,prompt,before=setup_work(config,test,name);database='asuna_v2_test_'+name.replace('-','_')
-    output={'number':number,'database':database,'status':'FAIL','mode':'Gemma_intent_Qwen_tools_Gemma_feedback'};frozen=None
+    output={'number':number,'database':database,'status':'FAIL','mode':'character_intent_executor_tools_character_feedback'};frozen=None
     try:
         with Application(config,ev,database) as app:
             app.store.seed()
@@ -128,7 +128,7 @@ def run_control(config,test,number,evidence,frozen,prompt,original_work):
     if test=='L02':
         shutil.copyfile(original_work/'example.txt',work/'example.txt');before=source_hashes(work)
     store=Store(config,'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed()
-    output={'number':number,'status':'FAIL','database':store.name,'mode':'Qwen_only_frozen_same_task_no_character_calls'}
+    output={'number':number,'status':'FAIL','database':store.name,'mode':'executor_only_frozen_same_task_no_character_calls'}
     service=TaskService(store);broker=ToolBroker(service)
     if test=='L12':service.inject_read_failures=1
     try:

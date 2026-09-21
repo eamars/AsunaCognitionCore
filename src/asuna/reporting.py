@@ -166,7 +166,7 @@ def build_report(reports:Path,output:Path,*,human_assessment:Path|None=None):
     report['what_works']=['Native DSH staged character and tool task probes, durable restart, real vector retrieval, actual compaction, isolated WSL tools, scoped erasure (see stage reports).']
     report['what_fails']=[{'test_id':r['test_id'],'evidence':r['evidence']} for r in report['results'] if r['status']=='FAIL']
     report['design_deviations']=[
-        'Qwen final OpenAI rendered token IDs are unavailable; equivalent server count was checked against returned usage.',
+        'executor final OpenAI rendered token IDs are unavailable; equivalent server count was checked against returned usage.',
         'Deletion conservatively removes scope-derived content and affected run evidence; global-safe deletion is rejected. External exports/backups cannot be recalled.',
         'No automatic maintenance or per-turn emotion model is on the character path. No physical devices, camera or real group sending are connected.',
         'Working-budget overflow fails closed; compaction is explicit at complete boundaries, not automatic.',

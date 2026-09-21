@@ -1,4 +1,4 @@
-"""Persistent local terminal adapter. Commands never enter the character context."""
+"""Shared local controller; terminal interaction is an explicit debug adapter only."""
 from __future__ import annotations
 
 import asyncio
@@ -10,9 +10,6 @@ import sys
 import threading
 import traceback
 import uuid
-
-from prompt_toolkit import PromptSession
-from prompt_toolkit.patch_stdout import patch_stdout
 
 from .application import Application
 from .config import ROOT, redact_text as redact
@@ -46,7 +43,7 @@ def prepare_local_scene(store, settings):
         store.init_head('persona:' + settings['persona'], 'global-safe',
                         {'body': source.read_text(encoding='utf-8')}, [str(source)])
     store.init_head('relationship:' + person, scope,
-                    {'body': '这是通过本机终端交流的用户。尚无共同经历，不预设熟悉程度。'}, [])
+                    {'body': '这是通过本机界面交流的用户。尚无共同经历，不预设熟悉程度。'}, [])
 
 
 class Chat:
@@ -103,7 +100,7 @@ class Chat:
                     cancelled = False
                     self.app.evidence.record('chat.task_persistence_error', {'task_id': task_id,
                         'traceback': redact(traceback.format_exc(), self.app.config)})
-                self.emit('[系统] 已撤销任务的行动权限。' if cancelled else '[系统] 行动未完成；/trace 可查看原始错误，聊天仍可继续。')
+                self.emit('[系统] 已撤销任务的行动权限。' if cancelled else '[系统] 行动未完成；请查看本轮执行详情中的原始错误，聊天仍可继续。')
             finally:
                 with self.state_lock:
                     self.active_task = None
@@ -146,12 +143,12 @@ class Chat:
                         self.emit('[系统] 当前上下文尚无对话可压缩。')
                         continue
                     self.app.character.compact(binding)
-                    self.emit('[系统] 已请求原生压缩，将在下一次完整认知轮次的边界执行；/trace 查看实际摘要。')
+                    self.emit('[系统] 已请求原生压缩，将在下一次完整认知轮次的边界执行；实际结果以执行记录为准。')
                     continue
                 if event.get('_new_context'):
                     scene = self.app.store.authorize(event['scene_id'], event['person_id'])
                     if self.app.store.db.tasks.find_one({'scene_id': scene['_id'], 'state': {'$in': ['READY', 'RUNNING']}}):
-                        self.emit('[系统] 请等当前行动结束后再使用 /new。')
+                        self.emit('[系统] 请等当前行动结束后再新建上下文。')
                         continue
                     generation = str(uuid.uuid4())
                     self.app.store.put('scenes', {**scene, 'character_context': generation},
@@ -178,9 +175,9 @@ class Chat:
                 if result['state'] == 'WAITING_TASK':
                     self._schedule(result)
                 elif result.get('silent_reason'):
-                    self.emit('[系统] 角色明确选择本轮不发言；可用 /trace 查看原因。')
+                    self.emit('[系统] 角色明确选择本轮不发言；请查看本轮执行详情中的原因。')
                 elif not messages:
-                    self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。用 /trace 查看原始过程。")
+                    self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
                 self.app.evidence.record('chat.completed', {'episode_id': episode, 'state': result['state']})
             except Exception:
                 error = redact(traceback.format_exc(), self.app.config)
@@ -194,7 +191,7 @@ class Chat:
                 except Exception:
                     self.app.evidence.record('chat.persistence_error', {'episode_id': episode,
                         'traceback': redact(traceback.format_exc(), self.app.config)})
-                self.emit(f'[系统] 本轮未完成；/trace 查看原始错误。原记录：{self.app.evidence.root.resolve()}')
+                self.emit(f'[系统] 本轮未完成；请查看本轮执行详情中的原始错误。原记录：{self.app.evidence.root.resolve()}')
             finally:
                 with self.state_lock:
                     self.active = None
@@ -325,13 +322,17 @@ class Chat:
                                                 'task_worker_stopped': not self.task_worker.is_alive()})
 
 
-async def terminal(controller):
+async def terminal(controller, *, debug=False):
+    if not debug:
+        raise PermissionError('CLI_DEBUG_ONLY: 正式交互使用 Web UI')
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.patch_stdout import patch_stdout
     # patch_stdout redraws the unfinished input instead of overwriting it.
     session = PromptSession() if sys.stdin.isatty() else None
     with patch_stdout():
         controller.worker.start()
         controller.task_worker.start()
-        print('[系统] 聊天已就绪。/help 帮助；/trace 最近过程；/quit 退出。生成期间可继续输入，消息按序处理。', flush=True)
+        print('[DEBUG] 仅限故障诊断；正式交互与验收请使用 Web UI。/help 帮助；/trace 最近过程；/quit 退出。', flush=True)
         try:
             while True:
                 try:
@@ -366,7 +367,9 @@ async def terminal(controller):
             await asyncio.to_thread(controller.stop)
 
 
-def chat(config, database=None, out=None):
+def chat(config, database=None, out=None, *, debug=False):
+    if not debug:
+        raise PermissionError('CLI_DEBUG_ONLY: 正式交互使用 Web UI')
     settings = local_settings(config)
     name = 'chat-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex[:6]
     evidence = Evidence(Path(out) if out else ROOT / 'reports' / name)
@@ -375,7 +378,7 @@ def chat(config, database=None, out=None):
             prepare_local_scene(app.store, settings)
             app.memory_indexer = MemoryIndexer(app.store, evidence, settings['scene_id']).start()
             app.stack.callback(app.memory_indexer.close)
-            asyncio.run(terminal(Chat(app, settings)))
+            asyncio.run(terminal(Chat(app, settings), debug=True))
         return 0
     except Exception:
         error = redact(traceback.format_exc(), config)

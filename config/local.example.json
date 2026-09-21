@@ -16,8 +16,22 @@
       "seed": 20260919
     },
     "max_tokens": 4096,
-    "native_thinking": false,
-    "context_window": 68608
+    "context_window": 68608,
+    "token_counter": "llama_cpp",
+    "reasoning_effort": "high",
+    "reasoning_efforts": {
+      "high": "high",
+      "off": null
+    },
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "thinkingFormat": "chat-template",
+      "chatTemplateKwargs": {
+        "enable_thinking": false
+      },
+      "maxTokensField": "max_tokens"
+    }
   },
   "executor": {
     "base_url": "http://192.168.2.13:1919/v1",
@@ -27,7 +41,20 @@
       "top_p": 0.95,
       "seed": 20260919
     },
-    "max_tokens": 8192
+    "max_tokens": 8192,
+    "context_window": 262144,
+    "token_counter": "anthropic_count",
+    "reasoning_effort": "high",
+    "reasoning_efforts": {
+      "high": "xhigh",
+      "off": null
+    },
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "thinkingFormat": "qwen",
+      "maxTokensField": "max_tokens"
+    }
   },
   "embedding": {
     "base_url": "http://192.168.2.8:1234/v1",

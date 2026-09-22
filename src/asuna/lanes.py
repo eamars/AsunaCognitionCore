@@ -13,6 +13,7 @@ class LaneResult:
     tool_calls: list=field(default_factory=list)
     request_refs: list=field(default_factory=list)
     receipt: str | None=None
+    diagnostic: dict | None=None
 
 
 class Lane(Protocol):

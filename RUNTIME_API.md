@@ -1,6 +1,6 @@
 # 宿主接入 API（ADR-003 A，2026-09-22）
 
-已实现 Python 宿主与通道接口；尚未实现或启用 NapCat adapter。接口使用平台无关的规范化信封，OneBot 解析、WS 连接和 echo 关联由后续 adapter 实现。本文不是已接通 QQ 的声明。
+Python 宿主与通道接口使用平台无关的规范化信封；OneBot 解析、WS 连接和 echo 关联属于行动脑开发的 adapter。2026-09-22 已核实一条授权 QQ 私聊的真实入站、角色回复和平台成功回执，用户确认收到；验收范围与待验项见 `docs/ADR0031-CORRECTION-REPORT.md`，不能从进程状态推断其他场景的收发成功。
 
 ## 运行和授权
 
@@ -8,7 +8,7 @@
 
 `RuntimeHost` 拥有 Application、原 Chat 的角色/行动队列、记忆索引线程和可选 ChannelServer。全局角色 lane 保持串行，场景内有序，同场景最多连续两个回合后让出给其他等待场景；行动队列独立。队列接收不调用检索、embedding 或模型。
 
-通道配置为基础配置同目录下的 `asuna-channel.local.json`（已 Git 忽略）；只有 `enabled: true` 才加载。结构见 `config/asuna-channel.example.json`。当前本机未启用任何外部通道。固定 token 与 NapCat token 是两种凭据，不要写入技能、聊天或普通任务文件。
+通道配置为基础配置同目录下的 `asuna-channel.local.json`（已 Git 忽略）；只有 `enabled: true` 才加载。结构见 `config/asuna-channel.example.json`。实际已启用的连接与对象以本次 profile 和 CONNECTION_NOTES.md 为准；宿主监听可用不等同 adapter 已接通。固定 token 与 NapCat token 是两种凭据，不要写入技能、聊天或普通任务文件。
 
 当前只支持显式配置的私聊路由。账号、发言人、场景和目标均由配置绑定，不能从请求填写内部权限。不同连接 token 必须不同且至少 24 字符。每条路由使用 `.runtime/channels/` 下独立工作目录，不能与本机或其他路由目录包含/重叠；普通任务仍走原 WSL 沙箱与无网络策略，不获得宿主或 NapCat 凭据。角色与行动上下文使用既有 scope 绑定。未配置资源的场景不获得 owner 工作区。
 
@@ -34,7 +34,11 @@
 
 返回 `{"status":"accepted","episode_id":"ep-…","received_at":"…"}`，仅说明 Mongo 已持久接收。重传同一连接/账号/场景/平台事件返回 `duplicate`，不会再排队。同 ID 不同正文或身份拒绝。数据库不可用返回 503；调用者可重试相同 ID。请求里的 `scope_key`、`episode_kind`、`trusted_context_events`、`task_id` 等未知字段全部拒绝。
 
-原文保存发生在检索与模型之前；记录 `ACCEPTED → PROCESSING → COMPLETE/FAILED`，角色 episode 保存其独立执行状态。关闭或丢失客户端不影响处理。恢复时扫描 ACCEPTED/PROCESSING，使用原 episode/operation ID 与既有 lane 回执，不用新 ID 重做已完成阶段。权限变更会重新校验。已失败/主动中断输入不自动重试；执行中断且副作用未知的行动标 UNKNOWN，不自动重复执行。已完成行动的待回传结果可以恢复。
+原文保存发生在检索与模型之前；记录 `ACCEPTED → PROCESSING → COMPLETE/FAILED`，角色 episode 保存其独立执行状态。关闭或丢失客户端不影响处理。恢复时扫描 ACCEPTED/PROCESSING，复用既有 lane 回执；旧版检索失败且尚未创建 episode 的输入可按原身份恢复。可选检索故障会作为诊断交给角色，继续使用当前授权场景的直接历史，不假称已召回记忆。权限变更会重新校验。用户取消不恢复；操作结果未知时不重复该动作，但诊断与已有结果仍可回传。经明确续接的中断角色生成保留原场景、原输入与错误记录；不会重做已保存的工具操作或公开输出。
+
+行动脑可直接以自然语言返回，不要求 `task_status`。`RETURNED` 仅表示原生行动回合已返回，不是目标完成证明；工具事实由宿主附加。继续同一目标时，角色可关联已有任务，宿主仅在相同主体、场景、权限 epoch 和集成授权下续用原行动会话。普通工具错误留在 DSH 执行回路；扩展层逃逸错误保留原始诊断并回传，不把整项任务统一封成 UNKNOWN。平台发送的 UNKNOWN 与禁止盲目重发规则仍按下文执行。
+
+运行中的行动会话不能同时被第二个任务接管，拒绝原因仍交给角色解释。宿主停机撤销旧进程权限后，新的明确续接请求可复用 `host_stop` 任务的原会话；旧任务权限不恢复，用户取消不适用该续接。集成子进程运行期间不持有宿主数据库副作用锁，因而可以回调 outbox 和回执接口。
 
 ## 领取公开输出
 
@@ -68,7 +72,7 @@ Web 当前本机场景可看到原文、排队状态、角色与行动过程、�
 
 ## 受管理集成运行器（B 基础设施）
 
-基础配置同目录的 `integration.local.json` 控制唯一 owner profile，示例见 `config/integration.example.json`。`enabled` 必须为 true，`scene_id/person_id` 必须与本机 owner 配置一致。文件和运行目录均 Git 忽略。当前本机 profile 没有网络端点和平台凭据，只用于本机运行器验收。
+基础配置同目录的 `integration.local.json` 控制唯一 owner profile，示例见 `config/integration.example.json`。`enabled` 必须为 true，`scene_id/person_id` 必须与本机 owner 配置一致。文件和运行目录均 Git 忽略。示例 profile 没有端点；实际集成任务仅使用 owner 已核实并明确配置的端点和目标，见 CONNECTION_NOTES.md。
 
 在 Web 发送消息前勾选“本条授权集成开发”，该授权写入持久输入、实际委托和任务回传；发送后勾选自动清除。聊天文字不能授予权限；外部通道不能提交该标记。普通任务仍只能使用原工作区与无网络沙箱。任务修订按新输入重新核定权限。停止已启用服务使用独立“停止集成”，普通任务取消不等同撤销此前的持久启用。
 

@@ -25,7 +25,7 @@ class PublishService:
             raise Denied('PUBLICATION_CONTEXT_STALE')
         if ep.get('task_id'):
             task=db.tasks.find_one({'_id':ep['task_id']})
-            if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE','UNKNOWN'):
+            if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
         if scene.get('channel_id'):
             if msg['delivery_state'] in ('QUEUED_EXTERNAL', 'SENDING'):
@@ -39,7 +39,8 @@ class PublishService:
                 if source_ep['_id'] in seen:
                     raise Denied('PUBLICATION_SOURCE_CYCLE')
                 seen.add(source_ep['_id'])
-                task = db.tasks.find_one({'_id': source_ep['task_id']})
+                feedback_source = db.messages.find_one({'_id':'in-'+source_ep['_id']})
+                task = db.tasks.find_one({'_id': feedback_source['event']['task_id']})
                 source_ep = db.episodes.find_one({'_id': task['episode_id']})
             source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
             channel = (source or {}).get('event', {}).get('channel', {})

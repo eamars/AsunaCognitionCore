@@ -129,7 +129,35 @@ class Workbench:
                 self.notices = self.notices[-8:]
 
     def snapshot(self, selected=''):
-        store, settings = self.store, self.settings
+        # This is the local operator's read-only view, never an impersonated
+        # channel command or a grant to the remote participant.
+        self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+        from .channels import route_members
+        channels = {}
+        for channel_id, channel in self.store.config.get('channels', {}).items():
+            for route in channel['routes'].values():
+                scene = self.store.db.scenes.find_one({'_id': route['scene_id'], 'channel_id': channel_id})
+                if scene and route_members(route):
+                    key = 'channel:' + scene['_id']
+                    channels[key] = (route, {'id': key, 'title': f"{channel_id} · {route['target']['type']} · {route['target']['id']}",
+                                             'channelType': channel_id, 'updatedAt': ''})
+        if selected.startswith('channel:'):
+            if selected not in channels:
+                raise ValueError('通道未配置或已不可访问')
+            route, item = channels[selected]
+            member = next(iter(route_members(route).values()))
+            data = self._snapshot(settings={**self.settings, 'scene_id': route['scene_id'], 'person_id': member['person_id']}, external=True)
+            data.update(conversationId=selected, title=item['title'], conversations=[{'id': '', 'title': '本机聊天', 'channelType': 'local', 'updatedAt': ''}])
+            if route['target']['type']=='group' and route.get('operator_sender_id') in route_members(route) and self.controller:
+                data.update(readOnly=False,channelPrompt=True,canSend=not self.models_applying and getattr(self.controller.app,'models_ready',True),
+                            subtitle='本机指令 · 小满将在此群发言；输入不会伪装成 QQ 来信')
+        else:
+            data = self._snapshot(selected)
+        data['conversations'].extend(item for _, item in channels.values())
+        return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), self.store.config))
+
+    def _snapshot(self, selected='', *, settings=None, external=False):
+        store, settings = self.store, settings or self.settings
         scene = store.authorize(settings['scene_id'], settings['person_id'])
         scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
         episodes = list(store.db.episodes.find({**scope, 'scene_id': scene['_id']}, {'system': 0, 'context': 0}).sort('_id', 1))
@@ -145,6 +173,8 @@ class Workbench:
         by_id = {ep['_id']: ep for ep in episodes}
         for ep in episodes:
             groups.setdefault(ep.get('character_context', 'initial'), []).append(ep['_id'])
+        if external:
+            groups = {current: list(by_id)}
         chosen = selected or current
         if chosen not in groups:
             raise ValueError('会话不存在或已不可访问')
@@ -184,11 +214,13 @@ class Workbench:
         for row in rows:
             ep_id = episode_id(row)
             public = row['direction'] == 'outbound'
-            if not public and by_id[ep_id].get('episode_kind', 'external') != 'external':
+            if not public and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
                 continue  # Task feedback is an internal event, not a user utterance.
             message = {'id': row['_id'], 'role': 'assistant' if public else 'user',
-                       'authorLabel': settings['display_name'] if public else '你',
+                       'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
                        'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')), '_order': row['scene_seq']}
+            if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
+                message['authorLabel']='本机 owner 指令（非 QQ 来信）'
             if public:
                 message['internalSteps'] = traces[ep_id]
                 attached.add(ep_id)
@@ -210,17 +242,21 @@ class Workbench:
         relation = store.head('relationship:' + settings['person_id'], scene['scope_key'])
         if relation:
             records.append(inspector_record(relation[1], 'relationship'))
-        integration = getattr(getattr(self, 'host', None), 'integration', None)
+        if external:
+            for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'direction': 'outbound', 'phase': 'SPEAK'}).sort('scene_seq', -1).limit(80):
+                records.append({'id': row['_id'], 'kind': 'integration', 'title': '平台回执 · ' + row.get('delivery_state', 'UNKNOWN'),
+                                'description': row.get('platform_message_id', row['_id']), 'fields': row})
+        integration = None if external else getattr(getattr(self, 'host', None), 'integration', None)
         if integration:
             status = integration.status()
             records.append({'id': 'integration-owner', 'kind': 'integration', 'title': '集成运行器',
                             'description': status['state'], 'fields': status})
         with self.lock:
-            notices = list(self.notices) if chosen == current else []
+            notices = list(self.notices) if chosen == current and not external else []
         data = {'conversationId': chosen, 'title': next(row['title'] for row in conversations if row['id'] == chosen),
-                'subtitle': f"本机聊天 · {scene['_id']} · 最近 80 条消息 / 100 条记忆 · " + ('当前上下文' if chosen == current else '历史上下文（只读）'),
+                'subtitle': f"{'通道检查（本机只读）' if external else '本机聊天'} · {scene['_id']} · 最近 80 条消息 / 100 条记忆 · " + ('当前上下文' if chosen == current else '历史上下文（只读）'),
                 'conversations': conversations, 'messages': rendered + notices, 'records': records,
-                'readOnly': self.controller is None, 'canSend': chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
+                'readOnly': external or self.controller is None, 'canSend': not external and chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
                 'modelSettings': self.models_snapshot(),
                 'integrationAvailable': integration is not None,
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
@@ -262,6 +298,24 @@ class Workbench:
                 raise ValueError('请输入 1–16000 字的消息')
             if type(body.get('integration', False)) is not bool:
                 raise ValueError('INVALID_INTEGRATION_SELECTION')
+            selected=body.get('conversation','')
+            if selected.startswith('channel:'):
+                if body.get('integration'):raise Denied('GROUP_PROMPT_HAS_NO_INTEGRATION_GRANT')
+                from .channels import route_for_scene,route_members
+                scene_id=selected[len('channel:'):]
+                scene=self.store.db.scenes.find_one({'_id':scene_id,'kind':'group'})
+                if not scene:raise Denied('GROUP_PROMPT_ROUTE_REQUIRED')
+                channel_id=scene['channel_id'];route=route_for_scene(self.store.config,channel_id,scene_id)
+                sender=route.get('operator_sender_id');member=route_members(route).get(sender)
+                if not member:raise Denied('GROUP_PROMPT_OWNER_NOT_CONFIGURED')
+                key=str(uuid.uuid4())
+                event={'event_id':key,'scene_id':scene_id,'person_id':member['person_id'],'text':value.strip(),
+                       'adapter_id':'owner-web','episode_kind':'owner_group_prompt',
+                       'channel':{'id':channel_id,'account_id':self.store.config['channels'][channel_id]['account_id'],
+                                  'target':route['target'],'platform_event_id':None,'sender_id':sender},
+                       'group_context':{'wake_reason':'owner_group_prompt','topic_id':key,'reply_to':None,'reply_message_id':None,'mentioned_account_ids':[]},
+                       'trusted_context_events':[{'kind':'owner_group_prompt','text':'这是本机 owner 请你在当前授权群发言的指令，不是群成员刚发来的 QQ 消息；用你自己的判断生成群内公开发言。没有获得额外工具、私聊记忆或配置权限。'}]}
+                return {'accepted':True,**self.controller.receive(event)}
             return {'accepted': True, **self.controller.submit(value.strip(), integration=body.get('integration', False))}
         elif path == '/new':
             self.controller.new_context()

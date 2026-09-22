@@ -38,9 +38,10 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         assert result['written']
         assert (work / '普通便条.txt').read_text(encoding='utf-8') == '这不是 stats.py'
         broker.call('workspace', 'end', 'task_status', {'status': 'done'})
-        with pytest.raises(Denied, match='TASK_ALREADY_REPORTED'):
-            broker.call('workspace', 'too-late', 'write_file', {'path': 'late.txt', 'text': 'late'})
-        assert not (work / 'late.txt').exists()
+        current=store.db.tasks.find_one({'_id':task['_id']})
+        store.put('tasks',{**current,'tool_steps':64},expected=current['revision'])
+        broker.call('workspace', 'after-status', 'write_file', {'path': 'late.txt', 'text': 'continued'})
+        assert (work / 'late.txt').read_text() == 'continued'
     finally:
         broker.close()
 
@@ -55,19 +56,49 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
             session = 's-' + sha(binding.encode())[:40]
             broker.call(session, 'read', 'read_file', {'path': 'notes/source.txt'})
             broker.call(session, 'write', 'write_file', {'path': '便条.txt', 'text': '原文保持不变'})
-            broker.call(session, 'status', 'task_status', {'status': 'done'})
             return LaneResult(narrative)
 
     try:
         done = Executor(service, ActionLane(), broker).run(ep['task_id'], work)
-        assert done['state'] == 'DONE'
+        assert done['state'] == 'RETURNED' and done['result']['declared_status'] is None
         fact = done['result']['facts'][0]
         assert fact['text'] == narrative
         for ref in fact['evidence_refs']:
             assert store.db.artifacts.find_one({'_id': ref, 'task_id': done['_id'], 'state': 'DONE'})
         assert (work / '便条.txt').read_text(encoding='utf-8') == '原文保持不变'
+        decision={'next':'delegate','goal':'继续这份便条','constraints':[],'recall_query':'','speak_before_action':False,'continue_task_id':done['_id']}
+        follow=Coordinator(store,FakeLane(store,[LaneResult('继续原会话'),LaneResult(json.dumps(decision))])).ingest(
+            {'event_id':'continue','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作'})
+        continuation=store.db.tasks.find_one({'_id':follow['task_id']})
+        assert continuation['execution_binding']==f"task:{done['_id']}:{done['scope_key']}:{done['policy_epoch']}:{done['intent_revision']}"
     finally:
         broker.close()
+
+
+def test_host_failure_returns_diagnostic_without_unknown_task_gate(store):
+    work, ep, service, broker=setup_workspace(store)
+    class BrokenLane:
+        def generate(self,*args):raise RuntimeError('actual extension failure')
+    try:
+        task=Executor(service,BrokenLane(),broker).run(ep['task_id'],work)
+        assert task['state']=='BLOCKED' and task['feedback_state']=='READY'
+        assert 'actual extension failure' in task['result']['error']
+        decision={'next':'speak','goal':'解释未完成','constraints':[],'recall_query':'','speak_before_action':False}
+        lane=FakeLane(store,[LaneResult('需要核实'),LaneResult(json.dumps(decision)),LaneResult('尚未完成')])
+        feedback=service.feedback(task,Coordinator(store,lane))
+        assert feedback['state']=='COMMITTED'
+        assert 'actual extension failure' in lane.calls[0]['messages'][-1]['content']
+        decision.update(next='delegate',continue_task_id=task['_id'])
+        follow=Coordinator(store,FakeLane(store,[LaneResult('继续原任务'),LaneResult(json.dumps(decision))])).ingest(
+            {'event_id':'diagnostic-continue','scene_id':'dm-a','person_id':'A','text':'继续诊断'})
+        class DiagnosticLane:
+            def generate(self,binding,operation,phase,text,system):
+                assert binding==f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
+                assert 'actual extension failure' in text
+                return LaneResult('诊断已收到，目标尚未完成')
+        resumed=Executor(service,DiagnosticLane(),broker).run(follow['task_id'],work)
+        assert resumed['state']=='RETURNED'
+    finally:broker.close()
 
 
 def test_only_explicit_current_scene_decision_can_cancel_task(store):
@@ -88,3 +119,35 @@ def test_only_explicit_current_scene_decision_can_cancel_task(store):
             Coordinator(store, foreign_lane).ingest({'event_id': 'foreign-cancel', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '停止别人的任务。'})
     finally:
         broker.close()
+
+
+def test_refused_concurrent_continuation_reaches_character_without_stopping_original(store):
+    work,ep,service,broker=setup_workspace(store)
+    try:
+        task=service.claim(ep['task_id'])
+        decision={'next':'delegate','goal':'传递诊断','constraints':[],'recall_query':'','speak_before_action':False,'continue_task_id':task['_id']}
+        lane=FakeLane(store,[LaneResult('收到诊断'),LaneResult(json.dumps(decision)),LaneResult('原任务仍在执行；诊断已记录。')])
+        result=Coordinator(store,lane).ingest({'event_id':'active-continuation','scene_id':'dm-a','person_id':'A','text':'补充当前任务的诊断'})
+        assert result['state']=='COMMITTED' and result['control_result']['accepted'] is False
+        assert 'TASK_CONTINUATION_NOT_AUTHORIZED' in lane.calls[-1]['messages'][-1]['content']
+        assert store.db.tasks.find_one({'_id':task['_id']})['state']=='RUNNING'
+        assert not store.db.tasks.find_one({'_id':'task-'+result['_id']})
+    finally:broker.close()
+
+
+@pytest.mark.parametrize('reason,allowed',[('host_stop',True),('user_cancelled',False)])
+def test_explicit_resume_distinguishes_host_shutdown_from_user_cancellation(store,reason,allowed):
+    work,ep,service,broker=setup_workspace(store)
+    try:
+        task=service.claim(ep['task_id']);service.cancel(task['_id'],reason=reason,person_id='A')
+        decision={'next':'delegate','goal':'继续原目标','constraints':[],'recall_query':'','speak_before_action':False,'continue_task_id':task['_id']}
+        lane=FakeLane(store,[LaneResult('核实原任务'),LaneResult(json.dumps(decision)),LaneResult('原任务已经取消。')])
+        result=Coordinator(store,lane).ingest({'event_id':'explicit-resume','scene_id':'dm-a','person_id':'A','text':'宿主重载后继续原目标'})
+        assert store.db.tasks.find_one({'_id':task['_id']})['state']=='CANCELLED'
+        if allowed:
+            continuation=store.db.tasks.find_one({'_id':result['task_id']})
+            assert continuation['continues_task_id']==task['_id']
+            assert continuation['execution_binding']==f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
+        else:
+            assert result['state']=='COMMITTED' and result['control_result']['accepted'] is False
+    finally:broker.close()

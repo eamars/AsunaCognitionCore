@@ -165,8 +165,13 @@ class Chat:
         """Called once by the owning host before it exposes any clients."""
         with self.ingress_lock:
             for row in self.app.store.db.messages.find({'host_managed': True,
-                    'ingress_state': {'$in': ['ACCEPTED', 'PROCESSING']}}).sort('received_at', 1):
+                    'ingress_state': {'$in': ['ACCEPTED', 'PROCESSING', 'FAILED']}}).sort('received_at', 1):
                 episode = row['episode_id']
+                # A failure before episode creation made no model/tool calls.
+                # Keep its original identity and diagnostic when resuming.
+                if row['ingress_state']=='FAILED':
+                    if self.app.store.db.episodes.find_one({'_id':episode}) or 'retrieval' not in row.get('failure','').lower():
+                        continue  # Only migrate the known pre-RAG failure; no blanket replay.
                 if episode not in self.enqueued:
                     self.enqueued.add(episode)
                     self.pending.put((row['event'], episode))
@@ -219,14 +224,17 @@ class Chat:
                     if source['policy_epoch'] != scene['policy_epoch']:
                         raise PermissionError('INPUT_POLICY_STALE')
                     if event.get('channel'):
-                        from .channels import route_for_scene
+                        from .channels import route_for_scene, route_members
                         route = route_for_scene(self.app.config, event['channel']['id'], event['scene_id'])
-                        if (route['person_id'] != event['person_id'] or route['target'] != event['channel']['target']
+                        member = route_members(route).get(event['channel'].get('sender_id', route.get('sender_id')), {})
+                        if event.get('episode_kind')=='owner_group_prompt' and route.get('operator_sender_id')!=event['channel'].get('sender_id'):
+                            raise PermissionError('GROUP_PROMPT_OWNER_REVOKED')
+                        if (member.get('person_id') != event['person_id'] or route['target'] != event['channel']['target']
                                 or event['channel']['account_id'] != self.app.config['channels'][event['channel']['id']]['account_id']):
                             raise PermissionError('INPUT_ROUTE_STALE')
                     input_state(self.app.store, episode, 'PROCESSING')
                     previous = self.app.store.db.episodes.find_one({'_id': episode})
-                    if previous and previous['state'] in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED'):
+                    if previous and previous['state'] in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED', 'INTERRUPTED'):
                         # Native lane receipts govern recovery; never invent a new operation ID.
                         result = self.app.router.coordinator.advance(episode)
                     else:
@@ -239,7 +247,7 @@ class Chat:
                 }).sort('scene_seq', 1))
                 for message in messages:
                     self.emit(f"{self.settings['display_name']}：{message['text']}")
-                if result['state'] == 'WAITING_TASK':
+                if result.get('task_id') and self.app.store.db.tasks.find_one({'_id':result['task_id'],'state':'READY'}):
                     self._schedule(result)
                 elif result.get('silent_reason'):
                     self.emit('[系统] 角色明确选择本轮不发言；请查看本轮执行详情中的原因。')

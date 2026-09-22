@@ -10,7 +10,7 @@ import yaml
 from contextlib import ExitStack
 import httpx
 from deepseek_harness import DeepSeekHarness
-from .config import ROOT
+from .config import ROOT, redact_text
 from .evidence import Evidence,sha,canonical
 from .lanes import LaneResult
 from .provider_proxy import ProviderProxy
@@ -86,7 +86,7 @@ class DshLane:
         if self.endpoint_file.exists():self.endpoint_file.unlink()
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
         compat=self.model['compat']
-        provider={'api':self.model['api'],'baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model['context_window'],'maxTokens':self.model['max_tokens'],'reasoningEfforts':self.model['reasoning_efforts']}],'retryPolicy':{'mode':'normal','maxRetries':0},'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
+        provider={'api':self.model['api'],'baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model['context_window'],'maxTokens':self.model['max_tokens'],'reasoningEfforts':self.model['reasoning_efforts']}],'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
         provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
         chat=config.get('chat',{})
         skills=skills_directory(config,chat.get('scene_id'),chat.get('person_id')) if lane=='executor' else None
@@ -95,7 +95,7 @@ class DshLane:
             {'id':'asuna-skill-filesystem','name':'@deepseek-ai/dsh-skill-filesystem','config':{'includeDefaultRoots':False,'agentsHome':self.home.as_posix(),'dshHome':self.home.as_posix(),'customSkillDirs':[skills.as_posix()],'watchFollowSymlinks':False}}]
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
-            {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'auto':False,'maxOverflowRetries':0,'maxTokens':self.model['max_tokens']}},
+            {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'maxTokens':self.model['max_tokens']}},
             *skill_rows,
             {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
@@ -171,7 +171,8 @@ class DshLane:
             response=self.http.post(self.url+'/run',headers={'Authorization':'Bearer '+self.token},json=request)
             body=response.json()
             self.evidence.record('lane.receipt',{'lane':self.lane,'operation':operation,'status_code':response.status_code,'body':body})
-            response.raise_for_status()
+            if response.is_error:
+                raise RuntimeError('DSH_BRIDGE: '+redact_text(json.dumps(body,ensure_ascii=False),self.config))
             skill_calls=[e for e in body.get('events',[]) if e.get('type')=='tool/call' and e.get('data',{}).get('name')=='skill']
             if skill_calls:
                 self.store.audit(operation.split(':')[0],'skills.native_calls',{'session_id':native_id,'calls':skill_calls,
@@ -184,7 +185,7 @@ class DshLane:
             refs=[{'artifact_path':(self.evidence.root/c['request_ref']).resolve().relative_to(ROOT).as_posix(),'sha256':sha((self.evidence.root/c['request_ref']).read_bytes())} for c in calls]
             finish=body['finish_reason']
             if finish=='completed':finish=(provider_finish(calls[-1]['raw']) if calls else None) or 'unverified_provider_finish'
-            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason=finish,request_refs=refs,receipt=body['message_id'])
+            value=LaneResult(content=body['content'],reasoning=body.get('reasoning'),finish_reason=finish,request_refs=refs,receipt=body['message_id'],diagnostic=body.get('native_reason') if finish!='stop' else None)
             self.store.put('lane_receipts',{'_id':operation,'scope_key':'operator','session_id':request['session'],'phase':phase,'result':vars(value),'semantic_hash':semantic_hash,'request_hash':sha(json.dumps(request,sort_keys=True).encode())},stream=operation)
             previous=self.store.db.sessions.find_one({'_id':request['session']})
             pending=session in self.compact_pending or bool(previous.get('compact_requested') and previous.get('compact_request_id')!=bound.get('compact_request_id'))

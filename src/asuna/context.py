@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
-from .config import prompt_path
+import traceback
+from .config import prompt_path, redact_text
 from .evidence import canonical, sha
 from .state import Store, Denied
 
@@ -37,7 +38,16 @@ class ContextBuilder:
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
         if self.retrieval:
-            memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
+            try:
+                memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
+            except (Denied, PermissionError):
+                raise
+            except Exception:
+                # Authorization, persona and direct scoped history already
+                # succeeded. Optional RAG must not prevent diagnosis/chat.
+                memories=[]
+                retrieval_manifest={'path':'scoped_history_without_rag','vector_verified':False,
+                                    'error':redact_text(traceback.format_exc(),self.store.config)}
         else:
             memories=list(self.store.db.memory_units.find({'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}],'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
@@ -51,6 +61,25 @@ class ContextBuilder:
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。',
                  'task_state_from_program':task_states,
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if retrieval_manifest.get('error'):
+            context['retrieval_diagnostic_from_host']=retrieval_manifest
+        if source and source.get('failure'):
+            context['prior_input_failure_from_host']=source['failure']
+        if event.get('group_context'):
+            group = event['group_context']
+            refs = [group.get('reply_message_id')]
+            if group.get('topic_id'):
+                anchor = self.store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+                                                         'event.event_id': group['topic_id']}, {'_id':1})
+                if anchor: refs.append(anchor['_id'])
+            related = list(self.store.db.messages.find({'_id': {'$in': [r for r in refs if r]},
+                'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
+                {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1}))
+            speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
+                'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
+                {'text':1,'author':1,'scene_seq':1}).sort('scene_seq',-1).limit(3)) if source else []
+            context['group_continuity_from_program'] = {**group, 'related_messages': related,
+                                                       'current_speaker_tail': list(reversed(speaker_tail))}
         manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if self.store.config.get('task_mode')=='workspace':
             if relation:
@@ -76,7 +105,8 @@ class ContextBuilder:
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
                 if self.skill_catalog:
-                    context['available_skills_from_native_dsh']=self.skill_catalog()
+                    try:context['available_skills_from_native_dsh']=self.skill_catalog()
+                    except Exception:context['skill_catalog_diagnostic_from_host']=redact_text(traceback.format_exc(),self.store.config)
             manifest['context_sha256']=sha(canonical(context))
         system=prompt_path(self.store.config,'common.md').read_text(encoding='utf-8')+'\n'+body
         return system,context,manifest

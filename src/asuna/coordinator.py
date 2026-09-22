@@ -16,6 +16,7 @@ DECISION_SCHEMA=json.loads((BUNDLE/'schemas/decision.schema.json').read_text(enc
 WORKSPACE_DECISION_SCHEMA=copy.deepcopy(DECISION_SCHEMA)
 WORKSPACE_DECISION_SCHEMA['properties']['cancel_task_id']={'type':'string','minLength':1,'maxLength':200}
 WORKSPACE_DECISION_SCHEMA['properties']['reflect_understanding']={'type':'boolean'}
+WORKSPACE_DECISION_SCHEMA['properties']['continue_task_id']={'type':'string','minLength':1,'maxLength':200}
 WORKSPACE_DECISION_SCHEMA['allOf'].append({'if':{'required':['cancel_task_id']},'then':{'properties':{'next':{'const':'speak'}}}})
 
 
@@ -54,10 +55,14 @@ class Coordinator:
 
     def _stage(self, ep, phase, round_id=0, extra=''):
         operation=f"{ep['_id']}:{phase}:{round_id}"
+        if ep.get('resume_generation'):
+            operation+=':resume:'+str(ep['resume_generation'])
         instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
         if phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE'):
             instruction=json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+instruction
         instruction += '\n'+extra
+        if ep.get('resume_diagnostic'):
+            instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
         binding=f"xiaoman:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
         if ep.get('character_context'):binding+=':'+ep['character_context']
@@ -73,6 +78,11 @@ class Coordinator:
             ep=self.store.db.episodes.find_one({'_id':ep_id})
             if not ep:
                 raise ValueError('EPISODE_NOT_FOUND')
+            if ep['state']=='INTERRUPTED':
+                # Explicitly resumed role generation keeps its scene/session.
+                # Completed tools/publications are not replayed by this path.
+                phase='SPEAK_ACCEPTED' if ep.get('speech') else 'DECISION_ACCEPTED' if ep.get('decision') else 'MONOLOGUE_ACCEPTED' if ep.get('monologue_refs') else 'PREPARED'
+                ep=self._update(ep,state=phase,resume_generation=ep.get('resume_generation',0)+1,resume_diagnostic=ep.get('failure','宿主中断'))
             try:
                 if ep['state']=='PREPARED':
                     if not self.monologue_enabled:
@@ -130,8 +140,6 @@ class Coordinator:
                         if self.store.config.get('task_mode')=='workspace':
                             from .resources import workspace_grant
                             workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
-                        if ep.get('delegation_depth',0)>=3:
-                            return self._update(ep,state='BLOCKED',reason='delegation depth exhausted')
                         task_id=ep.get('supersedes_task_id') or 'task-'+ep_id
                         intent_revision=1
                         if ep.get('supersedes_task_id'):
@@ -145,11 +153,27 @@ class Coordinator:
                             source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
                             integration = event_granted(self.store.config, source.get('event', {}))
                             if integration: capabilities = [*capabilities, *INTEGRATION_TOOLS]
-                            self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'allowed_capabilities':[t['name'] for t in capabilities]},stream=ep_id)
-                        self.crash('after_task_persist')
-                        if not ep['decision']['speak_before_action']:
-                            return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
-                        ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
+                            continuation={}
+                            prior_id=ep['decision'].get('continue_task_id') or (ep.get('task_id') if ep.get('episode_kind')=='task_feedback' else None)
+                            if prior_id:
+                                prior=self.store.db.tasks.find_one({'_id':prior_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']})
+                                # A new explicit request may resume context after host
+                                # shutdown; it cannot undo a user's task cancellation.
+                                host_resume=bool(prior and prior.get('cancel_reason')=='host_stop'
+                                    and ep['decision'].get('continue_task_id')==prior_id and ep.get('episode_kind')!='task_feedback')
+                                if not prior or prior['state'] in ('READY','RUNNING','STALE') or (prior['state']=='CANCELLED' and not host_resume) or bool(prior.get('integration_profile'))!=bool(integration):
+                                    ep=self._update(ep,control_result={'action':'continue','accepted':False,
+                                        'reason':'TASK_CONTINUATION_NOT_AUTHORIZED','prior_state':prior['state'] if prior else None,
+                                        'detail':'未创建或取消任何行动，原任务状态未修改。续接需要同一授权，且此前任务已返回、未取消；运行中的会话不能同时由第二个任务接管。'})
+                                else:
+                                    continuation={'continues_task_id':prior_id,'execution_binding':prior.get('execution_binding') or f"task:{prior['_id']}:{prior['scope_key']}:{prior['policy_epoch']}:{prior['intent_revision']}"}
+                            if ep.get('control_result',{}).get('accepted') is not False:
+                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'allowed_capabilities':[t['name'] for t in capabilities],**continuation},stream=ep_id)
+                        if self.store.db.tasks.find_one({'_id':task_id}):
+                            self.crash('after_task_persist')
+                            if not ep['decision']['speak_before_action']:
+                                return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
+                            ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
                     results={k:ep[k] for k in ('control_result','understanding_update') if k in ep}
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text)
@@ -160,7 +184,8 @@ class Coordinator:
                         self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':'xiaoman','phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
                     self.publisher.publish(key)
                     self.crash('before_episode_commit')
-                    ep=self._update(ep,state='WAITING_TASK' if ep['decision']['next']=='delegate' else 'COMMITTED')
+                    delegated=ep['decision']['next']=='delegate' and ep.get('task_id')==(ep.get('supersedes_task_id') or 'task-'+ep_id)
+                    ep=self._update(ep,state='WAITING_TASK' if delegated else 'COMMITTED')
                 return ep
             except ProtocolFailure as exc:
                 self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])

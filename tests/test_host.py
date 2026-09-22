@@ -103,12 +103,52 @@ def test_restart_does_not_run_input_after_policy_revocation(store, tmp_path):
         chat.stop()
 
 
+def test_failed_preprocessing_resumes_original_input_without_rag_dependency(store,tmp_path):
+    incoming=event('original-failure','原始目标')
+    row,_=persist_input(store,incoming,managed=True)
+    input_state(store,row['episode_id'],'FAILED',failure='prior retrieval TypeError')
+    class BrokenRetrieval:
+        def search(self,*args,**kwargs):raise TypeError('optional retrieval unavailable')
+    lane=FakeLane(store,responses())
+    coordinator=Coordinator(store,lane,context=ContextBuilder(store,BrokenRetrieval()))
+    chat=controller(store,tmp_path,coordinator)
+    chat.recover_inputs();chat.worker.start()
+    try:
+        chat.pending.join()
+        saved=store.db.messages.find_one({'_id':row['_id']})
+        assert saved['ingress_state']=='COMPLETE' and saved['text']=='原始目标'
+        assert store.db.messages.count_documents({'platform_event_id':'original-failure'})==1
+        context=store.db.episodes.find_one({'_id':row['episode_id']})['context']
+        assert context['memories']==[] and 'optional retrieval unavailable' in context['retrieval_diagnostic_from_host']['error']
+        assert context['prior_input_failure_from_host']=='prior retrieval TypeError'
+        assert len(lane.calls)==3
+    finally:chat.stop()
+
+
 def test_resources_never_fall_back_to_owner_workspace(store):
     local = store.config['chat']
     assert workspace_grant(store.config, local['scene_id'], local['person_id']) == local
     assert workspace_grant(store.config, 'dm-b', 'B', required=False) == {}
     with pytest.raises(Denied, match='WORKSPACE_NOT_AUTHORIZED'):
         workspace_grant(store.config, 'dm-b', 'B')
+
+
+def test_retrieval_handles_null_timestamps_and_large_authorized_scope(store,tmp_path):
+    from asuna.retrieval import Retrieval
+    retrieval=Retrieval(store,Evidence(tmp_path/'retrieval'))
+    def unavailable(*args):raise RuntimeError('embedding unavailable in local check')
+    retrieval.embed=unavailable
+    base={'scope_key':'scene:dm-a','policy_epoch':1,'character_id':'xiaoman','status':'active','revision':1,'schema_version':1,
+          'body_markdown':'历史材料','embedding_status':'PENDING','source_event_ids':[],'occurred_at':None}
+    store.db.memory_units.insert_many([{**base,'_id':'null-'+str(i)} for i in range(4100)])
+    try:
+        rows,manifest=retrieval.search('scene:dm-a',1,'当前查询')
+        assert manifest['lexical_candidate_count']==4096
+        assert manifest['cache_disabled_for_bounded_sample']
+        assert not manifest['vector_verified']
+        assert all(m['scope_key'] in ('scene:dm-a','global-safe') for m in rows)
+        assert store.db.memory_units.count_documents({'_id':{'$regex':'^null-'}})==4100
+    finally:retrieval.close()
 
 
 def test_scene_queue_is_ordered_and_does_not_starve_other_scene():
@@ -129,7 +169,7 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     from asuna.tasks import TaskService
     target = {'type': 'dm', 'id': 'peer'}
     store.config['channels'] = {'replay': {'token': 'x' * 32, 'account_id': 'bot', 'routes': {
-        'peer': {'scene_id': 'dm-a', 'person_id': 'A', 'target': target}}}}
+        'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': target}}}}
     scene = store.db.scenes.find_one({'_id': 'dm-a'})
     store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
     decision = {'next': 'delegate', 'goal': 'check', 'constraints': [], 'recall_query': '', 'speak_before_action': False}

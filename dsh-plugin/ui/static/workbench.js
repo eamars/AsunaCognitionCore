@@ -100,13 +100,16 @@ function renderInspector() {
 function render() {
   integrationLabel.hidden = !state.integrationAvailable;
   integrationStop.hidden = !state.integrationAvailable;
-  integrationChoice.disabled = state.readOnly || !state.canSend;
+  integrationChoice.disabled = state.readOnly || !state.canSend || state.channelPrompt;
+  if (state.channelPrompt) integrationChoice.checked = false;
   integrationStop.disabled = state.readOnly;
   $('title').textContent = state.title; $('subtitle').textContent = state.subtitle;
   $('connection').textContent = state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互';
   $('send').disabled = busy || state.readOnly || !state.canSend;
   $('input').disabled = state.readOnly || !state.canSend;
-  $('new-session').disabled = busy || state.readOnly;
+  $('new-session').disabled = busy || state.readOnly || state.channelPrompt;
+  $('send').textContent = state.channelPrompt ? '请小满在群里发言' : '发送';
+  $('input').placeholder = state.channelPrompt ? '给小满的本机指令；她将在当前群发言' : '输入消息…（Enter 发送，Shift + Enter 换行）';
   $('conversations').replaceChildren();
   for (const item of state.conversations) {
     const button = el('button', null, `session ${state.conversationId === item.id ? 'selected' : ''}`);
@@ -119,7 +122,7 @@ function render() {
     $('model-summary').textContent = `角色脑：${config.models.character.model} · 行动脑：${config.models.executor.model}`;
     $('model-summary').title = $('model-summary').textContent;
     $('model-save').disabled = state.readOnly || config.applying;
-    $('new-session').disabled = busy || state.readOnly || config.applying || !config.ready;
+    $('new-session').disabled = busy || state.readOnly || state.channelPrompt || config.applying || !config.ready;
     if (config.applying) $('model-status').textContent = '正在应用模型配置，暂时停止接收新消息…';
     else if (modelWasApplying) { $('model-status').textContent = config.error ? `未应用：${config.error}` : '已保存并应用；后续消息使用当前两条模型路由。'; modelRevision = config.revision; }
     modelWasApplying = config.applying;
@@ -144,7 +147,7 @@ async function refresh() {
 $('composer').onsubmit = async (event) => {
   event.preventDefault(); const value = $('input').value.trim(); if (!value || busy || !state?.canSend || state.readOnly) return;
   busy = true; $('send').disabled = true;
-  try { await api('send', {text: value, integration: integrationChoice.checked}); integrationChoice.checked = false; actionError = ''; $('input').value = ''; $('send-status').textContent = '已入队，可继续输入；回复完成后自动显示。'; await refresh(); }
+  try { await api('send', {text: value, integration: integrationChoice.checked, conversation}); integrationChoice.checked = false; actionError = ''; $('input').value = ''; $('send-status').textContent = '已入队，可继续输入；回复完成后自动显示。'; await refresh(); }
   catch (err) { actionError = err.message; error(actionError); $('send-status').textContent = '未确认送达；保留输入，请先刷新检查，避免重复发送。'; }
   finally { busy = false; $('send').disabled = state?.readOnly || !state?.canSend; }
 };

@@ -29,6 +29,8 @@ class Router:
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','task_id','intent_revision','delegation_depth','supersedes_task_id')
         trusted={k:event[k] for k in allowed if k in event}
+        if event.get('channel') and 'group_context' in event:
+            trusted['group_context'] = event['group_context']
         if event.get('integration_profile'):
             from .integration import event_granted
             if event_granted(self.store.config, event): trusted['integration_profile'] = 'owner'
@@ -36,7 +38,13 @@ class Router:
         if event.get('supersedes_task_id'):
             if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')
             self.tasks.revise(event['supersedes_task_id'],trusted)
-        if scene['kind']=='group' and not(event.get('mentioned') or event.get('reply_to') or event.get('scene_tick')):
+        wake = event.get('group_context', {}).get('wake_reason') if event.get('channel') else (event.get('mentioned') or event.get('scene_tick'))
+        if scene['kind']=='group' and not wake and event.get('episode_kind') != 'task_feedback':
+            if event.get('channel'):
+                from .ingress import persist_input
+                row, _ = persist_input(self.store, event, managed=True)
+                self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
+                return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
             key='quiet-'+sha(canonical([scene['_id'],event['event_id']]))
             previous=self.store.db.messages.find_one({'_id':key})
             if previous:return {'state':'RECEIVED_NO_WAKE','message_id':key}

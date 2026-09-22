@@ -28,8 +28,10 @@ export function apply(ctx, config) {
   }
   ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
     const operation = active.get(agent.session.id);
-    if (!operation) throw new Error('UNOWNED_LANE_GENERATION');
-    if (++operation.steps > 65) return { kind: 'reject' };
+    // Native continuations keep their authorized session; an operation is
+    // receipt bookkeeping, not permission for each native generation step.
+    if (!operation) return next();
+    ++operation.steps;
     if ((operation.compact && !operation.compacted) || operation.compactAt.includes(operation.steps)) {
       operation.compacted = true;
       const nodes = agent.session.surface.nodes;

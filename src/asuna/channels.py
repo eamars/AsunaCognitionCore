@@ -5,6 +5,7 @@ import threading
 import time
 import traceback
 import uuid
+from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, unquote
 
@@ -23,6 +24,45 @@ def route_for_scene(config, channel_id, scene_id):
     raise Denied('CHANNEL_ROUTE_NOT_AUTHORIZED')
 
 
+def route_members(route):
+    if route['target']['type'] == 'dm':
+        return {route['sender_id']: route}
+    if route['target']['type'] == 'group':
+        return route.get('members', {})
+    raise Denied('CHANNEL_TARGET_TYPE_DENIED')
+
+
+def group_context(store, route, body, event_id):
+    """Bind a normalized reply to an actual record in this group and epoch."""
+    mentions = body.get('mentioned_account_ids', [])
+    if not isinstance(mentions, list) or len(mentions) > 100 or any(not isinstance(v, str) for v in mentions):
+        raise ValueError('INVALID_MENTIONS')
+    reply = body.get('reply_to')
+    if reply is not None and (not isinstance(reply, str) or not 1 <= len(reply) <= 200):
+        raise ValueError('INVALID_REPLY_ID')
+    scene = store.db.scenes.find_one({'_id': route['scene_id']})
+    parent = None
+    if reply:
+        parent = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+            '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
+                    {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': 'xiaoman'}]})
+    reason = 'mentioned_account' if body['account_id'] in mentions else None
+    topic = None
+    if parent:
+        previous = parent.get('event', {}).get('group_context', {})
+        recent = parent.get('received_at', parent.get('receipt_at', '')) >= (datetime.now(timezone.utc)-timedelta(minutes=30)).isoformat()
+        if parent['direction'] == 'outbound':
+            reason = reason or 'reply_to_character'
+            origin = store.db.messages.find_one({'_id': 'in-'+parent['episode_id']})
+            topic = (origin or {}).get('event', {}).get('group_context', {}).get('topic_id')
+        elif previous.get('topic_id') and recent:
+            reason = reason or 'reply_in_active_topic'
+            topic = previous['topic_id']
+    return {'wake_reason': reason, 'topic_id': (topic or event_id) if reason else None,
+            'reply_to': reply, 'reply_message_id': parent['_id'] if parent else None,
+            'mentioned_account_ids': mentions}
+
+
 class Channels:
     def __init__(self, controller):
         self.controller = controller
@@ -35,13 +75,18 @@ class Channels:
         return channel
 
     def receive(self, channel_id, body):
-        allowed = {'route_id', 'account_id', 'sender_id', 'event_id', 'text', 'raw', 'occurred_at'}
+        allowed = {'route_id', 'account_id', 'sender_id', 'event_id', 'text', 'raw', 'occurred_at', 'mentioned_account_ids', 'reply_to', 'group_id'}
         if set(body) - allowed:
             raise Denied('CHANNEL_ENVELOPE_FIELD_DENIED')
         channel = self.store.config['channels'][channel_id]
         route = channel['routes'].get(body.get('route_id'))
-        if not route or body.get('account_id') != channel['account_id'] or body.get('sender_id') != route['sender_id']:
+        member = route_members(route).get(body.get('sender_id')) if route else None
+        if not member or body.get('account_id') != channel['account_id']:
             raise Denied('CHANNEL_IDENTITY_DENIED')
+        if route['target']['type'] == 'group' and body.get('group_id') != route['target']['id']:
+            raise Denied('CHANNEL_GROUP_DENIED')
+        if route['target']['type'] == 'dm' and any(k in body for k in ('group_id', 'mentioned_account_ids', 'reply_to')):
+            raise Denied('DM_GROUP_FIELDS_DENIED')
         if not isinstance(body.get('event_id'), str) or not 1 <= len(body['event_id']) <= 200:
             raise ValueError('INVALID_PLATFORM_EVENT_ID')
         if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= 16000:
@@ -50,11 +95,13 @@ class Channels:
             raise ValueError('INVALID_OCCURRED_AT')
         # Namespaced by connection/account/scene; same text/time is not deduplication.
         event_id = 'channel-' + sha(canonical([channel_id, channel['account_id'], route['scene_id'], body['event_id']]))
-        event = {'event_id': event_id, 'scene_id': route['scene_id'], 'person_id': route['person_id'],
+        event = {'event_id': event_id, 'scene_id': route['scene_id'], 'person_id': member['person_id'],
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
-                             'platform_event_id': body['event_id'], 'target': route['target']},
+                             'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']},
                  'raw': body.get('raw')}
+        if route['target']['type'] == 'group':
+            event['group_context'] = group_context(self.store, route, body, event_id)
         if 'occurred_at' in body:
             event['occurred_at'] = body['occurred_at']
         return self.controller.receive(event)
@@ -63,17 +110,19 @@ class Channels:
         if not message or message.get('channel_id') != channel_id:
             raise Denied('PUBLICATION_NOT_FOUND')
         route = route_for_scene(self.store.config, channel_id, message['scene_id'])
-        scene = self.store.authorize(message['scene_id'], route['person_id'])
+        episode = self.store.db.episodes.find_one({'_id': message['episode_id']})
+        if not episode or episode['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
+            raise Denied('PUBLICATION_MEMBER_REVOKED')
+        scene = self.store.authorize(message['scene_id'], episode['person_id'])
         if (message['policy_epoch'] != scene['policy_epoch'] or message['scope_key'] != scene['scope_key']
                 or message['target'] != route['target']
                 or message['channel_account_id'] != self.store.config['channels'][channel_id]['account_id']):
             raise Denied('PUBLICATION_CONTEXT_STALE')
-        episode = self.store.db.episodes.find_one({'_id': message['episode_id']})
         if not episode or episode['state'] not in ('SPEAK_ACCEPTED', 'WAITING_TASK', 'COMMITTED'):
             raise Denied('PUBLICATION_EPISODE_STALE')
         if episode.get('task_id'):
             task = self.store.db.tasks.find_one({'_id': episode['task_id']})
-            if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE', 'UNKNOWN'):
+            if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
 
     def claim(self, channel_id, wait_seconds=0):

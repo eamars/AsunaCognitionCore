@@ -3,6 +3,8 @@
 These do not claim live model or rendered-browser verification.
 """
 import json
+import hashlib
+from pathlib import Path
 from types import SimpleNamespace
 import uuid
 
@@ -16,7 +18,7 @@ from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
 from asuna.router import Router
 from asuna.state import Store
-from asuna.ui import UiBridge, Workbench, inspector_record, trace_step
+from asuna.ui import UiBridge, Workbench, inspector_record, raw_provider_response, trace_step
 
 
 @pytest.fixture
@@ -140,3 +142,77 @@ def test_bridge_auth_readonly_and_tool_payload(ui_store):
     step = trace_step({'_id': 'tool', 'type': 'state.commit', 'payload': {'collection': 'artifacts',
         'document': {'state': 'DONE', 'tool': 'read_file', 'result': {'execution': {'exit_code': 1}}}}}, True)
     assert step['type'] == 'tool_result' and step['status'] == 'error'
+
+
+def test_trace_output_keeps_reasoning_in_payload():
+    payload = {'request_refs': [{'artifact_path': 'reports/001-provider.request.json'}],
+               'content': 'final answer', 'reasoning': 'separate reasoning content', 'finish_reason': 'stop'}
+    step = trace_step({'_id': 'output', 'type': 'execution.output', 'payload': payload}, True)
+
+    assert step['payload'] == payload
+    assert 'thinking' not in step
+
+
+def test_raw_provider_response_preserves_captured_stream(tmp_path):
+    evidence = tmp_path / 'reports' / 'ui-test'
+    evidence.mkdir(parents=True)
+    request_name = '00102-provider.request.json'
+    request = evidence / request_name
+    request.write_text(json.dumps({'type': 'provider.request', 'payload': {'call_id': 'call-1'}}), encoding='utf-8')
+    raw = 'data: {"choices":[{"delta":{"reasoning_content":"line 1\\nline 2","content":"ok"}}]}\r\n\r\n'
+    response = evidence / '00111-provider.response.json'
+    response.write_text(json.dumps({'type': 'provider.response', 'payload': {
+        'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
+    ref = {'artifact_path': request.relative_to(tmp_path).as_posix(),
+           'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+
+    assert raw_provider_response([ref], root=tmp_path) == raw
+
+
+def test_provider_response_bridge_returns_exact_scoped_body(tmp_path, monkeypatch, ui_store):
+    import asuna.ui as ui
+    monkeypatch.setattr(ui, 'ROOT', tmp_path)
+    scene = ui_store.authorize('dm-a', 'A')
+    evidence = tmp_path / 'reports' / 'ui-test'
+    evidence.mkdir(parents=True)
+    request_name = '00102-provider.request.json'
+    request = evidence / request_name
+    request.write_text(json.dumps({'type': 'provider.request', 'payload': {'call_id': 'call-1'}}), encoding='utf-8')
+    raw = 'data: {"choices":[{"delta":{"reasoning_content":"native","content":"answer"}}]}\r\n\r\n'
+    (evidence / '00111-provider.response.json').write_text(json.dumps({'type': 'provider.response', 'payload': {
+        'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
+    ref = {'artifact_path': (Path('reports') / 'ui-test' / request_name).as_posix(),
+           'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+    event = ui_store.audit('episode-provider-response', 'phase.output', {'request_refs': [ref]}, scene['scope_key'])
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+    bridge = UiBridge(view)
+    try:
+        with httpx.Client(base_url=f'http://127.0.0.1:{bridge.server.server_port}', trust_env=False) as client:
+            assert client.get(f'/provider-response?event={event["_id"]}').status_code == 403
+            client.headers['Authorization'] = 'Bearer ' + bridge.token
+            response = client.get(f'/provider-response?event={event["_id"]}')
+            assert response.status_code == 200
+            assert response.json() == {'body_utf8': raw}
+            assert client.get('/provider-response?event=unknown').status_code == 403
+    finally:
+        bridge.close()
+
+
+def test_ui_provider_response_returns_raw_body_for_scoped_output(tmp_path, monkeypatch, ui_store):
+    import asuna.ui as ui
+    monkeypatch.setattr(ui, 'ROOT', tmp_path)
+    scene = ui_store.authorize('dm-a', 'A')
+    evidence = tmp_path / 'reports' / 'ui-test'
+    evidence.mkdir(parents=True)
+    request_name = '00102-provider.request.json'
+    request = evidence / request_name
+    request.write_text(json.dumps({'type': 'provider.request', 'payload': {'call_id': 'call-1'}}), encoding='utf-8')
+    raw = 'data: {"choices":[{"delta":{"reasoning_content":"raw","content":"answer"}}]}\n\n'
+    (evidence / '00111-provider.response.json').write_text(json.dumps({'type': 'provider.response', 'payload': {
+        'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
+    ref = {'artifact_path': (Path('reports') / 'ui-test' / request_name).as_posix(),
+           'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+    event = ui_store.audit('episode-provider-response', 'phase.output', {'request_refs': [ref]}, scene['scope_key'])
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+
+    assert view.provider_response(event['_id']) == {'body_utf8': raw}

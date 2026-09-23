@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 export const inject = ['webServer'];
 
 // DSH owns page delivery; this plugin only adds an embedded view and forwards
-// three small API operations to the existing Python Chat controller.
+// small display and interaction API operations to the existing Python Chat controller.
 export function apply(ctx) {
   if (ctx.webServer.host !== '127.0.0.1') throw new Error('ASUNA_UI_LOOPBACK_REQUIRED');
   const origin = `http://127.0.0.1:${ctx.webServer.port}`;
@@ -21,8 +21,9 @@ export function apply(ctx) {
       res.end(await readFile(new URL(`./static/${asset[0]}`, import.meta.url)));
       return;
     }
-    if (!['/asuna/api/state', '/asuna/api/send', '/asuna/api/new', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop'].includes(path)) return reply(404, {error: '未知接口'});
-    if ((path.endsWith('/state') ? req.method !== 'GET' : req.method !== 'POST') || (req.method === 'POST' && req.headers['x-asuna-ui'] !== '1')) return reply(405, {error: '不支持的请求'});
+    if (!['/asuna/api/state', '/asuna/api/provider-response', '/asuna/api/send', '/asuna/api/new', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop'].includes(path)) return reply(404, {error: '未知接口'});
+    const readOnly = path.endsWith('/state') || path.endsWith('/provider-response');
+    if ((readOnly ? req.method !== 'GET' : req.method !== 'POST') || (req.method === 'POST' && req.headers['x-asuna-ui'] !== '1')) return reply(405, {error: '不支持的请求'});
     if (!process.env.ASUNA_UI_BRIDGE || !process.env.ASUNA_UI_TOKEN) return reply(503, {error: 'Asuna 交互进程未连接，请通过 asuna ui 启动。'});
     try {
       let body = '';

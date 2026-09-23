@@ -48,7 +48,25 @@ function renderTrace(message) {
     const actor = step.actor || step.type;
     const color = ['role','action','tool'].includes(step.actorRole) ? step.actorRole : '';
     summary.append(el('span', index + 1, 'number'), el('span', step.label || actor, `actor ${color}`), el('small', `${step.type} · ${step.status || ''} · ${time(step.createdAt)}`), codeText('span', step.summary || step.type, 'summary'));
-    detail.append(el('pre', step.payload ?? step)); row.append(detail); rows.append(row);
+    const providerOutput = ['phase.output', 'execution.output'].includes(step.type);
+    const payload = el('pre', providerOutput ? '正在读取原始 provider response…' : (step.payload ?? step));
+    detail.append(payload);
+    if (providerOutput) {
+      let requested = false;
+      const loadRawResponse = async () => {
+        if (!detail.open || requested) return;
+        requested = true;
+        try {
+          const response = await api(`provider-response?event=${encodeURIComponent(step.id)}`);
+          payload.textContent = response.body_utf8;
+        } catch (cause) {
+          payload.textContent = `原始 provider response 读取失败：${cause.message}`;
+        }
+      };
+      detail.addEventListener('toggle', loadRawResponse);
+      if (detail.open) void loadRawResponse();
+    }
+    row.append(detail); rows.append(row);
   });
   panel.append(rows);
   // Error summary is outside the disclosure and remains visible when collapsed.

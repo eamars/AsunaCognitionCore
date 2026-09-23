@@ -337,7 +337,7 @@ class Executor:
         for attempt in range(2):
             value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision'])+':'+str(attempt),'execution' if not attempt else 'execution-repair',text,system)
             healthy()
-            self.service.store.audit(task['_id'],'execution.output',{'attempt':attempt,'request_refs':value.request_refs,'content':value.content,'finish_reason':value.finish_reason},task['scope_key'])
+            self.service.store.audit(task['_id'],'execution.output',{'attempt':attempt,'request_refs':value.request_refs,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason},task['scope_key'])
             if value.finish_reason!='stop':raise ValueError('EXECUTOR_INCOMPLETE')
             try:return self.service.finish(task,json.loads(value.content))
             except (Denied,ValueError,jsonschema.ValidationError) as exc:
@@ -363,7 +363,7 @@ class Executor:
             text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
         value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)
         healthy()
-        self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'finish_reason':value.finish_reason},task['scope_key'])
+        self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason},task['scope_key'])
         artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
         declared=next((a for a in reversed(artifacts) if a['tool']=='task_status'),None)
         observations=[a for a in artifacts if a['tool']!='task_status']

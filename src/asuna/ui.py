@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,7 +32,7 @@ def is_error(value):
 
 def trace_step(event, action=False):
     """Unknown event kinds keep their original type and payload."""
-    kind, payload = event['type'], event.get('payload', {})
+    kind, payload = event['type'], dict(event.get('payload', {}))
     if kind == 'state.commit' and payload.get('collection') == 'artifacts':
         payload = payload['document']
         kind = 'tool_call' if payload['state'] == 'INTENT' else 'tool_result'
@@ -46,6 +47,45 @@ def trace_step(event, action=False):
     return {'id': event['_id'], 'type': kind, 'actor': actor, 'actorRole': actor_role,
             'label': actor + (' · ' + payload['phase'] if payload.get('phase') else ''),
             'summary': display(summary), 'createdAt': event.get('occurred_at'), 'status': status, 'payload': payload}
+
+
+def raw_provider_response(request_refs, root=None):
+    """Read the exact saved response stream paired with the final request ref."""
+    if not isinstance(request_refs, list) or not request_refs:
+        raise ValueError('原始 provider response 不可用')
+    ref = request_refs[-1]
+    artifact_path = ref.get('artifact_path') if isinstance(ref, dict) else None
+    if not isinstance(artifact_path, str):
+        raise ValueError('原始 provider response 引用无效')
+    root = Path(root or ROOT).resolve()
+    reports_root = (root / 'reports').resolve()
+    request_path = (root / artifact_path).resolve()
+    if not request_path.is_relative_to(reports_root) or not request_path.name.endswith('-provider.request.json'):
+        raise PermissionError('原始 provider response 引用越界')
+    try:
+        request_bytes = request_path.read_bytes()
+        request_event = json.loads(request_bytes)
+    except (OSError, ValueError) as exc:
+        raise ValueError('原始 provider request 不可用') from exc
+    if ref.get('sha256') != hashlib.sha256(request_bytes).hexdigest():
+        raise PermissionError('原始 provider request 校验失败')
+    request_payload = request_event.get('payload', {})
+    call_id = request_payload.get('call_id')
+    if request_event.get('type') != 'provider.request' or not call_id:
+        raise PermissionError('原始 provider request 不匹配')
+    for response_path in request_path.parent.glob('*-provider.response.json'):
+        try:
+            response_event = json.loads(response_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        response_payload = response_event.get('payload', {})
+        if (response_event.get('type') == 'provider.response' and
+                response_payload.get('request_ref') == request_path.name and
+                response_payload.get('call_id') == call_id and
+                200 <= response_payload.get('status_code', 0) < 300 and
+                isinstance(response_payload.get('body_utf8'), str)):
+            return response_payload['body_utf8']
+    raise ValueError('原始 provider response 不可用')
 
 
 def inspector_record(row, kind='memory'):
@@ -267,6 +307,15 @@ class Workbench:
         # Same credential redaction as the terminal trace, including nested payloads.
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
 
+    def provider_response(self, event_id):
+        scene = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError('缺少 provider output event id')
+        event = self.store.db.audit_events.find_one({'_id': event_id, 'scope_key': scene['scope_key']})
+        if not event or event.get('type') not in ('phase.output', 'execution.output'):
+            raise PermissionError('当前场景没有该 provider output')
+        return {'body_utf8': raw_provider_response(event.get('payload', {}).get('request_refs', []), root=ROOT)}
+
     def command(self, path, body):
         with self.command_lock:
             return self._command(path, body)
@@ -340,6 +389,8 @@ class UiBridge:
                     url = urlsplit(self.path)
                     if self.command == 'GET' and url.path == '/state':
                         value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
+                    elif self.command == 'GET' and url.path == '/provider-response':
+                        value = workbench.provider_response(parse_qs(url.query).get('event', [''])[0])
                     elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:

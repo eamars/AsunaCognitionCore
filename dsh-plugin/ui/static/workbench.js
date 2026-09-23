@@ -41,10 +41,12 @@ function renderTrace(message) {
   const settled = message.internalSteps || [];
   const finalRefs = new Set(settled.flatMap(step => ['phase.output', 'execution.output'].includes(step.type)
     ? (step.payload?.request_refs || []).map(ref => ref.artifact_path?.split('/').at(-1)) : []));
-  const taskRows = state.messages.filter(row => row.role !== 'user' && row.taskId === message.taskId);
+  const episodeRows = state.messages.filter(row => row.episodeId === message.episodeId && row.internalSteps);
+  const episodeHost = episodeRows.find(row => row.role === 'assistant') || episodeRows.at(-1);
+  const taskRows = state.messages.filter(row => row.taskId === message.taskId && row.internalSteps);
   const taskHost = taskRows.find(row => row.episodeId === row.taskOwnerEpisodeId) || taskRows.at(-1);
-  const live = (message.role === 'user' ? [] : liveCalls).filter(call =>
-    call.operation?.startsWith(`${message.episodeId}:`) ||
+  const live = liveCalls.filter(call =>
+    (episodeHost?.id === message.id && call.operation?.startsWith(`${message.episodeId}:`)) ||
     (message.taskId && taskHost?.id === message.id && call.operation?.startsWith(`${message.taskId}:`)))
     .filter(call => !finalRefs.has(call.request_ref))
     .map(call => ({id: `live:${call.id}`, type: 'provider.live', actorRole: call.lane === 'character' ? 'role' : 'action',
@@ -99,7 +101,14 @@ function renderMessages() {
   box.replaceChildren();
   for (const message of state.messages) {
     const row = el('article', null, `message ${message.role}`);
-    row.append(el('p', `${message.authorLabel || (message.role === 'user' ? '你' : 'Asuna')}  ${time(message.createdAt)}`, 'meta'), codeText('div', message.text, 'bubble'), ...renderTrace(message));
+    row.append(el('p', `${message.authorLabel || (message.role === 'user' ? '你' : 'Asuna')}  ${time(message.createdAt)}`, 'meta'), codeText('div', message.text, 'bubble'));
+    if (message.turnStatus) {
+      const status = el('p', null, 'turn-status');
+      status.append(el('strong', message.turnStatus.label),
+        document.createTextNode(` · ${message.turnStatus.detail} · ${time(message.turnStatus.createdAt)}`));
+      row.append(status);
+    }
+    row.append(...renderTrace(message));
     box.append(row);
   }
   if (!state.messages.length) box.append(el('p', '当前上下文暂无消息。可以从下方开始聊天。', 'empty'));

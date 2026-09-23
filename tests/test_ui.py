@@ -18,7 +18,7 @@ from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
 from asuna.router import Router
 from asuna.state import Store
-from asuna.ui import UiBridge, Workbench, inspector_record, raw_provider_response, trace_step
+from asuna.ui import UiBridge, Workbench, inspector_record, raw_provider_response, trace_step, turn_status
 
 
 def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, tmp_path):
@@ -83,6 +83,24 @@ def controller(store, tmp_path, outputs):
 def reply(value):
     return [LaneResult('角色独白'), LaneResult(json.dumps({'next': 'speak', 'goal': '回应',
             'constraints': [], 'recall_query': '', 'speak_before_action': False})), LaneResult(value)]
+
+
+def test_silent_turn_stays_with_input_instead_of_creating_system_message(ui_store, tmp_path):
+    outputs = [LaneResult('角色独白'), LaneResult(json.dumps({'next': 'silent', 'goal': '此时不需要回复',
+                'constraints': [], 'recall_query': '', 'speak_before_action': False}))]
+    chat, view = controller(ui_store, tmp_path, outputs)
+    chat.worker.start()
+    try:
+        chat.submit('暂时不用回复')
+        chat.pending.join()
+        messages = view.snapshot()['messages']
+        assert len(messages) == 1 and messages[0]['role'] == 'user'
+        assert messages[0]['turnStatus']['label'] == '角色选择不发言'
+        assert messages[0]['turnStatus']['detail'] == '此时不需要回复'
+        assert any(step['type'] == 'phase.output' for step in messages[0]['internalSteps'])
+        assert turn_status({'no_wake': True, 'state': 'COMPLETE'}, '') is None
+    finally:
+        chat.stop()
 
 
 def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path):

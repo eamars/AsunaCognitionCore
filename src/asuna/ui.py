@@ -50,6 +50,24 @@ def trace_step(event, action=False):
             'summary': display(summary), 'createdAt': event.get('occurred_at'), 'status': status, 'payload': payload}
 
 
+def turn_status(ep, created_at):
+    state = ep.get('state', '')
+    if ep.get('no_wake'):
+        return None  # Routine group chatter has no agent turn to explain.
+    elif ep.get('silent_reason'):
+        label = '行动结果未追加公开回复' if ep.get('episode_kind') == 'task_feedback' else '角色选择不发言'
+        detail = ep['silent_reason']
+    elif ep.get('failure') or state.startswith('FAILED') or state == 'INTERRUPTED':
+        label, detail = '本轮未完成', '展开执行过程查看错误'
+    elif state == 'WAITING_TASK':
+        label, detail = '行动处理中', '可展开执行过程查看进度'
+    elif ep.get('episode_kind') == 'task_feedback':
+        label, detail = '行动反馈已处理', '未追加公开回复'
+    else:
+        label, detail = '本轮已结束', '没有公开回复'
+    return {'label': label, 'detail': detail, 'createdAt': created_at, 'state': state}
+
+
 def raw_provider_response(request_refs, root=None):
     """Read the exact saved response stream paired with the final request ref."""
     if not isinstance(request_refs, list) or not request_refs:
@@ -200,6 +218,11 @@ class Workbench:
 
     def emit(self, text):
         if text.startswith('[系统]'):
+            # These turn outcomes are shown beside their recorded input/trace.
+            # A global transient notice loses scene and episode identity.
+            if text.startswith(('[系统] 本轮没有公开发言', '[系统] 角色明确选择本轮不发言',
+                                '[系统] 本轮未完成', '[系统] 行动已排队')):
+                return
             with self.lock:
                 self.notices.append({'id': str(uuid.uuid4()), 'role': 'system', 'authorLabel': '系统',
                                      'text': text, 'createdAt': datetime.now(timezone.utc).isoformat()})
@@ -243,6 +266,7 @@ class Workbench:
             if row['episode_id'] not in known:
                 episodes.append({'_id': row['episode_id'], 'state': row['ingress_state'],
                                  'character_context': row.get('character_context', 'initial'),
+                                 'no_wake': row.get('processing_outcome') == 'RECORDED_NO_WAKE',
                                  **({'failure': row['failure']} if row.get('failure') else {})})
         # Contexts are native Chat /new generations, not fabricated channels.
         current = scene.get('character_context', 'initial')
@@ -309,13 +333,20 @@ class Workbench:
             rendered.append(message)
         for ep_id in dict.fromkeys(episode_id(row) for row in rows if episode_id(row) not in attached):
             ep = by_id[ep_id]
+            if ep.get('no_wake'):
+                continue
             input_row = next(row for row in rows if episode_id(row) == ep_id)
-            # Never manufacture an assistant reply for a pending, silent or failed turn.
-            rendered.append({'id': ep_id + ':status', 'role': 'system', 'authorLabel': '执行状态',
-                             'episodeId': ep_id, 'taskId': ep.get('task_id') or ep.get('control_result', {}).get('task_id'),
-                             'taskOwnerEpisodeId': task_owners.get(ep.get('task_id') or ep.get('control_result', {}).get('task_id')),
-                             'text': ep.get('silent_reason') or ep['state'], 'internalSteps': traces[ep_id],
-                             '_order': input_row['scene_seq'] + 0.5})
+            task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
+            target = next((m for m in reversed(rendered) if m['role'] == 'user' and m['episodeId'] == ep_id), None)
+            if target is None and task_id:
+                target = next((m for m in reversed(rendered) if m.get('taskId') == task_id), None)
+            if target is None:
+                continue  # Its input is outside the visible 80-message window.
+            occurred = next((step.get('createdAt') for step in reversed(traces[ep_id]) if step.get('createdAt')),
+                            input_row.get('occurred_at', input_row.get('received_at')))
+            target['turnStatus'] = turn_status(ep, occurred)
+            prior = target.get('internalSteps', [])
+            target['internalSteps'] = list({step['id']: step for step in [*prior, *traces[ep_id]]}.values())
         rendered.sort(key=lambda row: row['_order'])
         for row in rendered:
             row.pop('_order')
@@ -449,7 +480,7 @@ class UiBridge:
                             self.wfile.write(b': keepalive\n\n')
                         self.wfile.flush()
                         workbench.stream_hub.wait(version)
-                except (BrokenPipeError, ConnectionResetError, PermissionError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, PermissionError):
                     return
 
             def handle_request(self):

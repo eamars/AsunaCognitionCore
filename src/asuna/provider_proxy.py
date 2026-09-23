@@ -118,7 +118,17 @@ class ProviderProxy:
                                 evidence.record('provider.large_response',owner.blobs.put(raw,owner.scope_key,'provider.response'))
                             ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'first_model_content_seconds':first_content,'public_text_ttft_seconds':None,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
                             owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
-                            response.raise_for_status()
+                            if response.is_error:
+                                # Local admission already sent SSE headers. Keep the
+                                # provider's error intact in an SSE error frame so the
+                                # native adapter can classify overflow/retry normally.
+                                try:
+                                    payload=json.loads(raw)
+                                except (ValueError,UnicodeError):
+                                    payload={}
+                                if not isinstance(payload,dict) or not isinstance(payload.get('error'),dict):
+                                    payload={'error':{'message':raw.decode('utf-8',errors='replace'),'type':'upstream_error','code':str(response.status_code)}}
+                                raw=b'data: '+canonical(payload)+b'\n\n'
                             if not headers_sent:
                                 self.send_response(response.status_code)
                                 self.send_header('Content-Type', response.headers.get('content-type','text/event-stream'))
@@ -132,11 +142,14 @@ class ProviderProxy:
                 except Exception as exc:
                     heartbeat_stop.set()
                     try:
-                        evidence.record('provider.error', {'call_id':call_id,'request_ref':request_ref,'type':type(exc).__name__,'reason':str(exc) if isinstance(exc,(ValueError,PermissionError)) else None,'upstream_submitted':upstream_submitted,'partial_response_utf8':b''.join(chunks).decode('utf-8',errors='replace'),'duration_seconds':time.perf_counter()-started})
+                        evidence.record('provider.error', {'call_id':call_id,'request_ref':request_ref,'type':type(exc).__name__,'reason':str(exc),'upstream_submitted':upstream_submitted,'partial_response_utf8':b''.join(chunks).decode('utf-8',errors='replace'),'duration_seconds':time.perf_counter()-started})
+                        failure=canonical({'error':{'message':f'{type(exc).__name__}: {exc}','type':'boundary_error','code':'ASUNA_PROVIDER_BOUNDARY_FAILED'}})
                         if headers_sent:
                             with wire_lock:
-                                self.wfile.write(b'data: {"error":{"message":"ASUNA_PROVIDER_BOUNDARY_FAILED","type":"boundary_error","code":"ASUNA_PROVIDER_BOUNDARY_FAILED"}}\n\n');self.wfile.flush()
-                        else:self.send_error(502, 'ASUNA_PROVIDER_BOUNDARY_FAILED')
+                                self.wfile.write(b'data: '+failure+b'\n\n');self.wfile.flush()
+                        else:
+                            self.send_response(502);self.send_header('Content-Type','application/json');self.end_headers()
+                            self.wfile.write(failure)
                     except Exception:
                         self.close_connection = True
                 finally:

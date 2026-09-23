@@ -38,11 +38,15 @@ class TokenMeter:
         finally:http.client.close()
 
     def check(self,body,capacity_override=False):
-        measured=self.measure(body)
+        # Observation only: DSH owns pressure compaction and provider-confirmed
+        # overflow recovery. A separate preflight gate prevents both paths.
+        try:
+            measured=self.measure(body)
+        except Exception as exc:
+            measured={'input_tokens':None,'method':'unavailable','measurement_error':str(exc),'measurement_error_type':type(exc).__name__}
         effective=self.cfg.get('context_window',262144)
-        output=body.get('max_completion_tokens',body.get('max_tokens',self.cfg['max_tokens']))
-        limit=effective-output-4096
-        result={**measured,'effective_capacity':effective,'output_budget':output,'safety_margin':4096,'input_limit':limit,'capacity_probe_override':capacity_override}
+        output=body.get('max_completion_tokens',body.get('max_tokens',self.cfg.get('max_tokens',0)))
+        limit=effective-output
+        result={**measured,'effective_capacity':effective,'output_budget':output,'safety_margin':0,'input_limit':limit,'capacity_probe_override':capacity_override,'enforced':False}
         self.evidence.record('budget.checked',result)
-        if result['input_tokens']>limit:raise ValueError('INPUT_BUDGET_EXCEEDED')
         return result

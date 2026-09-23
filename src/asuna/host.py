@@ -94,15 +94,19 @@ class RuntimeHost:
             self._recover_tasks()
             indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)]).start()
             self.stack.callback(indexer.close)
-            self.controller.worker.start()
-            self.controller.task_worker.start()
-            self.stack.callback(self.controller.stop)
             if self.config.get('channels'):
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
                 self.stack.callback(self.channel_server.close)
                 self.evidence.record('host.channels_started', {'port': self.channel_server.server.server_port})
             if self.integration:
                 self.integration.restore()
+            from .schedule import ScheduleService
+            self.schedule = ScheduleService(self.app, self.controller)
+            self.app.coordinator.scheduler = self.schedule
+            self.controller.worker.start()
+            self.controller.task_worker.start()
+            self.stack.callback(self.controller.stop)
+            self.stack.callback(self.schedule.close)
             return self
         except BaseException:
             self.stack.close()

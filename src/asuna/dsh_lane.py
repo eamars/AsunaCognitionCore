@@ -62,7 +62,7 @@ def compaction_audit_records(body,calls,evidence):
 
 class DshLane:
     """Replaceable lane: pinned SDK boot + narrowly scoped native DSH operations."""
-    def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None, broker_token=None):
+    def __init__(self, config: dict, store: Store, evidence: Evidence, lane='character', plugin_rows=None, broker_token=None, schedule_callback=None):
         self.config,self.store,self.evidence,self.lane=config,store,evidence,lane
         declared=json.loads((ROOT/'package.json').read_text())['dependencies']['@deepseek-ai/dsh']
         installed=json.loads((ROOT/'node_modules/@deepseek-ai/dsh/package.json').read_text())['version']
@@ -70,8 +70,9 @@ class DshLane:
         if not declared==installed==locked=='0.1.5-rc.2':
             raise RuntimeError('DSH_RUNTIME_PIN_MISMATCH')
         bridge=ROOT/'dsh-plugin/runtime-v2.ts'
-        evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_path':str(bridge),'bridge_sha256':sha(bridge.read_bytes()),'sampling':config[lane]['sampling'],'provider_timeout_ms':config.get('provider_idle_timeout_seconds',1800)*1000})
-        self.model=validate(config[lane])
+        model_lane='character' if lane=='scheduler' else lane
+        evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_path':str(bridge),'bridge_sha256':sha(bridge.read_bytes()),'sampling':config[model_lane]['sampling'],'provider_timeout_ms':config.get('provider_idle_timeout_seconds',1800)*1000})
+        self.model=validate(config['character' if lane=='scheduler' else lane])
         self.home=Path(config['dsh_home'])/store.name/lane
         self.work=Path(config['workdir'])/store.name/lane
         self.home.mkdir(parents=True,exist_ok=True);self.work.mkdir(parents=True,exist_ok=True)
@@ -82,6 +83,7 @@ class DshLane:
         self.proxy=ProviderProxy(self.model,evidence,lane,store)
         self._resources.callback(self.proxy.close)
         self.token=secrets.token_hex(32)
+        self.scheduler_session='s-'+sha(('asuna-scheduler:'+store.name).encode())[:40] if lane=='scheduler' else None
         self.endpoint_file=self.home/'bridge-endpoint.json'
         if self.endpoint_file.exists():self.endpoint_file.unlink()
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
@@ -97,7 +99,9 @@ class DshLane:
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'maxTokens':self.model['max_tokens']}},
             *skill_rows,
-            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix()}},
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix(),
+                **({'schedulerSession':self.scheduler_session,'schedulerCallbackUrl':schedule_callback['url'],
+                    'schedulerCallbackToken':schedule_callback['token']} if schedule_callback else {})}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
             *(plugin_rows or [])]}]
         patch=self.home/'lane.patch.yml';patch.write_text(yaml.safe_dump(rows,allow_unicode=True,sort_keys=False),encoding='utf-8')
@@ -120,9 +124,21 @@ class DshLane:
             time.sleep(.05)
         self.url=f"http://127.0.0.1:{json.loads(self.endpoint_file.read_text())['port']}"
         # One bridge operation can contain many bounded model/tool steps.
-        # The former 300s whole-operation timeout interrupted valid workflows.
-        self.http=httpx.Client(timeout=config.get('workflow_timeout_seconds',1800),trust_env=False)
+        # /run returns when the native agent becomes idle, possibly after many
+        # valid tool/model steps. A host-wide read deadline would terminate an
+        # otherwise live agentic loop. Native provider timeouts and cancellation
+        # still apply; local connection establishment remains bounded.
+        self.http=httpx.Client(timeout=httpx.Timeout(None,connect=10),trust_env=False)
         self._resources.callback(self.http.close)
+
+    def schedule(self, path, payload=None):
+        if self.lane!='scheduler':raise ValueError('SCHEDULER_LANE_REQUIRED')
+        headers={'Authorization':'Bearer '+self.token}
+        response=(self.http.get(self.url+path,headers=headers) if payload is None else
+                  self.http.post(self.url+path,headers=headers,json=payload))
+        body=response.json()
+        if response.is_error:raise RuntimeError('NATIVE_SCHEDULE: '+redact_text(json.dumps(body,ensure_ascii=False),self.config))
+        return body
 
     def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None):
         with self.lock:

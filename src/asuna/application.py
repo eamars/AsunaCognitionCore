@@ -31,6 +31,7 @@ class Application:
             self.character=self.lanes.enter_context(DshLane(config,self.store,self.evidence))
             self.executor_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'executor',self.broker.rows,self.broker.token))
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval,self.executor_lane.skill_catalog))
+            self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)
             self.models_ready=True

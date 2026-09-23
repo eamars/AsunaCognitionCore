@@ -40,14 +40,16 @@ def test_E16_old_worker_exception_does_not_poison_replacement(store):
     finally:broker.close()
 
 
-def test_E24_budget_guard_before_generation_and_clock_fairness():
-    # Capacity arithmetic is deterministic; real server token counting is
-    # separately exercised by F01, including 196k and 234k requests.
+def test_E24_budget_observation_does_not_preempt_native_recovery_and_clock_fairness():
     class Sink:
         def record(self,*args):pass
     meter=TokenMeter({},Sink(),'executor')
     with patch.object(meter,'measure',return_value={'input_tokens':262144}):
-        with pytest.raises(ValueError,match='INPUT_BUDGET_EXCEEDED'):meter.check({'max_tokens':8192},capacity_override=True)
+        observation=meter.check({'max_tokens':8192})
+        assert observation['input_tokens']>observation['input_limit'] and observation['enforced'] is False
+    with patch.object(meter,'measure',side_effect=RuntimeError('tokenizer unavailable')):
+        observation=meter.check({'max_tokens':8192})
+        assert observation['input_tokens'] is None and observation['measurement_error']=='tokenizer unavailable'
     queue=FairQueue();clock=0;result=[]
     schedule=[(i,'g1',f'a{i}') for i in range(5)]+[(i,'g2',f'b{i}') for i in range(5)]
     while clock<5:

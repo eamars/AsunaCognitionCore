@@ -30,6 +30,19 @@ def controller(store, tmp_path, coordinator):
     return Chat(app, {'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'display_name': 'test'}, lambda _: None)
 
 
+def test_nine_prose_constraints_do_not_discard_a_valid_speech_decision(store):
+    decision={'next':'speak','goal':'send the authorized invitation',
+              'constraints':[f'invitation detail {i}' for i in range(9)],
+              'recall_query':'','speak_before_action':False}
+    lane=FakeLane(store,[LaneResult('invite once'),LaneResult(json.dumps(decision)),LaneResult('invitation')])
+    coordinator=Coordinator(store,lane)
+    result=coordinator.ingest(event())
+    assert result['state']=='COMMITTED'
+    assert result['decision']['constraints']==decision['constraints']
+    assert store.db.messages.count_documents({'episode_id':result['_id'],'direction':'outbound'})==1
+    assert store.db.tasks.count_documents({})==0
+
+
 def test_receive_persists_without_context_or_worker_and_dedupes(store, tmp_path):
     class UnavailableContext:
         def prepare(self, *args):
@@ -58,6 +71,28 @@ def test_persisted_current_and_future_inputs_do_not_leak_into_history(store):
     coordinator.ingest(event('first', 'first-input'))
     _, context, _ = ContextBuilder(store).prepare(event('second', 'second-input'))
     assert [m['text'] for m in context['delivered_history']] == ['first-input', 'public']
+
+
+def test_reply_history_identifies_recipient_without_cross_scene_lookup(store):
+    incoming = event('reply', 'Have you replied to @B?')
+    incoming['group_context'] = {'reply_to':'answer-id', 'reply_message_id':'answer',
+                                 'mentioned_account_ids':['bot','B']}
+    # Same platform ID in another scene must not supply the reply's author/body.
+    store.put('messages', {'_id':'foreign','scene_id':'dm-b','scope_key':'scene:dm-b',
+        'policy_epoch':1,'direction':'inbound','author':'B','text':'private canary',
+        'event':{'channel':{'platform_event_id':'question-id'}}})
+    store.put('messages', {'_id':'question','scene_id':'dm-a','scope_key':'scene:dm-a',
+        'policy_epoch':1,'scene_seq':1,'direction':'inbound','author':'A','text':'my question',
+        'event':{'channel':{'platform_event_id':'question-id'}}})
+    store.put('messages', {'_id':'answer','scene_id':'dm-a','scope_key':'scene:dm-a',
+        'policy_epoch':1,'scene_seq':2,'direction':'outbound','author':'xiaoman','text':'my answer',
+        'delivery_state':'DELIVERED','platform_message_id':'answer-id','platform_reply_to':'question-id'})
+    _, context, _ = ContextBuilder(store).prepare(incoming)
+    answer = next(row for row in context['delivered_history'] if row['_id']=='answer')
+    assert answer['reply_to_message']['author']=='A'
+    assert answer['reply_to_message']['text']=='my question'
+    assert context['group_continuity_from_program']['related_messages'][0]['reply_to_message']==answer['reply_to_message']
+    assert 'private canary' not in json.dumps(context)
 
 
 def test_restart_recovers_native_operation_receipt_without_new_generation(store, tmp_path):
@@ -201,3 +236,54 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     assert item['reply_to'] == 'original-platform-id' and item['target'] == target
     assert item['text'] == 'public'
     assert not store.db.sink_receipts.count_documents({})
+
+
+def test_returned_task_feedback_queue_continues_failed_role_stage_without_new_episode(store,tmp_path):
+    import time
+    from asuna.tasks import TaskService
+    decision={'next':'delegate','goal':'inspect evidence','constraints':[],
+              'recall_query':'','speak_before_action':False}
+    lane=FakeLane(store,[LaneResult('original thought'),LaneResult(json.dumps(decision)),
+        LaneResult('incomplete',finish_reason='max-tokens'),
+        LaneResult('我先核对已返回的结果。'),
+        LaneResult(json.dumps({'next':'speak','goal':'report result','constraints':[],
+            'recall_query':'','speak_before_action':False})),LaneResult('结果已核对。')])
+    coordinator=Coordinator(store,lane)
+    episode=coordinator.ingest(event('feedback-source'))
+    service=TaskService(store)
+    task=service.claim(episode['task_id'])
+    store.put('artifacts',{'_id':'feedback-observation','task_id':task['_id'],
+        'intent_revision':1,'scope_key':task['scope_key'],'state':'DONE'})
+    task=service.finish(task,{'task_id':task['_id'],'intent_revision':1,'status':'done',
+        'facts':[{'text':'verified','evidence_refs':['feedback-observation']}],
+        'artifact_refs':['feedback-observation'],'effect_receipts':[],
+        'uncertainties':[],'unmet_items':[],'needs_decision':None})
+    chat=controller(store,tmp_path,coordinator)
+    chat.app.service=service
+    chat.app.coordinator=coordinator
+    chat.worker.start()
+    chat.pending.put(({'_feedback_task':task['_id'],'event_id':task['_id']+':feedback',
+        'scene_id':task['scene_id'],'person_id':task['requester_id']},episode['_id']))
+    deadline=time.monotonic()+5
+    try:
+        while time.monotonic()<deadline:
+            current=store.db.tasks.find_one({'_id':task['_id']})
+            if current.get('feedback_state')=='DELIVERED':break
+            time.sleep(.05)
+        else: pytest.fail('original feedback did not continue through the queue')
+    finally:
+        chat.stopping.set()
+        chat.worker.join(timeout=5)
+    resumed=store.db.episodes.find_one({'_id':current['feedback_episode']})
+    assert resumed['state']=='COMMITTED'
+    assert store.db.audit_events.count_documents({'stream_id':resumed['_id'],'type':'phase.failed'})==1
+    assert store.db.audit_events.count_documents({'stream_id':resumed['_id'],'type':'feedback.continued'})==1
+    assert resumed['resume_generation']==1
+    assert store.db.tasks.count_documents({})==1
+    assert store.db.messages.count_documents({'episode_id':resumed['_id'],'direction':'inbound'})==1
+    assert store.db.messages.count_documents({'episode_id':resumed['_id'],'direction':'outbound'})==1
+    assert store.db.episodes.find_one({'_id':episode['_id']})['state']=='COMMITTED'
+    assert len(lane.calls)==6
+    assert lane.calls[3]['messages'][0]==lane.calls[2]['messages'][0]
+    assert '上次真实错误' in lane.calls[3]['messages'][-1]['content']
+    assert 'task_result' not in lane.calls[3]['messages'][-1]['content']

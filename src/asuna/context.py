@@ -10,6 +10,27 @@ class ContextBuilder:
     def __init__(self, store: Store, retrieval=None, skill_catalog=None):
         self.store,self.retrieval,self.skill_catalog=store,retrieval,skill_catalog
 
+    def _reply_context(self, rows, scene):
+        """Keep transport reply attribution when projecting scoped history."""
+        for row in rows:
+            event = row.pop('event', {})
+            group = event.get('group_context', {})
+            if group:
+                row['mentioned_account_ids'] = group.get('mentioned_account_ids', [])
+            reply = row.pop('platform_reply_to', None) or group.get('reply_to')
+            if not reply:
+                continue
+            row['reply_to'] = reply
+            parent = self.store.db.messages.find_one({
+                'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+                '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
+                        {'direction': 'outbound', 'platform_message_id': reply,
+                         'delivery_state': 'DELIVERED'}]},
+                {'text': 1, 'author': 1, 'direction': 1})
+            if parent:
+                row['reply_to_message'] = parent
+        return rows
+
     def prepare(self, event: dict, persona='P1'):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
@@ -29,7 +50,9 @@ class ContextBuilder:
         if source:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
-        history=list(self.store.db.messages.find(history_query,{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1}).sort('scene_seq',-1).limit(12))
+        history=list(self.store.db.messages.find(history_query,{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
+            'platform_reply_to':1,'event.group_context':1}).sort('scene_seq',-1).limit(12))
+        self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         if source:
@@ -55,12 +78,24 @@ class ContextBuilder:
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
         task_states=list(self.store.db.tasks.find({'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch']},
             {'_id':1,'intent_revision':1,'state':1,'goal':1,'feedback_state':1,'finished_at':1,'cancel_reason':1,'revision_requested_at':1}).sort('revision',-1).limit(8))
+        plans=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
+            'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
+            'status':{'$in':['CREATING','ACTIVE']}},
+            {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1}).sort('created_at',-1).limit(8))
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。',
                  'task_state_from_program':task_states,
+                 'plans_from_program':plans,
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if event.get('episode_kind')=='scheduled':
+            plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
+                'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
+                'policy_epoch':scene['policy_epoch']},
+                {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1})
+            if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
+            context['scheduled_plan_from_program']=plan
         if retrieval_manifest.get('error'):
             context['retrieval_diagnostic_from_host']=retrieval_manifest
         if source and source.get('failure'):
@@ -74,10 +109,13 @@ class ContextBuilder:
                 if anchor: refs.append(anchor['_id'])
             related = list(self.store.db.messages.find({'_id': {'$in': [r for r in refs if r]},
                 'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
-                {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1}))
+                {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
+                 'platform_reply_to':1, 'event.group_context':1}))
+            self._reply_context(related, scene)
             speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
-                {'text':1,'author':1,'scene_seq':1}).sort('scene_seq',-1).limit(3)) if source else []
+                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) if source else []
+            self._reply_context(speaker_tail, scene)
             context['group_continuity_from_program'] = {**group, 'related_messages': related,
                                                        'current_speaker_tail': list(reversed(speaker_tail))}
         manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}

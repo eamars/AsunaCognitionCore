@@ -27,7 +27,7 @@ class Router:
         # Identity and integration grants come from the host envelope, never
         # from quoted JSON in event text. Channel adapters cannot submit grants.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
-        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','task_id','intent_revision','delegation_depth','supersedes_task_id')
+        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','supersedes_task_id')
         trusted={k:event[k] for k in allowed if k in event}
         if event.get('channel') and 'group_context' in event:
             trusted['group_context'] = event['group_context']

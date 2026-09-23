@@ -14,6 +14,9 @@ export default class AsunaCompaction extends BasicCompactionEngine {
       maxTokens: cap, sessionId: agent.session.id, purpose: 'compaction', signal };
     const assembler = new BlockAssembler();
     for await (const chunk of this.ctx.llm.stream(options)) assembler.push(chunk);
+    if (assembler.finish.kind === 'error' || assembler.finish.kind === 'aborted') {
+      throw Object.assign(new Error(assembler.finish.failure.message), { code: assembler.finish.failure.code });
+    }
     if (assembler.finish.kind !== 'stop') throw new Error('ASUNA_SUMMARY_INCOMPLETE:' + assembler.finish.kind);
     const rawOutput = assembler.blocks();
     if (rawOutput.some(b => !['text', 'reasoning'].includes(b.type))) throw new Error('ASUNA_SUMMARY_NON_TEXT');

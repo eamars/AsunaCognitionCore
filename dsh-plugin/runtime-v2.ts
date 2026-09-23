@@ -1,9 +1,10 @@
 import { createServer } from 'node:http';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import * as skillTool from '@deepseek-ai/dsh-tool-skill';
+import * as scheduleTool from '@deepseek-ai/dsh-schedule';
 
 // v1 remains frozen for already-running experiments. v2 adds only a validated
 // completed-silent-episode boundary; Python still owns business state.
@@ -18,6 +19,7 @@ export function apply(ctx, config) {
   const prompts = new Map();
   const skillAccess = new Map();
   const active = new Map();
+  let schedulerAgent;
   let queue = Promise.resolve();
   const hash = value => createHash('sha256').update(value).digest('hex');
   function save(path, data) {
@@ -27,6 +29,26 @@ export function apply(ctx, config) {
     renameSync(tmp, path);
   }
   ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+    if (config.schedulerSession && agent.session.id === config.schedulerSession) {
+      const decision = await next();
+      if (decision.kind === 'enter' && decision.messages.some(message =>
+        message.source?.kind === 'plugin' && message.source.plugin === 'schedule')) {
+        // The installed schedule plugin has already appended its dispatch to
+        // this native session. Make that record durable before notifying the
+        // host, then consume the followup without a model request.
+        if (!await ctx.sessions.flush(agent.session)) throw new Error('SCHEDULE_DISPATCH_NOT_DURABLE');
+        for (const event of agent.session.snapshotEvents().filter(e => e.type === 'schedule/change' && e.data.operation === 'dispatch')) {
+          const response = await fetch(config.schedulerCallbackUrl, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + config.schedulerCallbackToken,
+              'Content-Type': 'application/json' },
+            body: JSON.stringify({ session: agent.session.id, seq: event.seq, id: event.data.id }) });
+          if (!response.ok) throw new Error('SCHEDULE_HOST_DELIVERY: ' + response.status + ' ' + await response.text());
+        }
+      }
+      // This root owns the native clock and log; role cognition enters through
+      // the host queue after a verified dispatch, never through this agent.
+      return { kind: 'reject' };
+    }
     const operation = active.get(agent.session.id);
     // Native continuations keep their authorized session; an operation is
     // receipt bookkeeping, not permission for each native generation step.
@@ -59,6 +81,7 @@ export function apply(ctx, config) {
     const setup = async (agentCtx) => {
       // Native loader/catalog are scoped to this authorized action agent.
       if (skillsEnabled) await agentCtx.plugin(skillTool, {});
+      if (config.schedulerSession && id === config.schedulerSession) await agentCtx.plugin(scheduleTool, {});
       agentCtx.systemPrompt.section({ name: 'asuna-complete', order: 0, complete: true,
         interpolate: false, text: () => prompts.get(id) });
       agentCtx.systemPrompt.suppressRuntimeContext();
@@ -71,6 +94,29 @@ export function apply(ctx, config) {
       : await ctx.agents.create({ sessionId: id, meta: { cwd: config.workdir }, agentOptions: options, setup });
     handles.set(id, handle);
     return handle.agent;
+  }
+  const schedulerReady = config.schedulerSession
+    ? handleSession(config.schedulerSession,
+      'Asuna native schedule owner. This root only persists native reminders and dispatches them to the host. It never calls a language model or publishes a message.', false)
+        .then(agent => { schedulerAgent = agent; return agent; })
+    : null;
+  async function scheduleOperation(path, input) {
+    const agent = await schedulerReady;
+    if (!agent) throw new Error('SCHEDULER_NOT_CONFIGURED');
+    if (path === '/schedule/events') return agent.session.snapshotEvents()
+      .filter(e => e.type === 'schedule/change').map(e => ({ seq: e.seq, data: e.data }));
+    const name = path === '/schedule/create' ? 'schedule_create'
+      : path === '/schedule/delete' ? 'schedule_delete' : null;
+    if (!name) throw new Error('UNKNOWN_SCHEDULE_OPERATION');
+    const args = path === '/schedule/create'
+      ? { prompt: 'ASUNA_PLAN:' + input.plan_id,
+          ...(input.after_seconds !== undefined ? { after_seconds: input.after_seconds } : {}),
+          ...(input.every_seconds !== undefined ? { every_seconds: input.every_seconds } : {}) }
+      : { id: input.id };
+    const result = await ctx.tools.execute({ callId: 'asuna-' + name + '-' + randomUUID(),
+      name, arguments: args, agent, signal: new AbortController().signal });
+    if (result.isError) throw new Error('NATIVE_SCHEDULE_TOOL: ' + JSON.stringify(result.error));
+    return result.value;
   }
   function resultFrom(events, messageId) {
     const start = events.findIndex(e => e.type === 'user/message' && e.data.id === messageId);
@@ -163,6 +209,20 @@ export function apply(ctx, config) {
         const skills = snapshot.skills.filter(s => s.invocation.modelInvocable).map(s => ({ name: s.name, description: s.description.slice(0, 500) }));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ skills, complete: snapshot.complete })); return;
+      }
+      if (config.schedulerSession && req.method === 'GET' && req.url === '/schedule/events') {
+        const result = await scheduleOperation(req.url, {});
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result)); return;
+      }
+      if (config.schedulerSession && req.method === 'POST' && ['/schedule/create','/schedule/delete'].includes(req.url)) {
+        let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 4096) throw new Error('INPUT_TOO_LARGE'); }
+        const input = JSON.parse(body);
+        if (req.url === '/schedule/create' && (!/^plan-[a-z0-9-]{1,100}$/.test(input.plan_id)
+            || Number(input.after_seconds !== undefined) + Number(input.every_seconds !== undefined) !== 1)) throw new Error('INVALID_SCHEDULE_PLAN');
+        if (req.url === '/schedule/delete' && typeof input.id !== 'string') throw new Error('INVALID_SCHEDULE_ID');
+        const work = queue.then(() => scheduleOperation(req.url, input)); queue = work.catch(() => {});
+        const result = await work;
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result)); return;
       }
       if (req.method !== 'POST' || req.url !== '/run') throw new Error('UNKNOWN_OPERATION');
       let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 2 * 1024 * 1024) throw new Error('INPUT_TOO_LARGE'); }

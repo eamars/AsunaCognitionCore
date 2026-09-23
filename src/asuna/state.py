@@ -9,7 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from .config import BUNDLE, validate_database
 from .evidence import canonical, sha
 
-COLLECTIONS = ('identities','scenes','messages','episodes','tasks','memory_units','state_heads',
+COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
                'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts')
 
 
@@ -47,6 +47,7 @@ class Store:
                          ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{})],
             'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True})],
             'tasks': [([('request_key',1)], {'unique':True})],
+            'plans': [([('scene_id',1),('person_id',1),('status',1)],{})],
             'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{})],
             'state_revisions': [([('mutation_id',1)], {'unique':True})],
             'sessions': [([('binding_key',1)], {'unique':True})],
@@ -121,7 +122,7 @@ class Store:
         doc = self.db[collection].find_one({'_id':key})
         if doc is None:
             return None
-        if not operator and (collection in ('audit_events','artifacts','episodes','sessions','state_revisions','lane_receipts','tasks') or doc.get('scope_key') not in ('global-safe',scope) or doc.get('status')=='tombstone'):
+        if not operator and (collection in ('audit_events','artifacts','episodes','sessions','state_revisions','lane_receipts','tasks','plans') or doc.get('scope_key') not in ('global-safe',scope) or doc.get('status')=='tombstone'):
             raise Denied('OBJECT_SCOPE_DENIED')
         if not operator and collection == 'memory_units' and doc.get('kind')=='monologue':
             raise Denied('OPERATOR_ONLY_MONOLOGUE')

@@ -218,6 +218,11 @@ class Chat:
                         continue
                     episode = result['_id']
                     self.latest = episode
+                    if result['state']=='FAILED_PROTOCOL' and not self.stopping.is_set():
+                        # The same durable feedback episode remains eligible.
+                        # Give its role session the original error on the next
+                        # normal queue turn; do not ingest or rerun the action.
+                        self.pending.put((event, task['episode_id']))
                 else:
                     scene = self.app.store.authorize(event['scene_id'], event['person_id'])
                     source = self.app.store.db.messages.find_one({'_id': 'in-' + episode})

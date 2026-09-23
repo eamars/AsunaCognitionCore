@@ -17,6 +17,7 @@ import httpx
 from .config import ROOT, redact_text
 from .state import Store, Denied
 from .model_settings import public_models, edited_models, revision, persist, LANES
+from .ui_stream import UiStreamHub
 
 
 def display(value):
@@ -107,6 +108,40 @@ class Workbench:
         self.models_applying = False
         self.models_error = ''
         self.model_thread = None
+        self.stream_hub = UiStreamHub()
+
+    def attach_streams(self):
+        if self.controller:
+            app = self.controller.app
+            app.character.proxy.ui_observer = self.stream_hub
+            app.executor_lane.proxy.ui_observer = self.stream_hub
+
+    def stream_scene(self, selected=''):
+        # Reuse the ordinary view's scene/context authorization before opening
+        # a read-only observation connection.
+        self.snapshot(selected)
+        if selected.startswith('channel:'):
+            scene = self.store.db.scenes.find_one({'_id': selected.removeprefix('channel:')})
+        else:
+            scene = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+        return {'_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
+
+    def live_streams(self, scene, calls):
+        current = self.store.db.scenes.find_one({'_id': scene['_id'], 'scope_key': scene['scope_key'],
+                                                 'policy_epoch': scene['policy_epoch']})
+        if not current:
+            raise PermissionError('场景授权已变化，请刷新')
+        visible = []
+        for call in calls:
+            operation = call.get('operation')
+            if call.get('scope_key') != scene['scope_key'] or not isinstance(operation, str):
+                continue
+            owner_id = operation.split(':', 1)[0]
+            query = {'_id': owner_id, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+                     'policy_epoch': scene['policy_epoch']}
+            if self.store.db.episodes.find_one(query, {'_id': 1}) or self.store.db.tasks.find_one(query, {'_id': 1}):
+                visible.append(call)
+        return visible
 
     def models_snapshot(self):
         return {'models': public_models(self.store.config), 'revision': revision(self.store.config),
@@ -127,10 +162,12 @@ class Workbench:
         def apply():
             try:
                 controller.app.replace_models(candidate)
+                self.attach_streams()
                 try:
                     persist(candidate, candidate['_model_settings_path'])
                 except Exception:
                     controller.app.replace_models(previous)
+                    self.attach_streams()
                     raise
                 self.emit('[系统] 两条模型配置已保存并应用；后续消息使用新配置。')
             except Exception as exc:
@@ -236,10 +273,13 @@ class Workbench:
         rows = [m for m in messages if episode_id(m) in groups[chosen]][-80:]
         visible_ids = {episode_id(m) for m in rows}
         traces = {}
+        task_owners = {}
         for ep_id in visible_ids:
             ep = by_id[ep_id]
             task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
             task = store.db.tasks.find_one({'_id': task_id, **scope}) if task_id else None
+            if task:
+                task_owners[task_id] = task.get('episode_id')
             streams = [ep_id] + ([task_id] if task else [])
             events = list(store.db.audit_events.find({'stream_id': {'$in': streams}, 'scope_key': scene['scope_key']}).sort([('occurred_at', 1), ('seq', 1)]))
             steps = [step for event in events if (step := trace_step(event, event['stream_id'] == task_id))]
@@ -257,6 +297,7 @@ class Workbench:
             if not public and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
                 continue  # Task feedback is an internal event, not a user utterance.
             message = {'id': row['_id'], 'role': 'assistant' if public else 'user',
+                       'episodeId': ep_id, 'taskId': by_id[ep_id].get('task_id') or by_id[ep_id].get('control_result', {}).get('task_id'),
                        'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
                        'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')), '_order': row['scene_seq']}
             if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
@@ -264,12 +305,15 @@ class Workbench:
             if public:
                 message['internalSteps'] = traces[ep_id]
                 attached.add(ep_id)
+            message['taskOwnerEpisodeId'] = task_owners.get(message['taskId'])
             rendered.append(message)
         for ep_id in dict.fromkeys(episode_id(row) for row in rows if episode_id(row) not in attached):
             ep = by_id[ep_id]
             input_row = next(row for row in rows if episode_id(row) == ep_id)
             # Never manufacture an assistant reply for a pending, silent or failed turn.
             rendered.append({'id': ep_id + ':status', 'role': 'system', 'authorLabel': '执行状态',
+                             'episodeId': ep_id, 'taskId': ep.get('task_id') or ep.get('control_result', {}).get('task_id'),
+                             'taskOwnerEpisodeId': task_owners.get(ep.get('task_id') or ep.get('control_result', {}).get('task_id')),
                              'text': ep.get('silent_reason') or ep['state'], 'internalSteps': traces[ep_id],
                              '_order': input_row['scene_seq'] + 0.5})
         rendered.sort(key=lambda row: row['_order'])
@@ -307,12 +351,16 @@ class Workbench:
         # Same credential redaction as the terminal trace, including nested payloads.
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
 
-    def provider_response(self, event_id):
-        scene = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+    def provider_response(self, event_id, selected=''):
+        scene = self.stream_scene(selected)
         if not isinstance(event_id, str) or not event_id:
             raise ValueError('缺少 provider output event id')
         event = self.store.db.audit_events.find_one({'_id': event_id, 'scope_key': scene['scope_key']})
         if not event or event.get('type') not in ('phase.output', 'execution.output'):
+            raise PermissionError('当前场景没有该 provider output')
+        owner = {'_id': event['stream_id'], 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+                 'policy_epoch': scene['policy_epoch']}
+        if not (self.store.db.episodes.find_one(owner, {'_id': 1}) or self.store.db.tasks.find_one(owner, {'_id': 1})):
             raise PermissionError('当前场景没有该 provider output')
         return {'body_utf8': raw_provider_response(event.get('payload', {}).get('request_refs', []), root=ROOT)}
 
@@ -381,6 +429,29 @@ class UiBridge:
             def log_message(self, *args):
                 pass
 
+            def stream(self, selected):
+                scene = workbench.stream_scene(selected)
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Connection', 'close')
+                self.end_headers()
+                version = -1
+                try:
+                    while True:
+                        current, calls = workbench.stream_hub.snapshot()
+                        if current != version:
+                            visible = workbench.live_streams(scene, calls)
+                            payload = json.dumps({'version': current, 'calls': visible}, ensure_ascii=False).encode('utf-8')
+                            self.wfile.write(b'event: snapshot\ndata: ' + payload + b'\n\n')
+                            version = current
+                        else:
+                            self.wfile.write(b': keepalive\n\n')
+                        self.wfile.flush()
+                        workbench.stream_hub.wait(version)
+                except (BrokenPipeError, ConnectionResetError, PermissionError):
+                    return
+
             def handle_request(self):
                 status = 200
                 try:
@@ -389,8 +460,11 @@ class UiBridge:
                     url = urlsplit(self.path)
                     if self.command == 'GET' and url.path == '/state':
                         value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
+                    elif self.command == 'GET' and url.path == '/stream':
+                        return self.stream(parse_qs(url.query).get('conversation', [''])[0])
                     elif self.command == 'GET' and url.path == '/provider-response':
-                        value = workbench.provider_response(parse_qs(url.query).get('event', [''])[0])
+                        value = workbench.provider_response(parse_qs(url.query).get('event', [''])[0],
+                                                            parse_qs(url.query).get('conversation', [''])[0])
                     elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
@@ -411,8 +485,11 @@ class UiBridge:
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.send_header('Content-Length', str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                try:
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
 
             do_GET = do_POST = handle_request
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -469,6 +546,7 @@ def ui(config, database=None, out=None, *, port=8765, read_only=False):
     evidence = Evidence(Path(out) if out else ROOT / 'reports' / ('ui-' + uuid.uuid4().hex[:12]))
     with RuntimeHost(config, evidence, database) as host:
         workbench = Workbench(host.app.store, settings, host.controller)
+        workbench.attach_streams()
         workbench.host = host
         host.controller.emit = workbench.emit
         try:

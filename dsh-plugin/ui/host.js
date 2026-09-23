@@ -21,10 +21,24 @@ export function apply(ctx) {
       res.end(await readFile(new URL(`./static/${asset[0]}`, import.meta.url)));
       return;
     }
-    if (!['/asuna/api/state', '/asuna/api/provider-response', '/asuna/api/send', '/asuna/api/new', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop'].includes(path)) return reply(404, {error: '未知接口'});
-    const readOnly = path.endsWith('/state') || path.endsWith('/provider-response');
+    if (!['/asuna/api/state', '/asuna/api/stream', '/asuna/api/provider-response', '/asuna/api/send', '/asuna/api/new', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop'].includes(path)) return reply(404, {error: '未知接口'});
+    const readOnly = path.endsWith('/state') || path.endsWith('/stream') || path.endsWith('/provider-response');
     if ((readOnly ? req.method !== 'GET' : req.method !== 'POST') || (req.method === 'POST' && req.headers['x-asuna-ui'] !== '1')) return reply(405, {error: '不支持的请求'});
     if (!process.env.ASUNA_UI_BRIDGE || !process.env.ASUNA_UI_TOKEN) return reply(503, {error: 'Asuna 交互进程未连接，请通过 asuna ui 启动。'});
+    if (path.endsWith('/stream')) {
+      const abort = new AbortController();
+      res.on('close', () => abort.abort());
+      try {
+        const upstream = await fetch(process.env.ASUNA_UI_BRIDGE + '/stream' + new URL(req.url, origin).search,
+          {headers: {'Authorization': `Bearer ${process.env.ASUNA_UI_TOKEN}`}, signal: abort.signal});
+        if (!upstream.ok) return reply(upstream.status, await upstream.json());
+        res.writeHead(200, {'Content-Type': 'text/event-stream; charset=utf-8', 'Connection': 'keep-alive'});
+        for await (const chunk of upstream.body) res.write(chunk);
+      } catch {
+        if (!res.headersSent) reply(503, {error: 'Asuna 实时观察连接中断。'});
+      } finally { if (!res.writableEnded) res.end(); }
+      return;
+    }
     try {
       let body = '';
       for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 65536) return reply(413, {error: '消息过长'}); }

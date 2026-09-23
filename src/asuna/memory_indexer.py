@@ -10,15 +10,21 @@ from .retrieval import Retrieval
 
 
 class MemoryIndexer:
-    def __init__(self, store, evidence, scene_id):
+    def __init__(self, store, evidence, scene_id, *, summary_lane=None, summary_scene=None, summary_can_run=lambda: True):
         self.store, self.evidence, self.scene_id = store, evidence, scene_id
         self.scene_ids = [scene_id] if isinstance(scene_id, str) else list(scene_id)
         self.stopping = threading.Event()
         self.retrieval = Retrieval(store, evidence)
         self.retrieval.http.client.timeout = httpx.Timeout(10, connect=5)
         self.worker = threading.Thread(target=self._run, name='asuna-memory', daemon=True)
+        self.summarizer = None
+        if summary_lane and summary_scene:
+            from .dialogue_summary import DialogueSummarizer
+            self.summarizer = DialogueSummarizer(store, evidence, summary_lane, summary_scene, summary_can_run)
 
     def start(self):
+        if self.summarizer:
+            self.summarizer.initialize()
         self.worker.start()
         return self
 
@@ -41,6 +47,12 @@ class MemoryIndexer:
                 except Exception:
                     self.evidence.record('memory.index_error', {'scene_id': self.scene_id,
                         'traceback': redact_text(traceback.format_exc(), self.store.config)})
+                if self.summarizer and scene_id == self.summarizer.scene_id:
+                    try:
+                        self.summarizer.tick()
+                    except Exception:
+                        self.evidence.record('summary.error', {'scene_id': scene_id,
+                            'traceback': redact_text(traceback.format_exc(), self.store.config)})
                 self.stopping.wait(2)
         finally:
             self.retrieval.close()

@@ -70,9 +70,9 @@ class DshLane:
         if not declared==installed==locked=='0.1.5-rc.2':
             raise RuntimeError('DSH_RUNTIME_PIN_MISMATCH')
         bridge=ROOT/'dsh-plugin/runtime-v2.ts'
-        model_lane='character' if lane=='scheduler' else lane
+        model_lane='character' if lane=='scheduler' else 'executor' if lane=='summary' else lane
         evidence.record('runtime.fingerprint',{'version':installed,'executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes()),'bridge_path':str(bridge),'bridge_sha256':sha(bridge.read_bytes()),'sampling':config[model_lane]['sampling'],'provider_timeout_ms':config.get('provider_idle_timeout_seconds',1800)*1000})
-        self.model=validate(config['character' if lane=='scheduler' else lane])
+        self.model=validate(config[model_lane])
         self.home=Path(config['dsh_home'])/store.name/lane
         self.work=Path(config['workdir'])/store.name/lane
         self.home.mkdir(parents=True,exist_ok=True);self.work.mkdir(parents=True,exist_ok=True)
@@ -95,11 +95,14 @@ class DshLane:
         skill_rows=[{'id':'asuna-skills','name':'@deepseek-ai/dsh-skill'}]
         if skills:skill_rows += [
             {'id':'asuna-skill-filesystem','name':'@deepseek-ai/dsh-skill-filesystem','config':{'includeDefaultRoots':False,'agentsHome':self.home.as_posix(),'dshHome':self.home.as_posix(),'customSkillDirs':[skills.as_posix()],'watchFollowSymlinks':False}}]
+        # Native pre-step pressure does not yet include a newly claimed inbox
+        # message. Share its threshold with the bridge's pending-input check.
+        pressure_ratio=.8
         rows += [{'id':'system-prompt','config':{'includeHarnessIdentity':False,'includeRuntimeContext':False,'personaPrefix':''}}, {'insert':[
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
-            {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'maxTokens':self.model['max_tokens']}},
+            {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'maxTokens':self.model['max_tokens'],'thresholdRatio':pressure_ratio}},
             *skill_rows,
-            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix(),
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'contextWindow':self.model['context_window'],'pressureThresholdRatio':pressure_ratio,'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix(),
                 **({'schedulerSession':self.scheduler_session,'schedulerCallbackUrl':schedule_callback['url'],
                     'schedulerCallbackToken':schedule_callback['token']} if schedule_callback else {})}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
@@ -155,6 +158,7 @@ class DshLane:
                 if existing.get('semantic_hash')!=semantic_hash:raise PermissionError('OPERATION_INPUT_CHANGED_OR_LEGACY_UNVERIFIED')
                 return LaneResult(**existing['result'])
             self.proxy.purpose=phase
+            self.proxy.ui_operation=operation
             initial_system=(bound or {}).get('initial_system',system)
             delivered_text=text if initial_system==system else ('ASUNA_STATE_REVISION\n本阶段采用程序已提交并冻结的当前人格快照；以下不是外部引用。历史阶段仍使用其原版本。\n'+system+'\n\n'+text)
             request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':delivered_text,'system':initial_system}

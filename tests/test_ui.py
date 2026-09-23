@@ -21,6 +21,44 @@ from asuna.state import Store
 from asuna.ui import UiBridge, Workbench, inspector_record, raw_provider_response, trace_step
 
 
+def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, tmp_path):
+    chat, view = controller(ui_store, tmp_path, reply('完成'))
+    chat.worker.start()
+    bridge = UiBridge(view)
+    client = httpx.Client(base_url=f'http://127.0.0.1:{bridge.server.server_port}', trust_env=False,
+                         headers={'Authorization': 'Bearer ' + bridge.token}, timeout=5)
+    try:
+        chat.submit('观察流')
+        chat.pending.join()
+        episode = chat.latest
+        view.stream_hub('start', 'call-a', lane='character', phase='SPEAK',
+                        operation=episode + ':SPEAK:0', scope_key='scene:dm-a', request_ref='request-a.json')
+        view.stream_hub('start', 'call-b', lane='executor', phase='execution',
+                        operation=episode + ':execute:0', scope_key='scene:dm-b', request_ref='request-b.json')
+        assert client.get('/stream', headers={'Authorization': 'bad'}).status_code == 403
+        with client.stream('GET', '/stream') as response:
+            assert response.status_code == 200
+            lines = iter(response.iter_lines())
+            assert next(lines) == 'event: snapshot'
+            initial = json.loads(next(lines).removeprefix('data: '))
+            assert [call['id'] for call in initial['calls']] == ['call-a']
+            view.stream_hub('chunk', 'call-a', chunk=b'data: {"choices":[{"delta":{"reasoning_content":"')
+            view.stream_hub('chunk', 'call-a', chunk='想法'.encode('utf-8')[:2])
+            view.stream_hub('chunk', 'call-a', chunk='想法'.encode('utf-8')[2:] + b'"}}]}\n\n')
+            # SSE may have emitted an intermediate snapshot while chunks arrived.
+            for line in lines:
+                if line.startswith('data: ') and 'reasoning_content' in line and '想法' in line:
+                    value = json.loads(line.removeprefix('data: '))
+                    assert value['calls'][0]['body_utf8'] == 'data: {"choices":[{"delta":{"reasoning_content":"想法"}}]}\n\n'
+                    break
+            else:
+                pytest.fail('live raw provider bytes did not arrive')
+    finally:
+        client.close()
+        bridge.close()
+        chat.stop()
+
+
 @pytest.fixture
 def ui_store():
     config = load('config/local.example.json')
@@ -182,7 +220,10 @@ def test_provider_response_bridge_returns_exact_scoped_body(tmp_path, monkeypatc
     (evidence / '00111-provider.response.json').write_text(json.dumps({'type': 'provider.response', 'payload': {
         'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
     ref = {'artifact_path': (Path('reports') / 'ui-test' / request_name).as_posix(),
-           'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+               'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+    ui_store.db.episodes.insert_one({'_id': 'episode-provider-response', 'schema_version': 1, 'scene_id': scene['_id'],
+                                     'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
+                                     'state': 'COMMITTED', 'character_context': 'initial'})
     event = ui_store.audit('episode-provider-response', 'phase.output', {'request_refs': [ref]}, scene['scope_key'])
     view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
     bridge = UiBridge(view)
@@ -211,7 +252,10 @@ def test_ui_provider_response_returns_raw_body_for_scoped_output(tmp_path, monke
     (evidence / '00111-provider.response.json').write_text(json.dumps({'type': 'provider.response', 'payload': {
         'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
     ref = {'artifact_path': (Path('reports') / 'ui-test' / request_name).as_posix(),
-           'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+               'sha256': hashlib.sha256(request.read_bytes()).hexdigest()}
+    ui_store.db.episodes.insert_one({'_id': 'episode-provider-response', 'schema_version': 1, 'scene_id': scene['_id'],
+                                     'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
+                                     'state': 'COMMITTED', 'character_context': 'initial'})
     event = ui_store.audit('episode-provider-response', 'phase.output', {'request_refs': [ref]}, scene['scope_key'])
     view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
 

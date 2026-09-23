@@ -30,6 +30,9 @@ class Application:
         try:
             self.character=self.lanes.enter_context(DshLane(config,self.store,self.evidence))
             self.executor_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'executor',self.broker.rows,self.broker.token))
+            # Same configured action model, separate tool-free native session
+            # for low-priority dialogue summaries; no third model deployment.
+            self.summary_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'summary'))
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval,self.executor_lane.skill_catalog))
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
@@ -44,11 +47,23 @@ class Application:
         """Only the idle Web controller may call this; preserve both lane identities."""
         previous=self.config
         self.models_ready=False
-        self.lanes.close()
+        summarizer=getattr(getattr(self,'memory_indexer',None),'summarizer',None)
+        old_summary_lane=summarizer.lane if summarizer else None
+        if summarizer:
+            summarizer.paused.set()
+            old_summary_lane.lock.acquire()  # Let any already-running summary finish.
         try:
-            self._start_lanes(config)
-        except Exception:
-            self._start_lanes(previous)
-            raise
-        self.config=config
-        self.store.config=config
+            self.lanes.close()
+            try:
+                self._start_lanes(config)
+            except Exception:
+                self._start_lanes(previous)
+                raise
+            self.config=config
+            self.store.config=config
+        finally:
+            if summarizer:
+                if self.models_ready:
+                    summarizer.lane=self.summary_lane
+                    summarizer.paused.clear()
+                old_summary_lane.lock.release()

@@ -21,6 +21,7 @@ function codeText(tag, value, cls) {
   return node;
 }
 let state, conversation = '', tab = 'memory', selected, busy = false, revision = '', stopped = false, requestNumber = 0, actionError = '';
+let liveCalls = [], stream, streamConnected = false;
 const time = value => { const date = new Date(value); return value && !Number.isNaN(date.valueOf()) ? date.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}) : (value || ''); };
 const expanded = new Set();
 const names = {memory: '记忆', preference: '偏好', group_preference: '群偏好', relationship: '关系'};
@@ -37,19 +38,39 @@ function errorSummary(step) {
   return `${step.label || step.type}：${brief.slice(0, 240)}${brief.length > 240 ? '…' : ''}（展开执行步骤查看完整错误）`;
 }
 function renderTrace(message) {
-  const steps = message.internalSteps || [];
+  const settled = message.internalSteps || [];
+  const finalRefs = new Set(settled.flatMap(step => ['phase.output', 'execution.output'].includes(step.type)
+    ? (step.payload?.request_refs || []).map(ref => ref.artifact_path?.split('/').at(-1)) : []));
+  const taskRows = state.messages.filter(row => row.role !== 'user' && row.taskId === message.taskId);
+  const taskHost = taskRows.find(row => row.episodeId === row.taskOwnerEpisodeId) || taskRows.at(-1);
+  const live = (message.role === 'user' ? [] : liveCalls).filter(call =>
+    call.operation?.startsWith(`${message.episodeId}:`) ||
+    (message.taskId && taskHost?.id === message.id && call.operation?.startsWith(`${message.taskId}:`)))
+    .filter(call => !finalRefs.has(call.request_ref))
+    .map(call => ({id: `live:${call.id}`, type: 'provider.live', actorRole: call.lane === 'character' ? 'role' : 'action',
+      label: `${call.lane === 'character' ? '角色脑' : '行动脑'} · ${call.phase}`, status: call.status,
+      createdAt: call.createdAt, summary: call.status === 'running' ? '原始回包传输中' : '等待记录结算',
+      requestRef: call.request_ref, body_utf8: call.body_utf8}));
+  const steps = [...settled, ...live].sort((left, right) =>
+    new Date(left.createdAt || 0) - new Date(right.createdAt || 0));
   if (!steps.length) return [];
   const failed = steps.filter(step => step.status === 'error');
-  const panel = disclosure(`trace:${message.id}`, `内部执行过程 · ${steps.length} 个步骤${failed.length ? ` · ${failed.length} 项错误` : ''}`); panel.className = 'trace';
+  const panelKey = `trace:${message.id}`;
+  if (live.length) expanded.add(panelKey);
+  const panel = disclosure(panelKey, `内部执行过程 · ${steps.length} 个步骤${failed.length ? ` · ${failed.length} 项错误` : ''}`); panel.className = 'trace';
   const rows = el('ol', null, 'steps');
   steps.forEach((step, index) => {
     const row = el('li', null, `step ${step.status === 'error' ? 'error' : ''}`);
-    const detail = disclosure(`step:${message.id}:${step.id}`); const summary = detail.firstChild;
+    const providerOutput = ['phase.output', 'execution.output'].includes(step.type);
+    const ref = step.requestRef || (providerOutput ? step.payload?.request_refs?.at(-1)?.artifact_path?.split('/').at(-1) : null);
+    const detailKey = `step:${message.id}:${ref || step.id}`;
+    if (step.type === 'provider.live') expanded.add(detailKey);
+    const detail = disclosure(detailKey); const summary = detail.firstChild;
     const actor = step.actor || step.type;
     const color = ['role','action','tool'].includes(step.actorRole) ? step.actorRole : '';
-    summary.append(el('span', index + 1, 'number'), el('span', step.label || actor, `actor ${color}`), el('small', `${step.type} · ${step.status || ''} · ${time(step.createdAt)}`), codeText('span', step.summary || step.type, 'summary'));
-    const providerOutput = ['phase.output', 'execution.output'].includes(step.type);
-    const payload = el('pre', providerOutput ? '正在读取原始 provider response…' : (step.payload ?? step));
+    summary.append(el('span', index + 1, 'number'), el('span', step.label || actor, `actor ${color}`), el('small', `${step.type} · ${step.status || ''} · ${time(step.createdAt)}`), codeText('span', providerOutput ? '原始 provider response' : (step.summary || step.type), 'summary'));
+    const payload = el('pre', step.type === 'provider.live' ? step.body_utf8 : providerOutput ? '正在读取原始 provider response…' : (step.payload ?? step));
+    if (step.type === 'provider.live') detail.dataset.liveCall = step.id.slice(5);
     detail.append(payload);
     if (providerOutput) {
       let requested = false;
@@ -57,7 +78,7 @@ function renderTrace(message) {
         if (!detail.open || requested) return;
         requested = true;
         try {
-          const response = await api(`provider-response?event=${encodeURIComponent(step.id)}`);
+          const response = await api(`provider-response?event=${encodeURIComponent(step.id)}&conversation=${encodeURIComponent(conversation)}`);
           payload.textContent = response.body_utf8;
         } catch (cause) {
           payload.textContent = `原始 provider response 读取失败：${cause.message}`;
@@ -83,6 +104,30 @@ function renderMessages() {
   }
   if (!state.messages.length) box.append(el('p', '当前上下文暂无消息。可以从下方开始聊天。', 'empty'));
   box.scrollTop = nearBottom ? box.scrollHeight : oldScroll;
+}
+function connectStream() {
+  stream?.close();
+  liveCalls = []; streamConnected = false;
+  if (stopped) return;
+  stream = new EventSource(`/asuna/api/stream?conversation=${encodeURIComponent(conversation)}`);
+  const openedStream = stream;
+  stream.addEventListener('snapshot', event => {
+    if (stream !== openedStream) return;
+    try {
+      const next = JSON.parse(event.data).calls || [];
+      const structureChanged = next.length !== liveCalls.length || next.some((call, index) =>
+        call.id !== liveCalls[index]?.id || call.status !== liveCalls[index]?.status);
+      liveCalls = next;
+      streamConnected = true;
+      if (state && structureChanged) renderMessages();
+      else for (const detail of document.querySelectorAll('[data-live-call]')) {
+        const call = liveCalls.find(item => item.id === detail.dataset.liveCall);
+        if (call) detail.querySelector('pre').textContent = call.body_utf8;
+      }
+      $('connection').textContent = state?.readOnly ? '● 已连接 · 只读检查 · 实时流' : '● 已连接 · 本机交互 · 实时流';
+    } catch { /* A display frame cannot stop the agent. */ }
+  });
+  stream.onerror = () => { if (stream !== openedStream) return; streamConnected = false; $('connection').textContent = '观察连接中断 · 正在重连'; };
 }
 function renderInspector() {
   const kinds = [...new Set([...Object.keys(names), ...state.records.map(record => record.kind)])];
@@ -122,7 +167,7 @@ function render() {
   if (state.channelPrompt) integrationChoice.checked = false;
   integrationStop.disabled = state.readOnly;
   $('title').textContent = state.title; $('subtitle').textContent = state.subtitle;
-  $('connection').textContent = state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互';
+  $('connection').textContent = `${state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互'}${streamConnected ? ' · 实时流' : ''}`;
   $('send').disabled = busy || state.readOnly || !state.canSend;
   $('input').disabled = state.readOnly || !state.canSend;
   $('new-session').disabled = busy || state.readOnly || state.channelPrompt;
@@ -132,7 +177,7 @@ function render() {
   for (const item of state.conversations) {
     const button = el('button', null, `session ${state.conversationId === item.id ? 'selected' : ''}`);
     button.append(el('span', item.title), el('small', `${item.channelType} · ${time(item.updatedAt)}`));
-    button.onclick = async () => { conversation = item.id; selected = undefined; revision = ''; await refresh(); }; $('conversations').append(button);
+    button.onclick = async () => { conversation = item.id; selected = undefined; revision = ''; connectStream(); await refresh(); }; $('conversations').append(button);
   }
   renderMessages(); renderInspector();
   const config = state.modelSettings;
@@ -154,7 +199,7 @@ async function refresh() {
     const signature = JSON.stringify(next);
     state = next;
     if (signature !== revision) { revision = signature; render(); }
-    $('connection').textContent = state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互';
+    $('connection').textContent = `${state.readOnly ? '● 已连接 · 只读检查' : '● 已连接 · 本机交互'}${streamConnected ? ' · 实时流' : ''}`;
     error(actionError || state.modelSettings?.error || '');
   } catch (err) {
     if (request !== requestNumber) return;
@@ -170,7 +215,7 @@ $('composer').onsubmit = async (event) => {
   finally { busy = false; $('send').disabled = state?.readOnly || !state?.canSend; }
 };
 $('input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('composer').requestSubmit(); } };
-$('new-session').onclick = async () => { busy = true; $('new-session').disabled = true; try { await api('new', {}); actionError = ''; conversation = ''; $('send-status').textContent = '已请求新上下文；有未结束的行动时不会切换，请查看系统消息。'; await refresh(); } catch (err) { actionError = err.message; error(actionError); } finally { busy = false; if (state) render(); } };
+$('new-session').onclick = async () => { busy = true; $('new-session').disabled = true; try { await api('new', {}); actionError = ''; conversation = ''; connectStream(); $('send-status').textContent = '已请求新上下文；有未结束的行动时不会切换，请查看系统消息。'; await refresh(); } catch (err) { actionError = err.message; error(actionError); } finally { busy = false; if (state) render(); } };
 $('refresh').onclick = refresh;
 const integrationLabel = el('label'); integrationLabel.hidden = true;
 const integrationChoice = el('input'); integrationChoice.type = 'checkbox'; integrationChoice.id = 'integration-choice';
@@ -187,14 +232,16 @@ stopHost.onclick = async () => {
   try {
     await api('stop', {});
     stopped = true; busy = true; requestNumber++;
+    stream?.close();
     $('send').disabled = true; $('input').disabled = true; $('new-session').disabled = true;
     $('connection').textContent = '服务正在停止';
     $('send-status').textContent = '已请求停止整个宿主；再次运行 start-asuna.cmd 可恢复未开始的输入。';
   } catch (err) { error(err.message); stopHost.disabled = false; }
 };
 $('search').oninput = () => { if (state) renderInspector(); };
-addEventListener('pagehide', () => { stopped = true; });
+addEventListener('pagehide', () => { stopped = true; stream?.close(); });
 async function poll() { await refresh(); if (!stopped) setTimeout(poll, 2000); }
+connectStream();
 poll();
 
 const modelButton = el('button', '模型设置'); modelButton.id = 'model-settings';

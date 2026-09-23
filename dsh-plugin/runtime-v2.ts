@@ -28,7 +28,7 @@ export function apply(ctx, config) {
     const fd = openSync(tmp, 'r+'); fsyncSync(fd); closeSync(fd);
     renameSync(tmp, path);
   }
-  ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+  ctx.on('agent/pre-step', async ({ agent, messages, signal }, next) => {
     if (config.schedulerSession && agent.session.id === config.schedulerSession) {
       const decision = await next();
       if (decision.kind === 'enter' && decision.messages.some(message =>
@@ -68,6 +68,30 @@ export function apply(ctx, config) {
       if (!await ctx.sessions.flush(agent.session)) throw new Error('COMPACTION_NOT_DURABLE');
       operation.compactionResult = result;
       operation.compactions.push(result);
+    }
+    if (messages.length) {
+      // DSH's native pressure hook prices the durable surface before these
+      // claimed inbox messages are appended. Include them when deciding whether
+      // to ask the same native engine for a useful pre-request compaction.
+      // This is advisory: no extra budget rejection or fixed retry loop.
+      const pending = messages.reduce((sum, message) => sum + ctx.tokenMeter.estimateMessage(message), 0);
+      const before = ctx.tokenMeter.measure(agent.session).totalTokens;
+      const threshold = Math.min(Math.floor(config.contextWindow * config.pressureThresholdRatio),
+        config.contextWindow - config.maxTokens);
+      operation.pressure = { before, pending, projected: before + pending, threshold,
+        outputBudget: config.maxTokens };
+      if (before + pending >= threshold) {
+        try {
+          const result = await ctx.compaction.compactIfNeeded(agent, 'context-overflow', signal);
+          if (result) {
+            operation.compactions.push(result);
+            operation.pressure.compacted = true;
+          }
+        } catch (error) {
+          operation.pressure.error = error instanceof Error ? error.message : String(error);
+          ctx.logger.warn('pending-input compaction failed: ' + operation.pressure.error + '; continuing the turn');
+        }
+      }
     }
     return next();
   });
@@ -195,6 +219,7 @@ export function apply(ctx, config) {
     if (!result) throw new Error('NO_CAUSAL_TURN_RESULT');
     result.compaction = active.get(input.session)?.compactionResult;
     result.compactions = active.get(input.session)?.compactions ?? [];
+    result.pressure = active.get(input.session)?.pressure;
     result.surface = [...agent.session.surface.nodes];
     result.compaction_events = agent.session.snapshotEvents().filter(e => e.type.startsWith('compaction/'));
     save(path, { ...record, state: 'DONE', result });

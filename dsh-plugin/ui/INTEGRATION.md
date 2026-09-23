@@ -22,6 +22,12 @@ Asuna 的现有请求审计/预算边界目前只实现 OpenAI Chat Completions 
 
 DSH `/asuna/api/state` 转发至 `UiBridge /state`；`/send` 和 `/new` 接收 POST。桥接使用标准库临时 loopback HTTP 端口，只向启动的 DSH 子进程传递随机 bearer token；不向浏览器暴露数据库或模型凭据。DSH 路由限制 loopback、Host/Origin 和写请求自定义头，不开放跨域。该界面是本机操作者检查器，包含私有独白与调试 payload，不是供聊天参与者访问的公共接口。
 
+## 实时原始流的局部适配
+
+固定版本 DSH 的原生会话流和 Chat 组件连接的是 UI shell 会话，而角色脑和行动脑分别在独立 DSH home 运行。通用 `StreamChunk` 提供规范化的 reasoning/text 增量，不保留 provider 的 `reasoning_content`/`content` 字段与完整原始 JSON。现有 Asuna provider 边界还会先把上游流收齐、保存审计，再交给 DSH。因此直接复用原生 Chat 增量显示既不能接到这两条会话，也不能满足原字段显示。
+
+仅在当前代理收到原始字节时增加可失败的只读 UI 观察回调，由现有 `/asuna` 路由转发 SSE。页面沿用当前执行步骤的 `<details>`/`<pre>`，按原始到达顺序显示字节解码后的文本，不提取或改名字段；脑别、阶段、状态放在外层。浏览器连接先取得当前临时快照，再接收更新；断线重连只恢复观察，不提交用户消息、模型请求或工具任务。已结算的 `phase.output`/`execution.output` 以审计请求引用替换对应临时行，仍从原有 `provider-response` 端点读取完整回包。临时流只保留短时间用于衔接，不是新的持久记录或恢复平台；观察失败不改变代理执行。
+
 ## 已有数据与事件
 
 | 来源 | UI 映射 |

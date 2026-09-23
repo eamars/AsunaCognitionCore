@@ -92,7 +92,12 @@ class RuntimeHost:
             channels.recover_sending()
             self.controller.recover_inputs()
             self._recover_tasks()
-            indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)]).start()
+            indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)],
+                                    summary_lane=self.app.summary_lane,
+                                    summary_scene=self.settings['scene_id'],
+                                    summary_can_run=lambda: self.controller.active_task is None
+                                        and self.controller.task_queue.empty()).start()
+            self.app.memory_indexer = indexer
             self.stack.callback(indexer.close)
             if self.config.get('channels'):
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))

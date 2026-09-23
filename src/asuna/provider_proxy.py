@@ -27,6 +27,8 @@ class ProviderProxy:
         self.lock = threading.Lock()
         self.capacity_probe_override=False
         self.scope_key='operator'
+        self.ui_operation=None
+        self.ui_observer=None
         self.blobs=None
         if store is not None:
             from .blobs import BlobStore
@@ -64,6 +66,13 @@ class ProviderProxy:
                     last=body.get('messages',[{}])[-1].get('content','')
                     purpose='compaction' if isinstance(last,str) and last.startswith('ASUNA_COMPACTION_V1\n') else owner.purpose
                     request_ref = evidence.record('provider.request', {'call_id': call_id, 'lane': lane, 'purpose': purpose, 'url':cfg['base_url']+'/chat/completions','body_utf8': outgoing.decode(), 'body_sha256': sha(outgoing), 'token_render_visibility':budget['method'],'large_body_artifact':blob})
+                    def observe(kind, **value):
+                        observer = owner.ui_observer
+                        if observer:
+                            try:observer(kind,call_id,**value)
+                            except Exception:pass  # Display cannot change provider execution.
+                    observe('start',lane=lane,phase=purpose,operation=owner.ui_operation,
+                            scope_key=owner.scope_key,request_ref=request_ref)
                     # A local queue can exceed Node fetch's independent header
                     # deadline even when the SDK request timeout is longer.
                     # Acknowledge only durable local admission here. HTTP 200
@@ -103,6 +112,7 @@ class ProviderProxy:
                                 if first is None:
                                     first = time.perf_counter() - started
                                 chunks.append(chunk)
+                                observe('chunk',chunk=chunk)
                                 pending+=decoder.decode(chunk)
                                 while '\n' in pending:
                                     line,pending=pending.split('\n',1)
@@ -117,6 +127,7 @@ class ProviderProxy:
                             if owner.blobs and len(raw)>1024*1024:
                                 evidence.record('provider.large_response',owner.blobs.put(raw,owner.scope_key,'provider.response'))
                             ref = evidence.record('provider.response', {'call_id':call_id,'request_ref':request_ref,'status_code':response.status_code,'body_utf8':raw.decode('utf-8'),'transport_first_byte_seconds':first,'first_model_content_seconds':first_content,'public_text_ttft_seconds':None,'queue_seconds':queued.wait_seconds,'total_seconds':time.perf_counter()-started})
+                            observe('end',status='settling' if not response.is_error else 'error')
                             owner.calls.append({'call_id':call_id,'request_ref':request_ref,'response_ref':ref,'body':body,'raw':raw.decode('utf-8'),'status':response.status_code,'budget':budget})
                             if response.is_error:
                                 # Local admission already sent SSE headers. Keep the
@@ -141,6 +152,8 @@ class ProviderProxy:
                                 self.wfile.flush()
                 except Exception as exc:
                     heartbeat_stop.set()
+                    try:observe('end',status='error')
+                    except UnboundLocalError:pass
                     try:
                         evidence.record('provider.error', {'call_id':call_id,'request_ref':request_ref,'type':type(exc).__name__,'reason':str(exc),'upstream_submitted':upstream_submitted,'partial_response_utf8':b''.join(chunks).decode('utf-8',errors='replace'),'duration_seconds':time.perf_counter()-started})
                         failure=canonical({'error':{'message':f'{type(exc).__name__}: {exc}','type':'boundary_error','code':'ASUNA_PROVIDER_BOUNDARY_FAILED'}})

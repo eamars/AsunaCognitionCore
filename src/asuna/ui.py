@@ -44,16 +44,21 @@ def trace_step(event, action=False):
     actor_role = 'tool' if tool else 'role' if role else 'action' if action else 'system'
     actor = '工具调用' if kind == 'tool_call' else '工具结果' if tool else '角色脑' if role else '行动脑' if action else '系统 / 协调器'
     status = 'error' if any(word in kind for word in ('failed', 'error')) or is_error(payload) else 'running' if kind.endswith('started') else 'ok'
+    if kind in ('phase.output', 'execution.output') and payload.get('finish_reason') not in (None, 'stop'):
+        status = 'error'
     summary = next((payload[key] for key in ('content', 'traceback', 'error', 'goal', 'tool', 'state', 'phase') if payload.get(key)), kind)
     return {'id': event['_id'], 'type': kind, 'actor': actor, 'actorRole': actor_role,
             'label': actor + (' · ' + payload['phase'] if payload.get('phase') else ''),
-            'summary': display(summary), 'createdAt': event.get('occurred_at'), 'status': status, 'payload': payload}
+            'summary': display(summary), 'createdAt': event.get('occurred_at'), 'status': status,
+            'sourceStreamId': event.get('stream_id'), 'payload': payload}
 
 
 def turn_status(ep, created_at):
     state = ep.get('state', '')
     if ep.get('no_wake'):
         return None  # Routine group chatter has no agent turn to explain.
+    if state in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED'):
+        return None  # A running phase is not a completed, silent turn.
     elif ep.get('silent_reason'):
         label = '行动结果未追加公开回复' if ep.get('episode_kind') == 'task_feedback' else '角色选择不发言'
         detail = ep['silent_reason']
@@ -107,6 +112,55 @@ def raw_provider_response(request_refs, root=None):
     raise ValueError('原始 provider response 不可用')
 
 
+def provider_metadata(raw):
+    """Only non-content wire facts for the Web diagnostic; the audit keeps raw."""
+    frames, sse, done = [], False, False
+    for line in raw.splitlines():
+        if not line.startswith('data:'):
+            continue
+        sse = True
+        value = line[5:].strip()
+        if value == '[DONE]':
+            done = True
+            continue
+        try:
+            packet = json.loads(value)
+        except ValueError:
+            continue
+        if isinstance(packet, dict):
+            frames.append(packet)
+    if not sse:
+        try:
+            packet = json.loads(raw)
+        except ValueError:
+            packet = None
+        if isinstance(packet, dict):
+            frames.append(packet)
+    result = {'wire_format': 'sse' if sse else 'json' if frames else 'text',
+              'response_bytes': len(raw.encode('utf-8')), 'frame_count': len(frames)}
+    if sse:
+        result['stream_done'] = done
+    finishes = []
+    for packet in frames:
+        for source, target in (('id', 'response_id'), ('model', 'model'), ('created', 'created')):
+            if isinstance(packet.get(source), (str, int)):
+                result[target] = packet[source]
+        for choice in packet.get('choices', []) if isinstance(packet.get('choices'), list) else []:
+            if isinstance(choice, dict) and isinstance(choice.get('finish_reason'), str):
+                if choice['finish_reason'] not in finishes:
+                    finishes.append(choice['finish_reason'])
+        usage = packet.get('usage')
+        if isinstance(usage, dict):
+            counts = {key: usage[key] for key in ('prompt_tokens', 'completion_tokens', 'total_tokens',
+                                                  'input_tokens', 'output_tokens')
+                      if isinstance(usage.get(key), (int, float)) and not isinstance(usage[key], bool)}
+            if counts:
+                result['usage'] = counts
+    if finishes:
+        result['finish_reasons'] = finishes
+    return result
+
+
 def inspector_record(row, kind='memory'):
     content = row.get('body_markdown') or row.get('content') or row.get('title') or row['_id']
     body = content.get('body', display(content)) if isinstance(content, dict) else str(content)
@@ -135,13 +189,36 @@ class Workbench:
             app.executor_lane.proxy.ui_observer = self.stream_hub
 
     def stream_scene(self, selected=''):
-        # Reuse the ordinary view's scene/context authorization before opening
-        # a read-only observation connection.
-        self.snapshot(selected)
+        # Opening an observation connection must not rebuild the full transcript
+        # beside the /state request. Check the same scene/context membership here.
+        local = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
         if selected.startswith('channel:'):
-            scene = self.store.db.scenes.find_one({'_id': selected.removeprefix('channel:')})
+            from .channels import route_members
+            scene = None
+            for channel_id, channel in self.store.config.get('channels', {}).items():
+                for route in channel['routes'].values():
+                    if selected != 'channel:' + route['scene_id'] or not route_members(route):
+                        continue
+                    configured = self.store.db.scenes.find_one({'_id': route['scene_id'], 'channel_id': channel_id})
+                    if configured:
+                        member = next(iter(route_members(route).values()))
+                        scene = self.store.authorize(route['scene_id'], member['person_id'])
+                        break
+                if scene:
+                    break
+            if not scene:
+                raise ValueError('通道未配置或已不可访问')
         else:
-            scene = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+            scene = local
+            current = scene.get('character_context', 'initial')
+            if selected and selected != current:
+                scope = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+                         'policy_epoch': scene['policy_epoch']}
+                context = {'$or': [{'character_context': selected}] +
+                           ([{'character_context': {'$exists': False}}] if selected == 'initial' else [])}
+                if not (self.store.db.episodes.find_one({**scope, **context}, {'_id': 1}) or
+                        self.store.db.messages.find_one({**scope, 'host_managed': True, **context}, {'_id': 1})):
+                    raise ValueError('会话不存在或已不可访问')
         return {'_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
 
     def live_streams(self, scene, calls):
@@ -152,7 +229,10 @@ class Workbench:
         visible = []
         for call in calls:
             operation = call.get('operation')
-            if call.get('scope_key') != scene['scope_key'] or not isinstance(operation, str):
+            # An internal DSH compaction can inherit the enclosing phase's
+            # operation ID; its summary is not that phase's visible output.
+            if (call.get('phase') == 'compaction' or call.get('scope_key') != scene['scope_key']
+                    or not isinstance(operation, str)):
                 continue
             owner_id = operation.split(':', 1)[0]
             query = {'_id': owner_id, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
@@ -279,8 +359,10 @@ class Workbench:
         chosen = selected or current
         if chosen not in groups:
             raise ValueError('会话不存在或已不可访问')
+        # Operator projection includes generated SPEAK while platform delivery is
+        # pending; deliveryState below keeps it distinct from an accepted post.
         messages = list(store.db.messages.find({**scope, 'scene_id': scene['_id'], '$or': [
-            {'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED', 'phase': 'SPEAK'}]}).sort('scene_seq', 1))
+            {'direction': 'inbound'}, {'direction': 'outbound', 'phase': 'SPEAK'}]}).sort('scene_seq', 1))
         def episode_id(message):
             return message.get('episode_id') or message['_id'].removeprefix('in-')
         conversations = []
@@ -307,6 +389,12 @@ class Workbench:
             streams = [ep_id] + ([task_id] if task else [])
             events = list(store.db.audit_events.find({'stream_id': {'$in': streams}, 'scope_key': scene['scope_key']}).sort([('occurred_at', 1), ('seq', 1)]))
             steps = [step for event in events if (step := trace_step(event, event['stream_id'] == task_id))]
+            for step in steps:
+                if step['type'] == 'phase.output':
+                    step['displayKey'] = step['payload'].get('operation')
+                elif step['type'] == 'execution.output' and task:
+                    attempt = step['payload'].get('attempt')
+                    step['displayKey'] = f"{task_id}:execute:{task['intent_revision']}" + (f':{attempt}' if attempt is not None else '')
             finished = {event.get('payload', {}).get('operation') for event in events if event['type'] in ('phase.output', 'phase.failed')}
             for step in steps:
                 if step['type'] == 'phase.started' and (step['payload'].get('operation') in finished or ep['state'] in ('COMMITTED', 'INTERRUPTED', 'FAILED_RUNTIME', 'FAILED_PROTOCOL')):
@@ -324,6 +412,9 @@ class Workbench:
                        'episodeId': ep_id, 'taskId': by_id[ep_id].get('task_id') or by_id[ep_id].get('control_result', {}).get('task_id'),
                        'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
                        'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')), '_order': row['scene_seq']}
+            if public:
+                message['displayKey'] = ep_id + ':SPEAK:0'
+                message['deliveryState'] = row.get('delivery_state', 'UNKNOWN')
             if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
                 message['authorLabel']='本机 owner 指令（非 QQ 来信）'
             if public:
@@ -375,14 +466,14 @@ class Workbench:
                 'modelSettings': self.models_snapshot(),
                 'integrationAvailable': integration is not None,
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
-                                 'group_preference': '当前本机场景没有群偏好记录。'}}
+                                 'group_preference': '当前场景没有群偏好记录。'}}
         latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
         if latest_scene['policy_epoch'] != scene['policy_epoch'] or latest_scene['scope_key'] != scene['scope_key']:
             raise PermissionError('场景授权已变化，请刷新')
         # Same credential redaction as the terminal trace, including nested payloads.
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
 
-    def provider_response(self, event_id, selected=''):
+    def provider_diagnostic(self, event_id, selected=''):
         scene = self.stream_scene(selected)
         if not isinstance(event_id, str) or not event_id:
             raise ValueError('缺少 provider output event id')
@@ -393,7 +484,9 @@ class Workbench:
                  'policy_epoch': scene['policy_epoch']}
         if not (self.store.db.episodes.find_one(owner, {'_id': 1}) or self.store.db.tasks.find_one(owner, {'_id': 1})):
             raise PermissionError('当前场景没有该 provider output')
-        return {'body_utf8': raw_provider_response(event.get('payload', {}).get('request_refs', []), root=ROOT)}
+        raw = raw_provider_response(event.get('payload', {}).get('request_refs', []), root=ROOT)
+        return {'diagnostic': {'source_event': event_id, 'event_type': event['type'],
+                               **provider_metadata(raw)}}
 
     def command(self, path, body):
         with self.command_lock:
@@ -493,9 +586,9 @@ class UiBridge:
                         value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
                     elif self.command == 'GET' and url.path == '/stream':
                         return self.stream(parse_qs(url.query).get('conversation', [''])[0])
-                    elif self.command == 'GET' and url.path == '/provider-response':
-                        value = workbench.provider_response(parse_qs(url.query).get('event', [''])[0],
-                                                            parse_qs(url.query).get('conversation', [''])[0])
+                    elif self.command == 'GET' and url.path == '/provider-diagnostic':
+                        value = workbench.provider_diagnostic(parse_qs(url.query).get('event', [''])[0],
+                                                              parse_qs(url.query).get('conversation', [''])[0])
                     elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
@@ -538,11 +631,12 @@ def serve(workbench, port):
     env = {**os.environ, 'DSH_HOME': str(ROOT / '.runtime' / 'ui-shell'), 'DSH_TELEMETRY_DISABLED': '1',
            'ASUNA_UI_BRIDGE': f'http://127.0.0.1:{bridge.server.server_port}', 'ASUNA_UI_TOKEN': bridge.token}
     command = ['node', str(ROOT / 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'web',
-               '--patch', str(ROOT / 'dsh-plugin/ui/cordis.patch.yml'), '--host', '127.0.0.1', '--port', str(port), '--no-open']
+               '--patch', str(ROOT / 'dsh-plugin/ui/cordis.patch.yml'), '--host', '127.0.0.1', '--port', str(port)]
     process = None
     try:
         process = subprocess.Popen(command, cwd=ROOT, env=env)
-        print(f'Asuna UI: http://127.0.0.1:{port}/asuna/ （DSH 原生页面也可从侧栏 Asuna 打开）', flush=True)
+        print(f'Asuna UI: DSH 会在系统默认浏览器自动打开并完成本机认证；进入后点击侧栏 Asuna。'
+              f' 若浏览器未自动打开，请复制下一行 dsh web: 地址。端口：{port}。', flush=True)
         while True:
             try:
                 return process.wait(timeout=.5)

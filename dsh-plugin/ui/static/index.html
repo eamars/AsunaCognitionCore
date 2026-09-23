@@ -1,17 +1,13 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Asuna · UI Elements V1</title><link rel="stylesheet" href="/asuna/style.css"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Asuna · DSH 工作台</title>
+</head>
 <body>
-<div class="workbench">
-  <aside class="sidebar"><header><h1>Asuna</h1><p>双脑交互 · UI Elements V1</p></header><button id="new-session">＋ 新上下文</button><p class="hint">保留当前场景与记忆</p><h2>会话 / 场景</h2><nav id="conversations" aria-label="会话列表"></nav><footer id="connection" role="status">正在连接…</footer></aside>
-  <main><header class="conversation-header"><div><h2 id="title">本机聊天</h2><p id="subtitle">连接现有 Asuna 交互进程</p></div><button id="refresh">刷新</button></header><div id="error" role="alert" hidden></div><section id="messages" aria-label="聊天记录"><p class="empty">正在读取对话…</p></section><form id="composer"><label class="sr-only" for="input">输入消息</label><textarea id="input" rows="2" placeholder="输入消息…（Enter 发送，Shift + Enter 换行）" maxlength="16000"></textarea><button id="send" type="submit">发送</button><p id="send-status" role="status">回复由现有双脑流程生成</p></form></main>
-  <aside class="inspector"><header><h2>会话检查器</h2><p>当前场景记录 · 只读（非历史快照）</p></header><div id="tabs" role="tablist" aria-label="检查器类型"></div><label class="sr-only" for="search">搜索记录</label><input id="search" type="search" placeholder="搜索记录…"><div id="records" role="tabpanel" aria-label="检查器记录"></div><section id="detail" aria-label="记录详情"><p class="empty">选择一条记录查看详情</p></section></aside>
-</div>
-<dialog id="model-dialog" aria-labelledby="model-dialog-title">
-  <form id="model-form"><header><h2 id="model-dialog-title">模型设置</h2><p>角色脑与行动脑分别配置，也可以使用同一模型。空闲时保存并应用。</p></header>
-    <p class="hint">采用 DSH 的模型 ID、连接和兼容参数。当前审计桥支持本机/LAN 的 OpenAI Chat Completions 协议。</p>
-    <div id="model-fields"></div><p id="model-status" role="status"></p>
-    <footer><button id="model-close" type="button">关闭</button><button id="model-save" type="submit">保存并应用</button></footer>
-  </form>
-</dialog><script type="module" src="/asuna/workbench.js"></script>
-</body></html>
+  <p>正在打开 Asuna 工作台…</p>
+  <script type="module" src="/asuna/workbench.js"></script>
+</body>
+</html>

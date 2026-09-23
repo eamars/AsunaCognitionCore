@@ -35,6 +35,9 @@ def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, t
                         operation=episode + ':SPEAK:0', scope_key='scene:dm-a', request_ref='request-a.json')
         view.stream_hub('start', 'call-b', lane='executor', phase='execution',
                         operation=episode + ':execute:0', scope_key='scene:dm-b', request_ref='request-b.json')
+        view.stream_hub('start', 'call-c', lane='character', phase='compaction',
+                        operation=episode + ':SPEAK:0', scope_key='scene:dm-a', request_ref='request-c.json')
+        view.stream_hub('text', 'call-c', field='content', text='内部上下文压缩摘要')
         assert client.get('/stream', headers={'Authorization': 'bad'}).status_code == 403
         with client.stream('GET', '/stream') as response:
             assert response.status_code == 200
@@ -42,17 +45,28 @@ def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, t
             assert next(lines) == 'event: snapshot'
             initial = json.loads(next(lines).removeprefix('data: '))
             assert [call['id'] for call in initial['calls']] == ['call-a']
-            view.stream_hub('chunk', 'call-a', chunk=b'data: {"choices":[{"delta":{"reasoning_content":"')
-            view.stream_hub('chunk', 'call-a', chunk='想法'.encode('utf-8')[:2])
-            view.stream_hub('chunk', 'call-a', chunk='想法'.encode('utf-8')[2:] + b'"}}]}\n\n')
-            # SSE may have emitted an intermediate snapshot while chunks arrived.
+            view.stream_hub('chunk', 'call-a', chunk='data: {"choices":[{"delta":{"reasoning_content":"想法"}}]}\n\n'.encode())
+            view.stream_hub('text', 'call-a', field='reasoning_content', text='想法')
             for line in lines:
                 if line.startswith('data: ') and 'reasoning_content' in line and '想法' in line:
                     value = json.loads(line.removeprefix('data: '))
-                    assert value['calls'][0]['body_utf8'] == 'data: {"choices":[{"delta":{"reasoning_content":"想法"}}]}\n\n'
+                    assert value['calls'][0]['parts'] == [{'field': 'reasoning_content', 'text': '想法'}]
+                    assert 'body_utf8' not in value['calls'][0]
+                    assert 'content' not in value['calls'][0]
                     break
             else:
-                pytest.fail('live raw provider bytes did not arrive')
+                pytest.fail('live reasoning text did not arrive')
+            view.stream_hub('text', 'call-a', field='content', text='真实正文')
+            for line in lines:
+                if line.startswith('data: ') and '真实正文' in line:
+                    value = json.loads(line.removeprefix('data: '))
+                    assert value['calls'][0]['parts'] == [
+                        {'field': 'reasoning_content', 'text': '想法'},
+                        {'field': 'content', 'text': '真实正文'},
+                    ]
+                    break
+            else:
+                pytest.fail('read-only body projection did not cross the HTTP stream')
     finally:
         client.close()
         bridge.close()
@@ -85,6 +99,20 @@ def reply(value):
             'constraints': [], 'recall_query': '', 'speak_before_action': False})), LaneResult(value)]
 
 
+def test_stream_scene_authorizes_context_without_rebuilding_history(ui_store, monkeypatch):
+    scene = ui_store.authorize('dm-a', 'A')
+    ui_store.db.episodes.insert_one({'_id': 'episode-old-context', 'schema_version': 1, 'scene_id': scene['_id'],
+                                     'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
+                                     'character_context': 'older'})
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+    monkeypatch.setattr(view, 'snapshot', lambda *_: pytest.fail('stream authorization rebuilt the transcript'))
+    assert view.stream_scene('older')['_id'] == 'dm-a'
+    with pytest.raises(ValueError, match='会话不存在'):
+        view.stream_scene('another-scene')
+    with pytest.raises(ValueError, match='通道未配置'):
+        view.stream_scene('channel:dm-a')
+
+
 def test_silent_turn_stays_with_input_instead_of_creating_system_message(ui_store, tmp_path):
     outputs = [LaneResult('角色独白'), LaneResult(json.dumps({'next': 'silent', 'goal': '此时不需要回复',
                 'constraints': [], 'recall_query': '', 'speak_before_action': False}))]
@@ -115,6 +143,11 @@ def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path)
         first = client.get('/state').json()
         assert [m['text'] for m in first['messages'] if m['role'] in ('user', 'assistant')] == ['第一句输入', '第一句回复']
         assert any(step['type'] == 'phase.output' for m in first['messages'] for step in m.get('internalSteps', []))
+        public = next(m for m in first['messages'] if m['role'] == 'assistant')
+        stages = [step for step in public['internalSteps'] if step['type'] == 'phase.output']
+        assert next(step for step in stages if step['payload']['phase'] == 'MONOLOGUE')['payload']['content'] == '角色独白'
+        assert next(step for step in stages if step['payload']['phase'] == 'SPEAK')['displayKey'] == public['displayKey']
+        assert public['deliveryState'] == 'DELIVERED'
         assert not any(step['status'] == 'running' for m in first['messages'] for step in m.get('internalSteps', []))
         assert first['conversations'][0]['updatedAt']
         assert client.post('/new', json={}).status_code == 200
@@ -128,6 +161,9 @@ def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path)
         history = client.get('/state', params={'conversation': first['conversationId']}).json()
         assert not history['canSend']
         assert any(m['text'] == '第一句回复' for m in history['messages'])
+        ui_store.db.messages.update_one({'_id': public['id']}, {'$set': {'delivery_state': 'READY'}})
+        pending = next(m for m in view.snapshot(first['conversationId'])['messages'] if m['id'] == public['id'])
+        assert pending['deliveryState'] == 'READY' and pending['text'] == public['text']
         assert {r['id'] for r in first['records']}.issubset({r['id'] for r in latest['records']})
         assert client.post('/send', json={'text': ' '}).status_code == 400
         assert client.post('/send', json=[]).status_code == 400
@@ -225,7 +261,7 @@ def test_raw_provider_response_preserves_captured_stream(tmp_path):
     assert raw_provider_response([ref], root=tmp_path) == raw
 
 
-def test_provider_response_bridge_returns_exact_scoped_body(tmp_path, monkeypatch, ui_store):
+def test_provider_diagnostic_bridge_excludes_displayed_text(tmp_path, monkeypatch, ui_store):
     import asuna.ui as ui
     monkeypatch.setattr(ui, 'ROOT', tmp_path)
     scene = ui_store.authorize('dm-a', 'A')
@@ -234,7 +270,8 @@ def test_provider_response_bridge_returns_exact_scoped_body(tmp_path, monkeypatc
     request_name = '00102-provider.request.json'
     request = evidence / request_name
     request.write_text(json.dumps({'type': 'provider.request', 'payload': {'call_id': 'call-1'}}), encoding='utf-8')
-    raw = 'data: {"choices":[{"delta":{"reasoning_content":"native","content":"answer"}}]}\r\n\r\n'
+    raw = ('data: {"id":"resp-1","model":"fixture","choices":[{"delta":{"reasoning_content":"native","content":"answer"},"finish_reason":"stop"}]}\r\n\r\n'
+           'data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":7,"total_tokens":19}}\r\n\r\ndata: [DONE]\r\n\r\n')
     (evidence / '00111-provider.response.json').write_text(json.dumps({'type': 'provider.response', 'payload': {
         'request_ref': request_name, 'call_id': 'call-1', 'status_code': 200, 'body_utf8': raw}}), encoding='utf-8')
     ref = {'artifact_path': (Path('reports') / 'ui-test' / request_name).as_posix(),
@@ -247,17 +284,22 @@ def test_provider_response_bridge_returns_exact_scoped_body(tmp_path, monkeypatc
     bridge = UiBridge(view)
     try:
         with httpx.Client(base_url=f'http://127.0.0.1:{bridge.server.server_port}', trust_env=False) as client:
-            assert client.get(f'/provider-response?event={event["_id"]}').status_code == 403
+            assert client.get(f'/provider-diagnostic?event={event["_id"]}').status_code == 403
             client.headers['Authorization'] = 'Bearer ' + bridge.token
-            response = client.get(f'/provider-response?event={event["_id"]}')
+            response = client.get(f'/provider-diagnostic?event={event["_id"]}')
             assert response.status_code == 200
-            assert response.json() == {'body_utf8': raw}
-            assert client.get('/provider-response?event=unknown').status_code == 403
+            assert response.json() == {'diagnostic': {'source_event': event['_id'], 'event_type': 'phase.output',
+                'wire_format': 'sse', 'response_bytes': len(raw.encode()), 'frame_count': 2, 'stream_done': True,
+                'response_id': 'resp-1', 'model': 'fixture', 'finish_reasons': ['stop'],
+                'usage': {'prompt_tokens': 12, 'completion_tokens': 7, 'total_tokens': 19}}}
+            assert 'native' not in response.text and 'answer' not in response.text
+            assert client.get('/provider-diagnostic?event=unknown').status_code == 403
+            assert client.get(f'/provider-response?event={event["_id"]}').status_code == 404
     finally:
         bridge.close()
 
 
-def test_ui_provider_response_returns_raw_body_for_scoped_output(tmp_path, monkeypatch, ui_store):
+def test_ui_provider_diagnostic_keeps_raw_only_in_audit(tmp_path, monkeypatch, ui_store):
     import asuna.ui as ui
     monkeypatch.setattr(ui, 'ROOT', tmp_path)
     scene = ui_store.authorize('dm-a', 'A')
@@ -277,4 +319,7 @@ def test_ui_provider_response_returns_raw_body_for_scoped_output(tmp_path, monke
     event = ui_store.audit('episode-provider-response', 'phase.output', {'request_refs': [ref]}, scene['scope_key'])
     view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
 
-    assert view.provider_response(event['_id']) == {'body_utf8': raw}
+    diagnostic = view.provider_diagnostic(event['_id'])
+    assert diagnostic['diagnostic']['response_bytes'] == len(raw.encode())
+    assert 'raw' not in json.dumps(diagnostic) and 'answer' not in json.dumps(diagnostic)
+    assert raw_provider_response([ref], root=tmp_path) == raw

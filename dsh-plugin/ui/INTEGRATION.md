@@ -2,6 +2,16 @@
 
 核对版本：仓库 `package.json` / `package-lock.json` 的 DSH `0.1.5-rc.2`，对应源码提交 `fb2c4b9e698e30edb738bca4cf0618587db7d203`；没有按本机旁边较新 DSH checkout 的 API 编写或升级版本。
 
+## UI 原生复用原则（ADR-006）
+
+Asuna 扩展 DSH，不另建相似的 UI 控件库。实施顺序是复用现成功能视图/slot、公开组件与受支持的组合方式，再补最小 Asuna 业务字段和动作绑定。固定版的完整 WorkspaceBrowser 与 Chat 没有公开的任意 Asuna 场景/消息绑定；用户已批准本轮以公开 Input、Button、DisclosureRow、MarkdownText、CodeBlock 和状态组件组合当前三栏。此交付称为“原生基础组件复用＋Asuna业务组合”，不称完整原生 WorkspaceBrowser/Chat 接入。
+
+以后确实需要新增自定义控件时，须在设计说明中列出核对过的固定版包、导出和 props、缺少的必要行为、最小新增范围，以及如何保留原生交互并删除重复代码，取得用户确认后再实施。数据不同、更方便或更好看都不是充分理由。不得复制私有组件、从 bundle 抠组件、伪造 Host session、升级 DSH 来回避本地契约；不得建设运行时审批/检查系统或让模型输出 UI schema。已批准的脑来源、阶段和场景等语义标签无需逐行请示；UI 故障不能停止 agent、工具或 QQ 服务。
+
+本版仍保留 Asuna 的真实场景选择与输入端点、三栏和右侧检查器。`/asuna/` 只引导到同一 DSH 主页面；原工作台的自绘消息、会话列表、流轮询及执行分支已移除。`/asuna/api/stream` 是只读有序正文/思考观察；网页折叠诊断只有非内容元数据，完整 provider bytes 仅留既有审计。
+
+以下记录描述 ADR-004 时期的内嵌 V1 接线和验收，作为历史资料保留。
+
 ## DSH 原生能力
 
 - `package.json` 的 `dsh.client` / `exports["./client"]`：原生客户端发现与交付。
@@ -26,7 +36,7 @@ DSH `/asuna/api/state` 转发至 `UiBridge /state`；`/send` 和 `/new` 接收 P
 
 固定版本 DSH 的原生会话流和 Chat 组件连接的是 UI shell 会话，而角色脑和行动脑分别在独立 DSH home 运行。通用 `StreamChunk` 提供规范化的 reasoning/text 增量，不保留 provider 的 `reasoning_content`/`content` 字段与完整原始 JSON。现有 Asuna provider 边界还会先把上游流收齐、保存审计，再交给 DSH。因此直接复用原生 Chat 增量显示既不能接到这两条会话，也不能满足原字段显示。
 
-仅在当前代理收到原始字节时增加可失败的只读 UI 观察回调，由现有 `/asuna` 路由转发 SSE。页面沿用当前执行步骤的 `<details>`/`<pre>`，按原始到达顺序显示字节解码后的文本，不提取或改名字段；脑别、阶段、状态放在外层。浏览器连接先取得当前临时快照，再接收更新；断线重连只恢复观察，不提交用户消息、模型请求或工具任务。已结算的 `phase.output`/`execution.output` 以审计请求引用替换对应临时行，仍从原有 `provider-response` 端点读取完整回包。临时流只保留短时间用于衔接，不是新的持久记录或恢复平台；观察失败不改变代理执行。
+历史 V1 实现曾将原始 provider bytes 推给网页并在诊断中显示完整回包。ADR-006 后续修订已取代这一路径：代理在现有解码点只投影 `reasoning_content`/`content` 的有序文本，网页诊断按需取非内容元数据；完整原包仅由既有审计保存。浏览器断线重连只恢复观察，不提交用户消息、模型请求或工具任务；观察失败不改变代理执行。
 
 没有公开回复的真实回合不生成系统聊天气泡。状态与执行步骤附在触发它的输入下；任务反馈附在原任务的可见回合下，并按事件 ID 去重。普通群消息只记录而未唤醒角色时不产生回合状态提示，更不把 `RECEIVED_NO_WAKE` 的临时提示堆到本机聊天末尾。
 

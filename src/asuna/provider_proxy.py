@@ -112,14 +112,23 @@ class ProviderProxy:
                                 if first is None:
                                     first = time.perf_counter() - started
                                 chunks.append(chunk)
-                                observe('chunk',chunk=chunk)
                                 pending+=decoder.decode(chunk)
                                 while '\n' in pending:
                                     line,pending=pending.split('\n',1)
                                     if line.startswith('data: ') and line[6:].strip()!='[DONE]':
                                         try:
                                             parsed=json.loads(line[6:])
-                                            if first_content is None and any(c.get('delta',{}).get('content') for c in parsed.get('choices',[])):first_content=time.perf_counter()-started
+                                            choices=parsed.get('choices',[]) if isinstance(parsed,dict) else []
+                                            choices=choices if isinstance(choices,list) else []
+                                            if first_content is None and any(isinstance(c,dict) and isinstance(c.get('delta'),dict) and c['delta'].get('content') for c in choices):first_content=time.perf_counter()-started
+                                            # The existing SSE decode point also feeds a read-only UI
+                                            # projection. It never changes the bytes sent to DSH.
+                                            for choice in choices[:1]:
+                                                delta=choice.get('delta',{}) if isinstance(choice,dict) else {}
+                                                if isinstance(delta,dict):
+                                                    for field,part in delta.items():
+                                                        if field in ('content','reasoning_content') and isinstance(part,str) and part:
+                                                            observe('text',field=field,text=part)
                                         except (ValueError,TypeError):pass
                                 # Save complete return before DSH can commit it; stream buffering
                                 # does not provide public-text TTFT and is reported as such.

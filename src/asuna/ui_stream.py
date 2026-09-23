@@ -1,7 +1,6 @@
-"""Transient, read-only display of provider bytes while a UI session is open."""
+"""Transient, read-only text projection while a UI session is open."""
 from __future__ import annotations
 
-import codecs
 from datetime import datetime, timezone
 import threading
 import time
@@ -23,18 +22,24 @@ class UiStreamHub:
     def __call__(self, kind, call_id, **value):
         with self.condition:
             if kind == 'start':
-                self.calls[call_id] = {**value, 'id': call_id, 'body_utf8': '',
+                self.calls[call_id] = {**value, 'id': call_id, 'parts': [],
                                        'createdAt': datetime.now(timezone.utc).isoformat(),
-                                       'status': 'running', '_decoder': codecs.getincrementaldecoder('utf-8')(),
-                                       '_ended': 0}
+                                       'status': 'running', '_ended': 0}
             elif call_id in self.calls:
                 call = self.calls[call_id]
-                if kind == 'chunk':
-                    call['body_utf8'] += call['_decoder'].decode(value['chunk'])
+                if kind == 'text':
+                    field, part = value['field'], value['text']
+                    if field not in ('content', 'reasoning_content') or not isinstance(part, str):
+                        return
+                    if call['parts'] and call['parts'][-1]['field'] == field:
+                        call['parts'][-1]['text'] += part
+                    else:
+                        call['parts'].append({'field': field, 'text': part})
                 elif kind == 'end':
-                    call['body_utf8'] += call['_decoder'].decode(b'', final=True)
                     call['status'] = value.get('status', 'settling')
                     call['_ended'] = time.monotonic()
+                else:
+                    return
             else:
                 return
             # Settled entries remain briefly so the durable audit row can replace
@@ -47,7 +52,8 @@ class UiStreamHub:
         with self.condition:
             if self._prune():
                 self.version += 1
-            return self.version, [{key: value for key, value in call.items() if not key.startswith('_')}
+            return self.version, [{key: [part.copy() for part in value] if key == 'parts' else value
+                                   for key, value in call.items() if not key.startswith('_')}
                                   for call in self.calls.values()]
 
     def wait(self, version, timeout=15):

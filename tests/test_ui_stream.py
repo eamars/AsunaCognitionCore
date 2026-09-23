@@ -1,4 +1,4 @@
-"""The existing provider boundary must expose native bytes before completion."""
+"""The provider boundary exposes ordered text before completion and audits raw bytes."""
 import threading
 
 import httpx
@@ -43,7 +43,7 @@ def test_raw_reasoning_arrives_before_provider_completion_and_display_failure_is
 
     def observer(kind, call_id, **value):
         hub(kind, call_id, **value)
-        if kind == 'chunk':
+        if kind == 'text':
             raise RuntimeError('render disconnected')
 
     proxy.ui_observer = observer
@@ -61,17 +61,22 @@ def test_raw_reasoning_arrives_before_provider_completion_and_display_failure_is
         assert first_sent.wait(5)
         # The producer may have flushed before the proxy read it.
         with hub.condition:
-            assert hub.condition.wait_for(lambda: any(first.decode() in call['body_utf8']
+            assert hub.condition.wait_for(lambda: any(call['parts'] == [{'field': 'reasoning_content', 'text': 'first'}]
                                                      for call in hub.calls.values()), 5)
         _, calls = hub.snapshot()
-        assert calls[0]['body_utf8'] == first.decode()
+        assert calls[0]['parts'] == [{'field': 'reasoning_content', 'text': 'first'}]
+        assert 'body_utf8' not in calls[0] and 'content' not in calls[0] and 'reasoning_content' not in calls[0]
         assert worker.is_alive()  # Native reasoning is visible during generation.
         release.set()
         worker.join(5)
         assert not worker.is_alive()
         assert result['response'].status_code == 200
         assert proxy.calls[0]['raw'] == (first + second).decode()
-        assert hub.snapshot()[1][0]['body_utf8'] == (first + second).decode()
+        assert hub.snapshot()[1][0]['parts'] == [
+            {'field': 'reasoning_content', 'text': 'first'},
+            {'field': 'content', 'text': 'second'},
+        ]
+        assert calls[0]['parts'] == [{'field': 'reasoning_content', 'text': 'first'}]
     finally:
         release.set()
         worker.join(5)

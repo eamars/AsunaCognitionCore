@@ -63,6 +63,7 @@ class ScheduleService:
             self.lane = DshLane(app.config, self.store, app.evidence, 'scheduler',
                 schedule_callback={'url': f'http://127.0.0.1:{self.server.server_port}/due', 'token': self.token})
             self.reconcile()
+            self.ensure_self_development()
         except BaseException:
             self.close()
             raise
@@ -105,6 +106,41 @@ class ScheduleService:
     def zone_of(self, scene, plan=None):
         """这个场景/这条计划用哪个钟面。计划上已落库的时区优先：改配置不追改旧安排。"""
         return schedule_rules.scene_timezone(self.app.config, scene or {}, plan)
+
+    def ensure_self_development(self):
+        """Register one native recurring opportunity, with no second host clock."""
+        settings = self.app.config.get('self_development', {})
+        if not settings.get('enabled'):
+            return
+        interval = settings.get('every_seconds', 86400)
+        if type(interval) is not int or not schedule_rules.MIN_INTERVAL_SECONDS <= interval <= schedule_rules.MAX_INTERVAL_SECONDS:
+            raise ValueError('SELF_DEVELOPMENT_INTERVAL_INVALID')
+        scene_id, person_id = self.controller.settings['scene_id'], self.controller.settings['person_id']
+        scene = self.store.authorize(scene_id, person_id)
+        plan_id = 'plan-asuna-self-development'
+        plan = self.store.db.plans.find_one({'_id': plan_id})
+        if plan and (plan.get('kind') != 'self_development' or plan['scene_id'] != scene_id
+                     or plan['person_id'] != person_id or plan['policy_epoch'] != scene['policy_epoch']):
+            raise Denied('SELF_DEVELOPMENT_PLAN_BINDING_CHANGED')
+        if not plan:
+            plan = self.store.put('plans', {'_id': plan_id, 'kind': 'self_development',
+                'scene_id': scene_id, 'person_id': person_id, 'scope_key': scene['scope_key'],
+                'policy_epoch': scene['policy_epoch'], 'status': 'CREATING',
+                'intent': '回顾近期经历，自主决定是否继续自我开发',
+                'rule': {'every_seconds': interval}, 'plan_version': 1,
+                'created_at': now()}, stream=plan_id)
+        events=self._native_events()
+        creates, _, deleted=self._grouped(events)
+        if plan.get('schedule_id') in creates and plan['schedule_id'] not in deleted:
+            return
+        native = (self._created(plan_id,events) if not plan.get('schedule_id') else None) or self.lane.schedule(
+            '/schedule/create', {'plan_id': plan_id, 'every_seconds': plan['rule']['every_seconds']})
+        if not isinstance(native, dict) or not native.get('id'):
+            raise ValueError('NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE')
+        current = self.store.db.plans.find_one({'_id': plan_id})
+        self.store.put('plans', {**current, 'schedule_id': native['id'],
+            'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
+            expected=current['revision'], stream=plan_id)
 
     def create(self, ep, spec):
         intent = spec.get('intent') if isinstance(spec, dict) else None
@@ -345,29 +381,33 @@ class ScheduleService:
             scene = self.store.authorize(plan['scene_id'], plan['person_id'])
             if scene['policy_epoch'] != plan['policy_epoch']:
                 raise Denied('SCHEDULE_POLICY_STALE')
-            channel = None
-            if scene.get('channel_id'):
-                route = route_for_scene(self.app.config, scene['channel_id'], scene['_id'])
-                if plan['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
-                    raise Denied('SCHEDULE_ROUTE_REVOKED')
-                channel = {'id': scene['channel_id'], 'account_id': scene['channel_account_id'],
-                           'target': route['target'], 'sender_id': 'scheduler', 'platform_event_id': None}
-            event = {'event_id': 'schedule:' + occurrence, 'scene_id': plan['scene_id'],
-                     'person_id': plan['person_id'], 'adapter_id': 'scheduler',
-                     'episode_kind': 'scheduled', 'scheduled_plan_id': plan_id,
-                     'scene_tick': True,
-                     'text': '你之前安排的计划「' + plan['intent'] + '」现在到期了。请重新判断是否继续；到期本身不是新授权或已完成的行动。'}
-            if channel:
-                event['channel'] = channel
-                if scene['kind'] == 'group':
-                    event['group_context'] = {'wake_reason': 'scheduled_plan',
-                        'topic_id': event['event_id'], 'reply_to': None,
-                        'reply_message_id': None, 'mentioned_account_ids': []}
-            if plan.get('integration_profile') == 'owner' and event_granted(self.app.config,
-                    {**event, 'integration_profile': 'owner'}):
-                event['integration_profile'] = 'owner'
-            self.controller.receive(event)
-            outcome = 'ENQUEUED'
+            if plan.get('kind') == 'self_development':
+                self.controller.offer_self_development('self-development:' + occurrence)
+                outcome = 'ENQUEUED'
+            else:
+                channel = None
+                if scene.get('channel_id'):
+                    route = route_for_scene(self.app.config, scene['channel_id'], scene['_id'])
+                    if plan['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
+                        raise Denied('SCHEDULE_ROUTE_REVOKED')
+                    channel = {'id': scene['channel_id'], 'account_id': scene['channel_account_id'],
+                               'target': route['target'], 'sender_id': 'scheduler', 'platform_event_id': None}
+                event = {'event_id': 'schedule:' + occurrence, 'scene_id': plan['scene_id'],
+                         'person_id': plan['person_id'], 'adapter_id': 'scheduler',
+                         'episode_kind': 'scheduled', 'scheduled_plan_id': plan_id,
+                         'scene_tick': True,
+                         'text': '你之前安排的计划「' + plan['intent'] + '」现在到期了。请重新判断是否继续；到期本身不是新授权或已完成的行动。'}
+                if channel:
+                    event['channel'] = channel
+                    if scene['kind'] == 'group':
+                        event['group_context'] = {'wake_reason': 'scheduled_plan',
+                            'topic_id': event['event_id'], 'reply_to': None,
+                            'reply_message_id': None, 'mentioned_account_ids': []}
+                if plan.get('integration_profile') == 'owner' and event_granted(self.app.config,
+                        {**event, 'integration_profile': 'owner'}):
+                    event['integration_profile'] = 'owner'
+                self.controller.receive(event)
+                outcome = 'ENQUEUED'
         except Exception as exc:
             # 一次到期没排进去，只记在这一条计划上：下一次登记、这个场景的聊天都不跟着消失。
             outcome = str(exc) or type(exc).__name__

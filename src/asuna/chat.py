@@ -80,6 +80,7 @@ class Chat:
         self.ingress_lock = threading.RLock()
         self.enqueued = set()
         self.reconfiguring = False
+        self.on_turn_finished = None
 
     def _schedule(self, episode):
         task = self.app.store.db.tasks.find_one({'_id': episode['task_id']})
@@ -136,13 +137,37 @@ class Chat:
         self.pending.put(({'_compact': True, 'event_id': str(uuid.uuid4()),
             'scene_id': self.settings['scene_id'], 'person_id': self.settings['person_id']}, None))
 
-    def submit(self, text, *, integration=False):
+    def submit(self, text, *, integration=False, development=False):
+        if integration and development:
+            raise ValueError('CHOOSE_ONE_DEVELOPMENT_CAPABILITY')
         event = {'event_id': str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
         if integration:
             from .integration import owner_profile
             owner_profile(self.app.store.config, event['scene_id'], event['person_id'])
             event['integration_profile'] = 'owner'
+        if development:
+            if not self.app.config.get('self_development',{}).get('enabled'):
+                raise PermissionError('SELF_DEVELOPMENT_NOT_ENABLED')
+            event['development_profile']='owner'
+        return self.receive(event)
+
+    def offer_self_development(self, event_id: str, *, text=None, trusted_context_events=None,
+                               task_id=None):
+        """Queue a host-origin opportunity in the owner's existing role scene."""
+        if not event_id.startswith('self-development:'):
+            raise ValueError('INVALID_SELF_DEVELOPMENT_EVENT')
+        event = {
+            'event_id': event_id,
+            'scene_id': self.settings['scene_id'],
+            'person_id': self.settings['person_id'],
+            'adapter_id': 'self-development',
+            'episode_kind': 'self_development',
+            'text': text or ('这是一次内部自我开发机会，不是用户消息或新授权。你可以回顾近期经历，'
+                             '自行决定是否值得反思、继续旧工作、委托改进，或者什么都不做。无需公开回复。'),
+            'trusted_context_events': trusted_context_events or [],
+        }
+        if task_id:event['task_id']=task_id
         return self.receive(event)
 
     def receive(self, event):
@@ -350,6 +375,7 @@ class Chat:
                 elif not messages:
                     self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
                 self.app.evidence.record('chat.completed', {'episode_id': episode, 'state': result['state']})
+                if self.on_turn_finished:self.on_turn_finished()
             except Exception:
                 error = redact(traceback.format_exc(), self.app.config)
                 self.app.evidence.record('chat.error', {'episode_id': episode, 'traceback': error})

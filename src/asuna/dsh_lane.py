@@ -165,7 +165,7 @@ class DshLane:
             if self.lane=='executor' and self.model.get('compact_at_steps'):request['compact_at_steps']=self.model['compact_at_steps']
             if session in self.compact_pending:
                 safe=bool(bound and bound.get('last_phase') in ('SPEAK','execution','execution-repair'))
-                if bound and bound.get('last_phase')=='DECIDE':
+                if bound and bound.get('last_phase') in ('DECIDE','SELF','REFLECT'):
                     prior=self.store.db.episodes.find_one({'_id':bound['last_operation'].split(':')[0],'state':'COMMITTED','decision.next':'silent'})
                     if prior:safe=True;request['completed_episode_boundary']=bound['last_operation']
                 if safe:request['compact_before']=True

@@ -28,7 +28,7 @@ class Router:
         # Identity and integration grants come from the host envelope, never
         # from quoted JSON in event text. Channel adapters cannot submit grants.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
-        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','supersedes_task_id')
+        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','supersedes_task_id','adapter_id')
         trusted={k:event[k] for k in allowed if k in event}
         if isinstance(event.get('channel'),dict):
             # Channels.receive built this envelope after route/member checks.
@@ -41,6 +41,11 @@ class Router:
         if event.get('integration_profile'):
             from .integration import event_granted
             if event_granted(self.store.config, event): trusted['integration_profile'] = 'owner'
+        if (event.get('development_profile')=='owner' and not event.get('channel')
+                and (event['scene_id'],event['person_id']) == (
+                    self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
+                and self.store.config.get('self_development',{}).get('enabled')):
+            trusted['development_profile']='owner'
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':'cli-fixture'},scene['scope_key'])
         if event.get('supersedes_task_id'):
             if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')

@@ -19,6 +19,7 @@ DECISION_SCHEMA['properties']['constraints'].pop('maxItems',None)
 WORKSPACE_DECISION_SCHEMA=copy.deepcopy(DECISION_SCHEMA)
 WORKSPACE_DECISION_SCHEMA['properties']['cancel_task_id']={'type':'string','minLength':1,'maxLength':200}
 WORKSPACE_DECISION_SCHEMA['properties']['reflect_understanding']={'type':'boolean'}
+WORKSPACE_DECISION_SCHEMA['properties']['reflect_self']={'type':'boolean'}
 WORKSPACE_DECISION_SCHEMA['properties']['continue_task_id']={'type':'string','minLength':1,'maxLength':200}
 # P3：四种计时——一次性/固定间隔/绝对时刻/每日每周本地钟点。换算与判定在 schedule_rules，
 # 这里只管形状；at 与 clock 都按场景时区的本地钟点读，不要求模型自己换算 UTC。
@@ -208,6 +209,8 @@ class Coordinator:
                         try:
                             decision=json.loads(text)
                             jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA if self.store.config.get('task_mode')=='workspace' else DECISION_SCHEMA)
+                            if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
+                                raise ValueError('SELF_STATE_ONLY_IN_INTERNAL_OPPORTUNITY')
                             break
                         except (ValueError,jsonschema.ValidationError) as exc:
                             decision_error=str(exc) if isinstance(exc,ValueError) else f'{list(exc.absolute_path)}: {exc.message}'
@@ -215,6 +218,17 @@ class Coordinator:
                                 raise ProtocolFailure('BAD_DECISION_JSON: '+decision_error)
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,feedback_resume_phase=None)
                 if ep['state']=='DECISION_ACCEPTED':
+                    if ep['decision'].get('reflect_self') and not ep.get('self_state_update'):
+                        from .self_state import SelfState
+                        try:
+                            update=json.loads(self._stage(ep,'SELF'))
+                        except ValueError as exc:
+                            raise ProtocolFailure('INVALID_SELF_STATE_JSON') from exc
+                        if not isinstance(update,dict) or set(update)!={'target','body'}:
+                            raise ProtocolFailure('INVALID_SELF_STATE_STAGE')
+                        committed=({'target':'none','committed':False} if update['target']=='none'
+                                   else SelfState(self.store).commit(ep,update['target'],update['body']))
+                        ep=self._update(ep,self_state_update=committed)
                     if ep['decision'].get('schedule') and not ep.get('plan_result'):
                         spec=ep['decision']['schedule']
                         ep=self._plan_control(ep,'plan_result',lambda:self.scheduler.create(ep,spec))
@@ -284,12 +298,23 @@ class Coordinator:
                         if not self.store.db.tasks.find_one({'_id':task_id}):
                             from .tasks import WORKSPACE_TOOLS,TOOLS
                             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
-                            from .integration import event_granted, INTEGRATION_TOOLS
                             source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
+                            development=(ep.get('episode_kind')=='self_development' or
+                                ((source or {}).get('event',{}).get('development_profile')=='owner'
+                                 and (ep['scene_id'],ep['person_id']) == (
+                                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
+                                 and not (source or {}).get('event',{}).get('channel')) or
+                                ep.get('episode_kind')=='task_feedback' and bool(
+                                    (self.store.db.tasks.find_one({'_id':ep.get('task_id')}) or {}).get('development_grant')))
+                            if development:
+                                from .development import DEVELOPMENT_TOOLS
+                                capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
+                            from .integration import event_granted, INTEGRATION_TOOLS
                             integration = event_granted(self.store.config, source.get('event', {}))
                             if integration: capabilities = [*capabilities, *INTEGRATION_TOOLS]
                             continuation={}
-                            prior_id=ep['decision'].get('continue_task_id') or (ep.get('task_id') if ep.get('episode_kind')=='task_feedback' else None)
+                            prior_id=ep['decision'].get('continue_task_id') or (ep.get('task_id')
+                                if ep.get('episode_kind') in ('task_feedback','self_development') else None)
                             if prior_id:
                                 prior=self.store.db.tasks.find_one({'_id':prior_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']})
                                 # A new explicit request may resume context after host
@@ -303,13 +328,13 @@ class Coordinator:
                                 else:
                                     continuation={'continues_task_id':prior_id,'execution_binding':prior.get('execution_binding') or f"task:{prior['_id']}:{prior['scope_key']}:{prior['policy_epoch']}:{prior['intent_revision']}"}
                             if ep.get('control_result',{}).get('accepted') is not False:
-                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'allowed_capabilities':[t['name'] for t in capabilities],**continuation},stream=ep_id)
+                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'development_grant':development,'allowed_capabilities':[t['name'] for t in capabilities],**continuation},stream=ep_id)
                         if self.store.db.tasks.find_one({'_id':task_id}):
                             self.crash('after_task_persist')
                             if not ep['decision']['speak_before_action']:
                                 return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
                             ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
-                    results={k:ep[k] for k in ('control_result','understanding_update','plan_result',
+                    results={k:ep[k] for k in ('control_result','understanding_update','self_state_update','plan_result',
                         'plan_update_result','plan_cancel_result') if k in ep}
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text,feedback_resume_phase=None)

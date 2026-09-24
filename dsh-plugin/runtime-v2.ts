@@ -207,6 +207,9 @@ export function apply(ctx, config) {
           prior.result?.finish_reason === 'completed' && JSON.parse(prior.result.content).next === 'silent';
       } catch { completedSilent = false; }
     }
+    if (['SELF', 'REFLECT'].includes(boundary?.phase) && input.completed_episode_boundary === boundary.operation && boundary.finish_reason === 'completed') {
+      completedSilent = true; // Host attached this marker only after the role episode committed silent.
+    }
     if (input.compact_before && (!boundary || !(['SPEAK', 'execution', 'execution-repair'].includes(boundary.phase) || completedSilent))) throw new Error('COMPACTION_REQUIRES_COMPLETED_EPISODE_OR_TASK');
     record = { state: 'INTENT', inputHash, session: input.session, message };
     save(path, record);

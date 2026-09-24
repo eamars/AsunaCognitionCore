@@ -10,10 +10,13 @@ def episode_id(event):
 
 def persist_input(store, event, *, managed=False):
     scene = store.authorize(event['scene_id'], event['person_id'])
+    internal = event.get('episode_kind') == 'self_development'
+    if internal and (event.get('adapter_id') != 'self-development' or scene['kind'] != 'dm'):
+        raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED')
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:
-        if (previous['author'] != event['person_id'] or previous['text'] != event['text']
+        if (previous['author'] != ('asuna:internal' if internal else event['person_id']) or previous['text'] != event['text']
                 or previous['policy_epoch'] != scene['policy_epoch']
                 or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')
@@ -29,6 +32,9 @@ def persist_input(store, event, *, managed=False):
                'occurred_at': event.get('occurred_at', now()), 'received_at': now(),
                'character_context': scene.get('character_context', 'initial'),
                'event': event, 'host_managed': managed, 'ingress_state': 'ACCEPTED'}
+    if internal:
+        message['direction'] = 'internal'
+        message['author'] = 'asuna:internal'
     try:
         return store.put('messages', message, stream=key), True
     except Conflict:

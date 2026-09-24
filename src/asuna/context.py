@@ -57,6 +57,8 @@ class ContextBuilder:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
         relation=self.store.head('relationship:'+event['person_id'],scope)
         overlay=self.store.head('overlay:'+persona,scope)
+        from .self_state import SelfState
+        self_state=SelfState(self.store).read(persona,scope)
         from .ingress import episode_id
         source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
         history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
@@ -96,6 +98,7 @@ class ContextBuilder:
             {'_id':1,'intent_revision':1,'state':1,'goal':1,'feedback_state':1,'finished_at':1,'cancel_reason':1,'revision_requested_at':1}).sort('revision',-1).limit(8))
         plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
             'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
+            'kind':{'$ne':'self_development'},
             'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
             {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
              'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,
@@ -107,12 +110,38 @@ class ContextBuilder:
                                       moment) for row in plan_rows]
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
+                 'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要只在 participants 覆盖当前说话人时才算这个人的证据：participants 里只有别人的那段是背景，不能当成当前说话人说过什么；attribution.corrections 与 corrected_by 是程序按真实 reply 链算出的更正标注，非空就说明这段转述之后有人更正过，以更正后的原话为准。',
                  'task_state_from_program':task_states,
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if event.get('episode_kind') == 'self_development':
+            if event.get('task_id'):
+                context['ongoing_development_task_id_from_program']=event['task_id']
+            # Local owner opportunity may read the real scenes already bound to
+            # this host. Keep source scene/author on each excerpt.
+            allowed = {scene['_id']}
+            for channel in self.store.config.get('channels', {}).values():
+                allowed.update(route['scene_id'] for route in channel.get('routes', {}).values())
+            recent = list(self.store.db.messages.find({
+                'scene_id': {'$in': list(allowed)},
+                '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
+                {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
+                 'delivery_state':1}).sort('received_at',-1).limit(30))
+            tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
+                {'scene_id':1,'state':1,'goal':1,'failure_type':1,'result':1,
+                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(12))
+            for item in tasks:
+                if item.get('result'):
+                    item['result_excerpt']=json.dumps(item.pop('result'),ensure_ascii=False,default=str)[:2400]
+            lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
+                {'candidate':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
+                 'activated_at':1,'task_id':1,'reason':1}).sort('published_at',-1).limit(8))
+            context['recent_experience_from_program'] = {
+                'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
+                'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
         if source:
             apply_peer_context(context,source)
         if event.get('episode_kind')=='scheduled':
@@ -177,6 +206,16 @@ class ContextBuilder:
                 'read_only_paths':grant.get('read_only_paths',[]),
                 'cancellation_available':True,
                 'network':'isolated','delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+            development = (event.get('episode_kind') == 'self_development' or
+                event.get('development_profile') == 'owner' or
+                event.get('episode_kind') == 'task_feedback' and bool(
+                    (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
+            if development and (scene['_id'],event['person_id']) == (
+                    self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
+                from .development import DEVELOPMENT_TOOLS
+                context['action_capabilities_from_program']['development'] = {
+                    'candidate':'持久的有效项目候选；通过行动脑 development_* 工具编辑、检查、自选发布。',
+                    'tools':[tool['name'] for tool in DEVELOPMENT_TOOLS]}
             context['action_capabilities_from_program']['history_query']=(
                 '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
                 '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')

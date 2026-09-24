@@ -23,7 +23,9 @@ class PublishService:
         scene=db.scenes.find_one({'_id':msg['scene_id']})
         if not ep or ep['state'] not in ('SPEAK_ACCEPTED','COMMITTED') or ep['policy_epoch']!=scene['policy_epoch'] or msg['scope_key']!=scene['scope_key']:
             raise Denied('PUBLICATION_CONTEXT_STALE')
-        if ep.get('task_id'):
+        # A self-development activation event may carry its prior task ID only
+        # as context. It is not itself a delegated task intent.
+        if ep.get('task_id') and ep.get('intent_revision') is not None:
             task=db.tasks.find_one({'_id':ep['task_id']})
             if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')

@@ -558,7 +558,8 @@ class Workbench:
         # Operator projection includes generated SPEAK while platform delivery is
         # pending; deliveryState below keeps it distinct from an accepted post.
         messages = list(store.db.messages.find({**scope, 'scene_id': scene['_id'], '$or': [
-            {'direction': 'inbound'}, {'direction': 'outbound', 'phase': 'SPEAK'}]}).sort('scene_seq', 1))
+            {'direction': 'inbound'}, {'direction': 'outbound', 'phase': 'SPEAK'},
+            *([] if external else [{'direction':'internal'}])]}).sort('scene_seq', 1))
         def episode_id(message):
             return message.get('episode_id') or message['_id'].removeprefix('in-')
         conversations = []
@@ -675,11 +676,12 @@ class Workbench:
             traces[ep_id] = steps
         rendered, attached = [], set()
         input_times = {episode_id(row): row.get('occurred_at') or row.get('received_at')
-                       for row in rows if row['direction'] == 'inbound'}
+                       for row in rows if row['direction'] in ('inbound','internal')}
         for row in rows:
             ep_id = episode_id(row)
             public = row['direction'] == 'outbound'
-            if not public and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
+            internal = row['direction'] == 'internal'
+            if not public and not internal and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
                 continue  # Task feedback is an internal event, not a user utterance.
             speak = next((step for step in reversed(traces.get(ep_id, []))
                           if step['type'] == 'phase.output' and step['sourceStreamId'] == ep_id
@@ -690,7 +692,7 @@ class Workbench:
             created_at = ((started or {}).get('createdAt') or (speak or {}).get('createdAt') or row.get('occurred_at')
                           or row.get('received_at') or input_times.get(ep_id)) if public else (
                               row.get('occurred_at') or row.get('received_at'))
-            message = {'id': row['_id'], 'role': 'assistant' if public else 'user',
+            message = {'id': row['_id'], 'role': 'assistant' if public else 'system' if internal else 'user',
                        'episodeId': ep_id, 'taskId': by_id[ep_id].get('task_id') or by_id[ep_id].get('control_result', {}).get('task_id'),
                        'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
                        'text': row['text'], 'createdAt': created_at,
@@ -700,6 +702,8 @@ class Workbench:
                 message['deliveryState'] = row.get('delivery_state', 'UNKNOWN')
             if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
                 message['authorLabel']='本机 owner 指令（非 QQ 来信）'
+            if internal:
+                message['authorLabel']='内部自我开发机会（非用户消息）'
             if public:
                 message['internalSteps'] = traces[ep_id]
                 attached.add(ep_id)
@@ -711,7 +715,7 @@ class Workbench:
                 continue
             input_row = next(row for row in rows if episode_id(row) == ep_id)
             task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
-            target = next((m for m in reversed(rendered) if m['role'] == 'user' and m['episodeId'] == ep_id), None)
+            target = next((m for m in reversed(rendered) if m['role'] in ('user','system') and m['episodeId'] == ep_id), None)
             if target is None and task_id:
                 target = next((m for m in reversed(rendered) if m.get('taskId') == task_id), None)
             if target is None and task_id and task_id in tasks:
@@ -756,6 +760,7 @@ class Workbench:
                 'readOnly': external or self.controller is None, 'canSend': not external and chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
                 'modelSettings': self.models_snapshot(),
                 'integrationAvailable': integration is not None,
+                'selfDevelopmentAvailable': not external and bool(store.config.get('self_development',{}).get('enabled')),
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
                                  'group_preference': '当前场景没有群偏好记录。'}}
         latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
@@ -804,15 +809,21 @@ class Workbench:
             return self.apply_models(body)
         if not getattr(self.controller.app, 'models_ready', True):
             raise ValueError('模型运行时未就绪，请在模型设置中修正并重新应用')
+        if path == '/self-development/offer':
+            return {'accepted':True,**self.controller.offer_self_development(
+                'self-development:manual:'+uuid.uuid4().hex)}
         if path == '/send':
             value = body.get('text')
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 16000:
                 raise ValueError('请输入 1–16000 字的消息')
             if type(body.get('integration', False)) is not bool:
                 raise ValueError('INVALID_INTEGRATION_SELECTION')
+            if type(body.get('development',False)) is not bool:
+                raise ValueError('INVALID_DEVELOPMENT_SELECTION')
             selected=body.get('conversation','')
             if selected.startswith('channel:'):
-                if body.get('integration'):raise Denied('GROUP_PROMPT_HAS_NO_INTEGRATION_GRANT')
+                if body.get('integration') or body.get('development'):
+                    raise Denied('GROUP_PROMPT_HAS_NO_DEVELOPMENT_GRANT')
                 from .channels import route_for_scene,route_members
                 scene_id=selected[len('channel:'):]
                 scene=self.store.db.scenes.find_one({'_id':scene_id,'kind':'group'})
@@ -828,7 +839,8 @@ class Workbench:
                        'group_context':{'wake_reason':'owner_group_prompt','topic_id':key,'reply_to':None,'reply_message_id':None,'mentioned_account_ids':[]},
                        'trusted_context_events':[{'kind':'owner_group_prompt','text':'这是本机 owner 请你在当前授权群发言的指令，不是群成员刚发来的 QQ 消息；用你自己的判断生成群内公开发言。没有获得额外工具、私聊记忆或配置权限。'}]}
                 return {'accepted':True,**self.controller.receive(event)}
-            return {'accepted': True, **self.controller.submit(value.strip(), integration=body.get('integration', False))}
+            return {'accepted': True, **self.controller.submit(value.strip(),
+                integration=body.get('integration', False),development=body.get('development',False))}
         elif path == '/new':
             self.controller.new_context()
         else:
@@ -885,7 +897,7 @@ class UiBridge:
                     elif self.command == 'GET' and url.path == '/provider-diagnostic':
                         value = workbench.provider_diagnostic(parse_qs(url.query).get('event', [''])[0],
                                                               parse_qs(url.query).get('conversation', [''])[0])
-                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop'):
+                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop', '/self-development/offer'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
                             raise ValueError('INVALID_BODY_SIZE')
@@ -938,7 +950,7 @@ def serve(workbench, port):
                 return process.wait(timeout=.5)
             except subprocess.TimeoutExpired:
                 if getattr(workbench, 'host', None) and workbench.host.shutdown_requested.is_set():
-                    return 0
+                    return 75 if workbench.host.restart_requested.is_set() else 0
     except KeyboardInterrupt:
         return 0
     finally:

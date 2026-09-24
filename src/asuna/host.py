@@ -8,7 +8,7 @@ from .channels import Channels, ChannelServer, route_members
 from .chat import Chat, local_settings, prepare_local_scene
 from .config import ROOT
 from .memory_indexer import MemoryIndexer
-from .state import Denied
+from .state import Denied, now
 
 
 def prepare_channels(store):
@@ -74,6 +74,7 @@ class RuntimeHost:
         self.config, self.evidence, self.database = config, evidence, database
         self.stack = ExitStack()
         self.shutdown_requested = threading.Event()
+        self.restart_requested = threading.Event()
 
     def __enter__(self):
         try:
@@ -88,6 +89,7 @@ class RuntimeHost:
                 self.app.broker.integration = self.integration
                 self.stack.callback(self.integration.close)
             self.controller = Chat(self.app, self.settings, emit=lambda text: self.evidence.record('host.notice', {'text': text}))
+            self.controller.on_turn_finished = self._maybe_restart_after_publish
             channels = Channels(self.controller)
             channels.recover_sending()
             self.controller.recover_inputs()
@@ -112,10 +114,36 @@ class RuntimeHost:
             self.controller.task_worker.start()
             self.stack.callback(self.controller.stop)
             self.stack.callback(self.schedule.close)
+            self._complete_activations()
             return self
         except BaseException:
             self.stack.close()
             raise
+
+    def _maybe_restart_after_publish(self):
+        """Switch code only after the original action/feedback turn has settled."""
+        if self.controller.active_task or not self.controller.task_queue.empty():return
+        applied=self.app.store.db.sink_receipts.find_one({
+            'kind':'self_development_publish','state':'APPLIED'})
+        if applied:
+            self.restart_requested.set()
+            self.shutdown_requested.set()
+
+    def _complete_activations(self):
+        """A successfully constructed live host supplies the actual boot result."""
+        store=self.app.store
+        for row in store.db.sink_receipts.find({'kind':'self_development_publish','state':{'$in':['APPLIED','ACTIVE']}}):
+            current=store.db.sink_receipts.find_one({'_id':row['_id']})
+            active=(store.put('sink_receipts',{**current,'state':'ACTIVE','activated_at':now()},
+                              expected=current['revision'],stream=current['task_id'])
+                    if current['state']=='APPLIED' else current)
+            self.controller.offer_self_development('self-development:publish:'+active['_id'],
+                text='自我开发候选已由当前宿主实际启动。这里是上一行动目标的发布结果；你可决定继续观察、修正或不处理。',
+                task_id=active['task_id'],
+                trusted_context_events=[{'kind':'development_publish_result',
+                    'task_id':active['task_id'],'candidate':active['candidate'],
+                    'state':'ACTIVE','activated_at':active['activated_at'],
+                    'changed_files':active['changed_files'],'boot_probe':active['boot_probe']}])
 
     def _recover_tasks(self):
         store = self.app.store

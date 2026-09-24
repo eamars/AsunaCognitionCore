@@ -67,6 +67,10 @@
   "workflow_timeout_seconds": 1800,
   "provider_idle_timeout_seconds": 1800,
   "publish_adapter": "local-idempotent-sink",
+  "self_development": {
+    "enabled": true,
+    "every_seconds": 86400
+  },
   "prompts_dir": "config/prompts",
   "chat": {
     "scene_id": "local-dm",

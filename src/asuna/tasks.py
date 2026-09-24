@@ -18,6 +18,7 @@ from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
+from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -117,6 +118,7 @@ class TaskService:
             source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
             integration=event_granted(self.store.config,source.get('event',{}))
             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
+            if revised.get('development_grant'):capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
             revised.update(integration_profile='owner' if integration else None,
                            allowed_capabilities=[t['name'] for t in [*capabilities, *(INTEGRATION_TOOLS if integration else [])]])
             return self.store.put('tasks',revised,expected=task['revision'],stream=task['_id'])
@@ -222,7 +224,7 @@ class ToolBroker:
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
 
     @property
-    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':[*WORKSPACE_TOOLS, *INTEGRATION_TOOLS] if self.store.config.get('task_mode')=='workspace' else TOOLS}}]
+    def rows(self):return [{'id':'asuna-controlled-tools','name':(ROOT/'dsh-plugin/tools.ts').as_posix(),'config':{'url':f'http://127.0.0.1:{self.server.server_port}','tools':[*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS] if self.store.config.get('task_mode')=='workspace' else TOOLS}}]
 
     def bind(self,session,task,workspace):
         if self.store.config.get('task_mode')=='workspace':
@@ -241,6 +243,8 @@ class ToolBroker:
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
             if tool not in current['allowed_capabilities']:raise Denied('CAPABILITY_DENIED')
+            if tool in DEVELOPMENT_NAMES and not current.get('development_grant'):
+                raise Denied('DEVELOPMENT_GRANT_REQUIRED')
             if tool.startswith('integration_'):
                 if current.get('integration_profile') != 'owner': raise Denied('INTEGRATION_TASK_GRANT_REQUIRED')
                 owner_profile(self.store.config, current['scene_id'], current['requester_id'])
@@ -259,7 +263,7 @@ class ToolBroker:
         # Never hold the effects lock across either wait; leases and cancellation
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
-        with (nullcontext() if tool.startswith('integration_') or tool=='consult_character'
+        with (nullcontext() if tool.startswith('integration_') or tool in DEVELOPMENT_NAMES or tool=='consult_character'
                   or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME else self.service.lock):
             if not tool.startswith('integration_'):self.service.valid(task)
             if tool=='fixture_read_resource' and self.service.inject_read_failures>0:
@@ -268,7 +272,11 @@ class ToolBroker:
                 self.store.audit(task['_id'],'fault.injected',{'kind':'transient_read_failure','artifact':key},task['scope_key'])
                 self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
                 return result
-            if tool=='consult_character':
+            if tool in DEVELOPMENT_NAMES:
+                if not getattr(self,'development',None):raise Denied('DEVELOPMENT_UNAVAILABLE')
+                result=self.development.call(task,tool,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool=='consult_character':
                 if not getattr(self, 'consult_character', None):raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE')
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
@@ -404,6 +412,8 @@ class Executor:
             text+='\n上次行动的实际返回/诊断（保留原目标；不明副作用先核实）：'+json.dumps((prior or {}).get('result',{}),ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务由 owner 在 Web 明确授权集成开发。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。'
+        if task.get('development_grant'):
+            text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。发布与否由你判断。'
         if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):
             text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
         value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)

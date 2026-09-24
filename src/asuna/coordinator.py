@@ -20,10 +20,24 @@ WORKSPACE_DECISION_SCHEMA=copy.deepcopy(DECISION_SCHEMA)
 WORKSPACE_DECISION_SCHEMA['properties']['cancel_task_id']={'type':'string','minLength':1,'maxLength':200}
 WORKSPACE_DECISION_SCHEMA['properties']['reflect_understanding']={'type':'boolean'}
 WORKSPACE_DECISION_SCHEMA['properties']['continue_task_id']={'type':'string','minLength':1,'maxLength':200}
+# P3：四种计时——一次性/固定间隔/绝对时刻/每日每周本地钟点。换算与判定在 schedule_rules，
+# 这里只管形状；at 与 clock 都按场景时区的本地钟点读，不要求模型自己换算 UTC。
+SCHEDULE_TIMING={'type':'object','additionalProperties':False,
+    'properties':{'after_seconds':{'type':'integer','minimum':1,'maximum':31622400},
+        'every_seconds':{'type':'integer','minimum':300,'maximum':31622400},
+        'at':{'type':'string','minLength':10,'maxLength':40},
+        'clock':{'type':'object','additionalProperties':False,'required':['time'],
+            'properties':{'time':{'type':'string','minLength':4,'maxLength':5},
+                'weekdays':{'type':'array','items':{'type':'integer','minimum':0,'maximum':6},
+                    'minItems':1,'maxItems':7}}}},
+    'oneOf':[{'required':['after_seconds']},{'required':['every_seconds']},
+             {'required':['at']},{'required':['clock']}]}
 WORKSPACE_DECISION_SCHEMA['properties']['schedule']={'type':'object','additionalProperties':False,
-    'required':['intent'],'properties':{'intent':{'type':'string','minLength':1,'maxLength':1000},
-    'after_seconds':{'type':'integer','minimum':1},'every_seconds':{'type':'integer','minimum':300}},
-    'oneOf':[{'required':['after_seconds']},{'required':['every_seconds']}]}
+    'required':['intent'],'properties':dict(SCHEDULE_TIMING['properties'],
+    intent={'type':'string','minLength':1,'maxLength':1000}),'oneOf':SCHEDULE_TIMING['oneOf']}
+WORKSPACE_DECISION_SCHEMA['properties']['update_plan']={'type':'object','additionalProperties':False,
+    'required':['plan_id'],'properties':{'plan_id':{'type':'string','minLength':1,'maxLength':200},
+    'intent':{'type':'string','minLength':1,'maxLength':1000},'schedule':SCHEDULE_TIMING}}
 WORKSPACE_DECISION_SCHEMA['properties']['cancel_plan_id']={'type':'string','minLength':1,'maxLength':200}
 WORKSPACE_DECISION_SCHEMA['allOf'].append({'if':{'required':['cancel_task_id']},'then':{'properties':{'next':{'const':'speak'}}}})
 
@@ -96,6 +110,31 @@ class Coordinator:
                 operation=task['_id']+':consult:'+call_key)
             return {'judgment':judgment,'kind':'character_interpretation','internal':True,
                 'context_diagnostics':{k:context[k] for k in ('retrieval_diagnostic_from_host','skill_catalog_diagnostic_from_host') if k in context}}
+
+    def _plan_row(self, ep, plan_id):
+        """她引用的那条安排在本轮上下文里的样子；找不到就返回 None（护栏照旧）。"""
+        return next((row for row in ep['context'].get('plans_from_program',[])
+                     if row.get('_id')==plan_id),None)
+
+    def _plan_rejected(self, ep, field, reason):
+        """时间安排没办成：原因记在这一条结果里交给她回话，不让整轮聊天跟着消失。"""
+        self.store.audit(ep['_id'],'schedule.control_rejected',{'field':field,'reason':reason},
+            ep['scope_key'])
+        return self._update(ep,**{field:{'accepted':False,'error':reason}})
+
+    def _plan_control(self, ep, field, action):
+        """跑一个时间安排控制字段。换算/校验类失败（时间已过、钟点不存在、形状不对）
+        记进这一条结果里交给她回话，不把整轮聊天打死；权限/纪元问题照旧抛出去。"""
+        if not self.scheduler:
+            raise ValueError('SCHEDULER_NOT_AVAILABLE')
+        try:
+            plan=action()
+        except ValueError as exc:
+            return self._plan_rejected(ep,field,str(exc))
+        return self._update(ep,**{field:{'accepted':True,'plan_id':plan['_id'],'status':plan['status'],
+            'scheduled_at':plan.get('scheduled_at'),'next_fire_at':plan.get('next_fire_at'),
+            'timezone':plan.get('timezone'),'rule':plan.get('rule'),
+            'plan_version':plan.get('plan_version',1)}})
 
     def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None):
         operation=operation or f"{ep['_id']}:{phase}:{round_id}"
@@ -177,18 +216,30 @@ class Coordinator:
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,feedback_resume_phase=None)
                 if ep['state']=='DECISION_ACCEPTED':
                     if ep['decision'].get('schedule') and not ep.get('plan_result'):
-                        if not self.scheduler:raise ValueError('SCHEDULER_NOT_AVAILABLE')
-                        plan=self.scheduler.create(ep,ep['decision']['schedule'])
-                        ep=self._update(ep,plan_result={'plan_id':plan['_id'],
-                            'status':plan['status'],'scheduled_at':plan.get('scheduled_at'),
-                            'rule':plan['rule']})
-                    if ep['decision'].get('cancel_plan_id') and not ep.get('plan_cancel_result'):
-                        if not self.scheduler:raise ValueError('SCHEDULER_NOT_AVAILABLE')
-                        plan_id=ep['decision']['cancel_plan_id']
-                        if plan_id not in {p['_id'] for p in ep['context'].get('plans_from_program',[])}:
+                        spec=ep['decision']['schedule']
+                        ep=self._plan_control(ep,'plan_result',lambda:self.scheduler.create(ep,spec))
+                    if ep['decision'].get('update_plan') and not ep.get('plan_update_result'):
+                        spec=ep['decision']['update_plan']
+                        plan_id=spec.get('plan_id')
+                        row=self._plan_row(ep,plan_id)
+                        if not row:
                             raise Denied('SCHEDULE_PLAN_NOT_IN_CURRENT_CONTEXT')
-                        plan=self.scheduler.cancel(plan_id,ep['scene_id'],ep['person_id'],ep['policy_epoch'])
-                        ep=self._update(ep,plan_cancel_result={'plan_id':plan_id,'status':plan['status']})
+                        if row.get('status') not in ('CREATING','ACTIVE'):
+                            # 已取消/已到期/已暂停的安排改不动：把这句话还给她，让她说"那条已经不在了"，
+                            # 而不是让一句改期把整轮聊天打死。
+                            ep=self._plan_rejected(ep,'plan_update_result',
+                                'SCHEDULE_PLAN_NOT_ACTIVE: 这条安排现在是 '+str(row.get('status'))+
+                                '，改期只对着还生效的；要再安排就新建一条')
+                        else:
+                            ep=self._plan_control(ep,'plan_update_result',
+                                lambda:self.scheduler.update(ep,plan_id,spec))
+                    if ep['decision'].get('cancel_plan_id') and not ep.get('plan_cancel_result'):
+                        plan_id=ep['decision']['cancel_plan_id']
+                        if not self._plan_row(ep,plan_id):
+                            raise Denied('SCHEDULE_PLAN_NOT_IN_CURRENT_CONTEXT')
+                        ep=self._plan_control(ep,'plan_cancel_result',
+                            lambda:self.scheduler.cancel(plan_id,ep['scene_id'],ep['person_id'],
+                                ep['policy_epoch']))
                     if ep['decision'].get('reflect_understanding') and not ep.get('understanding_update'):
                         from .memory import MemoryService
                         if not ep['context'].get('understanding_update_from_program',{}).get('available'):
@@ -258,7 +309,8 @@ class Coordinator:
                             if not ep['decision']['speak_before_action']:
                                 return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
                             ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
-                    results={k:ep[k] for k in ('control_result','understanding_update','plan_result','plan_cancel_result') if k in ep}
+                    results={k:ep[k] for k in ('control_result','understanding_update','plan_result',
+                        'plan_update_result','plan_cancel_result') if k in ep}
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text,feedback_resume_phase=None)
                 if ep['state']=='SPEAK_ACCEPTED':

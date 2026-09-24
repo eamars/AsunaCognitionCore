@@ -198,6 +198,33 @@ def test_running_feedback_task_stays_with_original_input_and_ready_task_is_queue
     assert next(message for message in messages if message['id'] == 'in-' + queued)['turnStatus']['label'] == '行动已排队'
 
 
+def test_resumed_speak_uses_actual_operation_and_stage_time(ui_store):
+    scene = ui_store.authorize('dm-a', 'A')
+    scope = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+             'policy_epoch': scene['policy_epoch']}
+    ep_id = 'ep-ui-resumed-speak'
+    operation = ep_id + ':SPEAK:0:resume:1'
+    ui_store.db.episodes.insert_one({'_id': ep_id, 'schema_version': 1, **scope,
+                                     'character_context': scene.get('character_context', 'initial'),
+                                     'source_event_id': ep_id, 'state': 'COMMITTED'})
+    ui_store.db.messages.insert_many([
+        {'_id': 'in-' + ep_id, 'schema_version': 1, **scope, 'episode_id': ep_id,
+         'scene_seq': 1, 'direction': 'inbound', 'text': '请回复',
+         'received_at': '2026-09-24T00:00:00+00:00'},
+        {'_id': ep_id + ':speak:0', 'schema_version': 1, **scope, 'episode_id': ep_id,
+         'scene_seq': 2, 'direction': 'outbound', 'phase': 'SPEAK', 'text': '恢复后的回复',
+         'delivery_state': 'DELIVERED'},
+    ])
+    started = ui_store.audit(ep_id, 'phase.started', {'phase': 'SPEAK', 'operation': operation}, scene['scope_key'])
+    ui_store.audit(ep_id, 'phase.output', {'phase': 'SPEAK', 'operation': operation,
+                                          'content': '恢复后的回复', 'finish_reason': 'stop'}, scene['scope_key'])
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+    public = next(message for message in view.snapshot()['messages'] if message['role'] == 'assistant')
+    assert public['displayKey'] == operation
+    assert public['createdAt'] == started['occurred_at']
+    assert next(step for step in public['internalSteps'] if step['type'] == 'phase.output')['displayKey'] == operation
+
+
 def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path):
     chat, view = controller(ui_store, tmp_path, reply('第一句回复') + reply('第二句回复'))
     chat.worker.start()

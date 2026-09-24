@@ -54,24 +54,103 @@ def trace_step(event, action=False):
             'sourceStreamId': event.get('stream_id'), 'payload': payload}
 
 
+# ── 本轮状态：程序事实与角色决定分开说 ────────────────────────────────
+# 一条已落库的入站可能停在三个不同的地方：程序闸门（没建 episode、没调模型）、
+# 角色自己选了沉默（模型跑过）、或者根本还没轮到。三者必须在 Web 上分得清，
+# 否则"程序没让它进模型"会被读成"她看了一眼、选择不说"。
+PROGRAM_HOLD_OUTCOMES = ('PROACTIVE_HOLD',)   # proactive.OUTCOME_HOLD
+PROGRAM_HOLD_STATES = ('PROACTIVE_HELD',)     # chat.py 再核拦下时写的 result_state
+RUNNING_PHASES = ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED')
+INGRESS_PENDING = {'ACCEPTED': ('已接收，排队中', '程序还没轮到这一轮，模型尚未调用'),
+                   'PROCESSING': ('处理中', '程序正在准备这一轮，还没有结果')}
+# 闸门名字跟 P5 的 holds 名单对齐（tools/p5b_ui_offline_check.py 会拿 proactive.py 源码对账）。
+# 没见过的名字原样显示，不替它编解释。
+HOLD_GATES = {
+    'not_enrolled': '这个场景没开主动模式',
+    'not_a_group_scene': '不是群场景',
+    'trigger_without_time': '这条消息读不到发生时间',
+    'quiet_hours': '安静时段',
+    'dense_exchange': '群里正在快速一问一答',
+    'candidate_merge_window': '这波消息还没发完',
+    'probe_cooldown': '刚问过一轮，还在冷却',
+    'scene_cooldown': '距上次自己插话太近',
+    'hourly_cap': '这一小时主动说过太多次',
+    'topic_attempt_unanswered': '这条话题插过一次还没人接',
+    'foreground_busy': '前台行动在跑，或队列里排着别的输入',
+    'decision_write_conflict': '决定没写进行记录（并发）',
+}
+
+
+def program_hold(ep):
+    """程序闸门拦下的那条入站：没有角色 episode，模型一次都没被调用。
+
+    只读程序自己写在行上的字段（processing_outcome／result_state／proactive），
+    不从正文或场景猜。再核拦下时以 recheck_hold 为准——第一次评估的 holds 是空的，
+    那一次闸门确实是开着的。
+    """
+    if not isinstance(ep, dict):
+        return None
+    if (ep.get('processing_outcome') not in PROGRAM_HOLD_OUTCOMES
+            and ep.get('result_state') not in PROGRAM_HOLD_STATES):
+        return None
+    record = ep.get('proactive') if isinstance(ep.get('proactive'), dict) else {}
+    recheck = record.get('recheck_hold')
+    raw = recheck if (isinstance(recheck, list) and recheck) else record.get('holds')
+    holds = [gate for gate in (raw or []) if isinstance(gate, str) and gate]
+    parts = [HOLD_GATES[gate] + '（' + gate + '）' if gate in HOLD_GATES else gate for gate in holds]
+    detail = ('程序按这个场景的闸门停下了：没有创建角色回合，模型未被调用。拦下的原因：'
+              + ('、'.join(parts) if parts else '行里没写闸门名单'))
+    if recheck:
+        detail += '。入队时闸门还开着，真要跑之前再核被拦下'
+    return {'label': '程序拦下 · 未进入模型', 'detail': detail, 'kind': 'program_hold', 'holds': holds}
+
+
+def ingress_projection(row):
+    """一条已落库、还没有角色 episode 的入站行 → 本轮状态需要的最小投影。
+
+    只搬程序已经写下的事实；proactive 里留下状态要用的几项，完整判断仍在那一行记录和审计里。
+    """
+    ep = {'_id': row['episode_id'], 'state': row.get('ingress_state') or '',
+          'character_context': row.get('character_context', 'initial'),
+          'no_wake': row.get('processing_outcome') == 'RECORDED_NO_WAKE'}
+    for field in ('processing_outcome', 'result_state'):
+        if isinstance(row.get(field), str):
+            ep[field] = row[field]
+    record = row.get('proactive')
+    if isinstance(record, dict):
+        ep['proactive'] = {key: record[key] for key in ('holds', 'recheck_hold', 'wake', 'decided_at')
+                           if key in record}
+    if row.get('failure'):
+        ep['failure'] = row['failure']
+    return ep
+
+
 def turn_status(ep, created_at, task=None):
     state = ep.get('state', '')
     if ep.get('no_wake'):
         return None  # Routine group chatter has no agent turn to explain.
-    if state in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED'):
+    if state in RUNNING_PHASES:
         return None  # A running phase is not a completed, silent turn.
-    elif ep.get('silent_reason'):
+    hold = program_hold(ep)
+    if ep.get('silent_reason'):
         label = '行动结果未追加公开回复' if ep.get('episode_kind') == 'task_feedback' else '角色选择不发言'
         detail = ep['silent_reason']
     elif ep.get('failure') or state.startswith('FAILED') or state == 'INTERRUPTED':
         label, detail = '本轮未完成', '展开执行过程查看错误'
+    elif hold:
+        label, detail = hold['label'], hold['detail']
     elif state == 'WAITING_TASK':
         label, detail = ('行动已排队', '等待行动脑开始') if (task or {}).get('state') == 'READY' else ('行动处理中', '可展开执行过程查看进度')
     elif ep.get('episode_kind') == 'task_feedback':
         label, detail = '行动反馈已处理', '未追加公开回复'
+    elif state in INGRESS_PENDING:
+        label, detail = INGRESS_PENDING[state]
     else:
         label, detail = '本轮已结束', '没有公开回复'
-    return {'label': label, 'detail': detail, 'createdAt': created_at, 'state': state}
+    status = {'label': label, 'detail': detail, 'createdAt': created_at, 'state': state}
+    if hold:
+        status.update(kind=hold['kind'], holds=hold['holds'])
+    return status
 
 
 def raw_provider_response(request_refs, root=None):
@@ -464,10 +543,7 @@ class Workbench:
         known = {ep['_id'] for ep in episodes}
         for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'host_managed': True}):
             if row['episode_id'] not in known:
-                episodes.append({'_id': row['episode_id'], 'state': row['ingress_state'],
-                                 'character_context': row.get('character_context', 'initial'),
-                                 'no_wake': row.get('processing_outcome') == 'RECORDED_NO_WAKE',
-                                 **({'failure': row['failure']} if row.get('failure') else {})})
+                episodes.append(ingress_projection(row))
         # Contexts are native Chat /new generations, not fabricated channels.
         current = scene.get('character_context', 'initial')
         groups = {current: []}
@@ -598,18 +674,29 @@ class Workbench:
                 steps.append({'id': ep_id + ':failure', 'type': 'episode.failure', 'label': '执行失败', 'status': 'error', 'summary': display(ep['failure']), 'payload': ep['failure']})
             traces[ep_id] = steps
         rendered, attached = [], set()
+        input_times = {episode_id(row): row.get('occurred_at') or row.get('received_at')
+                       for row in rows if row['direction'] == 'inbound'}
         for row in rows:
             ep_id = episode_id(row)
             public = row['direction'] == 'outbound'
             if not public and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
                 continue  # Task feedback is an internal event, not a user utterance.
+            speak = next((step for step in reversed(traces.get(ep_id, []))
+                          if step['type'] == 'phase.output' and step['sourceStreamId'] == ep_id
+                          and step['payload'].get('phase') == 'SPEAK' and step['status'] != 'error'), None) if public else None
+            speak_operation = speak.get('displayKey') if speak else None
+            started = next((step for step in traces.get(ep_id, []) if step['type'] == 'phase.started'
+                            and step['payload'].get('operation') == speak_operation), None) if speak_operation else None
+            created_at = ((started or {}).get('createdAt') or (speak or {}).get('createdAt') or row.get('occurred_at')
+                          or row.get('received_at') or input_times.get(ep_id)) if public else (
+                              row.get('occurred_at') or row.get('received_at'))
             message = {'id': row['_id'], 'role': 'assistant' if public else 'user',
                        'episodeId': ep_id, 'taskId': by_id[ep_id].get('task_id') or by_id[ep_id].get('control_result', {}).get('task_id'),
                        'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
-                       'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')),
+                       'text': row['text'], 'createdAt': created_at,
                        'sceneSeq': row['scene_seq'], '_order': row['scene_seq']}
             if public:
-                message['displayKey'] = ep_id + ':SPEAK:0'
+                message['displayKey'] = speak_operation or ep_id + ':SPEAK:0'
                 message['deliveryState'] = row.get('delivery_state', 'UNKNOWN')
             if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
                 message['authorLabel']='本机 owner 指令（非 QQ 来信）'

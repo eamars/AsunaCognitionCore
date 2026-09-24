@@ -161,6 +161,92 @@ class Chat:
             return {'status': 'accepted' if created else 'duplicate', 'episode_id': episode,
                     'received_at': row['received_at']}
 
+    def _proactive_open(self, scene_id):
+        """前台行动在跑、或本场景已经排着别的输入 → 这次主动机会直接作废，不排队等。"""
+        if self.active_task is not None or not self.task_queue.empty():
+            return False
+        with self.pending.mutex:
+            return not self.pending.queue.queues.get(scene_id)
+
+    def _proactive_group_row(self, event, episode):
+        """主动判断只在已授权群场景的旁听行上做；读不到就照实放弃这次机会。"""
+        from . import proactive
+        woken = (event.get('group_context') or {}).get('wake_reason') == proactive.WAKE_REASON
+        if not woken and not (event.get('channel') and 'group_context' in event):
+            return None, None, None          # 不是通道群消息：没有旁听行可判断
+        row = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
+        scene = self.app.store.db.scenes.find_one({'_id': event['scene_id']})
+        if not scene or scene.get('kind') != 'group' or not row:
+            return None, None, None
+        return proactive, scene, row
+
+    def _proactive_consider(self, event, episode, result):
+        """分寸判断是可选腿：它自己出错只记证据，不许把已经跑完的一轮改成失败。"""
+        try:
+            self._proactive_consider_inner(event, episode, result)
+        except Exception:
+            self.app.evidence.record('proactive.consider_error', {'episode_id': episode,
+                                                                  'traceback': traceback.format_exc()[-800:]})
+
+    def _proactive_consider_inner(self, event, episode, result):
+        """旁听行落库之后的一次分寸判断：只由新入站消息触发，没有任何定时器重开旧话题。"""
+        if result.get('state') != 'RECEIVED_NO_WAKE':
+            return
+        proactive, scene, row = self._proactive_group_row(event, episode)
+        if not proactive:
+            return
+        decision, updated = proactive.consider(
+            self.app.store, self.app.evidence, self.app.config, scene, row,
+            now_ts=proactive.now_ts(), can_run=self._proactive_open(scene['_id']))
+        if updated is None:
+            return
+        with self.ingress_lock:
+            self.enqueued.add(episode)
+        self.latest = episode
+        self.pending.put((updated['event'], episode))
+        self.app.evidence.record('proactive.enqueued', {'episode_id': episode,
+            'scene_id': scene['_id'], 'holds': decision.get('holds', [])})
+
+    def _proactive_stale(self, event, episode):
+        """再核本身出错就当拦下：她自己的插话宁可少说一次，也不把一条旁听消息变成用户看得见的报错。"""
+        try:
+            return self._proactive_stale_inner(event, episode)
+        except Exception:
+            self.app.evidence.record('proactive.recheck_error', {'episode_id': episode,
+                                                                 'traceback': traceback.format_exc()[-800:]})
+            return True
+
+    def _proactive_stale_inner(self, event, episode):
+        """主动回合真要在跑之前再核一次闸门：这中间她可能已经说过一句、或前台开始忙了。"""
+        from . import proactive
+        if (event.get('group_context') or {}).get('wake_reason') != proactive.WAKE_REASON:
+            return False                       # 不是她自己插的那句：该跑就跑，闸门管不着
+        proactive, scene, row = self._proactive_group_row(event, episode)
+        if not proactive:
+            return False
+        limits = proactive.route_settings(self.app.config, scene)
+        moment = proactive.now_ts()
+        profile = proactive.observe(self.app.store, scene, now_ts=moment, trigger=row, limits=limits)
+        decision = proactive.decide(profile, limits, now_ts=moment,
+                                    can_run=self._proactive_open(scene['_id']))
+        if decision['fire']:
+            return False
+        current = self.app.store.db.messages.find_one({'_id': row['_id']})
+        if not current:
+            return True
+        record = {**(current.get('proactive') or {}), 'wake': False,
+                  'recheck_hold': decision['holds'],
+                  'recheck_at': datetime.fromtimestamp(moment, timezone.utc).isoformat()}
+        try:
+            self.app.store.put('messages', {**current, 'processing_outcome': proactive.OUTCOME_HOLD,
+                                           'proactive': record}, expected=current['revision'],
+                               stream=episode)
+        except Exception:
+            pass
+        self.app.evidence.record('proactive.hold', {'scene_id': scene['_id'], 'message_id': row['_id'],
+            'stage': 'recheck', 'holds': decision['holds']})
+        return True
+
     def recover_inputs(self):
         """Called once by the owning host before it exposes any clients."""
         with self.ingress_lock:
@@ -238,6 +324,10 @@ class Chat:
                                 or event['channel']['account_id'] != self.app.config['channels'][event['channel']['id']]['account_id']):
                             raise PermissionError('INPUT_ROUTE_STALE')
                     input_state(self.app.store, episode, 'PROCESSING')
+                    if self._proactive_stale(event, episode):
+                        # P5：入队时闸门还开着，真要开口时已经不该插这句——不建 episode、不调模型。
+                        input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
+                        continue
                     previous = self.app.store.db.episodes.find_one({'_id': episode})
                     if previous and previous['state'] in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED', 'INTERRUPTED'):
                         # Native lane receipts govern recovery; never invent a new operation ID.
@@ -245,6 +335,7 @@ class Chat:
                     else:
                         result = self.app.router.receive(event, persona=self.settings['persona'])
                     input_state(self.app.store, episode, 'COMPLETE', result_state=result['state'])
+                    self._proactive_consider(event, episode, result)
                 self.app.store.authorize(event['scene_id'], event['person_id'])
                 messages = list(self.app.store.db.messages.find({
                     'episode_id': episode, 'scene_id': event['scene_id'],

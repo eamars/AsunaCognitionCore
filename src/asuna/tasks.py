@@ -17,6 +17,7 @@ from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
+from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -44,6 +45,9 @@ WORKSPACE_TOOLS = [
 
 TOOLS.append(HISTORY_TOOL)
 WORKSPACE_TOOLS.append(HISTORY_TOOL)
+# P1-c：按需群整理与历史查询共用同一只读入口规则（场景来自任务绑定，参数不换范围）。
+TOOLS.append(DIGEST_TOOL)
+WORKSPACE_TOOLS.append(DIGEST_TOOL)
 TOOLS.append(CONSULT_TOOL)
 WORKSPACE_TOOLS.append(CONSULT_TOOL)
 
@@ -255,7 +259,8 @@ class ToolBroker:
         # Never hold the effects lock across either wait; leases and cancellation
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
-        with (nullcontext() if tool.startswith('integration_') or tool=='consult_character' or tool==HISTORY_TOOL_NAME else self.service.lock):
+        with (nullcontext() if tool.startswith('integration_') or tool=='consult_character'
+                  or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME else self.service.lock):
             if not tool.startswith('integration_'):self.service.valid(task)
             if tool=='fixture_read_resource' and self.service.inject_read_failures>0:
                 self.service.inject_read_failures-=1
@@ -274,6 +279,12 @@ class ToolBroker:
                 # cancellation or lease renewal cannot queue behind a Mongo read.
                 if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE')
                 result=self.history.query_for_task(task,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool==DIGEST_TOOL_NAME:
+                # P1-c read-only discussion digest: same rule as history — scene from the
+                # task binding, no effects lock held across the Mongo reads.
+                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE')
+                result=self.digest.digest_for_task(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool.startswith('integration_'):
                 result=self.integration.call(tool,args)

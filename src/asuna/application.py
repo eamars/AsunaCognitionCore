@@ -5,6 +5,7 @@ from .coordinator import Coordinator
 from .dsh_lane import DshLane
 from .retrieval import Retrieval
 from .history_query import HistoryQueryService
+from .discussion_digest import DiscussionDigestService
 from .tasks import TaskService,ToolBroker,Executor
 from .router import Router
 
@@ -23,6 +24,9 @@ class Application:
             # P1-b: the trusted read-only history entry reuses this store and retrieval;
             # the broker binds every call to the calling task's own scene and epoch.
             self.history=HistoryQueryService(self.store,self.retrieval);self.broker.history=self.history
+            # P1-c: on-demand group discussion digest reads the very same store/retrieval;
+            # no new service, port or collection, and nothing is ever sent to QQ.
+            self.digest=DiscussionDigestService(self.store,self.retrieval);self.broker.digest=self.digest
             self.lanes=ExitStack();self.stack.callback(self.lanes.close)
             self.models_ready=False
             self._start_lanes(self.config)

@@ -87,6 +87,11 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
   const isOutput = step => ['phase.output', 'execution.output'].includes(step.type);
   const isExecutionCall = call => call?.phase === 'execution' || call?.phase === 'execution-repair';
   const callKey = call => `${call.operation}:${call.request_ref || call.id}`;
+  function publicOperation(message) {
+    const speak = (message.internalSteps || []).filter(step => step.type === 'phase.output' &&
+      step.sourceStreamId === message.episodeId && step.payload?.phase === 'SPEAK' && step.status !== 'error').at(-1);
+    return speak?.displayKey || message.displayKey;
+  }
   function hostFor(messages, call) {
     if (typeof call.operation !== 'string') return null;
     const episodes = messages.filter(row => row.internalSteps && call.operation.startsWith(`${row.episodeId}:`));
@@ -97,7 +102,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
   }
   function nodesFor(state, calls) {
     const messages = state?.messages || [], live = new Map(), nodes = [];
-    const publicKeys = new Set(messages.filter(row => row.role === 'assistant').map(row => row.displayKey));
+    const publicKeys = new Set(messages.filter(row => row.role === 'assistant').map(publicOperation));
     const durableKeys = new Set(messages.flatMap(row => (row.internalSteps || []).filter(isOutput).map(step => step.displayKey)));
     for (const call of calls) {
       // DSH context compaction can run inside an Asuna phase operation. Its
@@ -155,11 +160,14 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
         && !(step.type.endsWith('.started') && step.status === 'running'));
       if (rest.length) nodes.push({key: `trace:${message.episodeId || message.id}`, kind: 'trace', steps: rest,
         createdAt: rest.find(step => step.createdAt)?.createdAt || message.createdAt});
-      if (message.role === 'assistant') nodes.push({key: `generation:${message.displayKey || message.id}`,
-        kind: 'generation', message, step: steps.filter(step => isOutput(step) && step.displayKey === message.displayKey).at(-1),
-        calls: (live.get(message.id) || []).filter(call => call.operation === message.displayKey),
-        createdAt: steps.find(step => step.type === 'phase.started' && step.payload?.operation === message.displayKey)?.createdAt
-          || message.createdAt});
+      if (message.role === 'assistant') {
+        const operation = publicOperation(message);
+        const settled = steps.filter(step => step.type === 'phase.output' && step.displayKey === operation).at(-1);
+        nodes.push({key: `generation:${operation || message.id}`, kind: 'generation', message, step: settled,
+          calls: (live.get(message.id) || []).filter(call => call.operation === operation),
+          createdAt: steps.find(step => step.type === 'phase.started' && step.payload?.operation === operation)?.createdAt
+            || settled?.createdAt || message.createdAt});
+      }
     }
     const seen = new Set();
     return nodes.filter(node => { if (seen.has(node.key)) return false; seen.add(node.key); return true; })
@@ -300,7 +308,9 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     return h('div', {className: 'asuna-tool', 'data-message-key': `tool:${step.id}`},
       h(DisclosureRow, {icon: h(StateDot, {state: step.status === 'error' ? 'error' : 'done'}),
         title: `${step.actor || '工具'} · ${step.payload?.tool || step.type}`, open, expandable: true, expandOnRowClick: true,
-        onToggle: () => setOpen(!open), collapsedContent: h('small', null, clock(step.createdAt))}, code(step.payload)));
+        onToggle: () => setOpen(!open), collapsedContent: h(React.Fragment, null,
+          h('span', {className: 'asuna-tool-separator', 'aria-hidden': true}),
+          h('time', {className: 'asuna-tool-time'}, clock(step.createdAt)))}, code(step.payload)));
   }
   function Trace({steps, nodeKey}) {
     const [open, setOpen] = useState(false);

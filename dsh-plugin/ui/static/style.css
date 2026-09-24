@@ -37,7 +37,7 @@ body:has(.asuna-workbench) [data-slot="root"]>div:has(>[data-rightbar-col])>[dat
 .asuna-thinking[data-state="running"] .asuna-thinking-row:after{content:"";position:absolute;inset-block:0;left:0;width:300px;pointer-events:none;background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--dsw-alias-bg-base) 60%,transparent) 55%,transparent 100%);animation:asuna-thinking-sweep 2.6s ease-out infinite}
 @keyframes asuna-thinking-sweep{0%{left:-300px}90%,to{left:100%}}
 @media (prefers-reduced-motion:reduce){.asuna-thinking[data-state="running"] .asuna-thinking-row:after{animation:none}}
-.asuna-thinking-separator{flex:none;width:2px;height:2px;margin:0 8px;border-radius:1px;background:var(--dsw-alias-label-caption,#999)}
+.asuna-thinking-separator,.asuna-tool-separator{flex:none;width:2px;height:2px;margin:0 8px;border-radius:1px;background:var(--dsw-alias-label-caption,#999)}
 .asuna-thinking-summary{min-width:0;flex:auto;overflow:hidden;white-space:nowrap;color:var(--dsw-alias-label-tertiary,#81858c);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px))}
 .asuna-thinking-summary-text{display:block;overflow:hidden;text-overflow:ellipsis}
 .asuna-thinking-summary[data-follow-end]{display:flex;justify-content:flex-end}
@@ -46,6 +46,7 @@ body:has(.asuna-workbench) [data-slot="root"]>div:has(>[data-rightbar-col])>[dat
 .asuna-error-text{color:#a93434;background:#fff2f1;border-radius:5px;padding:6px 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 .asuna-turn-status{margin-top:6px;color:#69778e;font-size:12px}.asuna-muted{color:var(--asuna-muted);font-size:13px;line-height:1.7}
 .asuna-tool,.asuna-trace{padding-left:12px}.asuna-trace ol{list-style:decimal;padding-left:18px}.asuna-trace li{padding:5px 0;border-top:1px solid var(--asuna-line)}
+.asuna-tool-time{flex:none;white-space:nowrap}
 .asuna-bottom{position:absolute;bottom:122px;left:50%;transform:translateX(-50%);z-index:1}
 .asuna-composer{padding:13px 18px;border-top:1px solid var(--asuna-line);display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .asuna-composer textarea{resize:vertical;min-height:55px;max-height:180px;width:100%;border:1px solid #dce3ee;border-radius:8px;padding:10px;color:#263249;background:#fff;font-size:13px}

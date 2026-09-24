@@ -47,7 +47,7 @@ def group_context(store, route, body, event_id):
             '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
                     {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': 'xiaoman'}]})
     reason = 'mentioned_account' if body['account_id'] in mentions else None
-    topic = None
+    topic = topic_via = None
     if parent:
         previous = parent.get('event', {}).get('group_context', {})
         recent = parent.get('received_at', parent.get('receipt_at', '')) >= (datetime.now(timezone.utc)-timedelta(minutes=30)).isoformat()
@@ -55,10 +55,17 @@ def group_context(store, route, body, event_id):
             reason = reason or 'reply_to_character'
             origin = store.db.messages.find_one({'_id': 'in-'+parent['episode_id']})
             topic = (origin or {}).get('event', {}).get('group_context', {}).get('topic_id')
-        elif previous.get('topic_id') and recent:
+            topic_via = 'reply_to_character'
+        elif previous.get('wake_reason') and recent:
+            # 唤醒口径不变：父行本身被唤醒过（或她回过我）才算"活跃话题里的接话"。
             reason = reason or 'reply_in_active_topic'
-            topic = previous['topic_id']
-    return {'wake_reason': reason, 'topic_id': (topic or event_id) if reason else None,
+            topic, topic_via = previous.get('topic_id'), 'reply_in_active_topic'
+        elif previous.get('topic_id'):
+            # P5：旁听来的那条线也认得出属于哪个话题，只是不因此唤醒她。
+            topic, topic_via = previous['topic_id'], 'reply_chain'
+    if topic is None:
+        topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
+    return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,
             'reply_to': reply, 'reply_message_id': parent['_id'] if parent else None,
             'mentioned_account_ids': mentions}
 

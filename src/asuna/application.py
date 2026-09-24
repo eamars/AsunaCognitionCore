@@ -4,6 +4,7 @@ from .context import ContextBuilder
 from .coordinator import Coordinator
 from .dsh_lane import DshLane
 from .retrieval import Retrieval
+from .history_query import HistoryQueryService
 from .tasks import TaskService,ToolBroker,Executor
 from .router import Router
 
@@ -19,6 +20,9 @@ class Application:
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
             self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)
+            # P1-b: the trusted read-only history entry reuses this store and retrieval;
+            # the broker binds every call to the calling task's own scene and epoch.
+            self.history=HistoryQueryService(self.store,self.retrieval);self.broker.history=self.history
             self.lanes=ExitStack();self.stack.callback(self.lanes.close)
             self.models_ready=False
             self._start_lanes(self.config)

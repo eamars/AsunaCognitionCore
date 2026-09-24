@@ -16,6 +16,7 @@ from .skills import skills_directory
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
+from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -41,6 +42,8 @@ WORKSPACE_TOOLS = [
     {'name': 'task_status', 'description': 'Optionally annotate your current assessment: done, partial, blocked, or needs_character_decision. You may continue working and update it. Natural language findings do not require this tool.', 'parameters': {'status': {'type': 'string', 'enum': ['done', 'partial', 'blocked', 'needs_character_decision'], 'required': True}}},
 ]
 
+TOOLS.append(HISTORY_TOOL)
+WORKSPACE_TOOLS.append(HISTORY_TOOL)
 TOOLS.append(CONSULT_TOOL)
 WORKSPACE_TOOLS.append(CONSULT_TOOL)
 
@@ -252,7 +255,7 @@ class ToolBroker:
         # Never hold the effects lock across either wait; leases and cancellation
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
-        with (nullcontext() if tool.startswith('integration_') or tool=='consult_character' else self.service.lock):
+        with (nullcontext() if tool.startswith('integration_') or tool=='consult_character' or tool==HISTORY_TOOL_NAME else self.service.lock):
             if not tool.startswith('integration_'):self.service.valid(task)
             if tool=='fixture_read_resource' and self.service.inject_read_failures>0:
                 self.service.inject_read_failures-=1
@@ -264,6 +267,13 @@ class ToolBroker:
                 if not getattr(self, 'consult_character', None):raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE')
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
+                with self.service.lock:self.service.valid(task)
+            elif tool==HISTORY_TOOL_NAME:
+                # Read-only scoped history: the scene comes from the task binding, never
+                # from arguments. The effects lock stays released during the query so a
+                # cancellation or lease renewal cannot queue behind a Mongo read.
+                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE')
+                result=self.history.query_for_task(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool.startswith('integration_'):
                 result=self.integration.call(tool,args)

@@ -137,6 +137,9 @@ class ContextBuilder:
                 'read_only_paths':grant.get('read_only_paths',[]),
                 'cancellation_available':True,
                 'network':'isolated','delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+            context['action_capabilities_from_program']['history_query']=(
+                '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
+                '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
             from .integration import event_granted, INTEGRATION_TOOLS
             if event_granted(self.store.config, event):
                 context['action_capabilities_from_program']['integration'] = {

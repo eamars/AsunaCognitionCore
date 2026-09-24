@@ -54,7 +54,7 @@ def trace_step(event, action=False):
             'sourceStreamId': event.get('stream_id'), 'payload': payload}
 
 
-def turn_status(ep, created_at):
+def turn_status(ep, created_at, task=None):
     state = ep.get('state', '')
     if ep.get('no_wake'):
         return None  # Routine group chatter has no agent turn to explain.
@@ -66,7 +66,7 @@ def turn_status(ep, created_at):
     elif ep.get('failure') or state.startswith('FAILED') or state == 'INTERRUPTED':
         label, detail = '本轮未完成', '展开执行过程查看错误'
     elif state == 'WAITING_TASK':
-        label, detail = '行动处理中', '可展开执行过程查看进度'
+        label, detail = ('行动已排队', '等待行动脑开始') if (task or {}).get('state') == 'READY' else ('行动处理中', '可展开执行过程查看进度')
     elif ep.get('episode_kind') == 'task_feedback':
         label, detail = '行动反馈已处理', '未追加公开回复'
     else:
@@ -506,8 +506,29 @@ class Workbench:
         oldest_seq = page_rows[0]['scene_seq'] if page_rows else None
         # DSH keeps the active turn in its followed window. Keep the real
         # running task's owner visible even after newer messages move past it.
-        active_owners = {task.get('episode_id') for task in store.db.tasks.find(
-            {**scope, 'state': {'$in': ['READY', 'RUNNING']}}, {'episode_id': 1})}
+        active_tasks = list(store.db.tasks.find(
+            {**scope, 'state': {'$in': ['READY', 'RUNNING']}},
+            {'episode_id': 1, 'continues_task_id': 1}))
+        lineage_tasks = {task['_id']: task for task in active_tasks}
+        def ancestors(task):
+            seen = {task['_id']}
+            while task.get('continues_task_id'):
+                parent_id = task['continues_task_id']
+                if parent_id in seen:
+                    break
+                seen.add(parent_id)
+                parent = lineage_tasks.get(parent_id)
+                if parent is None:
+                    parent = store.db.tasks.find_one({'_id': parent_id, **scope},
+                                                     {'episode_id': 1, 'continues_task_id': 1})
+                    if parent is None:
+                        break
+                    lineage_tasks[parent_id] = parent
+                yield parent
+                task = parent
+        active_owners = {task.get('episode_id') for task in active_tasks}
+        for task in active_tasks:
+            active_owners.update(parent.get('episode_id') for parent in ancestors(task))
         active_owners.intersection_update(groups[chosen])
         rows = sorted({row['_id']: row for row in [
             *page_rows, *(row for row in messages if episode_id(row) in active_owners),
@@ -606,11 +627,18 @@ class Workbench:
             target = next((m for m in reversed(rendered) if m['role'] == 'user' and m['episodeId'] == ep_id), None)
             if target is None and task_id:
                 target = next((m for m in reversed(rendered) if m.get('taskId') == task_id), None)
+            if target is None and task_id and task_id in tasks:
+                for parent in ancestors(tasks[task_id]):
+                    target = next((m for m in reversed(rendered) if m.get('taskId') == parent['_id']), None)
+                    if target is not None:
+                        break
             if target is None:
                 continue  # Its input is outside the visible 80-message window.
             occurred = next((step.get('createdAt') for step in reversed(traces[ep_id]) if step.get('createdAt')),
                             input_row.get('occurred_at', input_row.get('received_at')))
-            target['turnStatus'] = turn_status(ep, occurred)
+            target['turnStatus'] = turn_status(ep, occurred, tasks.get(task_id))
+            if task_id and task_id != target.get('taskId'):
+                target.setdefault('taskIds', []).append(task_id)
             prior = target.get('internalSteps', [])
             target['internalSteps'] = list({step['id']: step for step in [*prior, *traces[ep_id]]}.values())
         rendered.sort(key=lambda row: row['_order'])

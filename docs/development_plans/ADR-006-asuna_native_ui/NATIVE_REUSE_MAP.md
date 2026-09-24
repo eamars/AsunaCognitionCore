@@ -12,7 +12,7 @@
 
 在固定版 DSH 的 `main` keyed slot 注册 Asuna 面板，复用同一份宿主 React 与 `@deepseek-ai/dsh-client-ui-primitives` 虚拟公开模块。左栏使用 `Input`、`Button`，消息正文使用 `MarkdownText`，工具和原包诊断使用 `DisclosureRow`、`CodeBlock`，状态使用 `StateDot`、`ConnectionIndicator`。Asuna 只负责原场景筛选和选择、消息来源/身份关联、现有输入回调和只读增量投影。
 
-固定版 `@deepseek-ai/dsh-client-ui-chat` 的 `AssistantMarkdown` 将 `kind: 'reasoning'` 交给内部 `ReasoningRow`；该行用公开 `DisclosureRow` 和 `IconThinkOutline14` 折叠展示原思考文本，未将思考表达为 JSON。本轮不导入或复制内部 `ReasoningRow`，只用这两个公开基础组件组合 Asuna 已取得的 `reasoning_content` 或 DSH `reasoning`；来源标签保留，生成中的思考直接可见，完整原文可展开。网页折叠诊断只显示非内容元数据，真正的 wire 回包留在既有审计。
+固定版 `@deepseek-ai/dsh-client-ui-chat` 的 `AssistantMarkdown` 将 `kind: 'reasoning'` 交给内部 `ReasoningRow`；该行用公开 `DisclosureRow` 和 `IconThinkOutline14` 折叠展示原思考文本，未将思考表达为 JSON。其单条思考默认折叠：运行时预览末行，结束后预览首行，预览去掉 `**` 标记，展开后保留全文；运行状态和语言跟随 DSH。本轮不导入或复制内部 `ReasoningRow`，只用这两个公开基础组件组合 Asuna 已取得的 `reasoning_content` 或 DSH `reasoning`；来源标签保留，生成中的思考有预览且可直接展开。网页折叠诊断只显示非内容元数据，真正的 wire 回包留在既有审计。
 
 以下表格保留范围修订前的完整视图调查；表内 WorkspaceBrowser、Chat、SessionEventStream 路径**均未作为本轮交付接入**。
 

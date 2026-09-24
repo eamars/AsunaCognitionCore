@@ -157,6 +157,47 @@ def test_silent_turn_stays_with_input_instead_of_creating_system_message(ui_stor
         chat.stop()
 
 
+def test_running_feedback_task_stays_with_original_input_and_ready_task_is_queued(ui_store):
+    scene = ui_store.authorize('dm-a', 'A')
+    scope = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+             'policy_epoch': scene['policy_epoch']}
+    context = scene.get('character_context', 'initial')
+    root, child, queued = 'ep-ui-root', 'ep-ui-feedback', 'ep-ui-queued'
+    for ep_id, kind, state in ((root, 'external', 'WAITING_TASK'),
+                               (child, 'task_feedback', 'WAITING_TASK'),
+                               (queued, 'external', 'WAITING_TASK')):
+        ui_store.db.episodes.insert_one({'_id': ep_id, 'schema_version': 1, **scope, 'character_context': context,
+                                         'episode_kind': kind, 'source_event_id': ep_id, 'state': state,
+                                         'task_id': 'task-' + ep_id})
+    for seq, ep_id, kind in ((1, root, 'external'), (2, child, 'task_feedback'),
+                              (16, queued, 'external')):
+        ui_store.db.messages.insert_one({'_id': 'in-' + ep_id, 'schema_version': 1, **scope, 'episode_id': ep_id,
+                                         'scene_seq': seq, 'direction': 'inbound',
+                                         'text': kind, 'event': {'episode_kind': kind},
+                                         'received_at': f'2026-09-24T00:00:{seq:02d}+00:00'})
+    for seq in range(3, 16):
+        ep_id = f'ep-ui-filler-{seq}'
+        ui_store.db.episodes.insert_one({'_id': ep_id, 'schema_version': 1, **scope, 'character_context': context,
+                                         'source_event_id': ep_id, 'state': 'COMMITTED'})
+        ui_store.db.messages.insert_one({'_id': 'in-' + ep_id, 'schema_version': 1, **scope, 'episode_id': ep_id,
+                                         'scene_seq': seq, 'direction': 'inbound',
+                                         'text': 'filler', 'received_at': f'2026-09-24T00:00:{seq:02d}+00:00'})
+    for ep_id, state, parent in ((root, 'BLOCKED', None), (child, 'RUNNING', 'task-' + root),
+                                  (queued, 'READY', None)):
+        ui_store.db.tasks.insert_one({'_id': 'task-' + ep_id, 'request_key': 'task-' + ep_id,
+                                      'schema_version': 1, **scope, 'episode_id': ep_id,
+                                      'state': state, 'intent_revision': 1,
+                                      **({'continues_task_id': parent} if parent else {})})
+    ui_store.audit('task-' + child, 'tool_call', {'tool': 'read_file'}, scene['scope_key'])
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+    messages = view.snapshot()['messages']
+    owner = next(message for message in messages if message['id'] == 'in-' + root)
+    assert owner['taskIds'] == ['task-' + child]
+    assert any(step['sourceStreamId'] == 'task-' + child for step in owner['internalSteps'])
+    assert not any(message['id'] == 'in-' + child for message in messages)
+    assert next(message for message in messages if message['id'] == 'in-' + queued)['turnStatus']['label'] == '行动已排队'
+
+
 def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path):
     chat, view = controller(ui_store, tmp_path, reply('第一句回复') + reply('第二句回复'))
     chat.worker.start()

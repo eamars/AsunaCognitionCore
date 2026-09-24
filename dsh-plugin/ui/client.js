@@ -91,7 +91,8 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     if (typeof call.operation !== 'string') return null;
     const episodes = messages.filter(row => row.internalSteps && call.operation.startsWith(`${row.episodeId}:`));
     if (episodes.length) return (episodes.find(row => row.role === 'assistant') || episodes.at(-1)).id;
-    const tasks = messages.filter(row => row.internalSteps && row.taskId && call.operation.startsWith(`${row.taskId}:`));
+    const tasks = messages.filter(row => row.internalSteps &&
+      [row.taskId, ...(row.taskIds || [])].some(taskId => taskId && call.operation.startsWith(`${taskId}:`)));
     return tasks.length ? (tasks.find(row => row.episodeId === row.taskOwnerEpisodeId) || tasks.at(-1)).id : null;
   }
   function nodesFor(state, calls) {
@@ -187,12 +188,24 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       diagnostic ? code(diagnostic) : h('p', {className: 'asuna-muted'}, fallback));
   }
   function Thinking({body, live}) {
-    const [open, setOpen] = useState(Boolean(live));
+    const [open, setOpen] = useState(false);
     useSyncExternalStore(localeSubscribe, localeSnapshot, localeSnapshot);
-    return h(DisclosureRow, {icon: h(IconThinkOutline14, {size: 14}),
+    const visible = live ? body.trimEnd() : body;
+    const line = live ? visible.slice(visible.lastIndexOf('\n') + 1) : visible.split('\n', 1)[0];
+    const preview = line.replaceAll('**', '');
+    return h('div', {className: 'asuna-thinking', 'data-variant': 'think', 'data-state': live ? 'running' : 'ok',
+      'data-expanded': open || undefined},
+      live && h('span', {className: 'asuna-sr-only'}, translate('running')),
+      h(DisclosureRow, {icon: h(IconThinkOutline14, {size: 14}),
       title: translate('thinking'), open, expandable: true, expandOnRowClick: true,
-      onToggle: () => setOpen(!open)},
-      h('div', {className: 'asuna-thinking-text'}, body));
+      onToggle: () => setOpen(value => !value), rowClassName: 'asuna-thinking-row',
+      leadingClassName: 'asuna-thinking-leading',
+      titleClassName: 'asuna-thinking-title', chevronClassName: 'asuna-thinking-chevron',
+      collapsedContent: h(React.Fragment, null,
+        h('span', {className: 'asuna-thinking-separator', 'aria-hidden': true}),
+        h('span', {className: 'asuna-thinking-summary', 'data-follow-end': live || undefined},
+          h('span', {className: 'asuna-thinking-summary-text'}, preview)))},
+      h('div', {className: 'asuna-thinking-text'}, body)));
   }
   function decisionGoal(value) {
     if (typeof value !== 'string') return '';
@@ -423,8 +436,8 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
   return {inject: ['slots', 'layout', 'locale'], apply(ctx) {
     localeRuntime = ctx.locale;
     ctx.effect(() => ctx.locale.register('asuna', {
-      zh: {thinking: '思考过程', loadOlder: '加载更早', loadingOlder: '正在加载…'},
-      en: {thinking: 'Thinking', loadOlder: 'Load earlier', loadingOlder: 'Loading…'}
+      zh: {thinking: '思考', running: '运行中', loadOlder: '加载更早', loadingOlder: '正在加载…'},
+      en: {thinking: 'Think', running: 'Running', loadOlder: 'Load earlier', loadingOlder: 'Loading…'}
     }), 'Asuna message labels');
     translate = ctx.locale.bind('asuna');
     ctx.effect(() => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = '/asuna/style.css';

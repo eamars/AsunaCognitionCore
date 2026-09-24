@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import threading
@@ -161,6 +162,80 @@ def provider_metadata(raw):
     return result
 
 
+def native_call_projection(events, receipt_id, request_refs, operation):
+    """Project one real DSH turn's Assistant steps onto its ordered requests.
+
+    A mismatched count is not an identity join. In that case the caller keeps
+    the existing aggregate output instead of assigning text to a guessed call.
+    """
+    target = next((index for index, event in enumerate(events)
+                   if event.get('type') == 'user/message' and event.get('data', {}).get('id') == receipt_id), None)
+    if target is None:
+        return []
+    opening_index = next((index for index in range(target, -1, -1)
+                          if events[index].get('type') == 'turn/start'), None)
+    if opening_index is None:
+        return []
+    turn = events[opening_index].get('data', {}).get('turn')
+    closing = next((index for index in range(target + 1, len(events))
+                    if events[index].get('type') == 'turn/end' and events[index].get('data', {}).get('turn') == turn), None)
+    if closing is None:
+        return []
+    window = events[opening_index:closing + 1]
+    assistants = [event for event in window if event.get('type') == 'assistant/message'
+                  and event.get('data', {}).get('turn') == turn]
+    if len(assistants) != len(request_refs) or not assistants:
+        return []
+    starts = {event.get('data', {}).get('step'): event.get('time') for event in window
+              if event.get('type') == 'step/start' and event.get('data', {}).get('turn') == turn}
+    calls = []
+    for event, ref in zip(assistants, request_refs):
+        path = ref.get('artifact_path') if isinstance(ref, dict) else None
+        if not isinstance(path, str):
+            return []
+        request_id = Path(path).name
+        if not re.fullmatch(r'\d+-provider\.request\.json', request_id):
+            return []
+        blocks = event.get('data', {}).get('message', {}).get('content', [])
+        if not isinstance(blocks, list):
+            return []
+        parts = [{'field': 'reasoning_content' if block['type'] == 'reasoning' else 'content',
+                  'text': block['text']}
+                 for block in blocks if isinstance(block, dict) and block.get('type') in ('reasoning', 'text')
+                 and isinstance(block.get('text'), str) and block['text']]
+        millis = starts.get(event.get('data', {}).get('step')) or event.get('time')
+        if not isinstance(millis, (int, float)):
+            return []
+        calls.append({'id': f'{operation}:{request_id}', 'request_ref': request_id,
+                      'operation': operation, 'lane': 'executor',
+                      'phase': 'execution', 'createdAt': datetime.fromtimestamp(millis / 1000, timezone.utc).isoformat(),
+                      'status': 'settled', 'parts': parts})
+    return calls if len({call['id'] for call in calls}) == len(calls) else []
+
+
+def audited_request_purpose(ref):
+    """Classify a request, hash-checking any proposed compaction exclusion."""
+    path = ref.get('artifact_path') if isinstance(ref, dict) else None
+    if not isinstance(path, str):
+        return None
+    target = (ROOT / path).resolve()
+    if not target.is_relative_to((ROOT / 'reports').resolve()) or not target.name.endswith('-provider.request.json'):
+        return None
+    with target.open('rb') as source:
+        heading = source.read(4096)
+        match = re.search(rb'"purpose"\s*:\s*"([^"]+)"', heading)
+        if not match:
+            return None
+        purpose = match.group(1).decode('ascii', errors='replace')
+        if purpose != 'compaction':
+            return purpose
+        raw = heading + source.read()
+    if ref.get('sha256') != hashlib.sha256(raw).hexdigest():
+        return None
+    event = json.loads(raw)
+    return event.get('payload', {}).get('purpose') if event.get('type') == 'provider.request' else None
+
+
 def inspector_record(row, kind='memory'):
     content = row.get('body_markdown') or row.get('content') or row.get('title') or row['_id']
     body = content.get('body', display(content)) if isinstance(content, dict) else str(content)
@@ -187,6 +262,47 @@ class Workbench:
             app = self.controller.app
             app.character.proxy.ui_observer = self.stream_hub
             app.executor_lane.proxy.ui_observer = self.stream_hub
+
+    def native_execution_calls(self, operation, request_refs, native_logs=None, receipts=None, sessions=None):
+        """Read DSH's existing step record for a settled Asuna operation."""
+        receipt = (receipts.get(operation) if receipts is not None else
+                   self.store.db.lane_receipts.find_one({'_id': operation},
+                                                        {'session_id': 1, 'result.receipt': 1, 'result.request_refs': 1}))
+        if not receipt or receipt.get('result', {}).get('request_refs') != request_refs:
+            return []
+        session_id = receipt.get('session_id')
+        if not isinstance(session_id, str) or not re.fullmatch(r's-[0-9a-f]{40}', session_id):
+            return []
+        session = (sessions.get(session_id) if sessions is not None else
+                   self.store.db.sessions.find_one({'_id': session_id}, {'dsh_home': 1}))
+        if not session or not isinstance(session.get('dsh_home'), str):
+            return []
+        home = Path(session['dsh_home']).resolve()
+        if not home.is_relative_to((ROOT / '.runtime' / 'asuna-dsh').resolve()):
+            return []
+        logs = list(home.glob(f'sessions/*/{session_id}/session.v3.jsonl'))
+        if len(logs) != 1:
+            return []
+        try:
+            if native_logs is not None and session_id in native_logs:
+                events = native_logs[session_id]
+            else:
+                events = [json.loads(line) for line in logs[0].read_text(encoding='utf-8').splitlines() if line]
+                if native_logs is not None:
+                    native_logs[session_id] = events
+            projected = native_call_projection(events, receipt['result'].get('receipt'), request_refs, operation)
+            if projected:
+                return projected
+            # A native compaction has its own provider request but no Assistant
+            # step in the action turn. Confirm that classification from the
+            # existing hash-checked audit before matching ordered requests.
+            classified = [(ref, audited_request_purpose(ref)) for ref in request_refs]
+            if any(purpose not in ('execution', 'execution-repair', 'compaction') for _, purpose in classified):
+                return []
+            ordinary = [ref for ref, purpose in classified if purpose != 'compaction']
+            return native_call_projection(events, receipt['result'].get('receipt'), ordinary, operation)
+        except (OSError, ValueError, TypeError, OverflowError):
+            return []
 
     def stream_scene(self, selected=''):
         # Opening an observation connection must not rebuild the full transcript
@@ -308,7 +424,7 @@ class Workbench:
                                      'text': text, 'createdAt': datetime.now(timezone.utc).isoformat()})
                 self.notices = self.notices[-8:]
 
-    def snapshot(self, selected=''):
+    def snapshot(self, selected='', before_seq=None):
         # This is the local operator's read-only view, never an impersonated
         # channel command or a grant to the remote participant.
         self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
@@ -326,17 +442,21 @@ class Workbench:
                 raise ValueError('通道未配置或已不可访问')
             route, item = channels[selected]
             member = next(iter(route_members(route).values()))
-            data = self._snapshot(settings={**self.settings, 'scene_id': route['scene_id'], 'person_id': member['person_id']}, external=True)
+            data = self._snapshot(settings={**self.settings, 'scene_id': route['scene_id'], 'person_id': member['person_id']},
+                                  external=True, before_seq=before_seq)
             data.update(conversationId=selected, title=item['title'], conversations=[{'id': '', 'title': '本机聊天', 'channelType': 'local', 'updatedAt': ''}])
             if route['target']['type']=='group' and route.get('operator_sender_id') in route_members(route) and self.controller:
                 data.update(readOnly=False,channelPrompt=True,canSend=not self.models_applying and getattr(self.controller.app,'models_ready',True),
                             subtitle='本机指令 · 小满将在此群发言；输入不会伪装成 QQ 来信')
         else:
-            data = self._snapshot(selected)
+            data = self._snapshot(selected, before_seq=before_seq)
         data['conversations'].extend(item for _, item in channels.values())
+        self.stream_hub.mark_durable({step.get('displayKey') for message in data['messages']
+                                      for step in message.get('internalSteps', []) if step['type'] in ('phase.output', 'execution.output')
+                                      and step.get('displayKey')})
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), self.store.config))
 
-    def _snapshot(self, selected='', *, settings=None, external=False):
+    def _snapshot(self, selected='', *, settings=None, external=False, before_seq=None):
         store, settings = self.store, settings or self.settings
         scene = store.authorize(settings['scene_id'], settings['person_id'])
         scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
@@ -376,18 +496,67 @@ class Workbench:
         conversations.sort(key=lambda row: (row['id'] == current, row['_order']), reverse=True)
         for item in conversations:
             item.pop('_order')
-        rows = [m for m in messages if episode_id(m) in groups[chosen]][-80:]
+        context_rows = [m for m in messages if episode_id(m) in groups[chosen]
+                        and (before_seq is None or m['scene_seq'] < before_seq)]
+        page_start = max(0, len(context_rows) - 12)
+        while page_start and episode_id(context_rows[page_start - 1]) == episode_id(context_rows[page_start]):
+            page_start -= 1
+        page_rows = context_rows[page_start:]
+        has_more = page_start > 0
+        oldest_seq = page_rows[0]['scene_seq'] if page_rows else None
+        # DSH keeps the active turn in its followed window. Keep the real
+        # running task's owner visible even after newer messages move past it.
+        active_owners = {task.get('episode_id') for task in store.db.tasks.find(
+            {**scope, 'state': {'$in': ['READY', 'RUNNING']}}, {'episode_id': 1})}
+        active_owners.intersection_update(groups[chosen])
+        rows = sorted({row['_id']: row for row in [
+            *page_rows, *(row for row in messages if episode_id(row) in active_owners),
+        ]}.values(), key=lambda row: row['scene_seq'])
         visible_ids = {episode_id(m) for m in rows}
         traces = {}
         task_owners = {}
+        native_logs, native_projections = {}, {}
+        task_ids = {ep.get('task_id') or ep.get('control_result', {}).get('task_id')
+                    for ep_id in visible_ids if (ep := by_id[ep_id])}
+        task_ids.discard(None)
+        tasks = {task['_id']: task for task in store.db.tasks.find({'_id': {'$in': list(task_ids)}, **scope})}
+        stream_ids = visible_ids | tasks.keys()
+        events_by_stream = {stream_id: [] for stream_id in stream_ids}
+        for event in store.db.audit_events.find({'stream_id': {'$in': list(stream_ids)},
+                                                 'scope_key': scene['scope_key'],
+                                                 '$or': [
+                                                     {'type': {'$nin': ['state.intent', 'state.commit', 'context.prepared']}},
+                                                     {'type': 'state.commit', 'payload.collection': 'artifacts'},
+                                                 ]}).sort([('occurred_at', 1), ('seq', 1)]):
+            events_by_stream[event['stream_id']].append(event)
+        operations = set()
         for ep_id in visible_ids:
             ep = by_id[ep_id]
             task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
-            task = store.db.tasks.find_one({'_id': task_id, **scope}) if task_id else None
+            task = tasks.get(task_id)
+            if not task:
+                continue
+            for event in events_by_stream.get(ep_id, []) + events_by_stream.get(task_id, []):
+                if event['type'] != 'execution.output':
+                    continue
+                attempt = event.get('payload', {}).get('attempt')
+                operations.add(f"{task_id}:execute:{task['intent_revision']}" +
+                               (f':{attempt}' if attempt is not None else ''))
+        receipts = {receipt['_id']: receipt for receipt in store.db.lane_receipts.find(
+            {'_id': {'$in': list(operations)}},
+            {'session_id': 1, 'result.receipt': 1, 'result.request_refs': 1})}
+        session_ids = {receipt.get('session_id') for receipt in receipts.values()
+                       if isinstance(receipt.get('session_id'), str)}
+        sessions = {session['_id']: session for session in store.db.sessions.find(
+            {'_id': {'$in': list(session_ids)}}, {'dsh_home': 1})}
+        for ep_id in visible_ids:
+            ep = by_id[ep_id]
+            task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
+            task = tasks.get(task_id)
             if task:
                 task_owners[task_id] = task.get('episode_id')
-            streams = [ep_id] + ([task_id] if task else [])
-            events = list(store.db.audit_events.find({'stream_id': {'$in': streams}, 'scope_key': scene['scope_key']}).sort([('occurred_at', 1), ('seq', 1)]))
+            events = sorted(events_by_stream.get(ep_id, []) + (events_by_stream.get(task_id, []) if task else []),
+                            key=lambda event: (event.get('occurred_at'), event.get('seq')))
             steps = [step for event in events if (step := trace_step(event, event['stream_id'] == task_id))]
             for step in steps:
                 if step['type'] == 'phase.output':
@@ -395,6 +564,11 @@ class Workbench:
                 elif step['type'] == 'execution.output' and task:
                     attempt = step['payload'].get('attempt')
                     step['displayKey'] = f"{task_id}:execute:{task['intent_revision']}" + (f':{attempt}' if attempt is not None else '')
+                    if step['id'] not in native_projections:
+                        native_projections[step['id']] = self.native_execution_calls(
+                            step['displayKey'], step['payload'].get('request_refs', []), native_logs,
+                            receipts, sessions)
+                    step['providerCalls'] = native_projections[step['id']]
             finished = {event.get('payload', {}).get('operation') for event in events if event['type'] in ('phase.output', 'phase.failed')}
             for step in steps:
                 if step['type'] == 'phase.started' and (step['payload'].get('operation') in finished or ep['state'] in ('COMMITTED', 'INTERRUPTED', 'FAILED_RUNTIME', 'FAILED_PROTOCOL')):
@@ -411,7 +585,8 @@ class Workbench:
             message = {'id': row['_id'], 'role': 'assistant' if public else 'user',
                        'episodeId': ep_id, 'taskId': by_id[ep_id].get('task_id') or by_id[ep_id].get('control_result', {}).get('task_id'),
                        'authorLabel': settings['display_name'] if public else (row.get('event', {}).get('channel', {}).get('sender_id') or row.get('author', '未知发言者')) if external else '你',
-                       'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')), '_order': row['scene_seq']}
+                       'text': row['text'], 'createdAt': row.get('occurred_at', row.get('received_at')),
+                       'sceneSeq': row['scene_seq'], '_order': row['scene_seq']}
             if public:
                 message['displayKey'] = ep_id + ':SPEAK:0'
                 message['deliveryState'] = row.get('delivery_state', 'UNKNOWN')
@@ -460,8 +635,9 @@ class Workbench:
         with self.lock:
             notices = list(self.notices) if chosen == current and not external else []
         data = {'conversationId': chosen, 'title': next(row['title'] for row in conversations if row['id'] == chosen),
-                'subtitle': f"{'通道检查（本机只读）' if external else '本机聊天'} · {scene['_id']} · 最近 80 条消息 / 100 条记忆 · " + ('当前上下文' if chosen == current else '历史上下文（只读）'),
+                'subtitle': f"{'通道检查（本机只读）' if external else '本机聊天'} · {scene['_id']} · 分段加载消息 / 100 条记忆 · " + ('当前上下文' if chosen == current else '历史上下文（只读）'),
                 'conversations': conversations, 'messages': rendered + notices, 'records': records,
+                'hasMore': has_more, 'beforeSeq': oldest_seq,
                 'readOnly': external or self.controller is None, 'canSend': not external and chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
                 'modelSettings': self.models_snapshot(),
                 'integrationAvailable': integration is not None,
@@ -583,7 +759,12 @@ class UiBridge:
                         raise PermissionError('UI_AUTH_REQUIRED')
                     url = urlsplit(self.path)
                     if self.command == 'GET' and url.path == '/state':
-                        value = workbench.snapshot(parse_qs(url.query).get('conversation', [''])[0])
+                        query = parse_qs(url.query)
+                        raw_before = query.get('before', [''])[0]
+                        if raw_before and (not raw_before.isdecimal() or int(raw_before) < 1):
+                            raise ValueError('INVALID_BEFORE_SEQ')
+                        value = workbench.snapshot(query.get('conversation', [''])[0],
+                                                   int(raw_before) if raw_before else None)
                     elif self.command == 'GET' and url.path == '/stream':
                         return self.stream(parse_qs(url.query).get('conversation', [''])[0])
                     elif self.command == 'GET' and url.path == '/provider-diagnostic':

@@ -9,6 +9,21 @@ from asuna.provider_proxy import ProviderProxy
 from asuna.ui_stream import UiStreamHub
 
 
+def test_completed_call_survives_long_action_until_durable_output(monkeypatch):
+    import asuna.ui_stream as stream_module
+    now = [1000.0]
+    monkeypatch.setattr(stream_module.time, 'monotonic', lambda: now[0])
+    hub = UiStreamHub()
+    hub('start', 'call-1', operation='task:execute:1', phase='execution', lane='executor')
+    hub('text', 'call-1', field='reasoning_content', text='工具前的思考')
+    hub('end', 'call-1', status='settling')
+    now[0] += 301
+    assert hub.snapshot()[1][0]['parts'][0]['text'] == '工具前的思考'
+    hub.mark_durable({'task:execute:1'})
+    now[0] += 301
+    assert hub.snapshot()[1] == []
+
+
 def test_raw_reasoning_arrives_before_provider_completion_and_display_failure_is_isolated(tmp_path):
     first_sent = threading.Event()
     release = threading.Event()

@@ -4,6 +4,7 @@ import traceback
 from .config import prompt_path, redact_text
 from .evidence import canonical, sha
 from .state import Store, Denied
+from .peer_context import apply_peer_context
 
 
 class ContextBuilder:
@@ -89,6 +90,8 @@ class ContextBuilder:
                  'task_state_from_program':task_states,
                  'plans_from_program':plans,
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if source:
+            apply_peer_context(context,source)
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],

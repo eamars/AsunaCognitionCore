@@ -27,7 +27,7 @@ config = {
     'legacy_database': values.get('MONGODB_DB_NAME'),
     'embedding': {'base_url': 'http://192.168.2.8:1234/v1', 'api_key': values.get('EMBEDDING_API_KEY', ''), 'model': values.get('EMBEDDING_MODEL'), 'query_prefix': 'search_query: ', 'document_prefix': 'search_document: '},
     'character': {'base_url': 'http://192.168.2.13:8083/v1', 'model': 'gemma4-26b-a4b-it-qat-vision-262144-qat-mtp', 'sampling': {'temperature': 0.7, 'top_p': 0.95, 'seed': 20260919}, 'max_tokens': 4096},
-    'executor': {'base_url': 'http://192.168.2.13:1919/v1', 'model': 'qwen38-next-uncensored-freetoken-vision', 'sampling': {'temperature': 0.2, 'top_p': 0.95, 'seed': 20260919}, 'max_tokens': 8192},
+    'executor': {'base_url': 'http://192.168.2.13:1919/v1', 'model': 'qwen38-next-uncensored-freetoken-vision', 'sampling': {'temperature': 0.2, 'top_p': 0.95, 'seed': 20260919}, 'max_tokens': 32768},
     'dsh_home': str(ROOT / '.runtime' / 'asuna-dsh'),
     'workdir': str(ROOT / '.runtime' / 'work'),
     'local_only': True,

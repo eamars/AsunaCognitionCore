@@ -20,13 +20,17 @@ body:has(.asuna-workbench) [data-slot="root"]>div:has(>[data-rightbar-col])>[dat
 .asuna-header>div{min-width:0;flex:1}.asuna-header p{font-size:11px;color:var(--asuna-muted);overflow-wrap:anywhere}
 .asuna-error{padding:10px 20px;background:#fff2f1;color:#a93434;white-space:pre-wrap}
 .asuna-messages{min-height:0;flex:1;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;scrollbar-gutter:stable}
+.asuna-older{display:flex;justify-content:center}
 .asuna-message{max-width:100%;padding:0 4px;overflow-wrap:anywhere}
 .asuna-message.asuna-user{align-self:flex-end;max-width:85%;text-align:right}
 .asuna-message.asuna-user .asuna-body{background:#eaf2ff;border-radius:10px;padding:9px 13px;text-align:left}
-.asuna-message.asuna-assistant .asuna-body{padding:3px 0}.asuna-message.asuna-process{padding-left:12px;border-left:2px solid #dce7f8}
+.asuna-message.asuna-assistant .asuna-body{padding:3px 0;color:var(--dsw-alias-label-primary,#0f1115)}.asuna-message.asuna-process{padding-left:12px;border-left:2px solid #dce7f8}
+.asuna-message.asuna-process[data-lane=character]{border-left-color:#ab8cd0}.asuna-message.asuna-process[data-lane=executor]{border-left-color:#77a9e5}
+.asuna-message.asuna-process[data-lane=character] .asuna-meta strong{color:#7750b7}.asuna-message.asuna-process[data-lane=executor] .asuna-meta strong{color:#2666bd}
+.asuna-message.asuna-assistant .asuna-meta strong{color:var(--dsw-alias-label-primary,#0f1115)}
 .asuna-meta{display:flex;align-items:center;gap:7px;color:var(--asuna-muted);font-size:12px;margin-bottom:4px}.asuna-meta strong{font-size:12px;font-weight:600;color:#42516b}
 .asuna-body{min-width:0;line-height:1.65}.asuna-body p{margin:0 0 8px}.asuna-part{margin-bottom:7px}.asuna-part>small{display:block;margin-bottom:3px}
-.asuna-thinking-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.asuna-thinking-text{padding-left:22px;color:var(--dsw-alias-label-tertiary,#81858c);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:pre-wrap;overflow-wrap:anywhere}
 .asuna-diagnostic{margin-top:8px}.asuna-diagnostic pre,.asuna-trace pre,.asuna-tool pre{max-height:360px;overflow:auto}
 .asuna-error-text{color:#a93434;background:#fff2f1;border-radius:5px;padding:6px 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 .asuna-turn-status{margin-top:6px;color:#69778e;font-size:12px}.asuna-muted{color:var(--asuna-muted);font-size:13px;line-height:1.7}

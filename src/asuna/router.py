@@ -2,6 +2,7 @@
 from collections import defaultdict,deque
 from .evidence import canonical,sha
 from .state import Store,Denied,now
+from .peer_context import snapshot_event
 
 
 class FairQueue:
@@ -29,6 +30,12 @@ class Router:
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','supersedes_task_id')
         trusted={k:event[k] for k in allowed if k in event}
+        if isinstance(event.get('channel'),dict):
+            # Channels.receive built this envelope after route/member checks.
+            # Persist only the bounded peer snapshot, not arbitrary OneBot raw.
+            trusted['channel']=event['channel']
+            peer=snapshot_event(event)
+            if peer: trusted['raw']={'asuna_peer':peer}
         if event.get('channel') and 'group_context' in event:
             trusted['group_context'] = event['group_context']
         if event.get('integration_profile'):

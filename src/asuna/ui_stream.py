@@ -14,7 +14,8 @@ class UiStreamHub:
 
     def _prune(self):
         expired = [key for key, call in self.calls.items()
-                   if call['_ended'] and time.monotonic() - call['_ended'] > 300]
+                   if call['_ended'] and ((call['_durable_at'] and time.monotonic() - call['_durable_at'] > 300)
+                                          or time.monotonic() - call['_ended'] > 7200)]
         for key in expired:
             del self.calls[key]
         return bool(expired)
@@ -24,7 +25,7 @@ class UiStreamHub:
             if kind == 'start':
                 self.calls[call_id] = {**value, 'id': call_id, 'parts': [],
                                        'createdAt': datetime.now(timezone.utc).isoformat(),
-                                       'status': 'running', '_ended': 0}
+                                       'status': 'running', '_ended': 0, '_durable_at': 0}
             elif call_id in self.calls:
                 call = self.calls[call_id]
                 if kind == 'text':
@@ -47,6 +48,17 @@ class UiStreamHub:
             self._prune()
             self.version += 1
             self.condition.notify_all()
+
+    def mark_durable(self, operations):
+        """Retain long-running step text until its existing audit output arrives."""
+        with self.condition:
+            now = time.monotonic()
+            for call in self.calls.values():
+                if call['_ended'] and call.get('operation') in operations and not call['_durable_at']:
+                    call['_durable_at'] = now
+            if self._prune():
+                self.version += 1
+                self.condition.notify_all()
 
     def snapshot(self):
         with self.condition:

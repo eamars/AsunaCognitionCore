@@ -18,7 +18,33 @@ from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
 from asuna.router import Router
 from asuna.state import Store
-from asuna.ui import UiBridge, Workbench, inspector_record, raw_provider_response, trace_step, turn_status
+from asuna.ui import UiBridge, Workbench, inspector_record, native_call_projection, raw_provider_response, trace_step, turn_status
+
+
+def test_native_steps_keep_request_identity_across_tool_boundary():
+    events = [
+        {'type': 'turn/start', 'seq': 1, 'time': 1000, 'data': {'turn': 4}},
+        {'type': 'step/start', 'seq': 2, 'time': 1100, 'data': {'turn': 4, 'step': 1}},
+        {'type': 'user/message', 'seq': 3, 'time': 1101, 'data': {'id': 'request-message'}},
+        {'type': 'assistant/message', 'seq': 4, 'time': 1300, 'data': {'turn': 4, 'step': 1,
+            'message': {'content': [{'type': 'reasoning', 'text': '工具前的思考'}, {'type': 'tool-call'}]}}},
+        {'type': 'tool/call', 'seq': 5, 'time': 1301, 'data': {'callId': 'tool-1'}},
+        {'type': 'tool/result', 'seq': 6, 'time': 1500, 'data': {}},
+        {'type': 'step/start', 'seq': 7, 'time': 1600, 'data': {'turn': 4, 'step': 2}},
+        {'type': 'assistant/message', 'seq': 8, 'time': 1800, 'data': {'turn': 4, 'step': 2,
+            'message': {'content': [{'type': 'reasoning', 'text': '工具后的思考'},
+                                    {'type': 'text', 'text': '最终答复'}]}}},
+        {'type': 'turn/end', 'seq': 9, 'time': 1801, 'data': {'turn': 4}},
+    ]
+    refs = [{'artifact_path': f'reports/run/{number:05d}-provider.request.json'} for number in (1, 2)]
+    calls = native_call_projection(events, 'request-message', refs, 'task:execute:1')
+    assert [call['id'] for call in calls] == [
+        'task:execute:1:00001-provider.request.json', 'task:execute:1:00002-provider.request.json']
+    assert calls[0]['createdAt'] < calls[1]['createdAt']
+    assert calls[0]['parts'] == [{'field': 'reasoning_content', 'text': '工具前的思考'}]
+    assert calls[1]['parts'] == [{'field': 'reasoning_content', 'text': '工具后的思考'},
+                                 {'field': 'content', 'text': '最终答复'}]
+    assert native_call_projection(events, 'request-message', refs[:1], 'task:execute:1') == []
 
 
 def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, tmp_path):

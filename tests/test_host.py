@@ -1,5 +1,6 @@
 """Host contracts on isolated Mongo; fake model receipts, never real QQ sends."""
 import json
+import os
 from queue import Queue
 import threading
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
 from asuna.ingress import persist_input, input_state, episode_id
-from asuna.host import RuntimeHost
+from asuna.host import RuntimeHost, _workspace_overlaps
 from asuna.lanes import FakeLane, LaneResult
 from asuna.resources import workspace_grant
 from asuna.router import Router
@@ -20,6 +21,18 @@ from asuna.state import Denied
 
 def event(key='one', text='input'):
     return {'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': text}
+
+
+def test_workspace_overlap_check_preserves_ancestor_and_sibling_rules(tmp_path):
+    root = tmp_path.resolve()
+    existing = [root / 'local', root / 'channels' / 'member-0', root / 'channels' / 'member' / 'child']
+    ordered = sorted(os.path.normcase(str(path)) for path in existing)
+    known = set(ordered)
+    for candidate in [root / 'channels' / 'member', root / 'channels' / 'member' / 'child' / 'next',
+                      root / 'local' / 'nested', root / 'channels']:
+        assert _workspace_overlaps(candidate, ordered, known)
+    for candidate in [root / 'channels' / 'member-1', root / 'channels' / 'other']:
+        assert not _workspace_overlaps(candidate, ordered, known)
 
 
 def test_restart_waits_for_active_action_but_not_durable_queue():

@@ -21,10 +21,11 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     return data;
   }
   function viewStore() {
-    let value = {state: null, calls: [], connected: false, error: '', busy: false, stopped: false,
+    let value = {state: null, inspector: null, calls: [], connected: false, error: '', busy: false, stopped: false,
       loadingOlder: false, olderRevision: 0};
     let selected = '', revision = '', stream, timer, active = false, request = 0;
     let history = new Map(), beforeSeq = null, hasMore = false;
+    let inspectorRequest = 0, inspectorAt = 0;
     const settlementTimers = new Set();
     const clearSettlementTimers = () => { for (const pending of settlementTimers) clearTimeout(pending); settlementTimers.clear(); };
     const listeners = new Set();
@@ -39,15 +40,25 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
         const existing = history.get(message.id);
         history.set(message.id, existing && message.revision && existing.revision === message.revision ? existing : message);
       }
-      if (history.size > 96) {
-        const ordered = [...history.values()].sort((a, b) => a.sceneSeq - b.sceneSeq);
-        history = new Map((older ? ordered.slice(0, 96) : ordered.slice(-96)).map(message => [message.id, message]));
-      }
       const messages = [...history.values()].sort((a, b) => a.sceneSeq - b.sceneSeq);
       messages.push(...(older ? value.state?.messages || [] : page.messages || []).filter(message => !Number.isSafeInteger(message.sceneSeq)));
       return {...(older ? value.state : page), messages, beforeSeq, hasMore};
     }
-    async function refresh() {
+    async function refreshInspector(force = false) {
+      const scene = selected;
+      if (!active || (!force && value.inspector?.sceneId === value.state?.sceneId &&
+          Date.now() - inspectorAt < 30000)) return;
+      const number = ++inspectorRequest;
+      try {
+        const next = await api(`inspector-list?scene=${encodeURIComponent(scene)}`);
+        if (!active || scene !== selected || number !== inspectorRequest) return;
+        inspectorAt = Date.now();
+        if (next.inspectorRevision !== value.inspector?.inspectorRevision ||
+            next.sceneId !== value.inspector?.sceneId) set({inspector: next});
+      } catch (cause) { if (active && scene === selected && number === inspectorRequest)
+        set({error: cause.message}); }
+    }
+    async function refresh(forceInspector = false) {
       const number = ++request;
       try {
         const next = await api(`state?scene=${encodeURIComponent(selected)}`);
@@ -59,6 +70,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
             .filter(isOutput).map(step => step.displayKey)));
           set({state, calls: value.calls.filter(call => !(call.status !== 'running' && durable.has(call.operation))), error: ''});
         }
+        void refreshInspector(forceInspector);
       } catch (cause) { if (active && number === request) { revision = ''; set({error: cause.message, connected: false}); } }
     }
     function connect() {
@@ -68,7 +80,9 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       stream = opened;
       opened.addEventListener('snapshot', event => {
         if (stream !== opened) return;
-        try { set({calls: (JSON.parse(event.data).calls || []).map(call => ({...call, parts: []})), connected: true}); }
+        try { const prior = new Map(value.calls.map(call => [call.id, call]));
+          set({calls: (JSON.parse(event.data).calls || []).map(call =>
+            ({...call, parts: prior.get(call.id)?.parts || []})), connected: true}); }
         catch { /* Observation is never an agent control path. */ }
       });
       opened.addEventListener('start', event => {
@@ -106,17 +120,17 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       });
       opened.addEventListener('reset', () => {
         if (stream !== opened) return;
-        set({calls: []}); void refresh();
+        set({calls: []}); void refresh(true);
       });
       opened.onerror = () => { if (stream === opened) set({connected: false}); };
     }
     async function poll() { await refresh(); if (active && !value.stopped)
       timer = setTimeout(poll, value.state?.hasPendingWork ? 2000 : 30000); }
     function start() { if (active) return; active = true; connect(); void poll(); }
-    function stop() { active = false; ++request; clearTimeout(timer); clearSettlementTimers(); stream?.close(); stream = undefined; }
-    function select(id) { if (id === selected) return; selected = id; ++request; revision = '';
-      history = new Map(); beforeSeq = null; hasMore = false;
-      set({state: null, calls: [], error: '', loadingOlder: false, olderRevision: 0}); connect(); void refresh(); }
+    function stop() { active = false; ++request; ++inspectorRequest; clearTimeout(timer); clearSettlementTimers(); stream?.close(); stream = undefined; }
+    function select(id) { if (id === selected) return; selected = id; ++request; ++inspectorRequest; revision = '';
+      history = new Map(); beforeSeq = null; hasMore = false; inspectorAt = 0;
+      set({state: null, inspector: null, calls: [], error: '', loadingOlder: false, olderRevision: 0}); connect(); void refresh(true); }
     async function loadOlder() {
       if (!active || value.loadingOlder || !value.state?.hasMore || !value.state.beforeSeq) return;
       const scene = selected, cursor = value.state.beforeSeq;
@@ -130,7 +144,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       finally { if (active && scene === selected) set({loadingOlder: false}); }
     }
     async function command(path, body) { set({busy: true});
-      try { const result = await api(path, body); await refresh(); set({error: ''}); return result; }
+      try { const result = await api(path, body); await refresh(true); set({error: ''}); return result; }
       catch (cause) { set({error: cause.message}); throw cause; }
       finally { set({busy: false}); } }
     async function stopHost() { await api('stop', {}); clearTimeout(timer); clearSettlementTimers(); stream?.close(); set({stopped: true, connected: false}); }
@@ -289,11 +303,48 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     raw = raw.replace(/\\u[0-9a-fA-F]{0,3}$/, '');
     try { return JSON.parse(`"${raw}"`); } catch { return ''; }
   }
-  function Contents({step, calls, message}) {
+  function HistoricalDetail({step, scene, field, renderContent}) {
+    const [open, setOpen] = useState(false), [detail, setDetail] = useState(null), [error, setError] = useState('');
+    useEffect(() => {
+      if (!open) return;
+      let mounted = true;
+      api(`trace-detail?event=${encodeURIComponent(step.id)}&scene=${encodeURIComponent(scene)}`)
+        .then(value => { if (mounted) { setDetail(value); setError(''); } })
+        .catch(cause => { if (mounted) setError(cause.message); });
+      return () => { mounted = false; };
+    }, [open, step.id, scene]);
+    const thinking = field === 'reasoning';
+    const body = detail?.payload?.[field];
+    const expanded = detail && !thinking && h(React.Fragment, null,
+      renderContent(body || step.summary),
+      ...(detail.providerCalls || []).map((call, index) => h('div', {key: call.id, className: 'asuna-native-call'},
+        h('p', {className: 'asuna-muted'}, `行动步骤 ${index + 1} · ${clock(call.createdAt)}`),
+        ...(call.parts || []).map((part, partIndex) => h('section',
+          {className: 'asuna-part', key: `${call.id}:${partIndex}`},
+          part.field === 'reasoning_content' ? h(Thinking, {body: part.text}) : renderContent(part.text))))));
+    return h('section', {className: thinking ? 'asuna-part asuna-thinking' : 'asuna-part'},
+      h(DisclosureRow, {icon: thinking ? h(IconThinkOutline14, {size: 14}) : h(IconCodeOutline16, {size: 14}),
+        title: thinking ? translate('thinking') : step.type === 'execution.output' ? '完整输出与行动步骤' : '完整输出',
+        open, expandable: true,
+        expandOnRowClick: true, onToggle: () => setOpen(value => !value),
+        rowClassName: thinking ? 'asuna-thinking-row' : undefined,
+        leadingClassName: thinking ? 'asuna-thinking-leading' : undefined,
+        titleClassName: thinking ? 'asuna-thinking-title' : undefined,
+        chevronClassName: thinking ? 'asuna-thinking-chevron' : undefined,
+        collapsedContent: thinking ? h(React.Fragment, null,
+          h('span', {className: 'asuna-thinking-separator', 'aria-hidden': true}),
+          h('span', {className: 'asuna-thinking-summary'},
+            h('span', {className: 'asuna-thinking-summary-text'}, step.reasoningPreview || '已保存的思考'))) : undefined},
+        error ? h('p', {className: 'asuna-error-text'}, error) :
+          detail ? (thinking ? h('div', {className: 'asuna-thinking-text'}, body || '') : expanded) :
+            h('p', {className: 'asuna-muted'},
+              thinking ? '正在读取思考…' : '正在读取完整输出…')));
+  }
+  function Contents({step, calls, message, scene}) {
     const parts = (calls || []).flatMap(call => (call.parts || []).map((part, index) => ({...part,
       key: `${call.operation}:${call.request_ref || call.id}:${index}`, streaming: call.status === 'running'})));
     const decision = step?.payload?.phase === 'DECIDE' || calls?.some(call => call.phase === 'DECIDE');
-    const structured = !decision && step?.type === 'execution.output' && (step?.payload?.content || '').trim().startsWith('{');
+    const structured = !decision && step?.type === 'execution.output' && step.structuredContent;
     const contentParts = parts.filter(part => part.field === 'content');
     const liveContent = contentParts.map(part => part.text).join('');
     const renderContent = (content, streaming) => {
@@ -308,13 +359,16 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       return child ? h('section', {className: 'asuna-part', key: part.key}, child) : null;
     }));
     if (step || message) {
-      const content = message?.text ?? step?.summary ?? '', reasoning = '';
-      if (parts.length && parts.filter(part => part.field === 'content').map(part => part.text).join('') === content &&
-          parts.filter(part => part.field === 'reasoning_content').map(part => part.text).join('') === reasoning)
+      const content = message?.text ?? step?.summary ?? '';
+      if (!step?.hasReasoning && !step?.hasFullContent && parts.length &&
+          parts.filter(part => part.field === 'content').map(part => part.text).join('') === content &&
+          !parts.some(part => part.field === 'reasoning_content' && part.text))
         return liveParts();
       return h(React.Fragment, null,
-        reasoning && h('section', {className: 'asuna-part'}, h(Thinking, {body: reasoning})),
-        content && renderContent(content));
+        step?.hasReasoning && h(HistoricalDetail, {step, scene, field: 'reasoning', renderContent}),
+        content && renderContent(content),
+        !message && (step?.hasFullContent || (step?.type === 'execution.output' && step.hasProviderDiagnostic)) &&
+          h(HistoricalDetail, {step, scene, field: 'content', renderContent}));
     }
     return liveParts();
   }
@@ -343,7 +397,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       h('div', {className: 'asuna-meta'}, h(StateDot, {state: error ? 'error' : ongoing || pendingDelivery ? 'ongoing' : uncertainDelivery ? 'warning' : 'done'}),
         h('strong', null, actor), h('time', null, clock(node.createdAt || step?.createdAt || call?.createdAt || message?.createdAt)),
         delivery && h('small', null, delivery)),
-      h('div', {className: 'asuna-body'}, h(Contents, {step, calls, message})),
+      h('div', {className: 'asuna-body'}, h(Contents, {step, calls, message, scene})),
       error && h('p', {className: 'asuna-error-text'}, step?.payload?.finish_reason ||
         (decision ? '决策生成失败，部分内容已保留' : '生成或发送失败，部分正文已保留')),
       h(Diagnostic, {step, calls, scene}));
@@ -474,7 +528,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
           h(Button, {variant: 'ghost', onClick: () => void store.command('self-development/offer', {}).then(() => setNotice('内部机会已入队。')).catch(cause => setNotice(cause.message)),
             disabled: !state?.canSend || state.readOnly || state.scenePrompt || view.busy || view.stopped,
             title: '向角色脑提供一次内部自我开发机会，不作为用户消息'}, '自我开发机会'),
-          h(Button, {variant: 'toolbar', onClick: () => void store.refresh(), icon: h(IconRefreshOutline16, {size: 16})}, '刷新'),
+          h(Button, {variant: 'toolbar', onClick: () => void store.refresh(true), icon: h(IconRefreshOutline16, {size: 16})}, '刷新'),
           h(Button, {variant: 'ghost', onClick: () => void store.stopHost().catch(cause => setNotice(cause.message)),
             disabled: view.stopped, title: '停止整个宿主与行动，不是停止当前生成'}, '停止整个服务')),
         view.error && h('div', {className: 'asuna-error', role: 'alert'}, view.error),
@@ -511,7 +565,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
           h(Button, {type: 'submit', variant: 'primary', disabled: !state?.canSend || view.busy || view.stopped},
             state?.scenePrompt ? state.scenePromptLabel : '发送'),
           h('p', {role: 'status'}, view.stopped ? '已请求停止整个宿主。' : notice))),
-      h(Inspector, {state}));
+      h(Inspector, {state: view.inspector}));
   }
   return {inject: ['slots', 'layout', 'locale'], apply(ctx) {
     localeRuntime = ctx.locale;

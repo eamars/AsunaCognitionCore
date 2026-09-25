@@ -265,6 +265,8 @@ def test_http_chat_uses_scene_navigation_and_shows_all_context_messages(ui_store
         assert client.post('/send', json={'text': '第一句输入'}).status_code == 200
         chat.pending.join()
         first = client.get('/state').json()
+        first_inspector = client.get('/inspector-list').json()
+        assert 'records' not in first and first_inspector['sceneId'] == first['sceneId']
         assert [m['text'] for m in first['messages'] if m['role'] in ('user', 'assistant')] == ['第一句输入', '第一句回复']
         assert any(step['type'] == 'phase.output' for m in first['messages'] for step in m.get('internalSteps', []))
         public = next(m for m in first['messages'] if m['role'] == 'assistant')
@@ -284,6 +286,7 @@ def test_http_chat_uses_scene_navigation_and_shows_all_context_messages(ui_store
         assert client.post('/send', json={'text': '第二句输入'}).status_code == 200
         chat.pending.join()
         latest = client.get('/state').json()
+        latest_inspector = client.get('/inspector-list').json()
         assert latest['sceneId'] == first['sceneId']
         assert any(m['text'] == '第二句回复' for m in latest['messages'])
         assert any(m['text'] == '第一句回复' for m in latest['messages'])
@@ -291,7 +294,8 @@ def test_http_chat_uses_scene_navigation_and_shows_all_context_messages(ui_store
         ui_store.db.messages.update_one({'_id': public['id']}, {'$set': {'delivery_state': 'READY'}})
         pending = next(m for m in view.snapshot('dm-a')['messages'] if m['id'] == public['id'])
         assert pending['deliveryState'] == 'READY' and pending['text'] == public['text']
-        assert {r['id'] for r in first['records']}.issubset({r['id'] for r in latest['records']})
+        assert {r['id'] for r in first_inspector['records']}.issubset(
+            {r['id'] for r in latest_inspector['records']})
         assert client.post('/send', json={'text': ' '}).status_code == 400
         assert client.post('/send', json=[]).status_code == 400
     finally:
@@ -390,8 +394,10 @@ def test_bridge_auth_readonly_and_tool_payload(ui_store):
     try:
         with httpx.Client(base_url=f'http://127.0.0.1:{bridge.server.server_port}', trust_env=False) as client:
             assert client.get('/state').status_code == 403
+            assert client.get('/inspector-list').status_code == 403
             client.headers['Authorization'] = 'Bearer ' + bridge.token
             assert client.get('/state').json()['readOnly']
+            assert isinstance(client.get('/inspector-list').json()['records'], list)
             assert client.post('/send', json={'text': 'blocked'}).status_code == 403
             assert client.post('/new', json={}).status_code == 404
     finally:
@@ -408,6 +414,33 @@ def test_trace_output_keeps_reasoning_in_payload():
 
     assert step['payload'] == payload
     assert 'thinking' not in step
+
+
+def test_historical_thinking_and_long_output_remain_available_on_demand(ui_store, tmp_path):
+    long_output = '一段完整内容。' * 55
+    reasoning = '原有思考预览\n' + '后续思考。' * 70
+    decision = json.dumps({'next': 'speak', 'goal': '回应', 'constraints': [],
+                           'recall_query': '', 'speak_before_action': False})
+    chat, view = controller(ui_store, tmp_path, [LaneResult(long_output, reasoning=reasoning),
+                                                  LaneResult(decision), LaneResult('完成')])
+    chat.worker.start()
+    try:
+        chat.submit('检查历史记录')
+        chat.pending.join()
+        state = view.snapshot()
+        steps = next(message['internalSteps'] for message in state['messages']
+                     if message['role'] == 'assistant')
+        monologue = next(step for step in steps if step['type'] == 'phase.output'
+                         and step['payload']['phase'] == 'MONOLOGUE')
+        assert monologue['hasReasoning'] and monologue['reasoningPreview'] == '原有思考预览'
+        assert monologue['hasFullContent'] and len(monologue['summary']) == 240
+        assert 'reasoning' not in monologue['payload'] and 'content' not in monologue['payload']
+        assert long_output not in json.dumps(state, ensure_ascii=False)
+        detail = view.trace_detail(monologue['id'])
+        assert detail['payload']['content'] == long_output
+        assert detail['payload']['reasoning'] == reasoning
+    finally:
+        chat.stop()
 
 
 def test_raw_provider_response_preserves_captured_stream(tmp_path):

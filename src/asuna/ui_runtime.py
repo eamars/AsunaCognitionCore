@@ -62,7 +62,7 @@ def _run_host(connection, config, database, evidence_root):
                     request_id = message['id']
                     method = message['method']
                     try:
-                        if method not in ('snapshot', 'command', 'trace_detail',
+                        if method not in ('snapshot', 'command', 'trace_detail', 'inspector_list',
                                           'inspector_detail', 'provider_diagnostic'):
                             raise ValueError('UNKNOWN_UI_METHOD')
                         value = getattr(workbench, method)(*message['args'])

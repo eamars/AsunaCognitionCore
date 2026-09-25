@@ -150,6 +150,12 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             for _ in range(40):
                 self.wfile.write(b'\x00' * 65536)
+        elif kind == 'expired':
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"retcode":-5503007,"retmsg":"download url has expired",'
+                             b'"rkey":"CAESMGoieAXqbqKk"}')
         elif kind == 'redirect-out':
             self.send_response(302)
             self.send_header('Location', 'http://localhost:%d/png' % self.server.server_port)
@@ -178,7 +184,8 @@ def main() -> int:
     from asuna_pkg import vision
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    Handler.routes = {'/png': 'png', '/html': 'html', '/big': 'big', '/redirect-out': 'redirect-out'}
+    Handler.routes = {'/png': 'png', '/html': 'html', '/big': 'big', '/expired': 'expired',
+                    '/redirect-out': 'redirect-out'}
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f'http://127.0.0.1:{server.server_address[1]}'
 
@@ -206,6 +213,19 @@ def main() -> int:
         check('清单不内嵌 URL（只记主机），避免临时链接长期进上下文',
               'url' not in items[0] and items[0]['url_host'] == 'multimedia.nt.qq.com.cn', items[0])
         check('ref 可重算（同一消息同一段不变）', vision.ref_of(MEDIA_MESSAGE['_id'], 0) == ref)
+        # 1b. adapter 现在真实发的形状：没有 version/truncated，sub_type 是字符串，summary 有值
+        now = json.loads(json.dumps(MEDIA_MESSAGE))
+        live = now['event']['raw']['asuna_media']
+        live.pop('version'), live.pop('truncated')
+        live['items'][0].update({'sub_type': '1', 'summary': '[动画表情]',
+                                 'url': 'https://multimedia.nt.qq.com.cn/download?appid=1407&fileid='
+                                        + 'EhS9' * 22 + '&rkey=' + 'CAESMI' * 16})
+        live_items = vision.attachments_of(now, config=config())
+        check('线上真实形状（无 version、sub_type 为字符串、长 URL）照样出可拉清单',
+              len(live_items) == 1 and live_items[0]['pullable'] is True
+              and live_items[0]['ref'] == vision.ref_of(now['_id'], 0)
+              and live_items[0]['url_host'] == 'multimedia.nt.qq.com.cn', live_items)
+
         note = vision.media_note(MEDIA_MESSAGE, config())
         check('角色现场只给媒体事实：语音段以占位符事实保留', note['can_pull'] is True
               and note['other_media_placeholders'] == ['[语音（未解析）]'], note.get('other_media_placeholders'))
@@ -244,6 +264,15 @@ def main() -> int:
         check('真拉取：来源主机如实记录', result['source']['host'] == '127.0.0.1', result['source'])
         check('真拉取：视觉输入状态先标 awaiting（最终由插件的附件保存结果决定）',
               result['visual'] == 'awaiting_attachment')
+        # 3b. 真实 QQ 下载 URL 很长（长 fileid + rkey）：不能被截成坏链接，URL 也不进清单
+        long_url = f'{base}/png?appid=1407&fileid=' + 'EhS9' * 60 + '&rkey=' + 'CAQSMB' * 40
+        deep_store = store_with(long_url)
+        deep = vision.read_image_for_task(deep_store, blobs, TASK, config(), {'ref': ref})
+        entry = vision.attachments_of(MEDIA_MESSAGE, config=config())[0]
+        check('长下载 URL 不被截断：仍能拉到那张图，回读 URL 与原值一致',
+              len(long_url) > 420 and deep['media_type'] == 'image/png'
+              and vision.media_source_url(deep_store, TASK, entry) == long_url,
+              (len(long_url), len(vision.media_source_url(deep_store, TASK, entry))))
 
         # 4. 回执有界
         receipt = vision.inline_summary(result)
@@ -272,6 +301,14 @@ def main() -> int:
         expect('404 → IMAGE_FETCH_FAILED:HTTP_404',
                lambda: vision.read_image_for_task(store_with(f'{base}/missing'), blobs, TASK, config(), {'ref': ref}),
                'IMAGE_FETCH_FAILED:HTTP_404')
+        try:
+            vision.read_image_for_task(store_with(f'{base}/expired'), blobs, TASK, config(), {'ref': ref})
+        except ValueError as exc:
+            check('链接过期 → IMAGE_FETCH_FAILED:HTTP_400 带服务端原因（不泄露 rkey）',
+                  str(exc).startswith('IMAGE_FETCH_FAILED:HTTP_400')
+                  and 'download url has expired' in str(exc) and 'CAESMGoieAXqbqKk' not in str(exc), str(exc))
+        else:
+            check('链接过期 → IMAGE_FETCH_FAILED:HTTP_400 带服务端原因', False, '没有报错')
         expect('重定向跳出白名单 → IMAGE_REDIRECT_HOST_DENIED',
                lambda: vision.read_image_for_task(store_with(f'{base}/redirect-out'), blobs, TASK, config(), {'ref': ref}),
                'IMAGE_REDIRECT_HOST_DENIED')

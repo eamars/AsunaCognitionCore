@@ -20,7 +20,8 @@ The bridge exposes these UI operations through the DSH prefix route:
 
 | Operation | Behavior |
 | --- | --- |
-| `GET /asuna/api/state` | Return the selected scene's paged messages, status, inspector records, model settings, and send permissions. |
+| `GET /asuna/api/state` | Return the selected scene's paged messages, status, model settings, and send permissions. |
+| `GET /asuna/api/inspector-list` | Return authorized summary records for the selected scene; record details remain on demand. |
 | `GET /asuna/api/stream` | Stream live character and action text observations for the selected scene. |
 | `GET /asuna/api/provider-diagnostic` | Return authorized provider metadata for an output event in the selected scene. |
 | `POST /asuna/api/send` | Submit a local message or, for an authorized owner QQ route, an explicitly labeled local prompt in that scene. |

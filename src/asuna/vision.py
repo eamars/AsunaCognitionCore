@@ -7,6 +7,7 @@
 from __future__ import annotations
 import base64
 from pathlib import Path
+import re
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
@@ -18,16 +19,28 @@ MEDIA_KEY = 'asuna_media'
 READ_IMAGE_TOOL_NAME = 'read_image'
 # DSH v1 附件路径接受的栅格格式；其余类型直接拒收，不假装能送进视觉输入。
 IMAGE_MEDIA_TYPES = ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
-DEFAULT_MAX_BYTES = 4 * 1024 * 1024
+# 默认就等于硬上限：QQ 照片常有 4–6 MiB，而 DSH 会把请求内图片重编到 1 MiB 目标再发，
+# 在拉取这一步拦下 5 MiB 的照片只是我们自己加的围栏，不是路由的能力边界。
+DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 HARD_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
 SCENE_SCAN_MESSAGES = 50
+# QQ 的下载 URL 带长 fileid 与 rkey，截断就是静默把链接改坏（拉回来必然是错的或 404）。
+# 清单里不内嵌 URL，只在拉取时按原消息回读，所以这里给足长度。
+URL_LIMIT = 2048
 # 默认只放行这套部署里真出现过的 QQ 多媒体主机（依据是库里存的入站元数据，不是猜的 CDN 名单）。
 # 换了 CDN 时清单会带着 host_not_allowed(具体主机) 说明原因，加一行 vision.image_hosts 即可，
 # 不静默放宽；显式写 vision.image_hosts: [] 表示谁都不放行。
 DEFAULT_IMAGE_HOSTS = ('multimedia.nt.qq.com.cn',)
 USER_AGENT = 'asuna-host/1.0 read-image'
+
+
+def _error_detail(body):
+    """非 2xx 时那一小段服务端说明是有用的（例如 QQ 的“下载链接已过期”）。
+    只留有界一行，并把临时凭据隐掉。"""
+    text = _clean(body.decode('utf-8', 'ignore'), 160)
+    return re.sub(r'(rkey"?\s*[:=]\s*"?)[^&\s"]*', r'\1[已隐藏]', text)
 
 
 def _clean(value, limit):
@@ -113,7 +126,7 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
         if len(out) >= limit:
             break
         message_id = (message or {}).get('_id') or (message or {}).get('event', {}).get('event_id') or 'message'
-        url = _clean(item.get('url'), 420)
+        url = _clean(item.get('url'), URL_LIMIT)
         name = _clean(item.get('file'), 120)
         parsed = urlsplit(url) if url else None
         host = (parsed.hostname or '') if parsed else ''
@@ -192,7 +205,7 @@ def pull_bytes(entry, config, *, max_bytes=None):
     vision = vision_capability(config)
     cap = min(int(max_bytes or vision['max_bytes']), HARD_MAX_BYTES)
     if entry.get('pull_via') == 'url':
-        url = _clean(entry.get('url'), 420)
+        url = _clean(entry.get('url'), URL_LIMIT)
         if not url:
             raise ValueError('IMAGE_URL_MISSING')
         parsed = urlsplit(url)
@@ -221,7 +234,11 @@ def pull_bytes(entry, config, *, max_bytes=None):
         except _RedirectDenied as exc:
             raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED:{exc}') from exc
         except urllib.error.HTTPError as exc:
-            raise ValueError(f'IMAGE_FETCH_FAILED:HTTP_{exc.code}') from exc
+            try:
+                detail = _error_detail(exc.read(512) or b'')
+            except Exception:  # noqa: BLE001 读不到原因也要报状态码
+                detail = ''
+            raise ValueError(f'IMAGE_FETCH_FAILED:HTTP_{exc.code}' + (f':{detail}' if detail else '')) from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             raise ValueError(f'IMAGE_FETCH_FAILED:{type(exc).__name__}') from exc
         if not host_allowed(final_host, vision['image_hosts']):
@@ -307,7 +324,7 @@ def media_source_url(store, task, entry):
     wanted = entry['ref']
     for index, item in enumerate(block.get('items') or []):
         if ref_of(row['_id'], index) == wanted and isinstance(item, dict):
-            return _clean(item.get('url'), 420)
+            return _clean(item.get('url'), URL_LIMIT)
     return ''
 
 

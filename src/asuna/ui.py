@@ -574,12 +574,9 @@ class Workbench:
                              not self.models_applying and getattr(self.controller.app, 'models_ready', True)))
         data['hasPendingWork'] = bool(self.controller and (
             self.controller.pending.unfinished_tasks or self.controller.task_queue.unfinished_tasks)) or data['hasPendingWork']
-        data['inspectorRevision'] = hashlib.sha256(repr([(record['id'], record['kind'], record['title'],
-            record.get('description'), record.get('createdAt')) for record in data['records']]).encode('utf-8')).hexdigest()[:16]
         revision_parts = [data['sceneId'], data['modelSettings']['revision'], data['canSend'], data['hasPendingWork']]
         revision_parts.extend((message['id'], message.get('sceneSeq'), message.get('revision'))
                               for message in data['messages'])
-        revision_parts.append(data['inspectorRevision'])
         data['revision'] = hashlib.sha256(repr(revision_parts).encode('utf-8')).hexdigest()[:20]
         self.stream_hub.mark_durable({step.get('displayKey') for message in data['messages']
                                       for step in message.get('internalSteps', []) if step['type'] in ('phase.output', 'execution.output')
@@ -752,16 +749,45 @@ class Workbench:
                 payload = step.get('payload', {})
                 if not isinstance(payload, dict):
                     payload = {}
+                reasoning = payload.get('reasoning')
+                if not isinstance(reasoning, str):
+                    reasoning = ''
+                content = payload.get('content')
                 projected.append({**{key: value for key, value in step.items() if key not in ('payload', 'providerCalls')},
                     'summary': step['summary'][:240],
                     'payload': {key: payload[key] for key in ('phase', 'operation', 'attempt', 'tool', 'finish_reason')
                                 if key in payload and isinstance(payload[key], (str, int, float, bool))},
+                    'hasReasoning': bool(reasoning.strip()),
+                    'reasoningPreview': reasoning.strip().split('\n', 1)[0][:120] if reasoning.strip() else '',
+                    'hasFullContent': isinstance(content, str) and len(content) > 240,
+                    'structuredContent': (step['type'] == 'execution.output' and
+                                          isinstance(content, str) and content.lstrip().startswith('{')),
                     'hasProviderDiagnostic': bool(payload.get('request_refs'))})
             if steps:
                 message['internalSteps'] = projected
             message['revision'] = hashlib.sha256(repr((message.get('text'), message.get('authorLabel'),
                 message.get('deliveryState'), message.get('turnStatus'),
                 tuple((step['id'], step['status'], step['summary']) for step in projected))).encode('utf-8')).hexdigest()[:16]
+        with self.lock:
+            notices = list(self.notices) if not external else []
+        data = {'sceneId': scene['_id'], 'title': scene['_id'],
+                'subtitle': f"{'通道场景' if external else '本机私聊'} · {scene['_id']} · 分段加载消息",
+                'scenes': [], 'messages': rendered + notices,
+                'hasMore': has_more, 'beforeSeq': oldest_seq, 'hasPendingWork': bool(active_tasks),
+                'readOnly': external or self.controller is None,
+                'canSend': not external and self.controller is not None and not self.models_applying and getattr(self.controller.app, 'models_ready', True),
+                'modelSettings': self.models_snapshot()}
+        latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
+        if latest_scene['policy_epoch'] != scene['policy_epoch'] or latest_scene['scope_key'] != scene['scope_key']:
+            raise PermissionError('场景授权已变化，请刷新')
+        # Same credential redaction as the terminal trace, including nested payloads.
+        return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
+
+    def inspector_list(self, selected=''):
+        selection = self._scene_selection(selected)
+        store, settings, external = self.store, selection['settings'], selection['external']
+        scene = store.authorize(settings['scene_id'], settings['person_id'])
+        scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
         records = []
         for row in store.db.memory_units.aggregate([
                 {'$match': {'$or': [scope, {'scope_key': 'global-safe', 'policy_epoch': 1}], 'status': 'active'}},
@@ -789,22 +815,14 @@ class Workbench:
             status = integration.status()
             records.append({'id': 'integration-owner', 'kind': 'integration', 'title': '集成运行器',
                             'description': status['state']})
-        with self.lock:
-            notices = list(self.notices) if not external else []
-        data = {'sceneId': scene['_id'], 'title': scene['_id'],
-                'subtitle': f"{'通道场景' if external else '本机私聊'} · {scene['_id']} · 分段加载消息 / 100 条记忆",
-                'scenes': [], 'messages': rendered + notices, 'records': records,
-                'hasMore': has_more, 'beforeSeq': oldest_seq, 'hasPendingWork': bool(active_tasks),
-                'readOnly': external or self.controller is None,
-                'canSend': not external and self.controller is not None and not self.models_applying and getattr(self.controller.app, 'models_ready', True),
-                'modelSettings': self.models_snapshot(),
-                'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
-                                 'group_preference': '当前场景没有群偏好记录。'}}
         latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
         if latest_scene['policy_epoch'] != scene['policy_epoch'] or latest_scene['scope_key'] != scene['scope_key']:
             raise PermissionError('场景授权已变化，请刷新')
-        # Same credential redaction as the terminal trace, including nested payloads.
-        return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
+        result = {'sceneId': scene['_id'], 'records': records,
+                  'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
+                                   'group_preference': '当前场景没有群偏好记录。'}}
+        result['inspectorRevision'] = hashlib.sha256(repr(records).encode('utf-8')).hexdigest()[:16]
+        return json.loads(redact_text(json.dumps(result, ensure_ascii=False, default=str), store.config))
 
     def trace_detail(self, event_id, selected=''):
         scene = self.stream_scene(selected)
@@ -813,11 +831,17 @@ class Workbench:
             raise PermissionError('当前场景没有该执行记录')
         owner = {'_id': event['stream_id'], 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
                  'policy_epoch': scene['policy_epoch']}
-        if not (self.store.db.episodes.find_one(owner, {'_id': 1}) or
-                self.store.db.tasks.find_one(owner, {'_id': 1})):
+        task = self.store.db.tasks.find_one(owner, {'intent_revision': 1})
+        if not (task or self.store.db.episodes.find_one(owner, {'_id': 1})):
             raise PermissionError('当前场景没有该执行记录')
-        return json.loads(redact_text(json.dumps({'id': event_id, 'type': event['type'],
-            'payload': event.get('payload', {})}, ensure_ascii=False, default=str), self.store.config))
+        detail = {'id': event_id, 'type': event['type'], 'payload': event.get('payload', {})}
+        if task and event['type'] == 'execution.output':
+            attempt = detail['payload'].get('attempt')
+            operation = f"{task['_id']}:execute:{task['intent_revision']}" + (
+                f':{attempt}' if attempt is not None else '')
+            detail['providerCalls'] = self.native_execution_calls(
+                operation, detail['payload'].get('request_refs', []))
+        return json.loads(redact_text(json.dumps(detail, ensure_ascii=False, default=str), self.store.config))
 
     def inspector_detail(self, record_id, kind, selected=''):
         selection = self._scene_selection(selected)
@@ -968,6 +992,9 @@ class BridgeWorkbench(Workbench):
     def trace_detail(self, event_id, selected=''):
         return self.link.call('trace_detail', event_id, selected) if self.link.ready.is_set() else super().trace_detail(event_id, selected)
 
+    def inspector_list(self, selected=''):
+        return self.link.call('inspector_list', selected) if self.link.ready.is_set() else super().inspector_list(selected)
+
     def inspector_detail(self, record_id, kind, selected=''):
         return (self.link.call('inspector_detail', record_id, kind, selected) if self.link.ready.is_set()
                 else super().inspector_detail(record_id, kind, selected))
@@ -1044,6 +1071,8 @@ class UiBridge:
                     elif self.command == 'GET' and url.path == '/trace-detail':
                         query = parse_qs(url.query)
                         value = workbench.trace_detail(query.get('event', [''])[0], query.get('scene', [''])[0])
+                    elif self.command == 'GET' and url.path == '/inspector-list':
+                        value = workbench.inspector_list(parse_qs(url.query).get('scene', [''])[0])
                     elif self.command == 'GET' and url.path == '/inspector-detail':
                         query = parse_qs(url.query)
                         value = workbench.inspector_detail(query.get('id', [''])[0], query.get('kind', [''])[0],

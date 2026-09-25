@@ -1,5 +1,7 @@
 """Long-lived owner of Application, queues and adapter listeners; Web is a client."""
+from bisect import bisect_left, insort
 from contextlib import ExitStack
+import os
 from pathlib import Path
 import threading
 import time
@@ -18,11 +20,23 @@ except Exception:
     scene_links = None
 
 
+def _workspace_overlaps(workspace, ordered, known):
+    key = os.path.normcase(str(workspace))
+    if any(os.path.normcase(str(parent)) in known for parent in (workspace, *workspace.parents)):
+        return True
+    prefix = key if key.endswith(os.sep) else key + os.sep
+    index = bisect_left(ordered, prefix)
+    return index < len(ordered) and ordered[index].startswith(prefix)
+
+
 def prepare_channels(store):
     """Explicit DM/group identities and disjoint per-member resource grants."""
-    scene_ids, tokens, workspaces = set(), set(), []
+    scene_ids, tokens = set(), set()
     new_identities = False
     local = store.config['chat']
+    local_workspace = Path(local['workspace']).resolve()
+    ordered_workspaces = [os.path.normcase(str(local_workspace))]
+    known_workspaces = set(ordered_workspaces)
     # The A2 resolver reads the same two collections for every channel member.
     # Keep one startup-local read view and include any setup rows written below.
     # The resolver itself, its aliases, and its results are unchanged.
@@ -33,7 +47,11 @@ def prepare_channels(store):
             identities=SimpleNamespace(find=lambda _query: identity_rows),
             scenes=SimpleNamespace(find=lambda _query: scene_rows))
     else:
+        identity_rows = list(store.db.identities.find({}))
         relationship_db = store.db
+    identities_by_id = {row['_id']: row for row in identity_rows}
+    relationship_heads = {row['_id'] for row in store.db.state_heads.find(
+        {'_id': {'$regex': '^relationship:'}}, {'_id': 1})}
     for channel_id, channel in store.config.get('channels', {}).items():
         token = channel.get('token', '')
         if not isinstance(token, str) or not token.isascii() or len(token) < 24 or token in tokens:
@@ -61,15 +79,16 @@ def prepare_channels(store):
                 workspace = Path(grant['workspace']).resolve()
                 if not workspace.is_relative_to((ROOT / '.runtime' / 'channels').resolve()):
                     raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')
-                local_workspace = Path(local['workspace']).resolve()
-                if any(workspace.is_relative_to(other) or other.is_relative_to(workspace)
-                       for other in [local_workspace, *workspaces]):
+                if _workspace_overlaps(workspace, ordered_workspaces, known_workspaces):
                     raise Denied('CHANNEL_WORKSPACE_OVERLAP')
-                workspaces.append(workspace)
-                identity = store.db.identities.find_one({'_id': person})
+                workspace_key = os.path.normcase(str(workspace))
+                insort(ordered_workspaces, workspace_key)
+                known_workspaces.add(workspace_key)
+                identity = identities_by_id.get(person)
                 if identity is None:
                     created = store.put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
                                                       'account_id': sender}, stream='host:setup')
+                    identities_by_id[person] = created
                     if relationship_db is not store.db:
                         identity_rows.append(created)
                     new_identities = True
@@ -80,8 +99,11 @@ def prepare_channels(store):
                     {'_id': scene_id, 'scope_key': 'scene:' + scene_id}, person) if scene_links
                     else {'entity': 'relationship:' + person, 'scope': 'scene:' + scene_id})
                 # 没配 canonical 映射时就是原来那一份；配了之后别名场景不再另起一条关系记录。
-                store.init_head(target['entity'], target['scope'],
-                                {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
+                head_key = target['entity'] + '|' + target['scope']
+                if head_key not in relationship_heads:
+                    store.init_head(target['entity'], target['scope'],
+                                    {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
+                    relationship_heads.add(head_key)
                 workspace.mkdir(parents=True, exist_ok=True)
             scene = store.db.scenes.find_one({'_id': scene_id})
             if scene is None:

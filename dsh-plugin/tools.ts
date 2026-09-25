@@ -1,7 +1,11 @@
 import { defineTool } from '@deepseek-ai/dsh-tools';
 
 export const name = 'asuna-controlled-tools';
-export const inject = ['tools'];
+// DSH 只放行这里声明过的 ctx 服务。attachImage 要读 ctx.attachments，所以 'attachments'
+// 必须一起列进来：只写 ['tools'] 时，真宿主上每一次 read_image 都如实抛
+// `cannot get property "attachments" without inject`（2026-09-25 实测）——字节已经拉回来了，
+// 图却没进模型请求。离线自检用假 ctx 装载本插件，照不出这道运行时闸门，故自检补一条断言。
+export const inject = ['tools', 'attachments'];
 
 // 看图（read_image）的最后一棒。宿主已经按元数据把字节真实拉回来并 base64 编码；
 // 这里按 DSH 原生附件机制存成 durable attachment（ctx.attachments.saveImage），

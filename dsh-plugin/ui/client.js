@@ -322,7 +322,8 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
         ...(call.parts || []).map((part, partIndex) => h('section',
           {className: 'asuna-part', key: `${call.id}:${partIndex}`},
           part.field === 'reasoning_content' ? h(Thinking, {body: part.text}) : renderContent(part.text))))));
-    return h('section', {className: thinking ? 'asuna-part asuna-thinking' : 'asuna-part'},
+    return h('section', {className: thinking ? 'asuna-part asuna-thinking' : 'asuna-part',
+      'data-expanded': thinking && open || undefined},
       h(DisclosureRow, {icon: thinking ? h(IconThinkOutline14, {size: 14}) : h(IconCodeOutline16, {size: 14}),
         title: thinking ? translate('thinking') : step.type === 'execution.output' ? '完整输出与行动步骤' : '完整输出',
         open, expandable: true,

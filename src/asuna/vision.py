@@ -3,6 +3,10 @@
 角色现场仅可获得消息附件的有界元数据和诚实占位符。行动脑按需通过
 ``read_image`` 拉取当前授权场景的图片；能力来自行动模型路由配置，图片字节
 经白名单与大小检查后复用现有 BlobStore 和 DSH durable attachment seam。
+
+读图范围与 A2 跨场景只读联动同一口径：本场景之外，还扫配置里那条有向边指向的场景
+（``context_links`` / 路由级 ``read_scenes``，现算自配置，不是工具参数）。放宽的只有**读**——
+字节仍按本任务的 scope_key 落盘，写、出站、场景成员资格都不因此放宽；删掉配置键就回到只扫本场景。
 """
 from __future__ import annotations
 import base64
@@ -13,6 +17,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from .evidence import canonical, sha
+from .scene_links import message_times, read_scope
 from .state import Denied
 
 MEDIA_KEY = 'asuna_media'
@@ -160,24 +165,61 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
     return out
 
 
-def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES):
-    """本场景最近的入站图片（含当前这条）。场景由任务绑定，参数换不了范围。"""
+def readable_image_scenes(store, task, config):
+    """本任务能读图的范围：本场景（围栏照旧）+ 配置声明的只读联动场景（A2 同一口径）。
+
+    联动集合现算自配置（``scene_links.read_scope``），不是工具参数：她既不能把范围换宽，
+    也不能把别人的场景说成自己的。本场景与任务记录不同步仍然拒（不猜）；联动场景在库里
+    查不到、或纪元与本任务不同步，就照实不扫它——那条边本来只是「额外能读」，缺了不算围栏不对。
+    """
     scene = store.db.scenes.find_one({'_id': task['scene_id']})
     if (not isinstance(scene, dict) or scene.get('scope_key') != task['scope_key']
             or scene.get('policy_epoch') != task['policy_epoch']):
         raise Denied('VISION_SCENE_FENCE_MISMATCH')
-    rows = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                                        'direction': 'inbound'},
-                                       {'_id': 1, 'scene_seq': 1, 'text': 1, 'event.raw': 1})
-                .sort('scene_seq', -1).limit(scan))
+    out = [{'scene_id': scene.get('_id'), 'linked': False}]
+    for scene_id in read_scope(config, scene)['linked_scenes']:
+        doc = store.db.scenes.find_one({'_id': scene_id})
+        if not isinstance(doc, dict) or doc.get('policy_epoch') != task['policy_epoch']:
+            continue
+        out.append({'scene_id': scene_id, 'linked': True})
+    return out
+
+
+def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES):
+    """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。"""
+    scenes = readable_image_scenes(store, task, config)
+    rows, scanned = [], []
+    for scope in scenes:
+        found = list(store.db.messages.find({'scene_id': scope['scene_id'],
+                                             'policy_epoch': task['policy_epoch'],
+                                             'direction': 'inbound'},
+                                            {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1,
+                                             'text': 1, 'event.raw': 1, 'occurred_at': 1, 'received_at': 1})
+                     .sort('scene_seq', -1).limit(scan))
+        scanned.append({'scene_id': scope['scene_id'], 'linked': scope['linked'], 'messages': len(found)})
+        for row in found:
+            row['_linked_scene'] = bool(scope['linked'])
+            rows.append(row)
+    # 各场景的 scene_seq 互不可比：跨场景归并用与 history_query 同一口径的有效时间。
+    times = message_times(store, rows)
+    rows.sort(key=lambda row: (times.get(row.get('_id'), ('', ''))[0], row.get('scene_seq') or 0))
     items = []
-    for row in sorted(rows, key=lambda r: r.get('scene_seq') or 0):
+    for row in rows:
+        linked = bool(row.pop('_linked_scene', False))
         for entry in attachments_of(row, config=config):
             entry['scene_seq'] = row.get('scene_seq')
+            entry['scene_id'] = row.get('scene_id')
+            entry['linked_scene'] = linked
             items.append(entry)
     truncated = len(items) > limit
-    return {'scene_id': scene['_id'], 'attachments': items[-limit:], 'truncated': truncated,
-            'scanned_messages': len(rows), 'vision': vision_capability(config)}
+    return {'scene_id': scene_id_of(task), 'attachments': items[-limit:], 'truncated': truncated,
+            'scanned_messages': len(rows), 'scanned_scenes': scanned,
+            'linked_scenes': [scope['scene_id'] for scope in scenes if scope['linked']],
+            'vision': vision_capability(config)}
+
+
+def scene_id_of(task):
+    return _clean((task or {}).get('scene_id'), 90)
 
 
 class _RedirectDenied(Exception):
@@ -294,16 +336,20 @@ def read_image_for_task(store, blobs, task, config, args):
     listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if not entry:
-        # 不区分「不存在」与「在别的场景/别的纪元」：不借这个工具探测别人的图。
+        # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE:' + str(entry.get('not_pullable_because') or ''))
     full = dict(entry)
-    full['url'] = (media_source_url(store, task, entry))
+    full['url'] = (media_source_url(store, task, config, entry))
     data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
     digest = sha(data)
+    # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
     blob = blobs.put(data, task['scope_key'], 'image', source_ids=[entry['source_message_id']]) if blobs else None
-    payload = {'ref': ref, 'scene_id': task['scene_id'], 'source_message_id': entry['source_message_id'],
+    payload = {'ref': ref, 'scene_id': task['scene_id'],
+               'image_scene_id': _clean(entry.get('scene_id'), 90) or task['scene_id'],
+               'linked_scene': bool(entry.get('linked_scene')),
+               'source_message_id': entry['source_message_id'],
                'placeholder': entry.get('placeholder'), 'summary': entry.get('summary') or None,
                'media_type': media_type, 'bytes': len(data), 'sha256': digest, 'pulled_via': via,
                'source': source, 'blob_artifact': (blob or {}).get('artifact_id'),
@@ -311,12 +357,21 @@ def read_image_for_task(store, blobs, task, config, args):
                'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
                'visual': 'awaiting_attachment',
                'note': '图片字节已按本次调用真实拉取；此前正文里的占位符只说明这里出现过一张图，不代表内容已被读过。'}
+    if payload['linked_scene']:
+        payload['scene_note'] = ('这张图来自本场景按配置只读联动的另一个场景（同一个人在那边的入口）。'
+                                 '放宽的只有读：字节按本任务的 scope 存，写与出站不因此放宽。')
     return payload
 
 
-def media_source_url(store, task, entry):
-    """URL 不进清单（避免把带 rkey 的临时链接长期抄进上下文），拉取时按原消息回读。"""
-    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': task['scene_id'],
+def media_source_url(store, task, config, entry):
+    """URL 不进清单（避免把带 rkey 的临时链接长期抄进上下文），拉取时按原消息回读。
+
+    回读走与清单同一道围栏：条目写着哪个场景就回那个场景读，不在本任务可读集合里就返回空。
+    """
+    scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
+    if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
+        return ''
+    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
                                       'policy_epoch': task['policy_epoch']})
     block = media_block(row)
     if not block:
@@ -332,13 +387,20 @@ def task_attachment_context(store, task, config, source_message):
     """行动任务输入里的附件段：让她知道有什么可拉、ref 是什么、没拉过就是没看过。"""
     capability = vision_capability(config)
     current = attachments_of(source_message, config=config) if source_message else []
-    scene = scene_attachments(store, task, config) if capability['supported'] else {'attachments': [], 'truncated': False}
+    for entry in current:
+        # 当前这条消息按定义就在本任务自己的场景里。
+        entry['scene_id'] = task['scene_id']
+        entry['linked_scene'] = False
+    scene = scene_attachments(store, task, config) if capability['supported'] else {'attachments': []}
     items = current or scene['attachments']
     if not items:
         return None
     return {'attachments': items, 'scene_attachments': scene['attachments'], 'vision': capability,
+            'linked_scenes': scene.get('linked_scenes') or None,
+            'scanned_scenes': scene.get('scanned_scenes') or None,
             'route': ('用 read_image(ref) 按需拉取；成功返回的 image 才是本次真实看到的视觉输入。'
-                      '未调用的附件正文没有被读过，不要说看过。'),
+                      '未调用的附件正文没有被读过，不要说看过。linked_scene=true 的那条来自按配置'
+                      '只读联动的场景（同一个人在另一个入口发的），拉取与落盘仍按本任务的围栏与 scope。'),
             'unsupported_because': capability['unsupported_because']}
 
 
@@ -364,6 +426,7 @@ READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
     'description': ('按需拉取本授权场景某条消息里的图片附件，并把它变成这一轮真实的视觉输入（Pull 模式：'
                     '入站只带元数据与占位符，没调用就等于没看过）。ref 取自任务输入的 attachments 清单。'
+                    '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
                     '路由不支持图片、主机不在白名单、超限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
     'parameters': {'ref': {'type': 'string', 'required': True}, 'max_bytes': {'type': 'integer'}}}
 

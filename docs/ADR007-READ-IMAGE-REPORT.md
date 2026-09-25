@@ -48,7 +48,7 @@
 - 错误都是真实错误码：`VISION_ROUTE_UNSUPPORTED`、`IMAGE_NOT_PULLABLE`、`IMAGE_ATTACHMENT_NOT_IN_SCENE`、
   `VISION_SCENE_FENCE_MISMATCH`、`IMAGE_FETCH_FAILED:HTTP_…`、`IMAGE_TOO_LARGE`、`IMAGE_TYPE_UNSUPPORTED`、
   `IMAGE_INSECURE_URL_DENIED`、`IMAGE_REDIRECT_HOST_DENIED`、`IMAGE_FILE_NAME_DENIED`、`READ_IMAGE_ARGUMENT_DENIED`。
-  未知 ref 与「别的场景的图」给同一个码，不借这个工具探测别人的图。
+  未知 ref 与「围栏外的场景的图」给同一个码，不借这个工具探测别人的图。围栏范围 = 本场景 + 配置里那条只读联动边（现算自配置，删键即回滚），见下面「第二轮」。
 
 ## 本轮实测到的两件事（都改掉了）
 
@@ -92,6 +92,46 @@
 
 `vision.image_hosts` 有默认值（这套部署真出现过的 `multimedia.nt.qq.com.cn`）；换 CDN 时清单会点名被拒的主机，
 照提示加一行即可。删掉 `input_modalities` 就回到今天：工具不出现，清单说明为什么。
+
+## 第二轮：围栏只认本场景，联动场景里的图看不见（已改）
+
+**实测到的现象**（不是推断）：操作员在本机 owner 私聊（`local-dm`）里委托重试验图，ref 给的是
+`att-28d96d82c156`（= `ref_of('in-ep-245d91c91ae4294a9addd1fb644d67e9', 0)`，那条消息在 QQ 私聊
+`qq:3768713357:dm:673225019`，`scene_seq` 34，jpeg 148,285 B）。返回
+`IMAGE_ATTACHMENT_NOT_IN_SCENE`——而且是在能力门**之后**才报的，说明 `input_modalities` 已经声明了
+`image`、主机白名单也过了；拦下来的不是路由，是我自己那道只扫 `task['scene_id']` 的围栏。
+本机场景里一张图都没有（`messages` 查 `scene_id=local-dm` + `event.raw.asuna_media` 为空），
+而 `scenes.local-dm.readable_scenes` 里明明写着那条 QQ 私聊的边。
+
+**为什么算缺陷**：A2 那条边已经让历史、讨论整理、上下文都跨得过去（同一个人的另一个入口），
+只有看图没跟上——文字能同步、图片被拦在围栏外，是割裂的。架构裁定里「A2 保持不动」那句是针对
+lifecycle 那一轮，不是把这条边永久冻住。
+
+**改了什么**（只动 `src/asuna/vision.py`）：
+
+- 新增 `readable_image_scenes(store, task, config)`：本场景的围栏比对一字未改（不同步仍然
+  `VISION_SCENE_FENCE_MISMATCH`），额外那份来自 `scene_links.read_scope`——现算自配置，不是工具参数，
+  所以她既不能把范围换宽、也不能把别人的场景说成自己的；联动场景在库里查不到或纪元与本任务不同步，
+  就照实不扫它。
+- `scene_attachments` 按这个集合逐场景扫（各自最近 50 条入站），跨场景归并用 `scene_links.message_times`
+  的有效时间——各场景的 `scene_seq` 互不可比，拿它排序会得出假的新旧。条目多带 `scene_id` 与
+  `linked_scene`，返回体多带 `scanned_scenes` / `linked_scenes`，覆盖范围照实报。
+- `media_source_url(store, task, config, entry)`：URL 按条目**自己**那条消息回读，回读前再核一次围栏，
+  不串场景、不放宽。
+- 落盘不变：字节仍按**本任务**的 `scope_key` 进 BlobStore——图来自联动场景也不会写进别人场景的账本。
+  放宽的只有读：写、出站、场景成员资格都不因此放宽。
+- 回执多带 `image_scene_id` / `linked_scene`，联动时加一句 `scene_note`；工具描述与行动输入的附件清单
+  同步（`linked_scenes`、`scanned_scenes`），她看得见这条来自哪。
+
+**回滚**：删掉配置里 `context_links` / 路由级 `read_scenes` 那条边，就回到「只扫本场景」——自检里有这条反证。
+
+**自检**（本次实跑）：`python3 tools/read_image_offline_check.py` → 全部通过，新增 9 条覆盖
+联动场景进清单并标来源、如实报扫了哪些场景、真拉到那张图、字节仍按本任务 scope 落盘、URL 按自己场景回读、
+行动输入清单带联动标记、**删键回到只扫本场景**、纪元不同步照实不扫、配置写了边但库里没那个场景不猜。
+同期回归：P2 `24/24`、P3 `38/38`、P5 `19/19`、P5-b `24/24`、讨论整理 `18/18`、只读联动 `11/11`、`compileall` 干净。
+
+**仍未验证**：真宿主里图片确实进了模型请求（插件回执 `visual:"attached"`）。这次改动要发布并重启才生效，
+生效之后让他把那张图重发一次，才算真看过、真验过。
 
 ## 已知边界（不藏）
 

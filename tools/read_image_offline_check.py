@@ -3,6 +3,7 @@
 
 覆盖：
 1. 真实入站元数据形状（照抄线上带图消息的 `event.raw.asuna_media`）→ 有界附件清单；
+1a. A2 只读联动：配置里那条边指向的场景里的图也能拉，范围仍现算自配置（删键即回滚）；
 2. 能力门（只看配置声明，不按模型名猜）与 allowed_capabilities 裁剪；
 3. 真拉取：本机 HTTP 服务 + 真 PNG 字节，全链路核对 sha256 / 字节 / BlobStore / base64；
 4. 错误面：超限、非图片、404、重定向出白名单、明文 http、白名单外主机、越场景、
@@ -10,6 +11,7 @@
 5. 回执有界：写进 artifacts 的副本不带 base64；
 6. 插件投影（装载真 dsh-plugin/tools.ts，只替换那一行包导入）：saveImage 收到原字节
    → ImageBlock + 元数据文本块；附件服务缺失 / 保存失败都如实标 unavailable；
+   外加 inject 声明断言——DSH 只放行 inject 列过的 ctx 服务，假 ctx 照不出这条运行时闸门；
 7. TokenMeter：内联图片不再被当成文本字节，但份数与字节数如实报；
 8. 本机文件目录路径与目录穿越防护。
 
@@ -176,7 +178,8 @@ def main() -> int:
     pkg.mkdir()
     (pkg / '__init__.py').write_text('', encoding='utf-8')
     sys.modules['httpx'] = types.ModuleType('httpx')  # evidence.py 顶层 import，本检查不出网
-    for name in ('vision.py', 'evidence.py', 'config.py', 'tokens.py'):
+    # scene_links.py 也得带上：真 vision.py 现在从同包读只读联动范围
+    for name in ('vision.py', 'evidence.py', 'config.py', 'tokens.py', 'scene_links.py'):
         shutil.copy(SRC / name, pkg / name)
     (pkg / 'state.py').write_text('class Denied(PermissionError):\n    pass\n', encoding='utf-8')
     sys.path.insert(0, work.as_posix())
@@ -271,8 +274,8 @@ def main() -> int:
         entry = vision.attachments_of(MEDIA_MESSAGE, config=config())[0]
         check('长下载 URL 不被截断：仍能拉到那张图，回读 URL 与原值一致',
               len(long_url) > 420 and deep['media_type'] == 'image/png'
-              and vision.media_source_url(deep_store, TASK, entry) == long_url,
-              (len(long_url), len(vision.media_source_url(deep_store, TASK, entry))))
+              and vision.media_source_url(deep_store, TASK, config(), entry) == long_url,
+              (len(long_url), len(vision.media_source_url(deep_store, TASK, config(), entry))))
 
         # 4. 回执有界
         receipt = vision.inline_summary(result)
@@ -337,6 +340,72 @@ def main() -> int:
                lambda: vision.read_image_for_task(store, blobs, TASK, config(), {'ref': 'x'}),
                'INVALID_READ_IMAGE_REF')
 
+        # 5b. A2 只读联动：本场景之外那条边指向的场景里的图，也能按同一道围栏拉
+        LINKED = 'qq:3768713357:dm:673225019'
+        own_doc = {'_id': TASK['scene_id'], 'scope_key': TASK['scope_key'],
+                   'policy_epoch': TASK['policy_epoch']}
+        linked_doc = {'_id': LINKED, 'scope_key': 'scene:' + LINKED, 'policy_epoch': TASK['policy_epoch']}
+        linked_message = json.loads(json.dumps(MEDIA_MESSAGE))
+        linked_message['_id'] = 'in-ep-245d91c91ae4294a9addd1fb644d67e9'
+        linked_message['scene_id'] = LINKED
+        linked_message['scene_seq'] = 34
+        linked_message['occurred_at'] = '2026-09-25T13:13:40Z'
+        linked_message['event']['raw']['asuna_media']['items'] = [
+            dict(linked_message['event']['raw']['asuna_media']['items'][0],
+                 sub_type='0', url=f'{base}/png?fileid=linked&rkey=CAESMI')]
+        linked_ref = vision.ref_of(linked_message['_id'], 0)
+
+        def linked_config(links=True, *, linked_doc_ok=True, epoch='same'):
+            cfg = config()
+            if links:
+                cfg['context_links'] = {TASK['scene_id']: [LINKED]}
+            doc = dict(linked_doc)
+            if epoch == 'other':
+                doc['policy_epoch'] = 'epoch-other'
+            scenes = [own_doc] + ([doc] if linked_doc_ok else [])
+            rows = [MEDIA_MESSAGE, linked_message]
+            return FakeStore(scenes, rows), cfg
+
+        both_store, both_cfg = linked_config()
+        listing = vision.scene_attachments(both_store, TASK, both_cfg, limit=8, scan=50)
+        by_ref = {item['ref']: item for item in listing['attachments']}
+        check('只读联动场景的图进清单，并写明它来自哪个场景',
+              linked_ref in by_ref and by_ref[linked_ref]['scene_id'] == LINKED
+              and by_ref[linked_ref]['linked_scene'] is True
+              and by_ref[linked_ref]['pullable'] is True
+              and by_ref[ref]['linked_scene'] is False, listing['scanned_scenes'])
+        check('清单如实报出扫了哪些场景（联动那条边写在 linked_scenes 里）',
+              {s['scene_id'] for s in listing['scanned_scenes']} == {TASK['scene_id'], LINKED}
+              and listing['linked_scenes'] == [LINKED], listing['scanned_scenes'])
+        pulled = vision.read_image_for_task(both_store, blobs, TASK, both_cfg, {'ref': linked_ref})
+        check('联动场景那张图真拉到了：魔数与字节一致，并标明来自联动场景',
+              pulled['media_type'] == 'image/png' and pulled['bytes'] == len(PNG)
+              and pulled['image_scene_id'] == LINKED and pulled['linked_scene'] is True
+              and 'scene_note' in pulled,
+              {key: pulled[key] for key in ('media_type', 'bytes', 'image_scene_id', 'linked_scene')})
+        check('联动场景的字节仍按本任务 scope 落盘（不写进别人场景的账本）',
+              blobs.saved[-1]['scope'] == TASK['scope_key']
+              and blobs.saved[-1]['source_ids'] == [linked_message['_id']], blobs.saved[-1])
+        check('联动条目的下载 URL 按它自己的场景回读（不串场景、不被截断）',
+              vision.media_source_url(both_store, TASK, both_cfg, by_ref[linked_ref])
+              == f'{base}/png?fileid=linked&rkey=CAESMI')
+        block_linked = vision.task_attachment_context(both_store, TASK, both_cfg, None)
+        check('行动输入的清单也带来源场景与联动标记（她看得见这条来自哪）',
+              bool(block_linked) and block_linked['linked_scenes'] == [LINKED]
+              and any(item['ref'] == linked_ref and item['linked_scene'] is True
+                      for item in block_linked['attachments']), list(block_linked or {}))
+        expect('删掉配置里那条边 → 回到只扫本场景（IMAGE_ATTACHMENT_NOT_IN_SCENE）',
+               lambda: vision.read_image_for_task(both_store, blobs, TASK, config(), {'ref': linked_ref}),
+               'IMAGE_ATTACHMENT_NOT_IN_SCENE')
+        expect('联动场景纪元与本任务不同步 → 照实不扫它',
+               lambda: vision.read_image_for_task(linked_config(epoch='other')[0], blobs, TASK, both_cfg,
+                                                  {'ref': linked_ref}),
+               'IMAGE_ATTACHMENT_NOT_IN_SCENE')
+        expect('配置写了边但库里没那个场景 → 不猜，清单里没有它',
+               lambda: vision.read_image_for_task(linked_config(linked_doc_ok=False)[0], blobs, TASK, both_cfg,
+                                                  {'ref': linked_ref}),
+               'IMAGE_ATTACHMENT_NOT_IN_SCENE')
+
         # 6. 本机文件目录路径
         image_dir = work / 'napcat'
         image_dir.mkdir()
@@ -388,7 +457,12 @@ def main() -> int:
             driver = work / 'driver.mjs'
             driver.write_text(f'''
 import assert from 'node:assert/strict';
-import {{ asunaRender, attachImage, imageBlock }} from '{(work / 'tools.mjs').as_posix()}';
+import {{ asunaRender, attachImage, imageBlock, inject }} from '{(work / 'tools.mjs').as_posix()}';
+// DSH 运行时只放行 inject 里声明过的 ctx 服务：少声明一条，真宿主上每一次 read_image 都会如实抛
+// `cannot get property "attachments" without inject`（2026-09-25 实测：字节拉回来了，图没进模型）。
+// 本自检用假 ctx 装载插件，照不出这道运行时闸门，所以直接断言声明本身。
+assert.ok(Array.isArray(inject) && inject.includes('tools') && inject.includes('attachments'),
+  'tools.ts 的 inject 必须同时声明 tools 与 attachments，实际：' + JSON.stringify(inject));
 const png = Buffer.from('{PNG_B64}', 'base64');
 const value = {{ ref: 'att-test', media_type: 'image/png', bytes: png.length, sha256: 'x',
   image: {{ media_type: 'image/png', data: png.toString('base64') }}, visual: 'awaiting_attachment' }};
@@ -420,7 +494,7 @@ assert.equal(asunaRender(null, missing).length, 1);
 const failing = await attachImage({{ attachments: {{ saveImage: async () => {{
   throw Object.assign(new Error('boom'), {{ code: 'IMAGE_ADMISSION_TOO_LARGE' }}); }} }} }}, value);
 assert.equal(failing.visual, 'unavailable:IMAGE_ADMISSION_TOO_LARGE');
-console.log(JSON.stringify({{ ok: true, visual: attached.visual, blocks: blocks.map(b => b.type),
+console.log(JSON.stringify({{ ok: true, inject: inject, visual: attached.visual, blocks: blocks.map(b => b.type),
   text_bytes: blocks[1].text.length, missing: missing.visual, failing: failing.visual }}));
 ''', encoding='utf-8')
             proc = subprocess.run([node, driver.as_posix()], capture_output=True, text=True, timeout=60)

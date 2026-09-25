@@ -1,33 +1,11 @@
-# UI Elements V1 限制
+# Current UI limitations
 
-## 有意不实现
-
-- 深色主题、移动端布局优化、图形工作流、图表/分析大盘。
-- 记忆编辑/CMS、跨会话 trace 对比、深层设置、模型提示词编辑。
-- QQ 接入、频道状态模拟、新身份/场景管理。
-- 新后端产品、存储重构、双脑运行时重构。
-
-## 当前约束
-
-- 仅本机操作者使用。所有检查器记录只读；原生上下文列表仅覆盖配置的当前本机场景。历史上下文不接受发送。
-- 偏好和群偏好标签可访问，但现有本机数据主要是 chat_chunk / monologue 记忆及 relationship revision，没有独立偏好记录时显示真实空态。不会从正文关键词推断结构化偏好。
-- 原存储没有的标题、时间、来源不会编造；新增记录字段作为通用字段值显示。
-- 最近 80 条消息、100 条 active 记忆及当前关系；没有分页或全量历史管理。检查器不是所选历史上下文的记忆快照。
-- 每两秒刷新持久化事件，不提供 token 流。入队成功与回复发布是不同状态；错误不会变成伪造的助手回答。请求失败不自动重发。
-- 与原终端一样，新上下文保留记忆。尚有行动任务时原控制器拒绝切换。
-- 纯浅色工作台嵌入 DSH；DSH 外层自己的主题/设置不由本插件改写。
-- 本机模型/数据库服务必须保持可用；最初模型停机的问题已解除，并已完成一次普通消息和一次真实工具委托的端到端验收。未进行长时间压力测试。
-- 最终验收使用 in-app browser；覆盖 1280×800、1440×1000 桌面，以及 390×844 窄屏观察。窄屏保留 960px 最小布局，需要横向滚动。未声称移动优化或所有浏览器兼容性。
-
-## ACCEPTANCE 状态
-
-| 项 | 当前证据 |
-| --- | --- |
-| A 三栏浅色布局 | 通过：DSH 原生入口、直接内嵌路由及桌面截图验收 |
-| B 聊天气泡与输入 | 通过：Enter/按钮发送、Shift+Enter、真实回复、新上下文、历史只读 |
-| C 双脑、工具与错误 | 通过：真实 Qwen 工具调用/结果 → Gemma 回复，展开 payload；历史错误折叠时仍可见 |
-| D 检查器标签与详情 | 通过：记忆/关系列表与详情、偏好/群偏好空态、搜索与字段值呈现 |
-| E 开发边界 | 无上述禁止功能，无运行时假数据，无新增大型后端或框架 |
-| F 向前兼容 | 通过：未知事件和新记录字段回归；客户端采用通用列表/详情 |
-
-上述验收针对 UI Elements V1 范围，不等于重新验收认知运行时、全部历史数据或性能容量。验收完成后停止功能扩展。
+- The workbench is a local operator interface served through loopback DSH. It is not a public chat interface for channel participants.
+- Configured external channel scenes are read-only. A local owner may submit a separately labeled group-speaking prompt only when that group route has an owner configured.
+- Historical contexts can be inspected but not sent to. “新上下文” retains the scene's persisted memory; it does not create a new identity or scene.
+- The inspector is read-only and reflects the selected scene's current records, not a historical memory snapshot. It shows a bounded recent record set and does not provide full memory editing, pagination, or cross-scene search.
+- Preference and group-preference tabs display stored records only. If no structured record exists, the UI shows an empty state instead of deriving one from message text.
+- Conversation messages can be loaded from earlier scene sequence pages. The inspector's memory and integration views are bounded and do not expose every database record.
+- Live generation is observed through the DSH stream bridge, with persisted state refreshed separately. An observation disconnect does not cancel host work; a send response interruption is not automatically retried.
+- The layout is designed for a desktop workbench with a minimum width. Narrow screens may require horizontal scrolling and are not a dedicated mobile layout.
+- Provider availability, channel connectivity, action tools, and self-development depend on local host configuration. The UI does not claim that a configured endpoint, running process, or queued message has completed an external operation.

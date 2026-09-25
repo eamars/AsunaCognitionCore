@@ -12,13 +12,13 @@
 
 | 观察 | 证据位置与限制 | V2.2 的处理 |
 |---|---|---|
-| 最终状态为 `CORE_FLOW_VERIFIED_WITH_LIMITATIONS`，不是早期核心整体未成立 | `reports/final-v1-20260920/result.json`：`status`、`stages`、`limitations`；`docs/V1-FINAL-DELIVERY.md` | 不重启旧验收项目，保留本机入口与模型组合 |
+| 最终状态为 `CORE_FLOW_VERIFIED_WITH_LIMITATIONS`，不是早期核心整体未成立 | `reports/final-v1-20260920/result.json`：`status`、`stages`、`limitations`；V1 交付记录（Git history） | 不重启旧验收项目，保留本机入口与模型组合 |
 | 当前角色已换 Gemma31B，窗口68,608，native_thinking关闭 | 最终报告 `character`、`limitations`；`config/local.json` | 不回退早期Gemma26B/262k；Qwen沿用实际配置 |
 | 已有 Windows 本机入口 | `RUN_ASUNA.md`；最终报告 `startup` = `C:\workspace\asuna_cognition_core_v2\start-asuna.cmd` | 新增宿主生命期，保留入口体验，真实启动方法由Codex在本机填写 |
-| 聊天期间可以推进自主行动，任务错误由原Qwen处理 | `docs/P1-B-REPORT.md`、`docs/P2-REPORT.md`、`reports/p1d-p2-verification-20260920.json` | 不再让Codex替行动脑改任务文件；仅补网络／长运行条件 |
-| 技能确由运行中的Qwen开发，并在恢复后通过native `skill` 调用 | `docs/P3-AB-REPORT.md`；`reports/p3-ab-verification-20260920.json` 的任务与 `native_skill_audits` | 保留已有DSH skill目录、loader与watcher，不另造技能市场 |
-| 关系理解已经产生真实版本更新，恢复后影响回答 | `docs/P3-C-REPORT.md`；`reports/p3c-verification-20260920.json` 中输入、REFLECT、更新后关系和后续公开内容 | 把这一通路扩展到新QQ身份／场景；不是从零建“记忆可写” |
-| 原生手动压缩曾在Qwen任务期间完成，任务仍返回原场景 | `docs/P1-D-REPORT.md`；`reports/p1d-p2-verification-20260920.json` 的 compaction 与结果事件 | 延续独立周期；增加一个适合长度的真实自动触发，不重复长容量矩阵 |
+| 聊天期间可以推进自主行动，任务错误由原Qwen处理 | 阶段报告已从当前文档树移除，历史内容保留在 Git history；`reports/p1d-p2-verification-20260920.json` | 不再让Codex替行动脑改任务文件；仅补网络／长运行条件 |
+| 技能确由运行中的Qwen开发，并在恢复后通过native `skill` 调用 | 阶段报告已从当前文档树移除，历史内容保留在 Git history；`reports/p3-ab-verification-20260920.json` 的任务与 `native_skill_audits` | 保留已有DSH skill目录、loader与watcher，不另造技能市场 |
+| 关系理解已经产生真实版本更新，恢复后影响回答 | 阶段报告已从当前文档树移除，历史内容保留在 Git history；`reports/p3c-verification-20260920.json` 中输入、REFLECT、更新后关系和后续公开内容 | 把这一通路扩展到新QQ身份／场景；不是从零建“记忆可写” |
+| 原生手动压缩曾在Qwen任务期间完成，任务仍返回原场景 | 阶段报告已从当前文档树移除，历史内容保留在 Git history；`reports/p1d-p2-verification-20260920.json` 的 compaction 与结果事件 | 延续独立周期；增加一个适合长度的真实自动触发，不重复长容量矩阵 |
 
 ### 两段特别有意义的实跑经验
 
@@ -48,7 +48,7 @@ V2.2 需要最小提取这些已工作代码：宿主持有 Application、按场
 
 ### E4：普通任务沙箱不能承载网络适配器开发和常驻运行
 
-`src/asuna/sandbox.py:23–25、58` 等位置限定命令大小、约30秒、bubblewrap `--unshare-all`、临时 `/tmp` 和有限资源；`/task` 与授权 `/skills` 是持久写入位置。`docs/P3-AB-REPORT.md` 已记录 `/tmp` 内容在后续调用消失的任务经验。
+`src/asuna/sandbox.py:23–25、58` 等位置限定命令大小、约30秒、bubblewrap `--unshare-all`、临时 `/tmp` 和有限资源；`/task` 与授权 `/skills` 是持久写入位置。旧阶段报告中关于 `/tmp` 内容在后续调用消失的观察保留在 Git history。
 
 这是隔离普通任务的有效基础。不能直接把所有任务改成宿主无限权限来让QQ连接成功。补一个仅用于已授权集成任务的开发／试运行入口，并由宿主管理部署程序；普通群请求不获得它的连接配置与部署写权限。
 

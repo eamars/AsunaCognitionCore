@@ -1,91 +1,52 @@
-# asuna-ai-cognition-core
+# Asuna Cognition Core
 
-2026-09-21：正式入口已统一为 Web。运行 `start-asuna.cmd`（`start-asuna-ui.cmd` 为别名），当前使用方法和配置见 [RUN_ASUNA.md](RUN_ASUNA.md)。后续开发调试呈现、消息收发和交互验收都使用 Web UI；其他 CLI 命令必须显式 `--debug`，不自动回退终端聊天。开发约束见 [AGENTS.md](AGENTS.md)。
+Asuna is a local-first, persistent dual-lane cognition runtime built on the pinned DSH runtime.
 
-2026-09-20：正在按 [ADR-002](docs/development_plans/ADR-002-Asuna_v2_Core_First_Codex_Reset/CODEX_START.md) 分阶段开发。P1-A/B/C 已实跑，P1-D 压缩恢复／场景隔离与 P2 工具错误恢复已完成有限验证，入口为 `start-asuna.cmd`；实际原文、摘要质量缺口和配置见 [RUN_ASUNA.md](RUN_ASUNA.md)。Gemma 已切换本机 31B（部署上下文 68,608）。[P3-A/B](docs/P3-AB-REPORT.md) 已验证一次技能生成及跨恢复复用；[P3-C](docs/P3-C-REPORT.md) 已验证一次关系理解更新及恢复使用。[最终交付与缺口](docs/V1-FINAL-DELIVERY.md) 已整理，V2 等待用户启动；以下原 V1 验收说明作为历史记录保留。
+## Overview
 
-V1 本地认知协调器：Python 管状态、权限、检索和发布；薄 TypeScript 插件连接固定版本 DSH。Gemma 独立生成 `MONOLOGUE → DECIDE → SPEAK`，Qwen 只执行已冻结任务，结果回到 Gemma。模型的 `stop` 只结束当前阶段。
+- **Character brain:** maintains persona and self-understanding, considers relationships, decides whether to delegate, and shapes the public response.
+- **Action brain:** investigates and carries out delegated work with scoped tools, then returns observations to the character brain. Ordinary tool errors stay in the active DSH action loop for diagnosis and recovery.
+- **Host:** binds scenes and identities, stores conversation and memory records, enforces capabilities, coordinates queues and schedules, and tracks publication receipts and task continuity.
 
-历史封存版本曾未通过原完整验收，以下为当时记录。历史报告、全部 attempt 和阶段证据已封存到交接文件 `evidence.zip`；工作树中的生成数据和测试运行状态按用户要求清除。验收结论以 ZIP 内的 `report.json` 为准：整体 FAIL；没有独立人工盲评，COGNITION 为 INCONCLUSIVE。源码、测试代码、原始架构与夹具继续保留。
+The two lanes have independent provider and model settings. Their names describe responsibilities; either lane can use the same or a different configured model.
 
-旧版范围不包含 QQ、摄像头或真实设备；当前 QQ 后续工作以 ADR-002 的 V2 计划为准。CLI 场景模拟器、受控文件任务和 Mongo 幂等消息接收器均走正式 Coordinator/TaskService/PublishService。公开视图仅显示已经送达的 SPEAK；operator 审计包含独白与 native reasoning，不能作为公众 API 暴露。
+## Current capabilities
 
-## 历史 V1 环境准备（仅 debug 参考）
+- A local Web workbench for conversation, model settings, memory and execution details.
+- Persistent, scene-scoped conversation history, memory retrieval, relationship state, and source-bound background dialogue summaries.
+- Authorized history search and structured discussion digests through the action path.
+- DSH-native action capabilities for skills, schedules, web search, and page fetching, subject to the configured grants and providers.
+- Optional authenticated channel routes for direct messages and groups. The host accepts normalized events and exposes public output with platform receipt handling; a platform adapter must be configured separately.
+- Owner-scoped integration and self-development tools with separate workspaces and publication controls.
+- On-demand image reading by the action brain when its configured route declares image input and the source passes the configured checks.
 
-以下为历史独立测试环境准备，不是当前日常启动步骤；不要在已有记忆库重新 seed。当前启动请看 RUN_ASUNA.md。需要 Python 3.12、uv、Node 24，以及已安装 Ubuntu/bubblewrap 的 WSL。仅使用项目本地的 DSH，不全局升级。已验证版本为 `0.1.5-rc.2`（上游 0.1.5 发布线），SDK 同 commit；详见 [ADR-001](docs/ADR-001-runtime.md)。
+Available actions depend on the current configuration and authorization for the scene. A configured capability does not mean its provider or external service is online.
 
-```powershell
-$env:PYTHONIOENCODING = 'utf-8'
-npm ci --ignore-scripts --no-audit --no-fund
-uv sync --frozen
-Copy-Item config/local.example.json config/local.json
-# 在 local.json 填入本机 ROOT 下的独立 dsh_home/workdir 及有效本地连接。
-.venv\Scripts\asuna.exe --debug doctor
-.venv\Scripts\asuna.exe --debug db-init
-.venv\Scripts\asuna.exe --debug seed
-.venv\Scripts\asuna.exe --debug index
-.venv\Scripts\asuna.exe --debug run --scene dm-a --person A --text '小满，欢迎回来'
-```
+## Quick start
 
-已有 `config/local.json` 时不要覆盖它。配置和凭据均被 git 忽略。环境发现只读取旧项目配置中的允许字段；不导入旧应用、不运行其启动脚本。数据库写入仅允许明确配置的新库和 `asuna_v2_test_` 前缀测试库。清理后，旧测试会话与测试数据库已不存在；仅在明确创建独立测试环境时参考上述初始化步骤；当前 Web 启动不得清空或重置已有记忆。历史 `environment.json` 在交接 ZIP 中，仅代表当时的部署指纹。
-
-`doctor` 只表示连通性和元数据探测；`index` 的 `ready=true` 才表示向量索引可查询。服务声明的 262144 上限与真实容量测试分开记录，不修改服务启动参数来配合测试。
-
-## CLI debug/维护参考（不是正式交互）
+Create and review `config/local.json` from `config/local.example.json`, then start the Web workbench:
 
 ```powershell
-# JSONL 每行必须有 event_id、scene_id、person_id、text。
-# 群事件还需 mentioned=true / reply_to / scene_tick 才唤醒角色。
-.venv\Scripts\asuna.exe --debug run --events examples/scenes.jsonl
-
-# workspace 必须在本仓库 .runtime/work 内，禁止挂载旧工程或凭据目录。
-.venv\Scripts\asuna.exe --debug run --scene dm-a --person A --text '读取任务目录的 START_HERE.md 并完成任务' --workspace .runtime/work/my-task
-.venv\Scripts\asuna.exe --debug compact --scene dm-a
-# compact 排队到下一完整阶段边界，不会立即伪造摘要。
-.venv\Scripts\asuna.exe --debug reflect --scope scene:dm-a --entity relationship:A
-.venv\Scripts\asuna.exe --debug rollback --scope scene:dm-a --entity relationship:A --target-revision OLD_REV --base-revision CURRENT_REV --operation UNIQUE_ID --operator
-.venv\Scripts\asuna.exe --debug cancel TASK_ID
-.venv\Scripts\asuna.exe --debug run --scene dm-a --person A --supersedes-task TASK_ID --text '修改刚才的任务，按新的要求核实'
-.venv\Scripts\asuna.exe --debug inspect episode EP_ID --format html --out reports/episode.html
-.venv\Scripts\asuna.exe --debug inspect request CALL_ID --view provider
-.venv\Scripts\asuna.exe --debug inspect trace --format html --out reports/operator-audit.html
-.venv\Scripts\asuna.exe --debug replay reports/RUN/trace.json --database asuna_v2_test_replay_unique --mode state-only --deny-model-and-tools
+.\start-asuna.cmd
 ```
 
-`cancel` 是 operator CLI；服务内部按可信 requester 检查身份。`--supersedes-task` 先使旧意图失效，再由角色形成新 decision；沿用 task_id、递增 intent_revision，保留旧副作用，不重用旧工具证据。每个 DSH_HOME 仅允许一个控制进程，运行中的多场景输入通过同一 Router 接收。
+The default UI is at `http://127.0.0.1:8765/asuna/`. `start-asuna-ui.cmd` is an alias. See [RUN_ASUNA.md](RUN_ASUNA.md) for prerequisites, configuration, stop and restart steps, and troubleshooting.
 
-`delete MEMORY_ID --operator` 会提高 scope epoch、使旧会话失效，并保守清理该 scope 的派生内容。只对合成测试库操作删除，或先明确接受其 scope 范围影响。它不撤回外部备份、已下载导出或 Git 历史；全局记忆删除当前会被拒绝。
+## Configuration
 
-## 历史测试和证据（不替代当前 Web 验收）
+`config/local.example.json` is the configuration template. `config/local.json`, model overrides, channel settings, integration settings, credentials, and deployment-specific values belong in ignored local files. Replace template connection addresses, identities, paths, and database choices with values for the local deployment; do not commit secrets or private deployment details.
 
-验收合同保存在原始 [docs/04](asuna_v2_v1_handoff/docs/04_ACCEPTANCE.md) 和 [41 项夹具](asuna_v2_v1_handoff/fixtures/acceptance_cases.json)，没有改写阈值。
+The optional channel and integration examples are `config/asuna-channel.example.json` and `config/integration.example.json`. See [RUNTIME_API.md](RUNTIME_API.md) for their host contracts.
 
-```powershell
-.venv\Scripts\python.exe asuna_v2_v1_handoff/tools/verify_bundle.py
-.venv\Scripts\python.exe tools/run_checks.py -q
-.venv\Scripts\asuna.exe --debug evaluate --test L01 --out reports/my-L01-unique
-.venv\Scripts\asuna.exe --debug evaluate --test A01 --out reports/my-A01-unique
-.venv\Scripts\python.exe tools/run_acceptance.py L04
-.venv\Scripts\python.exe tools/run_acceptance.py L03 --probe-count 1
-.venv\Scripts\python.exe tools/run_acceptance.py F01
-.venv\Scripts\asuna.exe --debug report --out reports/my-report-unique.json
-.venv\Scripts\asuna.exe --debug export --out evidence-unique.zip
-.venv\Scripts\asuna.exe --debug review-pack --out reports/review-unique
-.venv\Scripts\asuna.exe --debug review-import --original reports/review-unique/blind.json --submitted my-human-ratings.json --out reports/import-unique
-.venv\Scripts\asuna.exe --debug review-aggregate --original reports/review-unique/blind.json --imports reports/import-unique --out reports/scores-unique
-.venv\Scripts\asuna.exe --debug report --human-assessment reports/scores-unique/human-assessment.json --out report-with-human-unique.json
-```
+## Documentation
 
-每轮创建新的 experiment_id，先写 manifest，再调用模型；同名输出目录会拒绝覆盖。所有失败与重试保留。`--probe-count` 是缩小的设计探针，不算正式验收。A01 生成匿名评审表与单独 operator 映射；模型或本代理的自评不能替代用户评分。
+- [RUN_ASUNA.md](RUN_ASUNA.md) — current runbook.
+- [RUNTIME_API.md](RUNTIME_API.md) — current runtime, channel, tool, and recovery contract.
+- [AGENTS.md](AGENTS.md) — persistent development and interaction rules.
+- [dsh-plugin/ui/README.md](dsh-plugin/ui/README.md) — current Web UI behavior.
+- [docs/development_plans/](docs/development_plans/README.md) — ADRs and development plans; these record design history and future direction, not current runtime status.
+- [migrations/](migrations/002_artifact_blobs.md) — durable database contract notes.
 
-`review-pack` 生成离线 `review.html`。人工填写后下载 JSON，再用 `review-import` 导入；空白评分保留为空，导入本身不宣布认知通过。大型 provider 正文同时保存到新库 GridFS，详见 [migration 002](migrations/002_artifact_blobs.md)。
+## Project status
 
-`review-aggregate` 只统计明确指定的人工导入，不自动扫描或纳入测试票。按 experiment 分开报告，两个模型分别计算 P1 四维分数、P0 提升与反向对照；保留漏评和分歧，critical 错误不能被均分抵消。人工语义阈值与真实部署证据分开呈现，统计本身不自动签发完整验收 PASS。L06 评审材料含原始反思请求中的来源、原始决定及后续公开回复；L08 逐场景、逐重复对应连续性问题。
-
-详细限制、测试命令与 exit code 见各 `result.json`。特别需要区分：真实 native compaction 与 mock、真实长输入与 metadata、向量命中与近期回读、收到模型文本与实际送达、状态重放与模型重跑。
-
-## 部署边界
-
-DSH home、工作目录和测试数据库均独立。DSH 子进程只收到必需环境变量；Qwen 工具在无网络 WSL/bubblewrap namespace 中执行，仅挂载 task 目录，不持有 Mongo 或发布凭据。真实模型请求经过固定本地路由代理，保存最终 HTTP body 和原始返回。Qwen 服务未暴露最终 OpenAI 渲染 token IDs，等价服务端 count 已与返回 usage 核对；该缺口仍会报告。
-
-operator 授权过一次 Mongo 服务的 nofile 修复，历史证据见交接 ZIP 内的 `reports/M3.md` 与 `reports/search-diagnostics`：没有修改旧库数据或模型启动参数。当时进程软限制已提高，Compose 中持久配置需下次正式重建容器后生效；不要把普通 Docker restart 当作已应用新 Compose。
+Experimental, local-first, and actively evolving.

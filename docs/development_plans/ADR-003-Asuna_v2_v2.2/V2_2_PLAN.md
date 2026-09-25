@@ -14,7 +14,7 @@
 
 ### 当前实际基线
 
-依据最新 `docs/V1-FINAL-DELIVERY.md`、`reports/final-v1-20260920/result.json` 和源代码：
+依据当时的 V1 交付记录（历史内容保留在 Git history）、`reports/final-v1-20260920/result.json` 和源代码：
 
 | 已有内容 | 本轮处理 |
 |---|---|

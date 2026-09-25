@@ -1,69 +1,94 @@
-# Asuna：Web 启动与使用
+# Running Asuna
 
-2026-09-21：正式交互、开发调试呈现和交互验收统一使用现有 Web UI。CLI 仅用于显式 debug/维护，Web 故障时不回退终端聊天。后续开发规则见 [AGENTS.md](AGENTS.md)，ADR-003 的入口指示已同步修订。
+This runbook covers the local Web workbench and the optional runtime profiles. Normal conversation and product interaction use the Web UI.
 
-## 启动与打开
+## Prerequisites
 
-日常启动 `start-asuna.cmd`，`start-asuna-ui.cmd` 是它的别名。两者都只启动 `asuna ui`，默认读取 `config/local.json`，端口为 8765。浏览器打开 http://127.0.0.1:8765/asuna/；也可在 DSH 原生页面侧栏点击 Asuna。
+- Windows with the repository's Python virtual environment and pinned DSH UI dependency installed.
+- Python 3.12 or newer, as declared by `pyproject.toml`.
+- A reachable MongoDB database and reachable provider endpoints for the configured lanes. The UI can start without a model service in read-only mode.
+- An existing local configuration at `config/local.json`.
 
-2026-09-22：已从本机正在使用的示例配置及模型覆盖文件补齐缺失的 `config/local.json`、`config/local.models.local.json`，保留原模型路由、Mongo、DSH 历史与技能。当前实际工作台使用端口 8767，启动方式为：
+For a new development environment, install the locked dependencies once:
 
 ```powershell
-.\start-asuna.cmd --port 8767
+uv sync --frozen
+npm.cmd ci
 ```
 
-当前工作台：[打开 Asuna Web](http://127.0.0.1:8767/asuna/)。需要持久本机配置时，从示例复制并核实服务地址、身份和授权目录；已有 local.json 时不要覆盖。启动不安装依赖、不重新 seed、不升级 DSH。沿用项目 .venv、node_modules、现有 Mongo、模型及 WSL/bubblewrap。
+Copy `config/local.example.json` to `config/local.json` only when a local file does not already exist. Review and replace deployment-specific addresses, model IDs, scene and person IDs, database allowlists, and runtime paths before starting. Keep credentials and local overrides out of Git. Do not seed or reset a database that already contains Asuna data.
 
-2026-09-22 已用原独立路由通过 Web 复查普通聊天、排队持久化、停止后恢复及真实行动回传。之前 UI 验证中的连接失败保留为历史，不代表当前服务状态。最新证据见 [ADR-003 A 报告](docs/ADR003-A-REPORT.md)。
+## Start and open the Web UI
 
-## 正常使用与调试呈现
+Run the repository entry point from PowerShell or Command Prompt:
 
-- 左侧选择会话；“新上下文”保留身份、场景和数据库记忆，旧会话只读。
-- 中间输入自然语言，Enter 发送、Shift+Enter 换行。角色公开回复以 bubble 显示；生成和行动期间仍可入队。
-- 展开“内部执行过程”查看双脑阶段、工具参数、真实结果及原始错误。折叠后仍保留错误摘要。
-- 行动脑执行期间可选用 `consult_character` 咨询对应角色上下文，再继续原任务。咨询内容属于内部判断，在执行详情中查看；不单独发布 QQ 回复、不创建新目标，也无需用户或角色抄写任务 ID。实跑与边界见 [内部咨询报告](docs/ADR003-CONSULT-REPORT.md)。
-- 右侧查看和搜索记忆、偏好、群偏好、关系；无记录时显示空态。
+```powershell
+.\start-asuna.cmd
+```
 
-所有正常消息和开发任务通过这里发送。不要在宿主日志窗口输入聊天文本、/new 或 /trace。原有 Chat 队列和行动回传继续复用，Web 不调用终端适配器。
+`start-asuna-ui.cmd` is an alias. The default UI address is `http://127.0.0.1:8765/asuna/`. To use a different UI port:
 
-关浏览器标签页不停止宿主；点击页面右上“停止服务”，或在启动进程中按 Ctrl+C 停止整套宿主。尚未开始的已保存输入在下次启动恢复；主动中断的输入保留错误，不自动重试。已调度行动在正常停止时撤销权限；异常退出时正在执行且副作用未知的任务标 UNKNOWN，不盲目重做。启动窗口只是服务日志/进程控制，不是聊天界面。同一数据库与 DSH home 同时只运行一个读写宿主；已有窗口时直接使用现有 Web 页面。
+```powershell
+.\start-asuna.cmd --port 8780
+```
 
-宿主入口、公开输出、平台回执和受管理集成运行器契约见 [RUNTIME_API.md](RUNTIME_API.md)。当前未启用 QQ 通道，未向任何 QQ 对象发送；示例通道配置默认关闭。B 阶段已增加 owner 单条消息的“集成开发”授权、冻结试运行/启用副本、进程日志及停止按钮。当前本机 profile 无网络端点或平台凭据；外部 adapter 与真实 QQ 验收仍待完成。
+The browser is an interface to the running host. Closing the browser tab does not stop the host. Do not run two writable hosts against the same database and DSH home.
 
-## 配置与记录
+## Stop and restart
 
-配置中的 `chat.person_id`、`chat.scene_id`、`chat.display_name` 和工作区限制仍有效。每次 Web 运行记录保存在 `reports/ui-*`；数据继续使用既有 Mongo。完整集成和限制见 [UI 说明](dsh-plugin/ui/README.md)。凭据不写入浏览器聊天、代码或公开 trace。
+Use **停止整个服务** in the workbench or press Ctrl+C in the process window. Restart with `start-asuna.cmd`.
 
-模型未启动时，可用 `start-asuna.cmd --config config/local.example.json --read-only --port 8767` 查看真实数据；只读模式不能发送。它不是失败后的自动降级。
+The host persists accepted input before processing it and recovers eligible queued work on restart. It does not blindly replay an external send whose outcome is unknown. See [RUNTIME_API.md](RUNTIME_API.md) for task and publication recovery semantics.
 
-## 模型设置
+## Configuration
 
-点击 Web 左侧“模型设置”，分别修改角色脑、行动脑的连接地址、模型 ID、上下文窗口和输出上限。两脑可指向不同服务/模型，也可填同一模型。点击“读取服务模型列表”获取实际候选，模型 ID 也可手动填写。
+- `config/local.json` holds the local database, runtime paths, lane routes, and owner scene. This file is ignored by Git.
+- Model settings changed in the UI are saved to the adjacent `*.models.local.json` override. The character and action lanes can use the same or different providers and models. API keys are local and are not returned by the UI.
+- To enable channel routes, create `asuna-channel.local.json` beside the selected base configuration from `config/asuna-channel.example.json`, then configure the channel, authorized identities, scenes, targets, and a unique token. Channel routes are disabled unless the local channel file has `enabled: true`.
+- To enable managed integration, configure `integration.local.json` beside the base configuration using `config/integration.example.json`. Its owner binding and endpoint allowlist determine whether integration tools are available.
+- Self-development availability is controlled by the local `self_development` configuration. Its candidate workspace is separate from ordinary action workspaces.
 
-高级区沿用 DSH 的 `compat` 和 `reasoningEfforts` 含义，推理强度、采样和 token 计数随模型配置，不再由“角色/行动”决定。未知服务可选通用保守计数；专用计数需要服务实际支持。当前保留本机/LAN 与 OpenAI Chat Completions 审计桥边界，尚不支持直接套用 DSH 的全部云端/其他协议。
+Do not put credentials, real platform account IDs, or machine-specific connection details in tracked manuals or examples.
 
-空闲时“保存并应用”会重建两条 DSH lane，浏览器继续显示应用状态；有回复、排队消息或行动时拒绝切换。API key 只写入本地，不从接口回显；更换地址时不沿用旧密钥。配置保存到所选配置文件旁的 `*.models.local.json`（Git 忽略），下次启动自动恢复，不改写基础配置文件。历史执行标签只表示职责，不用当前模型冒充历史所用模型。
+## Model settings
 
-## 仅限 debug 的命令行
+Open **模型设置** in the workbench to edit each lane's endpoint, model ID, context and output limits, sampling, compatibility options, reasoning options, and token counter. Use **读取服务模型列表** to request IDs from a configured endpoint, or enter an ID directly.
 
-除 `ui` 外，CLI 操作均必须显式指定 `--debug`；缺少标志时在读取配置、连接数据库或调用模型前拒绝。`chat()` 和 `terminal()` 直接调用也要求 `debug=True`。Web 不加载 prompt-toolkit 输入组件。
+Settings can be applied while the host is idle. The UI reports and rejects a change when active or queued work prevents a safe switch. Provider and protocol support is limited to the current Asuna bridge; DSH's other provider options are not automatically available through it.
 
-CLI 保留给必要的故障诊断/维护，不能用于正式交互或替代 Web 验收。历史 /trace、/compact 等终端功能不等于 Web 已提供对应按钮；当前 Web 功能以 UI Elements V1 验收范围为准。
+## Channels
 
-## 历史证据（2026-09-20，终端命令不再是正式入口）
+The host channel service accepts authenticated normalized events and exposes an outbox for a configured platform adapter. It listens on loopback only; its default port is `8766`. Route configuration binds the platform account, sender, scene, and target. A running adapter process alone is not proof of platform delivery; delivery state comes from the adapter's receipt. See [RUNTIME_API.md](RUNTIME_API.md) for event, outbox, media, and receipt details.
 
-用户：你不用为了让我满意才选。你真的更偏向哪个？
+## Development and self-development
 
-小满：比起单纯的小物件，我更偏向逻辑谜题。把混乱的东西理顺、最后拼凑完整的那个过程，很有趣。
+Normal development tasks are submitted through the Web UI and receive only the capabilities granted to their scene and task. Owner-granted integration work uses a separate managed workspace and configured endpoints. The self-development tools edit a persistent project candidate; publication freezes a snapshot and performs a non-consuming boot probe before applying it. These tools do not turn ordinary conversation into a development task.
 
-完整六轮 C1、重开追问、生成中退出的原始错误、普通 Gemma 对照与当前缺口见 [P1-A 开发回报](docs/P1-A-REPORT.md)。
+## Debug CLI
 
-P1-B 另已实跑：“在授权工作区运行 Python，打印解释器版本和当前工作目录，把实际输出告诉我。”Qwen 实际运行 `python3`，小满回复：“解释器版本是 3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]，当前工作目录是 `/task`。”
+CLI commands other than `ui` are for explicit diagnosis or maintenance and require `--debug`. They do not replace Web interaction or UI review. For example:
 
-完整行动往返见 [P1-B 开发回报](docs/P1-B-REPORT.md)，新记忆与更正见 [P1-C 开发回报](docs/P1-C-REPORT.md)。单次压缩／恢复／场景隔离及摘要缺口见 [P1-D 开发回报](docs/P1-D-REPORT.md)，真实 FileNotFound 自主恢复见 [P2 开发回报](docs/P2-REPORT.md)。技能生成、重启发现／复用和反向反馈见 [P3-A/B 开发回报](docs/P3-AB-REPORT.md)。P3-C 的实际理解更新见 [P3-C 开发回报](docs/P3-C-REPORT.md)，最终主线结论和提交包见 [V1 最终交付](docs/V1-FINAL-DELIVERY.md)。下一阶段 V2 由用户启动。
+```powershell
+.\.venv\Scripts\asuna.exe doctor --debug --config config/local.json
+.\.venv\Scripts\asuna.exe inspect episode EPISODE_ID --debug --config config/local.json
+```
 
-2026-09-20 Gemma 切换验证：部署上下文已按 `/props` 更新为 68,608 token（训练容量不作为部署容量）。实跑欢迎返回的对话已完成 MONOLOGUE → DECIDE → SPEAK，并接续此前顿悟话题。
+The `chat()` and `terminal()` functions are debug terminal adapters. The Web UI reuses the `Chat` queue and action controller directly.
 
-P3-A/B：当前已有 Qwen 自行生成的 `note-consistency-check` 技能。可直接聊“帮我重新核实备用线和支架螺丝的位置，便条有没有和笔记冲突”，由角色决定是否委托；无需输入技能名。它依赖具体规则，当前只实测同类笔记核对，媒体表达尚未验证。`/trace` 可看到角色收到的原生目录和行动侧实际 skill 加载回执。
+## Read-only UI
 
-角色可在 DECIDE 中选择一次有界反思，生成当前人物／场景的关系理解正文，由程序提交来源与版本。没有变化可以不更新；不修改权限、不把某人的偏好推广到其他人。/trace 显示实际修订结果，后续 ContextBuilder 注入新版本。
+To inspect existing records without starting writable workers or calling a model:
+
+```powershell
+.\.venv\Scripts\python.exe -m asuna.cli ui --config config/local.json --read-only
+```
+
+Add `--port 8780` if the default UI port is occupied. Read-only mode cannot send messages or apply model settings.
+
+## Troubleshooting
+
+- **The UI does not open:** check the process window for its listening address and port. If the selected port is in use, restart with `--port` and open that port under `/asuna/`.
+- **Configuration fails to load:** validate the JSON, local database allowlist, private or loopback provider endpoint addresses, and runtime paths under this repository's `.runtime` directory.
+- **The page opens but messages cannot be sent:** check whether the UI is read-only, the host is stopping or reconfiguring, and both required lane endpoints are reachable.
+- **An external message is not delivered:** check the configured route and adapter, then inspect the publication receipt in the UI. `RUNNING` adapter status does not mean the platform accepted a message.
+- **A task stopped with an error:** expand its execution details in the UI. Ordinary action tool errors are available to the active DSH action loop; host or provider failures are recorded with their original diagnostic.

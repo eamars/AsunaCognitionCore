@@ -75,8 +75,13 @@ class Retrieval:
         self.evidence.record('vector.index',{'database':self.store.name,'definition':definition,'status':rows})
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
-    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False):
-        auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}],'character_id':'xiaoman','status':'active'}
+    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=()):
+        # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
+        linked=[item for item in dict.fromkeys(linked_scopes or ())
+                if isinstance(item, str) and item and item not in ('global-safe', scope)]
+        readable={scope} | set(linked)
+        auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}]
+                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked],'character_id':'xiaoman','status':'active'}
         vector_filter={**auth,'embedding_revision':self.revision}
         # Cache contains IDs/scores only, never bodies, vectors or raw queries.
         # Every hit still passes the authoritative read below. State revision
@@ -85,8 +90,9 @@ class Retrieval:
         # entire authorized history. A growing scene must not abort a turn.
         rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('occurred_at',-1),('_id',-1)]).limit(4096))
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
-        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]}},{'_id':1,'revision_id':1}).sort('_id',1))
-        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':'xiaoman','query_sha256':sha(query.encode()),'embedding_revision':self.revision,'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked}},{'_id':1,'revision_id':1}).sort('_id',1))
+        # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
+        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':'xiaoman','query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
         cache_hit=bool(cacheable and cached and cached['expires']>time.monotonic())
         vector=[]; failure=None
@@ -139,7 +145,7 @@ class Retrieval:
         # out of the same bounded retrieval. Reserve two slots for recent
         # statements already returned by this query, never arbitrary recency.
         recent_sources=sorted((m for m in candidates if m.get('epistemic_type')=='reported_speech'
-            and m['scope_key']==scope),key=lambda m:m.get('scene_seq',0),reverse=True)[:2]
+            and m['scope_key'] in readable),key=lambda m:m.get('scene_seq',0),reverse=True)[:2]
         selected=[];seen=set()
         for m in candidates[:1]+recent_sources+candidates:
             if m['_id'] in seen:continue

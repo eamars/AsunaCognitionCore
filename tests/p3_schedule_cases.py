@@ -679,7 +679,8 @@ def load_coordinator():
     # self_state 也得跟着装：真 context.prepare 读持久自我描述时 import 它。少带一个真文件，
     # 这条用例只会红在 ModuleNotFoundError 上，看不出是夹具缺文件——真文件新增同包 import 时这里同步。
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
-    for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py'):
+    for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
+                 'scene_links.py'):   # 真 context 现在 import 它：少带一个真文件只会红在 ModuleNotFound
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))
     bodies = dict(STUB_EXTRA, **{'state.py': STUB_STATE, 'channels.py': STUB_CHANNELS,
                                  'integration.py': STUB_INTEGRATION, 'dsh_lane.py': STUB_LANE})
@@ -687,7 +688,7 @@ def load_coordinator():
         open(os.path.join(package, name), 'w', encoding='utf-8').write(body)
     sys.path.insert(0, root)
     for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
-                 'p3coord.vision'):
+                 'p3coord.vision', 'p3coord.scene_links'):
         sys.modules.pop(name, None)
     module = __import__('p3coord.coordinator', fromlist=['WORKSPACE_DECISION_SCHEMA'])
     _PACKAGES['p3coord'] = (module, json)

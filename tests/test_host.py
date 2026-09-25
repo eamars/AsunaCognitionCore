@@ -1,5 +1,7 @@
 """Host contracts on isolated Mongo; fake model receipts, never real QQ sends."""
 import json
+from queue import Queue
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +11,7 @@ from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
 from asuna.ingress import persist_input, input_state, episode_id
+from asuna.host import RuntimeHost
 from asuna.lanes import FakeLane, LaneResult
 from asuna.resources import workspace_grant
 from asuna.router import Router
@@ -17,6 +20,26 @@ from asuna.state import Denied
 
 def event(key='one', text='input'):
     return {'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': text}
+
+
+def test_restart_waits_for_active_action_but_not_durable_queue():
+    recorded = []
+    evidence = SimpleNamespace(record=lambda kind, payload: recorded.append(kind))
+    host = RuntimeHost({}, evidence)
+    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
+        sink_receipts=SimpleNamespace(find_one=lambda query: {'_id': 'publish-receipt'}))))
+    queue = Queue()
+    queue.put(('queued-task', 1))
+    host.controller = SimpleNamespace(active=None, active_task='running-task', pending=Queue(),
+                                      task_queue=queue, state_lock=threading.Lock(),
+                                      restart_pending=host.restart_pending)
+    host._maybe_restart_after_publish()
+    assert host.restart_pending.is_set() and not host.restart_requested.is_set()
+    assert recorded == ['restart.pending', 'restart.blocked']
+    host.controller.active_task = None
+    host._maybe_restart_after_publish()
+    assert host.restart_requested.is_set() and host.shutdown_requested.is_set()
+    assert not queue.empty() and recorded[-1] == 'restart.requested'
 
 
 def responses():

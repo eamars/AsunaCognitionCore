@@ -26,8 +26,12 @@ fallback.exhausted=false，而它一定 more=true。上一版按 scene_seq 只�
 见 fallback_paging_probe.py）。不能用一个字段名探来探去：选错那支会静默少查，不报错。
 
 其余契约：
-  - 范围 = 当前这一个授权场景：scene['scene_id']（形如 qq:<bot>:group:<群号>）过滤记录，
-    scene['scope_key'] / scene['policy_epoch'] 交给 Retrieval；正文 text，纪元 policy_epoch。
+  - 范围 = 当前这一个授权场景，外加配置里给它挂了的**只读联动场景**（scene['readable_scenes']，
+    由 scene_links 现算自 config.context_links；没配就一个都不多读）。scene['scope_key'] /
+    scene['policy_epoch'] 交给 Retrieval；正文 text，纪元 policy_epoch。联动场景只在配置里存在，
+    工具参数换不了它。
+  - 跨场景之后 scene_seq 不再是全序（两个场景各有 seq=24），所以游标决胜位是
+    (时间, scene_seq, scene_id) 三位；少一位就会在同一秒两条上重一条或漏一条。
   - 只纳入该场景的 inbound，和 phase='SPEAK' 且 delivery_state='DELIVERED' 的出站。
   - 默认近 7 天、每页 50、最多 200；字面匹配默认大小写敏感。
   - 原文整条回读，保留用户原始空白，不截短（只有 render 显示时截，并标明）。
@@ -128,6 +132,16 @@ SORT_FIELD = "scene_seq"
 DEFAULT_WINDOW_DAYS = 7
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
+
+try:                                  # 宿主内：联动场景与 canonical person 都现算自配置
+    from . import scene_links
+except Exception:                     # 同目录平铺加载（离线自检）也认
+    try:
+        import scene_links
+    except Exception:                 # 更薄的环境里没有：照实不联动，不猜范围
+        scene_links = None
+
+MAX_LINKED_SCENES = getattr(scene_links, 'MAX_LINKS', 8)
 RENDER_SNIPPET = 200
 ID_FIELD = "_id"
 # 第三支的单页预算：每轮最多看这么多条送达回执、一页最多这么多轮。它只限制「这一页干多少活」，
@@ -175,7 +189,12 @@ def _parse(value):
 
 
 def _scene_parts(scene):
-    """scene 必须是带 scene_id / scope_key / policy_epoch 的那个场景字典。"""
+    """scene 必须是带 scene_id / scope_key / policy_epoch 的那个场景字典。
+
+    两个可选的派生键由调用方（HistoryQueryService / DiscussionDigestService）从配置算好带进来：
+      readable_scenes  这一轮还能只读哪些场景（配置里没有就不带，查询条件保持原单值形状）；
+      person_classes   {person_id: [同一个人的全部 person_id]}，按人过滤与「谁说的」标注都用它。
+    """
     if not isinstance(scene, dict):
         return None
     scene_id = _text(scene.get("scene_id"), 80)
@@ -186,8 +205,29 @@ def _scene_parts(scene):
         epoch = int(scene.get(EPOCH_FIELD))
     except (TypeError, ValueError):
         return None
+    readable = scene.get("readable_scenes")
+    extra = list(dict.fromkeys([item for item in (_text(value, 80) for value in
+                                (readable if isinstance(readable, (list, tuple)) else []))
+                                if item and item != scene_id]))[:MAX_LINKED_SCENES]
+    classes = scene.get("person_classes") if isinstance(scene.get("person_classes"), dict) else {}
+    raw_aliases = scene.get("person_aliases")
+    raw_aliases = raw_aliases if isinstance(raw_aliases, (list, tuple)) else []
+    own_person = _text(scene.get("person"), 60)
+    aliases = [item for item in (_text(value, 60) for value in raw_aliases)
+               if item and item != own_person]
     return {"scene_id": scene_id, "scope_key": scope_key, "epoch": epoch,
-            "group_id": _group_token_local(scene_id)}
+            "group_id": _group_token_local(scene_id),
+            "scene_ids": [scene_id] + extra, "linked_scenes": extra,
+            "person_classes": classes, "person_aliases": aliases}
+
+
+def scene_id_clause(parts):
+    """场景过滤条件：没联动时保持原来的单值形状（条件一行都不多写），联动了才换成 $in。"""
+    ids = list(dict.fromkeys([scene for scene in (parts.get("scene_ids") or [parts["scene_id"]])
+                              if scene]))
+    if not ids:
+        return {}
+    return {"scene_id": ids[0]} if len(ids) == 1 else {"scene_id": {"$in": ids}}
 
 
 def _receipt_ref(doc):
@@ -259,7 +299,7 @@ def _row_allowed(doc, parts, window, sink_times=None):
     """
     if not isinstance(doc, dict):
         return False
-    if _text(doc.get("scene_id"), 80) != parts["scene_id"]:
+    if _text(doc.get("scene_id"), 80) not in set(parts.get("scene_ids") or [parts["scene_id"]]):
         return False
     try:
         if int(doc.get(EPOCH_FIELD)) != parts["epoch"]:
@@ -290,20 +330,27 @@ def _cursors(cursor):
     out = {}
     for key in STREAM_KEYS:
         pair = raw.get(key) if isinstance(raw, dict) else None
-        out[key] = pair if isinstance(pair, list) and len(pair) == 2 else None
+        out[key] = pair if isinstance(pair, list) and len(pair) in (2, 3) else None
     return out
 
 
 def _cursor_of(doc, time_field):
-    return [doc.get(time_field), doc.get(SORT_FIELD)]
+    """游标位置：(时间, scene_seq, scene_id)。第三位是跨场景之后补的决胜位。"""
+    return [doc.get(time_field), doc.get(SORT_FIELD), doc.get("scene_id")]
 
 
 def _after_clause(pair, time_field):
+    """游标之后才要（降序）：时间更早；同一时刻看 scene_seq；scene_seq 也相同再看 scene_id。
+
+    只带两位的游标（改动之前发的、以及没联动时的本页）不加第三位条件，翻页序列照旧。
+    """
     if not pair:
         return None
-    at, seq = pair
-    return {"$or": [{time_field: {"$lt": at}},
-                   {time_field: at, SORT_FIELD: {"$lt": seq}}]}
+    at, seq = pair[0], pair[1]
+    clauses = [{time_field: {"$lt": at}}, {time_field: at, SORT_FIELD: {"$lt": seq}}]
+    if len(pair) > 2:
+        clauses.append({time_field: at, SORT_FIELD: seq, "scene_id": {"$lt": pair[2]}})
+    return {"$or": clauses}
 
 
 def _after_sink_pair(pair, stamp, ref):
@@ -368,11 +415,13 @@ PERSON_KEYS = ("author", PEER_DOC_PREFIX + ".person_id", PEER_DOC_PREFIX + ".car
                PEER_DOC_PREFIX + ".aliases")
 
 
-def person_clause(person):
+def person_clause(person, aliases=()):
     """按人过滤要下沉到查询里（不能等分页后再筛，否则首页会被无关行占满）。
 
     认已认证 author（就是 person_id），也认身份块里的名片/昵称/显示名/曾用名；
-    两者都匹不到就不算这个人说的。
+    两者都匹不到就不算这个人说的。aliases 是配置里认定「同一个人」的其他 person_id
+    （canonical person）：带上之后，在 local-dm 里按 local-user 过滤也能捞到他从 QQ 那个
+    入口说的话——历史行上的 author 一个都不改写，只是过滤条件多认几个等价 id。
     """
     text = _text(person, 60)
     if not text:
@@ -381,6 +430,14 @@ def person_clause(person):
     normalized = _norm_person_local(text)
     if normalized:
         values.add(normalized)
+    for alias in aliases or ():
+        alias = _text(alias, 60)
+        if not alias:
+            continue
+        values.add(alias.lower())
+        normalized_alias = _norm_person_local(alias)
+        if normalized_alias:
+            values.add(normalized_alias)
     ors = []
     for key in PERSON_KEYS:
         for value in sorted(values):
@@ -404,7 +461,8 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
     没给窗口就**不加时间键**：`{field: {}}` 在 Mongo 里是空字典等值，什么都匹不到。
     缺 receipt_at 的出站不在这里夹时间（它的时间不在本行），走 outbound_fallback_filter。
     """
-    base = {"scene_id": parts["scene_id"], EPOCH_FIELD: parts["epoch"]}
+    base = dict(scene_id_clause(parts))
+    base[EPOCH_FIELD] = parts["epoch"]
     if author:
         base["author"] = author
     bounds = {}
@@ -423,7 +481,7 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
     if pattern is not None:
         inbound[text_field] = dict(pattern)
         outbound[text_field] = dict(pattern)
-    clause = person_clause(person)
+    clause = person_clause(person, parts.get("person_aliases") or ())
     if clause:
         inbound["$and"] = [dict(clause)]
         outbound["$and"] = [dict(clause)]
@@ -438,17 +496,18 @@ def outbound_fallback_filter(parts, query="", *, author=None, case_sensitive=Tru
     `$in` 只圈这一批（分页时就是这么联行的），没给就只要求「有引用」。`$exists` 只是让 Mongo
     少捞行；优先级由 _outbound_time 在内存里再钉一遍，不靠它。
     """
-    flt = {"scene_id": parts["scene_id"], EPOCH_FIELD: parts["epoch"], DIRECTION_FIELD: OUTBOUND,
+    flt = dict(scene_id_clause(parts))
+    flt.update({EPOCH_FIELD: parts["epoch"], DIRECTION_FIELD: OUTBOUND,
            PHASE_FIELD: PHASE_SPEAK, DELIVERY_FIELD: DELIVERED,
            RECEIPT_REF_FIELD: ({"$in": sorted(refs)} if refs is not None
                               else {"$exists": True, "$ne": None}),
-           OUTBOUND_TIME_FIELD: {"$exists": False}}
+           OUTBOUND_TIME_FIELD: {"$exists": False}})
     if author:
         flt["author"] = author
     pattern = _text_pattern(query, case_sensitive)
     if pattern is not None:
         flt[text_field] = dict(pattern)
-    clause = person_clause(person)
+    clause = person_clause(person, parts.get("person_aliases") or ())
     if clause:
         flt["$and"] = [dict(clause)]
     return flt
@@ -460,6 +519,8 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
     peer, ok, reason = _identity_of(doc)
     author = _text(doc.get("author"), 40)
     stamp = _stamp(doc.get(time_field)) if at is None else _text(at, 32)
+    classes = (parts or {}).get("person_classes") or {}
+    same_person = {member.lower() for key in (author,) for member in classes.get(key, [])}
     base = {"message_id": str(doc.get("_id") or ""), "scene_id": _text(doc.get("scene_id"), 80),
             "scene_seq": doc.get(SORT_FIELD), "at": stamp, "time_field": time_field,
             "time_source": _time_source_of(time_field, stamp), "time_ref": _text(time_ref, 60),
@@ -473,7 +534,7 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         note = ("身份解析没接上，缺 %s" % "/".join(identity_status()["missing"])
                 if reason == "identity_unavailable" else "身份块没通过校验：%s" % reason)
         return dict(base, who="记录作者 %s（%s）" % (author or "?", note),
-                    person_id="", names=[author.lower()] if author else [])
+                    person_id="", names=sorted(({author.lower()} if author else set()) | same_person))
     card, nickname = _text(peer.get("card"), 60), _text(peer.get("nickname"), 60)
     display = _text(peer.get("display"), 60) or card or nickname or "未取到名字"
     bits = [display]
@@ -488,6 +549,7 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         bits.append("未核实")
     person_id = _text(peer.get("person_id"), 40)
     names = set([person_id.lower(), display.lower(), author.lower()])
+    names |= same_person | {member.lower() for member in classes.get(person_id, [])}
     for value in (card, nickname):
         if value:
             names.add(value.lower())
@@ -568,7 +630,7 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
             found = list(store.db.messages.find(
                 outbound_fallback_filter(parts, query, author=author, case_sensitive=case_sensitive,
                                          text_field=text_field, person=person, refs=set(receipts)),
-                sort=[(SORT_FIELD, -1)]) or [])
+                sort=[(SORT_FIELD, -1), ("scene_id", -1)]) or [])
         except Exception as exc:
             fb["why"] = "fallback_search_failed:%s" % type(exc).__name__
             fb["capped"] = True
@@ -588,6 +650,7 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
             seq = doc.get(SORT_FIELD)
             fb["dated"] += 1
             items.append({"eff": at, "seq": seq if isinstance(seq, int) else -1, "doc": doc,
+                          "sid": _text(doc.get("scene_id"), 80),
                           "hit": _hit(doc, parts, text_field, SINK_TIME_FIELD, at=at, time_ref=ref),
                           "positions": [(OUTBOUND_VIA_RECEIPT, [at, ref])],
                           "group": (SINK_GROUP, at), "rank": 2})
@@ -626,7 +689,8 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         if after:
             flt.setdefault("$and", []).append(after)   # 不盖掉按人过滤那一支
         try:
-            found = list(store.db.messages.find(flt, sort=[(field, -1), (SORT_FIELD, -1)],
+            found = list(store.db.messages.find(flt, sort=[(field, -1), (SORT_FIELD, -1),
+                                                           ("scene_id", -1)],
                                                limit=page + 1) or [])
         except Exception as exc:
             return {"hits": [], "degraded": True,
@@ -640,6 +704,7 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
             seq = doc.get(SORT_FIELD)
             at = _stamp(doc.get(field))
             items.append({"eff": at, "seq": seq if isinstance(seq, int) else -1,
+                          "sid": _text(doc.get("scene_id"), 80),
                           "doc": doc, "hit": _hit(doc, parts, text_field, field),
                           "positions": [(key, _cursor_of(doc, field))],
                           "group": (OWN_GROUP, str(doc.get(ID_FIELD) or "")),
@@ -656,7 +721,8 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         kept = index.get(mid) if mid else None
         if kept is None:
             kept = {"eff": item["eff"], "seq": item["seq"], "doc": item["doc"],
-                    "hit": item["hit"], "rank": item["rank"], "positions": list(item["positions"]),
+                    "sid": item.get("sid", ""), "hit": item["hit"], "rank": item["rank"],
+                    "positions": list(item["positions"]),
                     "group": item.get("group") or (OWN_GROUP, mid)}
             if mid:
                 index[mid] = kept
@@ -666,7 +732,9 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         if item["rank"] > kept["rank"]:
             kept.update(eff=item["eff"], seq=item["seq"], doc=item["doc"], hit=item["hit"],
                         rank=item["rank"])
-    merged.sort(key=lambda item: (item["eff"], item["seq"]), reverse=True)
+    # 归并决胜位三位一起：时间 → scene_seq → scene_id。跨场景后前两位可能两条完全相同，
+    # 少第三位就会在同一秒两条上重一条或漏一条（V7）。
+    merged.sort(key=lambda item: (item["eff"], item["seq"], item.get("sid", "")), reverse=True)
     cut = _group_safe_cut(merged, min(page, len(merged)))
     page_items = merged[:cut]
     consumed = dict((stream["key"], stream["cursor"]) for stream in streams)
@@ -778,7 +846,11 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                             OUTBOUND_VIA_RECEIPT: SINK_TIME_FIELD},
             "identity": identity_status(),
             "scope": {"scene_id": parts["scene_id"], "scope_key": parts["scope_key"],
-                      "group_id": parts["group_id"], EPOCH_FIELD: parts["epoch"]}}
+                      "group_id": parts["group_id"], EPOCH_FIELD: parts["epoch"],
+                      "linked_scenes": parts["linked_scenes"],
+                      "same_person_ids": sorted({member for members in
+                                                 (parts.get("person_classes") or {}).values()
+                                                 for member in members})}}
 
 
 def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET):
@@ -797,6 +869,14 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET):
     semantic = result.get("semantic") or {}
     if not semantic.get("ok") and semantic.get("why") != "not_attempted":
         notes.append("语义检索没成（%s），只按字面查了 messages" % semantic.get("why"))
+    scope = result.get("scope") or {}
+    linked = [scene for scene in (scope.get("linked_scenes") or []) if scene]
+    if linked:
+        others = len([hit for hit in hits if hit.get("scene_id") and
+                      hit.get("scene_id") != scope.get("scene_id")])
+        notes.append("本次范围按配置联动了 %d 个只读场景（%s）：行首的场景号就是这句话是在哪儿说的，"
+                     "联动场景里的行不是这个场景的新输入；跨场景命中 %d 条" % (
+                         len(linked), "、".join(linked), others))
     fb = result.get("fallback") or {}
     if fb.get("why"):        # 表不在（更旧的宿主）也要说清：不是没送达，是没有可比对的回执时间
         notes.append("本机出站的送达时间没关联上（%s）：缺 receipt_at 的已送达出站仍按没时间戳处理"
@@ -839,6 +919,7 @@ import hashlib
 import json as _json
 import re as _re
 
+
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）
     from .state import Denied
 except Exception:                     # 同目录平铺加载（离线自检）也认
@@ -853,7 +934,8 @@ HISTORY_TOOL = {
     "name": HISTORY_TOOL_NAME,
     "description": ("只读查询当前任务授权场景里保存的原话：字面检索覆盖完整 messages（不只是记忆候选），"
                     "返回原文、实际作者、场景、时间及其来源（平台回执／本机送达回执／入站时间），按 cursor 续页。"
-                    "场景由任务绑定，参数不能换查询范围，也不接受 Mongo 表达式。"
+                    "场景由任务绑定，外加配置给它挂的只读联动场景（同一人的另一个入口）；参数不能换"
+                    "查询范围，也不接受 Mongo 表达式。跨场景命中行首带各自的场景号。"
                     "回执时间回退会标明是送达回执，不伪称原始发送时刻；more=true 时必须带 cursor 续查，不能宣称查完。"),
     "parameters": {
         "query": {"type": "string"},
@@ -893,7 +975,10 @@ def _bounded_int(value, low, high, name):
 
 def _fingerprint(scene, query, person, since, until, window_days, case_sensitive, include_semantic):
     """筛选与范围指纹：游标必须延续发放它的那次筛选（ADR-005 §3），换任何一项都算换页序列。"""
-    basis = _json.dumps([scene["scene_id"], scene["policy_epoch"], query, person, since, until,
+    basis = _json.dumps([scene["scene_id"], scene["policy_epoch"],
+                         list(scene.get("readable_scenes") or []),
+                         sorted(scene.get("person_aliases") or []),
+                         query, person, since, until,
                          window_days, bool(case_sensitive), bool(include_semantic)], ensure_ascii=False)
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
 
@@ -926,8 +1011,28 @@ def _cursor_after_delivered(delivered, inner_cursor):
         key = _STREAM_BY_FIELD.get(hit.get("time_field"))
         if not key or not hit.get("at"):
             continue
-        pairs[key] = [hit["at"], hit.get("time_ref") if key == OUTBOUND_VIA_RECEIPT else hit.get("scene_seq")]
+        pairs[key] = [hit["at"], hit.get("time_ref") if key == OUTBOUND_VIA_RECEIPT else hit.get("scene_seq"),
+                      hit.get("scene_id")]
     return _encode_cursors(pairs)
+
+
+def _link_fields(store, scene_doc, person=""):
+    """把配置派生的联动范围装进 scene_doc：scene_links 不在就照实不联动。"""
+    if scene_links is None:
+        return {}
+    db = getattr(store, "db", None)
+    fields = {"readable_scenes": scene_links.readable_scenes(getattr(store, "config", None),
+                                                             scene_doc["scene_id"])}
+    try:
+        fields["person_classes"] = scene_links.person_classes(getattr(store, "config", None), db)
+        fields["person_aliases"] = scene_links.extra_person_values(getattr(store, "config", None),
+                                                                   db, person)
+        fields["person_canonical"] = dict(
+            (member, scene_links.canonical_person_id(getattr(store, "config", None), db, member))
+            for member in fields["person_classes"])
+    except Exception:
+        fields["person_classes"] = fields["person_aliases"] = fields["person_canonical"] = {}
+    return fields
 
 
 class HistoryQueryService:
@@ -966,8 +1071,11 @@ class HistoryQueryService:
         include_semantic = args.get("include_semantic", True)
         if not isinstance(include_semantic, bool):
             raise ValueError("INVALID_HISTORY_INCLUDE_SEMANTIC")
+        # 围栏比对的是「任务场景 + 它按配置能只读的那些场景」：联动集合现算自配置（不是工具参数），
+        # 所以工具既不能把范围换宽，也不能把游标借到另一条边上去。
         scene_doc = {"scene_id": scene["_id"], "scope_key": scene["scope_key"],
-                     "policy_epoch": scene["policy_epoch"]}
+                     "policy_epoch": scene["policy_epoch"], "person": person}
+        scene_doc.update(_link_fields(self.store, scene_doc, person))
         mark = _fingerprint(scene_doc, query, person, since, until,
                             window_days or DEFAULT_WINDOW_DAYS, case_sensitive, include_semantic)
         inner, stored = _unwrap_cursor(cursor or None)

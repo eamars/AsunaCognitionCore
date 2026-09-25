@@ -42,6 +42,12 @@ def local_settings(config):
     return settings
 
 
+try:                                  # 跨场景只读联动（A2）
+    from . import scene_links
+except Exception:
+    scene_links = None
+
+
 def prepare_local_scene(store, settings):
     """Initialize only missing local state; never reseed memories or revisions."""
     person, scene = settings['person_id'], settings['scene_id']
@@ -59,8 +65,16 @@ def prepare_local_scene(store, settings):
         source = Path(settings['persona_file'])
         store.init_head('persona:' + settings['persona'], 'global-safe',
                         {'body': source.read_text(encoding='utf-8')}, [str(source)])
-    store.init_head('relationship:' + person, scope,
+    if scene_links:
+        # 派生投影：配置里的联动边与 canonical 映射在库里留一份看得见的副本（读路径现算自配置）。
+        scene_links.sync_identity_docs(store, store.config)
+    target = (scene_links.relationship_target(store.config, store.db,
+              {'_id': scene, 'scope_key': scope}, person) if scene_links
+              else {'entity': 'relationship:' + person, 'scope': scope})
+    store.init_head(target['entity'], target['scope'],
                     {'body': '这是通过本机界面交流的用户。尚无共同经历，不预设熟悉程度。'}, [])
+    if scene_links:
+        scene_links.sync_scene_docs(store, store.config, [scene])
 
 
 class Chat:
@@ -81,6 +95,7 @@ class Chat:
         self.enqueued = set()
         self.reconfiguring = False
         self.on_turn_finished = None
+        self.restart_pending = threading.Event()
 
     def _schedule(self, episode):
         task = self.app.store.db.tasks.find_one({'_id': episode['task_id']})
@@ -93,6 +108,9 @@ class Chat:
 
     def _tasks(self):
         while not self.stopping.is_set():
+            if self.restart_pending.is_set():
+                self.stopping.wait(.1)
+                continue
             try:
                 task_id, revision = self.task_queue.get(timeout=.1)
             except Empty:
@@ -100,6 +118,9 @@ class Chat:
             try:
                 with self.state_lock:
                     if self.stopping.is_set():
+                        continue
+                    if self.restart_pending.is_set():
+                        self.task_queue.put((task_id, revision))
                         continue
                     self.active_task = task_id
                 task = self.app.store.db.tasks.find_one({'_id': task_id})
@@ -128,6 +149,8 @@ class Chat:
                 with self.state_lock:
                     self.active_task = None
                 self.task_queue.task_done()
+                if self.on_turn_finished:
+                    self.on_turn_finished()
 
     def new_context(self):
         self.pending.put(({'_new_context': True, 'event_id': str(uuid.uuid4()),
@@ -300,6 +323,9 @@ class Chat:
 
     def _work(self):
         while not self.stopping.is_set():
+            if self.restart_pending.is_set():
+                self.stopping.wait(.1)
+                continue
             try:
                 event, episode = self.pending.get(timeout=.1)
             except Empty:
@@ -309,7 +335,10 @@ class Chat:
                     if self.stopping.is_set():
                         self.app.evidence.record('chat.abandoned', event)
                         continue
-                    self.active = episode
+                    if self.restart_pending.is_set():
+                        self.pending.put((event, episode))
+                        continue
+                    self.active = episode or event['event_id']
                 if event.get('_compact'):
                     scene = self.app.store.authorize(event['scene_id'], event['person_id'])
                     binding = f"xiaoman:{scene['_id']}:{scene['policy_epoch']}:{self.settings['persona']}"
@@ -355,6 +384,10 @@ class Chat:
                         member = route_members(route).get(event['channel'].get('sender_id', route.get('sender_id')), {})
                         if event.get('episode_kind')=='owner_group_prompt' and route.get('operator_sender_id')!=event['channel'].get('sender_id'):
                             raise PermissionError('GROUP_PROMPT_OWNER_REVOKED')
+                        if (event.get('episode_kind') == 'owner_dm_prompt' and
+                                (route['target']['type'] != 'dm' or
+                                 route.get('sender_id') != event['channel'].get('sender_id'))):
+                            raise PermissionError('DM_PROMPT_OWNER_REVOKED')
                         if (member.get('person_id') != event['person_id'] or route['target'] != event['channel']['target']
                                 or event['channel']['account_id'] != self.app.config['channels'][event['channel']['id']]['account_id']):
                             raise PermissionError('INPUT_ROUTE_STALE')
@@ -385,7 +418,6 @@ class Chat:
                 elif not messages:
                     self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
                 self.app.evidence.record('chat.completed', {'episode_id': episode, 'state': result['state']})
-                if self.on_turn_finished:self.on_turn_finished()
             except Exception:
                 error = redact(traceback.format_exc(), self.app.config)
                 self.app.evidence.record('chat.error', {'episode_id': episode, 'traceback': error})
@@ -406,6 +438,8 @@ class Chat:
                 with self.ingress_lock:
                     self.enqueued.discard(episode)
                 self.pending.task_done()
+                if self.on_turn_finished:
+                    self.on_turn_finished()
 
     def trace(self):
         scene = self.app.store.authorize(self.settings['scene_id'], self.settings['person_id'])
@@ -508,10 +542,11 @@ class Chat:
         if self.pending.unfinished_tasks or self.task_queue.unfinished_tasks:
             self.emit('[系统] 正在停止宿主；未开始的已保存输入将在下次启动恢复，正在执行的任务撤销权限。')
         # Fence this application's work before shutting down its action lane.
-        for task_id, revision in self.scheduled_tasks.copy():
-            task = self.app.store.db.tasks.find_one({'_id': task_id})
-            if task and task['intent_revision'] == revision and task['state'] in ('READY', 'RUNNING'):
-                self.app.service.cancel(task_id, reason='host_stop', person_id=task['requester_id'])
+        if not self.restart_pending.is_set():
+            for task_id, revision in self.scheduled_tasks.copy():
+                task = self.app.store.db.tasks.find_one({'_id': task_id})
+                if task and task['intent_revision'] == revision and task['state'] in ('READY', 'RUNNING'):
+                    self.app.service.cancel(task_id, reason='host_stop', person_id=task['requester_id'])
         if active_task:
             self.app.executor_lane.sdk.close()
         if active:

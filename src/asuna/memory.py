@@ -6,6 +6,12 @@ from .evidence import canonical,sha
 from .state import Store,Denied,Conflict
 from .queue import database_effects_lock
 from . import summary_attribution
+
+try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
+    from . import scene_links
+except Exception:
+    scene_links = None
+
 import jsonschema
 
 REFLECTION=json.loads((BUNDLE/'schemas/reflection.schema.json').read_text(encoding='utf-8'))
@@ -29,8 +35,21 @@ class MemoryService:
             result={'state':'NO_CHANGE'}
         else:
             entity='relationship:'+episode['person_id']
+            target_scope,linked=scope,[]
+            if scene_links:
+                target=scene_links.relationship_target(self.store.config,self.store.db,scene,episode['person_id'])
+                entity,target_scope,linked=target['entity'],target['scope'],list(target['linked_scopes'])
+            # 本轮上下文里给她看的那一份优先（manifest 记的是她实际读到的 head）；但它只能是本场景
+            # 那一份，或配置认定同一个人时的那一份——别的都算越权，不给「看起来连着」的错写。
+            key=episode['manifest'].get('relationship_entity_key') or (entity+'|'+target_scope)
+            if key not in {entity+'|'+target_scope,'relationship:'+episode['person_id']+'|'+scope}:
+                raise Denied('UNDERSTANDING_SCOPE_PROMOTION_DENIED')
+            entity,_,target_scope=key.rpartition('|')
+            if target_scope!=scope and (not linked or scope not in linked
+                                        or not entity.startswith('relationship:')):
+                raise Denied('UNDERSTANDING_SCOPE_PROMOTION_DENIED')
             base_id=episode['manifest']['relationship_revision']
-            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':entity+'|'+scope})
+            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key})
             if not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT')
             if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
             if body==base['content'].get('body'):
@@ -40,18 +59,19 @@ class MemoryService:
                 content={k:v for k,v in base['content'].items() if k in {'body','familiarity','trust','closeness','tension'}}
                 content['body']=body
                 try:
-                    revision=self.store.mutate(entity,scope,base_id,content,sources,scope,operation,
+                    revision=self.store.mutate(entity,target_scope,base_id,content,sources,scope,operation,
+                        linked_scopes=linked,
                         reason='角色基于本轮真实输入、独白与本轮展示给角色的程序摘要形成的理解；来源由程序关联。',
                         change_class='interpretation')
                 except Conflict as exc:
                     # 头版本被同一轮更早的提交推前，或这条摘要覆盖的原文早已进入
                     # processed_source_ids：那是"没有可提交的新证据"，不是协议错误。
                     # 记审计后让本轮继续说话，不把整轮打成 FAILED_RUNTIME。
-                    result={'state':'NOT_COMMITTED','entity':entity,'base_revision':base_id,
+                    result={'state':'NOT_COMMITTED','entity':entity,'target_scope':target_scope,'base_revision':base_id,
                         'reason':str(exc),'body':body,'source_ids':sources,'auto_source_ids':auto,
                         'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
                 else:
-                    result={'state':'COMMITTED','entity':entity,'base_revision':base_id,
+                    result={'state':'COMMITTED','entity':entity,'target_scope':target_scope,'base_revision':base_id,
                         'accepted_revision':revision['_id'],'body':body,'source_ids':sources,
                         'auto_source_ids':auto,'auto_source_skipped':skipped,
                         'auto_stale_source_ids':stale}

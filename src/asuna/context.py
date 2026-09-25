@@ -11,6 +11,11 @@ try:                                  # 宿主按包加载
 except Exception:                     # 同目录平铺加载（离线自检）也认
     import schedule_rules
 
+try:                                  # 跨场景只读联动（A2）：联动范围现算自配置
+    from . import scene_links
+except Exception:
+    scene_links = None                # 拿不到就整体不联动，与改动前逐字一致
+
 # 主动机会给角色看的说明：只说清这是什么、她能选什么，不暗示她该说。
 PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的闸门（安静时段、群里现在的语速、'
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
@@ -35,7 +40,9 @@ class ContextBuilder:
                 continue
             row['reply_to'] = reply
             parent = self.store.db.messages.find_one({
-                'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+                **(scene_links.scene_id_filter(scene_links.read_scope(self.store.config, scene))
+                   if scene_links else {'scene_id': scene['_id']}),
+                'policy_epoch': scene['policy_epoch'],
                 '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
                         {'direction': 'outbound', 'platform_message_id': reply,
                          'delivery_state': 'DELIVERED'}]},
@@ -43,6 +50,30 @@ class ContextBuilder:
             if parent:
                 row['reply_to_message'] = parent
         return rows
+
+    def _merge_linked_history(self, own, scene, read, projection):
+        """把联动场景的最近几条按「有效时间」归并进这一轮的上下文窗口。
+
+        排序不能再拿 scene_seq 比：那是每个场景自己的序号，跨场景不可比。时间口径与查询侧一致
+        （平台回执 ＞ 本机送达回执 ＞ 入站发生时刻 ＞ 落库时刻），每条行上带 scene_id，
+        她能看出这句话是在哪个入口说的。联动场景的行只是给她看的历史，不是这个场景的新输入。
+        """
+        rows = []
+        for scene_id in read['linked_scenes']:
+            rows.extend(self.store.db.messages.find(
+                {'scene_id': scene_id, 'policy_epoch': scene['policy_epoch'],
+                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
+                projection).sort('scene_seq', -1).limit(12))
+        if not rows:
+            return own
+        merged = list(own) + rows
+        for row in merged:
+            row['scene_id'] = row.get('scene_id') or scene['_id']
+        times = scene_links.message_times(self.store, merged)
+        merged.sort(key=lambda row: (times.get(row['_id'], ('', ''))[0],
+                                     row.get('scene_id', ''), row.get('scene_seq') or 0),
+                    reverse=True)
+        return merged[:12]
 
     def prepare(self, event: dict, persona='P1'):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
@@ -55,7 +86,14 @@ class ContextBuilder:
         content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
         if len(''.join(content_lines))<80:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
-        relation=self.store.head('relationship:'+event['person_id'],scope)
+        read=(scene_links.read_scope(self.store.config,scene) if scene_links else
+              {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
+               'scope_keys':[scope],'linked_scope_keys':[]})
+        target=(scene_links.relationship_target(self.store.config,self.store.db,scene,event['person_id'])
+                if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
+                                     'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
+        # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
+        relation=self.store.head(target['entity'],target['scope'])
         overlay=self.store.head('overlay:'+persona,scope)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
@@ -66,8 +104,15 @@ class ContextBuilder:
         if source:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
-        history=list(self.store.db.messages.find(history_query,{'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
-            'platform_reply_to':1,'event.group_context':1}).sort('scene_seq',-1).limit(12))
+        history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
+            'platform_reply_to':1,'event.group_context':1}
+        if read['linked_scenes']:
+            # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
+            history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
+                                    receipt=1,received_at=1)
+        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1).limit(12))
+        if read['linked_scenes']:
+            history=self._merge_linked_history(history,scene,read,history_projection)
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
@@ -78,7 +123,8 @@ class ContextBuilder:
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
         if self.retrieval:
             try:
-                memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources)
+                memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
+                                                                   linked_scopes=read['linked_scope_keys'])
             except (Denied, PermissionError):
                 raise
             except Exception:
@@ -90,7 +136,8 @@ class ContextBuilder:
         else:
             memories=list(self.store.db.memory_units.find({'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}],'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
-        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by') if k in m} for m in memories]
+        # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
+        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by') if k in m} for m in memories]
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
@@ -117,6 +164,17 @@ class ContextBuilder:
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if read['linked_scenes']:
+            context['linked_scenes_from_program']={
+                'readable':read['linked_scenes'],'canonical_person':target['canonical'],
+                'note':'delivered_history 与 memories 里带 scene_id／scope_key 的行可能来自这些联动场景'
+                       '（配置认定是同一个人的另一个入口，只读）：它们不是这个场景里的新输入，不用当成'
+                       '刚说的话再回应一次；要引用就说清那是在哪个入口说的。'}
+        if target['shared']:
+            context['relationship_shared_from_program']={
+                'entity':target['entity'],'scope':target['scope'],
+                'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
+                       '会写进 %s，来源仍只取本轮场景里真实给过你的证据。' % target['scope']}
         if event.get('episode_kind') == 'self_development':
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']
@@ -155,6 +213,11 @@ class ContextBuilder:
                 {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1})
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             context['scheduled_plan_from_program']=plan
+        target_note=('只更新当前场景下对当前说话人的关系理解；不修改全局人格或权限。'
+                     if not target['shared'] else
+                     '只更新对当前说话人的关系理解。配置认定他与另一个入口是同一个人，这份关系记录共用'
+                     '（写在 %s 那一份上，来源仍只取本轮场景里真实给过你的证据）；不修改全局人格或权限。'
+                     % target['scope'])
         if retrieval_manifest.get('error'):
             context['retrieval_diagnostic_from_host']=retrieval_manifest
         if source and source.get('failure'):
@@ -194,11 +257,11 @@ class ContextBuilder:
             if str(group.get('wake_reason') or '').startswith('proactive'):
                 continuity['proactive_from_program'] = PROACTIVE_NOTE
             context['group_continuity_from_program'] = continuity
-        manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if self.store.config.get('task_mode')=='workspace':
             if relation:
                 context['understanding_update_from_program']={
-                    'available':True,'target':'只更新当前场景下对当前说话人的关系理解；不修改全局人格或权限。',
+                    'available':True,'target':target_note,
                     'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
             from .resources import workspace_grant
             grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)

@@ -14,13 +14,13 @@ Open the URL printed by the process, or use `http://127.0.0.1:8765/asuna/` when 
 
 ## Workbench areas
 
-- **Left — scenes and contexts:** search configured scenes, open the current context, or inspect a previous context in read-only mode. “新上下文” changes the DSH conversation context while retaining scene memory.
+- **Left — scenes and channels:** search and select the local DM or an authorized channel scene, such as an owner QQ DM or group. The list navigates scenes; it does not expose DSH contexts or sessions.
 - **Center — conversation and execution:** send messages, load earlier messages, follow live character/action output, and expand tool calls, results, or errors. Failed steps keep a short visible error summary and the full payload in the expandable execution record. A send whose response is interrupted is not automatically repeated.
 - **Right — inspector:** search and inspect memory, preference, group-preference, relationship, and integration records available in the current scene. Details are read-only. Empty preference views represent missing records; the UI does not infer preferences from message text.
 - **Model settings:** edit the character and action routes independently, discover model IDs from a configured endpoint, and apply settings when the host is idle.
 - **Host controls:** refresh the view, request an internal self-development opportunity for the owner scene, or stop the whole host and its actions.
 
-Configured external scenes can be inspected according to their route permissions. External channel conversations are read-only in the workbench; a configured local owner may submit an explicit group-speaking prompt for an authorized group route.
+Messages from every internal context generation remain in that scene's history. Selecting an authorized interactive scene opens its existing cognition session and allows a message to be sent. For configured owner QQ DM and group routes, the composer submits an explicitly labeled local instruction to that channel scene. Routes without a local owner send permission remain read-only.
 
 ## DSH integration
 

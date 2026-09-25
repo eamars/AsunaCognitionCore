@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import socket
 import subprocess
 import threading
 from urllib.parse import parse_qs, urlsplit
@@ -19,6 +20,11 @@ from .config import ROOT, redact_text
 from .state import Store, Denied
 from .model_settings import public_models, edited_models, revision, persist, LANES
 from .ui_stream import UiStreamHub
+
+try:                                  # 跨场景只读联动（A2）：关系记录只有一份，展示也按那一份
+    from . import scene_links
+except Exception:
+    scene_links = None
 
 
 def display(value):
@@ -315,14 +321,16 @@ def audited_request_purpose(ref):
     return event.get('payload', {}).get('purpose') if event.get('type') == 'provider.request' else None
 
 
-def inspector_record(row, kind='memory'):
+def inspector_record(row, kind='memory', *, detail=False):
     content = row.get('body_markdown') or row.get('content') or row.get('title') or row['_id']
     body = content.get('body', display(content)) if isinstance(content, dict) else str(content)
-    fields = {key: value for key, value in row.items() if key not in ('embedding', '_last_op')}
-    return {'id': row['_id'], 'kind': kind, 'title': row.get('title') or body[:70],
+    result = {'id': row['_id'], 'kind': kind, 'title': row.get('title') or body[:70],
             'description': row.get('kind', kind), 'createdAt': row.get('occurred_at', row.get('created_at')),
-            'source': ', '.join(row.get('source_event_ids', row.get('source_ids', []))),
-            'excerpt': body, 'fields': fields}
+            'excerpt': body[:160]}
+    if detail:
+        result['source'] = ', '.join(row.get('source_event_ids', row.get('source_ids', [])))
+        result['fields'] = {key: value for key, value in row.items() if key not in ('embedding', '_last_op')}
+    return result
 
 
 class Workbench:
@@ -384,37 +392,80 @@ class Workbench:
             return []
 
     def stream_scene(self, selected=''):
-        # Opening an observation connection must not rebuild the full transcript
-        # beside the /state request. Check the same scene/context membership here.
-        local = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
-        if selected.startswith('channel:'):
-            from .channels import route_members
-            scene = None
-            for channel_id, channel in self.store.config.get('channels', {}).items():
-                for route in channel['routes'].values():
-                    if selected != 'channel:' + route['scene_id'] or not route_members(route):
-                        continue
-                    configured = self.store.db.scenes.find_one({'_id': route['scene_id'], 'channel_id': channel_id})
-                    if configured:
-                        member = next(iter(route_members(route).values()))
-                        scene = self.store.authorize(route['scene_id'], member['person_id'])
-                        break
-                if scene:
-                    break
-            if not scene:
-                raise ValueError('通道未配置或已不可访问')
-        else:
-            scene = local
-            current = scene.get('character_context', 'initial')
-            if selected and selected != current:
-                scope = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
-                         'policy_epoch': scene['policy_epoch']}
-                context = {'$or': [{'character_context': selected}] +
-                           ([{'character_context': {'$exists': False}}] if selected == 'initial' else [])}
-                if not (self.store.db.episodes.find_one({**scope, **context}, {'_id': 1}) or
-                        self.store.db.messages.find_one({**scope, 'host_managed': True, **context}, {'_id': 1})):
-                    raise ValueError('会话不存在或已不可访问')
+        # Stream authorization resolves the same scene/channel selector as
+        # /state without rebuilding the transcript or exposing context IDs.
+        scene = self._scene_selection(selected)['scene']
         return {'_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
+
+    def _scene_selections(self):
+        """Return authorized scene navigation choices and their host bindings."""
+        from .channels import route_members
+
+        local = self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
+        local_latest = self.store.db.messages.find_one(
+            {'scene_id': local['_id'], 'scope_key': local['scope_key'], 'policy_epoch': local['policy_epoch'],
+             '$or': [{'occurred_at': {'$type': 'string'}}, {'received_at': {'$type': 'string'}}]},
+            {'occurred_at': 1, 'received_at': 1}, sort=[('scene_seq', -1)])
+        local_item = {'id': local['_id'], 'title': '本机私聊', 'channelType': 'local-dm',
+                      'updatedAt': ((local_latest or {}).get('occurred_at') or
+                                    (local_latest or {}).get('received_at') or '')}
+        selections = {local['_id']: {'scene': local, 'settings': self.settings, 'external': False,
+                                     'route': None, 'member': None, 'interactive': True,
+                                     'item': local_item}}
+        for channel_id, channel in self.store.config.get('channels', {}).items():
+            for route in channel.get('routes', {}).values():
+                members = route_members(route)
+                if not members:
+                    continue
+                scene = self.store.db.scenes.find_one({'_id': route['scene_id'], 'channel_id': channel_id})
+                if not scene:
+                    continue
+                target_type = route['target']['type']
+                sender = (route.get('operator_sender_id') if target_type == 'group'
+                          else route.get('sender_id'))
+                member = members.get(sender) or next(iter(members.values()))
+                try:
+                    scene = self.store.authorize(route['scene_id'], member['person_id'])
+                except (PermissionError, Denied):
+                    continue
+                interactive = (target_type == 'group' and
+                               route.get('operator_sender_id') in members and self.controller is not None)
+                if target_type == 'dm':
+                    interactive = (self._same_configured_person(
+                        member.get('person_id'), self.settings['person_id']) and self.controller is not None)
+                latest = self.store.db.messages.find_one(
+                    {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+                     'policy_epoch': scene['policy_epoch'],
+                     '$or': [{'occurred_at': {'$type': 'string'}}, {'received_at': {'$type': 'string'}}]},
+                    {'occurred_at': 1, 'received_at': 1}, sort=[('scene_seq', -1)])
+                item = {'id': scene['_id'],
+                        'title': f"{channel_id} · {'群聊' if target_type == 'group' else '私聊'} · {route['target']['id']}",
+                        'channelType': f'{channel_id}-{target_type}',
+                        'updatedAt': ((latest or {}).get('occurred_at') or
+                                      (latest or {}).get('received_at') or '')}
+                selections[scene['_id']] = {
+                    'scene': scene,
+                    'settings': {**self.settings, 'scene_id': route['scene_id'],
+                                 'person_id': member['person_id']},
+                    'external': True, 'route': route, 'channel_id': channel_id,
+                    'member': member, 'interactive': interactive, 'item': item,
+                }
+        return selections
+
+    def _same_configured_person(self, left, right):
+        if left == right:
+            return True
+        return bool(scene_links and left and right and
+                    scene_links.canonical_person_id(self.store.config, self.store.db, left) ==
+                    scene_links.canonical_person_id(self.store.config, self.store.db, right))
+
+    def _scene_selection(self, selected='', *, selections=None):
+        selections = selections or self._scene_selections()
+        key = selected or self.settings['scene_id']
+        selection = selections.get(key)
+        if not selection:
+            raise ValueError('场景不存在或已不可访问')
+        return selection
 
     def live_streams(self, scene, calls):
         current = self.store.db.scenes.find_one({'_id': scene['_id'], 'scope_key': scene['scope_key'],
@@ -504,87 +555,58 @@ class Workbench:
                 self.notices = self.notices[-8:]
 
     def snapshot(self, selected='', before_seq=None):
-        # This is the local operator's read-only view, never an impersonated
-        # channel command or a grant to the remote participant.
-        self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
-        from .channels import route_members
-        channels = {}
-        for channel_id, channel in self.store.config.get('channels', {}).items():
-            for route in channel['routes'].values():
-                scene = self.store.db.scenes.find_one({'_id': route['scene_id'], 'channel_id': channel_id})
-                if scene and route_members(route):
-                    key = 'channel:' + scene['_id']
-                    channels[key] = (route, {'id': key, 'title': f"{channel_id} · {route['target']['type']} · {route['target']['id']}",
-                                             'channelType': channel_id, 'updatedAt': ''})
-        if selected.startswith('channel:'):
-            if selected not in channels:
-                raise ValueError('通道未配置或已不可访问')
-            route, item = channels[selected]
-            member = next(iter(route_members(route).values()))
-            data = self._snapshot(settings={**self.settings, 'scene_id': route['scene_id'], 'person_id': member['person_id']},
-                                  external=True, before_seq=before_seq)
-            data.update(conversationId=selected, title=item['title'], conversations=[{'id': '', 'title': '本机聊天', 'channelType': 'local', 'updatedAt': ''}])
-            if route['target']['type']=='group' and route.get('operator_sender_id') in route_members(route) and self.controller:
-                data.update(readOnly=False,channelPrompt=True,canSend=not self.models_applying and getattr(self.controller.app,'models_ready',True),
-                            subtitle='本机指令 · 小满将在此群发言；输入不会伪装成 QQ 来信')
-        else:
-            data = self._snapshot(selected, before_seq=before_seq)
-        data['conversations'].extend(item for _, item in channels.values())
+        selections = self._scene_selections()
+        selection = self._scene_selection(selected, selections=selections)
+        item = selection['item']
+        data = self._snapshot(settings=selection['settings'], external=selection['external'],
+                              before_seq=before_seq)
+        scene_prompt = selection['external'] and selection['interactive']
+        target_type = (selection.get('route') or {}).get('target', {}).get('type')
+        prompt_verb = '在此 QQ 群发言' if target_type == 'group' else '回复此 QQ 私聊'
+        data.update(sceneId=selection['scene']['_id'], title=item['title'],
+                    subtitle=(f"{item['channelType']} · {selection['scene']['_id']} · 分段加载消息 / 100 条记忆"),
+                    scenes=[row['item'] for row in selections.values()],
+                    scenePrompt=scene_prompt,
+                    scenePromptPlaceholder=(f'本机指令；小满将{prompt_verb}' if scene_prompt else ''),
+                    scenePromptLabel=(f'请小满{prompt_verb}' if scene_prompt else '发送'),
+                    readOnly=self.controller is None or (selection['external'] and not selection['interactive']),
+                    canSend=(self.controller is not None and selection['interactive'] and
+                             not self.models_applying and getattr(self.controller.app, 'models_ready', True)))
+        data['hasPendingWork'] = bool(self.controller and (
+            self.controller.pending.unfinished_tasks or self.controller.task_queue.unfinished_tasks)) or data['hasPendingWork']
+        data['inspectorRevision'] = hashlib.sha256(repr([(record['id'], record['kind'], record['title'],
+            record.get('description'), record.get('createdAt')) for record in data['records']]).encode('utf-8')).hexdigest()[:16]
+        revision_parts = [data['sceneId'], data['modelSettings']['revision'], data['canSend'], data['hasPendingWork']]
+        revision_parts.extend((message['id'], message.get('sceneSeq'), message.get('revision'))
+                              for message in data['messages'])
+        revision_parts.append(data['inspectorRevision'])
+        data['revision'] = hashlib.sha256(repr(revision_parts).encode('utf-8')).hexdigest()[:20]
         self.stream_hub.mark_durable({step.get('displayKey') for message in data['messages']
                                       for step in message.get('internalSteps', []) if step['type'] in ('phase.output', 'execution.output')
                                       and step.get('displayKey')})
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), self.store.config))
 
-    def _snapshot(self, selected='', *, settings=None, external=False, before_seq=None):
+    def _snapshot(self, *, settings=None, external=False, before_seq=None):
         store, settings = self.store, settings or self.settings
         scene = store.authorize(settings['scene_id'], settings['person_id'])
         scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
-        episodes = list(store.db.episodes.find({**scope, 'scene_id': scene['_id']}, {'system': 0, 'context': 0}).sort('_id', 1))
-        known = {ep['_id'] for ep in episodes}
-        for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'host_managed': True}):
-            if row['episode_id'] not in known:
-                episodes.append(ingress_projection(row))
-        # Contexts are native Chat /new generations, not fabricated channels.
-        current = scene.get('character_context', 'initial')
-        groups = {current: []}
-        by_id = {ep['_id']: ep for ep in episodes}
-        for ep in episodes:
-            groups.setdefault(ep.get('character_context', 'initial'), []).append(ep['_id'])
-        if external:
-            groups = {current: list(by_id)}
-        chosen = selected or current
-        if chosen not in groups:
-            raise ValueError('会话不存在或已不可访问')
         # Operator projection includes generated SPEAK while platform delivery is
         # pending; deliveryState below keeps it distinct from an accepted post.
-        messages = list(store.db.messages.find({**scope, 'scene_id': scene['_id'], '$or': [
+        message_query = {**scope, 'scene_id': scene['_id'], '$or': [
             {'direction': 'inbound'}, {'direction': 'outbound', 'phase': 'SPEAK'},
-            *([] if external else [{'direction':'internal'}])]}).sort('scene_seq', 1))
+            *([] if external else [{'direction':'internal'}])]}
+        if before_seq is not None:
+            message_query['scene_seq'] = {'$lt': before_seq}
+        recent = list(store.db.messages.find(message_query).sort('scene_seq', -1).limit(13))
+        page_rows = list(reversed(recent[:12]))
+        has_more = len(recent) > 12
+        oldest_seq = page_rows[0]['scene_seq'] if page_rows else None
         def episode_id(message):
             return message.get('episode_id') or message['_id'].removeprefix('in-')
-        conversations = []
-        for context, ids in groups.items():
-            rows = [m for m in messages if episode_id(m) in ids]
-            first = next((m['text'] for m in rows if m['direction'] == 'inbound' and by_id[episode_id(m)].get('episode_kind', 'external') == 'external'), '本机聊天')
-            conversations.append({'id': context, 'title': ('当前 · ' if context == current else '') + first[:28],
-                                  'channelType': 'local',
-                                  'updatedAt': next((m.get('occurred_at') or m.get('received_at') for m in reversed(rows) if m.get('occurred_at') or m.get('received_at')), ''),
-                                  '_order': rows[-1]['scene_seq'] if rows else 0})
-        conversations.sort(key=lambda row: (row['id'] == current, row['_order']), reverse=True)
-        for item in conversations:
-            item.pop('_order')
-        context_rows = [m for m in messages if episode_id(m) in groups[chosen]
-                        and (before_seq is None or m['scene_seq'] < before_seq)]
-        page_start = max(0, len(context_rows) - 12)
-        while page_start and episode_id(context_rows[page_start - 1]) == episode_id(context_rows[page_start]):
-            page_start -= 1
-        page_rows = context_rows[page_start:]
-        has_more = page_start > 0
-        oldest_seq = page_rows[0]['scene_seq'] if page_rows else None
         # DSH keeps the active turn in its followed window. Keep the real
         # running task's owner visible even after newer messages move past it.
         active_tasks = list(store.db.tasks.find(
-            {**scope, 'state': {'$in': ['READY', 'RUNNING']}},
+            {**scope, 'scene_id': scene['_id'], 'state': {'$in': ['READY', 'RUNNING']}},
             {'episode_id': 1, 'continues_task_id': 1}))
         lineage_tasks = {task['_id']: task for task in active_tasks}
         def ancestors(task):
@@ -606,14 +628,22 @@ class Workbench:
         active_owners = {task.get('episode_id') for task in active_tasks}
         for task in active_tasks:
             active_owners.update(parent.get('episode_id') for parent in ancestors(task))
-        active_owners.intersection_update(groups[chosen])
-        rows = sorted({row['_id']: row for row in [
-            *page_rows, *(row for row in messages if episode_id(row) in active_owners),
-        ]}.values(), key=lambda row: row['scene_seq'])
+        owner_rows = []
+        for owner in active_owners - {episode_id(row) for row in page_rows}:
+            if owner:
+                owner_rows.extend(store.db.messages.find({**scope, 'scene_id': scene['_id'],
+                    'episode_id': owner, '$or': message_query['$or']}).sort('scene_seq', -1).limit(12))
+        rows = sorted({row['_id']: row for row in [*page_rows, *owner_rows]}.values(),
+                      key=lambda row: row['scene_seq'])
         visible_ids = {episode_id(m) for m in rows}
+        by_id = {ep['_id']: ep for ep in store.db.episodes.find(
+            {'_id': {'$in': list(visible_ids)}, **scope, 'scene_id': scene['_id']},
+            {'system': 0, 'context': 0})}
+        for row in rows:
+            if episode_id(row) not in by_id and row.get('host_managed'):
+                by_id[episode_id(row)] = ingress_projection(row)
         traces = {}
         task_owners = {}
-        native_logs, native_projections = {}, {}
         task_ids = {ep.get('task_id') or ep.get('control_result', {}).get('task_id')
                     for ep_id in visible_ids if (ep := by_id[ep_id])}
         task_ids.discard(None)
@@ -627,26 +657,6 @@ class Workbench:
                                                      {'type': 'state.commit', 'payload.collection': 'artifacts'},
                                                  ]}).sort([('occurred_at', 1), ('seq', 1)]):
             events_by_stream[event['stream_id']].append(event)
-        operations = set()
-        for ep_id in visible_ids:
-            ep = by_id[ep_id]
-            task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
-            task = tasks.get(task_id)
-            if not task:
-                continue
-            for event in events_by_stream.get(ep_id, []) + events_by_stream.get(task_id, []):
-                if event['type'] != 'execution.output':
-                    continue
-                attempt = event.get('payload', {}).get('attempt')
-                operations.add(f"{task_id}:execute:{task['intent_revision']}" +
-                               (f':{attempt}' if attempt is not None else ''))
-        receipts = {receipt['_id']: receipt for receipt in store.db.lane_receipts.find(
-            {'_id': {'$in': list(operations)}},
-            {'session_id': 1, 'result.receipt': 1, 'result.request_refs': 1})}
-        session_ids = {receipt.get('session_id') for receipt in receipts.values()
-                       if isinstance(receipt.get('session_id'), str)}
-        sessions = {session['_id']: session for session in store.db.sessions.find(
-            {'_id': {'$in': list(session_ids)}}, {'dsh_home': 1})}
         for ep_id in visible_ids:
             ep = by_id[ep_id]
             task_id = ep.get('task_id') or ep.get('control_result', {}).get('task_id')
@@ -662,11 +672,6 @@ class Workbench:
                 elif step['type'] == 'execution.output' and task:
                     attempt = step['payload'].get('attempt')
                     step['displayKey'] = f"{task_id}:execute:{task['intent_revision']}" + (f':{attempt}' if attempt is not None else '')
-                    if step['id'] not in native_projections:
-                        native_projections[step['id']] = self.native_execution_calls(
-                            step['displayKey'], step['payload'].get('request_refs', []), native_logs,
-                            receipts, sessions)
-                    step['providerCalls'] = native_projections[step['id']]
             finished = {event.get('payload', {}).get('operation') for event in events if event['type'] in ('phase.output', 'phase.failed')}
             for step in steps:
                 if step['type'] == 'phase.started' and (step['payload'].get('operation') in finished or ep['state'] in ('COMMITTED', 'INTERRUPTED', 'FAILED_RUNTIME', 'FAILED_PROTOCOL')):
@@ -681,7 +686,8 @@ class Workbench:
             ep_id = episode_id(row)
             public = row['direction'] == 'outbound'
             internal = row['direction'] == 'internal'
-            if not public and not internal and by_id[ep_id].get('episode_kind', 'external') not in ('external','owner_group_prompt'):
+            if not public and not internal and by_id[ep_id].get('episode_kind', 'external') not in (
+                    'external', 'owner_group_prompt', 'owner_dm_prompt'):
                 continue  # Task feedback is an internal event, not a user utterance.
             speak = next((step for step in reversed(traces.get(ep_id, []))
                           if step['type'] == 'phase.output' and step['sourceStreamId'] == ep_id
@@ -700,8 +706,9 @@ class Workbench:
             if public:
                 message['displayKey'] = speak_operation or ep_id + ':SPEAK:0'
                 message['deliveryState'] = row.get('delivery_state', 'UNKNOWN')
-            if not public and row.get('event',{}).get('episode_kind')=='owner_group_prompt':
-                message['authorLabel']='本机 owner 指令（非 QQ 来信）'
+            episode_kind = row.get('event', {}).get('episode_kind') or by_id[ep_id].get('episode_kind')
+            if not public and episode_kind in ('owner_group_prompt', 'owner_dm_prompt'):
+                message['authorLabel'] = '本机指令（非 QQ 来信）'
             if internal:
                 message['authorLabel']='内部自我开发机会（非用户消息）'
             if public:
@@ -735,29 +742,61 @@ class Workbench:
         rendered.sort(key=lambda row: row['_order'])
         for row in rendered:
             row.pop('_order')
+        for message in rendered:
+            steps = message.get('internalSteps', [])
+            if steps:
+                message['traceCount'] = len(steps)
+                message['errorCount'] = sum(step['status'] == 'error' for step in steps)
+            projected = []
+            for step in steps:
+                payload = step.get('payload', {})
+                if not isinstance(payload, dict):
+                    payload = {}
+                projected.append({**{key: value for key, value in step.items() if key not in ('payload', 'providerCalls')},
+                    'summary': step['summary'][:240],
+                    'payload': {key: payload[key] for key in ('phase', 'operation', 'attempt', 'tool', 'finish_reason')
+                                if key in payload and isinstance(payload[key], (str, int, float, bool))},
+                    'hasProviderDiagnostic': bool(payload.get('request_refs'))})
+            if steps:
+                message['internalSteps'] = projected
+            message['revision'] = hashlib.sha256(repr((message.get('text'), message.get('authorLabel'),
+                message.get('deliveryState'), message.get('turnStatus'),
+                tuple((step['id'], step['status'], step['summary']) for step in projected))).encode('utf-8')).hexdigest()[:16]
         records = []
-        for row in store.db.memory_units.find({'$or': [scope, {'scope_key': 'global-safe', 'policy_epoch': 1}], 'status': 'active'}, {'embedding': 0}).sort([('occurred_at', -1), ('_id', 1)]).limit(100):
+        for row in store.db.memory_units.aggregate([
+                {'$match': {'$or': [scope, {'scope_key': 'global-safe', 'policy_epoch': 1}], 'status': 'active'}},
+                {'$sort': {'occurred_at': -1, '_id': 1}}, {'$limit': 100},
+                {'$project': {'_id': 1, 'kind': 1, 'title': 1, 'occurred_at': 1, 'created_at': 1,
+                              'body_markdown': {'$cond': [
+                                  {'$eq': [{'$type': '$body_markdown'}, 'string']},
+                                  {'$substrCP': ['$body_markdown', 0, 160]}, '']}}}]):
             kind = row.get('kind')
             records.append(inspector_record(row, 'memory' if kind in (None, 'chat_chunk', 'monologue') else kind))
-        relation = store.head('relationship:' + settings['person_id'], scene['scope_key'])
+        target = (scene_links.relationship_target(store.config, store.db, scene,
+                  settings['person_id']) if scene_links
+                  else {'entity': 'relationship:' + settings['person_id'],
+                        'scope': scene['scope_key']})
+        relation = store.head(target['entity'], target['scope'])
         if relation:
             records.append(inspector_record(relation[1], 'relationship'))
         if external:
-            for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'direction': 'outbound', 'phase': 'SPEAK'}).sort('scene_seq', -1).limit(80):
+            for row in store.db.messages.find({**scope, 'scene_id': scene['_id'], 'direction': 'outbound', 'phase': 'SPEAK'},
+                    {'_id': 1, 'delivery_state': 1, 'platform_message_id': 1, 'occurred_at': 1}).sort('scene_seq', -1).limit(80):
                 records.append({'id': row['_id'], 'kind': 'integration', 'title': '平台回执 · ' + row.get('delivery_state', 'UNKNOWN'),
-                                'description': row.get('platform_message_id', row['_id']), 'fields': row})
+                                'description': row.get('platform_message_id', row['_id']), 'createdAt': row.get('occurred_at')})
         integration = None if external else getattr(getattr(self, 'host', None), 'integration', None)
         if integration:
             status = integration.status()
             records.append({'id': 'integration-owner', 'kind': 'integration', 'title': '集成运行器',
-                            'description': status['state'], 'fields': status})
+                            'description': status['state']})
         with self.lock:
-            notices = list(self.notices) if chosen == current and not external else []
-        data = {'conversationId': chosen, 'title': next(row['title'] for row in conversations if row['id'] == chosen),
-                'subtitle': f"{'通道检查（本机只读）' if external else '本机聊天'} · {scene['_id']} · 分段加载消息 / 100 条记忆 · " + ('当前上下文' if chosen == current else '历史上下文（只读）'),
-                'conversations': conversations, 'messages': rendered + notices, 'records': records,
-                'hasMore': has_more, 'beforeSeq': oldest_seq,
-                'readOnly': external or self.controller is None, 'canSend': not external and chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
+            notices = list(self.notices) if not external else []
+        data = {'sceneId': scene['_id'], 'title': scene['_id'],
+                'subtitle': f"{'通道场景' if external else '本机私聊'} · {scene['_id']} · 分段加载消息 / 100 条记忆",
+                'scenes': [], 'messages': rendered + notices, 'records': records,
+                'hasMore': has_more, 'beforeSeq': oldest_seq, 'hasPendingWork': bool(active_tasks),
+                'readOnly': external or self.controller is None,
+                'canSend': not external and self.controller is not None and not self.models_applying and getattr(self.controller.app, 'models_ready', True),
                 'modelSettings': self.models_snapshot(),
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
                                  'group_preference': '当前场景没有群偏好记录。'}}
@@ -766,6 +805,49 @@ class Workbench:
             raise PermissionError('场景授权已变化，请刷新')
         # Same credential redaction as the terminal trace, including nested payloads.
         return json.loads(redact_text(json.dumps(data, ensure_ascii=False, default=str), store.config))
+
+    def trace_detail(self, event_id, selected=''):
+        scene = self.stream_scene(selected)
+        event = self.store.db.audit_events.find_one({'_id': event_id, 'scope_key': scene['scope_key']})
+        if not event or trace_step(event) is None:
+            raise PermissionError('当前场景没有该执行记录')
+        owner = {'_id': event['stream_id'], 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+                 'policy_epoch': scene['policy_epoch']}
+        if not (self.store.db.episodes.find_one(owner, {'_id': 1}) or
+                self.store.db.tasks.find_one(owner, {'_id': 1})):
+            raise PermissionError('当前场景没有该执行记录')
+        return json.loads(redact_text(json.dumps({'id': event_id, 'type': event['type'],
+            'payload': event.get('payload', {})}, ensure_ascii=False, default=str), self.store.config))
+
+    def inspector_detail(self, record_id, kind, selected=''):
+        selection = self._scene_selection(selected)
+        scene = selection['scene']
+        scope = {'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
+        if kind == 'memory' or kind not in ('relationship', 'integration'):
+            row = self.store.db.memory_units.find_one({'_id': record_id, 'status': 'active',
+                '$or': [scope, {'scope_key': 'global-safe', 'policy_epoch': 1}]}, {'embedding': 0})
+            if not row or ('memory' if row.get('kind') in (None, 'chat_chunk', 'monologue') else row['kind']) != kind:
+                raise PermissionError('当前场景没有该检查器记录')
+            record = inspector_record(row, kind, detail=True)
+        elif kind == 'relationship':
+            target = (scene_links.relationship_target(self.store.config, self.store.db, scene,
+                      selection['settings']['person_id']) if scene_links else
+                      {'entity': 'relationship:' + selection['settings']['person_id'], 'scope': scene['scope_key']})
+            relation = self.store.head(target['entity'], target['scope'])
+            if not relation or relation[1]['_id'] != record_id:
+                raise PermissionError('当前场景没有该检查器记录')
+            record = inspector_record(relation[1], kind, detail=True)
+        elif record_id == 'integration-owner' and not selection['external'] and getattr(getattr(self, 'host', None), 'integration', None):
+            status = self.host.integration.status()
+            record = {'id': record_id, 'kind': kind, 'title': '集成运行器', 'description': status['state'], 'fields': status}
+        else:
+            row = self.store.db.messages.find_one({'_id': record_id, **scope,
+                'scene_id': scene['_id'], 'direction': 'outbound', 'phase': 'SPEAK'})
+            if not selection['external'] or not row:
+                raise PermissionError('当前场景没有该检查器记录')
+            record = {'id': record_id, 'kind': kind, 'title': '平台回执 · ' + row.get('delivery_state', 'UNKNOWN'),
+                      'description': row.get('platform_message_id', record_id), 'fields': row}
+        return json.loads(redact_text(json.dumps(record, ensure_ascii=False, default=str), self.store.config))
 
     def provider_diagnostic(self, event_id, selected=''):
         scene = self.stream_scene(selected)
@@ -789,7 +871,7 @@ class Workbench:
     def _command(self, path, body):
         self.store.authorize(self.settings['scene_id'], self.settings['person_id'])
         if self.controller is None:
-            raise PermissionError('只读模式不能发送消息或新建上下文')
+            raise PermissionError('只读模式不能发送消息')
         if path == '/stop':
             if not getattr(self, 'host', None):
                 raise ValueError('宿主停止入口不可用')
@@ -814,31 +896,85 @@ class Workbench:
             value = body.get('text')
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 16000:
                 raise ValueError('请输入 1–16000 字的消息')
-            selected=body.get('conversation','')
-            if selected.startswith('channel:'):
+            selection = self._scene_selection(body.get('scene', ''))
+            if selection['external']:
                 if body.get('integration') or body.get('development'):
-                    raise Denied('GROUP_PROMPT_HAS_NO_DEVELOPMENT_GRANT')
-                from .channels import route_for_scene,route_members
-                scene_id=selected[len('channel:'):]
-                scene=self.store.db.scenes.find_one({'_id':scene_id,'kind':'group'})
-                if not scene:raise Denied('GROUP_PROMPT_ROUTE_REQUIRED')
-                channel_id=scene['channel_id'];route=route_for_scene(self.store.config,channel_id,scene_id)
-                sender=route.get('operator_sender_id');member=route_members(route).get(sender)
-                if not member:raise Denied('GROUP_PROMPT_OWNER_NOT_CONFIGURED')
+                    raise Denied('CHANNEL_PROMPT_HAS_NO_DEVELOPMENT_GRANT')
+                if not selection['interactive']:
+                    raise Denied('SCENE_IS_READ_ONLY')
+                route = selection['route']
+                channel_id = selection['channel_id']
+                scene_id = selection['scene']['_id']
+                target_type = route['target']['type']
+                sender = (route.get('operator_sender_id') if target_type == 'group'
+                          else route.get('sender_id'))
+                member = selection['member']
+                if not sender or not member or member.get('person_id') != selection['settings']['person_id']:
+                    raise Denied('CHANNEL_OWNER_NOT_CONFIGURED')
                 key=str(uuid.uuid4())
+                episode_kind = 'owner_group_prompt' if target_type == 'group' else 'owner_dm_prompt'
                 event={'event_id':key,'scene_id':scene_id,'person_id':member['person_id'],'text':value.strip(),
-                       'adapter_id':'owner-web','episode_kind':'owner_group_prompt',
+                       'adapter_id':'owner-web','episode_kind':episode_kind,
                        'channel':{'id':channel_id,'account_id':self.store.config['channels'][channel_id]['account_id'],
                                   'target':route['target'],'platform_event_id':None,'sender_id':sender},
-                       'group_context':{'wake_reason':'owner_group_prompt','topic_id':key,'reply_to':None,'reply_message_id':None,'mentioned_account_ids':[]},
-                       'trusted_context_events':[{'kind':'owner_group_prompt','text':'这是本机 owner 请你在当前授权群发言的指令，不是群成员刚发来的 QQ 消息；用你自己的判断生成群内公开发言。没有获得额外工具、私聊记忆或配置权限。'}]}
+                       'trusted_context_events':[{'kind':episode_kind,'text':(
+                           '这是本机 owner 请你在当前授权群发言的指令，不是群成员刚发来的 QQ 消息；'
+                           '用你自己的判断生成群内公开发言。没有获得额外工具、私聊记忆或配置权限。'
+                           if target_type == 'group' else
+                           '这是本机 owner 请你回复当前授权 QQ 私聊的指令，不是新的 QQ 来信；'
+                           '沿用该私聊场景已有认知会话与历史。没有获得额外工具、私聊记忆或配置权限。')}]}
+                if target_type == 'group':
+                    event['group_context']={'wake_reason':'owner_group_prompt','topic_id':key,
+                                            'reply_to':None,'reply_message_id':None,
+                                            'mentioned_account_ids':[]}
                 return {'accepted':True,**self.controller.receive(event)}
+            if selection['scene']['_id'] != self.settings['scene_id']:
+                raise Denied('SCENE_IS_READ_ONLY')
             return {'accepted': True, **self.controller.submit(value.strip())}
-        elif path == '/new':
-            self.controller.new_context()
         else:
             raise ValueError('未知操作')
-        return {'accepted': True}
+
+
+class BridgeWorkbench(Workbench):
+    """Stable Web-facing view while a RuntimeHost is replaced."""
+    def __init__(self, store, settings, link):
+        super().__init__(store, settings)
+        self.link = link
+        self.stream_hub = link.stream_hub
+        self.stop_requested = threading.Event()
+
+    def snapshot(self, selected='', before_seq=None):
+        from .ui_runtime import RuntimeUnavailable
+        if self.link.ready.is_set():
+            try:
+                state = self.link.call('snapshot', selected, before_seq)
+                state['runtimeState'] = 'ready'
+                state['revision'] += ':ready'
+                return state
+            except RuntimeUnavailable:
+                pass
+        state = super().snapshot(selected, before_seq)
+        state['runtimeState'] = 'restarting'
+        state['canSend'] = False
+        state['revision'] += ':restarting'
+        return state
+
+    def command(self, path, body):
+        if path == '/stop':
+            self.stop_requested.set()
+            return {'accepted': True}
+        return self.link.call('command', path, body)
+
+    def trace_detail(self, event_id, selected=''):
+        return self.link.call('trace_detail', event_id, selected) if self.link.ready.is_set() else super().trace_detail(event_id, selected)
+
+    def inspector_detail(self, record_id, kind, selected=''):
+        return (self.link.call('inspector_detail', record_id, kind, selected) if self.link.ready.is_set()
+                else super().inspector_detail(record_id, kind, selected))
+
+    def provider_diagnostic(self, event_id, selected=''):
+        return (self.link.call('provider_diagnostic', event_id, selected) if self.link.ready.is_set()
+                else super().provider_diagnostic(event_id, selected))
 
 
 class UiBridge:
@@ -856,18 +992,33 @@ class UiBridge:
                 self.send_header('Cache-Control', 'no-store')
                 self.send_header('Connection', 'close')
                 self.end_headers()
-                version = -1
+                version, calls = workbench.stream_hub.snapshot()
+                visible = workbench.live_streams(scene, calls)
+                allowed = {call['id'] for call in visible}
                 try:
+                    payload = json.dumps({'version': version, 'calls': visible}, ensure_ascii=False).encode('utf-8')
+                    self.wfile.write(b'event: snapshot\ndata: ' + payload + b'\n\n')
+                    self.wfile.flush()
                     while True:
-                        current, calls = workbench.stream_hub.snapshot()
-                        if current != version:
-                            visible = workbench.live_streams(scene, calls)
-                            payload = json.dumps({'version': current, 'calls': visible}, ensure_ascii=False).encode('utf-8')
-                            self.wfile.write(b'event: snapshot\ndata: ' + payload + b'\n\n')
-                            version = current
-                        else:
+                        current, events = workbench.stream_hub.events_since(version)
+                        if not events:
                             self.wfile.write(b': keepalive\n\n')
+                        for event in events:
+                            if event['kind'] == 'reset':
+                                allowed.clear()
+                                self.wfile.write(b'event: reset\ndata: {}\n\n')
+                                continue
+                            if event['kind'] == 'start' and workbench.live_streams(scene, [event]):
+                                allowed.add(event['id'])
+                            if event['id'] not in allowed:
+                                continue
+                            public = {key: value for key, value in event.items() if key != 'scope_key'}
+                            payload = json.dumps(public, ensure_ascii=False).encode('utf-8')
+                            self.wfile.write(b'event: ' + event['kind'].encode() + b'\ndata: ' + payload + b'\n\n')
+                            if event['kind'] == 'end':
+                                allowed.discard(event['id'])
                         self.wfile.flush()
+                        version = current
                         workbench.stream_hub.wait(version)
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, PermissionError):
                     return
@@ -883,14 +1034,21 @@ class UiBridge:
                         raw_before = query.get('before', [''])[0]
                         if raw_before and (not raw_before.isdecimal() or int(raw_before) < 1):
                             raise ValueError('INVALID_BEFORE_SEQ')
-                        value = workbench.snapshot(query.get('conversation', [''])[0],
+                        value = workbench.snapshot(query.get('scene', [''])[0],
                                                    int(raw_before) if raw_before else None)
                     elif self.command == 'GET' and url.path == '/stream':
-                        return self.stream(parse_qs(url.query).get('conversation', [''])[0])
+                        return self.stream(parse_qs(url.query).get('scene', [''])[0])
                     elif self.command == 'GET' and url.path == '/provider-diagnostic':
                         value = workbench.provider_diagnostic(parse_qs(url.query).get('event', [''])[0],
-                                                              parse_qs(url.query).get('conversation', [''])[0])
-                    elif self.command == 'POST' and url.path in ('/send', '/new', '/models', '/models/discover', '/stop', '/integration/stop', '/self-development/offer'):
+                                                              parse_qs(url.query).get('scene', [''])[0])
+                    elif self.command == 'GET' and url.path == '/trace-detail':
+                        query = parse_qs(url.query)
+                        value = workbench.trace_detail(query.get('event', [''])[0], query.get('scene', [''])[0])
+                    elif self.command == 'GET' and url.path == '/inspector-detail':
+                        query = parse_qs(url.query)
+                        value = workbench.inspector_detail(query.get('id', [''])[0], query.get('kind', [''])[0],
+                                                           query.get('scene', [''])[0])
+                    elif self.command == 'POST' and url.path in ('/send', '/models', '/models/discover', '/stop', '/integration/stop', '/self-development/offer'):
                         size = int(self.headers.get('Content-Length', '0'))
                         if not 0 < size <= 65536:
                             raise ValueError('INVALID_BODY_SIZE')
@@ -934,14 +1092,28 @@ def serve(workbench, port):
     command = ['node', str(ROOT / 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'web',
                '--patch', str(ROOT / 'dsh-plugin/ui/cordis.patch.yml'), '--host', '127.0.0.1', '--port', str(port)]
     process = None
+    web_logged = False
     try:
         process = subprocess.Popen(command, cwd=ROOT, env=env)
         print(f'Asuna UI: DSH 会在系统默认浏览器自动打开并完成本机认证；进入后点击侧栏 Asuna。'
               f' 若浏览器未自动打开，请复制下一行 dsh web: 地址。端口：{port}。', flush=True)
         while True:
+            if not web_logged:
+                try:
+                    with socket.create_connection(('127.0.0.1', port), timeout=.1):
+                        pass
+                    if getattr(workbench, 'evidence', None):
+                        workbench.evidence.record('web.ready', {'port': port})
+                    web_logged = True
+                except OSError:
+                    pass
             try:
                 return process.wait(timeout=.5)
             except subprocess.TimeoutExpired:
+                if getattr(workbench, 'stop_requested', None) and workbench.stop_requested.is_set():
+                    return 0
+                if getattr(getattr(workbench, 'link', None), 'fatal', None) and workbench.link.fatal.is_set():
+                    return 75
                 if getattr(workbench, 'host', None) and workbench.host.shutdown_requested.is_set():
                     return 75 if workbench.host.restart_requested.is_set() else 0
     except KeyboardInterrupt:
@@ -967,16 +1139,17 @@ def ui(config, database=None, out=None, *, port=8765, read_only=False):
             return serve(Workbench(store, settings), port)
         finally:
             store.client.close()
-    from .host import RuntimeHost
     from .evidence import Evidence
+    from .ui_runtime import RuntimeLink
     evidence = Evidence(Path(out) if out else ROOT / 'reports' / ('ui-' + uuid.uuid4().hex[:12]))
-    with RuntimeHost(config, evidence, database) as host:
-        workbench = Workbench(host.app.store, settings, host.controller)
-        workbench.attach_streams()
-        workbench.host = host
-        host.controller.emit = workbench.emit
-        try:
-            return serve(workbench, port)
-        finally:
-            if workbench.model_thread:
-                workbench.model_thread.join()
+    store = Store(config, database)
+    streams = UiStreamHub()
+    link = RuntimeLink(config, database, evidence.root, streams)
+    workbench = BridgeWorkbench(store, settings, link)
+    workbench.evidence = evidence
+    link.start()
+    try:
+        return serve(workbench, port)
+    finally:
+        link.stop()
+        store.client.close()

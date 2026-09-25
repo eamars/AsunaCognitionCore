@@ -38,14 +38,16 @@ try:                                  # 宿主内：按包加载
                                 TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT, TIME_SOURCE_SINK,
                                 query_history, _parse as _parse_stamp, _text as _norm,
                                 _scene_parts, _row_allowed, _outbound_time, _sink_times,
-                                _stamp, _hit as _history_hit, person_clause)
+                                _stamp, _hit as _history_hit, person_clause,
+                                scene_id_clause, _link_fields)
 except Exception:                     # 同目录平铺加载（离线自检）也认
     try:
         from history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT,
                                    HISTORY_TOOL_NAME, TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT,
                                    TIME_SOURCE_SINK, query_history, _parse as _parse_stamp,
                                    _text as _norm, _scene_parts, _row_allowed, _outbound_time,
-                                   _sink_times, _stamp, _hit as _history_hit, person_clause)
+                                   _sink_times, _stamp, _hit as _history_hit, person_clause,
+                                   scene_id_clause, _link_fields)
     except Exception as exc:
         raise ImportError("discussion_digest needs the P1-b history_query module: %s" % exc)
 
@@ -163,8 +165,10 @@ def read_linkage(store, message_ids, scene=None):
         return {}, "no_messages_collection"
     try:
         flt = {"_id": {"$in": sorted(set(ids))}}
-        if isinstance(scene, dict):      # 同一道围栏：链与身份块也只读本场景、本策略周期
-            flt["scene_id"] = scene["scene_id"]
+        if isinstance(scene, dict):      # 同一道围栏：链与身份块也只读授权场景集合、本策略周期
+            parts = _scene_parts(scene)  # 联动场景里读到的行，链与身份块同样读得到（不然跨场景
+            flt.update(scene_id_clause(parts) if parts
+                       else {"scene_id": scene.get("scene_id")})   # 的更正会被当成没对象）
             flt["policy_epoch"] = scene["policy_epoch"]
         rows = list(column.find(flt, projection=LINKAGE_PROJECTION) or [])
     except Exception as exc:
@@ -216,11 +220,15 @@ def _topic_match(doc, topic, case_sensitive):
     return (topic in text) if case_sensitive else (topic.lower() in text.lower())
 
 
-def _person_match(doc, person):
-    """这条发言是不是这个人说的：直接复用 P1-b 的 person_clause，不另写一份「谁说的」口径。"""
+def _person_match(doc, person, aliases=()):
+    """这条发言是不是这个人说的：直接复用 P1-b 的 person_clause，不另写一份「谁说的」口径。
+
+    aliases 是配置里认定「同一个人」的其他 person_id：在 local-dm 里整理时，他从 QQ 那个入口
+    说的话也算他说的。历史行上的 author 一个都不改写。
+    """
     if not person:
         return False
-    for sub in (person_clause(person) or {}).get("$or") or []:
+    for sub in (person_clause(person, aliases) or {}).get("$or") or []:
         for key, value in sub.items():
             found, got = _lookup_doc(doc, key)
             if not found:
@@ -232,13 +240,13 @@ def _person_match(doc, person):
     return False
 
 
-def _seed_eligible(doc, topic, person, case_sensitive):
+def _seed_eligible(doc, topic, person, case_sensitive, aliases=()):
     """这一行本身就会被字面筛选读到吗？会的话它总会在某一页作为命中项出现，不该再当链内后续送一遍。
 
     这是跨页不重复的关键：一行要么作为命中项被它所在那一页送（keyset 游标保证不重不漏），
     要么作为链内后续被链到它的那一页送，两边不会都送。
     """
-    return _topic_match(doc, topic, case_sensitive) or _person_match(doc, person)
+    return _topic_match(doc, topic, case_sensitive) or _person_match(doc, person, aliases)
 
 
 def _thread_hit(doc, parts, sink_times):
@@ -307,7 +315,9 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
         branches = [{key: {"$in": sorted(set(frontier))}} for key in REPLY_TARGET_KEYS]
         if wanted:
             branches.append({"_id": {"$in": sorted(wanted)}})
-        flt = {"scene_id": parts["scene_id"], "policy_epoch": parts["epoch"], "$or": branches}
+        flt = dict(scene_id_clause(parts))
+        flt["policy_epoch"] = parts["epoch"]
+        flt["$or"] = branches
         try:
             found = list(column.find(flt, projection=THREAD_PROJECTION) or [])
         except Exception as exc:
@@ -335,7 +345,8 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
             if mid in seen:
                 continue
             seen.add(mid)
-            if _seed_eligible(doc, topic, person, case_sensitive):
+            if _seed_eligible(doc, topic, person, case_sensitive,
+                              parts.get("person_aliases") or ()):
                 stats["skipped_seed_eligible"] += 1
                 continue                       # 它由自己那一页作为命中项送，不在这里重复
             if mid in delivered:
@@ -349,7 +360,8 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
                 stats["out_of_window"] += 1
                 continue
             hit["thread"] = True
-            hit["person_match"] = not person or _person_match(doc, person)
+            hit["person_match"] = not person or _person_match(
+                doc, person, parts.get("person_aliases") or ())
             docs[mid], hits[mid] = doc, hit
             if len(docs) >= MAX_THREAD_ROWS:
                 stats["truncated"] = True
@@ -401,7 +413,9 @@ def _row(hit, doc):
     doc = doc if isinstance(doc, dict) else {}
     if not doc:
         doc = {"author": author, "direction": hit.get("direction")}
-    return {"id": _norm(hit.get("message_id"), 80), "seq": seq if isinstance(seq, int) else -1,
+    return {"id": _norm(hit.get("message_id"), 80),
+            "scene_id": _norm(hit.get("scene_id"), 80),
+            "seq": seq if isinstance(seq, int) else -1,
             "at": _norm(hit.get("at"), 32), "time_source": _norm(hit.get("time_source"), 40),
             "direction": _norm(hit.get("direction"), 16), "side": _norm(hit.get("side"), 16),
             "author": author, "person_id": peer_id, "display": display or author or "?",
@@ -411,11 +425,23 @@ def _row(hit, doc):
             "person_match": bool(hit.get("person_match", True))}
 
 
+def _canonical_of(row, canonical_map):
+    """这一行的发言人该归到哪个 canonical person；配置没认定同一个人就返回空（照原样归并）。"""
+    for key in (row.get("person_id"), row.get("author")):
+        if key and key in canonical_map:
+            return _norm(canonical_map[key], 40)
+    return ""
+
+
 def _key(row):
     """已校验身份按 person_id 归并；同一个人改名不会拆成两个人（person_id 不变）。
 
+    配置认定「同一个人的不同入口」时按 canonical person 归并：他在本机说的和在 QQ 说的算同一个人，
+    否则一份整理里会出现两个参与者，读起来像两个人在自说自话。
     身份块不可用就只能按记录作者归并，并在参与者条目里标明降级，不假装认得。
     """
+    if row.get("canonical"):
+        return row["canonical"]
     return row["person_id"] if row["identity"] == "peer" and row["person_id"] \
         else ("author:" + row["author"])
 
@@ -427,7 +453,10 @@ def build_digest(hits, docs, meta, *, snippet=SNIPPET):
     semantic、dropped、excluded、topic、person），覆盖范围只从这些真实计数拼出来。
     """
     rows = sorted([_row(hit, docs.get(_norm(hit.get("message_id"), 80))) for hit in hits],
-                  key=lambda row: (row["at"], row["seq"]))
+                  key=lambda row: (row["at"], row["seq"], _norm(row.get("scene_id"), 80)))
+    canonical_map = meta.get("person_canonical") or {}
+    for row in rows:
+        row["canonical"] = _canonical_of(row, canonical_map)
     index = dict((row["id"], row) for row in rows if row["id"])
     participants, corrections, opinions, open_items, replies = {}, [], [], [], []
     undated = 0
@@ -435,7 +464,12 @@ def build_digest(hits, docs, meta, *, snippet=SNIPPET):
         key = _key(row)
         person = participants.get(key)
         if person is None:
-            person = {"key": key, "person_id": row["person_id"], "display": row["display"],
+            person = {"key": key, "person_id": row["person_id"],
+                      "canonical": row.get("canonical") or "",
+                      "aliases": [member for member in
+                                  (meta.get("person_classes") or {}).get(key, [])
+                                  if member != key],
+                      "display": row["display"],
                       "role": ROLE_LABEL.get(row["role"], row["role"]), "side": row["side"],
                       "identity": row["identity"], "messages": 0, "inbound": 0, "outbound": 0,
                       "first_at": row["at"], "last_at": row["at"], "corrections": 0,
@@ -555,7 +589,12 @@ def _coverage(rows, meta, undated):
     for row in rows:
         label = row["time_source"] or "无来源标注"
         sources[label] = sources.get(label, 0) + 1
+    scenes = sorted({row["scene_id"] for row in rows if row.get("scene_id")})
     return {"scene_id": meta["scene_id"], "group_id": meta.get("group_id", ""),
+            "linked_scenes": list(meta.get("linked_scenes") or []),
+            "scenes_read": scenes,
+            "cross_scene_rows": len([row for row in rows if row.get("scene_id")
+                                     and row["scene_id"] != meta["scene_id"]]),
             "policy_epoch": meta.get("policy_epoch"), "topic": meta.get("topic", ""),
             "person": meta.get("person", ""), "window": list(meta.get("window") or []),
             "covered_from": dated[0]["at"] if dated else "",
@@ -611,6 +650,10 @@ def _notes(meta, participants, undated):
                         excluded.get("non_speak_outbound", "?")))
     if meta.get("linkage_why"):
         notes.append("reply 链没读到（%s）：更正只能按文本自称标注，对象不猜" % meta["linkage_why"])
+    if meta.get("linked_scenes"):
+        notes.append("本次按配置联动了 %d 个只读场景（%s）：条目里的 scene_id 就是那段话是在哪儿说的，"
+                     "联动场景的行不是这个场景的新输入" % (
+                         len(meta["linked_scenes"]), "、".join(meta["linked_scenes"])))
     thread = meta.get("thread") or {}
     if thread.get("extra"):
         notes.append("带上 %d 条不含主题词的同一 reply 链后续（只认 reply 链，不按时间邻近拉别的"
@@ -691,8 +734,12 @@ def render(digest, header="群讨论整理"):
         state = "部分覆盖（还有未读）"
     if cov.get("thread_extra"):
         state += "｜主题匹配 %d／链内后续 %d" % (cov.get("matched", 0), cov["thread_extra"])
-    lines = ["[%s｜场景 %s｜请求窗口 %s｜实际读到 %s → %s｜%d 条（对方 %d／我说 %d）｜参与者 %d 人｜%s]" % (
-        header, cov["scene_id"], window, stamp(cov["covered_from"]), stamp(cov["covered_to"]),
+    scene_bit = "场景 %s" % cov["scene_id"]
+    if cov.get("linked_scenes"):
+        scene_bit += "＋联动 %d 个只读场景（跨场景 %d 条）" % (
+            len(cov["linked_scenes"]), cov.get("cross_scene_rows", 0))
+    lines = ["[%s｜%s｜请求窗口 %s｜实际读到 %s → %s｜%d 条（对方 %d／我说 %d）｜参与者 %d 人｜%s]" % (
+        header, scene_bit, window, stamp(cov["covered_from"]), stamp(cov["covered_to"]),
         cov["read"], cov["inbound"], cov["outbound"], len(digest["participants"]), state)]
     if digest["participants"]:
         bits = []
@@ -733,7 +780,8 @@ DIGEST_TOOL = {
                     "时间及其来源，可按 query_authorized_history 回读原文。分类是按字面线索的机械标注，"
                     "不是结论；more=true 表示只覆盖了部分（还有未读原文，或同一 reply 链的讨论流没走完），"
                     "必须带 cursor 续页后才能说整理完整。person 只限定主题命中项是谁说的：同一 reply 链"
-                    "带进来的上下文发言可能来自别人，条目带 person_match=false、参与者标 thread_context。"),
+                    "带进来的上下文发言可能来自别人，条目带 person_match=false、参与者标 thread_context。场景由任务绑定，外加配置给它挂的只读联动场景"
+                    "（同一人的另一个入口，条目带各自 scene_id）；参数不能换查询范围。"),
     "parameters": {
         "topic": {"type": "string"},
         "query": {"type": "string"},
@@ -769,7 +817,10 @@ def _bounded_int(value, low, high, name):
 
 def _fingerprint(scene, topic, person, since, until, window_days, case_sensitive, include_semantic):
     """筛选与范围指纹：游标必须延续发放它的那次筛选，换任何一项都算换页序列。"""
-    basis = json.dumps(["digest", scene["scene_id"], scene["policy_epoch"], topic, person, since,
+    basis = json.dumps(["digest", scene["scene_id"], scene["policy_epoch"],
+                        list(scene.get("readable_scenes") or []),
+                        sorted(scene.get("person_aliases") or []),
+                        topic, person, since,
                         until, window_days, bool(case_sensitive), bool(include_semantic)],
                        ensure_ascii=False)
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
@@ -813,8 +864,9 @@ def _excluded_counts(store, scene_doc):
     column = getattr(getattr(store, "db", None), "messages", None)
     if column is None:
         return {}, "no_messages_collection"
-    base = {"scene_id": scene_doc["scene_id"], "policy_epoch": scene_doc["policy_epoch"],
-            "direction": "outbound"}
+    parts = _scene_parts(scene_doc)
+    base = dict(scene_id_clause(parts) if parts else {"scene_id": scene_doc["scene_id"]})
+    base.update({"policy_epoch": scene_doc["policy_epoch"], "direction": "outbound"})
     wanted = {"undelivered_outbound": dict(base, phase="SPEAK",
                                           delivery_state={"$ne": "DELIVERED"}),
               "non_speak_outbound": dict(base, phase={"$ne": "SPEAK"})}
@@ -867,8 +919,10 @@ class DiscussionDigestService:
         include_semantic = args.get("include_semantic", True)
         if not isinstance(include_semantic, bool):
             raise ValueError("INVALID_DIGEST_INCLUDE_SEMANTIC")
+        # 围栏比对的是「任务场景 + 它按配置能只读的那些场景」：联动集合来自配置，不是工具参数。
         scene_doc = {"scene_id": scene["_id"], "scope_key": scene["scope_key"],
-                     "policy_epoch": scene["policy_epoch"]}
+                     "policy_epoch": scene["policy_epoch"], "person": person}
+        scene_doc.update(_link_fields(self.store, scene_doc, person))
         mark = _fingerprint(scene_doc, topic, person, since, until,
                             window_days or DEFAULT_WINDOW_DAYS, case_sensitive, include_semantic)
         inner, stored, carried, state = _unwrap_cursor(cursor or None)
@@ -920,7 +974,11 @@ class DiscussionDigestService:
         # 还有未读原文，或同一 reply 链还有没走完的环节，都算部分覆盖：两者都靠 cursor 续
         more = bool(result.get("more")) or bool(thread.get("pending") or thread.get("pending_wanted"))
         excluded, excluded_why = _excluded_counts(self.store, scene_doc)
-        meta = {"scene_id": scene_doc["scene_id"], "group_id": _group_id_of(scene_doc["scene_id"]),
+        meta = {"linked_scenes": scene_doc.get("readable_scenes") or [],
+                "person_classes": scene_doc.get("person_classes") or {},
+                "person_canonical": scene_doc.get("person_canonical") or {},
+                "scene_id": scene_doc["scene_id"],
+                "group_id": _group_id_of(scene_doc["scene_id"]),
                 "policy_epoch": scene_doc["policy_epoch"], "topic": topic, "person": person,
                 "window": result.get("window") or [], "more": more,
                 "fallback": result.get("fallback") or {}, "semantic": result.get("semantic") or {},

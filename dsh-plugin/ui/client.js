@@ -2,7 +2,7 @@
 // scene projection, stable message identity, and trusted command callbacks.
 window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => {
   const React = require('react');
-  const {createElement: h, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} = React;
+  const {createElement: h, memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} = React;
   const {Button, Input, DisclosureRow, MarkdownText, CodeBlock, StateDot, ConnectionIndicator,
     IconCodeOutline16, IconThinkOutline14, IconSearchOutline16, IconRefreshOutline16} = require('@deepseek-ai/dsh-client-ui-primitives');
   const labels = Object.freeze({code: Object.freeze({copyLabel: '复制', copiedLabel: '已复制'}), footnotes: '脚注'});
@@ -23,8 +23,10 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
   function viewStore() {
     let value = {state: null, calls: [], connected: false, error: '', busy: false, stopped: false,
       loadingOlder: false, olderRevision: 0};
-    let selected = '', signature = '', stream, timer, active = false, request = 0;
+    let selected = '', revision = '', stream, timer, active = false, request = 0;
     let history = new Map(), beforeSeq = null, hasMore = false;
+    const settlementTimers = new Set();
+    const clearSettlementTimers = () => { for (const pending of settlementTimers) clearTimeout(pending); settlementTimers.clear(); };
     const listeners = new Set();
     const set = patch => { value = {...value, ...patch}; listeners.forEach(listener => listener()); };
     const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener); };
@@ -33,7 +35,14 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       if (beforeSeq === null || (page.beforeSeq !== null && page.beforeSeq <= beforeSeq)) {
         beforeSeq = page.beforeSeq; hasMore = page.hasMore;
       }
-      for (const message of page.messages || []) if (Number.isSafeInteger(message.sceneSeq)) history.set(message.id, message);
+      for (const message of page.messages || []) if (Number.isSafeInteger(message.sceneSeq)) {
+        const existing = history.get(message.id);
+        history.set(message.id, existing && message.revision && existing.revision === message.revision ? existing : message);
+      }
+      if (history.size > 96) {
+        const ordered = [...history.values()].sort((a, b) => a.sceneSeq - b.sceneSeq);
+        history = new Map((older ? ordered.slice(0, 96) : ordered.slice(-96)).map(message => [message.id, message]));
+      }
       const messages = [...history.values()].sort((a, b) => a.sceneSeq - b.sceneSeq);
       messages.push(...(older ? value.state?.messages || [] : page.messages || []).filter(message => !Number.isSafeInteger(message.sceneSeq)));
       return {...(older ? value.state : page), messages, beforeSeq, hasMore};
@@ -41,28 +50,71 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     async function refresh() {
       const number = ++request;
       try {
-        const next = await api(`state?conversation=${encodeURIComponent(selected)}`);
+        const next = await api(`state?scene=${encodeURIComponent(selected)}`);
         if (!active || number !== request) return;
-        const hash = JSON.stringify(next);
-        if (hash !== signature || value.error) { signature = hash; set({state: mergePage(next), error: ''}); }
-      } catch (cause) { if (active && number === request) { signature = ''; set({error: cause.message, connected: false}); } }
+        if (next.revision !== revision || value.error) {
+          revision = next.revision;
+          const state = mergePage(next);
+          const durable = new Set(state.messages.flatMap(message => (message.internalSteps || [])
+            .filter(isOutput).map(step => step.displayKey)));
+          set({state, calls: value.calls.filter(call => !(call.status !== 'running' && durable.has(call.operation))), error: ''});
+        }
+      } catch (cause) { if (active && number === request) { revision = ''; set({error: cause.message, connected: false}); } }
     }
     function connect() {
-      stream?.close(); set({calls: [], connected: false});
+      stream?.close(); clearSettlementTimers(); set({calls: [], connected: false});
       if (!active || value.stopped) return;
-      const opened = new EventSource(`/asuna/api/stream?conversation=${encodeURIComponent(selected)}`);
+      const opened = new EventSource(`/asuna/api/stream?scene=${encodeURIComponent(selected)}`);
       stream = opened;
       opened.addEventListener('snapshot', event => {
         if (stream !== opened) return;
-        try { set({calls: JSON.parse(event.data).calls || [], connected: true}); }
+        try { set({calls: (JSON.parse(event.data).calls || []).map(call => ({...call, parts: []})), connected: true}); }
         catch { /* Observation is never an agent control path. */ }
+      });
+      opened.addEventListener('start', event => {
+        if (stream !== opened) return;
+        try { const next = JSON.parse(event.data);
+          set({calls: [...value.calls.filter(call => call.id !== next.id), {...next, parts: []}]});
+        } catch { /* Observation is never an agent control path. */ }
+      });
+      opened.addEventListener('delta', event => {
+        if (stream !== opened) return;
+        try { const next = JSON.parse(event.data);
+          set({calls: value.calls.map(call => {
+            if (call.id !== next.id) return call;
+            const parts = [...(call.parts || [])];
+            if (parts.at(-1)?.field === next.field) parts[parts.length - 1] =
+              {...parts.at(-1), text: parts.at(-1).text + next.text};
+            else parts.push({field: next.field, text: next.text});
+            return {...call, parts, sequence: next.sequence};
+          })});
+        } catch { /* Observation is never an agent control path. */ }
+      });
+      opened.addEventListener('end', event => {
+        if (stream !== opened) return;
+        try { const next = JSON.parse(event.data);
+          set({calls: value.calls.map(call => call.id === next.id ? {...call, status: next.status} : call)});
+          void refresh();
+          const pending = setTimeout(() => {
+            settlementTimers.delete(pending);
+            if (stream !== opened) return;
+            const calls = value.calls.filter(call => call.id !== next.id || call.status === 'running');
+            if (calls.length !== value.calls.length) set({calls});
+          }, 30000);
+          settlementTimers.add(pending);
+        } catch { /* Observation is never an agent control path. */ }
+      });
+      opened.addEventListener('reset', () => {
+        if (stream !== opened) return;
+        set({calls: []}); void refresh();
       });
       opened.onerror = () => { if (stream === opened) set({connected: false}); };
     }
-    async function poll() { await refresh(); if (active && !value.stopped) timer = setTimeout(poll, 2000); }
+    async function poll() { await refresh(); if (active && !value.stopped)
+      timer = setTimeout(poll, value.state?.hasPendingWork ? 2000 : 30000); }
     function start() { if (active) return; active = true; connect(); void poll(); }
-    function stop() { active = false; ++request; clearTimeout(timer); stream?.close(); stream = undefined; }
-    function select(id) { if (id === selected) return; selected = id; ++request; signature = '';
+    function stop() { active = false; ++request; clearTimeout(timer); clearSettlementTimers(); stream?.close(); stream = undefined; }
+    function select(id) { if (id === selected) return; selected = id; ++request; revision = '';
       history = new Map(); beforeSeq = null; hasMore = false;
       set({state: null, calls: [], error: '', loadingOlder: false, olderRevision: 0}); connect(); void refresh(); }
     async function loadOlder() {
@@ -70,7 +122,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       const scene = selected, cursor = value.state.beforeSeq;
       set({loadingOlder: true});
       try {
-        const page = await api(`state?conversation=${encodeURIComponent(scene)}&before=${cursor}`);
+        const page = await api(`state?scene=${encodeURIComponent(scene)}&before=${cursor}`);
         if (!active || scene !== selected) return;
         if (page.beforeSeq !== null && page.beforeSeq >= cursor) throw new Error('历史页没有向前推进');
         set({state: mergePage(page, true), olderRevision: value.olderRevision + 1, error: ''});
@@ -81,7 +133,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       try { const result = await api(path, body); await refresh(); set({error: ''}); return result; }
       catch (cause) { set({error: cause.message}); throw cause; }
       finally { set({busy: false}); } }
-    async function stopHost() { await api('stop', {}); clearTimeout(timer); stream?.close(); set({stopped: true, connected: false}); }
+    async function stopHost() { await api('stop', {}); clearTimeout(timer); clearSettlementTimers(); stream?.close(); set({stopped: true, connected: false}); }
     return {subscribe, getSnapshot, start, stop, refresh, loadOlder, select, command, stopHost, connect};
   }
   const isOutput = step => ['phase.output', 'execution.output'].includes(step.type);
@@ -126,7 +178,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
           const key = latestOutput.get(operation) === step ? operation : `event:${step.id}`;
           if (step.payload?.phase === 'SPEAK' && publicKeys.has(operation) && key === operation) continue;
           const started = steps.find(row => row.type === 'phase.started' && row.payload?.operation === operation);
-          if (step.payload?.content || step.payload?.reasoning || step.status === 'error') {
+          if (step.summary || step.status === 'error') {
             const nativeCalls = step.type === 'execution.output' ? step.providerCalls || [] : [];
             if (nativeCalls.length) {
               nativeCalls.forEach((call, index) => {
@@ -176,21 +228,21 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
         (Number.isFinite(b.time) ? b.time : Number.MAX_SAFE_INTEGER) || a.index - b.index)
       .map(row => row.node);
   }
-  function Diagnostic({step, calls, conversation}) {
+  function Diagnostic({step, calls, scene}) {
     const [open, setOpen] = useState(false), [loaded, setLoaded] = useState(null);
     useEffect(() => {
-      if (!open || !step?.payload?.request_refs?.length) return;
+      if (!open || !step?.hasProviderDiagnostic) return;
       let mounted = true;
       setLoaded(null);
-      api(`provider-diagnostic?event=${encodeURIComponent(step.id)}&conversation=${encodeURIComponent(conversation)}`)
+      api(`provider-diagnostic?event=${encodeURIComponent(step.id)}&scene=${encodeURIComponent(scene)}`)
         .then(result => { if (mounted) setLoaded({event: step.id, diagnostic: result.diagnostic}); })
         .catch(cause => { if (mounted) setLoaded({event: step.id, error: cause.message}); });
       return () => { mounted = false; };
-    }, [open, step?.id, conversation]);
+    }, [open, step?.id, scene]);
     const current = loaded?.event === step?.id ? loaded : null;
     const diagnostic = step ? current?.diagnostic : calls?.length ? {provider_calls: calls.map(call => ({
       id: call.id, lane: call.lane, phase: call.phase, operation: call.operation, status: call.status}))} : null;
-    const fallback = current?.error || (step?.payload?.request_refs?.length ? '正在读取 provider 元数据…' : '没有关联的 provider 请求');
+    const fallback = current?.error || (step?.hasProviderDiagnostic ? '正在读取 provider 元数据…' : '没有关联的 provider 请求');
     return h(DisclosureRow, {icon: h(IconCodeOutline16, {size: 14}), title: '诊断 · provider 元数据',
       open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(!open), className: 'asuna-diagnostic'},
       diagnostic ? code(diagnostic) : h('p', {className: 'asuna-muted'}, fallback));
@@ -245,7 +297,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     const contentParts = parts.filter(part => part.field === 'content');
     const liveContent = contentParts.map(part => part.text).join('');
     const renderContent = (content, streaming) => {
-      const shown = decision ? decisionGoal(content) : content;
+      const shown = decision ? decisionGoal(content) || (step ? content : '') : content;
       return shown && (structured ? code(shown) : h(MarkdownText, {text: shown, streaming, labels}));
     };
     const liveParts = () => h(React.Fragment, null, ...parts.map(part => {
@@ -256,7 +308,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       return child ? h('section', {className: 'asuna-part', key: part.key}, child) : null;
     }));
     if (step || message) {
-      const content = message?.text ?? step?.payload?.content ?? '', reasoning = step?.payload?.reasoning || '';
+      const content = message?.text ?? step?.summary ?? '', reasoning = '';
       if (parts.length && parts.filter(part => part.field === 'content').map(part => part.text).join('') === content &&
           parts.filter(part => part.field === 'reasoning_content').map(part => part.text).join('') === reasoning)
         return liveParts();
@@ -266,7 +318,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     }
     return liveParts();
   }
-  function Generation({node, conversation}) {
+  function Generation({node, scene}) {
     const {step, calls, message} = node, call = calls?.at(-1);
     const error = step?.status === 'error' || call?.status === 'error' || message?.deliveryState === 'FAILED';
     const ongoing = !step && !message && !error && (!call || call.status === 'running');
@@ -277,11 +329,11 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       step?.actorRole === 'action' ? 'executor' : call?.lane;
     const decision = !message && (step?.payload?.phase === 'DECIDE' || call?.phase === 'DECIDE');
     if (decision && !error) {
-      const content = step?.payload?.content || (calls || []).flatMap(row => row.parts || [])
+      const content = step?.summary || (calls || []).flatMap(row => row.parts || [])
         .filter(part => part.field === 'content').map(part => part.text).join('');
-      const reasoning = (step?.payload?.reasoning || '').trim() || (calls || []).some(row =>
+      const reasoning = (calls || []).some(row =>
         (row.parts || []).some(part => part.field === 'reasoning_content' && part.text?.trim()));
-      if (!decisionGoal(content) && !reasoning) return null;
+      if (!decisionGoal(content) && !reasoning && !step) return null;
     }
     const phase = step?.type === 'execution.output' ? 'EXECUTION' : step?.payload?.phase || call?.phase || '';
     const actor = message ? `${message.authorLabel || 'Asuna'} · SPEAK` :
@@ -294,7 +346,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       h('div', {className: 'asuna-body'}, h(Contents, {step, calls, message})),
       error && h('p', {className: 'asuna-error-text'}, step?.payload?.finish_reason ||
         (decision ? '决策生成失败，部分内容已保留' : '生成或发送失败，部分正文已保留')),
-      h(Diagnostic, {step, calls, conversation}));
+      h(Diagnostic, {step, calls, scene}));
   }
   function Message({message, nodeKey}) {
     return h('article', {className: `asuna-message asuna-${message.role}`, 'data-message-key': nodeKey},
@@ -303,37 +355,58 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
       h('div', {className: 'asuna-body'}, h(MarkdownText, {text: message.text || '', labels})),
       message.turnStatus && h('p', {className: 'asuna-turn-status'}, `${message.turnStatus.label} · ${message.turnStatus.detail}`));
   }
-  function Tool({step}) {
-    const [open, setOpen] = useState(false);
+  function TraceStep({step, scene}) {
+    const [open, setOpen] = useState(false), [detail, setDetail] = useState(null);
+    useEffect(() => { if (!open) return; let mounted = true;
+      api(`trace-detail?event=${encodeURIComponent(step.id)}&scene=${encodeURIComponent(scene)}`)
+        .then(result => { if (mounted) setDetail(result); }).catch(error => { if (mounted) setDetail({error:error.message}); });
+      return () => { mounted = false; };
+    }, [open, step.id, scene]);
     return h('div', {className: 'asuna-tool', 'data-message-key': `tool:${step.id}`},
       h(DisclosureRow, {icon: h(StateDot, {state: step.status === 'error' ? 'error' : 'done'}),
-        title: `${step.actor || '工具'} · ${step.payload?.tool || step.type}`, open, expandable: true, expandOnRowClick: true,
+        title: `${step.actor || '系统'} · ${step.payload?.tool || step.type}`, open, expandable: true, expandOnRowClick: true,
         onToggle: () => setOpen(!open), collapsedContent: h(React.Fragment, null,
           h('span', {className: 'asuna-tool-separator', 'aria-hidden': true}),
-          h('time', {className: 'asuna-tool-time'}, clock(step.createdAt)))}, code(step.payload)));
+          h('time', {className: 'asuna-tool-time'}, clock(step.createdAt)))},
+        detail ? code(detail.payload || detail) : h('p', {className: 'asuna-muted'}, '正在读取详情…')));
   }
-  function Trace({steps, nodeKey}) {
+  function Tool({step, scene}) { return h(TraceStep, {step, scene}); }
+  function Trace({steps, nodeKey, scene}) {
     const [open, setOpen] = useState(false);
     const failed = steps.filter(step => step.status === 'error');
     return h('div', {className: 'asuna-trace', 'data-message-key': nodeKey},
       ...failed.map(step => h('p', {className: 'asuna-error-text', key: step.id}, `${step.label || step.type}：${step.summary || step.type}`)),
       h(DisclosureRow, {icon: h(IconCodeOutline16, {size: 14}), title: `内部执行记录 · ${steps.length} 项`,
         open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(!open)},
-        h('ol', null, ...steps.map(step => h('li', {key: step.id}, h('strong', null, step.label || step.type),
-          h('small', null, ` · ${step.type} · ${clock(step.createdAt)}`), code(step.payload))))));
+        h('ol', null, ...steps.map(step => h('li', {key: step.id},
+          h(TraceStep, {step, scene}))))));
   }
   function Inspector({state}) {
-    const root = useRef(null), controller = useRef(null), latest = useRef(state);
+    const root = useRef(null), controller = useRef(null), latest = useRef(state), rendered = useRef(null);
     latest.current = state;
     useEffect(() => { let mounted = true;
       import('/asuna/workbench.js').then(module => { if (mounted && root.current) {
-        controller.current = module.mountInspector(root.current); controller.current.render(latest.current);
+        controller.current = module.mountInspector(root.current, api); controller.current.render(latest.current);
+        rendered.current = latest.current ? `${latest.current.sceneId}:${latest.current.inspectorRevision}` : '';
       }}).catch(() => { if (root.current) root.current.textContent = '检查器加载失败，请刷新页面。'; });
       return () => { mounted = false; controller.current?.dispose(); };
     }, []);
-    useEffect(() => { controller.current?.render(state); }, [state]);
+    useEffect(() => { const marker = state ? `${state.sceneId}:${state.inspectorRevision}` : '';
+      if (controller.current && marker !== rendered.current) {
+        controller.current.render(state); rendered.current = marker;
+      }
+    }, [state]);
     return h('aside', {ref: root, className: 'asuna-inspector', 'aria-label': '会话检查器'});
   }
+  const StableGeneration = memo(Generation, (previous, next) => previous.scene === next.scene &&
+    previous.node.key === next.node.key && previous.node.message === next.node.message &&
+    previous.node.step === next.node.step && previous.node.calls?.length === next.node.calls?.length &&
+    (previous.node.calls || []).every((call, index) => call === next.node.calls[index]));
+  const StableMessage = memo(Message, (previous, next) => previous.message === next.message &&
+    previous.nodeKey === next.nodeKey);
+  const StableTool = memo(Tool, (previous, next) => previous.step === next.step && previous.scene === next.scene);
+  const StableTrace = memo(Trace, (previous, next) => previous.scene === next.scene &&
+    previous.steps.length === next.steps.length && previous.steps.every((step, index) => step === next.steps[index]));
   function Workbench() {
     const storeRef = useRef(null); if (!storeRef.current) storeRef.current = viewStore();
     const store = storeRef.current, view = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -371,23 +444,20 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     };
     const send = async event => { event.preventDefault(); const value = draft.trim();
       if (!value || !state?.canSend || state.readOnly || view.busy) return;
-      try { await store.command('send', {text: value, conversation: state.conversationId});
+      try { await store.command('send', {text: value, scene: state.sceneId});
         setDraft(''); setNotice('已入队，可继续输入。'); }
       catch { setNotice('未确认送达；输入已保留，请先刷新检查，避免重复发送。'); } };
     const choose = item => { stick.current = true; olderAnchor.current = null;
       lastScrollTop.current = 0; setAtBottom(true); setNotice(''); store.select(item.id); };
-    const fresh = async () => { try { await store.command('new', {}); store.select(''); setNotice('已请求新上下文。'); }
-      catch { /* Server error remains visible. */ } };
     return h('div', {className: 'asuna-workbench'},
       h('aside', {className: 'asuna-sidebar'},
-        h('header', null, h('h1', null, 'Asuna'), h('p', null, '会话 / 场景')),
-        h(Button, {variant: 'outline', onClick: fresh, disabled: !state || view.busy || state.readOnly || state.channelPrompt}, '＋ 新上下文'),
+        h('header', null, h('h1', null, 'Asuna'), h('p', null, '场景 / 通道')),
         h(Input, {type: 'search', icon: h(IconSearchOutline16, {size: 16}), value: search,
           onChange: event => setSearch(event.target.value), placeholder: '搜索场景…', 'aria-label': '搜索场景'}),
-        h('nav', {'aria-label': '会话列表'}, ...(state?.conversations || []).filter(item =>
+        h('nav', {'aria-label': '场景与通道'}, ...(state?.scenes || []).filter(item =>
           `${item.title} ${item.id}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(item =>
-          h(Button, {key: item.id, variant: 'ghost', className: `asuna-scene ${state.conversationId === item.id ? 'selected' : ''}`,
-            onClick: () => choose(item), 'aria-current': state.conversationId === item.id ? 'page' : undefined},
+          h(Button, {key: item.id, variant: 'ghost', className: `asuna-scene ${state.sceneId === item.id ? 'selected' : ''}`,
+            onClick: () => choose(item), 'aria-current': state.sceneId === item.id ? 'page' : undefined},
             h('span', null, item.title), h('small', null, `${item.channelType} · ${clock(item.updatedAt)}`)))),
         state?.modelSettings && h('div', {className: 'asuna-sidebar-footer'},
           h(Button, {variant: 'ghost', onClick: () => settings.current?.open(state), disabled: !settingsReady}, '模型设置'),
@@ -398,9 +468,11 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
           onReconnect: () => { store.connect(); void store.refresh(); }})),
       h('main', {className: 'asuna-center'},
         h('header', {className: 'asuna-header'}, h('div', null, h('h2', null, state?.title || '本机聊天'),
-          h('p', null, state?.subtitle || '连接现有 Asuna 交互进程')),
+          h('p', null, state?.runtimeState === 'restarting' ? 'RuntimeHost 正在重启，Web 页面保持可用' :
+            state?.runtimeState === 'ready' ? `${state.subtitle} · RuntimeHost ready` :
+            state?.subtitle || '连接现有 Asuna 交互进程')),
           h(Button, {variant: 'ghost', onClick: () => void store.command('self-development/offer', {}).then(() => setNotice('内部机会已入队。')).catch(cause => setNotice(cause.message)),
-            disabled: !state?.canSend || state.readOnly || state.channelPrompt || view.busy || view.stopped,
+            disabled: !state?.canSend || state.readOnly || state.scenePrompt || view.busy || view.stopped,
             title: '向角色脑提供一次内部自我开发机会，不作为用户消息'}, '自我开发机会'),
           h(Button, {variant: 'toolbar', onClick: () => void store.refresh(), icon: h(IconRefreshOutline16, {size: 16})}, '刷新'),
           h(Button, {variant: 'ghost', onClick: () => void store.stopHost().catch(cause => setNotice(cause.message)),
@@ -420,11 +492,11 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
             h(Button, {variant: 'ghost', onClick: () => void loadOlder(), disabled: view.loadingOlder},
               view.loadingOlder ? translate('loadingOlder') : translate('loadOlder'))),
           !state ? h('p', {className: 'asuna-muted'}, '正在读取对话…') : !items.length
-            ? h('p', {className: 'asuna-muted'}, '当前上下文暂无消息。可以从下方开始聊天。')
-            : items.map(node => node.kind === 'generation' ? h(Generation, {key: node.key, node, conversation: state.conversationId})
-              : node.kind === 'message' ? h(Message, {key: node.key, message: node.message, nodeKey: node.key})
-              : node.kind === 'tool' ? h(Tool, {key: node.key, step: node.step})
-              : h(Trace, {key: node.key, steps: node.steps, nodeKey: node.key}))),
+            ? h('p', {className: 'asuna-muted'}, '当前场景暂无消息。可以从下方开始聊天。')
+            : items.map(node => node.kind === 'generation' ? h(StableGeneration, {key: node.key, node, scene: state.sceneId})
+              : node.kind === 'message' ? h(StableMessage, {key: node.key, message: node.message, nodeKey: node.key})
+              : node.kind === 'tool' ? h(StableTool, {key: node.key, step: node.step, scene: state.sceneId})
+              : h(StableTrace, {key: node.key, steps: node.steps, nodeKey: node.key, scene: state.sceneId}))),
         !atBottom && h(Button, {variant: 'outline', className: 'asuna-bottom', onClick: () => {
           if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
           stick.current = true; lastScrollTop.current = scroll.current?.scrollTop || 0; setAtBottom(true);
@@ -435,9 +507,9 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
             onKeyDown: event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault(); event.currentTarget.form.requestSubmit(); } },
             rows: 2, maxLength: 16000, disabled: !state?.canSend || state.readOnly || view.stopped,
-            placeholder: state?.channelPrompt ? '给小满的本机指令；她将在当前群发言' : '输入消息…（Enter 发送，Shift + Enter 换行）'}),
+            placeholder: state?.scenePrompt ? state.scenePromptPlaceholder : '输入消息…（Enter 发送，Shift + Enter 换行）'}),
           h(Button, {type: 'submit', variant: 'primary', disabled: !state?.canSend || view.busy || view.stopped},
-            state?.channelPrompt ? '请小满在群里发言' : '发送'),
+            state?.scenePrompt ? state.scenePromptLabel : '发送'),
           h('p', {role: 'status'}, view.stopped ? '已请求停止整个宿主。' : notice))),
       h(Inspector, {state}));
   }

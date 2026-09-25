@@ -41,11 +41,17 @@ class Application:
 
     def _start_lanes(self, config):
         try:
+            self.evidence.record('lane.character.start', {})
             self.character=self.lanes.enter_context(DshLane(config,self.store,self.evidence))
+            self.evidence.record('lane.character.ready', {})
+            self.evidence.record('lane.executor.start', {})
             self.executor_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'executor',self.broker.rows,self.broker.token))
+            self.evidence.record('lane.executor.ready', {})
             # Same configured action model, separate tool-free native session
             # for low-priority dialogue summaries; no third model deployment.
+            self.evidence.record('lane.summary.start', {})
             self.summary_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'summary'))
+            self.evidence.record('lane.summary.ready', {})
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)

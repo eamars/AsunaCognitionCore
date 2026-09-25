@@ -52,6 +52,11 @@ def load(path: str | Path = 'config/local.json') -> dict:
         if channels.get('enabled') is True:
             value['channels'] = channels['channels']
             value['channel_port'] = channels.get('port', 8766)
+        # 跨场景只读联动（A2）：这两个键写在通道文件顶层也要能到 store.config 里。
+        # 原样带过，不校验 route 内部键；形状不对的条目由 scene_links 在读的时候照实丢掉。
+        for key in ('context_links', 'canonical_persons'):
+            if key in channels:
+                value[key] = channels[key]
     validate_database(value, value['database'])
     for lane in ('character', 'executor', 'embedding'):
         validate_endpoint(value[lane]['base_url'])

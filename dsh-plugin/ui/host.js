@@ -21,8 +21,8 @@ export function apply(ctx) {
       res.end(await readFile(new URL(`./static/${asset[0]}`, import.meta.url)));
       return;
     }
-    if (!['/asuna/api/state', '/asuna/api/stream', '/asuna/api/provider-diagnostic', '/asuna/api/send', '/asuna/api/new', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop', '/asuna/api/self-development/offer'].includes(path)) return reply(404, {error: '未知接口'});
-    const readOnly = path.endsWith('/state') || path.endsWith('/stream') || path.endsWith('/provider-diagnostic');
+    if (!['/asuna/api/state', '/asuna/api/stream', '/asuna/api/provider-diagnostic', '/asuna/api/trace-detail', '/asuna/api/inspector-detail', '/asuna/api/send', '/asuna/api/models', '/asuna/api/models/discover', '/asuna/api/stop', '/asuna/api/integration/stop', '/asuna/api/self-development/offer'].includes(path)) return reply(404, {error: '未知接口'});
+    const readOnly = ['/state', '/stream', '/provider-diagnostic', '/trace-detail', '/inspector-detail'].some(suffix => path.endsWith(suffix));
     if ((readOnly ? req.method !== 'GET' : req.method !== 'POST') || (req.method === 'POST' && req.headers['x-asuna-ui'] !== '1')) return reply(405, {error: '不支持的请求'});
     if (!process.env.ASUNA_UI_BRIDGE || !process.env.ASUNA_UI_TOKEN) return reply(503, {error: 'Asuna 交互进程未连接，请通过 asuna ui 启动。'});
     if (path.endsWith('/stream')) {

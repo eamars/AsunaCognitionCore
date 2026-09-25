@@ -71,14 +71,15 @@ def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, t
             assert next(lines) == 'event: snapshot'
             initial = json.loads(next(lines).removeprefix('data: '))
             assert [call['id'] for call in initial['calls']] == ['call-a']
+            assert 'parts' not in initial['calls'][0]
             view.stream_hub('chunk', 'call-a', chunk='data: {"choices":[{"delta":{"reasoning_content":"想法"}}]}\n\n'.encode())
             view.stream_hub('text', 'call-a', field='reasoning_content', text='想法')
             for line in lines:
                 if line.startswith('data: ') and 'reasoning_content' in line and '想法' in line:
                     value = json.loads(line.removeprefix('data: '))
-                    assert value['calls'][0]['parts'] == [{'field': 'reasoning_content', 'text': '想法'}]
-                    assert 'body_utf8' not in value['calls'][0]
-                    assert 'content' not in value['calls'][0]
+                    assert value['kind'] == 'delta' and value['field'] == 'reasoning_content'
+                    assert value['text'] == '想法' and value['id'] == 'call-a'
+                    assert 'body_utf8' not in value and 'parts' not in value
                     break
             else:
                 pytest.fail('live reasoning text did not arrive')
@@ -86,13 +87,23 @@ def test_live_provider_stream_keeps_native_fields_and_scene_identity(ui_store, t
             for line in lines:
                 if line.startswith('data: ') and '真实正文' in line:
                     value = json.loads(line.removeprefix('data: '))
-                    assert value['calls'][0]['parts'] == [
-                        {'field': 'reasoning_content', 'text': '想法'},
-                        {'field': 'content', 'text': '真实正文'},
-                    ]
+                    assert value['kind'] == 'delta' and value['field'] == 'content'
+                    assert value['text'] == '真实正文' and '想法' not in line
                     break
             else:
                 pytest.fail('read-only body projection did not cross the HTTP stream')
+            transferred = 0
+            for _ in range(60):
+                view.stream_hub('text', 'call-a', field='content', text='x' * 1000)
+                for line in lines:
+                    if line.startswith('data: ') and '"kind": "delta"' in line:
+                        delta = json.loads(line.removeprefix('data: '))
+                        assert delta['text'] == 'x' * 1000
+                        transferred += len(line.encode('utf-8'))
+                        break
+                else:
+                    pytest.fail('semantic delta did not cross the HTTP stream')
+            assert transferred < 120000  # 60 KB of text plus bounded SSE metadata, not cumulative bodies.
     finally:
         client.close()
         bridge.close()
@@ -125,17 +136,36 @@ def reply(value):
             'constraints': [], 'recall_query': '', 'speak_before_action': False})), LaneResult(value)]
 
 
-def test_stream_scene_authorizes_context_without_rebuilding_history(ui_store, monkeypatch):
+def test_recent_message_pages_use_scene_sequence_boundary(ui_store):
     scene = ui_store.authorize('dm-a', 'A')
-    ui_store.db.episodes.insert_one({'_id': 'episode-old-context', 'schema_version': 1, 'scene_id': scene['_id'],
-                                     'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
-                                     'character_context': 'older'})
+    scope = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
+             'policy_epoch': scene['policy_epoch']}
+    for seq in range(1, 26):
+        episode = f'page-{seq}'
+        ui_store.db.episodes.insert_one({'_id': episode, 'schema_version': 1, **scope, 'state': 'COMMITTED',
+                                         'source_event_id': episode})
+        ui_store.db.messages.insert_one({'_id': f'in-{episode}', 'schema_version': 1, **scope, 'episode_id': episode,
+                                         'scene_seq': seq, 'direction': 'inbound', 'text': f'message-{seq}',
+                                         'received_at': f'2026-09-25T00:00:{seq:02d}+00:00'})
+    view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
+    first = view.snapshot()
+    assert [row['sceneSeq'] for row in first['messages']] == list(range(14, 26))
+    assert first['hasMore'] and first['beforeSeq'] == 14
+    second = view.snapshot(before_seq=first['beforeSeq'])
+    assert [row['sceneSeq'] for row in second['messages']] == list(range(2, 14))
+    assert second['hasMore'] and second['beforeSeq'] == 2
+    last = view.snapshot(before_seq=second['beforeSeq'])
+    assert [row['sceneSeq'] for row in last['messages']] == [1]
+    assert not last['hasMore']
+
+
+def test_stream_scene_authorizes_scene_without_rebuilding_history(ui_store, monkeypatch):
     view = Workbench(ui_store, {'scene_id': 'dm-a', 'person_id': 'A', 'display_name': '小满'})
     monkeypatch.setattr(view, 'snapshot', lambda *_: pytest.fail('stream authorization rebuilt the transcript'))
-    assert view.stream_scene('older')['_id'] == 'dm-a'
-    with pytest.raises(ValueError, match='会话不存在'):
-        view.stream_scene('another-scene')
-    with pytest.raises(ValueError, match='通道未配置'):
+    assert view.stream_scene('dm-a')['_id'] == 'dm-a'
+    with pytest.raises(ValueError, match='场景不存在'):
+        view.stream_scene('older')
+    with pytest.raises(ValueError, match='场景不存在'):
         view.stream_scene('channel:dm-a')
 
 
@@ -225,7 +255,7 @@ def test_resumed_speak_uses_actual_operation_and_stage_time(ui_store):
     assert next(step for step in public['internalSteps'] if step['type'] == 'phase.output')['displayKey'] == operation
 
 
-def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path):
+def test_http_chat_uses_scene_navigation_and_shows_all_context_messages(ui_store, tmp_path):
     chat, view = controller(ui_store, tmp_path, reply('第一句回复') + reply('第二句回复'))
     chat.worker.start()
     bridge = UiBridge(view)
@@ -239,24 +269,27 @@ def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path)
         assert any(step['type'] == 'phase.output' for m in first['messages'] for step in m.get('internalSteps', []))
         public = next(m for m in first['messages'] if m['role'] == 'assistant')
         stages = [step for step in public['internalSteps'] if step['type'] == 'phase.output']
-        assert next(step for step in stages if step['payload']['phase'] == 'MONOLOGUE')['payload']['content'] == '角色独白'
+        monologue = next(step for step in stages if step['payload']['phase'] == 'MONOLOGUE')
+        assert monologue['summary'] == '角色独白' and 'content' not in monologue['payload']
+        assert client.get('/trace-detail', params={'event': monologue['id']}).json()['payload']['content'] == '角色独白'
         assert next(step for step in stages if step['payload']['phase'] == 'SPEAK')['displayKey'] == public['displayKey']
         assert public['deliveryState'] == 'DELIVERED'
         assert not any(step['status'] == 'running' for m in first['messages'] for step in m.get('internalSteps', []))
-        assert first['conversations'][0]['updatedAt']
-        assert client.post('/new', json={}).status_code == 200
-        chat.pending.join()
+        assert first['sceneId'] == 'dm-a'
+        assert first['scenes'][0]['updatedAt']
+        assert 'conversationId' not in first and 'conversations' not in first
+        assert client.post('/new', json={}).status_code == 404
+        assert client.get('/state', params={'scene': 'initial'}).status_code == 400
+        ui_store.db.scenes.update_one({'_id': 'dm-a'}, {'$set': {'character_context': 'runtime-rotated-context'}})
         assert client.post('/send', json={'text': '第二句输入'}).status_code == 200
         chat.pending.join()
         latest = client.get('/state').json()
-        assert latest['conversationId'] != first['conversationId']
+        assert latest['sceneId'] == first['sceneId']
         assert any(m['text'] == '第二句回复' for m in latest['messages'])
-        assert not any(m['text'] == '第一句回复' for m in latest['messages'])
-        history = client.get('/state', params={'conversation': first['conversationId']}).json()
-        assert not history['canSend']
-        assert any(m['text'] == '第一句回复' for m in history['messages'])
+        assert any(m['text'] == '第一句回复' for m in latest['messages'])
+        assert latest['canSend']
         ui_store.db.messages.update_one({'_id': public['id']}, {'$set': {'delivery_state': 'READY'}})
-        pending = next(m for m in view.snapshot(first['conversationId'])['messages'] if m['id'] == public['id'])
+        pending = next(m for m in view.snapshot('dm-a')['messages'] if m['id'] == public['id'])
         assert pending['deliveryState'] == 'READY' and pending['text'] == public['text']
         assert {r['id'] for r in first['records']}.issubset({r['id'] for r in latest['records']})
         assert client.post('/send', json={'text': ' '}).status_code == 400
@@ -265,6 +298,41 @@ def test_http_chat_and_native_context_switch_preserve_memory(ui_store, tmp_path)
         client.close()
         bridge.close()
         chat.stop()
+
+
+def test_interactive_channel_scenes_accept_owner_prompts(ui_store, tmp_path):
+    chat, view = controller(ui_store, tmp_path, [])
+    ui_store.db.scenes.update_one({'_id': 'dm-b'}, {'$set': {'members': ['A', 'B', 'owner-alias'], 'channel_id': 'qq'}})
+    ui_store.db.scenes.update_one({'_id': 'g1'}, {'$set': {'channel_id': 'qq'}})
+    ui_store.config['canonical_persons'] = {'owner-alias': 'A'}
+    ui_store.config['channels'] = {'qq': {'account_id': 'owner-account', 'routes': {
+        'owner-dm': {'scene_id': 'dm-b', 'target': {'type': 'dm', 'id': 'owner-target'},
+                     'sender_id': 'owner-sender', 'person_id': 'owner-alias'},
+        'owner-group': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'authorized-group'},
+                        'operator_sender_id': 'owner-sender',
+                        'members': {'owner-sender': {'person_id': 'A'}}},
+    }}}
+    bridge = UiBridge(view)
+    client = httpx.Client(base_url=f'http://127.0.0.1:{bridge.server.server_port}', trust_env=False,
+                         headers={'Authorization': 'Bearer ' + bridge.token})
+    try:
+        for scene_id in ('dm-b', 'g1'):
+            state = client.get('/state', params={'scene': scene_id}).json()
+            assert state['sceneId'] == scene_id
+            assert state['canSend'] and not state['readOnly'] and state['scenePrompt']
+            assert scene_id in {row['id'] for row in state['scenes']}
+            response = client.post('/send', json={'scene': scene_id, 'text': f'本机指令到 {scene_id}'})
+            assert response.status_code == 200
+            message = ui_store.db.messages.find_one({'scene_id': scene_id, 'direction': 'inbound'}, sort=[('scene_seq', -1)])
+            assert message['event']['adapter_id'] == 'owner-web'
+            assert message['event']['episode_kind'] == ('owner_dm_prompt' if scene_id == 'dm-b' else 'owner_group_prompt')
+        ui_store.config['channels']['qq']['routes']['owner-dm']['person_id'] = 'B'
+        readonly = client.get('/state', params={'scene': 'dm-b'}).json()
+        assert not readonly['canSend'] and readonly['readOnly']
+        assert client.post('/send', json={'scene': 'dm-b', 'text': '未授权私聊'}).status_code == 403
+    finally:
+        client.close()
+        bridge.close()
 
 
 def test_scope_epoch_redaction_and_generic_records(ui_store, tmp_path):
@@ -285,9 +353,11 @@ def test_scope_epoch_redaction_and_generic_records(ui_store, tmp_path):
         assert 'EPOCH_PRIVATE' not in encoded and 'SCENE_PRIVATE' not in encoded
         assert ui_store.config['mongo_uri'] not in encoded
         steps = next(m['internalSteps'] for m in value['messages'] if m['role'] == 'assistant')
-        assert any(s['type'] == 'future.event' and s['payload']['extra']['field'] == 42 for s in steps)
+        future = next(s for s in steps if s['type'] == 'future.event')
+        assert 'extra' not in future['payload']
+        assert view.trace_detail(future['id'])['payload']['extra']['field'] == 42
         assert any(s['status'] == 'error' and '读取失败' in s['summary'] for s in steps)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match='场景不存在'):
             view.snapshot('not-a-context')
         ui_store.db.scenes.update_one({'_id': 'dm-a'}, {'$set': {'members': []}})
         with pytest.raises(PermissionError):
@@ -296,7 +366,8 @@ def test_scope_epoch_redaction_and_generic_records(ui_store, tmp_path):
             view.command('/send', {'text': 'denied'})
     finally:
         chat.stop()
-    record = inspector_record({'_id': 'future', 'content': {'new_field': [1, 2]}, 'extra': True}, 'future_record')
+    record = inspector_record({'_id': 'future', 'content': {'new_field': [1, 2]}, 'extra': True},
+                              'future_record', detail=True)
     assert record['kind'] == 'future_record' and record['fields']['extra']
 
 
@@ -322,7 +393,7 @@ def test_bridge_auth_readonly_and_tool_payload(ui_store):
             client.headers['Authorization'] = 'Bearer ' + bridge.token
             assert client.get('/state').json()['readOnly']
             assert client.post('/send', json={'text': 'blocked'}).status_code == 403
-            assert client.post('/new', json={}).status_code == 403
+            assert client.post('/new', json={}).status_code == 404
     finally:
         bridge.close()
     step = trace_step({'_id': 'tool', 'type': 'state.commit', 'payload': {'collection': 'artifacts',

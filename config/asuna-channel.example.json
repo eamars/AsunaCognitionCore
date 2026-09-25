@@ -1,6 +1,12 @@
 {
   "enabled": false,
   "port": 8766,
+  "context_links": {
+    "local-dm": ["qq:CONFIRMED_BOT_ACCOUNT:dm:AUTHORIZED_PEER_ACCOUNT"]
+  },
+  "canonical_persons": {
+    "qq:AUTHORIZED_PEER_ACCOUNT": "local-user"
+  },
   "channels": {
     "qq": {
       "token": "REPLACE_WITH_A_UNIQUE_LOCAL_TOKEN",

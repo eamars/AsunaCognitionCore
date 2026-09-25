@@ -20,8 +20,8 @@ const time = value => {
 };
 const names = {memory: '记忆', preference: '偏好', group_preference: '群偏好', relationship: '关系'};
 
-export function mountInspector(root) {
-  let tab = 'memory', selected, state, lastConversation;
+export function mountInspector(root, api) {
+  let tab = 'memory', selected, selectedDetail, detailError, state, lastScene, detailRequest = 0;
   const header = el('header');
   header.append(el('h2', '会话检查器'), el('p', '当前场景记录 · 只读（非历史快照）'));
   const tabs = el('div'); tabs.id = 'tabs'; tabs.role = 'tablist'; tabs.setAttribute('aria-label', '检查器类型');
@@ -33,13 +33,13 @@ export function mountInspector(root) {
   function render(next) {
     state = next;
     if (!state) {
-      selected = undefined; lastConversation = undefined;
+      selected = undefined; selectedDetail = undefined; lastScene = undefined; detailRequest++;
       tabs.replaceChildren(); records.replaceChildren(); detail.replaceChildren();
       detail.append(el('p', '正在读取当前场景记录…', 'empty'));
       return;
     }
-    if (lastConversation !== state.conversationId) {
-      selected = undefined; lastConversation = state.conversationId;
+    if (lastScene !== state.sceneId) {
+      selected = undefined; selectedDetail = undefined; lastScene = state.sceneId; detailRequest++;
     }
     const kinds = [...new Set([...Object.keys(names), ...state.records.map(record => record.kind)])];
     tabs.replaceChildren();
@@ -48,19 +48,27 @@ export function mountInspector(root) {
       button.role = 'tab'; button.id = `tab-${kind}`;
       button.setAttribute('aria-controls', 'records');
       button.setAttribute('aria-selected', String(kind === tab));
-      button.onclick = () => { tab = kind; selected = undefined; render(state); };
+      button.onclick = () => { tab = kind; selected = undefined; selectedDetail = undefined; detailRequest++; render(state); };
       tabs.append(button);
     });
     records.setAttribute('aria-labelledby', `tab-${tab}`);
     const query = search.value.toLocaleLowerCase();
-    const visible = state.records.filter(record => record.kind === tab && valueText(record).toLocaleLowerCase().includes(query));
-    if (!visible.some(record => record.id === selected)) selected = undefined;
+    const visible = state.records.filter(record => record.kind === tab &&
+      `${record.title} ${record.description || ''} ${record.excerpt || ''} ${record.badge || ''}`.toLocaleLowerCase().includes(query));
+    if (!visible.some(record => record.id === selected)) { selected = undefined; selectedDetail = undefined; detailRequest++; }
     records.replaceChildren();
     visible.forEach(record => {
       const button = el('button', null, `record ${selected === record.id ? 'selected' : ''}`);
       button.append(el('strong', record.title), el('small',
         [record.description || record.kind, time(record.createdAt), record.badge].filter(Boolean).join(' · ')));
-      button.onclick = () => { selected = record.id; render(state); };
+      button.onclick = () => {
+        selected = record.id; selectedDetail = undefined; detailError = undefined;
+        const request = ++detailRequest, scene = state.sceneId;
+        render(state);
+        api(`inspector-detail?scene=${encodeURIComponent(scene)}&kind=${encodeURIComponent(record.kind)}&id=${encodeURIComponent(record.id)}`)
+          .then(detail => { if (request === detailRequest) { selectedDetail = detail; render(state); } })
+          .catch(error => { if (request === detailRequest) { detailError = error.message; render(state); } });
+      };
       records.append(button);
     });
     if (!visible.length) records.append(el('p', query ? '没有匹配的记录' :
@@ -69,9 +77,10 @@ export function mountInspector(root) {
     const record = visible.find(row => row.id === selected);
     if (!record) { detail.append(el('p', '选择一条记录查看详情', 'empty')); return; }
     detail.append(el('h2', record.title));
+    if (!selectedDetail) { detail.append(el('p', detailError || '正在读取记录详情…', 'empty')); return; }
     const fields = el('dl');
     const fieldValue = value => el('dd', value, value !== null && typeof value === 'object' ? 'json-value' : '');
-    for (const [key, value] of Object.entries(record)) {
+    for (const [key, value] of Object.entries(selectedDetail)) {
       if (key === 'title') continue;
       if (key === 'fields' && Array.isArray(value)) {
         for (const field of value) fields.append(el('dt', field.label || field.key), fieldValue(field.value));

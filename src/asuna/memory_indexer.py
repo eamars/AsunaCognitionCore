@@ -62,7 +62,16 @@ class MemoryIndexer:
             self.retrieval.close()
 
     def close(self):
-        self.stopping.set()
-        self.worker.join(timeout=30)
+        self.request_stop()
+        if self.worker.ident is not None:
+            # The summary lane is owned by Application and is disposed after this
+            # callback. Drain its in-flight DSH request before that teardown.
+            self.worker.join()
+        else:
+            self.retrieval.close()
         self.evidence.record('memory.stopped', {'worker_stopped': not self.worker.is_alive(),
                                                'pending_retried_on_restart': True})
+
+    def request_stop(self):
+        """Stop scheduling new index/summary work before host teardown begins."""
+        self.stopping.set()

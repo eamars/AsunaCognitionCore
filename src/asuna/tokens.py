@@ -3,13 +3,47 @@ import json
 from .evidence import LocalHttp,sha,canonical
 
 
+def _without_inline_images(messages):
+    """把 data: 内联图片从「按字节保守上界」里摘出去，并如实报出份数与原始字节。
+
+    图片不是文本 token：视觉 token 由路由与 DSH 的 imageRequestPricing 定价。这里只保证
+    Asuna 这条审计读数不被一坨 base64 顶成假象，不自己发明视觉 token 公式。
+    """
+    state = {'images': 0, 'image_bytes': 0}
+
+    def walk(value):
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        if isinstance(value, dict):
+            # OpenAI 线格式（image_url.url）、Anthropic 线格式（source.data）、以及
+            # 少数路由直接带 data 的写法，三种都算内联图片；其余字段照常计入字节。
+            image_url = value.get('image_url')
+            source = value.get('source')
+            url = next((candidate for candidate in (
+                image_url.get('url') if isinstance(image_url, dict) else None,
+                source.get('data') if isinstance(source, dict) else None,
+                value.get('data')) if isinstance(candidate, str) and candidate.startswith('data:')), None)
+            if value.get('type') in ('image', 'image_url') and url is not None:
+                payload = url.split(',', 1)[1] if ',' in url else url
+                padding = payload.count('=') if len(payload) % 4 == 0 else 0
+                state['images'] += 1
+                state['image_bytes'] += (len(payload) // 4) * 3 - padding
+                return {'type': value.get('type'), 'inline_image_omitted': f'{len(payload)} base64 chars'}
+            return {k: walk(v) for k, v in value.items()}
+        return value
+
+    projected = walk(messages)
+    return projected, {'inline_images': state['images'], 'inline_image_bytes': state['image_bytes']}
+
+
 class TokenMeter:
     def __init__(self,cfg,evidence,lane):self.cfg,self.evidence,self.lane=cfg,evidence,lane
 
     def measure(self,body):
         counter=self.cfg.get('token_counter','conservative_bytes')
         if counter=='conservative_bytes':
-            return {'input_tokens':len(canonical({'messages':body.get('messages',[]),'tools':body.get('tools',[])})), 'method':'UTF8_bytes_conservative_bound', 'exact_render_visible':False}
+            messages,images=_without_inline_images(body.get('messages',[]))
+            return {'input_tokens':len(canonical({'messages':messages,'tools':body.get('tools',[])})), 'method':'UTF8_bytes_conservative_bound', 'exact_render_visible':False, **images}
         if counter not in ('llama_cpp', 'anthropic_count'):
             raise ValueError('UNKNOWN_TOKEN_COUNTER')
         http=LocalHttp(self.evidence)

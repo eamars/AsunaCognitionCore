@@ -157,8 +157,21 @@ class DialogueSummarizer:
             prompt = ('请总结这一小段已确认交流；窗口与来源由程序保存，不需复制 ID。'
                       'attribution 是程序从这些行算出来的归属事实，与它冲突就以它为准。\n'
                       + json.dumps({'window': window, 'attribution': attribution}, ensure_ascii=False))
+            operation = key
+            receipt = self.store.db.lane_receipts.find_one({'_id': operation})
+            attempt = 0
+            # A durably completed but interrupted/incomplete native turn is
+            # known not to contain a usable summary. DSH replays DONE operations,
+            # so use a fresh operation only for that explicit terminal result.
+            # Unknown delivery still reuses the original idempotency key.
+            while receipt and not (
+                    receipt.get('result', {}).get('finish_reason') == 'stop'
+                    and str(receipt.get('result', {}).get('content') or '').strip()):
+                attempt += 1
+                operation = key + ':retry-' + str(attempt)
+                receipt = self.store.db.lane_receipts.find_one({'_id': operation})
             result = self.lane.generate('dialogue-summary:' + scene_id + ':' + str(scene['policy_epoch']),
-                                        key, 'dialogue-summary', prompt, self.SYSTEM,
+                                        operation, 'dialogue-summary', prompt, self.SYSTEM,
                                         scope_key=scene['scope_key'], policy_epoch=scene['policy_epoch'])
             if result.finish_reason != 'stop' or not result.content.strip():
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)

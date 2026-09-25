@@ -29,6 +29,9 @@ class Application:
             # P1-c: on-demand group discussion digest reads the very same store/retrieval;
             # no new service, port or collection, and nothing is ever sent to QQ.
             self.digest=DiscussionDigestService(self.store,self.retrieval);self.broker.digest=self.digest
+            # 看图（Pull）：同一个 store 与既有 GridFS BlobStore；不新建集合、不新建端口、不另起视觉服务。
+            from .vision import VisionService
+            self.vision=VisionService(self.store);self.broker.vision=self.vision
             self.lanes=ExitStack();self.stack.callback(self.lanes.close)
             self.models_ready=False
             self._start_lanes(self.config)

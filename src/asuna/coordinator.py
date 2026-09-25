@@ -297,6 +297,7 @@ class Coordinator:
                             intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
                             from .tasks import WORKSPACE_TOOLS,TOOLS,ACTION_DSH_CAPABILITIES
+                            from .vision import route_filtered_tool_names
                             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
                             source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
                             development=(ep.get('episode_kind')=='self_development' or
@@ -328,7 +329,7 @@ class Coordinator:
                                 else:
                                     continuation={'continues_task_id':prior_id,'execution_binding':prior.get('execution_binding') or f"task:{prior['_id']}:{prior['scope_key']}:{prior['policy_epoch']}:{prior['intent_revision']}"}
                             if ep.get('control_result',{}).get('accepted') is not False:
-                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'development_grant':development,'allowed_capabilities':[*dict.fromkeys([*(t['name'] for t in capabilities), *ACTION_DSH_CAPABILITIES])],**continuation},stream=ep_id)
+                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'development_grant':development,'allowed_capabilities':[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config), *ACTION_DSH_CAPABILITIES])],**continuation},stream=ep_id)
                         if self.store.db.tasks.find_one({'_id':task_id}):
                             self.crash('after_task_persist')
                             if not ep['decision']['speak_before_action']:

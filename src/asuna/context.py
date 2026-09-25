@@ -144,6 +144,10 @@ class ContextBuilder:
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
         if source:
             apply_peer_context(context,source)
+            # 这条消息里出现过什么非文本段：只给有界事实与「能不能按需拉」，不替她决定要不要看图。
+            from .vision import media_note
+            media=media_note(source,self.store.config)
+            if media:context['media_from_program']=media
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
@@ -214,6 +218,11 @@ class ContextBuilder:
             context['action_capabilities_from_program']['history_query']=(
                 '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
                 '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
+            from .vision import vision_capability
+            if vision_capability(self.store.config)['supported']:
+                context['action_capabilities_from_program']['read_image']=(
+                    '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
+                    '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
             context['action_capabilities_from_program']['group_discussion']=(
                 '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
                 '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'

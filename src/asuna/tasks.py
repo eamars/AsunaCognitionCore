@@ -19,6 +19,8 @@ from .integration import INTEGRATION_TOOLS, owner_profile
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES
+from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
+                     route_filtered_tool_names, task_attachment_context)
 
 RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
@@ -55,6 +57,10 @@ TOOLS.append(DIGEST_TOOL)
 WORKSPACE_TOOLS.append(DIGEST_TOOL)
 TOOLS.append(CONSULT_TOOL)
 WORKSPACE_TOOLS.append(CONSULT_TOOL)
+# 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
+# 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
+TOOLS.append(READ_IMAGE_TOOL)
+WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
 
 
 class TaskService:
@@ -125,7 +131,7 @@ class TaskService:
             if revised.get('development_grant'):capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
             revised.update(integration_profile='owner' if integration else None,
             allowed_capabilities=[*dict.fromkeys([
-                *(t['name'] for t in capabilities),
+                *route_filtered_tool_names(capabilities, self.store.config),
                 *ACTION_DSH_CAPABILITIES,
                 *(t['name'] for t in INTEGRATION_TOOLS if integration),
             ])])
@@ -272,7 +278,7 @@ class ToolBroker:
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
         with (nullcontext() if tool.startswith('integration_') or tool in DEVELOPMENT_NAMES or tool=='consult_character'
-                  or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME else self.service.lock):
+                  or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not tool.startswith('integration_'):self.service.valid(task)
             if tool=='fixture_read_resource' and self.service.inject_read_failures>0:
                 self.service.inject_read_failures-=1
@@ -301,6 +307,12 @@ class ToolBroker:
                 # task binding, no effects lock held across the Mongo reads.
                 if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE')
                 result=self.digest.digest_for_task(task,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool==READ_IMAGE_TOOL_NAME:
+                # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
+                # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
+                if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE')
+                result=self.vision.read_image(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool.startswith('integration_'):
                 result=self.integration.call(tool,args)
@@ -354,7 +366,10 @@ print(json.dumps(r,ensure_ascii=False))
             self.service.crash('after_tool_before_receipt')
             result['evidence_ref']=key
             result['artifact_ref']=key
-            self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
+            # read_image 的 base64 只交给调用方，不进回执：一张图就能顶破普通 BSON 行的 1 MiB 上限，
+            # 字节本身已经在 GridFS 里，回执留 blob 引用与内联摘要。
+            stored_result=read_image_receipt(result) if tool==READ_IMAGE_TOOL_NAME else result
+            self.store.put('artifacts',{**artifact,'state':'DONE','result':stored_result},expected=artifact['revision'],stream=task['_id'])
             return result
 
     def close(self):self.server.shutdown();self.server.server_close();self.thread.join(2)
@@ -413,8 +428,12 @@ class Executor:
         from .resources import workspace_grant
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
         system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+'\n共享角色价值（不代写角色台词或独白）：\n'+persona['content']['body']
-        text=json.dumps({'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
-                         'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])},ensure_ascii=False)
+        payload={'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
+                 'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])}
+        # Pull 模式：只告诉她有什么图、ref 是什么、能不能拉；图片正文不进输入。
+        attachments=task_attachment_context(self.service.store,task,self.service.store.config,source)
+        if attachments:payload['attachments']=attachments
+        text=json.dumps(payload,ensure_ascii=False)
         if task.get('continues_task_id'):
             prior=self.service.store.db.tasks.find_one({'_id':task['continues_task_id'],'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch'],'requester_id':task['requester_id']})
             text+='\n上次行动的实际返回/诊断（保留原目标；不明副作用先核实）：'+json.dumps((prior or {}).get('result',{}),ensure_ascii=False)

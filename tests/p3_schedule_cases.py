@@ -678,14 +678,16 @@ def load_coordinator():
     # coordinator 与 context 都装真的：投影那条路不能只等宿主验（coordinator 就 import 这个 context）
     # self_state 也得跟着装：真 context.prepare 读持久自我描述时 import 它。少带一个真文件，
     # 这条用例只会红在 ModuleNotFoundError 上，看不出是夹具缺文件——真文件新增同包 import 时这里同步。
-    for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py'):
+    # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
+    for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py'):
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))
     bodies = dict(STUB_EXTRA, **{'state.py': STUB_STATE, 'channels.py': STUB_CHANNELS,
                                  'integration.py': STUB_INTEGRATION, 'dsh_lane.py': STUB_LANE})
     for name, body in bodies.items():
         open(os.path.join(package, name), 'w', encoding='utf-8').write(body)
     sys.path.insert(0, root)
-    for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state'):
+    for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
+                 'p3coord.vision'):
         sys.modules.pop(name, None)
     module = __import__('p3coord.coordinator', fromlist=['WORKSPACE_DECISION_SCHEMA'])
     _PACKAGES['p3coord'] = (module, json)
@@ -831,6 +833,38 @@ def context_projection_runs_end_to_end(env):
             and fire > datetime.fromisoformat(note['now_local'])
             and note['timezone'] == 'Pacific/Auckland'
             and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}),         [rows[0].get('local'), note.get('now_local')]
+
+
+@case
+def media_placeholder_reaches_the_character_scene(env):
+    """带图那条消息进现场时，她看到的是「这里有过一张图、能不能按需拉」，图片正文不在上下文里。"""
+    module, json = load_coordinator()
+    store = Store(config_with(top={'executor': {'input_modalities': ['text', 'image']},
+                                   'vision': {'image_hosts': ['multimedia.nt.qq.com.cn']}}))
+    store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
+    store.db.state_revisions.rows['rev-persona'] = {
+        '_id': 'rev-persona', 'entity_key': 'persona:P1|global-safe', 'scope_key': 'global-safe',
+        'revision': 1, 'content': {'body': '沈小满，24 岁。' + '说话清淡直接。' * 12},
+        'source_ids': [], 'parent_revision_id': None}
+    store.db.state_heads.rows['persona:P1|global-safe'] = {
+        '_id': 'persona:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'rev-persona',
+        'revision': 1}
+    store.db.messages.rows['in-ep-evt-1'] = {
+        '_id': 'in-ep-evt-1', 'scene_id': SCENE_ID, 'policy_epoch': 7, 'scene_seq': 12,
+        'direction': 'inbound', 'author': PERSON, 'text': '[图片（未解析）]',
+        'event': {'event_id': 'evt-1', 'raw': {'asuna_media': {
+            'version': 1, 'count': 1, 'truncated': False, 'items': [
+                {'type': 'image', 'placeholder': '[图片（未解析）]', 'file': 'a.png', 'file_id': '1',
+                 'url': 'https://multimedia.nt.qq.com.cn/download?file_md5=A', 'size': '46695',
+                 'summary': '', 'sub_type': 0}]}}}}
+    _system, context, _manifest = module.ContextBuilder(store, retrieval=None).prepare(
+        {'event_id': 'evt-1', 'scene_id': SCENE_ID, 'person_id': PERSON, 'text': '[图片（未解析）]'})
+    media = context.get('media_from_program') or {}
+    items = media.get('items') or []
+    return (media.get('can_pull') is True and len(items) == 1
+            and items[0]['placeholder'] == '[图片（未解析）]' and items[0]['pullable'] is True
+            and 'url' not in items[0] and 'base64' not in json.dumps(media, ensure_ascii=False)
+            and '不拉就不进上下文' in media['meaning']), items
 
 
 # ── 跑法 ────────────────────────────────────────────────────

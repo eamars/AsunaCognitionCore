@@ -88,8 +88,17 @@ class DshLane:
         if self.endpoint_file.exists():self.endpoint_file.unlink()
         rows=[{'id':name,'disabled':True} for name in ('llm-deepseek','deepseek-llm-api-extensions','session-log-deepseek','plugin-package-inventory-deepseek','persistent-bash','persistent-pwsh','terminal-bash','terminal-pwsh','pty','subprocess','session-title-llm','compaction-basic')]
         compat=self.model['compat']
-        provider={'api':self.model['api'],'baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','compat':compat,'models':[{'id':self.model['model'],'contextWindow':self.model['context_window'],'maxTokens':self.model['max_tokens'],'reasoningEfforts':self.model['reasoning_efforts']}],'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
+        # 输入模态是声明，不是猜测：pi-ai 适配器对没声明的模型按 [text] 算（DEFAULT_INPUT）。
+        # 少声明会在图片还没附上时就拒绝并点名模型，多声明会让提供方在半路拒绝——
+        # 所以这里只转达配置里写明的话，不从模型名里猜「它应该能看图」。
+        declared=[m for m in (self.model.get('input_modalities') or []) if m in ('text','image')]
+        model_entry={'id':self.model['model'],'contextWindow':self.model['context_window'],'maxTokens':self.model['max_tokens'],'reasoningEfforts':self.model['reasoning_efforts']}
+        if declared:model_entry['input']=declared
+        provider={'api':self.model['api'],'baseURL':self.proxy.url,'apiKeyEnv':'ASUNA_LOCAL_DUMMY_KEY','compat':compat,'models':[model_entry],'streamIdleTimeoutMs':config.get('provider_idle_timeout_seconds',1800)*1000}
         provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
+        # 图片历史会重进每一次请求。DSH 默认按 20 MiB base64 计，而本机审计代理只收 16 MiB 请求体；
+        # 把图片预算压在它下面，超限时由 DSH 报 IMAGE_OFFLOAD_REQUIRED，不让请求体凭空被拒。
+        provider['maxRequestImageBytes']=8*1024*1024
         chat=config.get('chat',{})
         skills=skills_directory(config,chat.get('scene_id'),chat.get('person_id')) if lane=='executor' else None
         self.skills_enabled=bool(skills)
@@ -100,6 +109,7 @@ class DshLane:
                                   for spec in row.get('config',{}).get('tools',[])
                                   if isinstance(spec,dict) and isinstance(spec.get('name'),str)})
         executor_plugins=list(plugin_rows or [])
+        attachment_plugin={'id':'asuna-attachment-local','name':'@deepseek-ai/dsh-attachment-local','config':{'dshHome':self.home.as_posix()}}
         if lane=='executor':
             # Fixed DSH web seam and providers. The model-facing tools are
             # loaded later into each authorized action-agent scope.
@@ -107,6 +117,7 @@ class DshLane:
                 {'id':'asuna-web-service','name':'@deepseek-ai/dsh-web'},
                 {'id':'asuna-web-search-deepseek','name':'@deepseek-ai/dsh-web-search-deepseek','config':{'apiKeyEnv':'DEEPSEEK_API_KEY'}},
                 {'id':'asuna-web-fetch-http','name':'@deepseek-ai/dsh-web-fetch-http'},
+                attachment_plugin,
             ]
         # Native pre-step pressure does not yet include a newly claimed inbox
         # message. Share its threshold with the bridge's pending-input check.

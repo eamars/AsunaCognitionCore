@@ -94,13 +94,13 @@ class RuntimeHost:
             channels.recover_sending()
             self.controller.recover_inputs()
             self._recover_tasks()
-            indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)],
-                                    summary_lane=self.app.summary_lane,
-                                    summary_scenes=[self.settings['scene_id'], *sorted(scenes)],
-                                    summary_can_run=lambda: self.controller.active_task is None
-                                        and self.controller.task_queue.empty()).start()
-            self.app.memory_indexer = indexer
-            self.stack.callback(indexer.close)
+            self.indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)],
+                                         summary_lane=self.app.summary_lane,
+                                         summary_scenes=[self.settings['scene_id'], *sorted(scenes)],
+                                         summary_can_run=lambda: self.controller.active_task is None
+                                             and self.controller.task_queue.empty()).start()
+            self.app.memory_indexer = self.indexer
+            self.stack.callback(self.indexer.close)
             if self.config.get('channels'):
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
                 self.stack.callback(self.channel_server.close)
@@ -117,6 +117,9 @@ class RuntimeHost:
             self._complete_activations()
             return self
         except BaseException:
+            indexer = getattr(self, 'indexer', None)
+            if indexer:
+                indexer.request_stop()
             self.stack.close()
             raise
 
@@ -180,4 +183,7 @@ class RuntimeHost:
                               expected=original['revision'], stream=original['_id'])
 
     def __exit__(self, *args):
+        indexer = getattr(self, 'indexer', None)
+        if indexer:
+            indexer.request_stop()
         self.stack.close()

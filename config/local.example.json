@@ -36,6 +36,7 @@
   "executor": {
     "base_url": "http://192.168.2.13:1919/v1",
     "model": "qwen38-next-uncensored-freetoken-vision",
+    "input_modalities": ["text", "image"],
     "sampling": {
       "temperature": 0.2,
       "top_p": 0.95,
@@ -62,6 +63,12 @@
     "query_prefix": "search_query: ",
     "document_prefix": "search_document: ",
     "api_key": ""
+  },
+  "vision": {
+    "image_hosts": ["multimedia.nt.qq.com.cn"],
+    "max_bytes": 4194304,
+    "timeout_seconds": 15,
+    "image_dirs": []
   },
   "local_only": true,
   "workflow_timeout_seconds": 1800,

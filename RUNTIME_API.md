@@ -46,6 +46,22 @@ Python 宿主与通道接口使用平台无关的规范化信封；OneBot 解析
 
 运行中的行动会话不能同时被第二个任务接管，拒绝原因仍交给角色解释。宿主停机撤销旧进程权限后，新的明确续接请求可复用 `host_stop` 任务的原会话；旧任务权限不恢复，用户取消不适用该续接。集成子进程运行期间不持有宿主数据库副作用锁，因而可以回调 outbox 和回执接口。
 
+## 非文本段与看图（Pull 模式）
+
+adapter 遇到非文本段时不上传字节，只在信封 `raw.asuna_media` 里给一份有界元数据，正文留下诚实占位符：
+
+```json
+{"version": 1, "count": 2, "truncated": false, "items": [
+  {"type": "image", "placeholder": "[图片（未解析）]", "file": "…png", "file_id": "…",
+   "url": "https://…/download?…", "size": "46695", "summary": "", "sub_type": 0}]}
+```
+
+宿主只持久化适配器提供的有界 `asuna_media` 元数据，不保留任意 OneBot raw。角色现场中的 `media_from_program` 说明消息里出现的媒体段、占位符及图片能否按需读取；图片不会因此直接进入角色脑的视觉输入。行动任务输入附带同场景图片的 `attachments` 清单（含稳定 `ref`）。
+
+行动侧按需拉取：`read_image({ref, max_bytes?})`。`ref` 由「消息 ID + 段序号」派生，可重算且不暴露平台 ID；场景与 policy epoch 由任务绑定，参数换不了查询范围。字节用标准库 HTTP 取回（scheme、主机白名单、重定向后主机复检、字节上限都在拉取路上），用魔数确认确实是 png/jpeg/webp/gif，按任务 scope 存进既有 GridFS `BlobStore`，再以 base64 交给 DSH 插件存成 durable attachment（`ctx.attachments.saveImage` → `ImageBlock`）。只有走完这一步，图片才是这一轮模型请求里的真实视觉输入；写进 `artifacts` 的回执不带 base64，只带 blob 引用与内联摘要（普通 BSON 行 1 MiB 上限）。
+
+能力开关只读行动路由配置声明，不从模型名猜：行动脑的 `read_image` 要求 `executor.input_modalities` 含 `image`；图片经 DSH provider model 的 `input` 送入，共用 `vision.image_hosts` 白名单。pi-ai 适配器会对旧图片执行最旧优先的体积卸载，`maxRequestImageBytes` 保持低于本机审计代理 16 MiB 请求体上限。行动脑能力不足或拉取失败返回真实错误码（`VISION_ROUTE_UNSUPPORTED`、`IMAGE_NOT_PULLABLE`、`IMAGE_ATTACHMENT_NOT_IN_SCENE`、`VISION_SCENE_FENCE_MISMATCH`、`IMAGE_FETCH_FAILED:HTTP_…`、`IMAGE_TOO_LARGE`、`IMAGE_TYPE_UNSUPPORTED`、`IMAGE_INSECURE_URL_DENIED`、`IMAGE_REDIRECT_HOST_DENIED`），不把占位符当成看过。`vision` 可配 `image_hosts`（默认只放行这套部署真出现过的 QQ 多媒体主机；显式写 `[]` 表示谁都不放行）、`max_bytes`（默认 4 MiB，硬上限 8 MiB）、`timeout_seconds`、`image_dirs`（本机 NapCat 图片目录，按纯文件名读取并拒绝目录穿越）、`allow_insecure_http`。
+
 ## 领取公开输出
 
 `GET /v1/channels/qq/outbox?wait_seconds=25`，最长等待 25 秒；无消息返回 `{"items":[]}`。有消息时原子领取一条：

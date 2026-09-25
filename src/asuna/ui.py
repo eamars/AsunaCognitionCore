@@ -759,8 +759,6 @@ class Workbench:
                 'hasMore': has_more, 'beforeSeq': oldest_seq,
                 'readOnly': external or self.controller is None, 'canSend': not external and chosen == current and not self.models_applying and (self.controller is None or getattr(self.controller.app, 'models_ready', True)),
                 'modelSettings': self.models_snapshot(),
-                'integrationAvailable': integration is not None,
-                'selfDevelopmentAvailable': not external and bool(store.config.get('self_development',{}).get('enabled')),
                 'emptyReasons': {'preference': '当前存储没有独立的偏好记录；原始内容可在记忆中查看。',
                                  'group_preference': '当前场景没有群偏好记录。'}}
         latest_scene = store.authorize(settings['scene_id'], settings['person_id'])
@@ -816,10 +814,6 @@ class Workbench:
             value = body.get('text')
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 16000:
                 raise ValueError('请输入 1–16000 字的消息')
-            if type(body.get('integration', False)) is not bool:
-                raise ValueError('INVALID_INTEGRATION_SELECTION')
-            if type(body.get('development',False)) is not bool:
-                raise ValueError('INVALID_DEVELOPMENT_SELECTION')
             selected=body.get('conversation','')
             if selected.startswith('channel:'):
                 if body.get('integration') or body.get('development'):
@@ -839,8 +833,7 @@ class Workbench:
                        'group_context':{'wake_reason':'owner_group_prompt','topic_id':key,'reply_to':None,'reply_message_id':None,'mentioned_account_ids':[]},
                        'trusted_context_events':[{'kind':'owner_group_prompt','text':'这是本机 owner 请你在当前授权群发言的指令，不是群成员刚发来的 QQ 消息；用你自己的判断生成群内公开发言。没有获得额外工具、私聊记忆或配置权限。'}]}
                 return {'accepted':True,**self.controller.receive(event)}
-            return {'accepted': True, **self.controller.submit(value.strip(),
-                integration=body.get('integration', False),development=body.get('development',False))}
+            return {'accepted': True, **self.controller.submit(value.strip())}
         elif path == '/new':
             self.controller.new_context()
         else:

@@ -137,19 +137,19 @@ class Chat:
         self.pending.put(({'_compact': True, 'event_id': str(uuid.uuid4()),
             'scene_id': self.settings['scene_id'], 'person_id': self.settings['person_id']}, None))
 
-    def submit(self, text, *, integration=False, development=False):
-        if integration and development:
-            raise ValueError('CHOOSE_ONE_DEVELOPMENT_CAPABILITY')
+    def submit(self, text):
         event = {'event_id': str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
-        if integration:
-            from .integration import owner_profile
-            owner_profile(self.app.store.config, event['scene_id'], event['person_id'])
-            event['integration_profile'] = 'owner'
-        if development:
-            if not self.app.config.get('self_development',{}).get('enabled'):
-                raise PermissionError('SELF_DEVELOPMENT_NOT_ENABLED')
-            event['development_profile']='owner'
+        config=self.app.config
+        identity=(event['scene_id'],event['person_id'])
+        local=config.get('chat',{})
+        if identity==(local.get('scene_id'),local.get('person_id')):
+            profile=config.get('integration',{})
+            if (profile.get('enabled') is True and
+                    identity==(profile.get('scene_id'),profile.get('person_id'))):
+                event['integration_profile']='owner'
+            if config.get('self_development',{}).get('enabled') is True:
+                event['development_profile']='owner'
         return self.receive(event)
 
     def offer_self_development(self, event_id: str, *, text=None, trusted_context_events=None,

@@ -338,7 +338,7 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     const storeRef = useRef(null); if (!storeRef.current) storeRef.current = viewStore();
     const store = storeRef.current, view = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
     const state = view.state, items = nodesFor(state, view.calls);
-    const [draft, setDraft] = useState(''), [search, setSearch] = useState(''), [integration, setIntegration] = useState(false), [development, setDevelopment] = useState(false);
+    const [draft, setDraft] = useState(''), [search, setSearch] = useState('');
     const [notice, setNotice] = useState(''), [atBottom, setAtBottom] = useState(true), [settingsReady, setSettingsReady] = useState(false);
     const scroll = useRef(null), stick = useRef(true), lastScrollTop = useRef(0), settings = useRef(null);
     const olderAnchor = useRef(null);
@@ -371,8 +371,8 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
     };
     const send = async event => { event.preventDefault(); const value = draft.trim();
       if (!value || !state?.canSend || state.readOnly || view.busy) return;
-      try { await store.command('send', {text: value, integration, development, conversation: state.conversationId});
-        setDraft(''); setIntegration(false); setDevelopment(false); setNotice('已入队，可继续输入。'); }
+      try { await store.command('send', {text: value, conversation: state.conversationId});
+        setDraft(''); setNotice('已入队，可继续输入。'); }
       catch { setNotice('未确认送达；输入已保留，请先刷新检查，避免重复发送。'); } };
     const choose = item => { stick.current = true; olderAnchor.current = null;
       lastScrollTop.current = 0; setAtBottom(true); setNotice(''); store.select(item.id); };
@@ -438,14 +438,6 @@ window.__ModuleLoader__.load({id: 'asuna-ui-elements-v1', factory: (require) => 
             placeholder: state?.channelPrompt ? '给小满的本机指令；她将在当前群发言' : '输入消息…（Enter 发送，Shift + Enter 换行）'}),
           h(Button, {type: 'submit', variant: 'primary', disabled: !state?.canSend || view.busy || view.stopped},
             state?.channelPrompt ? '请小满在群里发言' : '发送'),
-          state?.integrationAvailable && !state.channelPrompt && h('label', {className: 'asuna-integration'},
-            h('input', {type: 'checkbox', checked: integration, onChange: event => setIntegration(event.target.checked),
-              disabled: state.readOnly || development}), '本条授权集成开发'),
-          state?.selfDevelopmentAvailable && !state.channelPrompt && h('label', {className: 'asuna-integration'},
-            h('input', {type: 'checkbox', checked: development, onChange: event => setDevelopment(event.target.checked),
-              disabled: state.readOnly || integration}), '本条授权自我开发'),
-          state?.integrationAvailable && h(Button, {type: 'button', variant: 'ghost',
-            onClick: () => void store.command('integration/stop', {}).catch(() => {}), disabled: state.readOnly}, '停止集成'),
           h('p', {role: 'status'}, view.stopped ? '已请求停止整个宿主。' : notice))),
       h(Inspector, {state}));
   }

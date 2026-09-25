@@ -25,6 +25,34 @@ def speak():
                                  'recall_query': '', 'speak_before_action': False}))
 
 
+def test_local_owner_can_delegate_with_both_configured_capabilities(store, tmp_path):
+    settings = {'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1',
+                'display_name': '小满', 'workspace': str(tmp_path)}
+    store.config.update(task_mode='workspace', chat=settings,
+                        integration={'enabled': True, 'scene_id': 'dm-a', 'person_id': 'A'},
+                        self_development={'enabled': True})
+    decision = {'next': 'delegate', 'goal': '检查可用工具', 'constraints': [],
+                'recall_query': '', 'speak_before_action': False}
+    lane = FakeLane(store, [LaneResult('我来处理。'), LaneResult(json.dumps(decision)),
+                            LaneResult('先聊聊。'), speak(), LaneResult('我在。')])
+    app = SimpleNamespace(store=store, config=store.config, evidence=Evidence(tmp_path / 'evidence'),
+                          character=lane, router=Router(store, Coordinator(store, lane)))
+    chat = Chat(app, settings, lambda _: None)
+
+    accepted = chat.submit('帮我处理这件事。')
+    source = store.db.messages.find_one({'_id': 'in-' + accepted['episode_id']})
+    assert source['event']['integration_profile'] == 'owner'
+    assert source['event']['development_profile'] == 'owner'
+    episode = app.router.receive(source['event'])
+    task = store.db.tasks.find_one({'_id': episode['task_id']})
+    assert task['integration_profile'] == 'owner' and task['development_grant'] is True
+    assert {'integration_status', 'development_read'} <= set(task['allowed_capabilities'])
+    ordinary = chat.submit('今天过得怎么样？')
+    source = store.db.messages.find_one({'_id': 'in-' + ordinary['episode_id']})
+    reply = app.router.receive(source['event'])
+    assert reply['state'] == 'COMMITTED' and not reply.get('task_id')
+
+
 def test_compact_queues_after_turn_and_targets_current_context(store,tmp_path):
     scene=store.db.scenes.find_one({'_id':'dm-a'})
     store.put('scenes',{**scene,'character_context':'current-context'},expected=scene['revision'])

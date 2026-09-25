@@ -411,7 +411,7 @@ class Executor:
             prior=self.service.store.db.tasks.find_one({'_id':task['continues_task_id'],'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch'],'requester_id':task['requester_id']})
             text+='\n上次行动的实际返回/诊断（保留原目标；不明副作用先核实）：'+json.dumps((prior or {}).get('result',{}),ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
-            text+='\n本任务由 owner 在 Web 明确授权集成开发。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。'
+            text+='\n本任务继承本机 owner 工作域的集成能力。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。'
         if task.get('development_grant'):
             text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。发布与否由你判断。'
         if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):

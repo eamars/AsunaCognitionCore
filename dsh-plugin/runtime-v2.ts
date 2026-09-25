@@ -5,6 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import * as skillTool from '@deepseek-ai/dsh-tool-skill';
 import * as scheduleTool from '@deepseek-ai/dsh-schedule';
+import * as todoTool from '@deepseek-ai/dsh-tool-todo';
+import * as webTool from '@deepseek-ai/dsh-tool-web';
 
 // v1 remains frozen for already-running experiments. v2 adds only a validated
 // completed-silent-episode boundary; Python still owns business state.
@@ -18,6 +20,7 @@ export function apply(ctx, config) {
   const handles = new Map();
   const prompts = new Map();
   const skillAccess = new Map();
+  const capabilityAccess = new Map();
   const active = new Map();
   let schedulerAgent;
   let queue = Promise.resolve();
@@ -95,16 +98,28 @@ export function apply(ctx, config) {
     }
     return next();
   });
-  async function handleSession(id, system, skillsEnabled = false) {
+  async function handleSession(id, system, skillsEnabled = false, allowedCapabilities = []) {
     if (!/^[a-z0-9-]{1,100}$/.test(id)) throw new Error('INVALID_SESSION_ID');
     if (typeof system !== 'string' || system.trim().length < 80) throw new Error('MISSING_SYSTEM');
+    if (!Array.isArray(allowedCapabilities) || allowedCapabilities.some(name => typeof name !== 'string')) throw new Error('INVALID_ALLOWED_CAPABILITIES');
+    const capabilities = [...new Set(allowedCapabilities)].sort();
+    const capabilityKey = JSON.stringify(capabilities);
     prompts.set(id, system);
     if (skillAccess.has(id) && skillAccess.get(id) !== skillsEnabled) throw new Error('SESSION_SKILL_ACCESS_CHANGED');
     skillAccess.set(id, skillsEnabled);
+    if (capabilityAccess.has(id) && capabilityAccess.get(id) !== capabilityKey) throw new Error('SESSION_CAPABILITIES_CHANGED');
+    capabilityAccess.set(id, capabilityKey);
     if (handles.has(id)) return handles.get(id).agent;
     const setup = async (agentCtx) => {
+      const granted = new Set(capabilities);
+      const visibleBrokerTools = (config.brokerToolNames ?? []).filter(name => granted.has(name));
+      if ((config.brokerToolNames ?? []).length) agentCtx.tools.restrict({ allow: visibleBrokerTools });
       // Native loader/catalog are scoped to this authorized action agent.
       if (skillsEnabled) await agentCtx.plugin(skillTool, {});
+      if (granted.has('todo_write')) await agentCtx.plugin(todoTool, { allowParallelInProgress: true });
+      if (granted.has('web_search') || granted.has('web_fetch')) {
+        await agentCtx.plugin(webTool, { search: granted.has('web_search'), fetch: granted.has('web_fetch') });
+      }
       if (config.schedulerSession && id === config.schedulerSession) await agentCtx.plugin(scheduleTool, {});
       agentCtx.systemPrompt.section({ name: 'asuna-complete', order: 0, complete: true,
         interpolate: false, text: () => prompts.get(id) });
@@ -121,7 +136,7 @@ export function apply(ctx, config) {
   }
   const schedulerReady = config.schedulerSession
     ? handleSession(config.schedulerSession,
-      'Asuna native schedule owner. This root only persists native reminders and dispatches them to the host. It never calls a language model or publishes a message.', false)
+      'Asuna native schedule owner. This root only persists native reminders and dispatches them to the host. It never calls a language model or publishes a message.', false, [])
         .then(agent => { schedulerAgent = agent; return agent; })
     : null;
   async function scheduleOperation(path, input) {
@@ -175,8 +190,12 @@ export function apply(ctx, config) {
   }
   async function run(input) {
     const path = join(config.receipts, hash(input.operation) + '.json');
+    const allowedCapabilities = input.allowed_capabilities === undefined ? [] : input.allowed_capabilities;
+    if (!Array.isArray(allowedCapabilities) || allowedCapabilities.some(name => typeof name !== 'string')) throw new Error('INVALID_ALLOWED_CAPABILITIES');
+    const capabilities = [...new Set(allowedCapabilities)].sort();
     const semantic = [input.session, input.phase, input.text, input.system, !!input.compact_before, input.compact_at_steps ?? [], input.completed_episode_boundary ?? null];
     if (input.skills_enabled) semantic.push({ skills_enabled: true });
+    if (input.allowed_capabilities !== undefined) semantic.push({ allowed_capabilities: capabilities });
     const inputHash = hash(JSON.stringify(semantic));
     let record = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
     if (record && record.inputHash !== inputHash) throw new Error('OPERATION_CONTENT_MISMATCH');
@@ -185,8 +204,8 @@ export function apply(ctx, config) {
     if (!Array.isArray(compactAt) || compactAt.some(x => !Number.isInteger(x) || x < 2 || x > 64)) throw new Error('INVALID_COMPACTION_STEPS');
     if (compactAt.length && !input.phase.startsWith('execution')) throw new Error('MID_EPISODE_COMPACTION_FORBIDDEN');
     active.set(input.session, { steps: 0, compact: !!input.compact_before, compacted: false, compactAt, compactions: [] });
-    if (input.skills_enabled && !config.skillsEnabled) throw new Error('SKILLS_NOT_CONFIGURED');
-    const agent = await handleSession(input.session, input.system, !!input.skills_enabled);
+    if (input.skills_enabled && (!config.skillsEnabled || !capabilities.includes('skill'))) throw new Error('SKILLS_NOT_CONFIGURED_OR_GRANTED');
+    const agent = await handleSession(input.session, input.system, !!input.skills_enabled, capabilities);
     if (record) {
       await agent.whenIdle();
       const recovered = resultFrom(agent.session.snapshotEvents(), record.message.id);

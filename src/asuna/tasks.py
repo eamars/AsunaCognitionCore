@@ -41,8 +41,12 @@ WORKSPACE_TOOLS = [
     {'name': 'read_file', 'description': 'Read a UTF-8 file inside /task (up to 32 KiB).', 'parameters': {'path': {'type': 'string', 'required': True}}},
     {'name': 'write_file', 'description': 'Create a UTF-8 file inside /task. Existing files require explicit overwrite=true. Protected paths are read-only.', 'parameters': {'path': {'type': 'string', 'required': True}, 'text': {'type': 'string', 'required': True}, 'overwrite': {'type': 'boolean'}}},
     TOOLS[-1],
-    {'name': 'task_status', 'description': 'Optionally annotate your current assessment: done, partial, blocked, or needs_character_decision. You may continue working and update it. Natural language findings do not require this tool.', 'parameters': {'status': {'type': 'string', 'enum': ['done', 'partial', 'blocked', 'needs_character_decision'], 'required': True}}},
 ]
+
+# These are DSH-owned action-agent tools, not ToolBroker capabilities. The
+# names are persisted with each task grant so native session visibility follows
+# the same task boundary as the existing host tools.
+ACTION_DSH_CAPABILITIES = ('skill', 'todo_write', 'web_search', 'web_fetch')
 
 TOOLS.append(HISTORY_TOOL)
 WORKSPACE_TOOLS.append(HISTORY_TOOL)
@@ -120,7 +124,11 @@ class TaskService:
             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
             if revised.get('development_grant'):capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
             revised.update(integration_profile='owner' if integration else None,
-                           allowed_capabilities=[t['name'] for t in [*capabilities, *(INTEGRATION_TOOLS if integration else [])]])
+            allowed_capabilities=[*dict.fromkeys([
+                *(t['name'] for t in capabilities),
+                *ACTION_DSH_CAPABILITIES,
+                *(t['name'] for t in INTEGRATION_TOOLS if integration),
+            ])])
             return self.store.put('tasks',revised,expected=task['revision'],stream=task['_id'])
 
     @contextmanager
@@ -420,12 +428,10 @@ class Executor:
         healthy()
         self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason},task['scope_key'])
         artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
-        declared=next((a for a in reversed(artifacts) if a['tool']=='task_status'),None)
         observations=[a for a in artifacts if a['tool']!='task_status']
         # The model reports in natural language; identities and actual receipts
         # are attached by the program, never recopied or invented by the model.
         result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'text':value.content,
-                'declared_status':declared['result']['status'] if declared else None,
                 'finish_reason':value.finish_reason,'artifact_refs':[a['_id'] for a in observations],
                 'diagnostic':value.diagnostic,
                 'facts':[{'text':value.content,'evidence_refs':[a['_id'] for a in observations]}],

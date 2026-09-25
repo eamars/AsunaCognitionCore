@@ -92,9 +92,22 @@ class DshLane:
         provider['timeoutMs']=config.get('provider_idle_timeout_seconds',1800)*1000
         chat=config.get('chat',{})
         skills=skills_directory(config,chat.get('scene_id'),chat.get('person_id')) if lane=='executor' else None
+        self.skills_enabled=bool(skills)
         skill_rows=[{'id':'asuna-skills','name':'@deepseek-ai/dsh-skill'}]
         if skills:skill_rows += [
             {'id':'asuna-skill-filesystem','name':'@deepseek-ai/dsh-skill-filesystem','config':{'includeDefaultRoots':False,'agentsHome':self.home.as_posix(),'dshHome':self.home.as_posix(),'customSkillDirs':[skills.as_posix()],'watchFollowSymlinks':False}}]
+        broker_tool_names=sorted({spec['name'] for row in (plugin_rows or [])
+                                  for spec in row.get('config',{}).get('tools',[])
+                                  if isinstance(spec,dict) and isinstance(spec.get('name'),str)})
+        executor_plugins=list(plugin_rows or [])
+        if lane=='executor':
+            # Fixed DSH web seam and providers. The model-facing tools are
+            # loaded later into each authorized action-agent scope.
+            executor_plugins += [
+                {'id':'asuna-web-service','name':'@deepseek-ai/dsh-web'},
+                {'id':'asuna-web-search-deepseek','name':'@deepseek-ai/dsh-web-search-deepseek','config':{'apiKeyEnv':'DEEPSEEK_API_KEY'}},
+                {'id':'asuna-web-fetch-http','name':'@deepseek-ai/dsh-web-fetch-http'},
+            ]
         # Native pre-step pressure does not yet include a newly claimed inbox
         # message. Share its threshold with the bridge's pending-input check.
         pressure_ratio=.8
@@ -102,17 +115,20 @@ class DshLane:
             {'id':'asuna-token-meter','name':'@deepseek-ai/dsh-token-meter'},
             {'id':'asuna-compaction','name':(ROOT/'dsh-plugin/compaction.ts').as_posix(),'config':{'maxTokens':self.model['max_tokens'],'thresholdRatio':pressure_ratio}},
             *skill_rows,
-            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'contextWindow':self.model['context_window'],'pressureThresholdRatio':pressure_ratio,'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix(),
+            {'id':'asuna-runtime','name':bridge.as_posix(),'config':{'model':self.model['model'],'reasoningEffort':self.model['reasoning_effort'],'maxTokens':self.model['max_tokens'],'contextWindow':self.model['context_window'],'pressureThresholdRatio':pressure_ratio,'workdir':self.work.as_posix(),'skillsEnabled':bool(skills),'brokerToolNames':broker_tool_names,'receipts':(self.home/'operations').as_posix(),'endpointFile':self.endpoint_file.as_posix(),
                 **({'schedulerSession':self.scheduler_session,'schedulerCallbackUrl':schedule_callback['url'],
                     'schedulerCallbackToken':schedule_callback['token']} if schedule_callback else {})}},
             {'id':'asuna-local-provider','name':'@deepseek-ai/dsh-llm-pi-ai','config':{'providers':{'asuna-local':provider}}},
-            *(plugin_rows or [])]}]
+            *executor_plugins]}]
         patch=self.home/'lane.patch.yml';patch.write_text(yaml.safe_dump(rows,allow_unicode=True,sort_keys=False),encoding='utf-8')
         child={key:'' for key in os.environ}
         for key in ('SystemRoot','SYSTEMROOT','WINDIR','PATH','PATHEXT','TEMP','TMP','COMSPEC'):
             if key in os.environ:child[key]=os.environ[key]
         child.update({'DSH_HOME':str(self.home),'DSH_TELEMETRY_DISABLED':'1','ASUNA_LOCAL_DUMMY_KEY':'local-only-not-a-secret','ASUNA_BRIDGE_TOKEN':self.token})
         if broker_token:child['ASUNA_BROKER_TOKEN']=broker_token
+        if lane=='executor':
+            for key in ('DEEPSEEK_API_KEY','DEEPSEEK_SEARCH_BASE_URL','DSH_WEB_SEARCH_PROVIDER','DSH_WEB_FETCH_PROVIDER'):
+                if os.environ.get(key):child[key]=os.environ[key]
         self.sdk=DeepSeekHarness(dsh_bin=str(ROOT/'node_modules/.bin/dsh.cmd'),dsh_home=str(self.home),profile='sdk-minimal',patches=(str(patch),),cwd=str(self.work),env=child,provider='asuna-local',model=self.model['model'],reasoning_effort=self.model['reasoning_effort'],max_tokens=self.model['max_tokens'],request_timeout_seconds=300,initialize_timeout_seconds=45)
         self._resources.callback(self.sdk.close)
         try:
@@ -149,9 +165,16 @@ class DshLane:
             bound=self.store.db.sessions.find_one({'_id':native_id})
             if bound and bound.get('state')=='INVALIDATED':raise PermissionError('SESSION_INVALIDATED')
             if bound and bound.get('compact_requested'):self.compact_pending.add(session)
+            owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
+            if scope_key is not None:
+                if owner and owner.get('scope_key')!=scope_key:raise PermissionError('LANE_OWNER_SCOPE_MISMATCH')
+                owner={'scope_key':scope_key,'policy_epoch':policy_epoch}
+            allowed_capabilities=(sorted(set(owner.get('allowed_capabilities',[])))
+                                  if self.lane=='executor' and isinstance(owner.get('allowed_capabilities'),list) else None)
             existing=self.store.db.lane_receipts.find_one({'_id':operation})
             semantic={'session':native_id,'phase':phase,'text':text,'system':system}
             if scope_key is not None:semantic.update(scope_key=scope_key,policy_epoch=policy_epoch)
+            if allowed_capabilities is not None:semantic['allowed_capabilities']=allowed_capabilities
             semantic_hash=sha(canonical(semantic))
             if existing:
                 if existing.get('state')=='INVALIDATED':raise PermissionError('OPERATION_INVALIDATED')
@@ -162,6 +185,7 @@ class DshLane:
             initial_system=(bound or {}).get('initial_system',system)
             delivered_text=text if initial_system==system else ('ASUNA_STATE_REVISION\n本阶段采用程序已提交并冻结的当前人格快照；以下不是外部引用。历史阶段仍使用其原版本。\n'+system+'\n\n'+text)
             request={'session':'s-'+sha(session.encode())[:40],'operation':operation,'phase':phase,'text':delivered_text,'system':initial_system}
+            if allowed_capabilities is not None:request['allowed_capabilities']=allowed_capabilities
             if self.lane=='executor' and self.model.get('compact_at_steps'):request['compact_at_steps']=self.model['compact_at_steps']
             if session in self.compact_pending:
                 safe=bool(bound and bound.get('last_phase') in ('SPEAK','execution','execution-repair'))
@@ -169,16 +193,12 @@ class DshLane:
                     prior=self.store.db.episodes.find_one({'_id':bound['last_operation'].split(':')[0],'state':'COMMITTED','decision.next':'silent'})
                     if prior:safe=True;request['completed_episode_boundary']=bound['last_operation']
                 if safe:request['compact_before']=True
-            owner=self.store.db.episodes.find_one({'_id':operation.split(':')[0]}) or self.store.db.tasks.find_one({'_id':operation.split(':')[0]}) or {}
-            if scope_key is not None:
-                if owner and owner.get('scope_key')!=scope_key:raise PermissionError('LANE_OWNER_SCOPE_MISMATCH')
-                owner={'scope_key':scope_key,'policy_epoch':policy_epoch}
             if bound and bound.get('scope_key','operator')!=owner.get('scope_key','operator'):raise PermissionError('SESSION_SCOPE_CHANGED')
             if owner.get('scene_id'):
                 scene=self.store.db.scenes.find_one({'_id':owner['scene_id']})
                 if scene['policy_epoch']!=owner['policy_epoch']:raise PermissionError('POLICY_EPOCH_CHANGED')
             if self.lane=='executor':
-                request['skills_enabled']=bool(skills_directory(self.config,owner.get('scene_id'),owner.get('requester_id')))
+                request['skills_enabled']=self.skills_enabled and allowed_capabilities is not None and 'skill' in allowed_capabilities
             self.proxy.scope_key=owner.get('scope_key','operator')
             roots=set((bound or {}).get('evidence_roots',[]))
             if (bound or {}).get('evidence_root'):roots.add(bound['evidence_root'])
@@ -211,14 +231,6 @@ class DshLane:
             pending=session in self.compact_pending or bool(previous.get('compact_requested') and previous.get('compact_request_id')!=bound.get('compact_request_id'))
             self.store.put('sessions',{**previous,'last_phase':phase,'last_operation':operation,'inflight_operation':None,'compact_requested':pending,'compaction_generation':previous.get('compaction_generation',0)+len(body.get('compactions',[]))},expected=previous['revision'],stream=operation)
             return value
-
-    def skill_catalog(self):
-        # Called only after ContextBuilder authorizes the private scene/person.
-        response=self.http.get(self.url+'/skills',headers={'Authorization':'Bearer '+self.token})
-        value=response.json()
-        self.evidence.record('skills.catalog',value)
-        if response.is_error:raise RuntimeError('NATIVE_SKILL_CATALOG: '+str(value))
-        return value
 
     def compact(self,session):
         """Queue native complete-span compaction before the next real phase."""

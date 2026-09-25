@@ -43,7 +43,7 @@ class Application:
             # Same configured action model, separate tool-free native session
             # for low-priority dialogue summaries; no third model deployment.
             self.summary_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'summary'))
-            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval,self.executor_lane.skill_catalog))
+            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)

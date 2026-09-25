@@ -20,8 +20,8 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 
 
 class ContextBuilder:
-    def __init__(self, store: Store, retrieval=None, skill_catalog=None):
-        self.store,self.retrieval,self.skill_catalog=store,retrieval,skill_catalog
+    def __init__(self, store: Store, retrieval=None):
+        self.store,self.retrieval=store,retrieval
 
     def _reply_context(self, rows, scene):
         """Keep transport reply attribution when projecting scoped history."""
@@ -196,26 +196,21 @@ class ContextBuilder:
                 context['understanding_update_from_program']={
                     'available':True,'target':'只更新当前场景下对当前说话人的关系理解；不修改全局人格或权限。',
                     'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
-            from .tasks import WORKSPACE_TOOLS
             from .resources import workspace_grant
             grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
             context['action_capabilities_from_program']={
                 'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
-                'authorized_workspace':grant.get('workspace'),
-                'tools':[tool['name'] for tool in WORKSPACE_TOOLS] if grant else [],
-                'read_only_paths':grant.get('read_only_paths',[]),
                 'cancellation_available':True,
-                'network':'isolated','delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+                'network':'行动脑可以按需搜索公共网页并读取页面。',
+                'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
             development = (event.get('episode_kind') == 'self_development' or
                 event.get('development_profile') == 'owner' or
                 event.get('episode_kind') == 'task_feedback' and bool(
                     (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
             if development and (scene['_id'],event['person_id']) == (
                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
-                from .development import DEVELOPMENT_TOOLS
                 context['action_capabilities_from_program']['development'] = {
-                    'candidate':'持久的有效项目候选；通过行动脑 development_* 工具编辑、检查、自选发布。',
-                    'tools':[tool['name'] for tool in DEVELOPMENT_TOOLS]}
+                    'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
             context['action_capabilities_from_program']['history_query']=(
                 '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
                 '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
@@ -225,17 +220,13 @@ class ContextBuilder:
                 '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
                 '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
                 '判断，不自动总结、不自动发言。')
-            from .integration import event_granted, INTEGRATION_TOOLS
+            from .integration import event_granted
             if event_granted(self.store.config, event):
                 context['action_capabilities_from_program']['integration'] = {
-                    'tools': [tool['name'] for tool in INTEGRATION_TOOLS],
                     'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
             from .skills import skills_directory
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
-                if self.skill_catalog:
-                    try:context['available_skills_from_native_dsh']=self.skill_catalog()
-                    except Exception:context['skill_catalog_diagnostic_from_host']=redact_text(traceback.format_exc(),self.store.config)
             manifest['context_sha256']=sha(canonical(context))
         system=prompt_path(self.store.config,'common.md').read_text(encoding='utf-8')+'\n'+body
         return system,context,manifest

@@ -15,7 +15,7 @@ from .application import Application
 from .config import ROOT, redact_text as redact
 from .evidence import Evidence, canonical, sha
 from .memory_indexer import MemoryIndexer
-from .ingress import persist_input, input_state
+from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
 
 
@@ -167,6 +167,16 @@ class Chat:
                              '自行决定是否值得反思、继续旧工作、委托改进，或者什么都不做。无需公开回复。'),
             'trusted_context_events': trusted_context_events or [],
         }
+        previous = self.app.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+        if previous:
+            prior_profile = (previous.get('event') or {}).get('integration_profile')
+            if prior_profile is not None:
+                event['integration_profile'] = prior_profile
+        integration=self.app.config.get('integration',{})
+        if (previous is None and integration.get('enabled') is True and
+                (event['scene_id'],event['person_id']) ==
+                (integration.get('scene_id'),integration.get('person_id'))):
+            event['integration_profile']='owner'
         if task_id:event['task_id']=task_id
         return self.receive(event)
 

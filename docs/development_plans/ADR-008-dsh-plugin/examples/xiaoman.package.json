@@ -1,0 +1,33 @@
+{
+  "name": "@asuna/xiaoman",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PROPOSED artifact: Xiaoman persona resources, skills and authored integrations",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "persona/",
+    "agent-presets/",
+    "skills/",
+    "media/",
+    "integrations/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.1.x",
+    "@deepseek-ai/dsh": "0.1.5-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

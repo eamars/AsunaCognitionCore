@@ -1,0 +1,42 @@
+{
+  "name": "@asuna/cognition-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PROPOSED artifact: DSH-native Asuna cognition host and small client contributions",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./role": "./lib/role.js",
+    "./action": "./lib/action.js"
+  },
+  "files": [
+    "lib/",
+    "python/",
+    "agent-presets/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "0.1.5-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  }
+}

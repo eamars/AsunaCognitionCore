@@ -67,13 +67,17 @@ test('first native request has persona; one real input and no duplicate assistan
   const role = await h.create('role');
   role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Human input' }] }));
   await role.whenIdle();
-  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests.length, 1, JSON.stringify(role.session.snapshotEvents().filter(event => event.type === 'turn/end')));
   assert.match(JSON.stringify(h.requests[0].messages), /Current persona from existing state/);
   assert.equal(h.business.filter(x => x.method === 'input').length, 1);
   const events = role.session.snapshotEvents();
   assert.equal(events.filter(x => x.type === 'assistant/message').length, 1);
   assert.equal(events.filter(x => x.type === 'user/message' && x.data.source.kind === 'user').length, 1);
   assert.equal(events.filter(x => x.type === 'user/message' && x.data.source.kind === 'asuna').length, 1);
+  const stage = events.find(x => x.type === 'asuna/stage');
+  assert.deepEqual(stage.data, { turn: 1, step: 1, operation: 'stage-role', lane: 'character', phase: 'MONOLOGUE' });
+  assert.equal(events.find(x => x.type === 'user/message' && x.data.source.kind === 'asuna').data.source.lane, 'character');
+  assert.ok(stage.seq < events.find(x => x.type === 'assistant/message').seq);
   assert.equal(h.business.find(x => x.method === 'result').args.result.content, 'actual native assistant event');
 });
 
@@ -86,8 +90,32 @@ test('ordinary native sessions retain their own prompt, tools and input handling
   ordinary.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Ordinary input' }] }));
   await ordinary.whenIdle();
   assert.equal(h.business.length, 0);
+  assert.equal(ordinary.session.snapshotEvents().filter(event => event.type === 'asuna/stage').length, 0);
   assert.doesNotMatch(JSON.stringify(h.requests[0].messages), /Current persona|Internal context/);
   assert.ok(h.requests[0].tools.some(x => x.name === 'ordinary_tool'));
+});
+
+test('a native session model selection overrides the Asuna default route', async t => {
+  const h = await harness(t);
+  h.core.config.routes.character.reasoningEffort = 'unsupported-for-selected-model';
+  const role = await h.create('selected-model');
+  role.session.append('model/selection', { provider: 'fixture', model: 'selected-model' });
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'offline route selection' }] }));
+  await role.whenIdle();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests[0].model, 'selected-model');
+  assert.equal(h.requests[0].reasoningEffort, undefined);
+});
+
+test('the provider-default reasoning choice omits effort in the real native request', async t => {
+  const h = await harness(t);
+  h.core.config.routes.character.reasoningEffort = '';
+  const role = await h.create('default-effort');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'offline default reasoning' }] }));
+  await role.whenIdle();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests[0].reasoningEffort, undefined);
+  assert.equal(h.business.find(x => x.method === 'result').args.result.content, 'actual native assistant event');
 });
 
 test('native max-token finish remains incomplete at the business boundary', async t => {
@@ -170,4 +198,19 @@ test('selecting recovery on an existing blank native session exposes its indepen
   await h.ctx.tools.execute({ callId: 'denied-recovery-call', name: 'ordinary_tool', arguments: {},
     agent, signal: new AbortController().signal });
   assert.equal(ordinaryCalls, 0);
+});
+
+test('recovery honors the native session model and provider-default reasoning selection', async t => {
+  const h = await harness(t);
+  h.ctx.provide('asunaFloor', { config: { route: { provider: 'fixture', model: 'one-model', reasoningEffort: 'high' } } });
+  await h.ctx.agentPresets.register({ id: 'recovery', plugins: [{ name: new URL('../src/recovery.js', import.meta.url).href }] });
+  const agent = await h.create('repair-selection', false);
+  await h.ctx.agentPresets.select(agent, 'recovery');
+  agent.session.append('model/selection', { provider: 'fixture', model: 'recovery-selected-model' });
+  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect only' }] }));
+  await agent.whenIdle();
+  assert.equal(h.requests.length, 1, JSON.stringify(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')));
+  assert.equal(h.requests[0]?.model, 'recovery-selected-model', JSON.stringify(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')));
+  assert.equal(h.requests[0].reasoningEffort, undefined);
+  assert.equal(h.business.length, 0);
 });

@@ -8,7 +8,7 @@ Core without a selected persona is inert. A persona plugin injects `asuna` and c
 
 One native Host owns agents, sessions, model requests, streaming, tool loops, attachments and schedules. The private stdio worker retains existing business queues, memory, authorization, channel publication and integration supervision. Role/action/recovery are real native sessions. Ordinary DSH sessions retain their own behavior.
 
-The Client contributes a bounded memory right tab, a Plugins settings card, and a link from a role turn to its actual action session. Settings save and apply separately. Memory queries recheck session binding, policy epoch and A2 access; the tab is read-only.
+The Client contributes a bounded memory right tab and a Plugins settings card using DSH's shipped form controls. New actions/summaries use genuine native child sessions; historical action links remain readable. Settings save and apply separately. The native profile owns `deployment`, write-only `secrets`, QQ admission and lane routes after migration; provider credentials use DSH's native store. Automatic QQ admission preserves one main conversation per target, with isolated member grants and configurable blocks. Memory queries recheck session binding, policy epoch and A2 access; the tab is read-only.
 
 Authorized development tools use persistent project candidates and immutable built artifacts. Persona resource updates apply without Host restart. Python updates replace the worker at an idle boundary. JS/dependency/composition updates require Host restart. Failed candidates remain available for forward repair. The native **Asuna recovery** preset and publication floor remain available when Python cannot import; the minimum floor cannot be rewritten by these tools.
 

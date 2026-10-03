@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-/** One private process connection. Tokens never pass through this protocol. */
+/** One private process connection. Model token streams never cross this boundary. */
 export class BusinessWorker {
   constructor(config, onEvent, logger) {
     this.pending = new Map();

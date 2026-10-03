@@ -10,9 +10,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / '.runtime/adr008/packages'
-RUNTIME_MODULES = '''__init__ application audit blobs channels chat config context
+RUNTIME_MODULES = '''__init__ application audit blobs channel_admission channels chat config context
 coordinator development dialogue_summary discussion_digest evidence history_query host ingress
-integration integration_worker lanes memory memory_indexer model_settings native_worker native_api peer_context
+integration integration_worker lanes memory memory_indexer model_settings native_settings native_worker native_api native_cognition peer_context
 privacy proactive publish queue resources retrieval router sandbox scene_links schedule schedule_rules
 self_state skills state summary_attribution summary_trigger tasks tokens vision'''.split()
 
@@ -50,7 +50,7 @@ def bundle_python():
     mappings += [['docs/development_plans/ADR-001-asuna_v2_v1_handoff/prompts/reflect.md',
                   'python/asuna/resources/prompts/reflect.md'], ['RUNTIME_API.md','python/asuna/resources/RUNTIME_API.md']]
     (ROOT / 'packages/cognition-core/runtime-manifest.json').write_text(
-        json.dumps({'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS}, indent=2), encoding='utf-8')
+        json.dumps({'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS}, indent=2), encoding='utf-8', newline='\n')
     (destination.parent / 'pyproject.toml').write_text('''[build-system]
 requires = ["hatchling==1.30.1"]
 build-backend = "hatchling.build"

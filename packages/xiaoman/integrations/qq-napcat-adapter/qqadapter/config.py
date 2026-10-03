@@ -7,8 +7,8 @@ Two route kinds are supported:
   private: message_type=private, target.type=dm,    sender_id=<peer>
   group:   message_type=group,   target.type=group, target.id=<group id>,
            allowed_sender_ids=[<member ids>]   (the authorized member snapshot)
-Group routes are additionally bounded by adapter.allowed_group_ids, so a route
-object alone never opens a group that the owner did not list.
+Explicit admission is bounded by the configured allowlists. Automatic admission
+uses deterministic routes for new targets under the owner's admission policy.
 """
 import json
 import os
@@ -111,7 +111,13 @@ class Config:
         adapter = raw.get("adapter")
         if not isinstance(adapter, dict):
             raise ConfigError("adapter section missing")
-        self.allowed_private = self._id_list(adapter.get("allowed_private_user_ids"), "allowed_private_user_ids")
+        self.admission = adapter.get('admission', 'explicit')
+        if self.admission not in ('explicit', 'automatic'):
+            raise ConfigError('adapter.admission must be explicit or automatic')
+        self.blocked_senders = set(adapter.get('blocked_senders', []))
+        self.blocked_groups = set(adapter.get('blocked_groups', []))
+        private = adapter.get('allowed_private_user_ids') or []
+        self.allowed_private = self._id_list(private, "allowed_private_user_ids") if private else []
         groups = adapter.get("allowed_group_ids") or []
         if not isinstance(groups, list):
             raise ConfigError("allowed_group_ids must be a list")
@@ -208,7 +214,7 @@ class Config:
         }
 
     def _routes(self, node):
-        if not isinstance(node, dict) or not node:
+        if not isinstance(node, dict) or not node and self.admission != 'automatic':
             raise ConfigError("adapter.routes missing")
         routes = {}
         for route_id, blob in node.items():
@@ -246,37 +252,43 @@ class Config:
 
     # ---- lookups --------------------------------------------------------
     def route_for_sender(self, sender_id):
+        if sender_id in self.blocked_senders or not DIGITS.fullmatch(sender_id):
+            return None
         for route in self.routes.values():
             if route.message_type == "private" and route.sender_id == sender_id:
                 return route
+        if self.admission == 'automatic':
+            return Route('auto-dm-' + sender_id, {'message_type': 'private', 'sender_id': sender_id,
+                'target': {'type': 'dm', 'id': sender_id}})
         return None
 
     def route_for_group(self, group_id):
-        if group_id not in self.allowed_groups:
+        if group_id in self.blocked_groups or not DIGITS.fullmatch(group_id):
+            return None
+        if group_id not in self.allowed_groups and self.admission != 'automatic':
             return None
         for route in self.routes.values():
             if route.message_type == "group" and route.target_id == group_id:
                 return route
+        if self.admission == 'automatic':
+            return Route('auto-group-' + group_id, {'message_type': 'group',
+                'allowed_sender_ids': [self.napcat['account_id']], 'target': {'type': 'group', 'id': group_id}})
         return None
 
     def route_for_target(self, target_type, target_id):
         if target_type == "dm":
-            if target_id not in self.allowed_private:
-                return None
-            for route in self.routes.values():
-                if route.target_type == "dm" and route.target_id == target_id:
-                    return route
-            return None
+            return self.route_for_sender(target_id)
         if target_type == "group":
             return self.route_for_group(target_id)
         return None
 
     def is_allowed_private(self, target_id):
-        return target_id in self.allowed_private
+        return self.route_for_sender(target_id) is not None
 
     def is_group_member(self, group_id, sender_id):
         route = self.route_for_group(group_id)
-        return bool(route and route.accepts_sender(sender_id))
+        return bool(route and sender_id not in self.blocked_senders and DIGITS.fullmatch(sender_id)
+                    and (self.admission == 'automatic' or route.accepts_sender(sender_id)))
 
     def describe(self):
         group_routes = [r for r in self.routes.values() if r.message_type == "group"]

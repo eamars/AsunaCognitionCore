@@ -80,7 +80,7 @@ export class PublicationFloor {
   async persona(persona) {
     const root = (await this.effective(this.config.defaultProject))?.packageRoot;
     if (!root) return persona;
-    return { ...persona, persona_file: path.join(root, 'persona/core.md'),
+    return { ...persona, resource_root: root, persona_file: path.join(root, 'persona/core.md'),
       skill_directories: [path.join(root, 'skills')] };
   }
 

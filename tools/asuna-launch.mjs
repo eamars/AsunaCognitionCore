@@ -12,11 +12,12 @@ const read = async (file, fallback) => {
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
 const launch = await read(path.join(base, 'launch.json'));
-const config = await read(launch.config);
-const models = await read(launch.config.replace(/\.json$/, '.models.local.json'), {});
 const env = { ...process.env, DSH_HOME: path.join(base, 'home'), DSH_TELEMETRY_DISABLED: '1' };
-for (const [lane, source] of [['character', launch.shared_action_model ? 'executor' : 'character'], ['action', 'executor']]) {
-  env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || config[source]).api_key || 'local-no-auth';
+if (!launch.native_credentials) {
+  const config = await read(launch.config);
+  const models = await read(launch.config.replace(/\.json$/, '.models.local.json'), {});
+  for (const [lane, source] of [['character', launch.shared_action_model ? 'executor' : 'character'], ['action', 'executor']])
+    env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || config[source]).api_key || 'local-no-auth';
 }
 const dsh = path.join(root, 'node_modules/@deepseek-ai/dsh/lib/bin.js');
 async function run(args) {

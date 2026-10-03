@@ -10,7 +10,11 @@ def workspace_grant(config, scene_id, person_id, *, required=True):
         for route in channel.get('routes', {}).values():
             if scene_id == route['scene_id']:
                 from .channels import route_members
-                for grant in route_members(route).values():
+                if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
+                    continue
+                for sender, grant in route_members(route).items():
+                    if sender in channel.get('blocked_senders', []):
+                        continue
                     if person_id == grant['person_id']: return grant
     if required:
         raise Denied('WORKSPACE_NOT_AUTHORIZED')

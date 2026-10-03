@@ -16,15 +16,23 @@ The active action lane uses DSH's native agent loop. Asuna does not add a fixed 
 
 ## Configuration
 
-- `config/local.json` is the local base configuration. The example is `config/local.example.json`.
+- `config/local.json` is the initial migration source. The example is `config/local.example.json`. After migration the DSH profile's Core `deployment`, `secrets`, `qqAdmission` and route settings are authoritative.
 - Model credentials and initial route defaults may be supplied in an adjacent `*.models.local.json` file; after installation active routes are saved in the native profile. The character and action routes are independent; either may use the same or a different configured provider and model.
 - An adjacent `asuna-channel.local.json` is loaded only when `enabled` is `true`. Its example is `config/asuna-channel.example.json`.
 - An adjacent `integration.local.json` provides the optional owner-bound managed integration profile. Its example is `config/integration.example.json`.
 - Credentials, account IDs, scene IDs, provider addresses, and local paths come from deployment configuration. They are not fixed by lane name or stored in this contract.
 
+Core's native plugin settings page uses DSH's settings mirror, staged form controls, revision fence and durable profile writes. Business secrets are write-only values referenced by `{"$secret":"name"}`; LLM secrets remain in DSH's provider credential store. Save performs model-free validation. Apply quiesces ingress and background summaries at an idle user/action boundary, restarts the worker, and reloads an already-enabled adapter from the installed persona package. A settings startup failure restores the previous runtime configuration while retaining the saved proposal for correction.
+
+Native `asuna/stage` informational events attribute each actual request's `turn`, `step`, `operation`, `lane` and `phase`. Stage input notices also retain `source.lane`; `asuna/stage-result` links the final original assistant sequence to the same attribution. These envelopes are ignorable by plain DSH readers and contain no duplicate assistant content. Client projection uses DSH's location store and original assistant events, including native stream settlement and older-page loading. Brain names describe responsibilities, independently of provider/model. Only a recorded `SPEAK` phase is an outward-expression generation; neither an arbitrary closing assistant text nor a successful model call is a platform delivery receipt.
+
 ## Channel API
 
 When channel routes are configured, the host binds the channel server to `127.0.0.1`; the default port is `8766`. It is separate from the Web UI and is not exposed through the Web proxy. Each configured channel has a unique bearer token of at least 24 characters. A route binds the platform account, sender, Asuna person, scene, and publication target.
+
+`qqAdmission=automatic` admits authenticated, valid QQ messages from previously unknown DMs/groups/members. The adapter derives `auto-dm-<id>` / `auto-group-<id>` route IDs; existing configured targets keep their routes. Core persists admissions in the existing `artifacts` collection and creates separate per-member channel workspaces without owner grants. An automatically admitted group member does not start another conversation or bump the group's authorization epoch. Removals/blocking revoke membership; old task epochs remain fenced. `explicit` requires configured enrollment. Both modes honor channel `blocked_senders` and `blocked_groups` before admission and outbox delivery.
+
+Receipt projects to the target's real native QQ conversation before inference, including non-waking group activity. It uses the original durable input ID to deduplicate; an acknowledgment in `sink_receipts` permits projection retry after interruption without replaying execution. Historical rows predating projection migration remain in Memory. The Web composer is view-only for QQ; native archive hides until the next platform activity.
 
 All endpoints require:
 

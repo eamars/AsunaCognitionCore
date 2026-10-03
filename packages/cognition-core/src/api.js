@@ -1,4 +1,5 @@
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol';
+import { editSettings } from './settings.js';
 
 const initializers = [];
 export class AsunaApi extends TypertRemoteService {
@@ -12,15 +13,18 @@ export class AsunaApi extends TypertRemoteService {
     let worker = null;
     if (core.lifecycle.state === 'ready') worker = await core.worker.call('status');
     const providers = await Promise.all(core.ctx.llm.listProviders().map(async provider => ({
-      id: provider.id, models: (await core.ctx.llm.listModels(provider.id)).map(model => ({
-        id: model.id, contextWindow: model.context?.contextWindow, maxTokens: model.context?.defaultMaxTokens,
-        inputModalities: model.inputModalities,
+      id: provider.id, name: provider.name,
+      models: await Promise.all((await core.ctx.llm.listModels(provider.id)).map(async entry => {
+        const model = await core.ctx.llm.resolveModelInfo(provider.id, entry.id);
+        return { id: model.id, name: model.name, contextWindow: model.context?.contextWindow,
+          maxTokens: model.defaultMaxTokens, inputModalities: model.inputModalities, reasoning: model.reasoning };
       })),
     })));
     // Only configuration references and capability metadata cross this boundary.
     return JSON.parse(JSON.stringify({ lifecycle: core.lifecycle, worker, providers,
       personas: [...core.personas.values()].map(p => ({ id: p.id, name: p.display_name, version: p.version })),
-      applied: core.config, pending: JSON.stringify(core.config) !== JSON.stringify(core.savedConfig()),
+      applied: core.publicConfig(), pending: JSON.stringify(core.config) !== JSON.stringify(core.savedConfig()),
+      credentials: Object.keys(core.savedConfig().secrets ?? {}),
       publications: Object.values((await core.ctx.asunaFloor.selected()).projects).map(p => ({
         project: p.project, state: p.state, candidate: p.candidate, changed_files: p.changed_files,
         activated_at: p.activated_at,
@@ -32,31 +36,44 @@ export class AsunaApi extends TypertRemoteService {
     await this.core.ready();
     return this.core.worker.call(request.id ? 'memory.detail' : 'memory.page', {
       session_id: request.session_id, ...(request.id ? { id: request.id } : {
-        category: request.category, offset: request.offset }),
+        category: request.category, offset: request.offset, search: request.search }),
     });
   }
 
+  async inputPolicies(sessionIds) {
+    if (!Array.isArray(sessionIds) || sessionIds.length > 500 || sessionIds.some(id => typeof id !== 'string'))
+      throw new Error('INVALID_SESSION_IDS');
+    await this.core.ready();
+    const sessions = await Promise.all(sessionIds.map(async id => {
+      const header = this.core.ctx.sessions.get(id)?.header
+        ?? (await this.core.ctx.sessionPersistence.stat(id))?.header;
+      return { id, cwd: header?.cwd };
+    }));
+    return this.core.worker.call('input_policies', { sessions });
+  }
+
   async applySettings() {
-    const core = this.core, next = core.savedConfig();
-    const status = core.lifecycle.state === 'ready' ? await core.worker.call('status') : null;
-    if (status?.active_role || status?.active_task || status?.queued_inputs || status?.queued_tasks)
-      throw new Error('ASUNA_BUSY: wait for the current role and action to finish');
-    if (!core.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
-    for (const lane of ['character', 'action']) {
-      const route = next.routes[lane];
-      if (!(await core.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
-        throw new Error('MODEL_NOT_IN_NATIVE_CATALOG: ' + lane);
-    }
-    await core.resolveRoutes(next.routes);
-    core.config = next;
-    await core.restart();
+    await this.core.applySettings(this.core.savedConfig());
     return this.status();
+  }
+
+  async saveSettings(ops, revision) {
+    const { core } = this, settings = core.settings;
+    if (!settings) throw new Error('NATIVE_SETTINGS_UNAVAILABLE');
+    const descriptor = settings.describe().find(row => row.ns === 'asuna-cognition-core');
+    if (!descriptor || !Number.isInteger(revision) || descriptor.revision !== revision)
+      throw new Error('SETTINGS_CONFLICT: settings changed since this draft was started');
+    const next = editSettings(core.savedConfig(), ops, descriptor.base);
+    await core.validateSettings(next);
+    // DSH rechecks the revision inside its serialized durable write.
+    await settings.mutate('asuna-cognition-core', ops, revision);
+    return { saved: true };
   }
 }
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'applySettings']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'applySettings', 'saveSettings']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

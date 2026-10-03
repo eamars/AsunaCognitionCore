@@ -82,10 +82,34 @@ class Channels:
         return channel
 
     def receive(self, channel_id, body):
+        # Admission and input persistence share the controller's existing fence.
+        with self.controller.ingress_lock:
+            if self.controller.reconfiguring or self.controller.stopping.is_set():
+                raise RuntimeError('HOST_RECONFIGURING')
+            return self._receive(channel_id, body)
+
+    def _receive(self, channel_id, body):
         allowed = {'route_id', 'account_id', 'sender_id', 'event_id', 'text', 'raw', 'occurred_at', 'mentioned_account_ids', 'reply_to', 'group_id'}
         if set(body) - allowed:
             raise Denied('CHANNEL_ENVELOPE_FIELD_DENIED')
+        # Reject malformed payloads before any automatic enrollment writes.
+        if not isinstance(body.get('event_id'), str) or not 1 <= len(body['event_id']) <= 200:
+            raise ValueError('INVALID_PLATFORM_EVENT_ID')
+        if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= 16000:
+            raise ValueError('INVALID_MESSAGE_TEXT')
+        if 'occurred_at' in body and not isinstance(body['occurred_at'], str):
+            raise ValueError('INVALID_OCCURRED_AT')
+        if body.get('group_id') is None and any(k in body for k in ('group_id', 'mentioned_account_ids', 'reply_to')):
+            raise Denied('DM_GROUP_FIELDS_DENIED')
+        mentions, reply = body.get('mentioned_account_ids', []), body.get('reply_to')
+        if not isinstance(mentions, list) or len(mentions) > 100 or any(not isinstance(v, str) for v in mentions):
+            raise ValueError('INVALID_MENTIONS')
+        if reply is not None and (not isinstance(reply, str) or not 1 <= len(reply) <= 200):
+            raise ValueError('INVALID_REPLY_ID')
         channel = self.store.config['channels'][channel_id]
+        if channel.get('admission') == 'automatic' or channel.get('blocked_senders') or channel.get('blocked_groups'):
+            from .channel_admission import admit
+            admit(self.controller, channel_id, body)
         route = channel['routes'].get(body.get('route_id'))
         member = route_members(route).get(body.get('sender_id')) if route else None
         if not member or body.get('account_id') != channel['account_id']:
@@ -118,7 +142,12 @@ class Channels:
             raise Denied('PUBLICATION_NOT_FOUND')
         route = route_for_scene(self.store.config, channel_id, message['scene_id'])
         episode = self.store.db.episodes.find_one({'_id': message['episode_id']})
-        if not episode or episode['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
+        channel = self.store.config['channels'][channel_id]
+        allowed = {grant['person_id'] for sender, grant in route_members(route).items()
+                   if sender not in channel.get('blocked_senders', [])}
+        if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
+            allowed.clear()
+        if not episode or episode['person_id'] not in allowed:
             raise Denied('PUBLICATION_MEMBER_REVOKED')
         scene = self.store.authorize(message['scene_id'], episode['person_id'])
         if (message['policy_epoch'] != scene['policy_epoch'] or message['scope_key'] != scene['scope_key']
@@ -135,6 +164,8 @@ class Channels:
     def claim(self, channel_id, wait_seconds=0):
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
+            if self.controller.reconfiguring:
+                return {'items': []}
             with database_effects_lock(self.store.name):
                 row = self.store.db.messages.find_one({'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}, sort=[('scene_seq', 1)])
                 if row:

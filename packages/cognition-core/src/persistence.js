@@ -5,7 +5,7 @@
 import SessionPersistence from '@deepseek-ai/dsh-session-persistence';
 import JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl';
 
-export const ASUNA_EVENTS = new Set(['asuna/stage-result', 'asuna/schedule', 'asuna/action-linked']);
+export const ASUNA_EVENTS = new Set(['asuna/stage', 'asuna/stage-result', 'asuna/schedule', 'asuna/action-linked']);
 const compatible = event => ASUNA_EVENTS.has(event.type) ? { ...event, ignorable: true } : event;
 export function compatibleHandle(handle) {
   return { id: handle.id, header: handle.header, access: handle.access,

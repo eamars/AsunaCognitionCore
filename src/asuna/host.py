@@ -29,9 +29,11 @@ def _workspace_overlaps(workspace, ordered, known):
     return index < len(ordered) and ordered[index].startswith(prefix)
 
 
-def prepare_channels(store):
+def prepare_channels(store, *, dry_run=False):
     """Explicit DM/group identities and disjoint per-member resource grants."""
     scene_ids, tokens = set(), set()
+    def put(collection, document, **kwargs):
+        return document if dry_run else store.put(collection, document, **kwargs)
     new_identities = False
     local = store.config['chat']
     local_workspace = Path(local['workspace']).resolve()
@@ -59,6 +61,7 @@ def prepare_channels(store):
         tokens.add(token)
         if not isinstance(channel.get('account_id'), str) or not channel['account_id']:
             raise ValueError('CHANNEL_ACCOUNT_REQUIRED')
+        targets = set()
         for route in channel['routes'].values():
             scene_id = route['scene_id']
             if scene_id == local['scene_id'] or scene_id in scene_ids:
@@ -70,12 +73,19 @@ def prepare_channels(store):
                 raise Denied('CHANNEL_TARGET_OR_MEMBERS_REQUIRED')
             if kind == 'dm' and route['target']['id'] != route['sender_id']:
                 raise Denied('CHANNEL_DM_TARGET_MISMATCH')
-            people = []
+            target = (kind, route['target']['id'])
+            if target in targets:
+                raise Denied('CHANNEL_TARGET_ALREADY_BOUND')
+            targets.add(target)
+            people, all_people = [], set()
+            blocked = kind == 'group' and route['target']['id'] in channel.get('blocked_groups', [])
             for sender, grant in members.items():
                 person = grant['person_id']
-                if not isinstance(sender, str) or not sender or not isinstance(person, str) or not person or person in people:
+                if not isinstance(sender, str) or not sender or not isinstance(person, str) or not person or person in all_people:
                     raise Denied('CHANNEL_MEMBER_BINDING_INVALID')
-                people.append(person)
+                all_people.add(person)
+                if not blocked and sender not in channel.get('blocked_senders', []):
+                    people.append(person)
                 workspace = Path(grant['workspace']).resolve()
                 if not workspace.is_relative_to((ROOT / '.runtime' / 'channels').resolve()):
                     raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')
@@ -86,7 +96,7 @@ def prepare_channels(store):
                 known_workspaces.add(workspace_key)
                 identity = identities_by_id.get(person)
                 if identity is None:
-                    created = store.put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
+                    created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
                                                       'account_id': sender}, stream='host:setup')
                     identities_by_id[person] = created
                     if relationship_db is not store.db:
@@ -101,13 +111,15 @@ def prepare_channels(store):
                 # 没配 canonical 映射时就是原来那一份；配了之后别名场景不再另起一条关系记录。
                 head_key = target['entity'] + '|' + target['scope']
                 if head_key not in relationship_heads:
-                    store.init_head(target['entity'], target['scope'],
-                                    {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
+                    if not dry_run:
+                        store.init_head(target['entity'], target['scope'],
+                                        {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
                     relationship_heads.add(head_key)
-                workspace.mkdir(parents=True, exist_ok=True)
+                if not dry_run:
+                    workspace.mkdir(parents=True, exist_ok=True)
             scene = store.db.scenes.find_one({'_id': scene_id})
             if scene is None:
-                created = store.put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
+                created = put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
                                                'members': people, 'scope_key': 'scene:' + scene_id,
                                                'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
                                                'channel_account_id': channel['account_id']}, stream='host:setup')
@@ -115,9 +127,17 @@ def prepare_channels(store):
                     scene_rows.append(created)
             else:
                 if (scene.get('channel_id') != channel_id or scene.get('channel_account_id') != channel['account_id'] or scene['kind'] != kind
-                        or set(scene['members']) != set(people) or scene['scope_key'] != 'scene:' + scene_id):
+                        or scene['scope_key'] != 'scene:' + scene_id):
                     raise Denied('CHANNEL_SCENE_BINDING_CONFLICT')
-    if scene_links:
+                if set(scene['members']) != set(people):
+                    # In automatic mode, another participant in the same QQ
+                    # group is covered by the existing admission policy.
+                    revoked = set(scene['members']) - set(people)
+                    bump = bool(revoked) or channel.get('admission') != 'automatic'
+                    put('scenes', {**scene, 'members': people,
+                        'policy_epoch': scene['policy_epoch'] + int(bump)},
+                        expected=scene['revision'], stream='channel-membership:' + scene_id)
+    if scene_links and not dry_run:
         # 派生投影：联动边与 canonical 映射写进 scenes／identities，只为可观察；
         # 读路径每次现算自配置，删掉配置键立刻回到原状。
         if new_identities:
@@ -152,6 +172,8 @@ class RuntimeHost:
             self.settings = local_settings(self.config)
             prepare_local_scene(self.app.store, self.settings)
             local_ready = time.perf_counter()
+            from .channel_admission import restore_admissions
+            restore_admissions(self.app.store)
             scenes = prepare_channels(self.app.store)
             channel_scenes_ready = time.perf_counter()
             self.integration = None
@@ -180,6 +202,7 @@ class RuntimeHost:
                                          summary_lane=self.app.summary_lane,
                                          summary_scenes=[self.settings['scene_id'], *sorted(scenes)],
                                          summary_can_run=lambda: self.controller.active_task is None
+                                             and not self.controller.reconfiguring
                                              and self.controller.task_queue.empty()).start()
             self.app.memory_indexer = self.indexer
             self.stack.callback(self.indexer.close)

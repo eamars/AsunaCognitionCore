@@ -134,27 +134,34 @@ class ManagedProcess:
         return self.snapshot()
 
 
+def validate_profile(config):
+    """Shared startup/settings validation with no process, lease or filesystem writes."""
+    local = config['chat']
+    profile = owner_profile(config, local['scene_id'], local['person_id'])
+    endpoints = profile.get('endpoints', [])
+    if not isinstance(endpoints, list) or len(endpoints) > 8:
+        raise ValueError('INTEGRATION_ENDPOINT_LIMIT')
+    names, ports = set(), set()
+    for e in endpoints:
+        if not re.fullmatch(r'[a-z][a-z0-9_-]{0,30}', e['name']) or e['name'] in names:
+            raise ValueError('INVALID_INTEGRATION_ENDPOINT_NAME')
+        ip = ipaddress.ip_address(e['host'])
+        if not (ip.is_private or ip.is_loopback) or ip.is_unspecified or ip.is_multicast:
+            raise ValueError('INTEGRATION_ENDPOINT_MUST_BE_EXPLICIT_LOCAL_IP')
+        for key in ('port', 'target_port'):
+            if type(e[key]) is not int or not 1024 <= e[key] <= 65535:
+                raise ValueError('INVALID_INTEGRATION_PORT')
+        if e['port'] in ports:
+            raise ValueError('DUPLICATE_INTEGRATION_PORT')
+        names.add(e['name']); ports.add(e['port'])
+    return profile
+
+
 class IntegrationRunner:
     def __init__(self, config, *, root=None):
         self.config = config
-        local = config['chat']
-        self.profile = owner_profile(config, local['scene_id'], local['person_id'])
+        self.profile = validate_profile(config)
         self.endpoints = self.profile.get('endpoints', [])
-        if not isinstance(self.endpoints, list) or len(self.endpoints) > 8:
-            raise ValueError('INTEGRATION_ENDPOINT_LIMIT')
-        names, ports = set(), set()
-        for e in self.endpoints:
-            if not re.fullmatch(r'[a-z][a-z0-9_-]{0,30}', e['name']) or e['name'] in names:
-                raise ValueError('INVALID_INTEGRATION_ENDPOINT_NAME')
-            ip = ipaddress.ip_address(e['host'])
-            if not (ip.is_private or ip.is_loopback) or ip.is_unspecified or ip.is_multicast:
-                raise ValueError('INTEGRATION_ENDPOINT_MUST_BE_EXPLICIT_LOCAL_IP')
-            for key in ('port', 'target_port'):
-                if type(e[key]) is not int or not 1024 <= e[key] <= 65535:
-                    raise ValueError('INVALID_INTEGRATION_PORT')
-            if e['port'] in ports:
-                raise ValueError('DUPLICATE_INTEGRATION_PORT')
-            names.add(e['name']); ports.add(e['port'])
         self.root = Path(root).resolve() if root else ROOT/'.runtime/integration/owner'
         if not self.root.is_relative_to((ROOT/'.runtime/integration').resolve()):
             raise Denied('INTEGRATION_ROOT_DENIED')
@@ -184,7 +191,8 @@ class IntegrationRunner:
         saved = json.loads(self.enabled_path.read_text(encoding='utf-8'))
         if not saved.get('enabled'):
             return
-        if saved.get('profile') != self.fingerprint:
+        applying = self.config.get('_native_apply_integrations', False)
+        if saved.get('profile') != self.fingerprint and not applying:
             self.restoration_error = 'PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START'
             return
         try:
@@ -193,19 +201,32 @@ class IntegrationRunner:
             snapshot = self.root/'snapshots'/saved['snapshot']
             if snapshot.parent != self.root/'snapshots' or not snapshot.is_dir():
                 raise ValueError('ENABLED_SNAPSHOT_MISSING')
+            if applying and self.config.get('_native_integration_release'):
+                # Applying plugin settings uses the installed persona release,
+                # never unpublished files in the writable development tree.
+                snapshot = self._snapshot(Path(self.config['_native_integration_release']))
             self.active = self._launch(snapshot, saved['argv'], 'service')
+            if applying:
+                if self.active.snapshot()['state'] != 'RUNNING':
+                    raise RuntimeError('INTEGRATION_SETTINGS_START_FAILED')
+                updated = {**saved, 'snapshot': snapshot.name, 'profile': self.fingerprint}
+                temporary = self.enabled_path.with_suffix('.tmp')
+                temporary.write_text(json.dumps(updated), encoding='utf-8'); temporary.replace(self.enabled_path)
         except Exception as exc:
             self.restoration_error = str(exc)
+            if applying:
+                raise
 
-    def _snapshot(self):
+    def _snapshot(self, source_root=None):
+        source_root = source_root or self.dev
         destination = self.root/'snapshots'/uuid.uuid4().hex
         destination.mkdir(parents=True)
         count = total = 0
-        for source in self.dev.rglob('*'):
+        for source in source_root.rglob('*'):
             # The development namespace cannot mutate files during this locked copy.
-            if source.is_symlink() or source.is_junction() or not source.resolve().is_relative_to(self.dev.resolve()):
+            if source.is_symlink() or source.is_junction() or not source.resolve().is_relative_to(source_root.resolve()):
                 raise Denied('INTEGRATION_SNAPSHOT_LINK_DENIED')
-            target = destination/source.relative_to(self.dev)
+            target = destination/source.relative_to(source_root)
             if source.is_dir():
                 target.mkdir()
             elif source.is_file():

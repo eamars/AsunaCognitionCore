@@ -12,15 +12,22 @@ import { BusinessWorker } from './worker.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
+import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
+import { NativeChildren } from './children.js';
+import { redactSecrets } from '@deepseek-ai/dsh-settings';
+import { assertSecretReferences, nativeRoute } from './settings.js';
 import z from '@deepseek-ai/schemastery';
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
-  'sessionController', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm'];
+  'sessionController', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
 export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),
   configPath: z.string().volatile(), persona: z.string().volatile(),
+  deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
+  secrets: z.dict(z.string().role('secret')).volatile(),
+  qqAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
   routes: z.object({ character: Route, action: Route }).volatile() });
 
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
@@ -34,7 +41,9 @@ export class CognitionCore {
     this.personas = new Map();
     this.states = new Map();
     this.handles = new Map();
+    this.channelWrites = new Map();
     this.schedules = new NativeSchedules(this);
+    this.children = new NativeChildren(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
   }
 
@@ -66,14 +75,26 @@ export class CognitionCore {
       this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
+      const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
+        id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
-        skill_directories: await this.ctx.asunaFloor.skillPaths(persona), routes: this.config.routes, models,
+        skill_directories: await this.ctx.asunaFloor.skillPaths(persona),
+        routes: Object.fromEntries(Object.entries(this.config.routes).map(([lane, route]) => [lane, nativeRoute(route)])), models,
         integration_project: await this.ctx.asunaFloor.integrationProject(persona),
-        skill_workspace: await this.ctx.asunaFloor.skillWorkspace() });
+        skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), native_sessions: nativeSessions,
+        deployment: this.config.deployment, secrets: this.config.secrets, qq_admission: this.config.qqAdmission,
+        apply_integrations: !!this.applying });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
-      await this.ctx.workspaceController.create({ path: status.workspace });
+      await organizeNativeWorkspaces(this, status.navigation);
+      // Publish the native controller's own summaries after cold metadata
+      // repair, including to clients already connected during worker startup.
+      const primary = new Set(status.navigation.entries.map(entry => entry.session_id));
+      const catalog = await this.ctx.sessionController.list({}, new AbortController().signal);
+      for (const summary of catalog.items)
+        if (primary.has(summary.sessionId)) this.ctx.emit('api-session/added', summary);
       this.specs = await this.worker.call('tool_specs');
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
+      await this.worker.call('navigation.ready');
     })().catch(async error => {
       this.lifecycle.state = 'failed'; this.lifecycle.error = String(error);
       if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
@@ -85,18 +106,54 @@ export class CognitionCore {
   async resolveRoutes(routes) {
     const models = {};
     for (const lane of ['character', 'action']) {
-      const route = routes[lane];
+      const route = nativeRoute(routes[lane]);
+      if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
+        throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
       if (!Number.isInteger(route.maxTokens) || route.maxTokens < 1
           || model.context && route.maxTokens >= model.context.contextWindow)
         throw new Error('INVALID_OUTPUT_LIMIT: ' + lane);
-      if (model.reasoning && !model.reasoning.efforts.some(e => e.id === route.reasoningEffort))
+      if (route.reasoningEffort !== undefined && !model.reasoning?.efforts.some(e => e.id === route.reasoningEffort))
         throw new Error('INVALID_REASONING_EFFORT: ' + lane);
       models[lane] = { model: route.model, provider: route.provider, max_tokens: route.maxTokens,
-        reasoning_effort: route.reasoningEffort, input_modalities: model.inputModalities ?? [],
+        reasoning_effort: route.reasoningEffort ?? model.reasoning?.defaultEffort, input_modalities: model.inputModalities ?? [],
         context_window: model.context?.contextWindow ?? null, token_counter: 'native-host' };
     }
     return models;
+  }
+
+  publicConfig() { return redactSecrets(Config, this.config).value; }
+
+  async validateSettings(next) {
+    if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
+    const models = await this.resolveRoutes(next.routes);
+    if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: import the existing deployment with setup_native_profile.py');
+    assertSecretReferences(next.deployment);
+    // This process imports and validates the proposed business configuration.
+    // It does not initialize a RuntimeHost, consume queues, or call any model.
+    const probe = new BusinessWorker({ ...next, pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
+    try {
+      await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
+        models, persona: next.persona, qq_admission: next.qqAdmission ?? 'explicit' });
+    } finally { await probe.dispose(); }
+  }
+
+  async applySettings(next) {
+    if (this.applying || this.restarting) throw new Error('ASUNA_CONFIGURATION_BUSY');
+    this.applying = true;
+    const previous = this.config;
+    try {
+      await this.validateSettings(next);
+      if (this.lifecycle.state === 'ready') await this.worker.call('settings.quiesce');
+      this.config = next;
+      try { await this.restart(); }
+      catch (error) {
+        this.config = previous;
+        try { await this.restart(); }
+        catch (recovery) { throw new Error('SETTINGS_ACTIVATION_AND_RECOVERY_FAILED: ' + String(error) + '; ' + String(recovery)); }
+        throw new Error('SETTINGS_NOT_APPLIED_PREVIOUS_CONFIGURATION_RESTORED: ' + String(error));
+      }
+    } finally { this.applying = false; }
   }
 
   state(id) {
@@ -123,11 +180,23 @@ export class CognitionCore {
 
   message(stage) {
     return createUserMessage({ content: [{ type: 'text', text: stage.text }],
-      source: { kind: 'asuna', form: 'notice', summary: 'Asuna · ' + stage.phase,
-        operation: stage.token, phase: stage.phase } });
+      source: { kind: 'asuna', form: 'notice', summary: (stage.lane === 'character' ? '角色脑' : stage.lane === 'executor' ? '行动脑' : '交流摘要') + ' · ' + stage.phase,
+        operation: stage.token, lane: stage.lane, phase: stage.phase } });
   }
 
   async onEvent(event) {
+    if (event.kind === 'channel_input' || event.channel_input) {
+      const receipt = event.channel_input ?? event, id = receipt.session_id;
+      const previous = this.channelWrites.get(id) ?? Promise.resolve();
+      const worker = this.worker;
+      const writing = previous.catch(() => {}).then(async () => {
+        await recordChannelInput(this, receipt);
+        await worker.call('channel_input.ack', { input_id: receipt.input.id, session_id: id });
+      });
+      this.channelWrites.set(id, writing);
+      try { await writing; } finally { if (this.channelWrites.get(id) === writing) this.channelWrites.delete(id); }
+      if (event.kind === 'channel_input') return;
+    }
     if (event.kind === 'restart_requested') { await this.restart(); return; }
     if (event.kind === 'host_request') {
       try {
@@ -153,6 +222,10 @@ export class CognitionCore {
     }
     if (event.kind !== 'stage') return;
     try {
+      if (event.lane !== 'character' && event.binding?.parent_session_id) {
+        await this.children.start(event);
+        return;
+      }
       const agent = await this.ensureAgent(event);
       if (event.lane === 'executor') await this.linkAction(event);
       const saved = agent.session.snapshotEvents().find(e => e.type === 'asuna/stage-result'
@@ -162,7 +235,7 @@ export class CognitionCore {
           && e.type === 'assistant/message' && !e.data.interrupted);
         if (!actual) throw new Error('Saved Asuna receipt has no native assistant event');
         await this.worker.call('result', { token: event.token,
-          result: this.result(event, agent, actual, saved.data.finish_reason) });
+          result: this.result(event, agent.id, actual, saved.data.finish_reason) });
         return;
       }
       if (state.current) { state.queue.push(event); return; }
@@ -174,24 +247,45 @@ export class CognitionCore {
     }
   }
 
-  async ensureAgent(stage) {
+  async ensureAgent(stage, parentAgent, descriptor) {
+    // Native Archive hides a monitored conversation until its next activity.
+    // It does not disable the channel. Reopen before DSH's archive gate.
+    if (stage.lane === 'character' && stage.binding.scene_id.startsWith('qq:'))
+      await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
     const preset = stage.lane === 'executor' ? 'asuna-action' : stage.lane === 'summary'
       ? 'asuna-summary' : this.personas.get(this.config.persona).preset;
-    const setup = agentCtx => this.ctx.agentPresets.mount(agentCtx, preset).then(() => undefined);
-    const options = this.config.routes?.[stage.lane === 'character' ? 'character' : 'action'];
+    const setup = async agentCtx => {
+      await this.ctx.agentPresets.mount(agentCtx, preset);
+      if (descriptor) agentCtx.on('agent/pre-step', async ({ agent }, next) => {
+        if (!agent.session.snapshotEvents().some(event => event.type === 'subagent/descriptor'))
+          agent.session.append('subagent/descriptor', descriptor);
+        return next();
+      });
+    };
+    const options = nativeRoute(this.config.routes?.[stage.lane === 'character' ? 'character' : 'action']);
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
     const handle = persisted
-      ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, agentOptions: options, setup })
+      ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, parentAgent, agentOptions: options, setup })
       : await this.ctx.agents.create({ sessionId: stage.session_id,
-        meta: { cwd: stage.binding.cwd, agentPreset: preset }, agentOptions: options, setup });
+        parentAgent, meta: { cwd: stage.binding.cwd, agentPreset: preset,
+          ...(parentAgent ? { parentSession: parentAgent.id, origin: 'subagent',
+            delegationDepth: (parentAgent.session.header.delegationDepth ?? 0) + 1 } : {}) },
+        agentOptions: options, setup });
     this.handles.set(stage.session_id, handle);
-    const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd);
-    await workspace.attachSession(stage.session_id);
-    if (!persisted && stage.lane === 'executor')
-      await this.ctx.sessionController.rename({ sessionId: stage.session_id,
-        title: 'Asuna Action · ' + stage.binding.task_id });
+    if (!parentAgent) {
+      const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd,
+        stage.binding.scene_id.startsWith('qq:') ? 'QQ' : 'Local');
+      await workspace.attachSession(stage.session_id);
+    }
+    if (!persisted && stage.lane === 'executor') {
+      // Child Agents are owned by native subagent routing; the top-level
+      // session command controller deliberately refuses to acquire them.
+      handle.agent.session.append('session/title', { title: '行动脑 · ' + stage.binding.task_id,
+        source: { kind: 'user' }, messageSeqs: [] });
+      await this.ctx.sessions.flush(handle.agent.session);
+    }
     return handle.agent;
   }
 
@@ -206,12 +300,12 @@ export class CognitionCore {
     await this.ctx.sessions.flush(role.session);
   }
 
-  result(stage, agent, last, finishReason) {
+  result(stage, sessionId, last, finishReason) {
     return {
       content: textOf(last.data.message), finish_reason: finishReason,
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
-      receipt: stage.token, request_refs: [agent.session.id + ':' + last.seq],
+      receipt: stage.token, request_refs: [sessionId + ':' + last.seq],
     };
   }
 
@@ -273,7 +367,7 @@ export class CognitionCore {
         const waiting = this.next(agent.session.id, signal);
         // Observe both failures immediately; the signal also releases waiting.
         const [, stage] = await Promise.all([
-          this.worker.call('input', { session_id: agent.session.id,
+          this.worker.call('input', { session_id: agent.session.id, cwd: agent.session.header.cwd,
             message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n') }), waiting,
         ]);
         if (stage.error) throw new Error(stage.error);
@@ -287,8 +381,20 @@ export class CognitionCore {
         section.name === PERSONA_PREFIX_SECTION ? { ...section, text: state.system } : section) };
     });
     // Route selection only. All model-visible material uses the durable inbox.
-    scope.on('agent/request', async (_payload, next) => ({ ...await next(),
-      ...this.config.routes?.[lane === 'character' ? 'character' : 'action'] }));
+    scope.on('agent/request', async ({ agent, turn, step }, next) => {
+      const request = await next();
+      const stage = this.state(agent.session.id).current;
+      // Business attribution only. DSH still owns the request, stream, tools,
+      // process folding and assistant body. Every tool-followup step retains
+      // its actual lane, even when both lanes use the same model.
+      if (stage) agent.session.append('asuna/stage', { turn, step,
+        operation: stage.token, lane: stage.lane, phase: stage.phase });
+      // A deliberate native model selection remains authoritative for this
+      // session. The plugin routes are defaults for sessions without one.
+      const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
+      const route = selected ?? this.config.routes?.[lane === 'character' ? 'character' : 'action'];
+      return nativeRoute({ ...request, ...route, reasoningEffort: route?.reasoningEffort });
+    });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
       const decision = await next();
@@ -313,13 +419,14 @@ export class CognitionCore {
       if (!last || last.data.interrupted) throw new Error('Native stage has no complete assistant output');
       const finishReason = state.finish === 'max-tokens' ? 'length' : 'stop';
       agent.session.append('asuna/stage-result', { operation: stage.token,
+        turn, step: last.data.step, lane: stage.lane, phase: stage.phase,
         assistant_seq: last.seq, finish_reason: finishReason });
       await this.ctx.sessions.flush(agent.session);
       const waiting = lane === 'character' && stage.phase !== 'CONSULT'
         ? this.next(agent.session.id, signal) : null;
       state.current = null;
       await this.worker.call('result', { token: stage.token,
-        result: this.result(stage, agent, last, finishReason) });
+        result: this.result(stage, agent.id, last, finishReason) });
       if (waiting) {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);
@@ -349,7 +456,7 @@ export class CognitionCore {
     });
   }
 
-  async attachAction(agent) {
+  async attachAction(agent, attachments) {
     const scope = agent.ctx;
     await this.ready();
     const binding = await this.worker.call('session', { session_id: agent.session.id });
@@ -377,7 +484,9 @@ export class CognitionCore {
             const spill = await readSpill(this.ctx.get('spillStore'), agent.session.id, args);
             if (spill) return spill;
           }
-          return attachImage(scope, await this.worker.call('tool', {
+          // The action plugin owns the declared attachment injection. An
+          // Agent's context does not inherit that plugin's service grants.
+          return attachImage({ attachments }, await this.worker.call('tool', {
             session_id: agent.session.id, call_id: exec.callId, tool: spec.name, args,
           }));
         },
@@ -390,6 +499,7 @@ export class CognitionCore {
     clearTimeout(this.restartTimer);
     if (this.worker) this.worker.onFailure = null;
     await this.worker?.dispose();
+    await this.children.dispose();
     for (const handle of this.handles.values()) await handle.dispose();
     this.handles.clear();
   }
@@ -407,7 +517,12 @@ export function apply(ctx, config = {}) {
   };
   ctx.asunaFloor.activateRecovery = activateRecovery;
   new AsunaApi(ctx, core);
-  ctx.inject(['settings'], child => child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)));
+  ctx.inject(['settings'], child => child.effect(() => {
+    const settings = child.settings;
+    core.settings = settings;
+    const release = settings.configure({ auto: false }, ctx.fiber);
+    return () => { if (core.settings === settings) core.settings = null; return release(); };
+  }));
   ctx.on('dispose', () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;
     return core.dispose();

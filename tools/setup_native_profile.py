@@ -13,6 +13,7 @@ import tarfile
 import yaml
 
 from asuna.config import ROOT, load
+from asuna.native_settings import export_settings
 
 
 def profile_patch(config, config_path, shared_action_model=False):
@@ -33,7 +34,8 @@ def profile_patch(config, config_path, shared_action_model=False):
                         'reasoningEffort': model['reasoning_effort'], 'maxTokens': model['max_tokens']}
     return [
         {'id': 'llm-pi-ai', 'config': {'providers': providers}},
-        {'id': 'agent-default-model', 'config': routes['character']},
+        {'id': 'agent-default-model', 'config': {key: routes['character'][key]
+            for key in ('provider', 'model', 'reasoningEffort')}},
         {'id': 'session-title-llm', 'disabled': True},
         {'id': 'agent-preset-registry', 'config': {'default': 'asuna-xiaoman'}},
         {'id': 'asuna-publication-floor', 'config': {
@@ -43,7 +45,8 @@ def profile_patch(config, config_path, shared_action_model=False):
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
             'python': sys.executable, 'workspace': str(ROOT),
-            'configPath': str(config_path.resolve()), 'persona': config['chat']['persona'], 'routes': routes}},
+            'configPath': str(config_path.resolve()), 'persona': config['chat']['persona'], 'routes': routes,
+            **export_settings(config)}},
     ]
 
 
@@ -86,9 +89,34 @@ def main():
     merged = [merge(row, by_id.get(row['id'], {})) for row in defaults]
     ids = {row['id'] for row in defaults}
     merged.extend(row for row in prior or [] if row.get('id') not in ids)
+    # Older installers put an Asuna route's output limit into this native
+    # service. It is not part of AgentDefaultModel.Config: removing it during
+    # a native picker save causes an ordinary lifecycle reload instead of a
+    # volatile model update. Output limits remain in the two Asuna routes.
+    for row in merged:
+        if row.get('id') == 'agent-default-model':
+            row.get('config', {}).pop('maxTokens', None)
     editable.write_text(yaml.safe_dump(merged, allow_unicode=True, sort_keys=False), encoding='utf-8')
+    credential_values = {'ASUNA_NATIVE_' + lane.upper() + '_KEY': config[source].get('api_key') or 'local-no-auth'
+        for lane, source in (('character', 'executor' if args.shared_action_model else 'character'), ('action', 'executor'))}
+    subprocess.run(['node', str(ROOT / 'tools/import_native_credentials.mjs')], cwd=ROOT,
+                   input=json.dumps({'home': str(home), 'values': credential_values}), text=True,
+                   capture_output=True, check=True)
+    activation_path = base / 'activation.json'
+    selected = json.loads(activation_path.read_text(encoding='utf-8')) if activation_path.exists() else {'projects': {}, 'active': {}}
+    for artifact in manifest:
+        project = 'core' if artifact['name'] == '@asuna/cognition-core' else 'xiaoman'
+        installed = home / 'profiles/asuna-native/node_modules' / artifact['name']
+        selected.setdefault('projects', {})[project] = {
+            **selected.get('projects', {}).get(project, {}), 'project': project, 'state': 'APPLIED',
+            'artifact': artifact['path'], 'sha256': artifact['sha256'], 'packageRoot': str(installed),
+            'receipt_id': 'native-install-' + artifact['sha256'],
+            **({'workerPath': str(installed / 'python')} if project == 'core' else {})}
+    temporary = activation_path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(selected, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary.replace(activation_path)
     (base / 'launch.json').write_text(json.dumps({'config': str(args.config.resolve()),
-        'shared_action_model': args.shared_action_model}), encoding='utf-8')
+        'shared_action_model': args.shared_action_model, 'native_credentials': True}), encoding='utf-8')
     print('Installed native profile. Start with start-asuna.cmd --port 8780')
 
 

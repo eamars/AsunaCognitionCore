@@ -25,7 +25,8 @@ def preserve_temporary_evidence(request):
 
 @pytest.fixture
 def store(request):
-    db=Store(load(),'asuna_v2_test_M1_'+uuid.uuid4().hex[:12])
+    config=load();config['character_id']='xiaoman'  # Identity of the existing fixture records.
+    db=Store(config,'asuna_v2_test_M1_'+uuid.uuid4().hex[:12])
     db.migrate();db.seed()
     yield db
     root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')

@@ -1,10 +1,10 @@
 # Asuna Runtime API
 
-This document describes the current host contract. The Python host uses the pinned DSH runtime for its character and action lanes. Platform adapters translate their platform events into the normalized channel API below; the host does not parse a platform's wire protocol.
+This is the current business contract for the two native DSH plugins. See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for composition and [RUN_ASUNA.md](RUN_ASUNA.md) for installation. DSH owns model execution and Web sessions; its managed Python worker preserves the existing normalized channel API below.
 
 ## Runtime responsibilities
 
-`RuntimeHost` owns the application, the Web-reused `Chat` controller, memory indexing and background summaries, the native DSH schedule service, and any configured channel or integration services. The Web UI uses `Chat.submit`, `Chat.new_context`, and the host's scoped records directly; it does not use the terminal adapters.
+`RuntimeHost` inside the business worker owns Application, the queue/action `Chat` controller, memory indexing and summaries, and configured channels/integrations. The Core Host plugin owns actual native agents and the DSH schedule service. Native composer input enters through SessionController and is associated with persisted input by native message ID; the Web UI never reads a parallel Asuna chat store.
 
 Inbound work is persisted before retrieval or model calls. Character turns and action tasks use separate queues. The host binds each turn and task to a scene, person, policy epoch, and capability set. A new context changes the DSH conversation context while retaining persisted scene memory.
 
@@ -12,12 +12,12 @@ The character brain decides whether to answer, reflect, manage a plan, or delega
 
 Ordinary tool errors are returned to the active DSH action loop so it can inspect the error and continue. A task revision, cancellation, changed policy epoch, or expired lease fences further calls. The host records tool inputs and results as artifacts; result claims are checked against those records and any required effect receipts.
 
-The active action lane uses DSH's native agent loop. Asuna does not add a fixed action-step termination limit or reject turns using a separate token-budget gate. Token measurements are observational; context pressure is handled through DSH compaction, including the bridge's pending-input pressure check.
+The active action lane uses DSH's native agent loop. Asuna does not add a fixed action-step termination limit or reject turns using a separate token-budget gate. Token measurements are observational; context pressure is handled through DSH compaction, using the selected native model metadata.
 
 ## Configuration
 
 - `config/local.json` is the local base configuration. The example is `config/local.example.json`.
-- Model settings may be overridden in an adjacent `*.models.local.json` file. The character and action routes are independent; either may use the same or a different configured provider and model.
+- Model credentials and initial route defaults may be supplied in an adjacent `*.models.local.json` file; after installation active routes are saved in the native profile. The character and action routes are independent; either may use the same or a different configured provider and model.
 - An adjacent `asuna-channel.local.json` is loaded only when `enabled` is `true`. Its example is `config/asuna-channel.example.json`.
 - An adjacent `integration.local.json` provides the optional owner-bound managed integration profile. Its example is `config/integration.example.json`.
 - Credentials, account IDs, scene IDs, provider addresses, and local paths come from deployment configuration. They are not fixed by lane name or stored in this contract.
@@ -127,7 +127,7 @@ An adapter may normalize non-text segments into bounded `raw.asuna_media` metada
 
 The action brain can call `read_image({"ref": "…", "max_bytes": 4194304})` when `executor.input_modalities` includes `image`. The reference selects an attachment already visible to that task; it cannot widen the read scope. That scope is recomputed from configuration at call time (`context_links` or route-level `read_scenes`, own scene first), so deleting the configured edge returns to own-scene-only, and a linked scene missing from the database or sitting in another policy epoch is simply not scanned. Bytes pulled from a linked scene are still stored under the calling task's own scope key. URL fetching requires an allowed host and safe redirect, enforces a byte limit, and accepts PNG, JPEG, WebP, or GIF data identified by file signature. An optional local image directory can also be configured. Pulled bytes are stored through the scoped blob store and passed to DSH as a durable image attachment. The stored tool receipt contains metadata and blob references, not base64 image bytes.
 
-The default byte limit equals the 8 MiB hard limit: QQ photos are routinely 4-6 MiB and DSH re-encodes request images toward a 1 MiB target, so blocking at pull time would be an Asuna fence, not a route capability. Host allowlists, timeout, local directories, and insecure HTTP policy are configured under `vision`; the allowlist defaults to the multimedia host this deployment has actually received. Unsupported routes, disallowed sources, and fetch failures return real error codes, and a non-2xx response carries the server's bounded reason with any temporary `rkey` redacted; placeholders are not reported as viewed images. Download URLs are re-read from the stored message at pull time and are never embedded in the listing or truncated. Images re-enter every later request, so the provider profile keeps `maxRequestImageBytes` below this host's 16 MiB audit-proxy body cap.
+The default byte limit equals the 8 MiB hard limit: QQ photos are routinely 4-6 MiB and DSH re-encodes request images toward a 1 MiB target, so blocking at pull time would be an Asuna fence, not a route capability. Host allowlists, timeout, local directories, and insecure HTTP policy are configured under `vision`; the allowlist defaults to the multimedia host this deployment has actually received. Unsupported routes, disallowed sources, and fetch failures return real error codes, and a non-2xx response carries the server's bounded reason with any temporary `rkey` redacted; placeholders are not reported as viewed images. Download URLs are re-read from the stored message at pull time and are never embedded in the listing or truncated. Durable image references enter the native attachment pipeline; request image limits and pricing belong to the selected DSH provider. There is no Asuna token proxy.
 
 ## Schedules
 
@@ -139,4 +139,4 @@ The managed integration runner is available only to the configured local owner p
 
 Integration processes run in the configured isolated environment and can reach only explicitly configured local or LAN TCP endpoints. Their commands are argument arrays, not host-shell strings. Connection credentials are supplied through the local integration profile and are not copied into ordinary task files.
 
-Self-development uses a persistent project candidate separate from ordinary task workspaces. Its tools inspect, edit, and run candidate files, read bounded records from the existing database, and publish a frozen candidate only after a non-consuming boot probe succeeds. Publication requests a host restart before the new runtime becomes active. These capabilities are available only through the self-development or owner-granted path.
+Self-development uses persistent project candidates separate from ordinary task workspaces. The default target is the selected persona (`xiaoman`); `project="core"` selects the authorized cognition source. Tools inspect bounded file pages, edit/run candidate files, read bounded records from the existing database, and publish frozen artifacts after a non-consuming boot probe. Persona resources activate without restarting DSH. Python code replaces the worker at an idle boundary; JS/composition/dependency changes return `HOST_RESTART_REQUIRED`. Failed candidates remain for forward correction through the independent native recovery preset. Existing grants still control every ordinary action; QQ scenes do not inherit local owner development permissions.

@@ -16,6 +16,7 @@ import time
 from . import summary_attribution, summary_trigger
 from .evidence import canonical, sha
 from .state import Conflict, now
+from .config import character_id
 
 
 class DialogueSummarizer:
@@ -24,8 +25,8 @@ class DialogueSummarizer:
     SCENE_KINDS = ('dm', 'group')
     RETRY_BASE_SECONDS = 30.0    # 失败退避：错误处理，不是触发条件
     RETRY_CAP_SECONDS = 900.0
-    SYSTEM = ('你是小满对话记录的后台整理步骤，只整理提供的当前场景原文（私聊或已授权群）。'
-              '区分每个人说的话、小满已经实际送达的话和各自的看法；每条转述都用给定的 author '
+    SYSTEM = ('你是当前角色对话记录的后台整理步骤，只整理提供的当前场景原文（私聊或已授权群）。'
+              '区分每个人说的话、角色已经实际送达的话和各自的看法；每条转述都用给定的 author '
               '标明是谁说的，不要把一个人的偏好或决定写成另一个人的，也不要把群里的旁听当成谁'
               '对谁说的。这一批里有人更正自己或更正别人时，写清谁更正了什么、更正成什么，被推翻'
               '的旧说法只当历史保留。遇到来源节选不全或主体不明时明确保留不确定性。只输出简短'
@@ -177,7 +178,7 @@ class DialogueSummarizer:
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)
             saved = self.store.put('memory_units', {
                 '_id': key, 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
-                'character_id': 'xiaoman', 'kind': 'dialogue_summary',
+                'character_id': character_id(self.store.config), 'kind': 'dialogue_summary',
                 'epistemic_type': 'derived_summary', 'body_markdown': result.content.strip(),
                 'source_event_ids': source_ids, 'depends_on': source_ids,
                 'scene_id': scene_id, 'source_window': [rows[0]['scene_seq'], rows[-1]['scene_seq']],

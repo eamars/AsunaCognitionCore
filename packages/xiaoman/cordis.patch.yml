@@ -1,0 +1,11 @@
+- insert:
+    - id: asuna-xiaoman
+      name: '@asuna/xiaoman'
+    - id: asuna-xiaoman-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-xiaoman
+        name: 小满
+        description: Asuna character cognition with a separate native action session
+        plugins:
+          - name: '@asuna/cognition-core/role'

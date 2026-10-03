@@ -2,7 +2,6 @@ from contextlib import ExitStack
 from .state import Store
 from .context import ContextBuilder
 from .coordinator import Coordinator
-from .dsh_lane import DshLane
 from .retrieval import Retrieval
 from .history_query import HistoryQueryService
 from .discussion_digest import DiscussionDigestService
@@ -12,17 +11,22 @@ from .router import Router
 
 class Application:
     """Core services owned by RuntimeHost; also used by explicit debug diagnostics."""
-    def __init__(self,config,evidence,database=None):
+    def __init__(self,config,evidence,database=None,*,lane_factory=None,broker_http=False,development_factory=None):
         self.config,self.evidence=config,evidence
+        if lane_factory is None:
+            raise ValueError('NATIVE_HOST_LANE_REQUIRED: start Asuna through the DSH Web profile')
+        self.lane_factory=lane_factory
+        self.broker_http=broker_http
+        self.development_factory=development_factory
         self.store=Store(config,database);self.stack=ExitStack()
     def __enter__(self):
         try:
             self.store.migrate();self.stack.callback(self.store.client.close)
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
-            self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)
-            from .development import DevelopmentWorkspace
-            self.broker.development=DevelopmentWorkspace(self.config,self.store)
+            self.broker=ToolBroker(self.service,serve_http=self.broker_http);self.stack.callback(self.broker.close)
+            if self.development_factory:
+                self.broker.development=self.development_factory(self.config,self.store)
             # P1-b: the trusted read-only history entry reuses this store and retrieval;
             # the broker binds every call to the calling task's own scene and epoch.
             self.history=HistoryQueryService(self.store,self.retrieval);self.broker.history=self.history
@@ -42,15 +46,15 @@ class Application:
     def _start_lanes(self, config):
         try:
             self.evidence.record('lane.character.start', {})
-            self.character=self.lanes.enter_context(DshLane(config,self.store,self.evidence))
+            self.character=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence))
             self.evidence.record('lane.character.ready', {})
             self.evidence.record('lane.executor.start', {})
-            self.executor_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'executor',self.broker.rows,self.broker.token))
+            self.executor_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'executor'))
             self.evidence.record('lane.executor.ready', {})
             # Same configured action model, separate tool-free native session
             # for low-priority dialogue summaries; no third model deployment.
             self.evidence.record('lane.summary.start', {})
-            self.summary_lane=self.lanes.enter_context(DshLane(config,self.store,self.evidence,'summary'))
+            self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
             self.broker.consult_character=self.coordinator.consult
@@ -61,28 +65,3 @@ class Application:
             self.lanes.close()
             self.models_ready=False
             raise
-
-    def replace_models(self, config):
-        """Only the idle Web controller may call this; preserve both lane identities."""
-        previous=self.config
-        self.models_ready=False
-        summarizer=getattr(getattr(self,'memory_indexer',None),'summarizer',None)
-        old_summary_lane=summarizer.lane if summarizer else None
-        if summarizer:
-            summarizer.paused.set()
-            old_summary_lane.lock.acquire()  # Let any already-running summary finish.
-        try:
-            self.lanes.close()
-            try:
-                self._start_lanes(config)
-            except Exception:
-                self._start_lanes(previous)
-                raise
-            self.config=config
-            self.store.config=config
-        finally:
-            if summarizer:
-                if self.models_ready:
-                    summarizer.lane=self.summary_lane
-                    summarizer.paused.clear()
-                old_summary_lane.lock.release()

@@ -39,7 +39,7 @@ def assess(check,coverage,out):
         with zipfile.ZipFile(check/'frozen-inputs.zip') as archive:
             for name,digest in frozen.items():
                 if sha(archive.read(name))!=digest:raise ValueError('FROZEN_SOURCE_HASH_CHANGED')
-        current_core=[n for n in frozen if n.startswith(('src/asuna/','tests/','dsh-plugin/'))]
+        current_core=[n for n in frozen if n.startswith(('src/asuna/','tests/','packages/cognition-core/'))]
         changed=[n for n in current_core if not (ROOT/n).is_file() or sha((ROOT/n).read_bytes())!=frozen[n]]
         cases=list(ET.parse(check/'junit.xml').iter('testcase'))
         if len(mapping['cases'])!=24 or {r['test_id'] for r in mapping['cases']}!={f'E{i:02}' for i in range(1,25)}:

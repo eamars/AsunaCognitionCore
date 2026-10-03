@@ -1,5 +1,6 @@
 """Local embeddings and server-side, prefiltered Mongo vector retrieval."""
 from __future__ import annotations
+from .config import character_id
 import math
 import re
 import time
@@ -81,7 +82,7 @@ class Retrieval:
                 if isinstance(item, str) and item and item not in ('global-safe', scope)]
         readable={scope} | set(linked)
         auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}]
-                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked],'character_id':'xiaoman','status':'active'}
+                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked],'character_id':character_id(self.store.config),'status':'active'}
         vector_filter={**auth,'embedding_revision':self.revision}
         # Cache contains IDs/scores only, never bodies, vectors or raw queries.
         # Every hit still passes the authoritative read below. State revision
@@ -92,7 +93,7 @@ class Retrieval:
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
         heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked}},{'_id':1,'revision_id':1}).sort('_id',1))
         # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
-        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':'xiaoman','query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':character_id(self.store.config),'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
         cache_hit=bool(cacheable and cached and cached['expires']>time.monotonic())
         vector=[]; failure=None

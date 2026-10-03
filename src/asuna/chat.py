@@ -11,10 +11,8 @@ import threading
 import traceback
 import uuid
 
-from .application import Application
-from .config import ROOT, redact_text as redact
+from .config import ROOT, character_id, redact_text as redact
 from .evidence import Evidence, canonical, sha
-from .memory_indexer import MemoryIndexer
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
 
@@ -95,6 +93,7 @@ class Chat:
         self.enqueued = set()
         self.reconfiguring = False
         self.on_turn_finished = None
+        self.on_episode_finished = None
         self.restart_pending = threading.Event()
 
     def _schedule(self, episode):
@@ -160,9 +159,11 @@ class Chat:
         self.pending.put(({'_compact': True, 'event_id': str(uuid.uuid4()),
             'scene_id': self.settings['scene_id'], 'person_id': self.settings['person_id']}, None))
 
-    def submit(self, text):
-        event = {'event_id': str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
+    def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None):
+        event = {'event_id': event_id or str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
+        if native_session_id:
+            event.update(native_session_id=native_session_id,native_message_ids=native_message_ids or [])
         config=self.app.config
         identity=(event['scene_id'],event['person_id'])
         local=config.get('chat',{})
@@ -330,6 +331,8 @@ class Chat:
                 event, episode = self.pending.get(timeout=.1)
             except Empty:
                 continue
+            result = None
+            error = None
             try:
                 with self.state_lock:
                     if self.stopping.is_set():
@@ -341,7 +344,7 @@ class Chat:
                     self.active = episode or event['event_id']
                 if event.get('_compact'):
                     scene = self.app.store.authorize(event['scene_id'], event['person_id'])
-                    binding = f"xiaoman:{scene['_id']}:{scene['policy_epoch']}:{self.settings['persona']}"
+                    binding = f"{character_id(self.app.config)}:{scene['_id']}:{scene['policy_epoch']}:{self.settings['persona']}"
                     if scene.get('character_context'):
                         binding += ':' + scene['character_context']
                     if not self.app.store.db.sessions.find_one({'binding_key': binding}):
@@ -433,6 +436,12 @@ class Chat:
                         'traceback': redact(traceback.format_exc(), self.app.config)})
                 self.emit(f'[系统] 本轮未完成；请查看本轮执行详情中的原始错误。原记录：{self.app.evidence.root.resolve()}')
             finally:
+                if self.on_episode_finished:
+                    try:
+                        self.on_episode_finished(event, result, error)
+                    except Exception:
+                        self.app.evidence.record('chat.completion_callback_error', {
+                            'episode_id': episode, 'traceback': redact(traceback.format_exc(), self.app.config)})
                 with self.state_lock:
                     self.active = None
                 with self.ingress_lock:
@@ -483,7 +492,7 @@ class Chat:
             elif event['type'] in ('phase.started', 'phase.failed', 'chat.error', 'publication.receipt'):
                 lines.append(f"{event['occurred_at']} {event['type']}\n" + json.dumps(event['payload'], ensure_ascii=False, indent=2, default=str))
         if ep:
-            binding = f"xiaoman:{scene['_id']}:{scene['policy_epoch']}:{ep['persona']}"
+            binding = f"{character_id(self.app.config)}:{scene['_id']}:{scene['policy_epoch']}:{ep['persona']}"
             if ep.get('character_context'):
                 binding += ':' + ep['character_context']
             native = self.app.store.db.sessions.find_one({'binding_key': binding})
@@ -548,10 +557,9 @@ class Chat:
                 if task and task['intent_revision'] == revision and task['state'] in ('READY', 'RUNNING'):
                     self.app.service.cancel(task_id, reason='host_stop', person_id=task['requester_id'])
         if active_task:
-            self.app.executor_lane.sdk.close()
+            self.app.executor_lane.close()
         if active:
-            # SDK shutdown is bounded and only owns this Application's process.
-            self.app.character.sdk.close()
+            self.app.character.close()
         self.worker.join(timeout=10)
         if self.task_worker.ident is not None:
             self.task_worker.join(timeout=10)
@@ -612,22 +620,8 @@ async def terminal(controller, *, debug=False):
             await asyncio.to_thread(controller.stop)
 
 
-def chat(config, database=None, out=None, *, debug=False):
+def chat(controller, *, debug=False):
+    """Explicit debug adapter over an already owned controller; never boot a runtime."""
     if not debug:
         raise PermissionError('CLI_DEBUG_ONLY: 正式交互使用 Web UI')
-    settings = local_settings(config)
-    name = 'chat-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex[:6]
-    evidence = Evidence(Path(out) if out else ROOT / 'reports' / name)
-    try:
-        with Application({**config, 'task_mode': 'workspace'}, evidence, database) as app:
-            prepare_local_scene(app.store, settings)
-            app.memory_indexer = MemoryIndexer(app.store, evidence, settings['scene_id']).start()
-            app.stack.callback(app.memory_indexer.close)
-            asyncio.run(terminal(Chat(app, settings), debug=True))
-        return 0
-    except Exception:
-        error = redact(traceback.format_exc(), config)
-        evidence.record('chat.startup_error', {'traceback': error})
-        print('[系统] 启动或关闭失败：\n' + error, file=sys.stderr)
-        print(f'[系统] 原记录：{evidence.root.resolve()}', file=sys.stderr)
-        return 1
+    return asyncio.run(terminal(controller, debug=True))

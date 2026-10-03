@@ -85,8 +85,7 @@ def test_tool_registered_for_action_brain_and_native_plugin(broker_env):
     store, service, broker, work = broker_env
     assert [t['name'] for t in TOOLS].count(DIGEST_TOOL_NAME) == 1
     assert [t['name'] for t in WORKSPACE_TOOLS].count(DIGEST_TOOL_NAME) == 1
-    row = next(r for r in broker.rows if r['id'] == 'asuna-controlled-tools')
-    assert DIGEST_TOOL_NAME in [t['name'] for t in row['config']['tools']]
+    assert DIGEST_TOOL_NAME in [t['name'] for t in broker.specs]
     spec = next(t for t in WORKSPACE_TOOLS if t['name'] == DIGEST_TOOL_NAME)
     for word in ('参与者', '更正', '未决', '覆盖范围', 'cursor'):
         assert word in spec['description']

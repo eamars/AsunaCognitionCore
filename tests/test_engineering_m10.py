@@ -9,7 +9,7 @@ from asuna.context import ContextBuilder
 from asuna.publish import PublishService
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
-from asuna.dsh_lane import provider_finish
+from asuna.legacy_evidence import provider_finish
 from test_engineering_m1 import normal,event,decision
 from test_engineering_m3 import task_setup
 

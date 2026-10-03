@@ -1,52 +1,28 @@
 # Asuna Cognition Core
 
-Asuna is a local-first, persistent dual-lane cognition runtime built on the pinned DSH runtime.
+Asuna runs as two plugins in one native DSH **0.2.0-rc.2** Web Host:
 
-## Overview
+- `@asuna/cognition-core` supplies cognition, task/channel authorization, the business worker, and publication tools.
+- `@asuna/xiaoman` supplies the existing 小满 persona baseline, selected skills, QQ adapter source, and its role preset.
 
-- **Character brain:** maintains persona and self-understanding, considers relationships, decides whether to delegate, and shapes the public response.
-- **Action brain:** investigates and carries out delegated work with scoped tools, then returns observations to the character brain. Ordinary tool errors stay in the active DSH action loop for diagnosis and recovery.
-- **Host:** binds scenes and identities, stores conversation and memory records, enforces capabilities, coordinates queues and schedules, and tracks publication receipts and task continuity.
+DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker reuses the existing Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
 
-The two lanes have independent provider and model settings. Their names describe responsibilities; either lane can use the same or a different configured model.
+## Start
 
-## Current capabilities
-
-- A local Web workbench for conversation, model settings, memory and execution details.
-- Persistent, scene-scoped conversation history, memory retrieval, relationship state, and source-bound background dialogue summaries.
-- Authorized history search and structured discussion digests through the action path.
-- DSH-native action capabilities for skills, schedules, web search, and page fetching, subject to the configured grants and providers.
-- Optional authenticated channel routes for direct messages and groups. The host accepts normalized events and exposes public output with platform receipt handling; a platform adapter must be configured separately.
-- Owner-scoped integration and self-development tools with separate workspaces and publication controls.
-- On-demand image reading by the action brain when its configured route declares image input and the source passes the configured checks.
-
-Available actions depend on the current configuration and authorization for the scene. A configured capability does not mean its provider or external service is online.
-
-## Quick start
-
-Create and review `config/local.json` from `config/local.example.json`, then start the Web workbench:
+After installing the local profile as described in [RUN_ASUNA.md](RUN_ASUNA.md):
 
 ```powershell
 .\start-asuna.cmd
 ```
 
-The default UI is at `http://127.0.0.1:8765/asuna/`. `start-asuna-ui.cmd` is an alias. See [RUN_ASUNA.md](RUN_ASUNA.md) for prerequisites, configuration, stop and restart steps, and troubleshooting.
+`start-asuna-ui.cmd` is an alias; `asuna ui` opens the same native profile. Open the authenticated localhost address printed by DSH (default port **8780**), select the owner workspace and **小满**, and use the native composer. Delegated tasks have real **Asuna Action** sessions, linked from their initiating role turn.
 
-## Configuration
+The right sidebar offers **记忆** for authorized state and source records. **Plugins → @asuna/cognition-core** contains the Asuna settings card. Save and apply are separate operations; providers and credentials stay in native/local configuration.
 
-`config/local.example.json` is the configuration template. `config/local.json`, model overrides, channel settings, integration settings, credentials, and deployment-specific values belong in ignored local files. Replace template connection addresses, identities, paths, and database choices with values for the local deployment; do not commit secrets or private deployment details.
+Existing Mongo persona, self, relationships, history and grants remain authoritative. Package upgrades seed only missing state. Old native lane logs remain on disk for diagnosis and are never replayed or merged into new transcripts.
 
-The optional channel and integration examples are `config/asuna-channel.example.json` and `config/integration.example.json`. See [RUNTIME_API.md](RUNTIME_API.md) for their host contracts.
+## Develop
 
-## Documentation
+Owner actions edit the persistent `xiaoman` candidate by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start.
 
-- [RUN_ASUNA.md](RUN_ASUNA.md) — current runbook.
-- [RUNTIME_API.md](RUNTIME_API.md) — current runtime, channel, tool, and recovery contract.
-- [AGENTS.md](AGENTS.md) — persistent development and interaction rules.
-- [dsh-plugin/ui/README.md](dsh-plugin/ui/README.md) — current Web UI behavior.
-- [docs/development_plans/](docs/development_plans/README.md) — ADRs and development plans; these record design history and future direction, not current runtime status.
-- [migrations/](migrations/002_artifact_blobs.md) — durable database contract notes.
-
-## Project status
-
-Experimental, local-first, and actively evolving.
+See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for package contracts and lifecycle, [RUNTIME_API.md](RUNTIME_API.md) for channel/tool semantics, and [AGENTS.md](AGENTS.md) for development rules. Plans in `docs/development_plans/` preserve design history rather than current runtime documentation.

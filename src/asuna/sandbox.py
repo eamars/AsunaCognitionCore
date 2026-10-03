@@ -6,7 +6,7 @@ from .config import ROOT
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None, *, allowed_root=None):
+    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None, *, allowed_root=None, skill_root=None):
         self.task_dir = task_dir.resolve()
         root = Path(allowed_root).resolve() if allowed_root else (ROOT/'.runtime/work').resolve()
         if not any(root.is_relative_to((ROOT/'.runtime'/name).resolve()) for name in ('work','channels','integration')):
@@ -15,7 +15,10 @@ class Sandbox:
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')
         self.task_dir.mkdir(parents=True, exist_ok=True)
         self.skills_dir = Path(skills_dir).resolve() if skills_dir else None
-        if self.skills_dir and not self.skills_dir.is_relative_to((ROOT/'.runtime/skills').resolve()):
+        skills_root = Path(skill_root).resolve() if skill_root else (ROOT/'.runtime/skills').resolve()
+        if skill_root and not skills_root.is_relative_to((ROOT/'.runtime/work/self-development').resolve()):
+            raise PermissionError('SKILL_PROJECT_OUTSIDE_ALLOWLIST')
+        if self.skills_dir and not self.skills_dir.is_relative_to(skills_root):
             raise PermissionError('SKILL_DIRECTORY_OUTSIDE_ALLOWLIST')
         self.protected_paths=[]
         for path in protected_paths:

@@ -9,7 +9,7 @@
 4. 错误面：超限、非图片、404、重定向出白名单、明文 http、白名单外主机、越场景、
    未知 ref、能力未开、非法参数——都必须是真实错误码，不假装看过；
 5. 回执有界：写进 artifacts 的副本不带 base64；
-6. 插件投影（装载真 dsh-plugin/tools.ts，只替换那一行包导入）：saveImage 收到原字节
+6. 插件投影（装载真实原生插件模块）：saveImage 收到原字节
    → ImageBlock + 元数据文本块；附件服务缺失 / 保存失败都如实标 unavailable；
    外加 inject 声明断言——DSH 只放行 inject 列过的 ctx 服务，假 ctx 照不出这条运行时闸门；
 7. TokenMeter：内联图片不再被当成文本字节，但份数与字节数如实报；
@@ -444,25 +444,21 @@ def main() -> int:
         check('内联图片份数与字节如实报出', with_image['inline_images'] == 1
               and with_image['inline_image_bytes'] == len(PNG), with_image)
 
-        # 9. 插件投影：装载真 tools.ts（只替换那一行包导入）
+        # 9. 插件投影：直接装载原生插件的真实输出与 scoped action 模块。
         node = shutil.which('node')
         if not node:
             check('插件投影（node 可用）', False, '沙箱里没有 node')
         else:
-            source = (ROOT / 'dsh-plugin' / 'tools.ts').read_text(encoding='utf-8')
-            anchor = "import { defineTool } from '@deepseek-ai/dsh-tools';"
-            check('tools.ts 仍只依赖那一行包导入（可被自检装载）', source.count(anchor) == 1)
-            (work / 'tools.mjs').write_text(source.replace(anchor, 'const defineTool = (definition) => definition;'),
-                                            encoding='utf-8')
             driver = work / 'driver.mjs'
             driver.write_text(f'''
 import assert from 'node:assert/strict';
-import {{ asunaRender, attachImage, imageBlock, inject }} from '{(work / 'tools.mjs').as_posix()}';
+import {{ asunaRender, attachImage, imageBlock }} from '{(ROOT / 'packages/cognition-core/src/tool-output.js').as_uri()}';
+import {{ inject }} from '{(ROOT / 'packages/cognition-core/src/action.js').as_uri()}';
 // DSH 运行时只放行 inject 里声明过的 ctx 服务：少声明一条，真宿主上每一次 read_image 都会如实抛
 // `cannot get property "attachments" without inject`（2026-09-25 实测：字节拉回来了，图没进模型）。
 // 本自检用假 ctx 装载插件，照不出这道运行时闸门，所以直接断言声明本身。
 assert.ok(Array.isArray(inject) && inject.includes('tools') && inject.includes('attachments'),
-  'tools.ts 的 inject 必须同时声明 tools 与 attachments，实际：' + JSON.stringify(inject));
+  'action.js 的 inject 必须同时声明 tools 与 attachments，实际：' + JSON.stringify(inject));
 const png = Buffer.from('{PNG_B64}', 'base64');
 const value = {{ ref: 'att-test', media_type: 'image/png', bytes: png.length, sha256: 'x',
   image: {{ media_type: 'image/png', data: png.toString('base64') }}, visual: 'awaiting_attachment' }};

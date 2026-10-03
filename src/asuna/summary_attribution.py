@@ -102,7 +102,8 @@ def attribute(store, scene, rows):
         entry['chars'] += len(row.get('text') or '')
         if row.get('direction') not in entry['directions']:
             entry['directions'].append(row.get('direction'))
-    peers = [author for author in by_speaker if author != 'xiaoman']
+    from .config import character_id
+    peers = [author for author in by_speaker if author != character_id(store.config)]
     return {'participants': sorted(by_speaker),
             'source_by_speaker': {author: sorted(ids) for author, ids in sorted(by_speaker.items())},
             'speakers': {author: {'messages': entry['messages'], 'chars': entry['chars'],

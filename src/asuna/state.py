@@ -6,7 +6,7 @@ import uuid
 from bson import BSON
 from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
 from pymongo.errors import DuplicateKeyError
-from .config import BUNDLE, validate_database
+from .config import BUNDLE, validate_database, character_id
 from .evidence import canonical, sha
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
@@ -150,7 +150,7 @@ class Store:
                     continue
                 row.setdefault('policy_epoch',1)
                 if name=='memory_units':
-                    row.update(character_id='xiaoman',embedding_status='PENDING',depends_on=row['source_event_ids'])
+                    row.update(character_id=character_id(self.config),embedding_status='PENDING',depends_on=row['source_event_ids'])
                 self.put(name,row,stream='seed')
         for persona,path in world['personas'].items():
             self.init_head('persona:'+persona,'global-safe',{'body':(BUNDLE/path).read_text(encoding='utf-8')},[])

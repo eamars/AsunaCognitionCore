@@ -5,7 +5,7 @@ from pathlib import Path
 import threading
 import uuid
 import jsonschema
-from .config import BUNDLE, prompt_path
+from .config import BUNDLE, prompt_path, character_id
 from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
@@ -56,6 +56,7 @@ class Coordinator:
         self.lock=threading.RLock()
         self.monologue_enabled=monologue_enabled
         self.scheduler=None
+        self.native_session_resolver=None
 
     def ingest(self, event: dict, *, persona='P1'):
         with self.lock:
@@ -72,6 +73,8 @@ class Coordinator:
             ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
+            if event.get('native_session_id'):
+                ep=self._update(ep,native_session_id=event['native_session_id'])
             return self.advance(ep_id)
 
     def _update(self, ep, **changes):
@@ -155,7 +158,7 @@ class Coordinator:
                 '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
         elif ep.get('resume_diagnostic'):
             instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
-        binding=f"xiaoman:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
+        binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
         if ep.get('character_context'):binding+=':'+ep['character_context']
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
         value=self.character.generate(binding,operation,phase,instruction,ep['system'])
@@ -173,6 +176,8 @@ class Coordinator:
             ep=self.store.db.episodes.find_one({'_id':ep_id})
             if not ep:
                 raise ValueError('EPISODE_NOT_FOUND')
+            if self.native_session_resolver and not ep.get('native_session_id'):
+                ep=self._update(ep,native_session_id=self.native_session_resolver(ep))
             if ep['state']=='FAILED_PROTOCOL' and ep.get('episode_kind')=='task_feedback':
                 scene=self.store.authorize(ep['scene_id'],ep['person_id'])
                 if scene['policy_epoch']!=ep['policy_epoch']:
@@ -200,7 +205,7 @@ class Coordinator:
                     text=self._stage(ep,'MONOLOGUE',ep.get('recall_rounds',0))
                     memory_id='mono-'+ep_id+':'+str(ep.get('recall_rounds',0))
                     if not self.store.db.memory_units.find_one({'_id':memory_id}):
-                        self.store.put('memory_units',{'_id':memory_id,'character_id':'xiaoman','kind':'monologue','scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'body_markdown':text,'epistemic_type':'character_interpretation','source_event_ids':[ep['source_event_id']],'depends_on':[ep['source_event_id']],'episode_id':ep_id,'status':'active','embedding_status':'PENDING'},stream=ep_id)
+                        self.store.put('memory_units',{'_id':memory_id,'character_id':character_id(self.store.config),'kind':'monologue','scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'body_markdown':text,'epistemic_type':'character_interpretation','source_event_ids':[ep['source_event_id']],'depends_on':[ep['source_event_id']],'episode_id':ep_id,'status':'active','embedding_status':'PENDING'},stream=ep_id)
                     ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[memory_id],feedback_resume_phase=None)
                 if ep['state']=='MONOLOGUE_ACCEPTED':
                     decision_error=''
@@ -343,7 +348,7 @@ class Coordinator:
                     key=ep_id+':speak:0'
                     if not self.store.db.messages.find_one({'_id':key}):
                         sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-                        self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':'xiaoman','phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
+                        self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
                     self.publisher.publish(key)
                     self.crash('before_episode_commit')
                     delegated=ep['decision']['next']=='delegate' and ep.get('task_id')==(ep.get('supersedes_task_id') or 'task-'+ep_id)

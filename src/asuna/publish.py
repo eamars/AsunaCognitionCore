@@ -3,6 +3,7 @@ import uuid
 from .state import Store, Denied, Conflict, now
 from .evidence import sha
 from .queue import database_effects_lock
+from .config import character_id
 
 
 class PublishService:
@@ -15,7 +16,7 @@ class PublishService:
     def _publish(self, message_id: str):
         db=self.store.db
         msg=db.messages.find_one({'_id':message_id})
-        if not msg or msg.get('author')!='xiaoman' or msg.get('phase')!='SPEAK':
+        if not msg or msg.get('author')!=character_id(self.store.config) or msg.get('phase')!='SPEAK':
             raise Denied('ONLY_CHARACTER_SPEAK_CAN_PUBLISH')
         if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED'):
             return msg

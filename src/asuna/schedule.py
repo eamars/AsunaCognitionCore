@@ -7,12 +7,10 @@ ADR-005 P3 起，这里同时是"自然语言安排"的落点：角色在 DECIDE
 from __future__ import annotations
 
 import json
-import secrets
+from datetime import datetime, timezone
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .channels import route_for_scene, route_members
-from .dsh_lane import DshLane
 from .integration import event_granted
 from .state import Conflict, Denied, now
 
@@ -23,63 +21,66 @@ except Exception:                     # 同目录平铺加载（离线自检）�
 
 
 class ScheduleService:
-    def __init__(self, app, controller):
+    def __init__(self, app, controller, *, lane=None):
         self.app, self.controller, self.store = app, controller, app.store
         self.deliver_lock = threading.RLock()
-        self.token = secrets.token_hex(32)
-        service = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
-            def do_POST(self):
-                try:
-                    if self.path != '/due' or not secrets.compare_digest(
-                            self.headers.get('Authorization', ''), 'Bearer ' + service.token):
-                        raise Denied('SCHEDULE_CALLBACK_DENIED')
-                    size = int(self.headers.get('Content-Length', '0'))
-                    if not 0 < size <= 4096:
-                        raise ValueError('INVALID_SCHEDULE_CALLBACK_SIZE')
-                    service.deliver(json.loads(self.rfile.read(size)))
-                    status, value = 200, {'accepted': True}
-                except (Denied, ValueError, TypeError) as exc:
-                    status, value = 400, {'error': str(exc)}
-                except Exception as exc:
-                    service.app.evidence.record('schedule.callback_error', {'reason': str(exc)})
-                    status, value = 503, {'error': str(exc)}
-                body = json.dumps(value).encode()
-                self.send_response(status)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.lane = None
-        try:
-            self.lane = DshLane(app.config, self.store, app.evidence, 'scheduler',
-                schedule_callback={'url': f'http://127.0.0.1:{self.server.server_port}/due', 'token': self.token})
-            self.reconcile()
-            self.ensure_self_development()
-        except BaseException:
-            self.close()
-            raise
+        self.server = self.thread = None
+        self.lane = lane
+        if lane is None:
+            raise ValueError('NATIVE_HOST_SCHEDULE_REQUIRED')
+        self._migrate_native_links()
+        self.reconcile()
+        self.ensure_self_development()
 
     def close(self):
         if self.lane:
             self.lane.close()
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=5)
 
     def _native_events(self):
         events = self.lane.schedule('/schedule/events')
         if not isinstance(events, list):
             raise ValueError('INVALID_NATIVE_SCHEDULE_LOG')
         return events
+
+    def _migrate_native_links(self):
+        """One explicit cutover; retain old IDs and never replay old deliveries."""
+        events = self._native_events()
+        creates, _, _ = self._grouped(events)
+        for plan in self.store.db.plans.find({'status': {'$in': ['ACTIVE', 'CREATING']}}):
+            if plan.get('native_scheduler_session') == self.lane.scheduler_session:
+                continue
+            native = creates.get(plan.get('schedule_id'))
+            if not native:
+                live = [row for row in creates.values() if row.get('prompt') == 'ASUNA_PLAN:' + plan['_id']]
+                native = live[-1] if live else None
+            if not native:
+                rule = plan['rule']
+                scene = self.store.authorize(plan['scene_id'], plan['person_id'])
+                moment = datetime.now(timezone.utc)
+                if 'every_seconds' in rule:
+                    timing = {'every_seconds': rule['every_seconds']}
+                elif 'clock' in rule:
+                    timing = schedule_rules.native_payload(rule,
+                        schedule_rules.next_fire(rule, self.zone_of(scene, plan)['tz'], moment), moment)
+                else:
+                    due = datetime.fromisoformat(plan['scheduled_at'].replace('Z', '+00:00'))
+                    if due <= moment:
+                        self.store.put('plans', {**plan, 'status': 'SUSPENDED',
+                            'migration_note': 'Legacy one-shot is overdue; no delivery replay. Replan explicitly.'},
+                            expected=plan['revision'], stream=plan['_id'])
+                        continue
+                    timing = {'after_seconds': max(1, int((due - moment).total_seconds()))}
+                native = self.lane.schedule('/schedule/create', {'plan_id': plan['_id'], **timing})
+            legacy = {k: plan[k] for k in ('schedule_id', 'scheduled_at', 'last_dispatch_seq',
+                                           'native_scheduler_session') if k in plan}
+            self.store.put('plans', {**plan, 'legacy_schedule_binding': legacy,
+                'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
+                'native_scheduler_session': self.lane.scheduler_session, 'last_dispatch_seq': -1,
+                'migration_note': 'Native Host owns future occurrences; legacy history remains read-only.'},
+                expected=plan['revision'], stream=plan['_id'])
+            self.store.audit(plan['_id'], 'schedule.native_migrated', {
+                'previous': legacy, 'native_schedule_id': native['id'],
+                'native_session_id': self.lane.scheduler_session, 'replayed_deliveries': 0}, plan['scope_key'])
 
     def _grouped(self, events):
         """原生事件日志分三份：建过哪些、派发过哪些、删过哪些——认领与版本护栏只看这三样。"""
@@ -138,7 +139,7 @@ class ScheduleService:
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE')
         current = self.store.db.plans.find_one({'_id': plan_id})
-        self.store.put('plans', {**current, 'schedule_id': native['id'],
+        self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
 
@@ -174,7 +175,7 @@ class ScheduleService:
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
         current = self.store.db.plans.find_one({'_id': plan_id})
-        return self.store.put('plans', {**current, 'schedule_id': native['id'],
+        return self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'status': current['status']
                 if current['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
@@ -218,7 +219,7 @@ class ScheduleService:
             except BaseException as exc:                     # 旧的那条没删掉也不会重复行动
                 note = 'STALE_NATIVE_DELETE_FAILED: ' + str(exc)
         updated = self.store.put('plans', {**current, 'rule': rule, 'intent': intent,
-            'schedule_id': native['id'], 'scheduled_at': native['scheduledAt'],
+            'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
             'next_fire_at': fire_at.isoformat(timespec='seconds'), 'timezone': zone['name'],
             'tz_source': zone['source'], 'plan_version': current.get('plan_version', 1) + 1,
             'updated_at': now(), 'status': 'ACTIVE',
@@ -284,7 +285,7 @@ class ScheduleService:
                         pass
                 return
             try:
-                self.store.put('plans', {**current, 'schedule_id': native['id'],
+                self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
                     'scheduled_at': native['scheduledAt'],
                     'next_fire_at': fire_at.isoformat(timespec='seconds'),
                     'fire_count': current.get('fire_count', 0) + 1, 'status': 'ACTIVE'},
@@ -315,7 +316,7 @@ class ScheduleService:
             if not plan or plan['status'] in ('CANCELLED', 'SUSPENDED'):
                 continue
             if not plan.get('schedule_id'):
-                self.store.put('plans', {**plan, 'schedule_id': native['id'],
+                self.store.put('plans', {**plan, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
                     'scheduled_at': native['scheduledAt'], 'status': plan['status']
                         if plan['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
                     expected=plan['revision'], stream=plan_id)
@@ -327,7 +328,7 @@ class ScheduleService:
                 live = self._live(plan_id, creates, dispatched, deleted, exclude=plan['schedule_id'])
                 if live:
                     newest = live[-1]
-                    self.store.put('plans', {**plan, 'schedule_id': newest['id'],
+                    self.store.put('plans', {**plan, 'schedule_id': newest['id'], 'native_scheduler_session': self.lane.scheduler_session,
                         'scheduled_at': newest['scheduledAt']}, expected=plan['revision'], stream=plan_id)
                 elif schedule_rules.rearms_after_fire(plan['rule']):
                     self._rearm(plan_id)

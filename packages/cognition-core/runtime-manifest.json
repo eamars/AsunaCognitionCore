@@ -1,0 +1,348 @@
+{
+  "files": [
+    [
+      "src/asuna/__init__.py",
+      "python/asuna/__init__.py"
+    ],
+    [
+      "src/asuna/application.py",
+      "python/asuna/application.py"
+    ],
+    [
+      "src/asuna/audit.py",
+      "python/asuna/audit.py"
+    ],
+    [
+      "src/asuna/blobs.py",
+      "python/asuna/blobs.py"
+    ],
+    [
+      "src/asuna/channels.py",
+      "python/asuna/channels.py"
+    ],
+    [
+      "src/asuna/chat.py",
+      "python/asuna/chat.py"
+    ],
+    [
+      "src/asuna/config.py",
+      "python/asuna/config.py"
+    ],
+    [
+      "src/asuna/context.py",
+      "python/asuna/context.py"
+    ],
+    [
+      "src/asuna/coordinator.py",
+      "python/asuna/coordinator.py"
+    ],
+    [
+      "src/asuna/development.py",
+      "python/asuna/development.py"
+    ],
+    [
+      "src/asuna/dialogue_summary.py",
+      "python/asuna/dialogue_summary.py"
+    ],
+    [
+      "src/asuna/discussion_digest.py",
+      "python/asuna/discussion_digest.py"
+    ],
+    [
+      "src/asuna/evidence.py",
+      "python/asuna/evidence.py"
+    ],
+    [
+      "src/asuna/history_query.py",
+      "python/asuna/history_query.py"
+    ],
+    [
+      "src/asuna/host.py",
+      "python/asuna/host.py"
+    ],
+    [
+      "src/asuna/ingress.py",
+      "python/asuna/ingress.py"
+    ],
+    [
+      "src/asuna/integration.py",
+      "python/asuna/integration.py"
+    ],
+    [
+      "src/asuna/integration_worker.py",
+      "python/asuna/integration_worker.py"
+    ],
+    [
+      "src/asuna/lanes.py",
+      "python/asuna/lanes.py"
+    ],
+    [
+      "src/asuna/memory.py",
+      "python/asuna/memory.py"
+    ],
+    [
+      "src/asuna/memory_indexer.py",
+      "python/asuna/memory_indexer.py"
+    ],
+    [
+      "src/asuna/model_settings.py",
+      "python/asuna/model_settings.py"
+    ],
+    [
+      "src/asuna/native_worker.py",
+      "python/asuna/native_worker.py"
+    ],
+    [
+      "src/asuna/native_api.py",
+      "python/asuna/native_api.py"
+    ],
+    [
+      "src/asuna/peer_context.py",
+      "python/asuna/peer_context.py"
+    ],
+    [
+      "src/asuna/privacy.py",
+      "python/asuna/privacy.py"
+    ],
+    [
+      "src/asuna/proactive.py",
+      "python/asuna/proactive.py"
+    ],
+    [
+      "src/asuna/publish.py",
+      "python/asuna/publish.py"
+    ],
+    [
+      "src/asuna/queue.py",
+      "python/asuna/queue.py"
+    ],
+    [
+      "src/asuna/resources.py",
+      "python/asuna/resources.py"
+    ],
+    [
+      "src/asuna/retrieval.py",
+      "python/asuna/retrieval.py"
+    ],
+    [
+      "src/asuna/router.py",
+      "python/asuna/router.py"
+    ],
+    [
+      "src/asuna/sandbox.py",
+      "python/asuna/sandbox.py"
+    ],
+    [
+      "src/asuna/scene_links.py",
+      "python/asuna/scene_links.py"
+    ],
+    [
+      "src/asuna/schedule.py",
+      "python/asuna/schedule.py"
+    ],
+    [
+      "src/asuna/schedule_rules.py",
+      "python/asuna/schedule_rules.py"
+    ],
+    [
+      "src/asuna/self_state.py",
+      "python/asuna/self_state.py"
+    ],
+    [
+      "src/asuna/skills.py",
+      "python/asuna/skills.py"
+    ],
+    [
+      "src/asuna/state.py",
+      "python/asuna/state.py"
+    ],
+    [
+      "src/asuna/summary_attribution.py",
+      "python/asuna/summary_attribution.py"
+    ],
+    [
+      "src/asuna/summary_trigger.py",
+      "python/asuna/summary_trigger.py"
+    ],
+    [
+      "src/asuna/tasks.py",
+      "python/asuna/tasks.py"
+    ],
+    [
+      "src/asuna/tokens.py",
+      "python/asuna/tokens.py"
+    ],
+    [
+      "src/asuna/vision.py",
+      "python/asuna/vision.py"
+    ],
+    [
+      "config/prompts/common.md",
+      "python/asuna/resources/prompts/common.md"
+    ],
+    [
+      "config/prompts/executor.md",
+      "python/asuna/resources/prompts/executor.md"
+    ],
+    [
+      "config/prompts/stage_decide.md",
+      "python/asuna/resources/prompts/stage_decide.md"
+    ],
+    [
+      "config/prompts/stage_monologue.md",
+      "python/asuna/resources/prompts/stage_monologue.md"
+    ],
+    [
+      "config/prompts/stage_reflect.md",
+      "python/asuna/resources/prompts/stage_reflect.md"
+    ],
+    [
+      "config/prompts/stage_self.md",
+      "python/asuna/resources/prompts/stage_self.md"
+    ],
+    [
+      "config/prompts/stage_speak.md",
+      "python/asuna/resources/prompts/stage_speak.md"
+    ],
+    [
+      "docs/development_plans/ADR-001-asuna_v2_v1_handoff/schemas/decision.schema.json",
+      "python/asuna/resources/schemas/decision.schema.json"
+    ],
+    [
+      "docs/development_plans/ADR-001-asuna_v2_v1_handoff/schemas/reflection.schema.json",
+      "python/asuna/resources/schemas/reflection.schema.json"
+    ],
+    [
+      "docs/development_plans/ADR-001-asuna_v2_v1_handoff/schemas/mutation.schema.json",
+      "python/asuna/resources/schemas/mutation.schema.json"
+    ],
+    [
+      "docs/development_plans/ADR-001-asuna_v2_v1_handoff/schemas/task_result.schema.json",
+      "python/asuna/resources/schemas/task_result.schema.json"
+    ],
+    [
+      "docs/development_plans/ADR-001-asuna_v2_v1_handoff/prompts/reflect.md",
+      "python/asuna/resources/prompts/reflect.md"
+    ],
+    [
+      "RUNTIME_API.md",
+      "python/asuna/resources/RUNTIME_API.md"
+    ]
+  ],
+  "developmentTools": [
+    {
+      "name": "development_files",
+      "description": "Inspect the persistent candidate connected to this Asuna project.",
+      "parameters": {
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Optional relative path prefix"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Page size, maximum 100"
+        }
+      }
+    },
+    {
+      "name": "development_read",
+      "description": "Read a UTF-8 project file from the candidate.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true
+        },
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        }
+      }
+    },
+    {
+      "name": "development_write",
+      "description": "Write a UTF-8 project file in the candidate; changes are not active until publish.",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true
+        },
+        "text": {
+          "type": "string",
+          "required": true
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        }
+      }
+    },
+    {
+      "name": "development_run",
+      "description": "Run a command in the candidate and return raw stdout, stderr and exit status, including failures.",
+      "parameters": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "required": true
+        },
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        }
+      }
+    },
+    {
+      "name": "development_database_read",
+      "description": "Read unredacted records from the existing real Asuna database, bound to this local owner development task. No public database endpoint.",
+      "parameters": {
+        "collection": {
+          "type": "string",
+          "required": true
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "projection": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "skip": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        }
+      }
+    },
+    {
+      "name": "development_publish",
+      "description": "Freeze this candidate, perform minimum non-consuming boot probe, and activate a bootable snapshot. Returns the actual probe result.",
+      "parameters": {
+        "reason": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string",
+          "description": "Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes."
+        }
+      }
+    }
+  ]
+}

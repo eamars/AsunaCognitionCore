@@ -1,0 +1,43 @@
+- id: session-persistence-jsonl
+  disabled: true
+- id: spill-local
+  config:
+    root: !!js dshHomePath('spills')
+- insert:
+    - id: asuna-session-persistence
+      name: '@asuna/cognition-core/persistence'
+      config:
+        root: !!js dshHomePath('sessions')
+    - id: asuna-publication-floor
+      name: '@asuna/cognition-core/floor'
+    - id: asuna-cognition-core
+      name: '@asuna/cognition-core'
+    - id: asuna-action-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-action
+        name: Asuna Action
+        plugins:
+          - name: '@asuna/cognition-core/action'
+    - id: asuna-summary-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-summary
+        name: Asuna summaries
+        plugins:
+          - name: '@asuna/cognition-core/summary'
+    - id: asuna-scheduler-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-scheduler
+        name: Asuna schedules
+        plugins:
+          - name: '@asuna/cognition-core/scheduler'
+    - id: asuna-recovery-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-recovery
+        name: Asuna recovery
+        description: Repair an authorized plugin project when its business worker cannot start
+        plugins:
+          - name: '@asuna/cognition-core/recovery'

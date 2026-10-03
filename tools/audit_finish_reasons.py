@@ -2,7 +2,7 @@
 import json,uuid
 from asuna.config import ROOT
 from asuna.evidence import write_json,sha
-from asuna.dsh_lane import provider_finish
+from asuna.legacy_evidence import provider_finish
 
 findings=[];checked=0
 for directory in sorted({p.parent for p in (ROOT/'reports').rglob('*lane.receipt.json') if 'private' not in p.parts}):

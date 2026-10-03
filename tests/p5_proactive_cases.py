@@ -22,21 +22,6 @@ if HERE not in sys.path:
 import p2_summary_loop_cases as base                      # noqa: E402  装好第三方假件＋假集合
 
 
-def _stub_dsh():
-    '''只假掉 DSH 原生驱动：本文件不跑模型，只要 chat 模块能导入。'''
-    try:
-        import deepseek_harness                             # noqa: F401
-        return False
-    except Exception:
-        module = ModuleType('deepseek_harness')
-        module.DeepSeekHarness = object
-        module.__getattr__ = lambda name: object
-        sys.modules['deepseek_harness'] = module
-        return True
-
-
-STUBBED_DSH = _stub_dsh()
-
 from asuna import proactive                                # noqa: E402
 from asuna.channels import group_context                   # noqa: E402
 from asuna.chat import Chat                                # noqa: E402
@@ -403,7 +388,7 @@ def topic_is_derived_for_every_group_row():
                     'event': {'channel': {'platform_event_id': 'evt-woken'},
                               'group_context': {'wake_reason': 'mentioned_account',
                                                 'topic_id': 'topic-B', 'topic_via': 'mentioned'}}}
-    store = SimpleNamespace(db=base.FakeDB({
+    store = SimpleNamespace(config={'character_id': 'xiaoman'}, db=base.FakeDB({
         'scenes': [{'_id': GROUP, 'kind': 'group', 'policy_epoch': EPOCH, 'members': [PERSON]}],
         'messages': [parent_overheard, parent_woken]}))
     route = {'scene_id': GROUP}

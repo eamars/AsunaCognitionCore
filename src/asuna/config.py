@@ -1,11 +1,18 @@
 from __future__ import annotations
 import ipaddress
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
-ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = ROOT / 'docs/development_plans/ADR-001-asuna_v2_v1_handoff'
+ROOT = Path(os.environ.get('ASUNA_DATA_ROOT', Path(__file__).resolve().parents[2])).resolve()
+RESOURCES = Path(__file__).with_name('resources')
+BUNDLE = RESOURCES if RESOURCES.is_dir() else ROOT / 'docs/development_plans/ADR-001-asuna_v2_v1_handoff'
+
+
+def character_id(config):
+    """Stable persisted identity supplied by the selected persona contribution."""
+    return config.get('character_id') or config.get('chat', {}).get('persona', 'character')
 
 
 def prompt_path(config: dict, name: str) -> Path:

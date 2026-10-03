@@ -1,7 +1,7 @@
 from __future__ import annotations
 import copy
 import json
-from .config import BUNDLE
+from .config import BUNDLE, character_id
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict
 from .queue import database_effects_lock
@@ -159,7 +159,7 @@ class MemoryService:
                 key='chunk-'+sha(canonical([row['_id'],2,index]))
                 if self.store.db.memory_units.find_one({'_id':key}):continue
                 made.append(self.store.put('memory_units',{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
-                    'character_id':'xiaoman','kind':'chat_chunk','body_markdown':body,
+                    'character_id':character_id(self.store.config),'kind':'chat_chunk','body_markdown':body,
                     'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
                     'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),
                     'segment_index':index,'segment_count':len(parts),'source_event_ids':[row['_id']],

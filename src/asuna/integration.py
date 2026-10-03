@@ -64,7 +64,7 @@ class ManagedProcess:
         self.finished = threading.Event()
         self.stop_requested = False
         self.process = subprocess.Popen(
-            ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(ROOT/'src/asuna/integration_worker.py')],
+            ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).with_name('integration_worker.py'))],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding='utf-8', errors='replace')
         self.process.stdin.write(json.dumps(spec)+'\n'); self.process.stdin.flush()
@@ -158,7 +158,11 @@ class IntegrationRunner:
         self.root = Path(root).resolve() if root else ROOT/'.runtime/integration/owner'
         if not self.root.is_relative_to((ROOT/'.runtime/integration').resolve()):
             raise Denied('INTEGRATION_ROOT_DENIED')
-        self.dev = self.root/'development'; self.dev.mkdir(parents=True, exist_ok=True)
+        selected = config.get('_integration_project')
+        self.dev = Path(selected).resolve() if selected else self.root/'development'
+        if selected and not self.dev.is_relative_to((ROOT/'.runtime/work/self-development').resolve()):
+            raise Denied('INTEGRATION_PROJECT_NOT_AUTHORIZED')
+        self.dev.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.active = None
         self.enabled_path = self.root/'enabled.json'
@@ -167,7 +171,9 @@ class IntegrationRunner:
         self.lease = RuntimeLease(self.root/'owner.lock')
         self.lease.__enter__()
         try:
-            shutil.copyfile(ROOT/'RUNTIME_API.md', self.dev/'RUNTIME_API.md')
+            from .config import RESOURCES
+            manual = RESOURCES/'RUNTIME_API.md' if RESOURCES.is_dir() else ROOT/'RUNTIME_API.md'
+            shutil.copyfile(manual, self.dev/'RUNTIME_API.md')
         except BaseException:
             self.lease.__exit__(None, None, None); self.lease = None
             raise
@@ -232,7 +238,7 @@ class IntegrationRunner:
         with self.lock:
             if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
             if tool == 'integration_dev':
-                return Sandbox(self.dev, allowed_root=self.root/'development').run(valid_argv(args['argv']))
+                return Sandbox(self.dev, allowed_root=self.dev).run(valid_argv(args['argv']))
             if tool == 'integration_test':
                 timeout = args.get('timeout', 30)
                 if type(timeout) is not int or not 1 <= timeout <= 60:

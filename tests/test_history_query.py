@@ -158,8 +158,7 @@ def test_tool_registered_for_action_brain_and_native_plugin(broker_env):
     store, service, broker, work = broker_env
     assert [t['name'] for t in TOOLS].count(HISTORY_TOOL_NAME) == 1
     assert [t['name'] for t in WORKSPACE_TOOLS].count(HISTORY_TOOL_NAME) == 1
-    row = next(r for r in broker.rows if r['id'] == 'asuna-controlled-tools')
-    assert HISTORY_TOOL_NAME in [t['name'] for t in row['config']['tools']]
+    assert HISTORY_TOOL_NAME in [t['name'] for t in broker.specs]
     spec = next(t for t in WORKSPACE_TOOLS if t['name'] == HISTORY_TOOL_NAME)
     for word in ('原文', '来源', 'cursor'):
         assert word in spec['description']
@@ -442,4 +441,3 @@ def test_cursor_carries_the_filter_it_was_issued_with(store):
         service.query_for_task(task, dict(base, person='qq:111', cursor='not-a-real-cursor'))
     page2 = service.query_for_task(task, dict(base, person='qq:111', cursor=page1['next_cursor']))
     assert [h['message_id'] for h in page2['hits']] == ['A1'] and not page2['more']
-

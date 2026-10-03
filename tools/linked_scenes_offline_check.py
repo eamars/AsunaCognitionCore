@@ -288,6 +288,7 @@ TASK_QQ = {'scene_id': QQ, 'scope_key': 'scene:' + QQ, 'policy_epoch': 1}
 STUBS = {
     'config.py': 'from pathlib import Path\nimport os\nBUNDLE=Path(os.environ["ASUNA_BUNDLE"])\n'
                  'ROOT=BUNDLE\n'
+                 'def character_id(config):\n    return config.get("character_id", "xiaoman")\n'
                  'def prompt_path(config, name):\n    return BUNDLE/"prompts"/name\n'
                  'def redact_text(text, config):\n    return text\n'
                  'def validate_database(config, database):\n    return "asuna-test"\n',

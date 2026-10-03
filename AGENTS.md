@@ -1,7 +1,7 @@
 # Asuna development and interaction rules
 
 - Use the existing Web UI for normal interaction, runtime observation, execution details, and interactive review. Prefer the in-app browser when available and inspect the visible result.
-- The default entry point is `start-asuna.cmd`; `start-asuna-ui.cmd` is an alias. It runs `asuna ui`. Do not replace Web interaction with terminal chat, stdin text injection, or `asuna run`; fix Web issues in the Web path.
+- The default entry point is `start-asuna.cmd`; `start-asuna-ui.cmd` is an alias. It launches the installed native DSH Web profile; `asuna ui` selects the same profile. Do not replace Web interaction with terminal chat, stdin text injection, or `asuna run`; fix Web issues in the Web path.
 - CLI commands other than `ui` are for explicit `--debug` diagnosis and maintenance. Shell may be used for source edits, host lifecycle, and non-interactive diagnostics; these do not replace Web review.
 - `chat.py`'s `Chat` class is the Web-reused queue and action controller. `chat()` and `terminal()` are debug terminal adapters; Web does not call them or load terminal input dependencies.
 - Asuna extends the pinned DSH runtime. Prefer its existing capabilities and public UI primitives; do not duplicate its scheduler, tool system, or UI control library without a documented need.

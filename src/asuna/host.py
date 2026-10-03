@@ -127,9 +127,13 @@ def prepare_channels(store):
 
 
 class RuntimeHost:
-    def __init__(self, config, evidence, database=None, stream_observer=None):
+    def __init__(self, config, evidence, database=None, *,
+                 lane_factory=None, broker_http=False, schedule_lane=None,
+                 configure_controller=None, development_factory=None):
         self.config, self.evidence, self.database = config, evidence, database
-        self.stream_observer = stream_observer
+        self.lane_factory, self.broker_http = lane_factory, broker_http
+        self.schedule_lane, self.configure_controller = schedule_lane, configure_controller
+        self.development_factory = development_factory
         self.stack = ExitStack()
         self.shutdown_requested = threading.Event()
         self.restart_requested = threading.Event()
@@ -139,10 +143,10 @@ class RuntimeHost:
 
     def __enter__(self):
         try:
-            self.app = self.stack.enter_context(Application({**self.config, 'task_mode': 'workspace'}, self.evidence, self.database))
-            if self.stream_observer:
-                self.app.character.proxy.ui_observer = self.stream_observer
-                self.app.executor_lane.proxy.ui_observer = self.stream_observer
+            self.app = self.stack.enter_context(Application(
+                {**self.config, 'task_mode': 'workspace'}, self.evidence, self.database,
+                lane_factory=self.lane_factory, broker_http=self.broker_http,
+                development_factory=self.development_factory))
             self.evidence.record('host.recovery.start', {})
             recovery_start = time.perf_counter()
             self.settings = local_settings(self.config)
@@ -159,6 +163,8 @@ class RuntimeHost:
             self.controller = Chat(self.app, self.settings, emit=lambda text: self.evidence.record('host.notice', {'text': text}))
             self.controller.on_turn_finished = self._maybe_restart_after_publish
             self.controller.restart_pending = self.restart_pending
+            if self.configure_controller:
+                self.configure_controller(self)
             channels = Channels(self.controller)
             channels.recover_sending()
             self.controller.recover_inputs()
@@ -186,7 +192,7 @@ class RuntimeHost:
                 self.integration.restore()
             self.evidence.record('host.integration.ready', {})
             from .schedule import ScheduleService
-            self.schedule = ScheduleService(self.app, self.controller)
+            self.schedule = ScheduleService(self.app, self.controller, lane=self.schedule_lane)
             self.app.coordinator.scheduler = self.schedule
             self.evidence.record('host.schedule.ready', {})
             self.controller.worker.start()
@@ -242,6 +248,10 @@ class RuntimeHost:
         store=self.app.store
         for row in store.db.sink_receipts.find({'kind':'self_development_publish','state':{'$in':['APPLIED','ACTIVE']}}):
             current=store.db.sink_receipts.find_one({'_id':row['_id']})
+            # Native publications are activated only by the worker that actually
+            # loaded the selected artifact, after its initialization succeeds.
+            if current.get('artifact') and current['state'] != 'ACTIVE':
+                continue
             active=(store.put('sink_receipts',{**current,'state':'ACTIVE','activated_at':now()},
                               expected=current['revision'],stream=current['task_id'])
                     if current['state']=='APPLIED' else current)

@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 from asuna.config import ROOT,BUNDLE,load
 from asuna.evidence import Evidence,write_json,sha
 from asuna.experiments import freeze
-from asuna.dsh_lane import compaction_audit_records
+from asuna.legacy_evidence import compaction_audit_records
 from asuna.audit import render_html
 
 ev=Evidence(ROOT/'reports'/('compaction-audit-probe-'+uuid.uuid4().hex[:10]))

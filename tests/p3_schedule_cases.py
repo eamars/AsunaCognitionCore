@@ -654,6 +654,7 @@ def outage_acts_once_and_arms_the_future(env):
 # ── DECIDE 形状与控制字段：连 coordinator.py 的真 schema 一起验 ────────
 STUB_EXTRA = {
     'config.py': 'from pathlib import Path\nimport os\nBUNDLE=Path(os.environ["ASUNA_BUNDLE"])\n'
+                 'def character_id(config):\n    return config.get("character_id", "xiaoman")\n'
                  'def prompt_path(config, name):\n    return BUNDLE/"prompts"/name\n'
                  'def redact_text(text, config):\n    return text\n',
     'evidence.py': 'import json, hashlib\ndef canonical(value):\n    return json.dumps(value, sort_keys=True).encode()\n'

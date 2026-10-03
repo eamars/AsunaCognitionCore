@@ -10,8 +10,8 @@ def doctor(config,evidence):
     result={'recorded_at':datetime.now(timezone.utc).isoformat(),'config':redacted(config),'platform':platform.platform(),'python':platform.python_version(),'checks':checks}
     try:
         p=subprocess.run([str(ROOT/'node_modules/.bin/dsh.cmd'),'--version'],capture_output=True,text=True,timeout=30)
-        checks.append({'id':'DSH_VERSION','status':'PASS' if p.returncode==0 and p.stdout.strip()=='0.1.5-rc.2' else 'FAIL','value':p.stdout.strip(),'exit_code':p.returncode})
-        result['dsh']={'version':p.stdout.strip(),'commit':'fb2c4b9e698e30edb738bca4cf0618587db7d203','executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes())}
+        checks.append({'id':'DSH_VERSION','status':'PASS' if p.returncode==0 and p.stdout.strip()=='0.2.0-rc.2' else 'FAIL','value':p.stdout.strip(),'exit_code':p.returncode})
+        result['dsh']={'version':p.stdout.strip(),'commit':'639ed015397290b3745d163aafe02ffee4aa3f84','executable':str(ROOT/'node_modules/.bin/dsh.cmd'),'executable_sha256':sha((ROOT/'node_modules/@deepseek-ai/dsh/lib/bin.js').read_bytes()),'package_lock_sha256':sha((ROOT/'package-lock.json').read_bytes())}
         for name in ('character','executor','embedding'):
             try:
                 data=http.request('GET',config[name]['base_url']+'/models','doctor.metadata',api_key=config[name].get('api_key',''))

@@ -13,7 +13,6 @@ dependencies = [
     "jsonschema==4.26.0",
     "pydantic==2.12.5",
     "PyYAML==6.0.3",
-    "deepseek-harness-sdk",
     "prompt-toolkit==3.0.52",
 ]
 
@@ -31,10 +30,3 @@ packages = ["src/asuna"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.uv]
-# Explicit pinned npm DSH executable replaces the unavailable Windows runtime wheel.
-override-dependencies = ["deepseek-harness-runtime-bin; sys_platform == 'never'"]
-
-[tool.uv.sources]
-deepseek-harness-sdk = { git = "https://github.com/deepseek-ai/deepseek-harness.git", rev = "fb2c4b9e698e30edb738bca4cf0618587db7d203", subdirectory = "python/sdk" }

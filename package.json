@@ -3,5 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "dependencies": {"@deepseek-ai/dsh": "0.1.5-rc.2"}
+  "scripts": {
+    "pack:plugins": ".venv\\Scripts\\python.exe tools/pack_plugins.py",
+    "test:native": "node --test packages/cognition-core/test/*.test.js"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.0-rc.2"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

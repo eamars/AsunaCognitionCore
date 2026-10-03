@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, unquote
 
 from .evidence import canonical, sha
-from .config import redact_text
+from .config import redact_text, character_id
 from .queue import database_effects_lock
 from .state import Denied, now
 
@@ -45,7 +45,7 @@ def group_context(store, route, body, event_id):
     if reply:
         parent = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
             '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
-                    {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': 'xiaoman'}]})
+                    {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': character_id(store.config)}]})
     reason = 'mentioned_account' if body['account_id'] in mentions else None
     topic = topic_via = None
     if parent:

@@ -168,7 +168,8 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
             for ref in [_receipt_ref(row)] if ref}
     sink_times, sink_note = _sink_times(store, refs) if refs else ({}, '')
     origins = {}
-    mine = [row for row in rows if row.get('direction') == OUTBOUND and row.get('author') == 'xiaoman'
+    from .config import character_id
+    mine = [row for row in rows if row.get('direction') == OUTBOUND and row.get('author') == character_id(store.config)
             and row.get('episode_id')]
     if mine:
         keys = ['in-' + row['episode_id'] for row in mine]

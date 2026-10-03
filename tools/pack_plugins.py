@@ -70,8 +70,13 @@ packages = ["asuna"]
 
 def main():
     DESTINATION.mkdir(parents=True, exist_ok=True)
+    native = json.loads((DESTINATION / 'native-inline-manifest.json').read_text(encoding='utf-8'))
+    patch_digest = hashlib.sha256((ROOT / 'tools/dsh-inline/rc2-inline.patch').read_bytes()).hexdigest()
+    for artifact in native:
+        if artifact['patchSha256'] != patch_digest or hashlib.sha256(Path(artifact['path']).read_bytes()).hexdigest() != artifact['sha256']:
+            raise ValueError('Rebuild the current native inline extension before packing plugins')
     bundle_python()
-    artifacts = []
+    artifacts = list(native)
     for name in ('cognition-core', 'xiaoman'):
         result = subprocess.run(['npm.cmd', 'pack', '--json', '--pack-destination', str(DESTINATION)],
                                 cwd=ROOT / 'packages' / name, capture_output=True, text=True, check=True)

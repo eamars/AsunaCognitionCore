@@ -105,6 +105,8 @@ def main():
     activation_path = base / 'activation.json'
     selected = json.loads(activation_path.read_text(encoding='utf-8')) if activation_path.exists() else {'projects': {}, 'active': {}}
     for artifact in manifest:
+        if artifact['name'] not in ('@asuna/cognition-core', '@asuna/xiaoman'):
+            continue
         project = 'core' if artifact['name'] == '@asuna/cognition-core' else 'xiaoman'
         installed = home / 'profiles/asuna-native/node_modules' / artifact['name']
         selected.setdefault('projects', {})[project] = {

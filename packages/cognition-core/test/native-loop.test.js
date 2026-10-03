@@ -10,18 +10,24 @@ import AgentRegistry from '@deepseek-ai/dsh-agent';
 import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import Tools, { defineTool } from '@deepseek-ai/dsh-tools';
-import Loader from '@deepseek-ai/cordis-plugin-loader';
+import Loader, { Group } from '@deepseek-ai/cordis-plugin-loader';
 import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
+import TokenMeter from '@deepseek-ai/dsh-token-meter';
+import Commands from '@deepseek-ai/dsh-commands';
+import { serviceForAgent } from '@deepseek-ai/dsh-agent-preset-registry';
+import fs from 'node:fs/promises';
+import YAML from 'yaml';
 import { CognitionCore } from '../src/index.js';
 import { asunaRender, attachImage } from '../src/tool-output.js';
 
-async function harness(t, finish = 'stop') {
+async function harness(t, finish = 'stop', composition) {
   const ctx = new Context();
   new LlmRuntime(ctx); new SessionStore(ctx); new SessionProjectionRegistry(ctx);
   new AgentRegistry(ctx); new SystemPrompt(ctx, {}); new Tools(ctx);
   new AgentLoop(ctx, { agents: [], maxParallelToolCalls: 4 });
   new Loader(ctx, { baseUrl: import.meta.url });
   new AgentPresetRegistry(ctx, { default: 'asuna', selectedDefault: { get: () => undefined } });
+  if (composition) { ctx.loader.builtins.group = Group; new TokenMeter(ctx); new Commands(ctx); }
   const requests = [];
   let enter;
   const entered = new Promise(resolve => { enter = resolve; });
@@ -51,7 +57,7 @@ async function harness(t, finish = 'stop') {
   } };
   const handles = [];
   t.after(async () => { for (const handle of handles) await handle.dispose(); await ctx.fiber.dispose(); });
-  await ctx.agentPresets.register({ id: 'asuna', plugins: [{ name: new URL('../src/role.js', import.meta.url).href }] });
+  await ctx.agentPresets.register({ id: 'asuna', plugins: composition ?? [{ name: new URL('../src/role.js', import.meta.url).href }] });
   await ctx.agentPresets.register({ id: 'ordinary', plugins: [] });
   async function create(id, asuna = true) {
     const handle = await ctx.agents.create({ sessionId: id, agentOptions: { provider: 'fixture', model: 'one-model' },
@@ -61,6 +67,29 @@ async function harness(t, finish = 'stop') {
   }
   return { ctx, core, requests, business, create, entered };
 }
+
+test('packaged role preset compacts native history independently for two agents', async t => {
+  const patch = YAML.parse(await fs.readFile(new URL('../../xiaoman/cordis.patch.yml', import.meta.url), 'utf8'));
+  const composition = patch[0].insert.find(row => row.id === 'asuna-xiaoman-preset').config.plugins;
+  const h = await harness(t, 'stop', composition);
+  const first = await h.create('compact-one');
+  const second = await h.create('compact-two');
+  assert.equal(h.ctx.compaction, undefined, 'a preset backend must not leak into the Host');
+  const backend = agent => serviceForAgent(h.ctx, agent, 'compaction');
+  assert.ok(backend(first));
+  assert.equal(backend(first), backend(second), 'DSH reuses the standing preset backend; its operations remain session scoped');
+  for (const agent of [first, second]) {
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: ('History for ' + agent.id + '\n').repeat(300) }] }));
+    await agent.whenIdle();
+  }
+  const untouched = second.session.snapshotEvents().length;
+  const result = await backend(first).compactNow(first, new AbortController().signal);
+  assert.ok(result.shadowedSeqs.length > 0);
+  assert.equal(first.session.snapshotEvents().filter(e => e.type === 'compaction/summary').length, 1);
+  assert.equal(second.session.snapshotEvents().length, untouched);
+  assert.ok(first.session.snapshotEvents().some(e => e.type === 'user/message' && JSON.stringify(e.data).includes('History for compact-one')), 'durable originals remain available');
+  assert.equal(h.requests.find(request => request.purpose === 'compaction').maxTokens, 8192);
+});
 
 test('first native request has persona; one real input and no duplicate assistant history', async t => {
   const h = await harness(t);
@@ -178,6 +207,21 @@ test('native cancellation fails the pending business stage instead of reporting 
   assert.ok(results[0].args.error);
   assert.equal(results[0].args.result, undefined);
   assert.equal(role.session.snapshotEvents().findLast(x => x.type === 'turn/end').data.reason.kind, 'aborted');
+});
+
+test('business revision cancels only its exact running native operation', async t => {
+  const h = await harness(t, 'wait');
+  const role = await h.create('role');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Input' }] }));
+  await h.entered;
+  await h.core.onEvent({ kind: 'task_fenced', session_id: role.id, token: 'older-operation', reason: 'task_revised' });
+  assert.equal(h.requests[0].signal.aborted, false, 'a delayed old notice cannot abort a newer native run');
+  await h.core.onEvent({ kind: 'task_fenced', session_id: role.id, token: 'stage-role', reason: 'task_revised' });
+  await role.whenIdle();
+  const end = role.session.snapshotEvents().findLast(event => event.type === 'turn/end');
+  assert.deepEqual(end.data.reason, { kind: 'aborted', reason: { kind: 'hook', reason: 'task_revised' } });
+  assert.ok(h.business.find(row => row.method === 'result').args.error);
+  assert.equal(role.session.snapshotEvents().filter(event => event.type === 'asuna/stage-result').length, 0);
 });
 
 test('selecting recovery on an existing blank native session exposes its independent project tools', async t => {

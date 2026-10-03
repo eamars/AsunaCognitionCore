@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
 import sys
@@ -57,6 +57,16 @@ class NativeLane:
             elif self.lane == 'executor' or phase == 'CONSULT':
                 task_id = operation.split(':execute:', 1)[0].split(':consult:', 1)[0]
                 task = self.store.db.tasks.find_one({'_id': task_id})
+                if not task:
+                    raise Denied('STALE_TASK_FENCE')
+                if self.lane == 'executor':
+                    if operation.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
+                        raise Denied('STALE_TASK_FENCE')
+                else:
+                    artifact = self.store.db.artifacts.find_one({'_id':operation.split(':consult:',1)[1],
+                        'task_id':task_id,'intent_revision':task['intent_revision']})
+                    if not artifact:
+                        raise Denied('STALE_TASK_FENCE')
                 ep = self.store.db.episodes.find_one({'_id': task['episode_id']})
             else:
                 ep = self.store.db.episodes.find_one({'_id': operation.split(':', 1)[0]})
@@ -66,9 +76,12 @@ class NativeLane:
             if not role_id:
                 raise ValueError('NATIVE_ROLE_SESSION_REQUIRED')
             role_id = self.worker.continued_session(role_id)
-            native_id = (('asuna-action-' if self.lane == 'executor' else 'asuna-summary-')
-                         + sha((binding + ':' + operation).encode())[:32]
-                         if self.lane != 'character' else role_id)
+            if self.lane == 'executor':
+                native_id = self.worker.action_session_id(binding, role_id, ep, task)
+            elif self.lane == 'summary':
+                native_id = 'asuna-summary-' + sha((binding + ':' + operation).encode())[:32]
+            else:
+                native_id = role_id
             grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             cwd = (self.worker.qq_workspace if self.lane == 'character' and ep['scene_id'].startswith('qq:')
                    else str(Path(grant['workspace']).resolve()))
@@ -80,6 +93,7 @@ class NativeLane:
                 'role_session_id': role_id, 'task_id': task['_id'] if task else None,
                 'parent_session_id': role_id if self.lane != 'character' else None,
                 'broker_session': 's-' + sha(binding.encode())[:40],
+                **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
                 'system': system,
                 'skills_dir': str(skills_directory(self.store.config, ep['scene_id'], ep['person_id']) or ''),
@@ -94,14 +108,19 @@ class NativeLane:
                     request['channel_input'] = self.worker.channel_input(source)
             future = Future()
             future.asuna_lane = self.lane
-            with self.worker.controller.ingress_lock, self.worker.pending_lock:
+            future.asuna_task = task
+            future.asuna_session_id = native_id
+            future.asuna_binding = record
+            future.asuna_broker_session = record['broker_session'] + ':' + sha(operation.encode())[:16]
+            with self.worker.controller.ingress_lock, (self.worker.app.service.lock if task else nullcontext()), self.worker.pending_lock:
                 if self.worker.controller.reconfiguring:
                     raise RuntimeError('HOST_RECONFIGURING')
+                if task:self.worker.app.service.valid(task)
                 if operation in self.worker.pending:
                     raise RuntimeError('NATIVE_OPERATION_ALREADY_RUNNING')
                 self.worker.pending[operation] = future
-            self.worker.emit(request)
             try:
+                self.worker.emit(request)
                 value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
                 result = LaneResult(**value)
                 self.store.put('lane_receipts', {
@@ -111,6 +130,8 @@ class NativeLane:
             finally:
                 with self.worker.pending_lock:
                     self.worker.pending.pop(operation, None)
+                if self.lane == 'executor':
+                    self.worker.app.broker.bindings.pop(future.asuna_broker_session, None)
 
     def close(self):
         pass
@@ -197,6 +218,7 @@ class BusinessWorker:
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
             self.app.coordinator.native_session_resolver = self.resolve_role_session
+            self.app.service.on_fenced = self.task_fenced
         self.host = self.stack.enter_context(RuntimeHost(
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
             schedule_lane=NativeScheduleLane(self, config), configure_controller=configure,
@@ -297,6 +319,32 @@ class BusinessWorker:
         record = self.app.store.db.sessions.find_one({'_id': session_id}) or {}
         return record.get('successor_id', session_id)
 
+    def action_session_id(self, binding, role_id, ep, task):
+        """One native context per authorized execution binding, including old logs."""
+        query = {
+            'native_host': True, 'lane': 'executor',
+            'broker_session': 's-' + sha(binding.encode())[:40],
+            'parent_session_id': role_id, 'scene_id': ep['scene_id'],
+            'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
+            'person_id': ep['person_id'], 'persona': ep['persona'],
+        }
+        # Prefer the immediately preceding task's source when importing an old
+        # operation-scoped binding. Do not import another actor or policy epoch.
+        prior = None
+        for task_id in (task['_id'], task.get('continues_task_id')):
+            if task_id:
+                prior = self.app.store.db.sessions.find_one({**query, 'task_id': task_id},
+                    sort=[('binding_updated_at', -1), ('_id', -1)])
+                if prior: break
+        if not prior:
+            prior = self.app.store.db.sessions.find_one(query,
+                sort=[('binding_updated_at', -1), ('_id', -1)])
+        if prior:
+            return prior['_id']
+        identity = json.dumps([binding, role_id, ep['scene_id'], ep['scope_key'],
+                               ep['policy_epoch'], ep['person_id'], ep['persona']], sort_keys=True)
+        return 'asuna-action-' + sha(identity.encode())[:32]
+
     def watch_host(self):
         while not self.stopping.wait(.5):
             if self.host.restart_requested.is_set():
@@ -357,6 +405,7 @@ class BusinessWorker:
         return self.app.store.put('sessions', {
             **(prior or {}), **values, '_id': session_id, 'native_host': True,
             'binding_key': 'native-host:' + session_id,
+            'binding_updated_at': now(),
         }, expected=prior['revision'] if prior else None, stream='native-binding:' + session_id)
 
     def session(self, session_id):
@@ -367,6 +416,17 @@ class BusinessWorker:
         if scene['policy_epoch'] != record['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         return record
+
+    def task_fenced(self, task, reason):
+        with self.pending_lock:
+            pending=[(token,future) for token,future in self.pending.items()
+                if (bound:=getattr(future,'asuna_task',None)) and bound['_id']==task['_id']
+                and bound['intent_revision']<task['intent_revision'] and not future.done()]
+            for _,future in pending:
+                future.set_exception(Denied('STALE_TASK_FENCE'))
+        for token,future in pending:
+            self.emit({'kind':'task_fenced','token':token,'session_id':future.asuna_session_id,
+                'task_id':task['_id'],'intent_revision':task['intent_revision'],'reason':reason})
 
     def episode_finished(self, event, result, error):
         if event.get('channel'):
@@ -532,6 +592,15 @@ class BusinessWorker:
             return {'accepted': True}
         if method == 'session':
             return self.session(args['session_id'])
+        if method == 'stage.valid':
+            with self.pending_lock:
+                future=self.pending.get(args['token'])
+                if not future or future.done():return {'valid':False}
+                if args.get('session_id') and future.asuna_session_id != args['session_id']:
+                    raise Denied('NATIVE_OPERATION_SESSION_MISMATCH')
+                task=getattr(future,'asuna_task',None)
+            if task:self.app.service.valid(task)
+            return {'valid':True}
         if method in ('memory.page', 'memory.detail'):
             from .native_api import NativeMemory
             memory = NativeMemory(self, args['session_id'])
@@ -541,9 +610,17 @@ class BusinessWorker:
             record = self.session(args['session_id'])
             if record['lane'] != 'executor':
                 raise Denied('ACTION_SESSION_REQUIRED')
-            task = self.app.store.db.tasks.find_one({'_id': record['task_id']})
-            self.app.broker.bind(record['broker_session'], task, Path(record['cwd']))
-            return self.app.broker.call(record['broker_session'], args['call_id'], args['tool'], args['args'])
+            with self.pending_lock:
+                future = self.pending.get(args.get('operation'))
+                if not future or future.done():
+                    raise Denied('NATIVE_OPERATION_NOT_ACTIVE')
+                if future.asuna_lane != 'executor' or future.asuna_session_id != args['session_id']:
+                    raise Denied('NATIVE_OPERATION_SESSION_MISMATCH')
+                task, binding = future.asuna_task, future.asuna_binding
+                broker_session = future.asuna_broker_session
+            self.app.service.valid(task)
+            self.app.broker.bind(broker_session, task, Path(binding['cwd']))
+            return self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
             return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS]
         if method == 'schedule.deliver':

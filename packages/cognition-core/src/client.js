@@ -18,6 +18,48 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const memoryAuthor = value => typeof value === 'string' ? value.replace(/^qq:/, 'QQ · ') : '';
   const stageLabel = stage => ({ character: '角色脑', executor: '行动脑' })[stage?.lane] ?? null;
   const brainClass = lane => ['character', 'executor'].includes(lane) ? 'asuna-brain-' + lane : undefined;
+  function subscribeInputPolicies(ctx, rpc) {
+    let controller, previous = '', owned = new Map();
+    const unconfirmed = new Set();
+    const clear = id => {
+      if (ctx.conversation.blocks.storeFor(id).getSnapshot() === owned.get(id))
+        ctx.conversation.blocks.set(id, undefined);
+      owned.delete(id);
+      unconfirmed.delete(id);
+    };
+    const update = () => {
+      const list = ctx.sessions.list.getSnapshot();
+      const ids = Object.keys(list.byId).filter(id => list.byId[id]?.retainedBy.mainView > 0);
+      const key = ids.join('\n');
+      if (key === previous) return;
+      previous = key; controller?.abort(); controller = new AbortController();
+      const signal = controller.signal;
+      for (const id of owned.keys()) if (!ids.includes(id)) clear(id);
+      if (!ids.length) return;
+      // Resolve policy before enabling the shipped composer on a cold selection.
+      // Confirmed blocks survive request failure; temporary ones do not prevent
+      // ordinary DSH or the independent recovery preset from being used.
+      for (const id of ids) if (!owned.has(id) && !ctx.conversation.blocks.storeFor(id).getSnapshot()) {
+        const block = { reason: '正在确认会话输入权限…' };
+        owned.set(id, block); unconfirmed.add(id); ctx.conversation.blocks.set(id, block);
+      }
+      rpc('inputPolicies', { sessionIds: ids }, signal).then(policies => {
+        if (signal.aborted) return;
+        for (const id of ids) {
+          const reason = policies[id];
+          if (!reason) { if (owned.has(id)) clear(id); continue; }
+          unconfirmed.delete(id);
+          const block = { reason }; owned.set(id, block); ctx.conversation.blocks.set(id, block);
+        }
+      }).catch(() => {
+        if (signal.aborted) return;
+        for (const id of ids) if (unconfirmed.has(id)) clear(id);
+        previous = '';
+      });
+    };
+    const unsubscribe = ctx.sessions.list.subscribe(update); update();
+    return () => { unsubscribe(); controller?.abort(); for (const id of owned.keys()) clear(id); };
+  }
   // Pill's static branch forwards className, but not style. Scope just the
   // palette to these existing labels; native Pill still owns their geometry.
   const brainPalette = `
@@ -36,24 +78,32 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     return ['character', 'executor', 'summary'].includes(lane) ? { lane, phase: source.phase, operation: source.operation } : null;
   }
   function stageDefinitions() {
+    const matchStep = event => ['asuna/stage', 'asuna/stage-result', 'assistant/live-chunk', 'assistant/message'].includes(event.type)
+      && Number.isInteger(event.data.turn) && Number.isInteger(event.data.step);
+    const stageState = (match, reader) => {
+      const { event } = match;
+      const prior = reader.previous('asuna-stage-source')?.state;
+      return { stage: event.type.startsWith('asuna/') ? stageIdentity(event.data)
+        : prior?.turn === event.data.turn ? prior.stage : null,
+        turn: event.data.turn, step: event.data.step, anchor: event.seq,
+        sourceSeq: prior?.turn === event.data.turn ? prior.seq : undefined };
+    };
+    const markerState = (match, reader) => {
+      const state = stageState(match, reader);
+      const responseSeen = match.event.type.startsWith('assistant/');
+      return { ...state, responseSeen, anchor: responseSeen ? state.sourceSeq ?? state.anchor - 0.2 : state.anchor,
+        markerLocation: { kind: 'session' } };
+    };
     return [{ kind: 'asuna-stage-source',
       match: event => event.type === 'user/message' && event.data.source?.kind === 'asuna'
         ? { id: String(event.seq), role: 'start' } : null,
       start: (_context, match) => ({ stage: stageIdentity(match.event.data.source),
         turn: match.location.turn?.turn, seq: match.event.seq }),
       update: context => context.state,
-    }, { kind: 'asuna-stage', target: 'chat',
-      match: event => ['asuna/stage', 'asuna/stage-result', 'assistant/live-chunk', 'assistant/message'].includes(event.type)
-        && Number.isInteger(event.data.turn) && Number.isInteger(event.data.step)
+    }, { kind: 'asuna-stage',
+      match: event => matchStep(event)
         ? { id: event.data.turn + ':' + event.data.step, role: 'start' } : null,
-      start: (_context, match, reader) => {
-        const { event, location } = match;
-        const prior = reader.previous('asuna-stage-source')?.state;
-        const stage = event.type.startsWith('asuna/') ? stageIdentity(event.data)
-          : prior?.turn === event.data.turn ? prior.stage : null;
-        return { stage, turn: event.data.turn, step: event.data.step,
-          anchor: event.type.startsWith('asuna/') ? event.seq : Math.max(prior?.seq ?? event.seq, location.step?.start?.seq ?? event.seq) };
-      },
+      start: (_context, match, reader) => stageState(match, reader),
       update: (context, match) => match.event.type === 'asuna/stage'
         ? { ...context.state, stage: stageIdentity(match.event.data) } : context.state,
       // No token buffer: subscribe to native events only for their placement.
@@ -64,11 +114,27 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         return { kind: 'step', turn: context.state.turn, step: context.state.step,
           key: 'asuna-stage', value: context.state.stage };
       },
+    }, { kind: 'asuna-brain-marker', target: 'chat',
+      match: event => matchStep(event) ? { id: String(event.data.turn), role: 'start' } : null,
+      start: (_context, match, reader) => markerState(match, reader),
+      update: (context, match) => {
+        const state = context.state, stage = state.stage ?? stageIdentity(match.event.data);
+        // The explicit notice precedes native input materialization. Place
+        // identity immediately before the first response/process control,
+        // after user input, rather than anchoring it to that early notice.
+        if (!state.responseSeen && match.event.type.startsWith('assistant/')) return { ...state,
+          stage, responseSeen: true, anchor: match.event.seq - 0.2 };
+        return stage === state.stage ? state : { ...state, stage };
+      },
+      publication: match => match.event.type === 'assistant/live-chunk' ? 'animation-frame' : 'immediate',
       buildViewNode: context => {
-        // DSH resolves placement for its native assistant events. Unknown
-        // informational envelopes do not themselves acquire a StepLocation.
-        const location = context.matches.find(match => match.location.kind === 'step')?.location;
-        if (!stageLabel(context.state?.stage) || !location) return null;
+        // Keep one brain label with a native Turn's records, outside its
+        // disclosure. Attribute every step separately, but never repeat the
+        // label for tool followups. A cold partial Turn can use its first
+        // loaded explicit notice without guessing unloaded attribution.
+        const nativeStep = context.matches.some(match => match.location.kind === 'step');
+        if (!stageLabel(context.state?.stage) || !nativeStep || !context.state.responseSeen) return null;
+        const location = context.state.markerLocation;
         const previous = context.current.get('chat');
         if (previous?.data === context.state.stage && previous.location === location
             && previous.anchorSeq === context.state.anchor) return previous;
@@ -76,6 +142,20 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           id: context.id, target: 'chat', anchorSeq: context.state.anchor, location,
           visibility: 'visible', data: context.state.stage };
       },
+    }];
+  }
+  function actionDefinitions() {
+    return [{ kind: 'asuna-action-records', target: 'chat',
+      match: event => event.type === 'asuna/action-linked'
+        ? { id: event.data.segment_id ?? event.data.session_id, role: 'start' }
+        : event.type === 'asuna/action-range' ? { id: event.data.segment_id, role: 'update' } : null,
+      start: (_context, match) => ({ ...match.event.data, anchor: match.event.seq,
+        location: { kind: 'session' } }),
+      update: (context, match) => match.event.type === 'asuna/action-range'
+        ? { ...context.state, ...match.event.data } : context.state,
+      buildViewNode: context => !context.state?.location ? null : ({ key: context.key, kind: 'asuna-action-records',
+        id: context.id, target: 'chat', anchorSeq: context.state.anchor,
+        location: context.state.location, visibility: 'visible', data: context.state }),
     }];
   }
   // Same anchored Menu/Button primitives used by DSH's own preference rows.
@@ -124,33 +204,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
     // Use the shipped composer's block service, including blank/cold QQ
     // sessions. This is a service subscription, not a new UI slot/component.
-    ctx.effect(() => {
-      let controller, previous = '', owned = new Map();
-      const update = () => {
-        const list = ctx.sessions.list.getSnapshot();
-        const ids = Object.keys(list.byId).filter(id => list.byId[id]?.retainedBy.mainView > 0);
-        const key = ids.join('\n');
-        if (key === previous) return;
-        previous = key; controller?.abort(); controller = new AbortController();
-        const signal = controller.signal;
-        for (const [id, block] of owned) if (!ids.includes(id)) {
-          if (ctx.conversation.blocks.storeFor(id).getSnapshot() === block) ctx.conversation.blocks.set(id, undefined);
-          owned.delete(id);
-        }
-        if (!ids.length) return;
-        rpc('inputPolicies', { sessionIds: ids }, signal).then(policies => {
-          if (signal.aborted) return;
-          for (const [id, reason] of Object.entries(policies)) {
-            const block = { reason }; owned.set(id, block); ctx.conversation.blocks.set(id, block);
-          }
-        }).catch(() => { if (!signal.aborted) previous = ''; });
-      };
-      const unsubscribe = ctx.sessions.list.subscribe(update); update();
-      return () => { unsubscribe(); controller?.abort();
-        for (const [id, block] of owned)
-          if (ctx.conversation.blocks.storeFor(id).getSnapshot() === block) ctx.conversation.blocks.set(id, undefined);
-      };
-    });
+    ctx.effect(() => subscribeInputPolicies(ctx, rpc));
 
     function Memory(props) {
       const visible = props.useTabInfo().tab.visible;
@@ -387,6 +441,39 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return () => style.remove();
     });
     for (const definition of stageDefinitions()) ctx.effect(() => ctx.uiConversation.events.register(definition));
+    for (const definition of actionDefinitions()) ctx.effect(() => ctx.uiConversation.events.register(definition));
+    function InlineAction(props) {
+      const [reference, setReference] = React.useState(null), [error, setError] = React.useState('');
+      React.useEffect(() => {
+        const controller = new AbortController();
+        setReference(null); setError('');
+        const data = props.node.data;
+        const target = data.parent_session_id ? { parentSessionId: data.parent_session_id,
+          childSessionId: data.session_id, mode: 'unknown' }
+          : ctx.sessions.subagentAddress(data.session_id) ?? data.session_id;
+        const ref = ctx.sessions.retain(target, { source: 'asunaInline', signal: controller.signal });
+        ref.ready.then(() => { if (!controller.signal.aborted) setReference(ref); })
+          .catch(error => { if (!controller.signal.aborted) setError(error.message); });
+        return () => { controller.abort(); ref.release(); };
+      }, [props.node.data.session_id, props.node.data.parent_session_id]);
+      return h(React.Fragment, null, h(Pill, { className: brainClass('executor') }, '行动脑'),
+        reference ? h(props.SessionProvider, { session: reference },
+          props.renderSlot('asuna.inline.fragment', { owner: props }))
+          : h('p', { role: error ? 'alert' : 'status' }, error || '读取行动脑记录…'));
+    }
+    const actionKinds = ['assistant-step', 'tool-call', 'turn-error', 'turn-max-tokens',
+      'model-retry', 'compaction', 'manual-compaction', 'command'];
+    function NativeFragment(props) {
+      const range = props.owner.node.data;
+      return props.renderFactorySlot('conversation.chat.content', { variant: 'fragment', kinds: actionKinds,
+        after: range.after_seq, through: range.through_seq });
+    }
+    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+      name: 'conversation.chat.node', key: 'asuna-action-records', children: {
+        'asuna.inline.fragment': { kind: 'single', scope: 'session' },
+      },
+    }, InlineAction));
+    ctx.slots.inject('asuna.inline.fragment', () => ctx.slots.register({ name: 'asuna.inline.fragment' }, NativeFragment));
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-stage',
     }, props => stageLabel(props.node.data)
@@ -404,38 +491,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       name: 'conversation.session.header.actions', id: 'asuna-active-stage', order: 50, inject: injectChat,
     }, ActiveStage));
 
-    // A small association over actual native events, using DSH's location data.
-    // It neither streams nor copies role/action conversation contents.
-    ctx.effect(() => ctx.uiConversation.events.register({ kind: 'asuna-actions',
-      match: event => event.type === 'turn/start' ? { id: String(event.data.turn), role: 'start' }
-        : event.type === 'asuna/action-linked' ? { id: String(event.data.turn), role: 'update' } : null,
-      start: (_context, match) => ({ turn: match.event.data.turn, links: [] }),
-      update: (context, match) => ({ ...context.state, links: [...context.state.links, match.event.data] }),
-      buildLocationData: (context, scope, previous) => {
-        if (scope !== 'turn' || !context.state) return null;
-        if (previous?.value.links === context.state.links) return previous;
-        return { kind: 'turn', turn: context.state.turn, key: 'asuna-actions', value: { links: context.state.links } };
-      } }));
-    function ActionLinks(props) {
-      const data = props.useChat(snapshot => snapshot?.timeline.turns.get(props.turn.turn)?.data.get('asuna-actions'));
-      const links = data?.links || [];
-      return links.map(link => h(Button, { key: link.session_id, size: 'sm', variant: 'outline',
-        onClick: async () => {
-          // Pre-subagent task records may have been archived during workspace
-          // consolidation. Native main navigation cannot open archived sessions.
-          await ctx.uiWorkspace.unarchiveSession(link.session_id);
-          ctx.uiWorkspace.openSession(link.session_id);
-        } }, '打开行动会话 · ' + link.task_id));
-    }
-    ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
-      name: 'conversation.chat.turnTail', id: 'asuna-actions', order: 50,
-      inject: sessionId => {
-        const binding = ctx.sessions.binding(sessionId);
-        const chat = ctx.uiConversation.binding(binding).target('chat');
-        return { hooks: { chat } };
-      },
-    }, ActionLinks));
   }
-  return { apply, stageDefinitions, stageIdentity, stageLabel,
+  return { apply, stageDefinitions, actionDefinitions, stageIdentity, stageLabel, subscribeInputPolicies,
     inject: ['slots', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'configForms', 'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

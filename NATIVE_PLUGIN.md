@@ -8,6 +8,7 @@ Use the existing deployment configuration and Mongo database. Follow [RUN_ASUNA.
 
 ```powershell
 npm.cmd ci
+node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
 npm.cmd run pack:plugins
 .\.venv\Scripts\python.exe tools\setup_native_profile.py --shared-action-model
 .\start-asuna.cmd
@@ -15,10 +16,10 @@ npm.cmd run pack:plugins
 
 The optional shared-model flag seeds independent native provider references to the available action model. Later installations preserve settings saved in the editable native profile. **Plugins → @asuna/cognition-core** uses DSH's shipped settings form and fields for business configuration, route defaults, admission, and write-only secrets. Save and apply are separate operations. Model API keys use DSH's native provider credential store; the launcher no longer shadows migrated keys with environment values. Credentials remain outside prompts and artifacts.
 
-The packer writes content-addressed `.tgz` files and hashes to `.runtime/adr008/packages/manifest.json`. Setup calls the official DSH plugin installer and compares installed files to the tarballs. Nothing is published to npm. For another existing DSH Web profile, install both artifacts with:
+The [reviewed native extension](tools/dsh-inline/README.md) builds from the exact pinned release. It adds a public native Chat composition factory and preserves source-scoped cycle protection; it does not replace native message/tool renderers. The packer writes four content-addressed `.tgz` files and hashes to `.runtime/adr008/packages/manifest.json`: two Asuna plugins and two native rendering dependencies. Setup calls the official DSH plugin installer and compares installed files to the tarballs. Nothing is published to npm. For another existing DSH Web profile, install the delivery artifacts with:
 
 ```text
-dsh plugin --profile <web-profile> add <core.tgz> <xiaoman.tgz>
+dsh plugin --profile <web-profile> add <native-chat.tgz> <native-renderer.tgz> <core.tgz> <xiaoman.tgz>
 ```
 
 Core includes its Python business modules, generic prompts and JSON schemas. It runs without this checkout's `src/asuna`. Supply Python 3.12+ with the exact dependencies from the installed `python/pyproject.toml`, then configure the Core and publication-floor entries as described in [the Core package](packages/cognition-core/README.md). Source projects, private configuration, Mongo, model services and tool sandbox remain deployment inputs. Core alone does not invent a persona or start a worker without complete settings.
@@ -47,7 +48,7 @@ Brain attribution uses DSH's native Chat process disclosures and public node and
 
 The existing compact native `Pill` labels above the reasoning use purple for the character brain and blue for the action brain. There is no duplicate label below the output. Only their text/background palette is scoped by explicit lane; summary work does not receive a brain label. Light and dark palettes follow DSH's theme. Native reasoning and assistant text keep their original rendering and colors.
 
-To inspect both actual records, open the role conversation's native subagent catalog, select an **行动脑** child, then expand its process or use **Trajectory** for tool calls and results. The catalog also contains summaries; its count alone does not establish action execution. Its shipped sidebar-open control can show the child beside its parent. Legacy inline action links use native unarchive before navigation, because the Host clears an archived main selection; such restored pre-subagent records can be archived again with the native row action. Memory rows keep the native disclosure arrow visible while collapsed; clicking the title or arrow opens the detail body instead of the list excerpt.
+The role's main Chat displays actual action records alongside role judgments and consultation, using references to the original native action log. Expand the shipped reasoning/tool disclosures to read complete output and IN/OUT. There is one main composer. The native subagent catalog and **Trajectory** remain optional diagnostics; opening an action child is no longer the default reading path. Continued tasks on the same authorized execution binding retain their native action context and receive disjoint display ranges. The catalog also contains summaries; its count alone does not establish action execution. Memory rows keep the native disclosure arrow visible while collapsed; clicking the title or arrow opens the detail body instead of the list excerpt.
 
 ## Execution and persistence
 
@@ -55,7 +56,7 @@ The Host owns native agents, model requests, tools, compaction, streaming, sched
 
 DSH assembles before `agent/pre-step`; the scoped assembly boundary prepares claimed input before its first model call. Sourced business context enters the actual native request. Native assistant events are flushed before business receipts are committed. Recovery uses those events and original receipt IDs; it does not manufacture assistant history or replay completed side effects. Role/action hooks are scoped and state is keyed by native session ID.
 
-DSH 0.2's public `Session.append` does not accept an `ignorable` envelope option. Core therefore disables the stock JSONL component and inserts a thin public `SessionPersistence` adapter. It marks only `asuna/stage`, `asuna/stage-result`, `asuna/action-linked` and `asuna/schedule` as informational, delegating storage, leases, compression and reading to the native backend. No DSH files are patched. The optional repair utility preserves original compressed backups and changes only those missing envelope flags in earlier development logs; use it offline.
+DSH 0.2's public `Session.append` does not accept an `ignorable` envelope option. Core therefore disables the stock JSONL component and inserts a thin public `SessionPersistence` adapter. It marks its stage, result, action-link/range and schedule attribution as informational, delegating storage, leases, compression and reading to the native backend. This adapter does not patch DSH storage. The separately approved native Chat/renderer extension is built from the pinned source and installed as artifacts. The optional repair utility preserves original compressed backups and changes only those missing envelope flags in earlier development logs; use it offline.
 
 Legacy lane logs and Mongo history remain intact. Their separate runtime homes are not merged or replayed into this Host. New native bindings record migration context recovery under the original authorization. This does not preserve old model KV caches or pretend that separate histories were uninterrupted.
 
@@ -84,7 +85,7 @@ Persona resources apply without restarting the Host. Python updates replace only
 
 ## Verification boundaries
 
-The focused native suite exercises real installed DSH loop, preset and persistence services with synthetic inference; it is separate from live-model Web evidence. The publication probe executes the actual local npm pack command and checks immutable selection, bounded reads and session-scoped spilled output. The timer probe executes the native scheduler and durable inbox without issuing a model request. Python native-worker tests and offline business suites do not create another Mongo database.
+The focused native suite exercises real installed DSH loop, preset and persistence services with synthetic inference; it is separate from live-model Web evidence. The publication probe executes the actual local npm pack command and checks immutable selection, bounded reads and session-scoped spilled output. The timer probe executes the native scheduler and durable inbox without issuing a model request. Python native-worker/product tests do not create Mongo databases. Business integration tests use owned isolated test databases, export file evidence and drop those databases during teardown, including failures; they skip when Mongo is unavailable.
 
 ```powershell
 npm.cmd run test:native

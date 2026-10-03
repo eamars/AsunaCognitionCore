@@ -14,6 +14,7 @@ import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
 import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
+import { ActionRecords } from './action-records.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute } from './settings.js';
 import z from '@deepseek-ai/schemastery';
@@ -44,6 +45,7 @@ export class CognitionCore {
     this.channelWrites = new Map();
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
+    this.actionRecords = new ActionRecords(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
   }
 
@@ -216,6 +218,12 @@ export class CognitionCore {
       }
       return;
     }
+    if (event.kind === 'task_fenced') {
+      const active = this.states.get(event.session_id)?.current;
+      if (active?.token === event.token) this.ctx.agents.get(event.session_id)?.cancel(
+        { kind: 'hook', reason: event.reason }, { keepInbox: true });
+      return;
+    }
     const state = this.state(event.session_id);
     if (state.waiter) {
       const waiter = state.waiter; state.waiter = null; waiter.resolve(event); return;
@@ -290,14 +298,7 @@ export class CognitionCore {
   }
 
   async linkAction(stage) {
-    const role = this.ctx.agents.get(stage.binding.role_session_id);
-    if (!role || role.session.snapshotEvents().some(e => e.type === 'asuna/action-linked'
-        && e.data.session_id === stage.session_id)) return;
-    const turn = role.session.snapshotEvents().filter(e => e.type === 'turn/start').at(-1)?.data.turn;
-    if (!turn) return;
-    role.session.append('asuna/action-linked', { turn, session_id: stage.session_id,
-      task_id: stage.binding.task_id });
-    await this.ctx.sessions.flush(role.session);
+    await this.actionRecords.link(stage);
   }
 
   result(stage, sessionId, last, finishReason) {
@@ -345,7 +346,16 @@ export class CognitionCore {
     scope.tools.guard(exec => lane !== 'executor'
       || !this.state(exec.agent.session.id).allowed?.has(exec.name) ? 'Asuna capability not granted' : undefined);
     scope.on('tools/pre-execute', async (exec, next) => {
+      exec.signal.throwIfAborted();
       await this.worker.call('session', { session_id: exec.agent.session.id });
+      if (lane === 'executor') {
+        const stage = this.state(exec.agent.session.id).current;
+        const admission = await this.worker.call('stage.valid', {
+          token: stage?.token, session_id: exec.agent.session.id,
+        });
+        if (admission.valid !== true) throw new Error('ASUNA_ACTION_STAGE_SUPPRESSED');
+        exec.signal.throwIfAborted();
+      }
       return next();
     });
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
@@ -384,6 +394,11 @@ export class CognitionCore {
     scope.on('agent/request', async ({ agent, turn, step }, next) => {
       const request = await next();
       const stage = this.state(agent.session.id).current;
+      if (lane === 'executor') {
+        const admission = await this.worker.call('stage.valid', { token: stage?.token, session_id: agent.id });
+        if (admission.valid !== true) throw new Error('ASUNA_ACTION_STAGE_SUPPRESSED');
+      }
+      if (lane === 'character' && stage) await this.actionRecords.pause(agent.id);
       // Business attribution only. DSH still owns the request, stream, tools,
       // process folding and assistant body. Every tool-followup step retains
       // its actual lane, even when both lanes use the same model.
@@ -425,6 +440,7 @@ export class CognitionCore {
       const waiting = lane === 'character' && stage.phase !== 'CONSULT'
         ? this.next(agent.session.id, signal) : null;
       state.current = null;
+      if (lane === 'character' && stage.phase === 'CONSULT') await this.actionRecords.resume(agent.id);
       await this.worker.call('result', { token: stage.token,
         result: this.result(stage, agent.id, last, finishReason) });
       if (waiting) {
@@ -432,7 +448,7 @@ export class CognitionCore {
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
           state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage));
-        }
+        } else await this.actionRecords.resume(agent.id);
       }
     });
     scope.on('agent/error', ({ agent, error }) => {
@@ -480,6 +496,8 @@ export class CognitionCore {
       scope.tools.register(defineTool({ ...spec,
         output: { schema: { type: 'json' }, render: asunaRender },
         execute: async (args, exec) => {
+          exec.signal.throwIfAborted();
+          const operation = this.state(agent.session.id).current?.token;
           if (spec.name === 'read_file') {
             const spill = await readSpill(this.ctx.get('spillStore'), agent.session.id, args);
             if (spill) return spill;
@@ -487,7 +505,7 @@ export class CognitionCore {
           // The action plugin owns the declared attachment injection. An
           // Agent's context does not inherit that plugin's service grants.
           return attachImage({ attachments }, await this.worker.call('tool', {
-            session_id: agent.session.id, call_id: exec.callId, tool: spec.name, args,
+            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args,
           }));
         },
       }));

@@ -56,7 +56,7 @@ class Application:
             self.evidence.record('lane.summary.start', {})
             self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
-            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
+            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval),task_service=self.service)
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)

@@ -6,5 +6,10 @@
   "exports": {".": "./src/index.js"},
   "files": ["src", "persona", "skills", "integrations", "resources-provenance.json", "cordis.patch.yml", "README.md"],
   "dsh": {"bundle": {"patch": "./cordis.patch.yml"}},
-  "peerDependencies": {"@asuna/cognition-core": "0.1.x"}
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.1.x",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-command-compact": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.2.0-rc.2"
+  }
 }

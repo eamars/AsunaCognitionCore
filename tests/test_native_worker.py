@@ -9,6 +9,8 @@ from asuna.native_worker import BusinessWorker, NativeLane
 from asuna.state import Denied
 from asuna.router import Router
 from asuna.config import ROOT
+from unittest.mock import patch
+from concurrent.futures import Future
 
 
 def test_worker_import_does_not_load_sdk_or_old_web():
@@ -21,6 +23,44 @@ def test_worker_import_does_not_load_sdk_or_old_web():
     assert result.returncode == 0, result.stderr
 
 
+def test_task_fence_ends_old_pending_stage_without_ending_its_successor():
+    worker=BusinessWorker('unused'); events=[]; worker.emit=events.append
+    old,new=Future(),Future()
+    for future,revision in ((old,1),(new,2)):
+        future.asuna_task={'_id':'task','intent_revision':revision}
+        future.asuna_session_id='same-native-source'
+    worker.pending={'old':old,'new':new}
+    worker.task_fenced({'_id':'task','intent_revision':2},'task_revised')
+    assert str(old.exception())=='STALE_TASK_FENCE' and not new.done()
+    assert events==[{'kind':'task_fenced','token':'old','session_id':'same-native-source',
+        'task_id':'task','intent_revision':2,'reason':'task_revised'}]
+    worker.task_fenced({'_id':'task','intent_revision':2},'task_revised')
+    assert len(events)==1
+
+
+def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path):
+    worker=BusinessWorker('unused'); calls=[]
+    worker.session=lambda _: {'lane':'executor','task_id':'successor'}
+    def valid(task):
+        if task['_id']=='old':raise Denied('STALE_TASK_FENCE')
+    worker.app=SimpleNamespace(service=SimpleNamespace(valid=valid),broker=SimpleNamespace(
+        bind=lambda session,task,cwd:calls.append((session,task['_id'],cwd)),
+        call=lambda *args:{'accepted':True}))
+    for token,task in (('old-stage','old'),('new-stage','successor')):
+        future=Future();future.asuna_lane='executor';future.asuna_session_id='source'
+        future.asuna_task={'_id':task};future.asuna_binding={'cwd':str(tmp_path)}
+        future.asuna_broker_session=token
+        worker.pending[token]=future
+    args={'session_id':'source','call_id':'call','tool':'read_file','args':{'path':'note'}}
+    with pytest.raises(Denied,match='NATIVE_OPERATION_NOT_ACTIVE'):worker.dispatch('tool',args)
+    with pytest.raises(Denied,match='STALE_TASK_FENCE'):worker.dispatch('tool',{**args,'operation':'old-stage'})
+    with pytest.raises(Denied,match='SESSION_MISMATCH'):
+        worker.dispatch('tool',{**args,'operation':'new-stage','session_id':'other-source'})
+    assert not calls
+    assert worker.dispatch('tool',{**args,'operation':'new-stage'})=={'accepted':True}
+    assert calls==[('new-stage','successor',tmp_path)]
+
+
 def test_native_lane_does_not_invent_or_rebind_an_episode():
     ep = {'_id': 'ep-current'}
     store = SimpleNamespace(config={'workflow_timeout_seconds': 1}, db=SimpleNamespace(
@@ -31,6 +71,52 @@ def test_native_lane_does_not_invent_or_rebind_an_episode():
     with pytest.raises(ValueError, match='NATIVE_ROLE_SESSION_REQUIRED'):
         lane.generate('legacy-binding', 'ep-current:MONOLOGUE:0', 'MONOLOGUE', 'text', 'system')
     assert ep == {'_id': 'ep-current'}
+
+
+def test_action_successor_uses_the_same_native_context_with_its_current_task_grant(tmp_path):
+    class Rows:
+        def __init__(self): self.rows = {}
+        def find_one(self, query, **kwargs):
+            return next((dict(row) for row in reversed(list(self.rows.values()))
+                         if all(row.get(k) == v for k, v in query.items())), None)
+    tables = {name: Rows() for name in ('tasks', 'episodes', 'sessions', 'messages', 'lane_receipts')}
+    for index in (1, 2, 3):
+        tables['tasks'].rows[f'task{index}'] = {'_id': f'task{index}', 'episode_id': f'ep{index}',
+            'intent_revision': 1,
+            'allowed_capabilities': ['read_file'] if index == 1 else []}
+        tables['episodes'].rows[f'ep{index}'] = {'_id': f'ep{index}', 'scene_id': 'local', 'person_id': 'owner',
+            'scope_key': 'scope', 'policy_epoch': 1, 'persona': 'fixture',
+            'native_session_id': 'role' if index < 3 else 'another-role'}
+    def put(name, values, **kwargs):
+        values = {**values, 'revision': (tables[name].rows.get(values['_id']) or {}).get('revision', 0) + 1}
+        tables[name].rows[values['_id']] = values
+        return values
+    config = {'workflow_timeout_seconds': 2, 'executor': {}}
+    store = SimpleNamespace(config=config, db=SimpleNamespace(**tables), put=put,
+                            authorize=lambda *_: {'policy_epoch': 1})
+    worker = BusinessWorker('unused'); worker.app = SimpleNamespace(store=store,
+        service=SimpleNamespace(lock=threading.RLock(),valid=lambda task:task),
+        broker=SimpleNamespace(bindings={}))
+    worker.navigation_ready.set(); worker.controller = SimpleNamespace(ingress_lock=threading.RLock(), reconfiguring=False)
+    requests = []
+    def emit(event):
+        requests.append(event)
+        worker.pending[event['token']].set_result({'content': 'native receipt', 'finish_reason': 'stop'})
+    worker.emit = emit
+    with patch('asuna.native_worker.workspace_grant', return_value={'workspace': str(tmp_path)}), \
+         patch('asuna.native_worker.skills_directory', return_value=None), \
+         patch('asuna.native_worker.skill_directories', return_value=[]):
+        lane = NativeLane(worker, config, store, None, lane='executor')
+        for index in (1, 2, 3):
+            lane.generate('same-execution-binding', f'task{index}:execute:1', 'execution', 'context', 'system')
+        before = len(requests)
+        lane.generate('same-execution-binding', 'task1:execute:1', 'execution', 'context', 'system')
+        assert len(requests) == before, 'saved results must not reopen a completed stage'
+    assert requests[0]['session_id'] == requests[1]['session_id']
+    assert requests[2]['session_id'] != requests[1]['session_id'], 'another native role is an isolation boundary'
+    assert [r['binding']['task_id'] for r in requests] == ['task1', 'task2', 'task3']
+    assert requests[1]['binding']['allowed_capabilities'] == []
+    assert requests[1]['binding']['execution_binding'] == 'same-execution-binding'
 
 
 def test_group_role_is_continuous_across_speakers_but_not_scenes_or_authorization_epochs():

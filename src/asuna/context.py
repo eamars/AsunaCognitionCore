@@ -141,8 +141,19 @@ class ContextBuilder:
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
-        task_states=list(self.store.db.tasks.find({'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch']},
-            {'_id':1,'intent_revision':1,'state':1,'goal':1,'feedback_state':1,'finished_at':1,'cancel_reason':1,'revision_requested_at':1}).sort('revision',-1).limit(8))
+        # A storage revision counts writes/tool calls, not conversational time.
+        # Use each task's durable input timestamp, including legacy tasks, so
+        # recently returned work is not hidden behind old high-write tasks.
+        task_states=list(self.store.db.tasks.aggregate([
+            {'$match':{'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch']}},
+            {'$lookup':{'from':'messages','localField':'raw_input_refs','foreignField':'_id',
+                'pipeline':[{'$project':{'received_at':1,'_id':0}}],'as':'_inputs'}},
+            {'$addFields':{'_active':{'$cond':[{'$in':['$state',['READY','RUNNING']]},1,0]},
+                '_input_time':{'$max':'$_inputs.received_at'}}},
+            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':8},
+            {'$project':{'_id':1,'intent_revision':1,'state':1,'goal':1,'feedback_state':1,'finished_at':1,
+                'cancel_reason':1,'revision_requested_at':1,'pause_reason':1,'paused_at':1,'paused_state':1}},
+        ]))
         plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
             'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
             'kind':{'$ne':'self_development'},
@@ -164,6 +175,12 @@ class ContextBuilder:
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if any(task['state'] == 'PAUSED' for task in task_states):
+            context['task_continuation_from_program'] = (
+                'PAUSED 是重启后等待操作者决定的旧行动，历史与回执仍保留。'
+                '只有本地用户明确要求继续时才可通过 continue_task_id 续接；'
+                '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
+                '继续时先核实已有结果，未确认回执的操作不能盲目重做。')
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],

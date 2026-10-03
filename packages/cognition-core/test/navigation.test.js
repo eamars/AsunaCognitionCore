@@ -102,6 +102,7 @@ test('native continuation preserves history and task children retain their actua
   const child = { _id: 'action', lane: 'executor', cwd: execution, scene_id: role.scene_id,
     parent_session_id: role._id, role_session_id: role._id, task_id: 'task-one', allowed_capabilities: [] };
   core.worker = { async call(method, args) {
+    if (method === 'stage.valid') return { valid: true };
     if (method === 'session') return args.session_id === role._id ? role : child;
     if (method === 'result') { assert.ok(args.result, args.error); complete(args.result); }
   } };
@@ -125,9 +126,16 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(ctx.sessionProjectionCache.cachedSnapshot(parent.session.header).values.title, 'My QQ name',
     'native user renaming must survive organization and startup');
   assert.ok(parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog' && event.data.childId === 'action'));
+  const link = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-linked' && event.data.session_id === 'action');
+  assert.equal(link.data.parent_session_id, role._id);
+  assert.equal(link.data.after_seq, -1);
+  const range = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-range' && event.data.segment_id === link.data.segment_id);
+  assert.equal(range.data.state, 'completed');
+  assert.ok(range.data.through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
   await core.children.start(stage);
   assert.equal(requests, 2, 'a durable stage receipt must not rerun inference or tools');
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
+  assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
   assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);
   await core.handles.get(role._id).dispose();
   await ctx.fiber.dispose();

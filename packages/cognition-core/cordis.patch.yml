@@ -19,6 +19,26 @@
         name: 行动脑
         plugins:
           - name: '@asuna/cognition-core/action'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  maxTokens: 8192
+                  retainRatio: 0.32
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
     - id: asuna-summary-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -26,6 +46,26 @@
         name: 交流摘要
         plugins:
           - name: '@asuna/cognition-core/summary'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  maxTokens: 8192
+                  retainRatio: 0.32
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
     - id: asuna-scheduler-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -41,3 +81,23 @@
         description: Repair an authorized plugin project when its business worker cannot start
         plugins:
           - name: '@asuna/cognition-core/recovery'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  maxTokens: 8192
+                  retainRatio: 0.32
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

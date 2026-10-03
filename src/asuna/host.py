@@ -189,15 +189,15 @@ class RuntimeHost:
                 self.configure_controller(self)
             channels = Channels(self.controller)
             channels.recover_sending()
-            self.controller.recover_inputs()
-            inputs_ready = time.perf_counter()
             self._recover_tasks()
             tasks_ready = time.perf_counter()
+            self.controller.recover_inputs()
+            inputs_ready = time.perf_counter()
             self.evidence.record('host.recovery.ready', {
                 'local_seconds': round(local_ready - recovery_start, 3),
                 'channel_scene_seconds': round(channel_scenes_ready - local_ready, 3),
-                'input_seconds': round(inputs_ready - channel_scenes_ready, 3),
-                'task_seconds': round(tasks_ready - inputs_ready, 3)})
+                'task_seconds': round(tasks_ready - channel_scenes_ready, 3),
+                'input_seconds': round(inputs_ready - tasks_ready, 3)})
             self.indexer = MemoryIndexer(self.app.store, self.evidence, [self.settings['scene_id'], *sorted(scenes)],
                                          summary_lane=self.app.summary_lane,
                                          summary_scenes=[self.settings['scene_id'], *sorted(scenes)],
@@ -299,26 +299,20 @@ class RuntimeHost:
                 source = store.db.messages.find_one({'_id': parent['raw_input_refs'][0]}) if parent else None
             if not source or not source.get('host_managed'):
                 continue
-            if task['state'] == 'READY':
-                episode = store.db.episodes.find_one({'_id': task['episode_id']})
-                if episode and episode.get('decision',{}).get('next')=='delegate':
-                    self.controller._schedule({'task_id': task['_id']})
-            elif task['state'] == 'RUNNING':
-                # An in-flight executor may have produced effects. No blind retry.
-                store.put('tasks', {**task, 'state': 'BLOCKED', 'feedback_state':'READY',
-                                   'failure_type': 'HOST_INTERRUPTED_EXECUTOR',
-                                   'result':{'error':'宿主中断了上次行动。保留原会话与已有记录；没有回执的操作须先核实，不要盲目重做。'}}, expected=task['revision'], stream=task['_id'])
-                store.audit(task['_id'], 'execution.failed', {'reason': 'HOST_INTERRUPTED_EXECUTOR'}, task['scope_key'])
-                self.controller.pending.put(({'_feedback_task':task['_id'],'event_id':task['_id']+':feedback','scene_id':task['scene_id'],'person_id':task['requester_id']}, task['episode_id']))
-            elif task.get('feedback_state') == 'READY':
-                self.controller.pending.put(({'_feedback_task': task['_id'], 'event_id': task['_id'] + ':feedback',
-                                              'scene_id': task['scene_id'], 'person_id': task['requester_id']}, task['episode_id']))
-            elif task.get('feedback_state') == 'DELIVERED':
+            if task.get('feedback_state') == 'DELIVERED':
                 feedback = store.db.episodes.find_one({'_id': task.get('feedback_episode')})
                 original = store.db.episodes.find_one({'_id': task['episode_id']})
-                if feedback and feedback['state'] == 'COMMITTED' and original and original['state'] == 'WAITING_TASK':
-                    store.put('episodes', {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
-                              expected=original['revision'], stream=original['_id'])
+                if feedback and feedback['state'] == 'COMMITTED':
+                    if original and original['state'] == 'WAITING_TASK':
+                        store.put('episodes', {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
+                                  expected=original['revision'], stream=original['_id'])
+                    continue
+            # Approved restart policy: unfinished actions/results remain
+            # durable, but do not run or call the role model on startup.
+            # A new explicit local DECIDE may continue their native context.
+            paused = self.app.service.pause_for_restart(task['_id'])
+            self.evidence.record('host.task_paused', {'task_id': task['_id'],
+                'previous_state': task['state'], 'state': paused['state']})
 
     def __exit__(self, *args):
         try:

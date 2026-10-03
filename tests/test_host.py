@@ -323,3 +323,107 @@ def test_returned_task_feedback_queue_continues_failed_role_stage_without_new_ep
     assert lane.calls[3]['messages'][0]==lane.calls[2]['messages'][0]
     assert '上次真实错误' in lane.calls[3]['messages'][-1]['content']
     assert 'task_result' not in lane.calls[3]['messages'][-1]['content']
+
+
+@pytest.mark.parametrize('invalidate', ['cancel', 'pause'])
+def test_inflight_feedback_stops_after_task_authority_is_withdrawn(store, invalidate):
+    from concurrent.futures import ThreadPoolExecutor
+    from asuna.tasks import TaskService
+    entered, released = threading.Event(), threading.Event()
+    delegate = {'next': 'delegate', 'goal': 'inspect', 'constraints': [],
+                'recall_query': '', 'speak_before_action': False}
+    class PausedLane(FakeLane):
+        def generate(self, *args, **kwargs):
+            result = super().generate(*args, **kwargs)
+            if len(self.calls) == 3:
+                entered.set()
+                assert released.wait(5)
+            return result
+    lane = PausedLane(store, [LaneResult('original'), LaneResult(json.dumps(delegate)),
+        LaneResult('late feedback thought'), LaneResult(json.dumps({**delegate, 'next': 'speak'})),
+        LaneResult('must not be generated')])
+    coordinator = Coordinator(store, lane)
+    original = coordinator.ingest(event('inflight-feedback'))
+    service = TaskService(store)
+    task = service.claim(original['task_id'])
+    store.put('artifacts', {'_id': 'feedback-observation', 'task_id': task['_id'],
+        'intent_revision': 1, 'scope_key': task['scope_key'], 'state': 'DONE'})
+    task = service.finish(task, {'task_id': task['_id'], 'intent_revision': 1, 'status': 'done',
+        'facts': [{'text': 'checked', 'evidence_refs': ['feedback-observation']}],
+        'artifact_refs': ['feedback-observation'], 'effect_receipts': [], 'uncertainties': [],
+        'unmet_items': [], 'needs_decision': None})
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(service.feedback, task, coordinator)
+        try:
+            assert entered.wait(5)
+            if invalidate == 'cancel':
+                service.cancel(task['_id'], operator=True)
+            else:
+                service.pause_for_restart(task['_id'])
+        finally:
+            released.set()
+        feedback = pending.result(timeout=5)
+    current = store.db.tasks.find_one({'_id': task['_id']})
+    assert feedback['state'] == 'SUPPRESSED'
+    assert current['state'] == ('CANCELLED' if invalidate == 'cancel' else 'PAUSED')
+    assert current['feedback_state'] == ('SUPPRESSED' if invalidate == 'cancel' else 'PAUSED')
+    assert [call['phase'] for call in lane.calls[2:]] == ['MONOLOGUE']
+    assert store.db.messages.count_documents({'direction': 'outbound'}) == 0
+    assert store.db.tasks.count_documents({}) == 1
+    assert store.db.lane_receipts.count_documents({}) == 3, 'retain the actual in-flight output'
+    assert coordinator.advance(feedback['_id'])['state'] == 'SUPPRESSED'
+    assert len(lane.calls) == 3
+
+
+@pytest.mark.parametrize('state', ['READY', 'RUNNING', 'RETURNED'])
+def test_host_restart_pauses_unfinished_actions_and_never_queues_old_feedback(store, tmp_path, state):
+    from asuna.tasks import TaskService
+    delegate = {'next': 'delegate', 'goal': 'inspect', 'constraints': [],
+                'recall_query': '', 'speak_before_action': False}
+    lane = FakeLane(store, [LaneResult('original'), LaneResult(json.dumps(delegate))])
+    coordinator = Coordinator(store, lane)
+    incoming = event('restart-action')
+    persist_input(store, incoming, managed=True)
+    original = coordinator.ingest(incoming)
+    service = TaskService(store)
+    task = store.db.tasks.find_one({'_id': original['task_id']})
+    if state != 'READY':
+        task = service.claim(task['_id'])
+    if state == 'RETURNED':
+        task = store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'READY',
+            'result': {'facts': [{'text': 'existing result'}]}}, expected=task['revision'])
+    chat = controller(store, tmp_path, coordinator)
+    chat.app.service = service
+    host = RuntimeHost(store.config, chat.app.evidence)
+    host.app, host.controller = chat.app, chat
+    host._recover_tasks()
+    paused = store.db.tasks.find_one({'_id': task['_id']})
+    assert paused['state'] == 'PAUSED' and paused['paused_state'] == state
+    assert paused['feedback_state'] == 'PAUSED'
+    assert paused['fencing_token'] > task['fencing_token']
+    assert paused.get('result') == task.get('result')
+    assert chat.pending.empty() and chat.task_queue.empty() and len(lane.calls) == 2
+    host._recover_tasks()
+    assert store.db.tasks.find_one({'_id': task['_id']})['revision'] == paused['revision']
+
+
+def test_restart_reconciles_delivered_feedback_without_pausing_completed_work(store, tmp_path):
+    from asuna.tasks import TaskService
+    delegate = {'next': 'delegate', 'goal': 'inspect', 'constraints': [],
+                'recall_query': '', 'speak_before_action': False}
+    coordinator = Coordinator(store, FakeLane(store, [LaneResult('original'), LaneResult(json.dumps(delegate))]))
+    incoming = event('completed-feedback')
+    persist_input(store, incoming, managed=True)
+    original = coordinator.ingest(incoming)
+    task = store.db.tasks.find_one({'_id': original['task_id']})
+    store.put('episodes', {'_id': 'finished-feedback', 'state': 'COMMITTED'})
+    task = store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'DELIVERED',
+        'feedback_episode': 'finished-feedback'}, expected=task['revision'])
+    chat = controller(store, tmp_path, coordinator)
+    chat.app.service = TaskService(store)
+    host = RuntimeHost(store.config, chat.app.evidence)
+    host.app, host.controller = chat.app, chat
+    host._recover_tasks()
+    assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'RETURNED'
+    assert store.db.episodes.find_one({'_id': original['_id']})['state'] == 'COMMITTED'
+    assert chat.pending.empty() and chat.task_queue.empty()

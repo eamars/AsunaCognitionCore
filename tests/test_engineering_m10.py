@@ -97,7 +97,9 @@ def test_E23_mixed_state_replay_without_external_actions(store):
             assert replay(trace,target)['sha256']==projection(store)['sha256']
         modified=copy.deepcopy(trace);modified[-1]['payload']={'tampered':True}
         with pytest.raises(ValueError,match='HASH_CHAIN'):verify(modified)
-    finally:target.client.close()
+    finally:
+        from asuna.testing import dispose_test_store
+        dispose_test_store(target)
 
 
 def test_E07_provider_length_is_not_stop():

@@ -11,6 +11,8 @@ from .evidence import canonical, sha
 from .lanes import Lane
 from .publish import PublishService
 from .state import Store, Conflict, Denied, now
+from .tasks import FeedbackStale, require_current_feedback
+from .queue import database_effects_lock
 
 DECISION_SCHEMA=json.loads((BUNDLE/'schemas/decision.schema.json').read_text(encoding='utf-8'))
 # The number of natural-language constraints does not decide whether a valid
@@ -48,7 +50,7 @@ class ProtocolFailure(RuntimeError):
 
 
 class Coordinator:
-    def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None,monologue_enabled=True):
+    def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None,monologue_enabled=True,task_service=None):
         self.store,self.character = store,character
         self.context=context or ContextBuilder(store)
         self.publisher=publisher or PublishService(store,crash=crash)
@@ -57,6 +59,8 @@ class Coordinator:
         self.monologue_enabled=monologue_enabled
         self.scheduler=None
         self.native_session_resolver=None
+        from .tasks import TaskService
+        self.tasks=task_service or TaskService(store)
 
     def ingest(self, event: dict, *, persona='P1'):
         with self.lock:
@@ -90,8 +94,7 @@ class Coordinator:
             raise ValueError('CONSULT_QUESTION_REQUIRED')
         if not isinstance(args.get('context',''),str):raise ValueError('CONSULT_CONTEXT_MUST_BE_TEXT')
         with self.lock:
-            from .tasks import TaskService
-            TaskService(self.store).valid(task)
+            self.tasks.valid(task)
             scene=self.store.authorize(task['scene_id'],task['requester_id'])
             ep=self.store.db.episodes.find_one({'_id':task['episode_id'],
                 'scene_id':task['scene_id'],'person_id':task['requester_id'],
@@ -132,7 +135,9 @@ class Coordinator:
         if not self.scheduler:
             raise ValueError('SCHEDULER_NOT_AVAILABLE')
         try:
-            plan=action()
+            with database_effects_lock(self.store.name):
+                require_current_feedback(self.store, ep)
+                plan=action()
         except ValueError as exc:
             return self._plan_rejected(ep,field,str(exc))
         return self._update(ep,**{field:{'accepted':True,'plan_id':plan['_id'],'status':plan['status'],
@@ -141,6 +146,7 @@ class Coordinator:
             'plan_version':plan.get('plan_version',1)}})
 
     def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None):
+        require_current_feedback(self.store, ep)
         operation=operation or f"{ep['_id']}:{phase}:{round_id}"
         if ep.get('resume_generation'):
             operation+=':resume:'+str(ep['resume_generation'])
@@ -164,6 +170,7 @@ class Coordinator:
         value=self.character.generate(binding,operation,phase,instruction,ep['system'])
         self.crash('after_lane_delivery')
         self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
+        require_current_feedback(self.store, ep)
         if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
             label='INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT'
             raise ProtocolFailure(label+': '+json.dumps({
@@ -176,6 +183,12 @@ class Coordinator:
             ep=self.store.db.episodes.find_one({'_id':ep_id})
             if not ep:
                 raise ValueError('EPISODE_NOT_FOUND')
+            if ep['state'] in ('SUPPRESSED', 'COMMITTED'):
+                return ep
+            try:
+                require_current_feedback(self.store, ep)
+            except FeedbackStale as exc:
+                return self._suppress_feedback(ep, exc)
             if self.native_session_resolver and not ep.get('native_session_id'):
                 ep=self._update(ep,native_session_id=self.native_session_resolver(ep))
             if ep['state']=='FAILED_PROTOCOL' and ep.get('episode_kind')=='task_feedback':
@@ -264,16 +277,17 @@ class Coordinator:
                         if not ep['context'].get('understanding_update_from_program',{}).get('available'):
                             raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
                         text=self._stage(ep,'REFLECT')
-                        update=MemoryService(self.store).commit_understanding(ep,text)
+                        with database_effects_lock(self.store.name):
+                            require_current_feedback(self.store, ep)
+                            update=MemoryService(self.store).commit_understanding(ep,text)
                         ep=self._update(ep,understanding_update=update,feedback_resume_phase=None)
                     if ep['decision'].get('cancel_task_id') and not ep.get('control_result'):
-                        from .tasks import TaskService
                         target=self.store.db.tasks.find_one({'_id':ep['decision']['cancel_task_id'],
                             'scene_id':ep['scene_id'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']})
                         if not target or target['_id'] not in {t['_id'] for t in ep['context']['task_state_from_program']}:
                             raise Denied('CANCEL_TASK_NOT_IN_CURRENT_CONTEXT')
                         if target['state'] in ('READY','RUNNING'):
-                            target=TaskService(self.store).cancel(target['_id'],reason='character_confirmed_user_cancellation',person_id=ep['person_id'])
+                            target=self.tasks.cancel(target['_id'],reason='character_confirmed_user_cancellation',person_id=ep['person_id'])
                         ep=self._update(ep,control_result={'action':'cancel','task_id':target['_id'],'actual_state':target['state']})
                     next_step=ep['decision']['next']
                     if next_step=='silent':
@@ -294,11 +308,28 @@ class Coordinator:
                         if self.store.config.get('task_mode')=='workspace':
                             from .resources import workspace_grant
                             workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
+                        # A persisted role decision can redirect its own live
+                        # action. Fence the old revision before admitting its
+                        # replacement; retain the real native execution source.
+                        target_id=ep['decision'].get('continue_task_id')
+                        if target_id and not ep.get('supersedes_task_id'):
+                            source=self.store.db.messages.find_one({'_id':'in-'+ep_id})
+                            from .integration import event_granted
+                            integration=event_granted(self.store.config,(source or {}).get('event',{}))
+                            with self.tasks.lock:
+                                target=self.store.db.tasks.find_one({'_id':target_id,'scene_id':ep['scene_id'],
+                                    'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']})
+                                revising=bool(target and (target['state'] in ('READY','RUNNING') or
+                                    target['state']=='STALE' and target.get('revision_event_id')==ep['source_event_id'])
+                                    and bool(target.get('integration_profile'))==bool(integration))
+                                if revising:
+                                    self.tasks.revise(target_id,(source or {})['event'])
+                                    ep=self._update(ep,supersedes_task_id=target_id,
+                                        control_result={'action':'revise','accepted':True,'task_id':target_id})
                         task_id=ep.get('supersedes_task_id') or 'task-'+ep_id
                         intent_revision=1
                         if ep.get('supersedes_task_id'):
-                            from .tasks import TaskService
-                            revised=TaskService(self.store).activate_revision(ep)
+                            revised=self.tasks.activate_revision(ep)
                             intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
                             from .tasks import WORKSPACE_TOOLS,TOOLS,ACTION_DSH_CAPABILITIES
@@ -327,14 +358,22 @@ class Coordinator:
                                 # shutdown; it cannot undo a user's task cancellation.
                                 host_resume=bool(prior and prior.get('cancel_reason')=='host_stop'
                                     and ep['decision'].get('continue_task_id')==prior_id and ep.get('episode_kind')!='task_feedback')
-                                if not prior or prior['state'] in ('READY','RUNNING','STALE') or (prior['state']=='CANCELLED' and not host_resume) or bool(prior.get('integration_profile'))!=bool(integration):
+                                paused_resume=bool(prior and prior['state']=='PAUSED'
+                                    and ep['decision'].get('continue_task_id')==prior_id
+                                    and ep.get('episode_kind')=='external'
+                                    and (ep['scene_id'],ep['person_id']) == (
+                                        self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
+                                    and not (source or {}).get('event',{}).get('channel'))
+                                if not prior or prior['state'] in ('READY','RUNNING','STALE') or (prior['state']=='CANCELLED' and not host_resume) or (prior['state']=='PAUSED' and not paused_resume) or bool(prior.get('integration_profile'))!=bool(integration):
                                     ep=self._update(ep,control_result={'action':'continue','accepted':False,
                                         'reason':'TASK_CONTINUATION_NOT_AUTHORIZED','prior_state':prior['state'] if prior else None,
                                         'detail':'未创建或取消任何行动，原任务状态未修改。续接需要同一授权，且此前任务已返回、未取消；运行中的会话不能同时由第二个任务接管。'})
                                 else:
                                     continuation={'continues_task_id':prior_id,'execution_binding':prior.get('execution_binding') or f"task:{prior['_id']}:{prior['scope_key']}:{prior['policy_epoch']}:{prior['intent_revision']}"}
                             if ep.get('control_result',{}).get('accepted') is not False:
-                                self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'development_grant':development,'allowed_capabilities':[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config), *ACTION_DSH_CAPABILITIES])],**continuation},stream=ep_id)
+                                with database_effects_lock(self.store.name):
+                                    require_current_feedback(self.store, ep)
+                                    self.store.put('tasks',{'_id':task_id,'request_key':task_id,'episode_id':ep_id,'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,'goal':ep['decision']['goal'],'constraints':ep['decision']['constraints'],'raw_input_refs':['in-'+ep_id],'state':'READY','fencing_token':0,'tool_steps':0,'integration_profile':'owner' if integration else None,'development_grant':development,'allowed_capabilities':[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config), *ACTION_DSH_CAPABILITIES])],**continuation},stream=ep_id)
                         if self.store.db.tasks.find_one({'_id':task_id}):
                             self.crash('after_task_persist')
                             if not ep['decision']['speak_before_action']:
@@ -354,9 +393,15 @@ class Coordinator:
                     delegated=ep['decision']['next']=='delegate' and ep.get('task_id')==(ep.get('supersedes_task_id') or 'task-'+ep_id)
                     ep=self._update(ep,state='WAITING_TASK' if delegated else 'COMMITTED')
                 return ep
+            except FeedbackStale as exc:
+                return self._suppress_feedback(ep, exc)
             except ProtocolFailure as exc:
                 self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])
                 return self._update(ep,state='FAILED_PROTOCOL',failure=str(exc))
+
+    def _suppress_feedback(self, ep, error):
+        self.store.audit(ep['_id'], 'feedback.suppressed', {'reason': str(error)}, ep['scope_key'])
+        return self._update(ep, state='SUPPRESSED', feedback_suppression=str(error))
 
     def recover(self):
         self.store.recover_commits()

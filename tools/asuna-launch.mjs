@@ -11,6 +11,24 @@ const read = async (file, fallback) => {
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
 const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port 8780] [--dry-run]';
+const exists = file => fs.access(file).then(() => true, () => false);
+
+// DSH installs plugins by running `pnpm` from PATH. Node ships pnpm through corepack, so a machine
+// without its own pnpm still has one: the DSH child gets a one-line shim to it. Without this, every
+// restart meant to activate a published candidate falls back to the repair floor.
+export async function packageManagerEnv(env, { nodeDir = path.dirname(process.execPath),
+  shimDir = path.join(root, '.runtime/bin') } = {}) {
+  const key = Object.keys(env).find(name => name.toUpperCase() === 'PATH') ?? 'PATH';
+  const dirs = (env[key] ?? '').split(path.delimiter).filter(Boolean);
+  const names = process.platform === 'win32' ? ['pnpm.cmd', 'pnpm.exe'] : ['pnpm'];
+  for (const dir of dirs) for (const name of names) if (await exists(path.join(dir, name))) return env;
+  const corepack = path.join(nodeDir, process.platform === 'win32' ? 'corepack.cmd' : 'corepack');
+  if (!await exists(corepack)) return env;
+  await fs.mkdir(shimDir, { recursive: true });
+  if (process.platform === 'win32') await fs.writeFile(path.join(shimDir, 'pnpm.cmd'), `@"${corepack}" pnpm %*\r\n`);
+  else await fs.writeFile(path.join(shimDir, 'pnpm'), `#!/bin/sh\nexec "${corepack}" pnpm "$@"\n`, { mode: 0o755 });
+  return { ...env, [key]: [shimDir, ...dirs].join(path.delimiter), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' };
+}
 
 // The owner's original profile keeps its location; any other profile (e.g. the
 // demo) has its own DSH home, activation state and launch record.
@@ -53,7 +71,7 @@ async function main() {
     process.stdout.write(JSON.stringify(visible) + '\n'); return 0;
   }
   const models = await read(launch.config.replace(/\.json$/, '.models.local.json'), {});
-  const env = { ...process.env, DSH_HOME: launch.home, DSH_TELEMETRY_DISABLED: '1' };
+  const env = await packageManagerEnv({ ...process.env, DSH_HOME: launch.home, DSH_TELEMETRY_DISABLED: '1' });
   if (!launch.nativeCredentials)
     for (const [lane, source] of [['character', launch.sharedActionModel ? 'executor' : 'character'], ['action', 'executor']])
       env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || launch.local[source]).api_key || 'local-no-auth';

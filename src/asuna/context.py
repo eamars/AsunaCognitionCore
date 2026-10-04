@@ -113,19 +113,6 @@ INVENTED_MARK = '（自述编写，非共同经历）'
 
 
 
-def rounded_affect(view):
-    """Whole numbers for her to read (and an identical block while nothing moved, so it is not repeated)."""
-    view = dict(view)
-    for key in ('val', 'arl'):
-        if key in view:
-            view[key] = round(view[key])
-    if view.get('top_kinds'):
-        view['top_kinds'] = [{**item, 'share': round(item['share'], 2)} for item in view['top_kinds']]
-    if view.get('contributions'):
-        view['contributions'] = [{**row, 'val': round(row['val']), 'arl': round(row['arl']), 'age_h': round(row['age_h'])}
-                                 for row in view['contributions']]
-    return view
-
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
@@ -473,9 +460,9 @@ class ContextBuilder:
         if ledger.enabled:
             # One heart per persona: the state is global; reasons, who and numbers stay owner-private (§6.5).
             m=ledger.model
-            context['affect_from_program']={**rounded_affect(ledger.description(session_class)),
-                'commit_rules':{'require_cost':bool(m.get('require_cost')),'max_delta':m.get('max_delta'),
-                                'kinds':sorted(m.get('kinds',{})),'allow_untyped':bool(m.get('allow_untyped',True))}}
+            # Words only (AGENTS.md: interpreted state): her mood, its hints and reasons, and how to record one.
+            from .affect import interpret, recording_guide
+            context['affect_from_program']={**interpret(m,ledger.projection(),session_class),'how_to_record':recording_guide(m)}
             proposals=ledger.proposals(scope,session_class)
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
@@ -494,7 +481,8 @@ class ContextBuilder:
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
-            open_events=[{'event_id':e['_id'],'kind':e.get('kind'),'why':e.get('why'),'ts':e.get('ts')}
+            from .affect import kind_label
+            open_events=[{'event_id':e['_id'],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
                          for e in ledger.events() if e.get('open')
                          and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
             context['settlement_from_program']={'open_affect_events':open_events,

@@ -22,7 +22,10 @@ COLLECTIONS = ('affect_events', 'affect_amendments', 'affect_proposals')
 EVENT_FIELDS = ('kind', 'val', 'arl', 'who', 'ref', 'why', 'cost', 'open', 'half', 'half_arl')
 CORE = {'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
         'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
-        'kinds': {}, 'bands': [], 'policy': []}
+        'kinds': {}, 'bands': [], 'policy': [],
+        # Words a model writes, and the numbers they stand for (a model never writes or reads the numbers).
+        'scale': {'val': {'轻微': 8, '明显': 20, '强烈': 40}, 'arl': {'平稳': 0, '有些波动': 15, '激动': 35}}}
+PUBLIC_MOOD_NOTE = '这份心情可能来自别的对话：不必在这里解释原因，也不要编一个理由。'
 
 
 # ── pure projection ─────────────────────────────────────────────────
@@ -164,6 +167,77 @@ def describe(model, state, cls):
     return description
 
 
+def _word(scale, magnitude):
+    """The scale word a magnitude now reads as: nearest word, by midpoints between the defined values."""
+    words = sorted(scale.items(), key=lambda item: item[1])
+    chosen = words[0][0] if words[0][1] > 0 and magnitude >= words[0][1] / 2 else None
+    for (_, low), (word, high) in zip(words, words[1:]):
+        if magnitude >= (low + high) / 2:
+            chosen = word
+    return chosen or (words[0][0] if words[0][1] == 0 else '淡了')
+
+
+def kind_key(model, kind):
+    """A kind given by key or by its display label."""
+    kinds = model.get('kinds', {})
+    if not kind or kind in kinds:
+        return kind or ''
+    return next((key for key, spec in kinds.items() if spec.get('label') == kind), kind)
+
+
+def kind_label(model, kind):
+    return (model.get('kinds', {}).get(kind) or {}).get('label') or kind or '未分类'
+
+
+def from_words(model, item):
+    """A feeling recorded in words → the numeric event the ledger stores."""
+    scale = model.get('scale') or CORE['scale']
+    kind = kind_key(model, item.get('kind'))
+    if item['intensity'] not in scale['val']:
+        raise AffectError('AFFECT_INTENSITY_UNKNOWN', item['intensity'])
+    arousal = item.get('arousal') or min(scale['arl'], key=scale['arl'].get)
+    if arousal not in scale['arl']:
+        raise AffectError('AFFECT_AROUSAL_UNKNOWN', arousal)
+    valence = (model.get('kinds', {}).get(kind) or {}).get('valence')
+    direction = item.get('direction') or {'positive': '好', 'negative': '坏'}.get(valence)
+    if direction not in ('好', '坏'):
+        raise AffectError('AFFECT_DIRECTION_REQUIRED', kind or '未分类')
+    value = {k: item[k] for k in ('ref', 'why', 'cost', 'open', 'who') if k in item}
+    if kind:
+        value['kind'] = kind
+    return {**value, 'val': scale['val'][item['intensity']] * (1 if direction == '好' else -1), 'arl': scale['arl'][arousal]}
+
+
+def interpret(model, state, cls):
+    """Projection → the words she reads (no numbers). Public: mood, public tendencies and hints, and a note."""
+    view = describe(model, state, cls)
+    scale = model.get('scale') or CORE['scale']
+    band = first_rule(model.get('bands', []), state) or {}
+    out = {'label': view['label'] or '平静', **({'face': band['face']} if band.get('face') else {}),
+           'policy': view['policy'], 'tendencies': view['tendencies']}
+    if cls != visibility.OWNER_PRIVATE:
+        return {**out, 'note': PUBLIC_MOOD_NOTE}
+    out['main_feelings'] = [kind_label(model, item['kind']) for item in view['top_kinds']]
+    if view['open_count']:
+        out['unsettled'] = f"{view['open_count']} 件事还挂着"
+    out['reasons'] = [{'feeling': kind_label(model, row['kind']),
+                       'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
+                       'when': '刚才' if row['age_h'] < 1 else f"{row['age_h']:.0f} 小时前" if row['age_h'] < 48 else f"{row['age_h'] / 24:.0f} 天前",
+                       **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''), 'event_id': row['event_id']}
+                      for row in view['contributions']]
+    return out
+
+
+def recording_guide(model):
+    """How she records a feeling, in words."""
+    scale = model.get('scale') or CORE['scale']
+    kinds = model.get('kinds', {})
+    return {'kinds': [spec.get('label') or key for key, spec in kinds.items()],
+            'intensity': list(scale['val']), 'arousal': list(scale['arl']),
+            'direction': '种类本身带好坏的不用写；不在种类表里的感受写 direction（好/坏）',
+            'cost_required': bool(model.get('require_cost'))}
+
+
 def affect_model(model, policy=None):
     """Persona model ``affect`` merged over core defaults, with policy overrides for affect.* keys."""
     import copy
@@ -273,6 +347,12 @@ class AffectLedger:
             doc['proposal_id'] = proposal_id
         return self._insert('affect_events', doc, 'affect:' + ep['_id'])[0]
 
+    def record(self, ep, index, item, cls):
+        """A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates."""
+        if not self.enabled:
+            raise AffectError('AFFECT_DISABLED')
+        return self.commit(ep, index, from_words(self.model, item), cls)
+
     def amend(self, ep, index, item, cls):
         target = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona})
         if not target:
@@ -335,8 +415,14 @@ class AffectLedger:
                              'why': 'proposal_ttl_h elapsed', 'created_at': now(), 'source_scope': row['source_scope']},
                              'affect-propose:' + row['_id'])
             if state in ('pending', 'expired'):
-                out.append({'proposal_id': row['_id'], 'status': state,
-                            **{k: row[k] for k in EVENT_FIELDS if k in row}})
+                # In words, like everything else she reads about her feelings.
+                scale = self.model.get('scale') or CORE['scale']
+                out.append({'proposal_id': row['_id'], 'status': '待定' if state == 'pending' else '已过期',
+                            'feeling': kind_label(self.model, row.get('kind')),
+                            'direction': '好' if row.get('val', 0) >= 0 else '坏',
+                            'intensity': _word(scale['val'], abs(row.get('val', 0))),
+                            'arousal': _word(scale['arl'], row.get('arl', 0)),
+                            **{k: row[k] for k in ('ref', 'why', 'cost', 'open') if k in row}})
         return out
 
     def adopt(self, ep, index, item, cls):
@@ -348,7 +434,8 @@ class AffectLedger:
             raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', self.proposal_state(proposal))
         event = None
         if item['decision'] in ('accept', 'edit'):
-            fields = item['edit'] if item['decision'] == 'edit' else {k: proposal[k] for k in EVENT_FIELDS if k in proposal}
+            fields = (from_words(self.model, item['edit']) if item['decision'] == 'edit'
+                      else {k: proposal[k] for k in EVENT_FIELDS if k in proposal})
             event = self.commit(ep, index, fields, cls, refs=proposal['ref_index'], proposal_id=proposal['_id'])
         self._insert('affect_proposals', {'_id': 'decision:' + proposal['_id'], 'persona': self.persona,
                      'kind_row': 'decision', 'proposal_id': proposal['_id'], 'decision': item['decision'] if item['decision'] != 'edit' else 'accepted_edited',
@@ -422,7 +509,7 @@ class AffectLedger:
 
 
 # ── appraiser route (optional, proposals only) ─────────────────────
-PROPOSAL_FIELDS = {'kind', 'val', 'arl', 'ref', 'why', 'cost', 'open', 'who', 'half', 'half_arl'}
+PROPOSAL_FIELDS = {'kind', 'direction', 'intensity', 'arousal', 'ref', 'why', 'cost', 'open', 'who'}
 
 
 class Appraiser:
@@ -448,7 +535,7 @@ class Appraiser:
             {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1})]
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
                    'speech': ep.get('speech'), 'ref_index': ep['context'].get('ref_index', []),
-                   'kinds': sorted(ledger.model.get('kinds', {}))}
+                   'how_to_record': recording_guide(ledger.model)}
         try:
             result = self.lane.generate('appraiser:' + ep['persona'], episode_id + ':APPRAISE:0', 'APPRAISE',
                                         prompt_path(self.store.config, 'stage_appraise.md').read_text(encoding='utf-8')
@@ -465,9 +552,11 @@ class Appraiser:
         stored = []
         for index, item in enumerate(items[:3]):
             if not isinstance(item, dict) or set(item) - PROPOSAL_FIELDS or not isinstance(item.get('why'), str) \
-                    or len(item['why']) > 200 or not item.get('ref') or not isinstance(item.get('val'), (int, float)) \
-                    or not isinstance(item.get('arl'), (int, float)):
+                    or len(item['why']) > 200 or not item.get('ref') or not isinstance(item.get('intensity'), str):
                 self.store.audit(episode_id, 'affect.proposal_refused', {'index': index}, ep['scope_key'])
                 continue
-            stored.append(ledger.propose(ep, index, item, cls))
+            try:
+                stored.append(ledger.propose(ep, index, from_words(ledger.model, item), cls))
+            except AffectError as exc:
+                self.store.audit(episode_id, 'affect.proposal_refused', {'index': index, 'code': exc.code}, ep['scope_key'])
         return stored

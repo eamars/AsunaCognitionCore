@@ -82,9 +82,10 @@ def apply(coordinator, ep):
                     ledger = AffectLedger(store, ep['persona'], *model_and_policy(store, ep['persona']))
                 try:
                     if field == 'affect':
-                        row = ledger.commit(ep, index, item, cls)
-                        results.setdefault('affect', []).append({'index': index, 'event_id': row['_id'], 'kind': row.get('kind'),
-                                                                 'val': row.get('val'), 'arl': row.get('arl')})
+                        from .affect import kind_label
+                        row = ledger.record(ep, index, item, cls)
+                        results.setdefault('affect', []).append({'index': index, 'event_id': row['_id'],
+                                                                 'feeling': kind_label(ledger.model, row.get('kind'))})
                     elif field == 'affect_ops':
                         row = ledger.amend(ep, index, item, cls)
                         results.setdefault('affect_ops', []).append({'index': index, 'op': item['op'], 'event_id': item['event_id']})

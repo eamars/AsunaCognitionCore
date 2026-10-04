@@ -26,7 +26,7 @@ def ref_of(key):
 
 def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     setup(store)
-    secret = {'kind': 'attachment', 'val': 30, 'arl': 30, 'ref': 'private-1', 'why': 'OWNER_SECRET_WHY',
+    secret = {'kind': 'attachment', 'intensity': '强烈', 'arousal': '激动', 'ref': 'private-1', 'why': 'OWNER_SECRET_WHY',
               'who': 'OWNER_SECRET_WHO', 'cost': 'OWNER_SECRET_COST'}
     Coordinator(store, FakeLane(store, [LaneResult('想。'), decide(affect=[secret]), LaneResult('嗯。')])).ingest(event('private-1'))
     group = FakeLane(store, [LaneResult('群里。'), decide(), LaneResult('大家好。')])
@@ -35,8 +35,33 @@ def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     for value in ('OWNER_SECRET_WHY', 'OWNER_SECRET_WHO', 'OWNER_SECRET_COST', 'private-1', '靠近一点'):
         assert value not in visible, value
     block = ep['context']['affect_from_program']
-    assert set(block) == {'label', 'policy', 'tendencies', 'commit_rules'} and block['label']
+    assert {'label', 'policy', 'tendencies', 'note', 'how_to_record'} <= set(block) and block['label']
+    assert not set(block) & {'val', 'arl', 'reasons', 'main_feelings', 'contributions'}
     assert all(slot['slot'] != '提要求' for slot in block['policy'])      # owner-private slot hidden
+
+
+def test_T3_8_she_reads_and_writes_feelings_in_words_and_the_same_state_reads_the_same(store):
+    """AGENTS.md: computed state reaches the model only as interpreted text; she records in words."""
+    from asuna.affect import interpret
+    import re
+    ledger = setup(store)
+    ep = Coordinator(store, FakeLane(store, [LaneResult('想。'), decide(affect=[
+        {'kind': 'joy', 'intensity': '明显', 'arousal': '有些波动', 'ref': 'happy-1', 'why': '他夸了我', 'cost': '有点不好意思'},
+        {'kind': 'joy', 'intensity': '很多很多', 'ref': 'happy-1', 'why': '不在词表里'}]),
+        LaneResult('嗯。')])).ingest(event('happy-1'))
+    stored = store.db.affect_events.find_one({'why': '他夸了我'})
+    assert stored, ep.get('rejections')
+    scale = ledger.model['scale']
+    assert (stored['val'], stored['arl']) == (scale['val']['明显'], scale['arl']['有些波动'])
+    assert {r['code'] for r in ep['rejections']} == {'AFFECT_INTENSITY_UNKNOWN'}
+    from datetime import datetime, timedelta
+    at = (datetime.fromisoformat(stored['ts']) + timedelta(hours=1)).isoformat()   # one fixed moment
+    state = ledger.projection(at)
+    first, again = interpret(ledger.model, state, 'owner_private'), interpret(ledger.model, ledger.projection(at), 'owner_private')
+    assert first == again and first['reasons'][0]['why'] == '他夸了我'
+    numbers = re.compile(r'\d')
+    text = json.dumps({k: v for k, v in first.items() if k != 'reasons'}, ensure_ascii=False) +         json.dumps([{k: v for k, v in row.items() if k not in ('event_id', 'when')} for row in first['reasons']], ensure_ascii=False)
+    assert not numbers.search(text), text
 
 
 class BlockingLane:

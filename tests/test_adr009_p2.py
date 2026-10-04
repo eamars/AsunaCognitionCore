@@ -85,7 +85,7 @@ def test_T2_6_write_stage_commits_and_failures_do_not_stop_the_turn(store):
                'tags': ['entry', 'injectable'], 'reason': '值得记下'},
               {'doc': 'persona', 'op': 'set_tags', 'sid': PREAMBLE, 'tags': ['values'], 'reason': '标注'}]
     lane = FakeLane(store, [LaneResult('想记下。'), decide(write_docs=writes, policy_set=[{'key': 'nope', 'value': 1, 'reason': 'x'}],
-                                                           affect=[{'val': 1, 'arl': 1, 'ref': 'e', 'why': 'w'}]),
+                                                           affect=[{'intensity': '轻微', 'direction': '好', 'ref': 'e', 'why': 'w'}]),
                             LaneResult('今天他提到了一件小事。'), LaneResult('记下了。')])
     ep = Coordinator(store, lane).ingest(event('write-1'))
     assert ep['state'] == 'COMMITTED', ep.get('failure')

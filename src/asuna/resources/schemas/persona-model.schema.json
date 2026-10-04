@@ -224,6 +224,12 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 16
+              },
+              "valence": {
+                "enum": [
+                  "positive",
+                  "negative"
+                ]
               }
             }
           }
@@ -299,6 +305,27 @@
         "kind_floor": {
           "type": "number",
           "minimum": 0
+        },
+        "scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "val": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "$ref": "#/definitions/positive"
+              }
+            },
+            "arl": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
         }
       },
       "if": {

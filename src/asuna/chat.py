@@ -67,11 +67,6 @@ def prepare_local_scene(store, settings):
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
     seed_documents(store, settings)
-    target = (scene_links.relationship_target(store.config, store.db,
-              {'_id': scene, 'scope_key': scope}, person) if scene_links
-              else {'entity': 'relationship:' + person, 'scope': scope})
-    store.init_head(target['entity'], target['scope'],
-                    {'body': '这是通过本机界面交流的用户。尚无共同经历，不预设熟悉程度。'}, [])
     if scene_links:
         scene_links.sync_scene_docs(store, store.config, [scene])
 

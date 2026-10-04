@@ -147,6 +147,8 @@ To @ someone in a group she writes their label (`@[name #4]`, or `@#4`). The out
 
 The history and discussion-digest tools take `person` as a label, a `#number`, an id, or a name. A name resolves against the scene's people (current, former and operator-given names, and names shown on their own verified messages); when it matches several people the tool answers with their labels and runs no query, and the filter is always by author, never by a name on a message. Results name writers by label and carry no author or person ids.
 
+How well she knows the current speaker reaches her in `relationship` as words: `familiarity` is one level (the owner; known, when she has written an understanding of them or answered them many times; regular; met; new), computed from the owner's account, her written understanding, the turns in which she answered them and the lines they wrote, across every conversation of the canonical person. Nothing a message says raises it. A persona words each level and gives its `stance` in `people.familiarity`. `understanding` is what she has written about them. No relationship record is seeded: everyone starts with none, which reads as 你还没写过对这个人的理解, and her first reflected understanding creates the record.
+
 ## Media and image reading
 
 An adapter may normalize non-text segments into bounded `raw.asuna_media` metadata. The host preserves placeholders and does not treat them as visual input. The action task receives a bounded list of image attachments from its own scene and policy epoch, plus images from scenes it may read only through a configured cross-scene read link; every entry carries `scene_id` and `linked_scene`, so the listing states where each image came from.

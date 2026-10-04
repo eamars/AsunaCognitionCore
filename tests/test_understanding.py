@@ -40,7 +40,7 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     assert store.db.state_revisions.count_documents({'mutation_id':ep['_id']+':understanding'})==1
     assert done['manifest']['relationship_revision']==before['_id']
     _,current,manifest=ContextBuilder(store).prepare({**event,'event_id':'later'})
-    assert current['relationship']['body']==text
+    assert current['relationship']['understanding']==text
     assert manifest['relationship_revision']==revision['_id']
     _,foreign,_=ContextBuilder(store).prepare({'event_id':'other','scene_id':'dm-b','person_id':'B','text':'你好'})
     assert text not in json.dumps(foreign,ensure_ascii=False)

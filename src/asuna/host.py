@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import threading
 import time
-from types import SimpleNamespace
 
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
@@ -38,21 +37,7 @@ def prepare_channels(store, *, dry_run=False):
     local_workspace = Path(local['workspace']).resolve()
     ordered_workspaces = [os.path.normcase(str(local_workspace))]
     known_workspaces = set(ordered_workspaces)
-    # The A2 resolver reads the same two collections for every channel member.
-    # Keep one startup-local read view and include any setup rows written below.
-    # The resolver itself, its aliases, and its results are unchanged.
-    if scene_links and scene_links.canonical_map(store.config):
-        identity_rows = list(store.db.identities.find({}))
-        scene_rows = list(store.db.scenes.find({}))
-        relationship_db = SimpleNamespace(
-            identities=SimpleNamespace(find=lambda _query: identity_rows),
-            scenes=SimpleNamespace(find=lambda _query: scene_rows))
-    else:
-        identity_rows = list(store.db.identities.find({}))
-        relationship_db = store.db
-    identities_by_id = {row['_id']: row for row in identity_rows}
-    relationship_heads = {row['_id'] for row in store.db.state_heads.find(
-        {'_id': {'$regex': '^relationship:'}}, {'_id': 1})}
+    identities_by_id = {row['_id']: row for row in store.db.identities.find({})}
     for channel_id, channel in store.config.get('channels', {}).items():
         token = channel.get('token', '')
         if not isinstance(token, str) or not token.isascii() or len(token) < 24 or token in tokens:
@@ -98,31 +83,18 @@ def prepare_channels(store, *, dry_run=False):
                     created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
                                                       'account_id': sender}, stream='host:setup')
                     identities_by_id[person] = created
-                    if relationship_db is not store.db:
-                        identity_rows.append(created)
                 elif (identity['platform'], identity['account_id']) != (channel_id, sender):
                     raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
-                target = (scene_links.relationship_target(
-                    store.config, relationship_db,
-                    {'_id': scene_id, 'scope_key': 'scene:' + scene_id}, person) if scene_links
-                    else {'entity': 'relationship:' + person, 'scope': 'scene:' + scene_id})
-                # 没配 canonical 映射时就是原来那一份；配了之后别名场景不再另起一条关系记录。
-                head_key = target['entity'] + '|' + target['scope']
-                if head_key not in relationship_heads:
-                    if not dry_run:
-                        store.init_head(target['entity'], target['scope'],
-                                        {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
-                    relationship_heads.add(head_key)
+                # No relationship record is seeded: everyone starts with none, which her context says in
+                # words, and her first written understanding creates it (familiarity.py, memory.py).
                 if not dry_run:
                     workspace.mkdir(parents=True, exist_ok=True)
             scene = store.db.scenes.find_one({'_id': scene_id})
             if scene is None:
-                created = put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
-                                               'members': people, 'scope_key': 'scene:' + scene_id,
-                                               'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
-                                               'channel_account_id': channel['account_id']}, stream='host:setup')
-                if relationship_db is not store.db:
-                    scene_rows.append(created)
+                put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
+                               'members': people, 'scope_key': 'scene:' + scene_id,
+                               'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
+                               'channel_account_id': channel['account_id']}, stream='host:setup')
             else:
                 if (scene.get('channel_id') != channel_id or scene.get('channel_account_id') != channel['account_id'] or scene['kind'] != kind
                         or scene['scope_key'] != 'scene:' + scene_id):

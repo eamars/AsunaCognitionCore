@@ -522,6 +522,20 @@
             "minLength": 1,
             "maxLength": 20
           }
+        },
+        "familiarity": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^(owner|known|regular|met|new)$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {"type": "string", "minLength": 1, "maxLength": 60},
+                "stance": {"type": "string", "minLength": 1, "maxLength": 300}
+              }
+            }
+          }
         }
       }
     },

@@ -78,8 +78,10 @@ class Store:
                          ([('publication_key',1)],{'unique':True,'partialFilterExpression':{'publication_key':{'$type':'string'}}}),
                          ([('scene_id',1),('scene_seq',1)],{}),
                          ([('host_managed',1),('ingress_state',1),('received_at',1)],{}),
-                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{})],
-            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True})],
+                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{}),
+                         ([('author',1),('direction',1)],{})],
+            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
+                         ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
             'tasks': [([('request_key',1)], {'unique':True})],
             'plans': [([('scene_id',1),('person_id',1),('status',1)],{})],
             'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{}),
@@ -258,7 +260,9 @@ class Store:
                 parent=ancestor.get('parent_revision_id')
                 ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
             raise Conflict('MUTATION_ALREADY_ATTEMPTED')
-        if not head or head['revision_id']!=base_revision_id:
+        # A relationship has no record until she first writes one: that write starts from no base.
+        first=head is None and base_revision_id is None and entity.startswith('relationship:')
+        if not first and (not head or head['revision_id']!=base_revision_id):
             self.audit('mutation:'+mutation_id,'state.conflict',{'entity':entity,'base_revision_id':base_revision_id,'reason':'BASE_REVISION_STALE'},scope)
             raise Conflict('BASE_REVISION_STALE')
         evidence_ids=set();visited=set()
@@ -285,13 +289,16 @@ class Store:
                 if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
                 evidence_ids.add(key)
         for source in sources:roots(source,set())
-        processed=set(base.get('processed_source_ids',[]))
+        processed=set((base or {}).get('processed_source_ids',[]))
         if evidence_ids and evidence_ids.issubset(processed):
             raise Conflict('NO_NEW_SOURCE_EVENTS')
         new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
         metadata={k:v for k,v in {'reason':reason,'change_class':change_class}.items() if v is not None}
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
-        self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
+        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':entity+'|'+scope,'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
+        if first:
+            self.put('state_heads',{'_id':entity+'|'+scope,'scope_key':scope,'revision_id':new_id},stream='mutation:'+mutation_id)
+        else:
+            self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
         return revision
 
     def public_messages(self, scene: str, person: str):

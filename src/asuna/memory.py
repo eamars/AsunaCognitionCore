@@ -46,10 +46,11 @@ class MemoryService:
                                         or not entity.startswith('relationship:')):
                 raise Denied('UNDERSTANDING_SCOPE_PROMOTION_DENIED')
             base_id=episode['manifest']['relationship_revision']
-            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key})
-            if not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT')
+            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+            # No record yet (everyone starts with none): her first understanding creates it.
+            if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT')
             if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
-            if body==base['content'].get('body'):
+            if base and body==base['content'].get('body'):
                 result={'state':'NO_CHANGE'}
             else:
                 sources,auto,skipped,stale=self._understanding_sources(episode,scope)

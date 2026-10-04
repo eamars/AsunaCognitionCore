@@ -222,7 +222,8 @@ class Store:
 
     def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
                sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=()):
-        allowed = {'body','familiarity','trust','closeness','tension'}
+        # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
+        allowed = {'body'}
         # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
         # 别名场景这一轮写的是 canonical 那一份。linked_scopes 就是本轮授权的那个场景 scope——
         # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
@@ -243,9 +244,6 @@ class Store:
             row=self.db.memory_units.find_one({'_id':source,'status':{'$ne':'tombstone'}})
             if not row or row['scope_key'] not in readable_scopes:
                 raise Denied('MUTATION_SOURCE_DENIED')
-        for field in ('familiarity','trust','closeness','tension'):
-            if field in content and (type(content[field]) is not int or not 0<=content[field]<=4):
-                raise Denied('RELATIONSHIP_PARAMETER_RANGE')
         head,base=self.head(entity,scope) or (None,None)
         existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
         if existing:

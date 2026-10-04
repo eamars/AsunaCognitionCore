@@ -355,9 +355,6 @@ class NativeMemory:
                           'category_label': self.heads[key][1],
                           'revision': pair[0]['revision'], 'scope_key': scope,
                           'usage': self.cognition.usage(identifier, row['content'], row['_id']),
-                          'levels': {label: row['content'][field] for field, label in (
-                              ('familiarity', '熟悉程度'), ('trust', '信任'),
-                              ('closeness', '亲近程度'), ('tension', '紧张程度')) if field in row['content']},
                           'source_ids': row.get('source_ids', [])}
             else:
                 row = {'missing': True}
@@ -380,7 +377,6 @@ class NativeMemory:
                 window = row.get('source_window') if isinstance(row.get('source_window'), dict) else None
                 if window and window.get('file_sha256'):
                     # Read back the exact lines from the snapshot taken at import (MEMORY §6.3).
-                    result['levels'] = {'source_window': window, 'origin': row.get('origin'), 'invented': row.get('invented')}
                     snapshot = self.store.db.artifacts.find_one({'sha256': window['file_sha256'], 'kind': 'source_snapshot',
                                                                  'scope_key': row['scope_key']})
                     if snapshot:

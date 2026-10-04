@@ -51,7 +51,7 @@ def test_E16_busy_workspace_is_not_claimed(store):
 
 def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store):
     old=store.head('relationship:A','scene:dm-a')[1]
-    new=store.mutate('relationship:A','scene:dm-a',old['_id'],{'body':'new','trust':3},['M02'],'scene:dm-a','new-relation')
+    new=store.mutate('relationship:A','scene:dm-a',old['_id'],{'body':'new'},['M02'],'scene:dm-a','new-relation')
     service=MemoryService(store)
     foreign=store.head('relationship:B','scene:dm-b')[1]
     with pytest.raises(Denied):service.rollback('relationship:A','scene:dm-a',foreign['_id'],new['_id'],'bad',operator=True)

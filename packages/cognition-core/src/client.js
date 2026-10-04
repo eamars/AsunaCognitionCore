@@ -288,8 +288,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               h('p', { style: small }, [typeof detail.revision === 'number' ? '版本 ' + detail.revision : '',
                 memoryAuthor(detail.speaker || detail.author),
                 detail.generated_at ? '整理于 ' + memoryDate(detail.generated_at) : memoryDate(detail.occurred_at)].filter(Boolean).join(' · ')),
-              detail.levels && Object.keys(detail.levels).length > 0 && h('p', { style: small },
-                '已有关系档位（0–4）：' + Object.entries(detail.levels).map(([name, value]) => name + ' ' + value).join(' · ')),
               detail.sources_truncated && h('p', { style: small }, '以下显示前 12 条来源。'),
               ...detail.sources.map(source => h('blockquote', { key: source._id },
                 h('p', { style: small }, [source.category_label || '原始消息', memoryAuthor(source.author), source.scene_title,

@@ -53,8 +53,7 @@ class MemoryService:
                 result={'state':'NO_CHANGE'}
             else:
                 sources,auto,skipped,stale=self._understanding_sources(episode,scope)
-                content={k:v for k,v in base['content'].items() if k in {'body','familiarity','trust','closeness','tension'}}
-                content['body']=body
+                content={'body':body}
                 try:
                     revision=self.store.mutate(entity,target_scope,base_id,content,sources,scope,operation,
                         linked_scopes=linked,

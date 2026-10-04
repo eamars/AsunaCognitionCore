@@ -25,7 +25,7 @@ def view():
     store.db.sessions.insert_one(binding)
     from asuna.documents import DocumentStore
     DocumentStore(store, 'p').seed('persona', 'persona', '真实人格正文', path='persona.md')   # the persona is a document
-    store.init_head('relationship:qq:11', 'scene:one', {'body': '这个人偏好简洁表达', 'trust': 2}, [])
+    store.init_head('relationship:qq:11', 'scene:one', {'body': '这个人偏好简洁表达'}, [])
     worker = BusinessWorker('unused')
     worker.app = SimpleNamespace(store=store)
     return store, worker, binding

@@ -267,7 +267,7 @@ def rows(**overrides):
                 'revision_id': 'rev-rel-0', 'revision': 1}
     rel_rev = {'_id': 'rev-rel-0', 'entity_key': 'relationship:' + PERSON + '|' + SCOPE,
                'scope_key': SCOPE, 'mutation_id': 'seed:rev-rel-0', 'revision': 1,
-               'content': {'body': '刚认识，还在试口径。', 'familiarity': 1},
+               'content': {'body': '刚认识，还在试口径。'},
                'source_ids': [], 'parent_revision_id': None}
     from persona_rows import persona_rows
     persona_head, persona_rev = persona_rows(PERSONA_BODY)
@@ -545,8 +545,7 @@ def _heads(scope, persons):
                       'revision': 1})
         revisions.append({'_id': 'rev-rel-' + person, 'entity_key': key, 'scope_key': scope,
                           'mutation_id': 'seed:rev-rel-' + person, 'revision': 1,
-                          'content': {'body': '当前授权场景里的参与者，口径还在试。',
-                                      'familiarity': 1},
+                          'content': {'body': '当前授权场景里的参与者，口径还在试。'},
                           'source_ids': [], 'parent_revision_id': None})
     return heads, revisions
 

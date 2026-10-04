@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 import copy
 from pathlib import Path
 import threading
@@ -359,6 +360,17 @@ class Coordinator:
                             raise ValueError('决策不符合格式：'+where+'：'+exc.message+'。') from None
                         if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
                             raise ValueError('reflect_self 只能在内部的自我发展机会里用，这一次不能用。')
+                        # A mistyped id names no task at all: tell her here, with the ids she can use, instead of
+                        # letting the turn end in a refused continuation she then only talks about.
+                        cited=decision.get('continue_task_id')
+                        if cited and not self.store.db.tasks.find_one({'_id':cited,'scene_id':ep['scene_id'],
+                                'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']},{'_id':1}):
+                            close=[row['_id'] for row in self.store.db.tasks.find({'scene_id':ep['scene_id'],
+                                'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],
+                                '_id':{'$regex':'^'+re.escape(str(cited)[:16])}},{'_id':1}).limit(3)]
+                            raise ValueError('continue_task_id「'+str(cited)+'」不是这个对话里的任务'
+                                             +('；可能是：'+'、'.join(close) if close else '')
+                                             +'。要续接就照 task_state_from_program 原样抄 _id，不续接就去掉这个字段。')
                         return decision,delta
                     decision,delta=self._stage(ep,'DECIDE',ep.get('recall_rounds',0),shape=decision_shape,label='BAD_DECISION_JSON')
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,decision_delta=delta,feedback_resume_phase=None)

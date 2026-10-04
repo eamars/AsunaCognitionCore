@@ -56,6 +56,23 @@ def test_restart_waits_for_active_action_but_not_durable_queue():
     assert not queue.empty() and recorded[-1] == 'restart.requested'
 
 
+
+def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it_is_loading():
+    """Regression: a worker restarted for a publication saw that publication still APPLIED during its own
+    startup (the Host reports what it loaded only after initialization), asked for another restart, stopped
+    taking work, and the Host, still restarting, never honored it: every later input waited forever."""
+    recorded = []
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append(kind)), awaits_activation=True)
+    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
+        sink_receipts=SimpleNamespace(find_one=lambda query: {'_id': 'publish-receipt'}))))
+    host.controller = SimpleNamespace(active=None, active_task=None, pending=Queue(), task_queue=Queue(),
+                                      state_lock=threading.Lock(), restart_pending=host.restart_pending)
+    host._maybe_restart_after_publish()
+    assert not host.restart_pending.is_set() and not host.shutdown_requested.is_set() and recorded == []
+    host.activation_settled.set()          # publication.activated: what is APPLIED now is a new publication
+    host._maybe_restart_after_publish()
+    assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
+
 def responses():
     return [LaneResult('private'), LaneResult(json.dumps({'next': 'speak', 'goal': 'reply',
             'constraints': [], 'recall_query': '', 'speak_before_action': False})), LaneResult('public')]

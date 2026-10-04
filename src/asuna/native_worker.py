@@ -268,7 +268,7 @@ class BusinessWorker:
         self.host = self.stack.enter_context(RuntimeHost(
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
             schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
-            development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s)))
+            development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
         return {**self.status(), 'navigation': self.navigation}
@@ -751,6 +751,7 @@ class BusinessWorker:
                     self.app.store.put('sink_receipts', {**publication, '_id': receipt_id,
                         'kind': 'native_recovery_publish'}, stream=receipt_id)
             self.host._complete_activations()
+            self.host.activation_settled.set()
             return {'accepted': True}
         raise ValueError('UNKNOWN_BUSINESS_METHOD')
 

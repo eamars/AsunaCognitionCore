@@ -38,7 +38,9 @@ export const Config = z.object({ python: z.string().volatile(), workspace: z.str
   routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
 // Responsibility routes are configured independently; a lane name never implies a model.
-const routeOf = lane => lane === 'character' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
+// The relevance gate (attend) is her own judgment, so it uses the character route.
+const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
+const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
 export class CognitionCore {
@@ -116,6 +118,7 @@ export class CognitionCore {
         throw new Error('Configure the Asuna Python worker, workspace, and local configuration');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
+      this.efforts = await this.stageEfforts();
       const schedule = await this.attachSchedule();
       this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
@@ -182,6 +185,22 @@ export class CognitionCore {
         context_window: model.context?.contextWindow ?? null, token_counter: 'native-host' };
     }
     return models;
+  }
+
+  /** Per-stage effort on the character route, from what its model offers: the gate thinks briefly
+   * (default low), and group turns may think less than the local chat (deployment.reasoning_effort.group). */
+  async stageEfforts() {
+    const route = nativeRoute(this.config.routes.character);
+    const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
+    const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
+    const wanted = { attend: 'low', ...(this.config.deployment?.reasoning_effort ?? {}) };
+    return Object.fromEntries(Object.entries(wanted).filter(([, id]) => offered.has(id)));
+  }
+
+  effortFor(lane, stage) {
+    if (lane === 'attend') return this.efforts?.attend;
+    if (lane === 'character' && stage?.scene_kind === 'group') return this.efforts?.group;
+    return undefined;
   }
 
   publicConfig() { return redactSecrets(Config, this.config).value; }
@@ -251,7 +270,7 @@ export class CognitionCore {
       stage.delivery = composed.omitted;
     }
     return createUserMessage({ content: [{ type: 'text', text }],
-      source: { kind: 'asuna', form: 'notice', summary: (stage.lane === 'character' ? '角色脑' : stage.lane === 'executor' ? '行动脑' : '交流摘要') + ' · ' + stage.phase,
+      source: { kind: 'asuna', form: 'notice', summary: ({ character: '角色脑', executor: '行动脑', attend: '接话判断' }[stage.lane] ?? '交流摘要') + ' · ' + stage.phase,
         operation: stage.token, lane: stage.lane, phase: stage.phase, ...(carried ? { carried } : {}) } });
   }
 
@@ -331,8 +350,7 @@ export class CognitionCore {
       await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
-    const preset = stage.lane === 'executor' ? 'asuna-action' : stage.lane === 'summary'
-      ? 'asuna-summary' : stage.lane === 'appraiser' ? 'asuna-appraiser' : this.personas.get(this.config.persona).preset;
+    const preset = PRESETS[stage.lane] ?? this.personas.get(this.config.persona).preset;
     const setup = async agentCtx => {
       await this.ctx.agentPresets.mount(agentCtx, preset);
       if (descriptor) agentCtx.on('agent/pre-step', async ({ agent }, next) => {
@@ -486,7 +504,8 @@ export class CognitionCore {
       // session. The plugin routes are defaults for sessions without one.
       const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
       const route = selected ?? this.config.routes?.[routeOf(lane)];
-      return nativeRoute({ ...request, ...route, reasoningEffort: route?.reasoningEffort });
+      const effort = selected ? undefined : this.effortFor(lane, stage);
+      return nativeRoute({ ...request, ...route, reasoningEffort: effort ?? route?.reasoningEffort });
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);

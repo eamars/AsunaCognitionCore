@@ -73,6 +73,26 @@
         name: Asuna affect appraiser
         plugins:
           - name: '@asuna/cognition-core/appraiser'
+    - id: asuna-attend-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-attend
+        name: 接话判断
+        plugins:
+          - name: '@asuna/cognition-core/attend'
+          # Each group's gate session stays small: it compacts at about 5% of the window and keeps a short tail.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  maxTokens: 2048
+                  thresholdRatio: 0.05
+                  retainRatio: 0.012
     - id: asuna-scheduler-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:

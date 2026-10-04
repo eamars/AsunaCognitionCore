@@ -10,6 +10,7 @@ from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
 from .familiarity import NO_UNDERSTANDING, words as familiarity_words
+from . import attend
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -56,6 +57,26 @@ BLOCKS = {
 CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
                 'recent_experience_from_program')
+
+
+def catch_up(store, scene, rows, now_ts=None):
+    """A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke
+    there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines."""
+    from datetime import datetime, timezone
+    from .config import character_id
+    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': character_id(store.config),
+                                             'delivery_state': 'DELIVERED'}, {'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
+    since = (mine or {}).get('scene_seq') or 0
+    floor, always = now_ts - attend.WINDOW_MAX_MINUTES * 60, now_ts - attend.WINDOW_MIN_MINUTES * 60
+    kept = []
+    for index, row in enumerate(rows):
+        at = attend._seconds(row.get('received_at') or row.get('receipt_at'))
+        recent = at is not None and at >= floor and (row.get('scene_seq', 0) > since or at >= always)
+        if index >= 12 and not recent:
+            break
+        kept.append(row)
+    return kept
 
 
 def order_context(context, order=None):
@@ -195,14 +216,20 @@ class ContextBuilder:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
-            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1}
+            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1}
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
                                     receipt=1,received_at=1)
-        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1).limit(12))
+        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1)
+                     .limit(attend.MAX_LINES if scene['kind']=='group' else 12))
+        if scene['kind']=='group':
+            history=catch_up(self.store,scene,history)
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
+        else:
+            for row in history:                  # read only to size the catch-up window; not shown as raw times
+                row.pop('received_at',None); row.pop('receipt_at',None)
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}

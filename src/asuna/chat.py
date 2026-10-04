@@ -382,7 +382,7 @@ class Chat:
                         input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
                         continue
                     previous = self.app.store.db.episodes.find_one({'_id': episode})
-                    if previous and previous['state'] in ('PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED', 'INTERRUPTED'):
+                    if previous and previous['state'] in ('ATTENDING', 'PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED', 'INTERRUPTED'):
                         # Native lane receipts govern recovery; never invent a new operation ID.
                         result = self.app.router.coordinator.advance(episode)
                     else:

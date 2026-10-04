@@ -63,6 +63,7 @@ class Coordinator:
         self.scheduler=None
         self.native_session_resolver=None
         self.appraiser=None           # optional affect appraiser route; runs after commit, never inside a turn
+        self.attend=None              # the relevance gate's lane (attend.py); without it every wake runs the full turn
         self.appraisals={}
         from .tasks import TaskService
         self.tasks=task_service or TaskService(store)
@@ -77,6 +78,15 @@ class Coordinator:
                 return existing
             from .ingress import persist_input
             persist_input(self.store,event)
+            from . import attend
+            if self.attend and attend.gated(scene,event):
+                # The gate first: nothing is recalled until she chooses to join (attend.py).
+                ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[]},stream=ep_id)
+                if scene.get('character_context'):
+                    ep=self._update(ep,character_context=scene['character_context'])
+                if self.native_session_resolver:
+                    ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
+                return self.advance(ep_id)
             _,context,manifest=self.context.prepare(event,persona)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
             ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
@@ -206,9 +216,45 @@ class Coordinator:
                 'content':value.content,'request_refs':value.request_refs},ensure_ascii=False))
         return value.content
 
+    def _attend(self, ep):
+        """Ask the gate (attend.py) in her per-group session; 不理 ends the episode before any recall."""
+        from . import attend
+        from .state import content_ref
+        event=ep['attend_event']
+        scene=self.store.authorize(ep['scene_id'],ep['person_id'])
+        row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
+        operation=ep['_id']+':ATTEND:0'
+        self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
+        try:
+            material=attend.material(self.store,scene,event,row,ep['persona'])
+            value=self.attend.generate(self._binding(ep),operation,'ATTEND',
+                attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False),
+                attend.system(self.store,ep['persona']))
+            self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':'ATTEND',**content_ref(value.content),
+                'finish_reason':value.finish_reason,'request_refs':value.request_refs},ep['scope_key'])
+            verdict=attend.parse(value.content if value.finish_reason=='stop' else '')
+        except (Denied,ProtocolFailure):
+            raise
+        except Exception as exc:
+            # A gate that cannot answer lets the message pass quietly; it never fails the turn.
+            verdict={'choice':'quiet','reason':'没能判断：'+type(exc).__name__}
+            self.store.audit(ep['_id'],'attend.failed',{'error':str(exc)[:300]},ep['scope_key'])
+        self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
+        if row:
+            self.store.put('messages',{**row,'processing_outcome':'ATTEND_JOIN' if verdict['choice']=='join' else 'ATTEND_QUIET',
+                                       'attend':verdict},expected=row['revision'],stream=ep['_id'])
+        if verdict['choice']!='join':
+            return self._update(ep,state='COMMITTED',attend=verdict,silent_reason='不理：'+verdict['reason'])
+        _,context,manifest=self.context.prepare(event,ep['persona'])
+        context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
+        self.store.audit(ep['_id'],'context.prepared',{'manifest':manifest,'context':context},ep['scope_key'])
+        return self._update(ep,state='PREPARED',attend=verdict,context=context,manifest=manifest,
+                            system_ref=manifest['system_ref'])
+
     def advance(self, ep_id: str):
         ep=self._advance(ep_id)
-        if self.appraiser and ep.get('state') in ('COMMITTED','WAITING_TASK') and ep['_id'] not in self.appraisals:
+        if (self.appraiser and ep.get('state') in ('COMMITTED','WAITING_TASK') and ep['_id'] not in self.appraisals
+                and (ep.get('attend') or {}).get('choice')!='quiet'):
             import threading as _threading
             worker=_threading.Thread(target=self.appraiser.run,args=(ep['_id'],),name='asuna-appraise',daemon=True)
             self.appraisals[ep['_id']]=worker
@@ -248,6 +294,10 @@ class Coordinator:
                 phase='SPEAK_ACCEPTED' if ep.get('speech') else 'DECISION_ACCEPTED' if ep.get('decision') else 'MONOLOGUE_ACCEPTED' if ep.get('monologue_refs') else 'PREPARED'
                 ep=self._update(ep,state=phase,resume_generation=ep.get('resume_generation',0)+1,resume_diagnostic=ep.get('failure','宿主中断'))
             try:
+                if ep['state']=='ATTENDING':
+                    ep=self._attend(ep)
+                    if ep['state']=='COMMITTED':
+                        return ep
                 if ep['state']=='PREPARED':
                     if not self.monologue_enabled:
                         ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[],experiment_control='monologue_off')

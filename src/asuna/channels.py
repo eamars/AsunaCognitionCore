@@ -51,6 +51,12 @@ def kept_raw(event, raw):
     return kept
 
 
+def called_by_name(store, text):
+    """Whether a message says one of her names (her display name and the persona's other names, 2+ characters)."""
+    text = ' '.join(str(text or '').split())
+    return any(len(name) >= 2 and name in text for name in People(store).self_names)
+
+
 def group_context(store, route, body, event_id):
     """Bind a normalized reply to an actual record in this group and epoch."""
     mentions = body.get('mentioned_account_ids', [])
@@ -82,6 +88,9 @@ def group_context(store, route, body, event_id):
         elif previous.get('topic_id'):
             # P5：旁听来的那条线也认得出属于哪个话题，只是不因此唤醒她。
             topic, topic_via = previous['topic_id'], 'reply_chain'
+    if not reason and called_by_name(store, body.get('text')):
+        # Her name without an @: the relevance gate decides whether that was meant for her (attend.py).
+        reason = 'name_called'
     if topic is None:
         topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
     return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,

@@ -64,6 +64,9 @@ class Application:
             self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval),task_service=self.service)
+            # The relevance gate's lane: one small session per group, on the character route (attend.py).
+            self.attend_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'attend'))
+            self.coordinator.attend=self.attend_lane
             if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
                 # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).
                 from .affect import Appraiser

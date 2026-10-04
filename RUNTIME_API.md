@@ -74,6 +74,23 @@ Direct message example:
 
 Group events use the same endpoint and add `group_id`, `mentioned_account_ids`, and optionally `reply_to`. These values must come from the adapter's parsed platform event. Direct-message routes reject group-only fields. The host checks the configured group and member bindings. A group event wakes the character only under the configured mention and saved-reply rules; other authorized group messages can be persisted without starting a character turn.
 
+A group message wakes her for one of five reasons. An @ of her account or a reply to a message of hers runs her full turn. Three reasons go through the relevance gate first:
+
+- a reply inside a thread she was in;
+- her name without an @ (her display name or the persona's `people.self_names`);
+- the proactive rules of a group that opted in.
+
+The gate is one short request in a small per-group child session (`asuna-attend-…`, preset `asuna-attend`). It runs on the character route at a low effort, and compacts at about 5% of the context window. It reads only words:
+- why she is asked;
+- the speaker's label, notes and familiarity;
+- the lines since she last spoke there (at least 10, at most 60 minutes back, at most 40 lines);
+- how long ago that was;
+- her public mood.
+
+She answers 接话 or 不理 with a short reason. Anything else counts as 不理, and a gate that fails lets the message pass quietly. 不理 commits the episode before any recall (`processing_outcome: ATTEND_QUIET`). 接话 prepares her full context, says her reason in `attend_from_program`, and continues (`ATTEND_JOIN`). Every other message is stored without a turn.
+
+In a group, a turn's history covers the same catch-up window, and never fewer than the last 12 lines. `deployment.reasoning_effort` sets the character route's effort per stage, where the model offers it: `attend` (default `low`) for the gate, and `group` for group turns. The local chat keeps the route's own effort.
+
 The host persists accepted input before any retrieval or model call and returns:
 
 ```json

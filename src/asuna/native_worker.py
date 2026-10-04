@@ -33,8 +33,9 @@ class NativeLane:
     composes_context = True     # the plugin composes a role notice from structured context
     def __init__(self, worker, config, store, evidence, lane='character', *args):
         self.worker, self.store, self.lane = worker, store, lane
-        route = {'character': 'character', 'appraiser': 'appraiser'}.get(lane, 'action')
-        self.model = {**config['character' if lane == 'character' else 'executor'],
+        # The relevance gate (attend) is her own judgment: it uses the character route, at a low effort (index.js).
+        route = {'character': 'character', 'appraiser': 'appraiser', 'attend': 'character'}.get(lane, 'action')
+        self.model = {**config['character' if lane in ('character', 'attend') else 'executor'],
                       **config.get('_native_routes', {}).get(route, {})}
         self.lock = threading.RLock()
 
@@ -42,9 +43,9 @@ class NativeLane:
         """What a person sees for a child session: the task's goal, or which conversation is summarized."""
         if self.lane == 'executor' and task:
             return '行动脑 · ' + ' '.join(str(task.get('goal') or task['_id']).split())[:48]
-        if self.lane == 'summary':
+        if self.lane in ('summary', 'attend'):
             role = self.store.db.sessions.find_one({'_id': role_id}, {'native_title': 1}) or {}
-            return '交流摘要 · ' + (role.get('native_title') or ep['scene_id'])
+            return {'summary': '交流摘要', 'attend': '接话判断'}[self.lane] + ' · ' + (role.get('native_title') or ep['scene_id'])
         return None
 
     def generate(self, binding, operation, phase, text, system, **kwargs):
@@ -96,6 +97,9 @@ class NativeLane:
                 native_id = 'asuna-summary-' + sha((binding + ':' + operation).encode())[:32]
             elif self.lane == 'appraiser':
                 native_id = 'asuna-appraiser-' + ep['persona']
+            elif self.lane == 'attend':
+                # One small gate session per group, shared by everyone who speaks there (attend.py).
+                native_id = 'asuna-attend-' + sha(ep['scene_id'].encode())[:24]
             else:
                 native_id = role_id
             if self.lane == 'appraiser':
@@ -108,7 +112,7 @@ class NativeLane:
             else:
                 grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             platform = channel_kinds.of(ep['scene_id'])
-            cwd = (self.worker.channel_workspace(platform) if self.lane == 'character' and platform
+            cwd = (self.worker.channel_workspace(platform) if self.lane in ('character', 'attend') and platform
                    else str(Path(grant['workspace']).resolve()))
             record = self.worker.bind_session(native_id, {
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
@@ -124,7 +128,8 @@ class NativeLane:
                 'skills_dir': str(skills_directory(self.store.config, ep['scene_id'], ep['person_id']) or ''),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'])],
             })
-            request = {'kind': 'stage', 'token': operation, 'session_id': native_id,
+            scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+            request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
                        **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {})}
@@ -436,7 +441,7 @@ class BusinessWorker:
     def bind_session(self, session_id, values):
         prior = self.app.store.db.sessions.find_one({'_id': session_id})
         identity = ('lane', 'scene_id', 'persona', 'cwd')
-        if values['lane'] != 'character':
+        if values['lane'] not in ('character', 'attend'):       # a group's sessions serve everyone in it
             identity += ('person_id',)
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')

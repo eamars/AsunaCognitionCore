@@ -428,7 +428,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h(SettingsForm, { state: state.shell, onSave: editor.actions.save, onDiscard: editor.actions.discard,
           labels: { unavailable: '配置暂不可用', readOnly: '当前配置只读', saveFailed: '保存失败，草稿已保留。', save: '保存设置', saving: '保存中…' } },
           ...editor.fields.map(field => {
-            const props = { key: field.field, id: 'asuna-setting-' + field.field, label: field.label,
+            // A valid element id (the field key is JSON, which no selector or label-for can address).
+            const props = { key: field.field, id: 'asuna-setting-' + field.path.join('-').replace(/[^A-Za-z0-9_-]/g, '_'), label: field.label,
               ...state.fields[field.field], disabled: busy || state.shell.saving || !state.shell.writable,
               overriddenLabel: '已覆盖', resetLabel: '恢复默认',
               invalidLabel: field.type === 'number' ? '请输入正整数' : '请输入有效的 JSON 值',

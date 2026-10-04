@@ -70,7 +70,7 @@ def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):
     store.db.messages.insert_one(row)
     memory = NativeMemory(worker, 'role')
     detail = memory.detail('cognition:peer')
-    assert '同学' in detail['body'] and '本群身份 成员' in detail['body']
+    assert detail['body'].startswith('当前说话人：[同学 #') and 'qq:11' not in detail['body']
     assert detail['sources'][0]['text'] == '原话'
     store.db.messages.update_one({'_id': 'message'}, {'$set': {'event.raw.asuna_peer.person_id': 'qq:22'}})
     with pytest.raises(Denied, match='MEMORY_NOT_VISIBLE'):      # a mismatched identity block is never shown

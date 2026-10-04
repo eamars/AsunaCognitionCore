@@ -12,6 +12,7 @@
 P2 第二片在这里补的是群场景：真驱动下的自适应触发、多主体归属与更正回标。
 全程不调模型、不发 QQ：摘要那条 lane 用假替身，只验落库与读取／登记。
 """
+import json
 import os
 
 import pytest
@@ -83,11 +84,12 @@ def test_group_summary_loop_on_real_store(store):
     for row in data['messages']:
         marked = store.db.messages.find_one({'_id': row['_id']})
         assert marked['summary_batch_id'] == saved['_id'], row['_id']
-    assert '老陈' in lane.calls[0]['text'] and 'in-grp-1-11' in lane.calls[0]['text'], lane.calls[0]['text']
+    assert '老陈' in lane.calls[0]['text'] and '"who"' in lane.calls[0]['text'], lane.calls[0]['text']
     _system, context, manifest = cases.prepare_group(store, cases.PERSON, '那到底周几去？')
     assert saved['_id'] in manifest['selected'], manifest
     entry = next(m for m in context['memories'] if m['_id'] == saved['_id'])
-    assert entry['participants'] == saved['participants'], entry
+    # She reads who was in it and whether the current speaker was, in words; the ids stay on the saved unit.
+    assert entry['about_current_speaker'].startswith('这段里有当前说话人') and 'participants' not in entry, entry
     cases.add_row(store, 'memory_units', cases.monologue_unit(cases.PERSON, 'ep-g1'))
     result = MemoryService(store).commit_understanding(
         cases.group_episode(cases.PERSON, selected=manifest['selected']), '他自己把日子改成周五了。')
@@ -119,7 +121,7 @@ def test_summary_covering_someone_else_is_not_cited_on_real_store(store):
 
 
 def test_two_persons_with_same_display_name_on_real_store(store):
-    """真库那一层的同名：身份表两行同名不合并，摘要里仍是两个 person_id。"""
+    """真库那一层的同名：身份表两行同名不合并，摘要里仍是两个 person_id，给模型的是两个不同的标签。"""
     rows = [cases._in(cases.GROUP, 11, cases.PERSON, '雾灯我周三去修', cases.T0),
             cases._in(cases.GROUP, 12, 'qq:B1', '我去', cases.T0 + 25),
             cases._in(cases.GROUP, 13, 'qq:C1', '我也去', cases.T0 + 40)]
@@ -136,5 +138,7 @@ def test_two_persons_with_same_display_name_on_real_store(store):
     assert saved and saved['participants'] == sorted([cases.PERSON, 'qq:B1', 'qq:C1']), saved
     assert saved['source_by_speaker']['qq:B1'] == ['in-grp-1-12'], saved
     assert saved['source_by_speaker']['qq:C1'] == ['in-grp-1-13'], saved
-    assert '小舟（qq:B1）' in lane.calls[0]['text'] and '小舟（qq:C1）' in lane.calls[0]['text'], \
-        lane.calls[0]['text']
+    # Two people with one name get two labels; the model never sees their ids.
+    labels = {item['speaker_label'] for item in json.loads(lane.calls[0]['text'].split('\n', 1)[1])['window']}
+    assert len([label for label in labels if label.startswith('[小舟 #')]) == 2, lane.calls[0]['text']
+    assert 'qq:B1' not in lane.calls[0]['text'] and 'qq:C1' not in lane.calls[0]['text']

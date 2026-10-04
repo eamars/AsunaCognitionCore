@@ -7,6 +7,7 @@ Store.put／audit／head／mutate、MemoryService.commit_understanding、Context
 真实 Mongo 下的同一批结论由 tests/test_p2_summary_loop.py 在隔离宿主复测，两者不互相代替。
 """
 import importlib
+import json
 import os
 import sys
 import types
@@ -782,7 +783,8 @@ def t5_group_tick_saves_attribution_and_marks_sources():
         assert marked == saved['_id'], row['_id']
     assert 'summary.saved' in evidence.kinds(), evidence.kinds()
     assert '老陈' in lane.calls[0]['text'] and '小舟' in lane.calls[0]['text'], lane.calls[0]['text']
-    assert 'in-%s-11' % GROUP in lane.calls[0]['text'], '程序算出的归属要一起给模型，不让它自己认领'
+    assert '"who"' in lane.calls[0]['text'] and '更正了自己' in lane.calls[0]['text'], \
+        '程序算出的归属要一起给模型，不让它自己认领'
     return '群场景一轮 tick：摘要落库带上归属与更正，四条原文都标了批次'
 
 
@@ -856,9 +858,10 @@ def a3_same_display_name_stays_two_people():
     assert saved and saved['participants'] == sorted([PERSON, 'qq:B1', 'qq:C1']), saved
     assert saved['source_by_speaker']['qq:B1'] == ['in-grp-names-2'], saved
     assert saved['source_by_speaker']['qq:C1'] == ['in-grp-names-3'], saved
-    assert '小舟（qq:B1）' in lane.calls[0]['text'], '同名要带 person_id，否则模型会把两个人顺成一个'
-    assert '小舟（qq:C1）' in lane.calls[0]['text'], lane.calls[0]['text']
-    return '两个同名的人不会被顺成一个：归属按 person_id，给模型的标签也各自带 ID'
+    labels = {item['speaker_label'] for item in json.loads(lane.calls[0]['text'].split('\n', 1)[1])['window']}
+    assert len([label for label in labels if label.startswith('[小舟 #')]) == 2, '同名要两个标签，否则模型会把两个人顺成一个'
+    assert 'qq:B1' not in lane.calls[0]['text'], lane.calls[0]['text']
+    return '两个同名的人不会被顺成一个：归属按 person_id，给模型的是各自固定的 #编号'
 
 
 def a2_correction_marks_the_earlier_summary_as_stale():
@@ -885,12 +888,13 @@ def r5_group_next_turn_shows_attribution_and_correction():
     _system, context, manifest = prepare_group(store, PERSON, '那到底周几去？')
     entry = next((m for m in context['memories'] if m['_id'] == saved['_id']), None)
     assert entry, context['memories']
-    assert entry['participants'] == sorted([PERSON, PERSON_B, 'demo']), entry
-    assert entry['attribution']['corrections'][0]['corrects'] == 'in-%s-11' % GROUP, entry
+    assert entry['about_current_speaker'].startswith('这段里有当前说话人'), entry
+    assert '老陈' in entry['who'] and '小舟' in entry['who'] and '你' in entry['who'], entry
+    assert '更正了自己' in entry['corrections'][0], entry
     assert saved['_id'] in manifest['selected'], manifest
     rules = context['memory_source_rules']
-    assert 'participants' in rules and '更正' in rules, rules
-    assert 'participants' in context['understanding_update_from_program']['route']
+    assert 'about_current_speaker' in rules and '更正' in rules, rules
+    assert 'about_current_speaker' in context['understanding_update_from_program']['route']
     return '下一轮在群里也认得出这条摘要盖了谁、里面哪句被更正过'
 
 

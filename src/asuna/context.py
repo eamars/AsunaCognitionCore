@@ -8,7 +8,7 @@ from .documents import DocumentStore, render_markdown
 from .persona_model import effective
 from .evidence import canonical, sha
 from .state import Store, Denied
-from .peer_context import apply_peer_context
+from .people import People
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -25,7 +25,7 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
                   '说多少、还是继续旁听，都由你定。沉默不需要理由，也不因为"有机会"就该开口。'
                   'related_messages 里带 topic_id 的是这条话题线到目前为止的原话（含没@你的旁听行），'
-                  '谁说的以行上的 author 为准。')
+                  '谁说的以行上的 speaker 为准。')
 
 
 # Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
@@ -52,7 +52,7 @@ BLOCKS = {
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
 }
-CONTEXT_HEAD = ('scene_id', 'scope_key', 'policy_epoch', 'person_id', 'session_class')
+CONTEXT_HEAD = ('scene_id', 'scope_key', 'policy_epoch', 'speaker', 'session_class')
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
                 'recent_experience_from_program')
 
@@ -287,7 +287,7 @@ class ContextBuilder:
                  'relationship':relation[1]['content'] if relation else None,
                  'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
-                 'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要只在 participants 覆盖当前说话人时才算这个人的证据：participants 里只有别人的那段是背景，不能当成当前说话人说过什么；attribution.corrections 与 corrected_by 是程序按真实 reply 链算出的更正标注，非空就说明这段转述之后有人更正过，以更正后的原话为准。',
+                 'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。',
                  'task_state_from_program':task_states,
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
@@ -338,8 +338,12 @@ class ContextBuilder:
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
+        people=People(self.store,persona)
+        if source and (source.get('event') or {}).get('channel'):
+            # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.
+            line=people.identity_line(scene,source)
+            if line:context['sender_identity']=line
         if source:
-            apply_peer_context(context,source)
             # 这条消息里出现过什么非文本段：只给有界事实与「能不能按需拉」，不替她决定要不要看图。
             from .vision import media_note
             media=media_note(source,self.store.config)
@@ -416,7 +420,7 @@ class ContextBuilder:
         if relation:
             context['understanding_update_from_program']={
                 'available':True,'target':target_note,
-                'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+                'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={
@@ -490,6 +494,7 @@ class ContextBuilder:
                 'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
+        people.relabel(context,scene,event['person_id'])
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))
         manifest['system_ref']=system_ref

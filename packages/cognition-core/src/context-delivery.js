@@ -14,8 +14,8 @@ import { createHash } from 'node:crypto';
  * (262144 − 32768) × retainRatio 0.16 ≈ 36.7K. */
 export const REUSE_WINDOW_TOKENS = 32768;
 /** Orientation and the turn's trigger are always sent. */
-const ALWAYS = new Set(['scene_id', 'scope_key', 'policy_epoch', 'person_id', 'session_class', 'event']);
-const HEAD = ['scene_id', 'scope_key', 'policy_epoch', 'person_id', 'session_class'];
+const ALWAYS = new Set(['scene_id', 'scope_key', 'policy_epoch', 'speaker', 'session_class', 'event']);
+const HEAD = ['scene_id', 'scope_key', 'policy_epoch', 'speaker', 'session_class'];
 
 const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);
 

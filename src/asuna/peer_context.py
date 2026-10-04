@@ -1,4 +1,4 @@
-"""Project a verified QQ peer snapshot into the role context.
+"""Bind and store the verified QQ peer snapshot; people.py turns it into what she reads.
 
 Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.py).
 
@@ -10,8 +10,6 @@ Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.p
 不是 message['raw']。读不到就返回 None：没有身份块就别让角色以为自己知道什么。
 """
 PEER_KEY = "asuna_peer"
-ROLE_LABEL = {"owner": "群主", "admin": "管理员", "member": "成员", "unknown": "身份未知"}
-RELATION_LABEL = {"friend": "好友", "group": "群临时会话", "other": "临时会话"}
 CHANGE_LABEL = {"nickname": "昵称", "card": "群名片", "role": "身份", "title": "头衔"}
 MAX_NAME = 60
 MAX_ALIASES = 4
@@ -104,85 +102,6 @@ def snapshot_event(event):
     if isinstance(previous, dict):
         profile["previous"] = {key: _clean(previous.get(key)) for key in CHANGE_LABEL if previous.get(key)}
     return profile
-
-
-def project_peer(peer):
-    """身份块 → 一行中文；不是 dict 或缺 person_id 就 None。"""
-    if not isinstance(peer, dict):
-        return None
-    person_id = _clean(peer.get("person_id"), 32)
-    if not person_id:
-        return None
-    nickname = _clean(peer.get("nickname"))
-    card = _clean(peer.get("card"))
-    display = _clean(peer.get("display")) or card or nickname or "未取到名字"
-    scene = _clean(peer.get("scene"), 40)
-    parts = [display]
-    if scene.startswith("group:"):
-        parts.append("本群群名片 %s" % (card or "未设置"))
-        parts.append("QQ 昵称 %s" % (nickname or "未取到"))
-        role = _clean(peer.get("role"), 16) or "unknown"
-        parts.append("本群身份 %s" % ROLE_LABEL.get(role, role))
-        title = _clean(peer.get("title"))
-        if title:
-            parts.append("头衔 %s" % title)
-    else:
-        if nickname and nickname != display:
-            parts.append("昵称 %s" % nickname)
-        relation = _clean(peer.get("relation"), 16)
-        if relation:
-            parts.append(RELATION_LABEL.get(relation, relation))
-    profile_at = _clean(peer.get("profile_at"), 40)
-    if peer.get("verified") is True:
-        parts.append("QQ 平台已核实%s" % ("，时间 %s" % profile_at[:19] if profile_at else ""))
-    known = {display, card, nickname} - {""}
-    aliases = peer.get("aliases")
-    olds = [a for a in (_clean(x) for x in (aliases[:MAX_ALIASES] if isinstance(aliases, list) else []))
-            if a and a not in known][:2]
-    if olds:
-        parts.append("曾用名 %s" % "、".join(olds))
-    line = "[对方身份] %s（%s）" % ("；".join(parts), person_id)
-    changes = peer.get("changed")
-    changed = [f for f in (changes if isinstance(changes, list) else []) if isinstance(f, str)][:3]
-    previous = peer.get("previous") if isinstance(peer.get("previous"), dict) else {}
-    if changed:
-        bits = []
-        for field in changed:
-            label = CHANGE_LABEL.get(field, _clean(field, 16))
-            old = _clean(previous.get(field))
-            bits.append("%s（原「%s」）" % (label, old) if old else label)
-        line += "[刚改了%s，还是同一个人]" % "、".join(bits)
-    if not peer.get("verified"):
-        line += "[未核实：平台资料没查到，这只是这条消息自带的]"
-    return line
-
-
-def project_event(event):
-    """入站事件 → 一行；校验源是 event['channel']，不是 raw 自称。"""
-    peer = peer_from_event(event)
-    ok, _ = verify_peer(peer, channel_of(event), event.get("person_id") if isinstance(event, dict) else None)
-    return project_peer(peer) if ok else None
-
-
-def project_message(doc):
-    """持久消息 → 一行；校验源是 message['event']['channel']。"""
-    peer = peer_from_message(doc)
-    ok, _ = verify_peer(peer, channel_of(doc), doc.get("author") if isinstance(doc, dict) else None)
-    return project_peer(peer) if ok else None
-
-
-def apply_peer_context(context, doc, key="sender_identity"):
-    """ContextBuilder.prepare 用（在 context 字典造好之后）：校验通过才写。
-
-    只对当前这条写；不通过一个键都不加。返回 (那行或 None, 原因)；原因非空时
-    调用方值得记一行日志，别把通道自称的身份静默当成事实。
-    """
-    peer = peer_from_message(doc)
-    ok, reason = verify_peer(peer, channel_of(doc), doc.get("author") if isinstance(doc, dict) else None)
-    line = project_peer(peer) if ok else None
-    if line and isinstance(context, dict):
-        context[key] = line
-    return line, reason
 
 
 def speaker_name(config, person_id, row=None, db=None):

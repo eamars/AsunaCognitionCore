@@ -1,5 +1,6 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
-from .peer_context import peer_from_message, project_message
+from .peer_context import peer_from_message
+from .people import People, safe_name
 
 
 class CognitionView:
@@ -82,16 +83,15 @@ class CognitionView:
             'author': self.binding['person_id'], 'event.raw.asuna_peer': {'$exists': True}}]}
         # A rejected newest block must not make an older identity look current.
         message = self.store.db.messages.find_one(query, sort=[('scene_seq', -1)])
-        text = project_message(message) if message else None
+        scene = self.store.db.scenes.find_one({'_id': self.binding['scene_id']}) if message else None
+        # The same line her turn reads (people.py), so "用到了这一版" compares like with like.
+        text = People(self.store).identity_line(scene, message) if scene else None
         if not text:
             return None
         peer = peer_from_message(message)
         profile_at = peer.get('profile_at')
-        # The cognition projection contains a UTC wall-clock fragment. The Web
-        # view displays its timestamp separately in the browser's timezone.
-        body = text.replace('，时间 ' + str(profile_at)[:19], '') if profile_at else text
-        display = peer.get('display') or peer.get('card') or peer.get('nickname')
-        display = ' '.join(display.replace('\x00', '').split())[:60] if isinstance(display, str) else ''
+        body = text
+        display = safe_name(peer.get('card')) or safe_name(peer.get('nickname'))
         return {'id': 'cognition:peer', 'kind': 'relation', 'title': '对方身份资料',
                 'body': body, 'excerpt': body, 'category_label': '对人的认识', 'subject_name': display,
                 'scene_id': self.binding['scene_id'], 'updated_at': profile_at or message.get('occurred_at'),

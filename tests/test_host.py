@@ -113,7 +113,8 @@ def test_reply_history_identifies_recipient_without_cross_scene_lookup(store):
         'delivery_state':'DELIVERED','platform_message_id':'answer-id','platform_reply_to':'question-id'})
     _, context, _ = ContextBuilder(store).prepare(incoming)
     answer = next(row for row in context['delivered_history'] if row['_id']=='answer')
-    assert answer['reply_to_message']['author']=='A'
+    question = next(row for row in context['delivered_history'] if row['_id']=='question')
+    assert 'author' not in answer['reply_to_message'] and answer['reply_to_message']['speaker']==question['speaker']
     assert answer['reply_to_message']['text']=='my question'
     assert context['group_continuity_from_program']['related_messages'][0]['reply_to_message']==answer['reply_to_message']
     assert 'private canary' not in json.dumps(context)

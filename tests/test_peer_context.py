@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from asuna.peer_context import apply_peer_context, snapshot_event
+from asuna.peer_context import snapshot_event
 from asuna.router import Router
 
 
@@ -34,10 +34,6 @@ def test_peer_snapshot_rejects_mismatched_sender_and_group():
         event = qq_event()
         change(event)
         assert snapshot_event(event) is None
-    row = {'author': 'qq:77', 'event': qq_event()}
-    context = {}
-    assert apply_peer_context(context, row)[0] is None
-    assert 'sender_identity' not in context
 
 
 def test_router_persists_only_verified_peer_slot_for_awake_input():

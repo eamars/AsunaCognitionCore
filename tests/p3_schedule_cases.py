@@ -727,12 +727,16 @@ STUB_EXTRA = {
                  'def character_id(config):\n    return config.get("character_id", "demo")\n'
                  'def prompt_path(config, name):\n    return RESOURCES/"prompts"/name\n'
                  'def schema(name):\n    return json.loads((RESOURCES/"schemas"/name).read_text(encoding="utf-8"))\n'
-                 'def redact_text(text, config):\n    return text\n',
+                 'def redact_text(text, config):\n    return text\n'
+                 'def excerpt(text, limit):\n    text = str(text or "")\n'
+                 '    return text if len(text) <= limit else text[:limit]\n'
+                 'def ago(hours):\n    return ""\n',
     'evidence.py': 'import json, hashlib\ndef canonical(value):\n    return json.dumps(value, sort_keys=True).encode()\n'
                    'def sha(raw):\n    return hashlib.sha256(raw).hexdigest()\n',
     'lanes.py': 'class Lane:\n    pass\n',
     'publish.py': 'class PublishService:\n    def __init__(self, *a, **k):\n        pass\n',
     'peer_context.py': 'def apply_peer_context(context, source):\n    return context\n',
+    'people.py': 'class People:\n    def __init__(self, store, persona=None):\n        pass\n    def identity_line(self, scene, row):\n        return None\n    def relabel(self, context, scene, author):\n        return context\n',
     'ingress.py': 'def episode_id(event):\n    return \"ep-\" + str(event[\"event_id\"])\n',
     'tasks.py': 'import threading\nclass FeedbackStale(Exception):\n    pass\ndef require_current_feedback(store, ep):\n    return None\n'
                 'class TaskService:\n    def __init__(self, store, *a, **k):\n        self.store, self.lock = store, threading.RLock()\n',

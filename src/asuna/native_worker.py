@@ -21,7 +21,7 @@ from .config import ROOT, load, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
-from .peer_context import speaker_name
+from .people import People
 from .skills import skills_directory, skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
@@ -509,9 +509,9 @@ class BusinessWorker:
             if indexer.summarizer:
                 indexer.summarizer.scene_ids.append(scene['_id'])
                 indexer.summarizer.initialize()
+        # Label line + indented message (people.py): a name can't close the label or start a new speaker.
         return {'session_id': session_id, 'binding': binding, 'input': {
-            'id': row['_id'], 'text': row['text'], 'sender': row['event']['channel']['sender_id'],
-            'sender_name': speaker_name(config, row['author'], row, store.db),
+            'id': row['_id'], 'text': People(store).transcript(scene, row), 'sender': row['event']['channel']['sender_id'],
             'received_at': row['received_at'], 'state': row.get('ingress_state', 'ACCEPTED')}}
 
     def dispatch(self, method, args):

@@ -40,6 +40,8 @@ CORE_DEFAULTS = {
     'speak': {'max_messages': 1, 'split_marker': '---split---', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
     'phrasing': {'window': 20},
     'self_development': {'every_min': None},
+    # How people read in group and private chats (people.py): her word for the owner, and other names she answers to.
+    'people': {'owner_label': '本机用户', 'self_names': []},
 }
 SELF_DEVELOPMENT_DEFAULT_MIN = 1440
 

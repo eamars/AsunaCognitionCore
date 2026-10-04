@@ -1,5 +1,6 @@
 """Owner-granted, fixed-network integration lifecycle; contains no platform protocol."""
 from collections import deque
+import hashlib
 import ipaddress
 import json
 from pathlib import Path
@@ -14,6 +15,7 @@ from .evidence import canonical, sha
 from .sandbox import Sandbox
 from .state import Denied
 from .queue import RuntimeLease
+from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
 INTEGRATION_TOOLS = [
     {'name': 'integration_dev', 'description': 'Owner integration grant only. Execute argv for development in a persistent /task directory, with no network. Use python3 to read/write code and SKILL.md. RUNTIME_API.md describes the actual host contract. This is separate from the ordinary workspace.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
@@ -22,6 +24,9 @@ INTEGRATION_TOOLS = [
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
 ]
+# 集成产物导入跟着同一道 owner 闸门走：只读配置里的端点，只写本次任务工作区。
+INTEGRATION_TOOLS.append(IMPORT_TOOL)
+
 
 
 def owner_profile(config, scene, person):
@@ -286,6 +291,70 @@ class IntegrationRunner:
             if tool == 'integration_status':
                 return self.status()
             raise ValueError('UNKNOWN_INTEGRATION_TOOL')
+
+    def import_artifact(self, args, *, workspace, protected=()):
+        """Read one artifact from a configured endpoint; the platform writes it into the task workspace."""
+        from .integration_import import import_artifact
+        with self.lock:
+            if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
+            return import_artifact(args, endpoints=self.endpoints, workspace=workspace,
+                                   fetch=self._fetch_artifact, protected=protected)
+
+    def _fetch_artifact(self, endpoint, path, limit, timeout=20):
+        """One managed-namespace GET: only that endpoint's configured relay is reachable, never a URL."""
+        source = self.root/'fetch'/uuid.uuid4().hex
+        source.mkdir(parents=True)
+        process = snapshot = None
+        try:
+            shutil.copyfile(Path(__file__).with_name('integration_fetch.py'), source/'integration_fetch.py')
+            request = json.dumps({'endpoint': endpoint['name'], 'path': path, 'limit': limit, 'timeout': timeout})
+            snapshot = self._snapshot(source)
+            process = self._launch(snapshot, ['python3', 'integration_fetch.py', request], 'test')
+            expired = not process.finished.wait(timeout + 10)
+            value = process.snapshot()
+            if expired:
+                try:
+                    process.stop()
+                except BaseException:
+                    pass
+            streams = {}
+            for entry in value['logs']:
+                streams.setdefault(entry['stream'], []).append(entry['text'])
+            stdout = ''.join(streams.get('stdout', [])); stderr = ''.join(streams.get('stderr', []))
+            report = None
+            for line in reversed(stdout.splitlines()):
+                try:
+                    report = json.loads(line); break
+                except ValueError:
+                    continue
+            if expired:
+                return {'transport_error': 'IMPORT_FETCH_TIMEOUT: %ss' % timeout}
+            if report is None:
+                return {'transport_error': 'IMPORT_FETCH_REPORT_MISSING (exit %s): %s'
+                        % (value.get('exit_code'), (stdout + stderr)[-300:])}
+            body = b''
+            if report.get('status') == 200 and not report.get('transport_error'):
+                try:
+                    body = (process.directory/'data'/'artifact.bin').read_bytes()
+                except OSError as exc:
+                    return {'transport_error': 'IMPORT_ARTIFACT_READ_FAILED: ' + str(exc)[:200]}
+            if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
+                return {'transport_error': 'IMPORT_ARTIFACT_VERIFY_FAILED: reported %s bytes, read %s'
+                        % (report.get('bytes'), len(body))}
+            return {'status': report.get('status'), 'declared': report.get('declared'), 'body': body,
+                    'content_type': report.get('content_type'), 'location': report.get('location'),
+                    'transport_error': report.get('transport_error')}
+        except Exception as exc:
+            return {'transport_error': (type(exc).__name__ + ': ' + str(exc))[:300]}
+        finally:
+            shutil.rmtree(source, ignore_errors=True)
+            if snapshot is not None:
+                shutil.rmtree(snapshot, ignore_errors=True)
+            if process is not None:
+                try:
+                    (process.directory/'data'/'artifact.bin').unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def status(self):
         value = self.active.snapshot() if self.active else {'state': 'STOPPED', 'logs': []}

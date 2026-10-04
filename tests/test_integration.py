@@ -71,10 +71,15 @@ def test_only_explicit_owner_event_grants_tools(store):
     service = TaskService(store); broker = ToolBroker(service)
     try:
         task = service.claim(ordinary['task_id']); broker.bind('ordinary', task, work)
+        assert 'import_integration_artifact' not in task['allowed_capabilities'], task['allowed_capabilities']
         with pytest.raises(Denied, match='CAPABILITY_DENIED'):
             broker.call('ordinary', 'deny', 'integration_status', {})
+        with pytest.raises(Denied, match='CAPABILITY_DENIED'):
+            broker.call('ordinary', 'deny-import', 'import_integration_artifact',
+                        {'endpoint':'napcat','artifact_path':'/a','target_relative_path':'a.txt'})
         task = service.claim(granted['task_id']); broker.bind('granted', task, work)
         assert 'integration_start' in task['allowed_capabilities'] and task['integration_profile'] == 'owner'
+        assert 'import_integration_artifact' in task['allowed_capabilities'], task['allowed_capabilities']
         store.config['integration']['enabled'] = False
         with pytest.raises(Denied, match='OWNER_REQUIRED'):
             broker.call('granted', 'revoked', 'integration_status', {})
@@ -95,6 +100,44 @@ def test_revision_cannot_inherit_previous_integration_grant(store):
     revised=router.receive({'event_id':'revision','scene_id':'dm-a','person_id':'A','text':'ordinary check','supersedes_task_id':initial['task_id']})
     task=store.db.tasks.find_one({'_id':revised['task_id']})
     assert task['intent_revision']==2 and task['integration_profile'] is None
-    assert not any(t.startswith('integration_') for t in task['allowed_capabilities'])
+    assert not any(t.startswith('integration_') or t=='import_integration_artifact'
+                   for t in task['allowed_capabilities']), task['allowed_capabilities']
 
 
+def test_import_artifact_is_written_into_the_bound_task_workspace(store):
+    """导入工具只跟 owner 授权走，并且只能写这次绑定的工作区（宿主侧真 DB 复测）。"""
+    work = ROOT/'.runtime/work'/('integration-import-'+uuid.uuid4().hex); work.mkdir(parents=True)
+    store.config.update(task_mode='workspace', chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
+                        integration=profile('dm-a','A')['integration'])
+    decision={'next':'delegate','goal':'take the report','constraints':[],'recall_query':'','speak_before_action':False}
+    lane=FakeLane(store,[LaneResult('plan'),LaneResult(json.dumps(decision))]*4)
+    service=TaskService(store); router=Router(store,Coordinator(store,lane),task_service=service)
+    granted=router.receive({'event_id':'import-owner','scene_id':'dm-a','person_id':'A','text':'take the report',
+                            'integration_profile':'owner'})
+    ordinary=router.receive({'event_id':'import-ordinary','scene_id':'dm-a','person_id':'A','text':'take the report'})
+    assert 'import_integration_artifact' in store.db.tasks.find_one({'_id':granted['task_id']})['allowed_capabilities']
+    assert 'import_integration_artifact' not in store.db.tasks.find_one({'_id':ordinary['task_id']})['allowed_capabilities']
+    seen={}
+    class Runner:
+        def import_artifact(self, args, *, workspace, protected):
+            seen['args']=args; seen['workspace']=workspace; seen['protected']=[str(p) for p in protected]
+            return {'imported':True,'target_relative_path':args['target_relative_path'],'bytes':3}
+    service.crash=lambda point:None
+    broker=ToolBroker(service); broker.integration=Runner()
+    args={'endpoint':'napcat','artifact_path':'/reports/latest','target_relative_path':'imports/report.txt'}
+    try:
+        task=service.claim(ordinary['task_id']); broker.bind('ordinary', task, work)
+        with pytest.raises(Denied, match='CAPABILITY_DENIED'):
+            broker.call('ordinary','no-import','import_integration_artifact',args)
+        task=service.claim(granted['task_id']); broker.bind('granted', task, work)
+        result=broker.call('granted','import-1','import_integration_artifact',args)
+        assert result['imported'] is True and result['evidence_ref'], result
+        assert seen['args']==args and str(seen['workspace'])==str(work.resolve()), seen
+        # 字节由宿主写，路径由这次绑定的工作区决定；换 call_id 才是一次新的取用。
+        assert broker.call('granted','import-2','import_integration_artifact',
+                           {**args,'target_relative_path':'imports/second.txt'})['imported'] is True
+        store.config['integration']['enabled']=False
+        with pytest.raises(Denied, match='OWNER_REQUIRED'):
+            broker.call('granted','import-3','import_integration_artifact',args)
+    finally:
+        broker.close()

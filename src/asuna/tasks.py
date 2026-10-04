@@ -17,6 +17,7 @@ from .skills import skills_directory
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
+from .integration_import import IMPORT_TOOL_NAME, integration_gated
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
@@ -275,7 +276,7 @@ class ToolBroker:
             if tool not in current['allowed_capabilities']:raise Denied('CAPABILITY_DENIED')
             if tool in DEVELOPMENT_NAMES and not current.get('development_grant'):
                 raise Denied('DEVELOPMENT_GRANT_REQUIRED')
-            if tool.startswith('integration_'):
+            if integration_gated(tool):
                 if current.get('integration_profile') != 'owner': raise Denied('INTEGRATION_TASK_GRANT_REQUIRED')
                 owner_profile(self.store.config, current['scene_id'], current['requester_id'])
                 if not getattr(self, 'integration', None): raise Denied('INTEGRATION_RUNNER_UNAVAILABLE')
@@ -293,9 +294,9 @@ class ToolBroker:
         # Never hold the effects lock across either wait; leases and cancellation
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
-        with (nullcontext() if tool.startswith('integration_') or tool in DEVELOPMENT_NAMES or tool=='consult_character'
+        with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='consult_character'
                   or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
-            if not tool.startswith('integration_'):self.service.valid(task)
+            if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied('DEVELOPMENT_GRANT_REQUIRED')
                 result=self.persona_jobs(task,args)
@@ -328,8 +329,12 @@ class ToolBroker:
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE')
                 result=self.vision.read_image(task,args)
                 with self.service.lock:self.service.valid(task)
-            elif tool.startswith('integration_'):
-                result=self.integration.call(tool,args)
+            elif integration_gated(tool):
+                # 导入产物：端点白名单、工作区边界、默认不覆盖与大小上限都在
+                # integration_import 里算；字节由本宿主进程写进这次绑定的工作区，不经过模型。
+                result=(self.integration.import_artifact(args, workspace=sandbox.task_dir,
+                            protected=sandbox.protected_paths) if tool==IMPORT_TOOL_NAME
+                        else self.integration.call(tool,args))
             elif tool in ('list_files','read_file','write_file'):
                 code="""import pathlib,json,sys
 a=json.loads(sys.argv[1]);op=sys.argv[2];root=pathlib.Path('/task')
@@ -410,7 +415,7 @@ class Executor:
             prior=self.service.store.db.tasks.find_one({'_id':task['continues_task_id'],'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch'],'requester_id':task['requester_id']})
             text+='\n上次行动的实际返回/诊断（保留原目标；不明副作用先核实）：'+json.dumps((prior or {}).get('result',{}),ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
-            text+='\n本任务继承本机 owner 工作域的集成能力。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。'
+            text+='\n本任务继承本机 owner 工作域的集成能力。integration_dev 的 /task 是独立持久开发目录（不是普通 sandbox_run 的目录），可自主写代码与 SKILL.md。integration_test/start 将开发目录冻结为 /app，只读；/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
         if task.get('development_grant'):
             text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。发布与否由你判断。'
         if skills_directory(self.service.store.config,task['scene_id'],task['requester_id']):

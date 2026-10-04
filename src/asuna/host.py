@@ -34,7 +34,6 @@ def prepare_channels(store, *, dry_run=False):
     scene_ids, tokens = set(), set()
     def put(collection, document, **kwargs):
         return document if dry_run else store.put(collection, document, **kwargs)
-    new_identities = False
     local = store.config['chat']
     local_workspace = Path(local['workspace']).resolve()
     ordered_workspaces = [os.path.normcase(str(local_workspace))]
@@ -101,7 +100,6 @@ def prepare_channels(store, *, dry_run=False):
                     identities_by_id[person] = created
                     if relationship_db is not store.db:
                         identity_rows.append(created)
-                    new_identities = True
                 elif (identity['platform'], identity['account_id']) != (channel_id, sender):
                     raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
                 target = (scene_links.relationship_target(
@@ -138,10 +136,7 @@ def prepare_channels(store, *, dry_run=False):
                         'policy_epoch': scene['policy_epoch'] + int(bump)},
                         expected=scene['revision'], stream='channel-membership:' + scene_id)
     if scene_links and not dry_run:
-        # 派生投影：联动边与 canonical 映射写进 scenes／identities，只为可观察；
-        # 读路径每次现算自配置，删掉配置键立刻回到原状。
-        if new_identities:
-            scene_links.sync_identity_docs(store, store.config)
+        # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))
     return scene_ids
 

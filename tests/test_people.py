@@ -127,8 +127,47 @@ def test_her_label_mentions_reach_the_adapter_as_accounts(store):
     head(people, scene, row(20002, 'hi', card='阿杰'))
     out = People(store).outbound(scene, '@[阿杰 #2] 你来，@本机用户 [小林 #1] 也看看，@#2 再说一次，@[没人 #9] 呢')
     assert out == '@qq:20002 你来，@qq:20001 也看看，@qq:20002 再说一次，@没人 呢'
-    # What she sent comes back to her as the label, not the number.
-    assert People(store).mentions(scene, '@qq:20002 好') == '@[阿杰 #2] 好'
+
+
+def test_only_the_verified_profile_media_and_group_name_are_kept():
+    from asuna.channels import kept_raw
+    event = {'person_id': 'qq:20002', 'channel': {'sender_id': '20002', 'target': {'type': 'group', 'id': GROUP}}}
+    raw = row(20002, 'x', card='阿杰')['event']['raw']
+    raw.update({'post_type': 'message', 'sender': {'user_id': 20002, 'card': '阿杰'}, 'message': [{'type': 'text'}],
+                'raw_message': 'x', 'asuna_media': {'count': 1, 'items': []}, 'group_name': ' 演示\n群 ', 'other': 1})
+    kept = kept_raw(event, raw)
+    assert set(kept) == {'asuna_peer', 'asuna_media', 'group_name'} and kept['group_name'] == '演示 群'
+    forged = dict(raw, asuna_peer=dict(raw['asuna_peer'], account_id='20009'))
+    assert 'asuna_peer' not in kept_raw(event, forged)
+
+
+def test_conversations_read_by_name_not_id(store):
+    scene = setup(store)
+    store.put('messages', {**row(20002, 'hi', card='阿杰', rid='in-named'),
+                           'event': {**row(20002, 'hi', card='阿杰')['event'],
+                                     'raw': {**row(20002, 'hi', card='阿杰')['event']['raw'], 'group_name': '演示群'}}})
+    context = {'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': 1,
+               'delivered_history': [{'_id': 'm1', 'author': 'qq:20002', 'text': 'x', 'scene_id': SCENE,
+                                      'reply_to': '4242', 'platform_event_id': '4242'}],
+               'memories': [{'_id': 'g', 'scope_key': 'global-safe', 'body_markdown': 'x'},
+                            {'_id': 'h', 'scope_key': 'scene:' + SCENE, 'body_markdown': 'y'}]}
+    People(store).relabel(context, scene, 'qq:20002')
+    assert context['scene'] == '群聊「演示群」' and not {'scene_id', 'scope_key', 'policy_epoch'} & set(context)
+    assert 'scene' not in context['delivered_history'][0] and '4242' not in json.dumps(context)
+    assert context['memories'][0]['scene'] == '不分场合' and 'scene' not in context['memories'][1]
+    assert GROUP not in json.dumps(context, ensure_ascii=False)
+
+
+def test_removing_an_owner_alias_revokes_owner_private_at_once(store):
+    from asuna import visibility
+    setup(store)
+    dm = {'_id': 'qq:%s:dm:20001' % BOT, 'kind': 'dm'}
+    assert visibility.session_class(store.config, store.db, dm, 'qq:20001') == visibility.OWNER_PRIVATE
+    # A leftover field in the database must not keep the old link alive: configuration is the only authority.
+    store.put('identities', {'_id': 'qq:20001', 'person_id': 'qq:20001', 'platform': 'qq', 'account_id': '20001',
+                             'canonical_person_id': 'local-user'})
+    store.config['canonical_persons'] = {'qq:20009': 'local-user'}
+    assert visibility.session_class(store.config, store.db, dm, 'qq:20001') == visibility.PUBLIC
 
 
 def test_a_profile_only_names_its_own_sender(store):

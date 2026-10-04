@@ -33,6 +33,24 @@ def route_members(route):
     raise Denied('CHANNEL_TARGET_TYPE_DENIED')
 
 
+def kept_raw(event, raw):
+    """What of the adapter's raw event the host keeps: the sender profile verified against this
+    authenticated sender and group, the normalized media block, and the group's name. The platform
+    event itself (and anything else an adapter puts there) is never stored."""
+    from .peer_context import snapshot_event
+    from .vision import MEDIA_KEY
+    raw = raw if isinstance(raw, dict) else {}
+    kept = {}
+    peer = snapshot_event({**event, 'raw': raw})
+    if peer:
+        kept['asuna_peer'] = peer
+    if isinstance(raw.get(MEDIA_KEY), dict):
+        kept[MEDIA_KEY] = raw[MEDIA_KEY]
+    if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
+        kept['group_name'] = ' '.join(raw['group_name'].split())[:60]
+    return kept
+
+
 def group_context(store, route, body, event_id):
     """Bind a normalized reply to an actual record in this group and epoch."""
     mentions = body.get('mentioned_account_ids', [])
@@ -130,8 +148,8 @@ class Channels:
         event = {'event_id': event_id, 'scene_id': route['scene_id'], 'person_id': member['person_id'],
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
-                             'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']},
-                 'raw': body.get('raw')}
+                             'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
+        event['raw'] = kept_raw(event, body.get('raw'))
         if route['target']['type'] == 'group':
             event['group_context'] = group_context(self.store, route, body, event_id)
         if 'occurred_at' in body:

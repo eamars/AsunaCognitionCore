@@ -67,9 +67,6 @@ def prepare_local_scene(store, settings):
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
     seed_documents(store, settings)
-    if scene_links:
-        # 派生投影：配置里的联动边与 canonical 映射在库里留一份看得见的副本（读路径现算自配置）。
-        scene_links.sync_identity_docs(store, store.config)
     target = (scene_links.relationship_target(store.config, store.db,
               {'_id': scene, 'scope_key': scope}, person) if scene_links
               else {'entity': 'relationship:' + person, 'scope': scope})

@@ -29,7 +29,7 @@ LOOKALIKE_NOTES = 2
 ROLE_NOTES = {'owner': '群主', 'admin': '管理员'}
 ROLES = ('owner', 'admin', 'member')
 # QQ text conventions: the adapter writes a real @ as @<account>; her outbound @ reaches it as @qq:<account>.
-MENTION = re.compile(r'@(?:qq:)?(\d{5,12})')
+MENTION = re.compile(r'@(\d{5,12})')
 # What she writes to @ someone: their label, e.g. @[name #4] (the owner's may start with the owner word), or @#4.
 LABEL_MENTION = re.compile(r'@\s*(?:[^\s@\[\]#]{1,12}\s*)?\[([^\[\]#\n]*)#\s*(\d{1,6})\s*\]|@#(\d{1,6})')
 UNKNOWN_NAME = '还不知道名字'
@@ -387,6 +387,37 @@ class People:
             cache[key] = self.db.scenes.find_one({'_id': scene_id} if scene_id else {'scope_key': scope_key})
         return cache[key]
 
+    def scene_title(self, scene):
+        """A conversation as she reads it: 本机私聊, 群聊「name」 or 私聊 with the person's label; never an id."""
+        cache = self.__dict__.setdefault('_titles', {})
+        if not scene:
+            return '别处'
+        if scene['_id'] not in cache:
+            chat = self.config.get('chat') or {}
+            if scene['_id'] == chat.get('scene_id'):
+                title = '本机私聊'
+            elif scene.get('kind') == 'group':
+                row = self.db.messages.find_one({'scene_id': scene['_id'], 'event.raw.group_name': {'$exists': True}},
+                                                {'event.raw.group_name': 1}, sort=[('received_at', -1)])
+                name = safe_name(((row or {}).get('event') or {}).get('raw', {}).get('group_name'), 30)
+                title = '群聊「%s」' % name if name else '一个群聊'
+            else:
+                others = [d for d in self.roster(scene['_id']).values() if d.get('person') != self.self_id]
+                title = '私聊 · ' + self.label(others[0]) if others else '一个私聊'
+            cache[scene['_id']] = title
+        return cache[scene['_id']]
+
+    def _scope_title(self, scope_key, here):
+        """Where a memory belongs, for one not from this conversation; None when it is from here."""
+        from .visibility import is_owner_private_scope
+        if not scope_key or scope_key == (here or {}).get('scope_key'):
+            return None
+        if scope_key == 'global-safe':
+            return '不分场合'
+        if is_owner_private_scope(scope_key):
+            return '只在私下'
+        return self.scene_title(self._scene(scope_key=scope_key))
+
     def _author(self, scene, author):
         """A stored author as she reads it; her own rows read 你, the owner reads by the persona's word."""
         if author == self.self_id:
@@ -398,8 +429,16 @@ class People:
     def _row(self, scene, row):
         if not isinstance(row, dict):
             return row
+        here = scene
         scene = self._scene(row['scene_id']) if row.get('scene_id') and row.get('scene_id') != (scene or {}).get('_id') else scene
         account = (scene or {}).get('channel_account_id')
+        if 'scene_id' in row:
+            # Which conversation a row came from, by name, only when it is not this one.
+            if row.pop('scene_id') != (here or {}).get('_id'):
+                row['scene'] = self.scene_title(scene)
+        row.pop('scope_key', None)
+        for key in ('reply_to', 'platform_event_id'):     # platform message numbers; reply_to_message says what it answered
+            row.pop(key, None)
         if 'author' in row:
             row['speaker'] = self._author(scene, row.pop('author'))
         if 'mentioned_account_ids' in row:
@@ -418,8 +457,17 @@ class People:
         summary says in words who is in it and whether the current speaker is, instead of listing ids.
         """
         current = self.person(author)
-        context.pop('person_id', None)
+        for key in ('person_id', 'scene_id', 'scope_key', 'policy_epoch'):
+            context.pop(key, None)
+        context['scene'] = self.scene_title(scene)
         context['speaker'] = self._author(scene, author)
+        linked = context.get('linked_scenes_from_program')
+        if isinstance(linked, dict):
+            linked['readable'] = [self.scene_title(self._scene(s)) for s in linked.get('readable') or []]
+            linked['canonical_person'] = self._author(scene, linked.get('canonical_person'))
+        shared = context.get('relationship_shared_from_program')
+        if isinstance(shared, dict) and 'scope' in shared:
+            shared['scope'] = self._scope_title(shared['scope'], None)
         for key in ('delivered_history', 'undelivered_outbound_not_public'):
             for row in context.get(key) or []:
                 self._row(scene, row)
@@ -436,11 +484,15 @@ class People:
         if isinstance(context.get('event'), dict) and isinstance(context['event'].get('text'), str):
             context['event']['text'] = self.mentions(scene, context['event']['text'], scene.get('channel_account_id'))
         for fact in context.get('memories') or []:
-            self._memory(fact, current)
+            self._memory(fact, current, scene)
         return context
 
-    def _memory(self, fact, current):
+    def _memory(self, fact, current, here=None):
         scene = self._scene(fact['scene_id']) if fact.get('scene_id') else self._scene(scope_key=fact.get('scope_key'))
+        fact.pop('scene_id', None)
+        where = self._scope_title(fact.pop('scope_key', None), here)
+        if where:
+            fact['scene'] = where
         if 'speaker' in fact:
             fact['speaker'] = self._author(scene, fact['speaker'])
         if isinstance(fact.get('body_markdown'), str) and scene:

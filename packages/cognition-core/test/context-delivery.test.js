@@ -10,13 +10,13 @@ function surface(events) {
 const notice = (composed, episode) => ({ type: 'user/message', data: {
   content: [{ type: 'text', text: JSON.stringify(composed.context) }],
   source: { kind: 'asuna', carried: { ...composed.carried, episode } } } });
-const context = (rows, extra = {}) => ({ scene_id: 's', self_state_from_program: { core: '同一份自我' },
+const context = (rows, extra = {}) => ({ scene: '本机私聊', self_state_from_program: { core: '同一份自我' },
   relationship: { body: '认识' }, delivered_history: rows, memories: [{ _id: 'm1', body_markdown: '记忆' }],
   event: { text: '新的话' }, ...extra });
 
 test('a role notice repeats only what the visible session no longer shows', () => {
   const first = composeContext(context([{ _id: 'in-1', direction: 'inbound', text: '旧话' }]), visibleCarried(surface([])));
-  assert.deepEqual(Object.keys(first.context), ['scene_id', 'self_state_from_program', 'relationship', 'delivered_history', 'memories', 'event']);
+  assert.deepEqual(Object.keys(first.context), ['scene', 'self_state_from_program', 'relationship', 'delivered_history', 'memories', 'event']);
   const reply = { type: 'assistant/message', data: { content: [{ type: 'text', text: '她的回复' }] } };
   const events = [notice(first, 'ep-1'), reply];
 

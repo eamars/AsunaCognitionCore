@@ -36,8 +36,8 @@ class Router:
             trusted['native_session_id']=event['native_session_id']
             trusted['native_message_ids']=event.get('native_message_ids',[])
         if isinstance(event.get('channel'),dict):
-            # Channels.receive built this envelope after route/member checks.
-            # Persist only the bounded peer snapshot, not arbitrary OneBot raw.
+            # Channels.receive built this envelope after route/member checks and already kept only
+            # the verified profile, media block and group name (channels.kept_raw).
             trusted['channel']=event['channel']
             peer=snapshot_event(event)
             if peer: trusted['raw']={'asuna_peer':peer}

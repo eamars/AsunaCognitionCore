@@ -60,7 +60,8 @@ def admit(controller, channel_id, body):
     if route['target'] != {'type': kind, 'id': target}:
         raise Denied('CHANNEL_GROUP_DENIED')
     identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})
-    person = identity['person_id'] if identity else 'qq-person-' + sha(canonical([channel_id, sender]))[:24]
+    # One id form for every QQ person, configured or admitted: qq:<account>.
+    person = identity['person_id'] if identity else 'qq:' + sender
     grant = {'person_id': person, 'workspace': str(ROOT / '.runtime' / 'channels' /
         ('auto-' + sha(canonical([channel_id, channel['account_id'], kind, target, sender]))[:32])),
         'read_only_paths': []}

@@ -52,7 +52,7 @@ BLOCKS = {
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
 }
-CONTEXT_HEAD = ('scene_id', 'scope_key', 'policy_epoch', 'speaker', 'session_class')
+CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
                 'recent_experience_from_program')
 
@@ -303,14 +303,14 @@ class ContextBuilder:
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],
-                'note':'delivered_history 与 memories 里带 scene_id／scope_key 的行可能来自这些联动场景'
+                'note':'delivered_history 与 memories 里带 scene 的行来自这些联动场景'
                        '（配置认定是同一个人的另一个入口，只读）：它们不是这个场景里的新输入，不用当成'
                        '刚说的话再回应一次；要引用就说清那是在哪个入口说的。'}
         if target['shared']:
             context['relationship_shared_from_program']={
-                'entity':target['entity'],'scope':target['scope'],
+                'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
-                       '会写进 %s，来源仍只取本轮场景里真实给过你的证据。' % target['scope']}
+                       '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
         if event.get('episode_kind') in ('self_development', 'presence'):
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']

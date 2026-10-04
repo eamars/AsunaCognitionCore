@@ -173,6 +173,21 @@ test('T0.5 role system prompt is exactly the worker render, without harness iden
   assert.match(JSON.stringify(ordinaryRequest.messages), /RUNTIME_CONTEXT_FIXTURE/);
 });
 
+test('ADR-011: her other lanes carry neither the harness identity nor the host runtime context', async t => {
+  const h = await harness(t);
+  h.ctx.systemPrompt.context({ name: 'fixture-runtime-context', order: 1, text: 'RUNTIME_CONTEXT_FIXTURE' });
+  await h.ctx.agentPresets.register({ id: 'summary-fixture',
+    plugins: [{ name: new URL('../src/summary.js', import.meta.url).href }] });
+  const handle = await h.ctx.agents.create({ sessionId: 'summary', agentOptions: { provider: 'fixture', model: 'one-model' },
+    setup: async scope => { await h.ctx.agentPresets.mount(scope, 'summary-fixture'); } });
+  t.after(() => handle.dispose());
+  handle.agent.followup(createUserMessage({ source: { kind: 'asuna', form: 'notice', lane: 'summary', phase: 'summary' },
+    content: [{ type: 'text', text: 'Summarize' }] }));
+  await handle.agent.whenIdle();
+  assert.equal(h.requests.length, 1);
+  assert.doesNotMatch(JSON.stringify(h.requests[0].messages), /powered by DeepSeek Harness|RUNTIME_CONTEXT_FIXTURE/);
+});
+
 test('T6.4 CONSULT runs in the idle role session while the action tool waits; the role keeps no lock', async t => {
   const h = await harness(t);
   const role = await h.create('role');

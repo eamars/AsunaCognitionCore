@@ -24,7 +24,9 @@
                 config:
                   maxTokens: 24576
                   retainRatio: 0.16
-                  headroomTokens: 32768
+                  # Compact at 85% of the window, like the action brain (ADR-011 §8).
+                  thresholdRatio: 0.85
+                  headroomTokens: 6144
               - id: tool-result-pruner
                 name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
                 config:

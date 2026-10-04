@@ -463,7 +463,11 @@ export class CognitionCore {
     // turn is only known inside the assemble waterfall below (after the worker
     // admits the claimed input), so it is enforced there as the sole section;
     // a `complete` section's text is resolved before the waterfall runs.
-    if (lane === 'character') scope.systemPrompt.suppressRuntimeContext();
+    // Every other lane is her too (or her internal machinery): none carries the harness identity or the
+    // host's runtime snapshot (checkout path, Web GUI); deployment details stay in diagnostics (AGENTS.md).
+    scope.systemPrompt.suppressRuntimeContext();
+    scope.systemPrompt.section({ name: 'harness:identity',
+      order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY'), text: '' });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
       if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);

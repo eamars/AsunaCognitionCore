@@ -771,6 +771,16 @@ def load_coordinator():
                                  'integration.py': STUB_INTEGRATION, 'dsh_lane.py': STUB_LANE})
     for name, body in bodies.items():
         open(os.path.join(package, name), 'w', encoding='utf-8').write(body)
+    try:
+        import pymongo.errors          # noqa: F401  the operator's isolated host has the real one
+    except ImportError:                # the offline sandbox has none; affect.py only needs DuplicateKeyError
+        import types
+        errors = types.ModuleType('pymongo.errors')
+        errors.DuplicateKeyError = type('DuplicateKeyError', (Exception,), {})
+        stub = types.ModuleType('pymongo')
+        stub.errors = errors
+        sys.modules.setdefault('pymongo', stub)
+        sys.modules.setdefault('pymongo.errors', errors)
     sys.path.insert(0, root)
     for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
                  'p3coord.vision', 'p3coord.scene_links', 'p3coord.render', 'p3coord.visibility'):

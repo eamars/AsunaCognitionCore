@@ -12,7 +12,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(os.path.dirname(HERE), "src", "asuna")
-for _path in (SRC, HERE):
+# The flat modules (src/asuna) plus the package itself (src): a few of them import `asuna.channel_kinds`.
+for _path in (os.path.dirname(SRC), SRC, HERE):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 

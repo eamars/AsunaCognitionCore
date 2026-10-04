@@ -289,9 +289,10 @@ def head_pair(store):
 
 
 def audit_of(store, kind):
-    from pymongo.collection import Collection
     events = store.db.audit_events
-    if isinstance(events, Collection):          # real Mongo: attribute access would name a sub-collection
+    # Real Mongo: attribute access would name a sub-collection, so tell it by its class's module
+    # (the offline sandbox has no pymongo package to import Collection from).
+    if type(events).__module__.startswith('pymongo'):
         return list(events.find({'type': kind}).sort([('occurred_at', 1), ('seq', 1)]))
     return [row for row in events.rows.values() if row['type'] == kind]
 

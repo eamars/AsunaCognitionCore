@@ -3,7 +3,7 @@
 宿主侧落点：src/asuna/history_query.py。身份解析只有一条顶层导入：宿主 peer_context.py 已经
 提供的那三个公开函数（peer_from_message / verify_peer / channel_of），缺就整体降级、不抛。
 宿主那份里**没有** _group_token、_norm_person，这两个纯字符串解析在本模块内最小实现
-（_group_token_local / _norm_person_local）。没有注入入口、没有惰性重接：2026-09-24 宿主侧
+（_group_token_local；裸账号按已装平台补前缀，见 channel_kinds.person_ids）。没有注入入口、没有惰性重接：2026-09-24 宿主侧
 只读组合导入证实当前那份三项齐全，多出来的协议没有需求方。
 
 时间不是一个字段（这是上一版静默漏查的原因）：
@@ -45,6 +45,11 @@ import base64
 import json
 import re
 from datetime import datetime, timedelta
+
+try:
+    from . import channel_kinds
+except ImportError:                   # 同目录平铺加载（离线自检）：用同一份已装平台登记
+    from asuna import channel_kinds
 
 # ── 身份解析：宿主 peer_context.py 已提供这三个公开函数，顶层直接导入 ──────────
 # 2026-09-24 宿主侧只读组合导入实测：当前 src/asuna/peer_context.py 三项齐全
@@ -92,23 +97,12 @@ def _identity_of(doc):
 
 
 def _group_token_local(value):
-    """qq:<bot>:group:<群号> / group:<群号> → 群号；跟 peer_context._group_token 同语义。"""
+    """<平台>:<bot>:group:<群号> / group:<群号> → 群号；跟 peer_context._group_token 同语义。"""
     parts = [x for x in _text(value, 60).lower().split(":") if x]
     for i, token in enumerate(parts):
         if token == "group" and i + 1 < len(parts):
             return parts[i + 1]
     return ""
-
-
-def _norm_person_local(value):
-    """归一成 person_id；已带 `qq:` 这类前缀的不再拼第二次（否则 qq:qq: 把合法行判成不匹配）。"""
-    text = _text(value, 40)
-    if not text:
-        return ""
-    head, sep, rest = text.partition(":")
-    if sep and head and len(head) <= 12 and re.match(r"^[a-z][a-z0-9_]*$", head):
-        return text.lower()
-    return "qq:%s" % text.lower()
 
 
 TEXT_FIELD = "text"
@@ -458,24 +452,18 @@ def person_clause(person, aliases=()):
 
     认已认证 author（就是 person_id），也认身份块里的名片/昵称/显示名/曾用名；
     两者都匹不到就不算这个人说的。aliases 是配置里认定「同一个人」的其他 person_id
-    （canonical person）：带上之后，在 local-dm 里按 local-user 过滤也能捞到他从 QQ 那个
+    （canonical person）：带上之后，在 local-dm 里按 local-user 过滤也能捞到他从平台那个
     入口说的话——历史行上的 author 一个都不改写，只是过滤条件多认几个等价 id。
     """
     text = _text(person, 60)
     if not text:
         return None
-    values = {text.lower()}
-    normalized = _norm_person_local(text)
-    if normalized:
-        values.add(normalized)
+    values = {text.lower(), *channel_kinds.person_ids(text)}
     for alias in aliases or ():
         alias = _text(alias, 60)
         if not alias:
             continue
-        values.add(alias.lower())
-        normalized_alias = _norm_person_local(alias)
-        if normalized_alias:
-            values.add(normalized_alias)
+        values |= {alias.lower(), *channel_kinds.person_ids(alias)}
     ors = []
     for key in PERSON_KEYS:
         for value in sorted(values):

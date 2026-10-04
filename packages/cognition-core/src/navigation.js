@@ -26,12 +26,13 @@ async function checkpointCold(ctx, header, inheritedEventCount, events) {
 /** Append a received platform message without opening an Agent or starting inference. */
 export async function recordChannelInput(core, receipt) {
   const { ctx } = core, { session_id: id, binding, input } = receipt;
+  const channel = core.channelOf(binding.scene_id);
   if (!await ctx.sessionPersistence.stat(id)) await organizeNativeWorkspaces(core, {
-    first: false, archive_ids: [], workspaces: { QQ: binding.cwd, Local: core.config.deployment.chat.workspace },
-    entries: [{ session_id: id, workspace: 'QQ', binding }] });
+    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: core.config.deployment.chat.workspace },
+    entries: [{ session_id: id, workspace: channel.title, binding }] });
   await ctx.workspaceRegistry.unarchiveSession(id);
   const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
-  const message = createUserMessage({ source: { kind: 'user', channel: 'qq', receipt: input.id,
+  const message = createUserMessage({ source: { kind: 'user', channel: channel.kind, receipt: input.id,
     sender: input.sender, received_at: input.received_at },
     content: [{ type: 'text', text: input.text }] });
   const hot = ctx.sessions.get(id);
@@ -123,5 +124,7 @@ export async function organizeNativeWorkspaces(core, plan) {
     for (const workspace of ctx.workspaceRegistry.list())
       if (!keep.has(workspace.id)) await ctx.workspaceRegistry.delete(workspace.id);
   }
-  await ctx.workspaceRegistry.insertBefore(workspaces.get('QQ').id, workspaces.get('Local').id);
+  // Platform workspaces (QQ, …) list above the local chat.
+  for (const [title, workspace] of workspaces)
+    if (title !== 'Local') await ctx.workspaceRegistry.insertBefore(workspace.id, workspaces.get('Local').id);
 }

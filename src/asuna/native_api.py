@@ -8,7 +8,7 @@ import re
 
 from .config import ago, character_id
 from .state import Denied
-from . import scene_links
+from . import channel_kinds, scene_links
 from .ingress import NOT_CORE_NOTICE
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
@@ -121,8 +121,9 @@ class NativeMemory:
                                                 'native_title': {'$exists': True}}, {'native_title': 1})
         if main:
             return main['native_title']
-        match = re.fullmatch(r'qq:[^:]+:(group|dm):(.+)', scene_id)
-        return ('群聊 · ' if match[1] == 'group' else '私聊 · ') + match[2] if match else '本地聊天'
+        platform = channel_kinds.of(scene_id)
+        parts = platform.scene_parts(scene_id) if platform else None
+        return ('群聊 · ' if parts[1] == 'group' else '私聊 · ') + parts[2] if parts else '本地聊天'
 
     @staticmethod
     def timestamp(row):

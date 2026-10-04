@@ -1,0 +1,64 @@
+"""Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core names no platform.
+
+A kind module knows one platform's id formats and adapter conventions:
+
+  KIND, TITLE, READ_ONLY_NOTE, IMAGE_HOSTS     its id prefix, workspace title, note for read-only views, media hosts
+  ACCOUNT, INBOUND_MENTION                     an account id; how the adapter writes a real @ in inbound text
+  person_id(account), account_of(person)       qq:<account> and back
+  scene_id(bot, kind, target), scene_parts(id) a scene id and back
+  outbound_mention(account)                    how her @ reaches the adapter
+  adapter_config(adapter, channel), strip_derived(adapter)
+
+Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
+(`channels.qq`).
+"""
+import importlib
+from pathlib import Path
+import sys
+
+_KINDS = {}
+
+
+def register(module):
+    _KINDS[module.KIND] = module
+    return module
+
+
+def load(entries):
+    """Import each plugin's kind module: [{'python': <directory>, 'module': <name>}]."""
+    for entry in entries or ():
+        directory = str(Path(entry['python']).resolve())
+        if directory not in sys.path:
+            sys.path.insert(0, directory)
+        register(importlib.import_module(entry['module']))
+
+
+def get(kind):
+    return _KINDS.get(kind)
+
+
+def of(identifier):
+    """The kind of a scene or person id, by its prefix; None for local ids and unknown kinds."""
+    head, sep, _ = str(identifier or '').partition(':')
+    return _KINDS.get(head) if sep else None
+
+
+def of_channel(channel_id):
+    kind = _KINDS.get(channel_id)
+    if kind is None:
+        raise ValueError('CHANNEL_KIND_NOT_INSTALLED: ' + str(channel_id))
+    return kind
+
+
+def kinds():
+    return list(_KINDS.values())
+
+
+def person_ids(account):
+    """Every platform person id a bare account number could be (qq:<account>, …)."""
+    return [kind.person_id(account) for kind in _KINDS.values() if kind.ACCOUNT.fullmatch(str(account))]
+
+
+def image_hosts():
+    """The media hosts the installed platforms deliver images from (vision's default allowlist)."""
+    return [host for kind in _KINDS.values() for host in getattr(kind, 'IMAGE_HOSTS', ())]

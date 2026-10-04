@@ -1,4 +1,4 @@
-"""Bind and store the verified QQ peer snapshot; people.py turns it into what she reads.
+"""Bind and store the verified platform peer snapshot; people.py turns it into what she reads.
 
 Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.py).
 
@@ -9,6 +9,11 @@ Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.p
   持久消息      message['event']['raw']['asuna_peer']  （落库后跟着事件走的那一层）
 不是 message['raw']。读不到就返回 None：没有身份块就别让角色以为自己知道什么。
 """
+try:
+    from . import channel_kinds
+except ImportError:                   # history_query 的平铺加载（离线自检）：用同一份已装平台登记
+    from asuna import channel_kinds
+
 PEER_KEY = "asuna_peer"
 CHANGE_LABEL = {"nickname": "昵称", "card": "群名片", "role": "身份", "title": "头衔"}
 MAX_NAME = 60
@@ -57,8 +62,12 @@ def verify_peer(peer, channel, expected_person_id=None):
     sender = _clean(channel.get("sender_id"), 32)
     if not sender:
         return False, "no_sender"
-    person_id = expected_person_id or "qq:%s" % sender
-    if _clean(peer.get("person_id"), 40) != person_id or person_id != "qq:%s" % sender:
+    # The platform comes from the host's side: the route's person, else the authenticated channel.
+    platform = channel_kinds.of(expected_person_id) or channel_kinds.get(channel.get("id"))
+    if platform is None:
+        return False, "no_platform"
+    person_id = expected_person_id or platform.person_id(sender)
+    if _clean(peer.get("person_id"), 40) != person_id or person_id != platform.person_id(sender):
         return False, "person_mismatch"
     if _clean(peer.get("account_id"), 32) != sender:
         return False, "account_mismatch"
@@ -105,7 +114,7 @@ def snapshot_event(event):
 
 
 def speaker_name(config, person_id, row=None, db=None):
-    """Readable name for a stored author: a saved identity name, the character, the local user, or the QQ profile saved with the row."""
+    """Readable name for a stored author: a saved identity name, the character, the local user, or the platform profile saved with the row."""
     chat = config.get("chat", {})
     identity = db.identities.find_one({"_id": person_id}, {"display_name": 1}) if db is not None and person_id else None
     if identity and _clean(identity.get("display_name")):
@@ -116,4 +125,5 @@ def speaker_name(config, person_id, row=None, db=None):
         return "本机用户"
     peer = peer_from_message(row) or {}
     name = _clean(peer.get("display")) or _clean(peer.get("card")) or _clean(peer.get("nickname"))
-    return name or str(person_id or "").replace("qq:", "QQ · ", 1)
+    platform = channel_kinds.of(person_id)
+    return name or (platform.TITLE + " · " + str(person_id).partition(":")[2] if platform else str(person_id or ""))

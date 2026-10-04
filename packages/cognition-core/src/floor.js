@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolvePersona } from './persona.js';
+import { resolveChannel } from './channel.js';
 
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -86,6 +87,12 @@ export class PublicationFloor {
     return resolvePersona(persona, root ?? persona.resource_root);
   }
 
+  /** A channel plugin's paths, against its own published artifact when one is selected. */
+  async channel(channel) {
+    const root = (await this.effective(channel.project))?.packageRoot;
+    return resolveChannel(channel, root ?? channel.resource_root);
+  }
+
   async workerReady(projectId) {
     const selected = await this.selected(); selected.active ??= {};
     const activated = [];
@@ -98,11 +105,12 @@ export class PublicationFloor {
     await atomic(this.activationFile, selected); return activated;
   }
 
-  async integrationProject(persona) {
-    if (!persona.integration_directory) return null;
-    const project = await this.ensure();
-    const directory = path.resolve(project.candidate, persona.integration_directory);
-    if (!inside(project.candidate, directory)) throw new Error('PERSONA_INTEGRATION_PATH_INVALID');
+  /** The writable development copy of a channel plugin's adapter: her integration_* tools work there. */
+  async integrationProject(channel) {
+    if (!channel?.integration_directory) return null;
+    const project = await this.ensure(channel.project);
+    const directory = path.resolve(project.candidate, channel.integration_directory);
+    if (!inside(project.candidate, directory)) throw new Error('CHANNEL_INTEGRATION_PATH_INVALID');
     return directory;
   }
 
@@ -224,8 +232,9 @@ export class PublicationFloor {
     const artifact = path.join(destination, packageInfo.filename), bytes = await fs.readFile(artifact);
     const addressed = path.join(destination, packageInfo.filename.replace('.tgz', '-' + hash(bytes).slice(0, 12) + '.tgz'));
     await fs.copyFile(artifact, addressed);
+    // A channel plugin's python/ is imported once by the worker, like the plugin's own JavaScript.
     const restartRequired = [...changed, ...deleted].some(name => /(^|\/)(package(?:-lock)?\.json|cordis\.patch\.yml|uv\.lock|pyproject\.toml)$/.test(name)
-      || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name));
+      || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name) || project.format === 'package' && name.startsWith('python/'));
     const selected = await this.selected();
     const value = { candidate: identity, packageRoot: prepared.packageRoot, workerPath: prepared.workerPath,
       artifact: addressed, sha256: hash(bytes), state: restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
@@ -276,6 +285,13 @@ export class PublicationFloor {
       if (name.endsWith('.js') || name.endsWith('.mjs')) {
         probe = await run(process.execPath, ['--check', file]); if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
       }
+    }
+    if (!workerPath && await exists(path.join(target, 'python'))) {
+      // A channel plugin's Python must at least parse before it can be published.
+      probe = await run(this.config.python, ['-c', 'import ast, pathlib, sys\n'
+        + 'for f in pathlib.Path(sys.argv[1]).rglob("*.py"): ast.parse(f.read_text(encoding="utf-8"), str(f))',
+        path.join(target, 'python')]);
+      if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
     }
     if (workerPath) probe = await run(this.config.python, ['-c',
       'import asuna.native_worker; from asuna.config import load; from asuna.state import Store; s=Store(load(__import__("sys").argv[1])); s.db.command("ping"); s.authorize(s.config["chat"]["scene_id"],s.config["chat"]["person_id"]); s.client.close(); print("Worker imports and existing database authorization passed; no live consumers started.")',

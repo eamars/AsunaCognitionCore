@@ -761,8 +761,9 @@ def load_coordinator():
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
     # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
     optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py')
+    # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
-                 'scene_links.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
+                 'scene_links.py', 'channel_kinds.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
         if name in optional and not os.path.exists(os.path.join(SRC, name)):
             continue
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))

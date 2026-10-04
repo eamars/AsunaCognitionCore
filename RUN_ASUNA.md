@@ -10,12 +10,12 @@ Use the existing Mongo database and private deployment configuration. A compatib
 npm.cmd ci
 .\.venv\Scripts\uv.exe sync
 node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
-.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman
-.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --shared-action-model
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman --channel packages\napcat-qq
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --channel-package packages\napcat-qq --shared-action-model
 .\start-asuna.cmd
 ```
 
-The core names no persona: pass the persona package directory to both the packer and the installer.
+The core names no persona and no platform: pass the persona package and each channel package to both the packer and the installer. A configured channel (`channels.qq`) needs its channel package installed; Core reports `CHANNEL_PLUGIN_NOT_INSTALLED` otherwise.
 
 The installer does not initialize, reset, copy or replace Mongo. `--shared-action-model` seeds independent character/action references pointing to the available action model. Omit it on a new profile to seed separate routes. Reinstallation preserves saved profile settings; change routes in the native settings card after initial installation.
 
@@ -94,7 +94,7 @@ The maintenance commands are `db-init`, `inspect`, `rollback`, `index`, `delete`
 npm.cmd run test:native
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe tools\check_staged_secrets.py --personal --all
-.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/xiaoman
+.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/napcat-qq
 node tools/probe_native_schedule.mjs
 ```
 

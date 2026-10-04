@@ -15,6 +15,7 @@ import sys
 import threading
 import uuid
 
+from . import channel_kinds
 from .application import Application
 from .host import RuntimeHost
 from .config import ROOT, load, redact_text
@@ -106,7 +107,8 @@ class NativeLane:
                                     'scope_key': owner['scope_key'], 'policy_epoch': owner['policy_epoch']}
             else:
                 grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
-            cwd = (self.worker.qq_workspace if self.lane == 'character' and ep['scene_id'].startswith('qq:')
+            platform = channel_kinds.of(ep['scene_id'])
+            cwd = (self.worker.channel_workspace(platform) if self.lane == 'character' and platform
                    else str(Path(grant['workspace']).resolve()))
             record = self.worker.bind_session(native_id, {
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
@@ -201,13 +203,15 @@ class BusinessWorker:
             sys.stdout.flush()
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, skill_workspace=None, native_sessions=None,
-                   deployment=None, secrets=None, qq_admission='explicit', apply_integrations=False,
-                   schedule=True):
+                   deployment=None, secrets=None, admission='explicit', apply_integrations=False,
+                   schedule=True, channels=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
+        # Channel plugins (e.g. @asuna/napcat-qq) bring their platform's id formats before any route is read.
+        channel_kinds.load(channels)
         from .native_settings import runtime_settings
-        config = (runtime_settings(deployment, secrets or {}, models, qq_admission, create_dirs=True)
+        config = (runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True)
                   if deployment else load(self.config_path))
         # One Host per database: two Hosts may never run the same business queue
         # or publish the same scene concurrently.
@@ -229,8 +233,10 @@ class BusinessWorker:
                 config[key] = {**config[key], **models[lane]}
         config['_integration_project'] = integration_project
         config['_native_apply_integrations'] = apply_integrations
-        if persona.get('integration_directory'):
-            config['_native_integration_release'] = str(Path(persona['resource_root']) / persona['integration_directory'])
+        # The installed adapter release belongs to the channel plugin that ships it.
+        releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
+        if releases:
+            config['_native_integration_release'] = releases[0]
         config['_skill_workspace'] = skill_workspace
         evidence = Evidence(ROOT / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
@@ -258,10 +264,7 @@ class BusinessWorker:
         store, config = self.app.store, self.app.config
         known = {row['id']: row for row in native_sessions}
         local = config['chat']
-        qq_workspace = (ROOT / '.runtime' / 'work' / 'qq').resolve()
-        qq_workspace.mkdir(parents=True, exist_ok=True)
         Path(local['workspace']).mkdir(parents=True, exist_ok=True)
-        self.qq_workspace = str(qq_workspace)
         name = local.get('display_name') or local['persona']          # from the persona package, never hard-coded
         scenes = [(local['scene_id'], local['person_id'], 'Local', name + ' · 本地私聊')]
         for channel in config.get('channels', {}).values():
@@ -270,9 +273,10 @@ class BusinessWorker:
                     continue
                 members = [grant for sender, grant in route_members(route).items()
                            if sender not in channel.get('blocked_senders', [])]
-                if not members or not route['scene_id'].startswith('qq:'):
+                platform = channel_kinds.of(route['scene_id'])
+                if not members or not platform:
                     continue
-                scenes.append((route['scene_id'], members[0]['person_id'], 'QQ', self.qq_title(route)))
+                scenes.append((route['scene_id'], members[0]['person_id'], platform.TITLE, self.channel_title(route)))
         bindings = list(store.db.sessions.find({'native_host': True}))
         first = not any(row.get('navigation_version') == 1 for row in bindings)
         entries, retire = [], set()
@@ -290,7 +294,8 @@ class BusinessWorker:
                 'scene_id': scene_id, 'persona': local['persona'], 'policy_epoch': scene['policy_epoch'],
                 'character_context': scene.get('character_context')}))
             prior = store.db.sessions.find_one({'_id': session_id})
-            cwd = str(Path(local['workspace']).resolve()) if workspace == 'Local' else self.qq_workspace
+            cwd = (str(Path(local['workspace']).resolve()) if workspace == 'Local'
+                   else self.channel_workspace(channel_kinds.of(scene_id)))
             actor = source['person_id'] if source and source['person_id'] in scene['members'] else person
             values = {**(prior or {}), 'lane': 'character', 'scene_id': scene_id, 'person_id': actor,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
@@ -330,7 +335,15 @@ class BusinessWorker:
             retire.update(row['id'] for row in native_sessions
                           if row['id'] not in primary and row.get('agentPreset') != 'asuna-scheduler')
         return {'entries': entries, 'archive_ids': sorted(retire), 'first': first,
-                'workspaces': {'QQ': self.qq_workspace, 'Local': str(Path(local['workspace']).resolve())}}
+                'workspaces': {**{kind.TITLE: self.channel_workspace(kind) for kind in channel_kinds.kinds()},
+                               'Local': str(Path(local['workspace']).resolve())}}
+
+    @staticmethod
+    def channel_workspace(platform):
+        """The shared native workspace of one platform's conversations (.runtime/work/<kind>)."""
+        directory = (ROOT / '.runtime' / 'work' / platform.KIND).resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        return str(directory)
 
     @staticmethod
     def role_session_id(ep):
@@ -405,6 +418,7 @@ class BusinessWorker:
                 'workspace': self.app.config['chat']['workspace'] if self.app else None,
                 'transport': 'stdio', 'model_runtime': 'dsh-host',
                 'channels_active': bool(self.host and getattr(self.host, 'channel_server', None)),
+                'channel_titles': [kind.TITLE for kind in channel_kinds.kinds()],
                 'schedules_active': bool(self.host and getattr(self.host, 'schedule', None)),
                 'integration_active': integration['state'] == 'RUNNING',
                 'integration_state': integration['state'], 'integration_error': integration.get('error'),
@@ -414,6 +428,10 @@ class BusinessWorker:
                 'queued_inputs': self.controller.pending.qsize() if self.controller else 0,
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,
                 'active_task': self.controller.active_task if self.controller else None}
+
+    @staticmethod
+    def read_only_note(platform):
+        return platform.READ_ONLY_NOTE if platform else '这个会话仅供查看。'
 
     def bind_session(self, session_id, values):
         prior = self.app.store.db.sessions.find_one({'_id': session_id})
@@ -472,9 +490,9 @@ class BusinessWorker:
         if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
 
-    def qq_title(self, route):
+    def channel_title(self, route):
         """Conversation title a person can read: the configured name, else the group name or peer
-        name QQ last sent with a message in that scene, else the number."""
+        name the platform last sent with a message in that scene, else the number."""
         group = route['target']['type'] == 'group'
         name = route.get('display_name')
         if not name:
@@ -487,7 +505,7 @@ class BusinessWorker:
         return ('群聊' if group else '私聊') + ' · ' + name
 
     def channel_input(self, row):
-        """A real processed QQ receipt, including quiet/error outcomes; never a model turn."""
+        """A real processed platform receipt, including quiet/error outcomes; never a model turn."""
         from .channels import route_for_scene
         store, config = self.app.store, self.app.config
         scene = store.authorize(row['scene_id'], row['author'])
@@ -501,8 +519,8 @@ class BusinessWorker:
         binding = store.db.sessions.find_one({'_id': session_id})
         if not binding or not binding.get('main_conversation'):
             binding = self.bind_session(session_id, {**(binding or {}), **ep, 'lane': 'character', 'scope_key': scene['scope_key'],
-                'cwd': self.qq_workspace, 'role_session_id': session_id, 'main_conversation': True,
-                'native_title': self.qq_title(route), 'navigation_version': 1})
+                'cwd': self.channel_workspace(channel_kinds.of(scene['_id'])), 'role_session_id': session_id,
+                'main_conversation': True, 'native_title': self.channel_title(route), 'navigation_version': 1})
         indexer = getattr(self.app, 'memory_indexer', None)
         if indexer and scene['_id'] not in indexer.scene_ids:
             indexer.scene_ids.append(scene['_id'])
@@ -517,7 +535,8 @@ class BusinessWorker:
     def dispatch(self, method, args):
         if method == 'validate_settings':
             from .native_settings import runtime_settings
-            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['qq_admission'])
+            channel_kinds.load(args.get('channels'))
+            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['admission'])
             if config['chat']['persona'] != args['persona']:
                 raise ValueError('PERSONA_STATE_ID_MISMATCH')
             from .state import Store
@@ -594,14 +613,15 @@ class BusinessWorker:
         if method == 'input_policies':
             local = self.app.config['chat']
             ids = [row['id'] for row in args['sessions']]
-            policies = {row['_id']: ('QQ 会话仅供查看，请在 QQ 中回复。' if row['scene_id'] != local['scene_id']
+            policies = {row['_id']: (self.read_only_note(channel_kinds.of(row['scene_id'])) if row['scene_id'] != local['scene_id']
                 else '这是内部工作会话，请回到本地私聊。')
                 for row in self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True})
                 if row['scene_id'] != local['scene_id'] or row['lane'] != 'character'
                 or row.get('successor_id') or row.get('retired')}
             for row in args['sessions']:
-                if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work/qq').resolve():
-                    policies[row['id']] = 'QQ 会话仅供查看，请在 QQ 中回复。'
+                for platform in channel_kinds.kinds():
+                    if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work' / platform.KIND).resolve():
+                        policies[row['id']] = self.read_only_note(platform)
             return policies
         if method == 'input':
             session_id = args['session_id']

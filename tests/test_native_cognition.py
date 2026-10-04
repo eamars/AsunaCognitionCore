@@ -63,7 +63,7 @@ def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):
     store, worker, binding = view
     row = {'_id': 'message', 'direction': 'inbound', 'scene_id': binding['scene_id'],
            'policy_epoch': 1, 'author': 'qq:11', 'scene_seq': 1, 'text': '原话',
-           'event': {'channel': {'sender_id': '11', 'target': {'type': 'group', 'id': 'one'}},
+           'event': {'channel': {'id': 'qq', 'sender_id': '11', 'target': {'type': 'group', 'id': 'one'}},
                      'raw': {'asuna_peer': {'person_id': 'qq:11', 'account_id': '11',
                          'group_id': 'one', 'scene': 'group:one', 'display': '同学',
                          'role': 'member', 'verified': True}}}}

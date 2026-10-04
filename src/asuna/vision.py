@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+from . import channel_kinds
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -34,10 +35,9 @@ SCENE_SCAN_MESSAGES = 50
 # QQ 的下载 URL 带长 fileid 与 rkey，截断就是静默把链接改坏（拉回来必然是错的或 404）。
 # 清单里不内嵌 URL，只在拉取时按原消息回读，所以这里给足长度。
 URL_LIMIT = 2048
-# 默认只放行这套部署里真出现过的 QQ 多媒体主机（依据是库里存的入站元数据，不是猜的 CDN 名单）。
-# 换了 CDN 时清单会带着 host_not_allowed(具体主机) 说明原因，加一行 vision.image_hosts 即可，
+# 默认只放行已装平台声明的多媒体主机（channel_kinds.image_hosts；依据是库里存的入站元数据，不是猜的
+# CDN 名单）。换了 CDN 时清单会带着 host_not_allowed(具体主机) 说明原因，加一行 vision.image_hosts 即可，
 # 不静默放宽；显式写 vision.image_hosts: [] 表示谁都不放行。
-DEFAULT_IMAGE_HOSTS = ('multimedia.nt.qq.com.cn',)
 USER_AGENT = 'asuna-host/1.0 read-image'
 
 
@@ -104,7 +104,7 @@ def vision_capability(config):
     vision = (config or {}).get('vision', {})
     modalities = [str(m).lower() for m in (route.get('input_modalities') or [])]
     configured = vision.get('image_hosts')
-    hosts = [str(h) for h in (list(DEFAULT_IMAGE_HOSTS) if configured is None else configured)]
+    hosts = [str(h) for h in (channel_kinds.image_hosts() if configured is None else configured)]
     reasons = []
     if 'image' not in modalities:
         reasons.append('route_declares_image_input=false（config.executor.input_modalities 未声明 image）')

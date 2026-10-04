@@ -9,13 +9,14 @@ Names are made safe before she reads them: one line, visible characters only, an
 characters a label is built from, so a name can never close a label, imitate a handle or start a
 new speaker line. Message text is indented under its label for the same reason. The program, not
 the model, notices look-alike names, recent renames and group roles, and says so after the label.
-QQ numbers stay in program data: mentions of known people read as their label.
+Platform account numbers stay in program data: mentions of known people read as their label.
 """
 from __future__ import annotations
 
 import re
 import unicodedata
 
+from . import channel_kinds
 from .config import excerpt
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
@@ -28,8 +29,6 @@ PREVIOUS_NAMES = 4
 LOOKALIKE_NOTES = 2
 ROLE_NOTES = {'owner': '群主', 'admin': '管理员'}
 ROLES = ('owner', 'admin', 'member')
-# QQ text conventions: the adapter writes a real @ as @<account>; her outbound @ reaches it as @qq:<account>.
-MENTION = re.compile(r'@(\d{5,12})')
 # What she writes to @ someone: their label, e.g. @[name #4] (the owner's may start with the owner word), or @#4.
 LABEL_MENTION = re.compile(r'@\s*(?:[^\s@\[\]#]{1,12}\s*)?\[([^\[\]#\n]*)#\s*(\d{1,6})\s*\]|@#(\d{1,6})')
 UNKNOWN_NAME = '还不知道名字'
@@ -88,10 +87,11 @@ class People:
         from .scene_links import canonical_person_id
         return canonical_person_id(self.config, self.db, person_id) or person_id
 
-    def account_person(self, number):
-        """The person_id the host keeps for a QQ account number."""
+    def account_person(self, scene_id, number, platform=None):
+        """The person_id the host keeps for a platform account number in this scene's platform."""
+        platform = platform or channel_kinds.of(scene_id)
         row = self.db.identities.find_one({'account_id': str(number)}, {'person_id': 1})
-        return (row or {}).get('person_id') or 'qq:' + str(number)
+        return (row or {}).get('person_id') or (platform.person_id(number) if platform else str(number))
 
     def is_owner(self, doc):
         return bool(self.owner) and doc.get('person') == self.owner
@@ -153,7 +153,9 @@ class People:
         channel = channel_of(row)
         ok, _ = verify_peer(peer, channel)
         sender = str((channel or {}).get('sender_id') or '')
-        if not ok or row.get('author') not in ('qq:' + sender, self.account_person(sender)):
+        platform = channel_kinds.of(row.get('scene_id')) or channel_kinds.get((channel or {}).get('id'))
+        if not ok or not platform or row.get('author') not in (platform.person_id(sender),
+                                                               self.account_person(None, sender, platform)):
             return None
         out = {}
         for field in ('card', 'nickname'):
@@ -230,14 +232,18 @@ class People:
         return self.label(doc) + ('（%s）' % '；'.join(notes) if notes else '')
 
     def mentions(self, scene, text, account=None):
-        """Real-looking @<number> of a known person (or of her own account) reads as their label."""
+        """The adapter's real @<number> of a known person (or of her own account) reads as their label."""
+        platform = channel_kinds.of(scene['_id'])
+        if not platform:
+            return text or ''
+
         def swap(match):
             number = match.group(1)
             if account and number == str(account):
                 return '@' + self.self_name
-            doc = self.roster(scene['_id']).get(scene['_id'] + '|' + self.person(self.account_person(number)))
+            doc = self.roster(scene['_id']).get(scene['_id'] + '|' + self.person(self.account_person(scene['_id'], number)))
             return '@' + self.label(doc) if doc else match.group(0)
-        return MENTION.sub(swap, text or '')
+        return platform.INBOUND_MENTION.sub(swap, text or '')
 
     # ---- lookups (history tools) ------------------------------------------
     def ensure_roster(self, scene):
@@ -260,7 +266,7 @@ class People:
         number = re.fullmatch(r'\[?[^#\[\]]*#\s*(\d{1,6})\s*\]?', text)
         if number:
             return [d for d in docs if str(d.get('handle')) == number.group(1)]
-        ids = {self.person(text)} | ({self.person(self.account_person(text))} if text.isdigit() else set())
+        ids = {self.person(text)} | ({self.person(self.account_person(scene['_id'], text))} if text.isdigit() else set())
         by_id = [d for d in docs if d.get('person') in ids]
         if by_id:
             return by_id
@@ -274,7 +280,7 @@ class People:
                                safe_name(d.get('nickname'), 60), *(safe_name(p.get('name'), 60) for p in d.get('previous') or [])}}
         for row in self.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', '$or': [
                 {'event.raw.asuna_peer.' + field: text} for field in ('card', 'nickname', 'display', 'aliases')]},
-                {'author': 1, 'event': 1, 'received_at': 1}).limit(200):
+                {'author': 1, 'scene_id': 1, 'event': 1, 'received_at': 1}).limit(200):
             if self._profile(row) is not None:
                 persons.add(self.person(row['author']))
         found = [d for d in docs if d.get('person') in persons]
@@ -284,19 +290,22 @@ class People:
         return [d for d in docs if key and key in {name_key(self.shown(d)), name_key(d.get('card')), name_key(d.get('nickname'))}]
 
     def account_of(self, scene, doc):
-        """The QQ account behind a person in this scene, for the adapter's @ marker; None when unknown."""
+        """The platform account behind a person in this scene, for the adapter's @ marker; None when unknown."""
+        platform = channel_kinds.of(scene['_id'])
+        if not platform:
+            return None
         for author in [doc.get('author'), *self.authors_of(doc['person'], [scene['_id']]), doc['person']]:
             if not author:
                 continue
-            if str(author).startswith('qq:') and str(author)[3:].isdigit():
-                return str(author)[3:]
+            if platform.account_of(author):
+                return platform.account_of(author)
             row = self.db.identities.find_one({'person_id': author}, {'account_id': 1})
-            if row and str(row.get('account_id') or '').isdigit():
+            if row and platform.ACCOUNT.fullmatch(str(row.get('account_id') or '')):
                 return str(row['account_id'])
         return None
 
     def outbound(self, scene, text):
-        """Her @ of a label becomes the adapter's @qq:<account>; the stored text keeps the label she wrote.
+        """Her @ of a label becomes the adapter's @ marker (@qq:<account>); the stored text keeps the label she wrote.
 
         A label that names nobody here is sent as a plain @name, never as a number she guessed.
         """
@@ -306,7 +315,7 @@ class People:
             doc = by_handle.get(match.group(2) or match.group(3))
             account = self.account_of(scene, doc) if doc else None
             if account:
-                return '@qq:' + account
+                return channel_kinds.of(scene['_id']).outbound_mention(account)
             name = ' '.join((match.group(1) or '').split())
             return '@' + name if name else match.group(0).replace('#', '')
         return LABEL_MENTION.sub(swap, text or '')
@@ -333,13 +342,13 @@ class People:
         return self.label(self.entry(scene, author, row))
 
     def transcript(self, scene, row):
-        """One QQ message as it enters her conversation: the speaker's label line, then the message, indented."""
+        """One platform message as it enters her conversation: the speaker's label line, then the message, indented."""
         event = row.get('event') or {}
         group = event.get('group_context') or {}
         account = (event.get('channel') or {}).get('account_id')
         for number in group.get('mentioned_account_ids') or []:
             if str(number) != str(account):
-                self.entry(scene, self.account_person(number))
+                self.entry(scene, self.account_person(scene['_id'], number))
         doc = self.entry(scene, row['author'], row)
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now()))]
         parent_id = group.get('reply_message_id')
@@ -367,7 +376,7 @@ class People:
         if scene.get('kind') == 'group' or card:
             parts.append('群名片「%s」' % card if card else '没设群名片')
         if nickname:
-            parts.append('QQ 昵称「%s」' % nickname)
+            parts.append('%s 昵称「%s」' % (channel_kinds.of(scene['_id']).TITLE, nickname))
         olds = [safe_name(item.get('name')) for item in (doc.get('previous') or [])][-2:]
         if olds:
             parts.append('在这里用过的名字「%s」' % '」「'.join(olds))
@@ -443,7 +452,8 @@ class People:
             row['speaker'] = self._author(scene, row.pop('author'))
         if 'mentioned_account_ids' in row:
             ids = row.pop('mentioned_account_ids') or []
-            row['mentions'] = ['你' if str(n) == str(account) else self._author(scene, self.account_person(n)) for n in ids]
+            row['mentions'] = ['你' if str(n) == str(account) else
+                               self._author(scene, self.account_person((scene or {}).get('_id'), n)) for n in ids]
         if isinstance(row.get('text'), str) and scene:
             row['text'] = self.mentions(scene, row['text'], account)
         if isinstance(row.get('reply_to_message'), dict):

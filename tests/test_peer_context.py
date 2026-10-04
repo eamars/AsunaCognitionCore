@@ -11,7 +11,7 @@ def qq_event():
         'person_id': 'qq:42',
         'text': '@演示 我现在的群名片是什么？',
         'group_context': {'wake_reason': 'mention'},
-        'channel': {'sender_id': '42', 'target': {'type': 'group', 'id': '123'}},
+        'channel': {'id': 'qq', 'sender_id': '42', 'target': {'type': 'group', 'id': '123'}},
         'raw': {
             'asana_untrusted': 'do not copy this into context',
             'asuna_peer': {

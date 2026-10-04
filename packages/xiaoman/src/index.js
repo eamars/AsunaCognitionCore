@@ -10,7 +10,6 @@ export function apply(ctx) {
     model: 'persona-model.json',
     seeds: [{ slug: 'persona', kind: 'persona', path: 'seeds/persona.md' }],
     skill_directories: [fileURLToPath(new URL('../skills/', import.meta.url))],
-    integration_directory: 'integrations/qq-napcat-adapter',
     preset: 'asuna-xiaoman',
   });
   ctx.on('dispose', remove);

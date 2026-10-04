@@ -19,7 +19,8 @@
 只读配置：删掉一条别名，那个入口立刻不再算 canonical 那个人（包括 owner 私聊），库里没有第二份可以过期的副本。
 """
 from __future__ import annotations
-import re
+
+from . import channel_kinds
 
 MAX_LINKS = 8          # 一条边最多带几个场景：写宽了直接推高 token 成本，超了照实截断
 MAX_PERSONS = 32       # 一组「同一个人」最多几个人格入口
@@ -143,17 +144,6 @@ def canonical_map(config):
     return out
 
 
-def _normalize_person(value):
-    """归一成 person_id：已带 `qq:` 这类前缀的不再拼第二次（与 history_query 同一口径）。"""
-    text = _clean(value, 60)
-    if not text:
-        return ""
-    head, sep, _rest = text.partition(":")
-    if sep and head and len(head) <= 12 and re.match(r"^[a-z][a-z0-9_]*$", head):
-        return text.lower()
-    return "qq:%s" % text.lower()
-
-
 def canonical_person_id(config, db, person_id):
     """别名 → canonical，只看配置；没配映射就是本人 id。db 参数保留给调用方签名，不读。"""
     person_id = _clean(person_id, 60)
@@ -180,7 +170,7 @@ def extra_person_values(config, db, person):
     text = _clean(person, 60).lower()
     if not text:
         return []
-    wanted = {text, _normalize_person(text)}
+    wanted = {text, *channel_kinds.person_ids(text)}
     out = []
     for members in person_classes(config, db).values():
         if wanted & {member.lower() for member in members}:

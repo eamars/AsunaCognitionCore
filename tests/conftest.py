@@ -6,6 +6,11 @@ from asuna.config import ROOT,load
 from asuna.state import Store
 from asuna.evidence import write_json,sha
 from asuna.testing import dispose_test_store
+from asuna import channel_kinds
+
+# Fixtures use QQ scenes and people (qq:<bot>:group:<id>, qq:<account>): register the channel package's kind.
+QQ_CHANNEL={'python':ROOT/'packages'/'napcat-qq'/'python','module':'napcat_qq'}
+channel_kinds.load([QQ_CHANNEL])
 
 @pytest.fixture(autouse=True)
 def preserve_temporary_evidence(request):

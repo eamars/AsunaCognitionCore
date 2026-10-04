@@ -26,7 +26,7 @@ Exclusions:
     id is that long); a digit run inside a UUID (8-4-4-4-12 hex);
   - content of files containing NUL bytes or not decodable as UTF-8 (binary) is skipped; the name is still checked;
   - content of lockfiles package-lock.json and uv.lock is skipped (integrity blobs); the name is still checked;
-  - paths under node_modules/, .venv/ and vendored third-party code packages/*/integrations/*/vendor/ are skipped.
+  - paths under node_modules/, .venv/ and vendored third-party code packages/*/integration/vendor/ are skipped.
 Report-only scope: hits under docs/development_plans/ outside ADR-009-persona_residency/ print as
 ``report-only:path:line:category`` and are not counted in n (any mode).
 """
@@ -93,7 +93,7 @@ PRIVATE=re.compile(rf'(?<![\w.])(?:10\.{O}\.{O}\.{O}|172\.(?:1[6-9]|2[0-9]|3[01]
 TZ=re.compile(r'\b(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)/[A-Z][A-Za-z_]+(?:/[A-Z][A-Za-z_]+)?\b')
 PERSONA=re.compile('xiao'+'man|'+chr(0x5c0f)+chr(0x6ee1),re.I)  # built at runtime so this file never matches itself
 CORE=('src/asuna/','packages/cognition-core/','config/','tools/')
-SKIP=re.compile(r'(?:^|/)(?:node_modules|\.venv)/|^packages/[^/]+/integrations/[^/]+/vendor/')
+SKIP=re.compile(r'(?:^|/)(?:node_modules|\.venv)/|^packages/[^/]+/integration/vendor/')
 LOCKFILES={'package-lock.json','uv.lock'}
 
 def report_only(key):return key.startswith('docs/development_plans/') and not key.startswith('docs/development_plans/ADR-009-persona_residency/')

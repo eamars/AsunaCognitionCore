@@ -2,6 +2,7 @@
 from copy import deepcopy
 from pathlib import Path
 
+from . import channel_kinds
 from .config import ROOT, validate_database, validate_endpoint
 
 SECRET_NAMES = {'mongo_uri', 'api_key', 'token', 'password', 'secret', 'access_token'}
@@ -27,10 +28,10 @@ def export_settings(config):
         return value
     value = deepcopy({k: v for k, v in config.items() if k not in ('character', 'executor')})
     adapter = value.get('integration', {}).get('adapter_config', {})
-    for key in ('routes', 'allowed_private_user_ids', 'allowed_group_ids'):
-        adapter.pop(key, None)
+    channel_id = adapter.get('host', {}).get('channel_id')
+    if channel_id:
+        channel_kinds.of_channel(channel_id).strip_derived(adapter)
     adapter.get('host', {}).pop('token', None)
-    adapter.get('napcat', {}).pop('account_id', None)
     value.setdefault('vision', {})
     value.setdefault('context_links', {})
     value.setdefault('canonical_persons', {})
@@ -75,18 +76,19 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         if create_dirs:
             directory.mkdir(parents=True, exist_ok=True)
     if admission not in ('explicit', 'automatic'):
-        raise ValueError('INVALID_QQ_ADMISSION')
+        raise ValueError('INVALID_CHANNEL_ADMISSION')
     # The DSH catalog owns model capability validation. Legacy provider
     # endpoints and their separate model-settings file are not loaded here.
     for lane, key in (('character', 'character'), ('action', 'executor')):
         value[key] = {**models[lane], 'transport_read_timeout_seconds': value['provider_idle_timeout_seconds'],
                       'token_counter': 'native-host'}
-    for channel in value.get('channels', {}).values():
+    for channel_id, channel in value.get('channels', {}).items():
+        kind = channel_kinds.of_channel(channel_id)
         channel['admission'] = admission
         for key in ('blocked_senders', 'blocked_groups'):
-            if not isinstance(channel.get(key, []), list) or any(not isinstance(v, str) or not v.isascii() or not v.isdigit()
+            if not isinstance(channel.get(key, []), list) or any(not isinstance(v, str) or not kind.ACCOUNT.fullmatch(v)
                     for v in channel.get(key, [])):
-                raise ValueError('INVALID_QQ_BLOCK_LIST: ' + key)
+                raise ValueError('INVALID_CHANNEL_BLOCK_LIST: ' + key)
     integration = value.get('integration', {})
     if integration.get('enabled'):
         from .integration import validate_profile
@@ -98,18 +100,5 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         if not channel:
             raise ValueError('ADAPTER_CHANNEL_NOT_CONFIGURED')
         adapter['host']['token'] = channel['token']
-        adapter['napcat']['account_id'] = channel['account_id']
-        adapter.update(admission=admission, blocked_senders=channel.get('blocked_senders', []),
-                       blocked_groups=channel.get('blocked_groups', []))
-        adapter['routes'], adapter['allowed_private_user_ids'], adapter['allowed_group_ids'] = {}, [], []
-        for route_id, route in channel.get('routes', {}).items():
-            target = route['target']
-            if target['type'] == 'dm':
-                adapter['allowed_private_user_ids'].append(target['id'])
-                adapter['routes'][route_id] = {'message_type': 'private', 'sender_id': route['sender_id'], 'target': target}
-            elif target['type'] == 'group':
-                adapter['allowed_group_ids'].append(target['id'])
-                adapter['routes'][route_id] = {'message_type': 'group', 'allowed_sender_ids': list(route['members']), 'target': target}
-            else:
-                raise ValueError('INVALID_CHANNEL_TARGET')
+        channel_kinds.of_channel(channel_id).adapter_config(adapter, channel)
     return value

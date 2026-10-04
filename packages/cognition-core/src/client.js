@@ -15,7 +15,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       hour: '2-digit', minute: '2-digit', hour12: false,
     }) : '';
   };
-  const memoryAuthor = value => typeof value === 'string' ? value.replace(/^qq:/, 'QQ · ') : '';
+  // A platform person id (qq:<account>) reads as `QQ · <account>`; local ids read as themselves.
+  const memoryAuthor = value => typeof value === 'string'
+    ? value.replace(/^([a-z][a-z0-9_]{0,15}):/, (_, kind) => kind.toUpperCase() + ' · ') : '';
   const stageLabel = stage => ({ character: '角色脑', executor: '行动脑' })[stage?.lane] ?? null;
   const brainClass = lane => ['character', 'executor'].includes(lane) ? 'asuna-brain-' + lane : undefined;
   function subscribeInputPolicies(ctx, rpc) {
@@ -222,7 +224,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return describedValue;
     };
 
-    // Use the shipped composer's block service, including blank/cold QQ
+    // Use the shipped composer's block service, including blank/cold platform
     // sessions. This is a service subscription, not a new UI slot/component.
     ctx.effect(() => subscribeInputPolicies(ctx, rpc));
 
@@ -325,9 +327,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         catch (error) { setNotice(error.message); } finally { setBusy(false); } };
       const [editor] = React.useState(() => {
         const fields = [], add = (path, label, type = 'text') => fields.push({ path, label, type, field: JSON.stringify(path) });
-        for (const [key, label] of [['persona', '当前角色'], ['qqAdmission', 'QQ 接入策略'],
+        for (const [key, label] of [['persona', '当前角色'], ['channelAdmission', '外部渠道接入策略'],
           ['python', 'Python'], ['workspace', '工作目录'], ['configPath', '旧配置迁移来源']])
-          add([key], label, ['persona', 'qqAdmission'].includes(key) ? 'choice' : 'text');
+          add([key], label, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens'])
           add(['routes', lane, key], (lane === 'character' ? '角色脑 · ' : '行动脑 · ')
             + ({ provider: '模型服务', model: '模型', reasoningEffort: '推理强度', maxTokens: '最大输出 token' })[key],
@@ -391,7 +393,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const state = React.useSyncExternalStore(editor.store.subscribe, editor.store.getSnapshot);
       const routeValue = (lane, key) => state.fields[JSON.stringify(['routes', lane, key])].text;
       const choices = field => {
-        if (field.path[0] === 'qqAdmission') return [['automatic', '自动接入私聊、群及新成员'], ['explicit', '仅接入已配置身份']];
+        if (field.path[0] === 'channelAdmission') return [['automatic', '自动接入私聊、群及新成员'], ['explicit', '仅接入已配置身份']];
         if (field.path[0] === 'persona') return (status?.personas ?? []).map(persona => [persona.id, persona.name || persona.id]);
         const [, lane, key] = field.path, providers = status?.providers ?? [];
         if (key === 'provider') return providers.map(provider => [provider.id, provider.name || provider.id]);
@@ -444,7 +446,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
                 hint: field.type === 'json' ? 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。' : undefined });
           })),
         status && h('p', { style: small }, '自我来源：' + (status.worker?.self_source || '等待连接')
-          + ' · QQ：' + (status.worker?.channels_active ? '本机入口已启动；适配器 ' + status.worker.integration_state
+          + ' · ' + (status.worker?.channel_titles?.join('、') || '外部渠道') + '：' + (status.worker?.channels_active ? '本机入口已启动；适配器 ' + status.worker.integration_state
             + '；平台连接未验证' : '未启用')
           + (status.worker?.integration_error ? ' · ' + status.worker.integration_error : '')
           + ' · 定时：' + (status.worker?.schedules_active ? '原生调度' : '未启用')),

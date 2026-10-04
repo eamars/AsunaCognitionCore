@@ -9,8 +9,8 @@ Use the existing deployment configuration and Mongo database. Follow [RUN_ASUNA.
 ```powershell
 npm.cmd ci
 node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
-.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman
-.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --shared-action-model
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman --channel packages\napcat-qq
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --channel-package packages\napcat-qq --shared-action-model
 .\start-asuna.cmd
 ```
 
@@ -64,9 +64,9 @@ QQ ingress, outbox receipts and enabled integration snapshots retain their exist
 
 The editable DSH profile is authoritative after migration: `deployment` holds structured business values; `secrets` holds write-only values referenced as `{"$secret":"name"}`. Structured fields accept JSON. The native secret-map field can add references for a new channel without restating existing secrets. Mongo, embeddings, channel routes/block lists, A2 links, integration endpoints, vision and self-development are editable on the plugin page. Provider definitions/API keys remain in DSH's Models settings. Persona baselines, prompts and protected publication-floor source grants belong to installed artifacts/deployment composition rather than an arbitrary state editor.
 
-Persona, QQ admission, provider, model and reasoning effort use DSH's shipped Menu/Button selection controls. Model and effort choices come from the native provider catalog for the exact route; no model family is inferred from a brain label. The provider-default effort choice omits an explicit effort from native requests. Output limits accept positive integers; paths and addresses remain text inputs. Structured business sections retain native JSON value fields.
+Persona, channel admission, provider, model and reasoning effort use DSH's shipped Menu/Button selection controls. Model and effort choices come from the native provider catalog for the exact route; no model family is inferred from a brain label. The provider-default effort choice omits an explicit effort from native requests. Output limits accept positive integers; paths and addresses remain text inputs. Structured business sections retain native JSON value fields.
 
-Save validates model catalog references, business bindings and the existing database connection without starting consumers or requesting inference. DSH owns revision checking and durable writes; rejected drafts stay on screen. Apply fences ingress and refuses active user/action work; background summaries may be interrupted and resumed. It restarts the worker and an already-enabled adapter using the installed persona artifact. A failed settings activation restores the previously running configuration and leaves the proposed saved values pending for correction. This settings recovery is separate from forward-only code publication. Process startup alone does not prove QQ connectivity or delivery.
+Save validates model catalog references, business bindings and the existing database connection without starting consumers or requesting inference. DSH owns revision checking and durable writes; rejected drafts stay on screen. Apply fences ingress and refuses active user/action work; background summaries may be interrupted and resumed. It restarts the worker and an already-enabled adapter using the installed channel package's artifact. A failed settings activation restores the previously running configuration and leaves the proposed saved values pending for correction. This settings recovery is separate from forward-only code publication. Process startup alone does not prove QQ connectivity or delivery.
 
 ## Develop and publish forward
 
@@ -90,7 +90,7 @@ The focused native suite exercises real installed DSH loop, preset and persisten
 ```powershell
 npm.cmd run test:native
 .\.venv\Scripts\python.exe -m pytest tests/test_native_worker.py tests/test_native_product.py -q
-.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/xiaoman
+.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/napcat-qq
 node tools/probe_native_schedule.mjs
 node tools/probe_plugin_install.mjs
 node tools/probe_native_image.mjs

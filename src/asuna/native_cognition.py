@@ -1,4 +1,5 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
+from . import channel_kinds
 from .peer_context import peer_from_message
 from .people import People, safe_name
 
@@ -103,7 +104,7 @@ class CognitionView:
                           '这个对话还没有可核对的一轮')}
 
     def supplements(self, kind):
-        """The QQ identity saved with this person's latest message, when there is one."""
+        """The platform identity saved with this person's latest message, when there is one."""
         peer = self.peer() if kind in ('all', 'relation') else None
         if peer:
             peer['scene_id'] = self.binding['scene_id']
@@ -112,7 +113,13 @@ class CognitionView:
     def subject_name(self):
         peer = self.peer()
         if peer and peer.get('subject_name'):
-            return peer['subject_name'] + '（' + self.binding['person_id'].replace('qq:', 'QQ · ', 1) + '）'
+            return peer['subject_name'] + '（' + self.account_title() + '）'
         row = self.store.db.identities.find_one({'person_id': self.binding['person_id']},
                                                {'display_name': 1})
-        return (row or {}).get('display_name') or self.binding['person_id'].replace('qq:', 'QQ · ', 1)
+        return (row or {}).get('display_name') or self.account_title()
+
+    def account_title(self):
+        """qq:<account> reads as `QQ · <account>` on the owner's page; a local id reads as itself."""
+        person = self.binding['person_id']
+        platform = channel_kinds.of(person)
+        return platform.TITLE + ' · ' + person.partition(':')[2] if platform else person

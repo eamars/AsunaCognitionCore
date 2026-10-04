@@ -1,9 +1,10 @@
 # Asuna Cognition Core
 
-Asuna runs as two plugins in one native DSH **0.2.0-rc.2** Web Host:
+Asuna runs as plugins in one native DSH **0.2.0-rc.2** Web Host:
 
 - `@asuna/cognition-core` supplies cognition, task/channel authorization, the business worker, and publication tools.
-- A persona package (for example `packages/xiaoman`, the persona installed in this deployment) supplies the persona baseline, selected skills, channel adapter source, and its role preset. The core contains no persona; any persona package can replace it, and `tests/fixtures/personas/demo` is a synthetic one.
+- A persona package (for example `packages/xiaoman`, the persona installed in this deployment) supplies the persona baseline, selected skills and its role preset. The core contains no persona; any persona package can replace it, and `tests/fixtures/personas/demo` is a synthetic one.
+- A channel package per platform (`packages/napcat-qq` for QQ through NapCat) supplies that platform's id formats, its adapter and the adapter's skill. The core names no platform.
 
 DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker reuses the existing Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
 

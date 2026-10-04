@@ -90,7 +90,7 @@ def message(db, mid, seq, at, text, direction='inbound', scene=SCENE_ID, epoch=E
         doc['occurred_at'] = at
         if peer is not None:
             doc['event'] = {'raw': {'asuna_peer': dict(peer)},
-                            'channel': {'sender_id': author.split(':')[-1],
+                            'channel': {'id': 'qq', 'sender_id': author.split(':')[-1],
                                         'target': {'type': 'group', 'id': scene.rsplit(':', 1)[-1]}}}
     else:
         doc['phase'] = phase

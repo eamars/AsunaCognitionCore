@@ -46,7 +46,7 @@ def inbound(mid, seq, at, text, author=A_ID, peer=PEER_A, reply_to=None, scene=S
            "adapter_id": "p1c-fixture", "platform_event_id": "pe-" + mid}
     if peer is not None:
         doc["event"] = {"raw": {"asuna_peer": dict(peer)},
-                        "channel": {"sender_id": author.split(":")[-1],
+                        "channel": {"id": "qq", "sender_id": author.split(":")[-1],
                                     "target": {"type": "group", "id": scene.rsplit(":", 1)[-1]}}}
         if reply_to:
             doc["event"]["group_context"] = {"reply_to": "pe-" + reply_to,

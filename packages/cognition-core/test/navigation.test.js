@@ -55,6 +55,7 @@ test('native continuation preserves history and task children retain their actua
   const route = { provider: 'fixture', model: 'single-model' };
   const core = new CognitionCore(ctx, { persona: 'demo', deployment: { chat: { workspace: local } }, routes: { character: route, action: route } });
   core.ready = async () => {}; core.specs = []; core.personas.set('demo', { preset: 'ordinary' });
+  core.channels.set('qq', { kind: 'qq', title: 'QQ' });          // what @asuna/napcat-qq registers
   ctx.provide('asuna', core);
   ctx.provide('attachments', {});
   ctx.provide('sessionController', { list: async () => ({ items: [] }), rename: async ({ sessionId, title }) => {

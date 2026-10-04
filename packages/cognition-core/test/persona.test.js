@@ -10,8 +10,12 @@ import { CognitionCore } from '../src/index.js';
 import { PublicationFloor } from '../src/floor.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
-// The installed persona package is whichever other package sits beside the core.
-const installed = (await fs.readdir(path.join(repo, 'packages'))).find(name => name !== 'cognition-core');
+// The installed persona package is the other package beside the core that carries a persona model;
+// a channel package (e.g. napcat-qq) registers a channel instead.
+const siblings = (await fs.readdir(path.join(repo, 'packages'))).filter(name => name !== 'cognition-core');
+const hasModel = async name => fs.access(path.join(repo, 'packages', name, 'persona-model.json')).then(() => true, () => false);
+const installed = (await Promise.all(siblings.map(async name => await hasModel(name) && name))).find(Boolean);
+const channelPackages = (await Promise.all(siblings.map(async name => !await hasModel(name) && name))).filter(Boolean);
 const packages = { demo: path.join(repo, 'tests/fixtures/personas/demo'), installed: path.join(repo, 'packages', installed) };
 
 function core(persona = 'demo') {
@@ -39,6 +43,27 @@ test('T1.1 the synthetic and the installed persona package both register; no per
   const empty = core('demo');
   await assert.rejects(empty.ready(), /Select an installed Asuna persona/);
   assert.equal(empty.lifecycle.state, 'failed');
+});
+
+test('a channel package registers its kind; its paths stay inside the package and resolve to the published artifact', async () => {
+  for (const name of channelPackages) {
+    const value = core('demo'), directory = path.join(repo, 'packages', name);
+    await install(value, directory);
+    assert.equal(value.channels.size, 1);
+    const [channel] = value.channels.values();
+    assert.match(channel.kind, /^[a-z][a-z0-9_]*$/);
+    assert.equal(value.channelOf(channel.kind + ':bot:group:1'), channel);
+    assert.equal(value.channelOf('local-dm'), null);
+    await fs.access(path.join(directory, channel.python, channel.module, '__init__.py'));
+    if (channel.integration_directory) await fs.access(path.join(directory, channel.integration_directory));
+    const floor = new PublicationFloor({ workspace: os.tmpdir(), stateDir: 'x', defaultProject: 'demo', projects: [] });
+    floor.effective = async () => ({ packageRoot: '/published' });
+    const resolved = await floor.channel(channel);
+    assert.equal(resolved.python, path.join('/published', channel.python));
+    assert.throws(() => value.registerChannel({ ...channel, resource_root: directory }), /Duplicate Asuna channel kind/);
+  }
+  assert.throws(() => core('demo').registerChannel({ kind: 'x', project: 'x', title: 'X', module: 'x',
+    resource_root: '/tmp/x', python: '../escape' }), /CHANNEL_CONTRACT_INVALID: python/);
 });
 
 test('T1.6 model, seeds, jobs and skills resolve against the published artifact, not the candidate', async () => {

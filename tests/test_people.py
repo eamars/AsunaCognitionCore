@@ -22,7 +22,7 @@ def row(number, text, card='', nickname='', role='member', at='2026-10-04T01:00:
     number = str(number)
     return {'_id': rid or 'in-%s-%s' % (number, at), 'scene_id': SCENE, 'author': author or 'qq:' + number,
             'direction': 'inbound', 'text': text, 'received_at': at, 'policy_epoch': 1,
-            'event': {'channel': {'sender_id': number, 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}},
+            'event': {'channel': {'id': 'qq', 'sender_id': number, 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}},
                       'group_context': {'mentioned_account_ids': list(mentions), 'reply_message_id': reply},
                       'raw': {'asuna_peer': {'person_id': 'qq:' + number, 'account_id': number,
                                              'scene': 'group:' + GROUP, 'group_id': GROUP, 'card': card,
@@ -131,7 +131,7 @@ def test_her_label_mentions_reach_the_adapter_as_accounts(store):
 
 def test_only_the_verified_profile_media_and_group_name_are_kept():
     from asuna.channels import kept_raw
-    event = {'person_id': 'qq:20002', 'channel': {'sender_id': '20002', 'target': {'type': 'group', 'id': GROUP}}}
+    event = {'person_id': 'qq:20002', 'channel': {'id': 'qq', 'sender_id': '20002', 'target': {'type': 'group', 'id': GROUP}}}
     raw = row(20002, 'x', card='阿杰')['event']['raw']
     raw.update({'post_type': 'message', 'sender': {'user_id': 20002, 'card': '阿杰'}, 'message': [{'type': 'text'}],
                 'raw_message': 'x', 'asuna_media': {'count': 1, 'items': []}, 'group_name': ' 演示\n群 ', 'other': 1})

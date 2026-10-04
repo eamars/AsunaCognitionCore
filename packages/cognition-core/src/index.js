@@ -14,6 +14,7 @@ import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
+import { normalizeChannel } from './channel.js';
 import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { ActionRecords } from './action-records.js';
@@ -33,7 +34,7 @@ export const Config = z.object({ python: z.string().volatile(), workspace: z.str
   mountSchedule: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
   secrets: z.dict(z.string().role('secret')).volatile(),
-  qqAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
+  channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
   routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
 // Responsibility routes are configured independently; a lane name never implies a model.
@@ -47,6 +48,8 @@ export class CognitionCore {
       value && typeof value.get === 'function' ? value.get() : value]));
     this.config = this.savedConfig();
     this.personas = new Map();
+    this.channels = new Map();
+    this.channelWaiters = [];
     this.states = new Map();
     this.handles = new Map();
     this.channelWrites = new Map();
@@ -74,6 +77,37 @@ export class CognitionCore {
     return () => this.personas.delete(persona.id);
   }
 
+  /** A platform plugin (e.g. @asuna/napcat-qq) contributes its channel kind, adapter and skills. */
+  registerChannel(channel) {
+    if (this.channels.has(channel?.kind)) throw new Error('Duplicate Asuna channel kind: ' + channel.kind);
+    this.channels.set(channel.kind, normalizeChannel(channel));
+    for (const wake of this.channelWaiters.splice(0)) wake();
+    return () => this.channels.delete(channel.kind);
+  }
+
+  channelOf(sceneId) {
+    const [kind, ...rest] = String(sceneId ?? '').split(':');
+    return rest.length ? this.channels.get(kind) ?? null : null;
+  }
+
+  /** Every configured channel's plugin, waited for (plugins register on their own schedule), with resolved paths. */
+  async channelPlugins(deployment, timeoutMs = 15000) {
+    const wanted = Object.keys(deployment?.channels ?? {}), deadline = Date.now() + timeoutMs;
+    for (let missing = wanted.filter(kind => !this.channels.has(kind)); missing.length;
+         missing = wanted.filter(kind => !this.channels.has(kind))) {
+      if (Date.now() >= deadline) throw new Error('CHANNEL_PLUGIN_NOT_INSTALLED: ' + missing.join(', '));
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 500);
+        this.channelWaiters.push(() => { clearTimeout(timer); resolve(); });
+      });
+    }
+    return Promise.all([...this.channels.values()].map(channel => this.ctx.asunaFloor.channel(channel)));
+  }
+
+  async skillDirectories(persona, channels) {
+    return [...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
+  }
+
   ready() {
     if (!this.initializing) this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
@@ -88,13 +122,16 @@ export class CognitionCore {
       this.worker.onFailure = error => this.workerFailed(error);
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
         id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
+      const channels = await this.channelPlugins(this.config.deployment);
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
-        skill_directories: await this.ctx.asunaFloor.skillPaths(persona),
+        skill_directories: await this.skillDirectories(persona, channels),
         routes: Object.fromEntries(Object.entries(this.config.routes).map(([lane, route]) => [lane, nativeRoute(route)])), models,
-        integration_project: await this.ctx.asunaFloor.integrationProject(persona),
+        // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
+        integration_project: await this.ctx.asunaFloor.integrationProject(
+          [...this.channels.values()].find(channel => channel.integration_directory)),
         skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), native_sessions: nativeSessions,
-        deployment: this.config.deployment, secrets: this.config.secrets, qq_admission: this.config.qqAdmission,
-        apply_integrations: !!this.applying, schedule });
+        deployment: this.config.deployment, secrets: this.config.secrets, admission: this.config.channelAdmission,
+        channels, apply_integrations: !!this.applying, schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
       // Publish the native controller's own summaries after cold metadata
@@ -159,7 +196,8 @@ export class CognitionCore {
     const probe = new BusinessWorker({ ...next, pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
       await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
-        models, persona: next.persona, qq_admission: next.qqAdmission ?? 'explicit' });
+        models, persona: next.persona, admission: next.channelAdmission ?? 'explicit',
+        channels: await this.channelPlugins(next.deployment) });
     } finally { await probe.dispose(); }
   }
 
@@ -240,7 +278,7 @@ export class CognitionCore {
             && value.state === 'APPLIED') {
           const persona = this.personas.get(this.config.persona);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
-            skill_directories: await this.ctx.asunaFloor.skillPaths(persona) });
+            skill_directories: await this.skillDirectories(persona, await this.channelPlugins(this.config.deployment)) });
           [value] = await this.ctx.asunaFloor.workerReady(value.project);
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
@@ -289,7 +327,7 @@ export class CognitionCore {
   async ensureAgent(stage, parentAgent, descriptor) {
     // Native Archive hides a monitored conversation until its next activity.
     // It does not disable the channel. Reopen before DSH's archive gate.
-    if (stage.lane === 'character' && stage.binding.scene_id.startsWith('qq:'))
+    if (stage.lane === 'character' && this.channelOf(stage.binding.scene_id))
       await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
@@ -315,7 +353,7 @@ export class CognitionCore {
     this.handles.set(stage.session_id, handle);
     if (!parentAgent) {
       const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd,
-        stage.binding.scene_id.startsWith('qq:') ? 'QQ' : 'Local');
+        this.channelOf(stage.binding.scene_id)?.title ?? 'Local');
       await workspace.attachSession(stage.session_id);
     }
     if (!persisted && stage.lane === 'executor') {

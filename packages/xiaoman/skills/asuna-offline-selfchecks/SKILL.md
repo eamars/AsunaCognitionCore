@@ -16,14 +16,15 @@ description: 在没有 pytest、没有 pymongo、不联网的隔离沙箱里验�
 ## 项目归属（ADR-008：跑之前先认准 project）
 
 `development_*` 工具不写 `project` 时绑定的是**默认的 xiaoman 角色插件**项目（本技能文件就存在这个候选里）。
-那个候选根目录只有 `skills/ integrations/ seeds/ persona-model.json src/index.js`，**没有 `tools/` 也没有 `tests/`**，
+那个候选根目录只有 `skills/ seeds/ persona-model.json src/index.js`，**没有 `tools/` 也没有 `tests/`**，
 下面这套命令在里面跑只会红在 `No such file or directory`——那是挂错项目，不是产品坏了。
 
 - 跑这套离线套件：`development_run` 显式带 `project: "core"`（认知核候选里才有 `tools/` 和 `tests/`）。
 - 发布：`development_publish` 默认也只冻结并发布 **xiaoman 插件**；改的是认知核（`src/asuna`、`tools/`、
   `tests/`）必须显式 `project: "core"`，否则 publish 会照样成功返回，但核改动一点没上线。
-- 反过来也成立：只动插件（`skills/*/SKILL.md`、`integrations/`）就不必带 project，
-  而这套用例也不覆盖插件文件——插件侧改动靠各自的自测（如 `qqadapter/selftest.py`）。
+- 反过来也成立：只动插件（`skills/*/SKILL.md`）就不必带 project，而这套用例也不覆盖插件文件。
+- QQ 适配器和它的技能在 **napcat-qq** 通道包里（`project: "napcat-qq"`，候选里是 `integration/ skills/ python/`）；
+  `integration_*` 工具改的就是这个候选的 `integration/`，发布要带 `project: "napcat-qq"`，自测用 `qqadapter/selftest.py`。
 
 ## 入口（在认知核候选根目录 /task 里跑，`development_run` 带 `project="core"`）
 

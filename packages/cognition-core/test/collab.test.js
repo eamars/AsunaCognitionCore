@@ -75,3 +75,8 @@ test('her message reaches only a running action session with a current stage', a
     'an idle session is not woken; the worker delivers it with the next round');
   assert.equal(h.injected.length, 1);
 });
+
+test('thread entries are informational: plain DSH readers may skip them', async () => {
+  const { ASUNA_EVENTS } = await import('../src/persistence.js');
+  assert.ok(ASUNA_EVENTS.has('asuna/collab'), 'without ignorable, DSH refuses to load the conversation');
+});

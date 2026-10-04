@@ -60,7 +60,9 @@ export class AsunaApi extends TypertRemoteService {
     const binding = await this.core.worker.call('session', { session_id: sessionId }).catch(() => null);
     if (binding?.lane !== 'character') return null;
     const role = this.core.ctx.sessions.get(sessionId);
-    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/action-linked')?.data.session_id;
+    // The newest action session of her collaboration threads (collab.js).
+    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/collab' && event.data.child_session_id)
+      ?.data.child_session_id;
     return { action: action ? await this.contextProjections(action) : null };
   }
 

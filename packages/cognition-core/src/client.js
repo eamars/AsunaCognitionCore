@@ -23,7 +23,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
       'collab.state.done': '已完成', 'collab.state.failed': '没做成', 'collab.state.stopped': '已叫停',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
-      'collab.work': '工作了 {duration}', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
+      'collab.work': '工作了 {duration}', 'collab.call': '{n} 次工具调用', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
       'collab.more': '展开全文', 'collab.less': '收起', 'collab.progress': '进展',
       'duration.seconds': '{n} 秒', 'duration.minutes': '{n} 分钟', 'duration.hours': '{h} 小时 {m} 分钟',
       'tool.think': '心里话', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
@@ -125,7 +125,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
       'collab.state.done': 'Done', 'collab.state.failed': 'Not finished', 'collab.state.stopped': 'Stopped',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
-      'collab.work': 'Worked {duration}', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
+      'collab.work': 'Worked {duration}', 'collab.call': '{n} tool call', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
       'collab.more': 'Show all', 'collab.less': 'Show less', 'collab.progress': 'Progress',
       'duration.seconds': '{n}s', 'duration.minutes': '{n} min', 'duration.hours': '{h} h {m} min',
       'tool.think': 'Thought', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
@@ -872,7 +872,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const [open, setOpen] = React.useState(false);
       return h(DisclosureRow, { icon: h(IconChevronDownOutlineRegular), previewChevron: false,
         title: t('collab.work', { duration: duration(t, entry.duration_ms ?? 0) }),
-        collapsedContent: h('span', { style: { marginLeft: 8, ...small } }, t('collab.calls', { n: entry.tool_calls ?? 0 })),
+        collapsedContent: h('span', { style: { marginLeft: 8, ...small } },
+          t(entry.tool_calls === 1 ? 'collab.call' : 'collab.calls', { n: entry.tool_calls ?? 0 })),
         keepContentWhenOpen: true, open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
         open && h(Work, { ...props }));
     }
@@ -923,8 +924,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         .filter(Boolean);
       return h(DisclosureRow, { icon: h(Icon), previewChevron: false,
         title: t('tool.' + name),
-        collapsedContent: h('span', { style: { marginLeft: 8, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', ...(refused ? { color: 'var(--dsw-alias-state-error-primary)' } : {}) } },
+        // DSH's own row text: the secondary size, a dot between the title and what the call was about.
+        collapsedContent: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 'var(--dsh-content-font-size-secondary, 13px)',
+          ...(refused ? { color: 'var(--dsw-alias-state-error-primary)' } : {}) } },
+          h('span', { 'aria-hidden': true, style: { margin: '0 6px', opacity: .6 } }, '·'),
           props.phase === 'preparing' ? t('tool.preparing') : refused ? t('tool.refused') : summary),
         keepContentWhenOpen: true, open: disclosure.expanded, expandable: detail.length > 0,
         expandOnRowClick: true, onToggle: disclosure.toggle }, ...detail);

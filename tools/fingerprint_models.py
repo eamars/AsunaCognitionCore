@@ -1,6 +1,6 @@
 """Read-only deployment fingerprint. Does not import or execute an old app."""
 from datetime import datetime,timezone
-import json,subprocess,uuid
+import json,os,subprocess,uuid
 from asuna.config import ROOT,load,redacted
 from asuna.evidence import Evidence,LocalHttp,write_json,sha
 
@@ -12,7 +12,7 @@ for lane in ('character','executor','embedding'):
     except Exception as exc:result['model_endpoints'][lane]={'error_type':type(exc).__name__}
 script=r'''
 import pathlib,json,hashlib
-root=pathlib.Path('/home/rba90/models/Qwen3.8-Flash-Next-Uncensored-NVFP4')
+root=pathlib.Path(__MODEL_ROOT__).expanduser()
 files=[]
 for p in sorted(root.iterdir()):
  if p.is_file() and (p.suffix in ('.json','.jinja','.safetensors') or p.name.endswith('.jinja2')):
@@ -31,6 +31,10 @@ for p in pathlib.Path('/proc').iterdir():
   selected={arg:argv[i+1] for i,arg in enumerate(argv[:-1]) if arg in allow};process.append({'pid':int(p.name),'argv_whitelist':selected})
 print(json.dumps({'root':str(root),'files':files,'config':{k:config.get(k) for k in ('model_type','architectures','quantization_config','num_nextn_predict_layers','text_config')},'chat_template_sha256':hashlib.sha256(str(tokenizer.get('chat_template')).encode()).hexdigest(),'processes':process,'runtime_mtp_enabled':'not inferred from weights'}))
 '''
+# Weights directory inside WSL; `~` resolves to the WSL user's home there. Override with
+# ASUNA_FINGERPRINT_MODEL_ROOT instead of editing a user name into this file.
+MODEL_ROOT=os.environ.get('ASUNA_FINGERPRINT_MODEL_ROOT','~/models/Qwen3.8-Flash-Next-Uncensored-NVFP4')
+script=script.replace('__MODEL_ROOT__',repr(MODEL_ROOT))
 command=['wsl','--exec','python3','-c',script]
 proc=subprocess.run(command,capture_output=True,text=True,encoding='utf-8',timeout=600)
 ev.record('command',{'command':['wsl','--exec','python3','-c','<read-only manifest script in tools/fingerprint_models.py>'],'exit_code':proc.returncode,'stderr':proc.stderr})

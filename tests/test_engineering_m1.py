@@ -3,7 +3,6 @@ import copy
 import json
 import subprocess
 import sys
-from pathlib import Path
 import pytest
 from asuna.config import ROOT,load,validate_database
 from asuna.context import ContextBuilder
@@ -11,8 +10,7 @@ from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
 from asuna.publish import PublishService
 from asuna.state import Store,Conflict,Denied
-from asuna.audit import verify,replay,projection,render_html
-from asuna.evidence import sha
+from asuna.audit import verify,replay,projection,render_html,trace_contents
 
 def event(key='e',scene='dm-a',person='A',text='我回来了。'):
     return {'event_id':key,'scene_id':scene,'person_id':person,'text':text}
@@ -25,26 +23,10 @@ def normal(store):
     return Coordinator(store,lane),lane
 
 def test_E01_namespace_guard(store):
-    for forbidden in ('admin','local','config',load()['legacy_database'],'roleplay_bot','asuna_v2_test_/escape'):
+    for forbidden in ('admin','local','config','roleplay_bot','asuna_v2_test_/escape'):
         with pytest.raises(ValueError): validate_database(load(),forbidden)
     assert store.db.command('ping')['ok']==1
 
-def test_E02_actual_fake_request_and_missing_persona(store):
-    coordinator,lane=normal(store)
-    ep=coordinator.ingest(event())
-    assert '沈小满' in lane.calls[0]['messages'][0]['content']
-    assert ep['manifest']['persona_revision']
-    persona=store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['body']
-    assert persona in lane.calls[0]['messages'][0]['content']
-    assert sha(persona.encode())==ep['manifest']['persona_sha256']
-    assert not any(k in json.dumps(lane.calls) for k in ('p1_prediction','expectations_operator_only','reconcile_expected'))
-    assert not any('"'+k+'":' in json.dumps(lane.calls) for k in ('gold','expected','oracle'))
-    head,rev=store.head('persona:P1','global-safe')
-    for body in ('','# title only'):
-        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.body':body}})
-        before=len(lane.calls)
-        with pytest.raises(ValueError):coordinator.ingest(event(body or 'empty'))
-        assert len(lane.calls)==before
 
 def test_E03_stops_advance_and_E04_private_public_split(store):
     coordinator,lane=normal(store)
@@ -63,22 +45,17 @@ def test_E03_stops_advance_and_E04_private_public_split(store):
 
 def test_E05_delivered_projection_only(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
-        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','scene_seq':i,'text':'marker_'+state,'author':'xiaoman','direction':'outbound','delivery_state':state})
+        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','policy_epoch':1,'scene_seq':i,'text':'marker_'+state,'author':'demo','direction':'outbound','delivery_state':state})
     system,context,manifest=ContextBuilder(store).prepare(event())
     assert [x['text'] for x in context['delivered_history']]==['marker_DELIVERED']
 
 @pytest.mark.parametrize('bad',[LaneResult('',reasoning='thinking'),LaneResult(''),LaneResult('cut',finish_reason='length'),LaneResult('x',tool_calls=[{'id':'bad'}])])
 def test_E07_invalid_stage_fails_closed(store,bad):
-    lane=FakeLane(store,[bad]);ep=Coordinator(store,lane).ingest(event())
+    # Two repairs (answers.py), each telling her what was wrong; then the stage fails closed.
+    lane=FakeLane(store,[bad]*3);ep=Coordinator(store,lane).ingest(event())
     assert ep['state']=='FAILED_PROTOCOL' and store.db.sink_receipts.count_documents({})==0
+    assert len(lane.calls)==3 and all(call['messages'][-1]['content'].startswith('程序检查：') for call in lane.calls[1:])
 
-def test_E07_json_retry_and_recall_bounds(store):
-    lane=FakeLane(store,[LaneResult('我想说话。'),LaneResult('{bad'),LaneResult('still bad')])
-    assert Coordinator(store,lane).ingest(event())['state']=='FAILED_PROTOCOL'
-    assert len(lane.calls)==3
-    lane2=FakeLane(store,sum(([LaneResult('我需要回忆。'),decision('recall')] for _ in range(3)),[]))
-    assert Coordinator(store,lane2).ingest(event('recall'))['state']=='NEEDS_INFORMATION'
-    assert len(lane2.calls)==6 and store.db.sink_receipts.count_documents({})==0
 
 def test_E09_identity_and_E10_scope(store):
     assert store.identity('fixture','u-a')=='A'
@@ -88,8 +65,8 @@ def test_E09_identity_and_E10_scope(store):
         _,context,_=ContextBuilder(store).prepare(event(scene=scene,person=person))
         if scene!='dm-a':assert 'PRIVATE_A_CANARY' not in json.dumps(context)
     with pytest.raises(Denied):store.get('memory_units','M09','scene:g1')
-    head,_=store.head('persona:P1','global-safe')
-    with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
+    with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
 
 def test_E14_100_duplicates(store):
     coordinator,lane=normal(store)
@@ -119,25 +96,25 @@ def test_E15_nonidempotent_unknown(store):
     assert msg['delivery_state']=='UNKNOWN' and store.db.sink_receipts.count_documents({})==1
 
 def test_E17_twenty_cas_proposals(store):
-    head,_=store.head('persona:P1','global-safe')
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
     # M07 is global-safe in the immutable world fixture.
     source=store.db.memory_units.find_one({'scope_key':'global-safe'})['_id']
     def mutate(i):
         try:
-            return store.mutate('persona:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
+            return store.mutate('relationship:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
         except Conflict:return None
     with concurrent.futures.ThreadPoolExecutor(20) as pool:result=list(pool.map(mutate,range(20)))
     winners=[x for x in result if x]
     assert len(winners)==1
-    assert store.head('persona:P1','global-safe')[0]['revision_id']==winners[0]['_id']
+    assert store.head('relationship:P1','global-safe')[0]['revision_id']==winners[0]['_id']
 
 def test_E19_scope_inheritance_and_policy_denial(store):
-    head,_=store.head('persona:P1','global-safe')
-    with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
+    with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
     for field in ('ACL','audit','model_route','threshold','tools'):
-        with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
-    scoped=store.init_head('overlay:P1','scene:dm-a',{'body':'私域'},['M09'])
-    result=store.mutate('overlay:P1','scene:dm-a',scoped['revision_id'],{'body':'保留我的私域看法'},['M09'],'scene:dm-a','allowed-overlay')
+        with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
+    scoped=store.init_head('relationship:P1','scene:dm-a',{'body':'私域'},['M09'])
+    result=store.mutate('relationship:P1','scene:dm-a',scoped['revision_id'],{'body':'保留我的私域看法'},['M09'],'scene:dm-a','allowed-relationship')
     assert result['scope_key']=='scene:dm-a'
 
 def test_E21_audit_failure_prevents_calls_and_effects(store):
@@ -149,8 +126,8 @@ def test_E23_state_replay_and_tamper(store,tmp_path):
     coordinator,lane=normal(store);coordinator.ingest(event())
     events=list(store.db.audit_events.find({}))
     verify(events)
-    target=Store(load(),store.name+'_replay')
-    assert replay(events,target)['sha256']==projection(store)['sha256']
+    target=Store(load(),store.name+'_replay');store.derived_databases=[target.name]
+    assert replay(events,target,trace_contents(events,store))['sha256']==projection(store)['sha256']
     modified=copy.deepcopy(events);modified[0]['payload']['changed']=True
     with pytest.raises(ValueError):verify(modified)
     render_html(events,tmp_path/'trace.html')

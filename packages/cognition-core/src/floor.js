@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { resolvePersona } from './persona.js';
+import { resolveChannel } from './channel.js';
 
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -55,7 +57,10 @@ async function run(command, args, options = {}) {
 export class PublicationFloor {
   constructor(config) {
     this.config = config;
-    this.base = path.join(config.workspace ?? packageRoot, '.runtime/adr008');
+    // A non-default profile (e.g. the demo) keeps its own activation, baselines
+    // and candidates so it can never select or publish the owner's artifacts.
+    this.base = path.join(config.workspace ?? packageRoot, config.stateDir ?? '.runtime/adr008');
+    this.workRoot = config.stateDir ? path.join(this.base, 'work') : path.join(config.workspace ?? packageRoot, '.runtime/work');
     this.activationFile = path.join(this.base, 'activation.json');
     this.projects = new Map((config.projects ?? []).map(project => [project.id, project]));
     this.serial = Promise.resolve();
@@ -73,15 +78,19 @@ export class PublicationFloor {
   }
 
   async skillPaths(persona) {
-    const root = (await this.effective(this.config.defaultProject))?.packageRoot;
-    return root ? [path.join(root, 'skills')] : persona.skill_directories;
+    return (await this.persona(persona)).skill_directories;
   }
 
+  /** Every persona path resolves against the published package artifact when one is selected. */
   async persona(persona) {
     const root = (await this.effective(this.config.defaultProject))?.packageRoot;
-    if (!root) return persona;
-    return { ...persona, resource_root: root, persona_file: path.join(root, 'persona/core.md'),
-      skill_directories: [path.join(root, 'skills')] };
+    return resolvePersona(persona, root ?? persona.resource_root);
+  }
+
+  /** A channel plugin's paths, against its own published artifact when one is selected. */
+  async channel(channel) {
+    const root = (await this.effective(channel.project))?.packageRoot;
+    return resolveChannel(channel, root ?? channel.resource_root);
   }
 
   async workerReady(projectId) {
@@ -96,11 +105,12 @@ export class PublicationFloor {
     await atomic(this.activationFile, selected); return activated;
   }
 
-  async integrationProject(persona) {
-    if (!persona.integration_directory) return null;
-    const project = await this.ensure();
-    const directory = path.resolve(project.candidate, persona.integration_directory);
-    if (!inside(project.candidate, directory)) throw new Error('PERSONA_INTEGRATION_PATH_INVALID');
+  /** The writable development copy of a channel plugin's adapter: her integration_* tools work there. */
+  async integrationProject(channel) {
+    if (!channel?.integration_directory) return null;
+    const project = await this.ensure(channel.project);
+    const directory = path.resolve(project.candidate, channel.integration_directory);
+    if (!inside(project.candidate, directory)) throw new Error('CHANNEL_INTEGRATION_PATH_INVALID');
     return directory;
   }
 
@@ -112,7 +122,7 @@ export class PublicationFloor {
     const project = this.projects.get(id);
     if (!project || !/^[a-z][a-z0-9-]{0,50}$/.test(id)) throw new Error('DEVELOPMENT_PROJECT_NOT_AUTHORIZED');
     const source = path.resolve(project.root);
-    const candidate = path.join(this.config.workspace, '.runtime/work/self-development', id);
+    const candidate = path.join(this.workRoot, 'self-development', id);
     const baselineFile = path.join(this.base, 'development', id, 'baseline.json');
     const baseline = await json(baselineFile, {});
     const sourceFiles = await files(source);
@@ -222,8 +232,9 @@ export class PublicationFloor {
     const artifact = path.join(destination, packageInfo.filename), bytes = await fs.readFile(artifact);
     const addressed = path.join(destination, packageInfo.filename.replace('.tgz', '-' + hash(bytes).slice(0, 12) + '.tgz'));
     await fs.copyFile(artifact, addressed);
+    // A channel plugin's python/ is imported once by the worker, like the plugin's own JavaScript.
     const restartRequired = [...changed, ...deleted].some(name => /(^|\/)(package(?:-lock)?\.json|cordis\.patch\.yml|uv\.lock|pyproject\.toml)$/.test(name)
-      || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name));
+      || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name) || project.format === 'package' && name.startsWith('python/'));
     const selected = await this.selected();
     const value = { candidate: identity, packageRoot: prepared.packageRoot, workerPath: prepared.workerPath,
       artifact: addressed, sha256: hash(bytes), state: restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
@@ -274,6 +285,13 @@ export class PublicationFloor {
       if (name.endsWith('.js') || name.endsWith('.mjs')) {
         probe = await run(process.execPath, ['--check', file]); if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
       }
+    }
+    if (!workerPath && await exists(path.join(target, 'python'))) {
+      // A channel plugin's Python must at least parse before it can be published.
+      probe = await run(this.config.python, ['-c', 'import ast, pathlib, sys\n'
+        + 'for f in pathlib.Path(sys.argv[1]).rglob("*.py"): ast.parse(f.read_text(encoding="utf-8"), str(f))',
+        path.join(target, 'python')]);
+      if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
     }
     if (workerPath) probe = await run(this.config.python, ['-c',
       'import asuna.native_worker; from asuna.config import load; from asuna.state import Store; s=Store(load(__import__("sys").argv[1])); s.db.command("ping"); s.authorize(s.config["chat"]["scene_id"],s.config["chat"]["person_id"]); s.client.close(); print("Worker imports and existing database authorization passed; no live consumers started.")',

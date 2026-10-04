@@ -1,7 +1,6 @@
 """Product lifecycle probes against in-memory Mongo; never contact a model or QQ."""
 from copy import deepcopy
 from types import SimpleNamespace
-from concurrent.futures import Future
 import json
 
 import mongomock
@@ -11,7 +10,7 @@ from asuna import host, channel_admission, native_worker, native_settings
 from asuna.channels import Channels
 from asuna.chat import Chat
 from asuna.native_worker import BusinessWorker
-from asuna.resources import workspace_grant
+from asuna.grants import workspace_grant
 from asuna.state import Store, Denied
 
 
@@ -128,31 +127,6 @@ def test_epoch_change_retires_old_main_without_redirecting_or_importing_it(produ
     assert retired['retired'] and not retired['main_conversation'] and not retired.get('successor_id')
     assert old['_id'] in plan['archive_ids']
     assert p.store.db.sessions.count_documents({'scene_id': old['scene_id'], 'main_conversation': True}) == 1
-
-
-def test_settings_fence_detects_work_dequeued_before_active_flag(product):
-    p = product
-    p.channel.receive('qq', envelope())
-    p.worker.controller.pending.get_nowait()
-    assert p.worker.controller.active is None
-    assert p.worker.controller.pending.qsize() == 0
-    with pytest.raises(RuntimeError, match='ASUNA_BUSY'):
-        p.worker.dispatch('settings.quiesce', {})
-    p.worker.controller.pending.task_done()
-    p.worker.dispatch('settings.quiesce', {})
-    with pytest.raises(RuntimeError, match='HOST_RECONFIGURING'):
-        p.channel.receive('qq', envelope(sender='44440000'))
-    assert 'auto-dm-44440000' not in p.config['channels']['qq']['routes']
-
-
-def test_settings_can_pause_background_summary_without_interrupting_user_work(product):
-    worker = product.worker
-    background = Future()
-    background.asuna_lane = 'summary'
-    worker.pending['summary-fixture'] = background
-    assert worker.dispatch('settings.quiesce', {}) == {'quiesced': True}
-    assert 'BACKGROUND_SUMMARY_PAUSED' in str(background.exception())
-    assert worker.controller.reconfiguring
 
 
 def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(product):

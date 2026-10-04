@@ -11,10 +11,16 @@ from types import SimpleNamespace
 import mongomock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'packages/xiaoman/integrations/qq-napcat-adapter'))
+# The QQ adapter and its kind module belong to the channel package; name it explicitly.
+PACKAGE = Path(sys.argv[1] if len(sys.argv) > 1 else '').resolve()
+ADAPTER = PACKAGE / 'integration'
+if not (ADAPTER / 'qqadapter').is_dir():
+    raise SystemExit('Usage: probe_qq_admission.py <channel-package-directory, e.g. packages/napcat-qq>')
+sys.path.insert(0, str(ADAPTER))
 from qqadapter.config import Config
 from qqadapter.inbound import classify, SeenLRU
-from asuna import host, channel_admission
+from asuna import channel_kinds, host, channel_admission
+channel_kinds.load([{'python': PACKAGE / 'python', 'module': 'napcat_qq'}])
 from asuna.channels import Channels
 from asuna.config import load
 from asuna.ingress import persist_input

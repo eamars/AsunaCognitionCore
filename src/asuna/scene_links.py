@@ -6,20 +6,21 @@
 配置（写在 config/local.json 或 config/asuna-channel.local.json 顶层；config.load 原样带过，
 不新增校验器，形状不对的条目在读的时候照实丢掉）：
 
-  "context_links": {"local-dm": ["qq:3768713357:dm:673225019"]}
+  "context_links": {"local-dm": ["qq:demo-bot:dm:demo-user-1"]}
       有向边：左边的场景可以**只读**右边那些场景的历史。不做通配、不自动反向。
       通道路由里也可以写 read_scenes，语义等同于给该路由的 scene_id 挂同一条边。
 
-  "canonical_persons": {"qq:673225019": "local-user"}
+  "canonical_persons": {"qq:demo-user-1": "local-user"}
       同一个人的不同入口：键是别名（历史行里照旧写这个 person_id，不改写），值是 canonical person_id。
       归一只作用在两处——「按人过滤」把同一个人的其他入口算进来；「关系／偏好状态落在哪一份 head」
       用 canonical 那一份。别的都不动。
 
-库里那两个派生投影（scenes.readable_scenes、identities.canonical_person_id）只在宿主启动时写一次，
-为的是让人看得见联动到哪；读路径一律现算自配置，配置删掉立刻不联动，不会出现「库里还认、配置已经不认」。
+库里只留 scenes.readable_scenes 一份派生投影（宿主启动时写，让人看得见联动到哪）。「谁是同一个人」
+只读配置：删掉一条别名，那个入口立刻不再算 canonical 那个人（包括 owner 私聊），库里没有第二份可以过期的副本。
 """
 from __future__ import annotations
-import re
+
+from . import channel_kinds
 
 MAX_LINKS = 8          # 一条边最多带几个场景：写宽了直接推高 token 成本，超了照实截断
 MAX_PERSONS = 32       # 一组「同一个人」最多几个人格入口
@@ -143,31 +144,12 @@ def canonical_map(config):
     return out
 
 
-def _normalize_person(value):
-    """归一成 person_id：已带 `qq:` 这类前缀的不再拼第二次（与 history_query 同一口径）。"""
-    text = _clean(value, 60)
-    if not text:
-        return ""
-    head, sep, _rest = text.partition(":")
-    if sep and head and len(head) <= 12 and re.match(r"^[a-z][a-z0-9_]*$", head):
-        return text.lower()
-    return "qq:%s" % text.lower()
-
-
 def canonical_person_id(config, db, person_id):
-    """别名 → canonical；配置优先，其次库里那份派生投影。没配映射就返回本人 id。"""
+    """别名 → canonical，只看配置；没配映射就是本人 id。db 参数保留给调用方签名，不读。"""
     person_id = _clean(person_id, 60)
     if not person_id:
         return ""
-    mapping = canonical_map(config)
-    if person_id in mapping:
-        return mapping[person_id]
-    if not mapping:
-        return person_id                  # 没配映射就不查库：不引入新的隐式行为
-    for row in _rows(db, "identities"):
-        if _clean(row.get("person_id"), 60) == person_id:
-            return _clean(row.get("canonical_person_id"), 60) or person_id
-    return person_id
+    return canonical_map(config).get(person_id, person_id)
 
 
 def person_classes(config, db):
@@ -175,13 +157,6 @@ def person_classes(config, db):
     classes = {}
     for alias, canonical in canonical_map(config).items():
         classes.setdefault(canonical, set()).update({alias, canonical})
-    mapping = canonical_map(config)
-    if mapping:                           # 库里的投影只在配置还认这条边时才参与
-        for row in _rows(db, "identities"):
-            person = _clean(row.get("person_id"), 60)
-            canonical = _clean(row.get("canonical_person_id"), 60)
-            if person and canonical in classes:
-                classes[canonical].add(person)
     out = {}
     for members in classes.values():
         members = sorted(members)[:MAX_PERSONS]
@@ -195,7 +170,7 @@ def extra_person_values(config, db, person):
     text = _clean(person, 60).lower()
     if not text:
         return []
-    wanted = {text, _normalize_person(text)}
+    wanted = {text, *channel_kinds.person_ids(text)}
     out = []
     for members in person_classes(config, db).values():
         if wanted & {member.lower() for member in members}:
@@ -246,38 +221,6 @@ def _canonical_home_scene(config, db, canonical, own_scene):
     if chat in candidates:
         return chat
     return sorted(candidates)[0] if candidates else ""
-
-
-def sync_identity_docs(store, config):
-    """把 canonical 映射写进 identities（只加 canonical_person_id／alias_of 两个派生字段）。
-
-    历史消息行不在这里动：author、platform、身份块原样留着，归一只在查询与状态落点上生效。
-    """
-    mapping = canonical_map(config)
-    out = {"updated": [], "classes": {}}
-    if not mapping:
-        return out
-    column = getattr(getattr(store, "db", None), "identities", None)
-    if column is None:
-        return {**out, "why": "no_identities_collection"}
-    for row in _rows(store.db, "identities"):
-        person = _clean(row.get("person_id"), 60)
-        canonical = canonical_person_id(config, store.db, person)
-        if not canonical:
-            continue
-        wanted = {"canonical_person_id": canonical}
-        if person in mapping:
-            wanted["alias_of"] = mapping[person]
-        if all(row.get(key) == value for key, value in wanted.items()):
-            continue
-        try:
-            store.put("identities", {**row, **wanted}, expected=row.get("revision"),
-                      stream="scene-links")
-            out["updated"].append(person)
-        except Exception:
-            continue
-    out["classes"] = person_classes(config, store.db)
-    return out
 
 
 # ── 归并用：一条消息行的有效时间 ────────────────────────────────────

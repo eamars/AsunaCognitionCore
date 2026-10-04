@@ -5,13 +5,14 @@ from .config import ROOT
 
 def skills_directory(config, scene_id, person_id):
     chat = config.get('chat', {})
-    if config.get('task_mode') != 'workspace' or not chat.get('skills_dir'):
+    if not chat.get('skills_dir'):
         return None
     if (scene_id, person_id) != (chat.get('scene_id'), chat.get('person_id')):
         return None
     if config.get('_skill_workspace'):
         path = Path(config['_skill_workspace']).resolve()
-        if not path.is_relative_to((ROOT / '.runtime/work/self-development').resolve()):
+        # Any profile's floor keeps candidates in a self-development folder under .runtime.
+        if not (path.is_relative_to((ROOT / '.runtime').resolve()) and 'self-development' in path.parts):
             raise PermissionError('SKILL_PROJECT_OUTSIDE_ALLOWLIST')
         path.mkdir(parents=True, exist_ok=True)
         return path

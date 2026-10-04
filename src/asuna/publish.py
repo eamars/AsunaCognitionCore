@@ -10,6 +10,20 @@ class PublishService:
     def __init__(self, store: Store, *, idempotent=True, crash=lambda point: None):
         self.store,self.idempotent,self.crash = store,idempotent,crash
 
+    def cancel_after(self, failed: dict):
+        """A failed or unknown segment cancels every later segment of the same SPEAK (ADR-009 §11.1)."""
+        index = failed.get('segment_index')
+        if index is None:
+            return 0
+        cancelled = 0
+        for row in self.store.db.messages.find({'episode_id': failed['episode_id'], 'phase': 'SPEAK',
+                                                'segment_index': {'$gt': index},
+                                                'delivery_state': {'$in': ['READY', 'QUEUED_EXTERNAL']}}):
+            self.store.put('messages', {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
+                           expected=row['revision'], stream=row['episode_id'])
+            cancelled += 1
+        return cancelled
+
     def publish(self, message_id: str):
         with database_effects_lock(self.store.name):return self._publish(message_id)
 
@@ -18,7 +32,7 @@ class PublishService:
         msg=db.messages.find_one({'_id':message_id})
         if not msg or msg.get('author')!=character_id(self.store.config) or msg.get('phase')!='SPEAK':
             raise Denied('ONLY_CHARACTER_SPEAK_CAN_PUBLISH')
-        if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED'):
+        if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED','CANCELLED_AFTER_FAILURE'):
             return msg
         ep=db.episodes.find_one({'_id':msg['episode_id']})
         scene=db.scenes.find_one({'_id':msg['scene_id']})

@@ -30,7 +30,7 @@ def probe():
                  'workspace': str(ROOT / '.runtime/channels' / run)}}}}
     store = Store(config, 'asuna_v2_test_host_' + run)
     store.migrate()
-    store.seed()  # Only the isolated test database; never the configured live database.
+    store.seed(ROOT/'tests/fixtures/world.json')  # Only the isolated test database; never the configured live database.
     prepare_channels(store)
     evidence = Evidence(ROOT / 'reports' / ('host-probe-' + run))
     lane = FakeLane(store, [LaneResult('REPLAY_PRIVATE'), LaneResult(json.dumps({

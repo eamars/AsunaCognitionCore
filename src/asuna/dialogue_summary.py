@@ -14,9 +14,12 @@ import threading
 import time
 
 from . import summary_attribution, summary_trigger
+from .ingress import NOT_CORE_NOTICE
+from .people import People
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
+
 
 
 class DialogueSummarizer:
@@ -26,7 +29,7 @@ class DialogueSummarizer:
     RETRY_BASE_SECONDS = 30.0    # 失败退避：错误处理，不是触发条件
     RETRY_CAP_SECONDS = 900.0
     SYSTEM = ('你是当前角色对话记录的后台整理步骤，只整理提供的当前场景原文（私聊或已授权群）。'
-              '区分每个人说的话、角色已经实际送达的话和各自的看法；每条转述都用给定的 author '
+              '区分每个人说的话、角色已经实际送达的话和各自的看法；每条转述都用给定的 speaker_label '
               '标明是谁说的，不要把一个人的偏好或决定写成另一个人的，也不要把群里的旁听当成谁'
               '对谁说的。这一批里有人更正自己或更正别人时，写清谁更正了什么、更正成什么，被推翻'
               '的旧说法只当历史保留。遇到来源节选不全或主体不明时明确保留不确定性。只输出简短'
@@ -59,6 +62,7 @@ class DialogueSummarizer:
         query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
                  'scene_seq': {'$gt': scene['summary_start_seq']},
                  'summary_batch_id': {'$exists': False},
+                 **NOT_CORE_NOTICE,
                  '$or': [{'direction': 'inbound'},
                          {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
         rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
@@ -79,21 +83,17 @@ class DialogueSummarizer:
             rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
         return rows
 
-    def _labels(self, rows):
-        """给多说话人的批次带上显示名：模型按名字顺句子，程序仍按 person_id 认归属。"""
-        if len({row.get('author') for row in rows}) < 2:
-            return {}
-        names = {}
+    def _labels(self, people, scene, rows):
+        """Each author's label (people.py), the same one her conversation shows; attribution stays keyed by person_id.
+
+        Labels never collide, so two people with one name stay two people in the summary too.
+        """
+        labels = {}
         for row in rows:
             author = row.get('author')
-            if not author or author in names:
-                continue
-            identity = self.store.db.identities.find_one({'_id': author}, {'display_name': 1}) or {}
-            names[author] = identity.get('display_name') or author
-        # 同名不合并人物：显示名撞车时把 person_id 一起给模型，否则两个人在转述里会长成一个。
-        shared = {name for name in names.values() if list(names.values()).count(name) > 1}
-        return {author: (name + '（' + author + '）' if name in shared else name)
-                for author, name in names.items()}
+            if author and author not in labels:
+                labels[author] = people.speaker(scene, author, row)
+        return labels
 
     def _hold(self, scene_id, decision):
         note = (decision['pending_rows'], decision.get('hold'), decision.get('pending_age') is None)
@@ -144,10 +144,12 @@ class DialogueSummarizer:
 
     def _summarize(self, scene, rows, decision):
         scene_id = scene['_id']
-        labels = self._labels(rows)
-        window = [{'index': index + 1, 'author': row['author'],
+        people = People(self.store)
+        labels = self._labels(people, scene, rows)
+        account = scene.get('channel_account_id')
+        window = [{'index': index + 1,
                    'speaker_label': labels.get(row['author'], row['author']),
-                   'direction': row['direction'], 'text': row['text'][:self.ROW_CHAR_CAP],
+                   'direction': row['direction'], 'text': people.mentions(scene, row['text'], account)[:self.ROW_CHAR_CAP],
                    'excerpt_truncated': len(row['text']) > self.ROW_CHAR_CAP}
                   for index, row in enumerate(rows)]
         source_ids = [row['_id'] for row in rows]
@@ -156,8 +158,13 @@ class DialogueSummarizer:
         attribution = summary_attribution.attribute(self.store, scene, rows)
         if not saved:
             prompt = ('请总结这一小段已确认交流；窗口与来源由程序保存，不需复制 ID。'
+                      '称呼说话人只用 speaker_label（原样保留方括号里的 #编号：名字会重复，编号不会），不要写其他 ID。'
                       'attribution 是程序从这些行算出来的归属事实，与它冲突就以它为准。\n'
-                      + json.dumps({'window': window, 'attribution': attribution}, ensure_ascii=False))
+                      + json.dumps({'window': window, 'attribution': {
+                          'who': [labels.get(author, author) for author in attribution['participants']],
+                          'multi_speaker': attribution['multi_speaker'],
+                          'corrections': people.corrections(scene, attribution['corrections'])}},
+                          ensure_ascii=False))
             operation = key
             receipt = self.store.db.lane_receipts.find_one({'_id': operation})
             attempt = 0
@@ -165,15 +172,29 @@ class DialogueSummarizer:
             # known not to contain a usable summary. DSH replays DONE operations,
             # so use a fresh operation only for that explicit terminal result.
             # Unknown delivery still reuses the original idempotency key.
-            while receipt and not (
-                    receipt.get('result', {}).get('finish_reason') == 'stop'
-                    and str(receipt.get('result', {}).get('content') or '').strip()):
+            def usable(result):
+                text = result.get('content')
+                return result.get('finish_reason') == 'stop' and (
+                    str(text).strip() if text is not None else result.get('bytes') and not result.get('blank'))
+            while receipt and not usable(receipt.get('result', {})):
                 attempt += 1
                 operation = key + ':retry-' + str(attempt)
                 receipt = self.store.db.lane_receipts.find_one({'_id': operation})
-            result = self.lane.generate('dialogue-summary:' + scene_id + ':' + str(scene['policy_epoch']),
-                                        operation, 'dialogue-summary', prompt, self.SYSTEM,
-                                        scope_key=scene['scope_key'], policy_epoch=scene['policy_epoch'])
+            from . import answers
+
+            def generate(attempt, note):
+                return self.lane.generate('dialogue-summary:' + scene_id + ':' + str(scene['policy_epoch']),
+                                          operation if not attempt else operation + ':fix-' + str(attempt),
+                                          'dialogue-summary', note or prompt, self.SYSTEM,
+                                          scope_key=scene['scope_key'], policy_epoch=scene['policy_epoch'])
+
+            def rejected(attempt, issue, value):
+                self.evidence.record('summary.rejected', {'scene_id': scene_id, 'summary_id': key,
+                                     'attempt': attempt, 'problem': issue, 'request_refs': value.request_refs})
+            try:
+                result, _ = answers.ask(generate, '这段对话的摘要正文（格式见上面的说明）', rejected=rejected)
+            except answers.Rejected as exc:
+                raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + exc.problem) from None
             if result.finish_reason != 'stop' or not result.content.strip():
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)
             saved = self.store.put('memory_units', {

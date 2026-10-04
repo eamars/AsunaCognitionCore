@@ -13,6 +13,7 @@ from .evidence import canonical, sha
 from .config import redact_text, character_id
 from .queue import database_effects_lock
 from .state import Denied, now
+from .people import People
 
 
 def route_for_scene(config, channel_id, scene_id):
@@ -30,6 +31,34 @@ def route_members(route):
     if route['target']['type'] == 'group':
         return route.get('members', {})
     raise Denied('CHANNEL_TARGET_TYPE_DENIED')
+
+
+def kept_raw(event, raw):
+    """What of the adapter's raw event the host keeps: the sender profile verified against this
+    authenticated sender and group, the normalized media block, and the group's name. The platform
+    event itself (and anything else an adapter puts there) is never stored."""
+    from .peer_context import snapshot_event
+    from .vision import MEDIA_KEY
+    raw = raw if isinstance(raw, dict) else {}
+    kept = {}
+    peer = snapshot_event({**event, 'raw': raw})
+    if peer:
+        kept['asuna_peer'] = peer
+    if isinstance(raw.get(MEDIA_KEY), dict):
+        kept[MEDIA_KEY] = raw[MEDIA_KEY]
+    if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
+        kept['group_name'] = ' '.join(raw['group_name'].split())[:60]
+    own = raw.get('asuna_self')
+    if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
+            and own.get('role') in ('owner', 'admin', 'member'):
+        kept['asuna_self'] = {'role': own['role']}            # her own role in this group (group_admin.py)
+    return kept
+
+
+def called_by_name(store, text):
+    """Whether a message says one of her names (her display name and the persona's other names, 2+ characters)."""
+    text = ' '.join(str(text or '').split())
+    return any(len(name) >= 2 and name in text for name in People(store).self_names)
 
 
 def group_context(store, route, body, event_id):
@@ -63,6 +92,9 @@ def group_context(store, route, body, event_id):
         elif previous.get('topic_id'):
             # P5：旁听来的那条线也认得出属于哪个话题，只是不因此唤醒她。
             topic, topic_via = previous['topic_id'], 'reply_chain'
+    if not reason and called_by_name(store, body.get('text')):
+        # Her name without an @: the relevance gate decides whether that was meant for her (attend.py).
+        reason = 'name_called'
     if topic is None:
         topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
     return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,
@@ -129,8 +161,8 @@ class Channels:
         event = {'event_id': event_id, 'scene_id': route['scene_id'], 'person_id': member['person_id'],
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
-                             'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']},
-                 'raw': body.get('raw')}
+                             'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
+        event['raw'] = kept_raw(event, body.get('raw'))
         if route['target']['type'] == 'group':
             event['group_context'] = group_context(self.store, route, body, event_id)
         if 'occurred_at' in body:
@@ -162,24 +194,40 @@ class Channels:
                 raise Denied('PUBLICATION_INTENT_STALE')
 
     def claim(self, channel_id, wait_seconds=0):
+        from . import group_admin
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
             if self.controller.reconfiguring:
                 return {'items': []}
             with database_effects_lock(self.store.name):
+                action = group_admin.claim(self.store, channel_id)       # an admin action goes before her words
+                if action:
+                    return {'items': [action]}
                 row = self.store.db.messages.find_one({'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}, sort=[('scene_seq', 1)])
+                # A paced segment holds the line until its time and until earlier segments are delivered,
+                # so later messages never overtake it (ADR-009 §11.1).
+                if row and row.get('not_before') and row['not_before'] > now():
+                    row = None
+                if row and row.get('segment_index') and self.store.db.messages.find_one({'episode_id': row['episode_id'],
+                        'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']}, 'delivery_state': {'$ne': 'DELIVERED'}}):
+                    row = None
                 if row:
                     try:
                         self._valid_publication(row, channel_id)
                     except Denied as exc:
-                        self.store.put('messages', {**row, 'delivery_state': 'FAILED', 'failure': str(exc)},
-                                       expected=row['revision'], stream=row['episode_id'])
+                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED', 'failure': str(exc)},
+                                                expected=row['revision'], stream=row['episode_id'])
+                        from .publish import PublishService
+                        PublishService(self.store).cancel_after(failed)
                         continue
                     attempt = uuid.uuid4().hex
                     self.store.put('messages', {**row, 'delivery_state': 'SENDING',
                                    'attempt_id': attempt, 'claimed_at': now()}, expected=row['revision'], stream=row['episode_id'])
+                    # Her @[label] becomes the adapter's @qq:<account> here, at the edge (people.py).
+                    scene = self.store.db.scenes.find_one({'_id': row['scene_id']})
+                    text = People(self.store).outbound(scene, row['text']) if scene else row['text']
                     return {'items': [{'publication_id': row['_id'], 'attempt_id': attempt,
-                                       'target': row['target'], 'text': row['text'],
+                                       'target': row['target'], 'text': text,
                                        'reply_to': row['platform_reply_to']}]}
             if time.monotonic() >= deadline:
                 break
@@ -194,6 +242,10 @@ class Channels:
             raise ValueError('INVALID_PLATFORM_RECEIPT')
         if status == 'platform_accepted' and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip()):
             raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
+        if publication_id.startswith('ga-'):
+            from . import group_admin
+            with database_effects_lock(self.store.name):
+                return group_admin.receipt(self.store, channel_id, publication_id, body)
         with database_effects_lock(self.store.name):
             row = self.store.db.messages.find_one({'_id': publication_id})
             # An already claimed send may have happened before revocation. Preserve
@@ -211,13 +263,20 @@ class Channels:
                            'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
                            'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},
                            expected=row['revision'], stream=row['episode_id'])
+            if state != 'DELIVERED':
+                from .publish import PublishService
+                PublishService(self.store).cancel_after({**row, 'delivery_state': state})
             return {'status': state}
 
     def recover_sending(self):
         # A lost HTTP response may hide an actual send. Never reclaim automatically.
+        from .publish import PublishService
+        from . import group_admin
+        group_admin.recover_sending(self.store)
         for row in self.store.db.messages.find({'channel_id': {'$exists': True}, 'delivery_state': 'SENDING'}):
-            self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
-                           expected=row['revision'], stream=row['episode_id'])
+            unknown = self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
+                                     expected=row['revision'], stream=row['episode_id'])
+            PublishService(self.store).cancel_after(unknown)
 
 
 class ChannelServer:

@@ -9,7 +9,8 @@ class BlobStore:
     def __init__(self,store):self.store=store;self.bucket=GridFSBucket(store.db,bucket_name='artifact_blobs')
 
     def put(self,data:bytes,scope:str,kind:str,*,source_ids=()):
-        if scope not in ('operator','global-safe') and not self.store.db.scenes.find_one({'scope_key':scope}):raise Denied('ARTIFACT_SCOPE_UNKNOWN')
+        # owner-private:<persona> holds source snapshots and job reports (ADR-009 §2.2); reads stay operator-only.
+        if scope not in ('operator','global-safe') and not scope.startswith('owner-private:') and not self.store.db.scenes.find_one({'scope_key':scope}):raise Denied('ARTIFACT_SCOPE_UNKNOWN')
         key='blob-'+uuid.uuid4().hex;digest=sha(data)
         self.store.audit(key,'artifact.upload_intent',{'sha256':digest,'size':len(data),'kind':kind},scope)
         blob_id=self.bucket.upload_from_stream(key,data,metadata={'scope_key':scope,'sha256':digest,'kind':kind,'source_ids':list(source_ids)})
@@ -21,6 +22,12 @@ class BlobStore:
         except BaseException:
             self.bucket.delete(blob_id);raise
         return {'artifact_id':key,'sha256':digest,'size':len(data),'storage':'gridfs'}
+
+    def put_once(self,data:bytes,scope:str,kind:str,*,source_ids=()):
+        """Content-addressed: the same bytes in the same scope are stored once."""
+        existing=self.store.db.artifacts.find_one({'sha256':sha(data),'scope_key':scope,'kind':kind,'state':'DONE','storage':'gridfs'})
+        if existing:return {'artifact_id':existing['_id'],'sha256':existing['sha256'],'size':existing['size'],'storage':'gridfs','deduplicated':True}
+        return self.put(data,scope,kind,source_ids=source_ids)
 
     def get(self,key,scope,*,operator=False):
         if not operator:raise Denied('ARTIFACT_OPERATOR_VIEW_REQUIRED')

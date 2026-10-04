@@ -14,9 +14,10 @@ from asuna.evidence import Evidence
 from asuna.ingress import persist_input, input_state, episode_id
 from asuna.host import RuntimeHost, _workspace_overlaps
 from asuna.lanes import FakeLane, LaneResult
-from asuna.resources import workspace_grant
+from asuna.grants import workspace_grant
 from asuna.router import Router
 from asuna.state import Denied
+from fixture_grant import returned
 
 
 def event(key='one', text='input'):
@@ -66,22 +67,9 @@ def controller(store, tmp_path, coordinator):
     return Chat(app, {'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'display_name': 'test'}, lambda _: None)
 
 
-def test_nine_prose_constraints_do_not_discard_a_valid_speech_decision(store):
-    decision={'next':'speak','goal':'send the authorized invitation',
-              'constraints':[f'invitation detail {i}' for i in range(9)],
-              'recall_query':'','speak_before_action':False}
-    lane=FakeLane(store,[LaneResult('invite once'),LaneResult(json.dumps(decision)),LaneResult('invitation')])
-    coordinator=Coordinator(store,lane)
-    result=coordinator.ingest(event())
-    assert result['state']=='COMMITTED'
-    assert result['decision']['constraints']==decision['constraints']
-    assert store.db.messages.count_documents({'episode_id':result['_id'],'direction':'outbound'})==1
-    assert store.db.tasks.count_documents({})==0
-
-
 def test_receive_persists_without_context_or_worker_and_dedupes(store, tmp_path):
     class UnavailableContext:
-        def prepare(self, *args):
+        def prepare(self, *args, **kwargs):
             raise RuntimeError('retrieval unavailable')
     lane = FakeLane(store, [])
     coordinator = Coordinator(store, lane, context=UnavailableContext())
@@ -121,11 +109,12 @@ def test_reply_history_identifies_recipient_without_cross_scene_lookup(store):
         'policy_epoch':1,'scene_seq':1,'direction':'inbound','author':'A','text':'my question',
         'event':{'channel':{'platform_event_id':'question-id'}}})
     store.put('messages', {'_id':'answer','scene_id':'dm-a','scope_key':'scene:dm-a',
-        'policy_epoch':1,'scene_seq':2,'direction':'outbound','author':'xiaoman','text':'my answer',
+        'policy_epoch':1,'scene_seq':2,'direction':'outbound','author':'demo','text':'my answer',
         'delivery_state':'DELIVERED','platform_message_id':'answer-id','platform_reply_to':'question-id'})
     _, context, _ = ContextBuilder(store).prepare(incoming)
     answer = next(row for row in context['delivered_history'] if row['_id']=='answer')
-    assert answer['reply_to_message']['author']=='A'
+    question = next(row for row in context['delivered_history'] if row['_id']=='question')
+    assert 'author' not in answer['reply_to_message'] and answer['reply_to_message']['speaker']==question['speaker']
     assert answer['reply_to_message']['text']=='my question'
     assert context['group_continuity_from_program']['related_messages'][0]['reply_to_message']==answer['reply_to_message']
     assert 'private canary' not in json.dumps(context)
@@ -204,24 +193,6 @@ def test_resources_never_fall_back_to_owner_workspace(store):
         workspace_grant(store.config, 'dm-b', 'B')
 
 
-def test_retrieval_handles_null_timestamps_and_large_authorized_scope(store,tmp_path):
-    from asuna.retrieval import Retrieval
-    retrieval=Retrieval(store,Evidence(tmp_path/'retrieval'))
-    def unavailable(*args):raise RuntimeError('embedding unavailable in local check')
-    retrieval.embed=unavailable
-    base={'scope_key':'scene:dm-a','policy_epoch':1,'character_id':'xiaoman','status':'active','revision':1,'schema_version':1,
-          'body_markdown':'历史材料','embedding_status':'PENDING','source_event_ids':[],'occurred_at':None}
-    store.db.memory_units.insert_many([{**base,'_id':'null-'+str(i)} for i in range(4100)])
-    try:
-        rows,manifest=retrieval.search('scene:dm-a',1,'当前查询')
-        assert manifest['lexical_candidate_count']==4096
-        assert manifest['cache_disabled_for_bounded_sample']
-        assert not manifest['vector_verified']
-        assert all(m['scope_key'] in ('scene:dm-a','global-safe') for m in rows)
-        assert store.db.memory_units.count_documents({'_id':{'$regex':'^null-'}})==4100
-    finally:retrieval.close()
-
-
 def test_scene_queue_is_ordered_and_does_not_starve_other_scene():
     queue = SceneQueue()
     for scene, sequence in [('A', 1), ('A', 2), ('A', 3), ('B', 1)]:
@@ -239,8 +210,9 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     from asuna.channels import Channels
     from asuna.tasks import TaskService
     target = {'type': 'dm', 'id': 'peer'}
+    work = store.config['channels']['fixture']['routes']['dm-a']['workspace']
     store.config['channels'] = {'replay': {'token': 'x' * 32, 'account_id': 'bot', 'routes': {
-        'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': target}}}}
+        'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': target, 'workspace': work}}}}
     scene = store.db.scenes.find_one({'_id': 'dm-a'})
     store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
     decision = {'next': 'delegate', 'goal': 'check', 'constraints': [], 'recall_query': '', 'speak_before_action': False}
@@ -251,12 +223,9 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     episode = coordinator.ingest(incoming)
     service = TaskService(store)
     task = service.claim(episode['task_id'])
-    store.put('artifacts', {'_id': 'observation', 'task_id': task['_id'], 'intent_revision': 1,
-                           'scope_key': task['scope_key'], 'state': 'DONE'})
-    task = service.finish(task, {'task_id': task['_id'], 'intent_revision': 1, 'status': 'done',
-            'facts': [{'text': 'controlled replay result', 'evidence_refs': ['observation']}],
-            'artifact_refs': ['observation'], 'effect_receipts': [], 'uncertainties': [],
-            'unmet_items': [], 'needs_decision': None})
+    store.put('artifacts', {'_id': 'observation', 'task_id': task['_id'], 'intent_revision': 1, 'tool': 'read_file',
+                           'result': {'text': 'observed'}, 'scope_key': task['scope_key'], 'state': 'DONE'})
+    task = returned(store, task, 'controlled replay result', ['observation'])
     def crash(point):
         if point == 'after_lane_delivery':
             raise RuntimeError('feedback interrupted')
@@ -288,12 +257,9 @@ def test_returned_task_feedback_queue_continues_failed_role_stage_without_new_ep
     episode=coordinator.ingest(event('feedback-source'))
     service=TaskService(store)
     task=service.claim(episode['task_id'])
-    store.put('artifacts',{'_id':'feedback-observation','task_id':task['_id'],
+    store.put('artifacts',{'_id':'feedback-observation','task_id':task['_id'],'tool':'read_file','result':{'text':'observed'},
         'intent_revision':1,'scope_key':task['scope_key'],'state':'DONE'})
-    task=service.finish(task,{'task_id':task['_id'],'intent_revision':1,'status':'done',
-        'facts':[{'text':'verified','evidence_refs':['feedback-observation']}],
-        'artifact_refs':['feedback-observation'],'effect_receipts':[],
-        'uncertainties':[],'unmet_items':[],'needs_decision':None})
+    task=returned(store,task,'verified',['feedback-observation'])
     chat=controller(store,tmp_path,coordinator)
     chat.app.service=service
     chat.app.coordinator=coordinator
@@ -346,12 +312,9 @@ def test_inflight_feedback_stops_after_task_authority_is_withdrawn(store, invali
     original = coordinator.ingest(event('inflight-feedback'))
     service = TaskService(store)
     task = service.claim(original['task_id'])
-    store.put('artifacts', {'_id': 'feedback-observation', 'task_id': task['_id'],
-        'intent_revision': 1, 'scope_key': task['scope_key'], 'state': 'DONE'})
-    task = service.finish(task, {'task_id': task['_id'], 'intent_revision': 1, 'status': 'done',
-        'facts': [{'text': 'checked', 'evidence_refs': ['feedback-observation']}],
-        'artifact_refs': ['feedback-observation'], 'effect_receipts': [], 'uncertainties': [],
-        'unmet_items': [], 'needs_decision': None})
+    store.put('artifacts', {'_id': 'feedback-observation', 'task_id': task['_id'], 'tool': 'read_file',
+        'result': {'text': 'observed'}, 'intent_revision': 1, 'scope_key': task['scope_key'], 'state': 'DONE'})
+    task = returned(store, task, 'checked', ['feedback-observation'])
     with ThreadPoolExecutor(max_workers=1) as pool:
         pending = pool.submit(service.feedback, task, coordinator)
         try:

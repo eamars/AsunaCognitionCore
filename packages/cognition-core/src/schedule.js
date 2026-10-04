@@ -86,6 +86,19 @@ export class NativeSchedules {
         await this.ctx.sessions.flush(agent.session);
         return result;
       }
+      if (path === '/schedule/update') {
+        // ADR-009 D-5: change timing in place (native schedule_update), logged like create/delete
+        // so reconciliation never mistakes it for a delete followed by a create.
+        const expected = (await this.ctx.schedule.catalog()).find(row => row.id === payload.id && row.sessionId === sessionId);
+        if (!expected) return { id: payload.id, updated: false, code: 'schedule_not_found' };
+        const result = await this.ctx.schedule.update({ sessionId, id: payload.id, expected, change: payload.change });
+        if (result.updated && result.record) {
+          agent.session.append('asuna/schedule', { operation: 'update', schedule: result.record });
+          await this.ctx.sessions.flush(agent.session);
+          return result.record;
+        }
+        return result;
+      }
       if (path === '/schedule/delete') {
         const result = await this.ctx.schedule.delete({ sessionId, id: payload.id });
         if (result.deleted) agent.session.append('asuna/schedule', { operation: 'delete', id: payload.id });

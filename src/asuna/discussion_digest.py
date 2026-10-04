@@ -39,7 +39,7 @@ try:                                  # 宿主内：按包加载
                                 query_history, _parse as _parse_stamp, _text as _norm,
                                 _scene_parts, _row_allowed, _outbound_time, _sink_times,
                                 _stamp, _hit as _history_hit, person_clause,
-                                scene_id_clause, _link_fields)
+                                scene_id_clause, _link_fields, bind_people)
 except Exception:                     # 同目录平铺加载（离线自检）也认
     try:
         from history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT,
@@ -47,7 +47,7 @@ except Exception:                     # 同目录平铺加载（离线自检）�
                                    TIME_SOURCE_SINK, query_history, _parse as _parse_stamp,
                                    _text as _norm, _scene_parts, _row_allowed, _outbound_time,
                                    _sink_times, _stamp, _hit as _history_hit, person_clause,
-                                   scene_id_clause, _link_fields)
+                                   scene_id_clause, _link_fields, bind_people)
     except Exception as exc:
         raise ImportError("discussion_digest needs the P1-b history_query module: %s" % exc)
 
@@ -220,7 +220,7 @@ def _topic_match(doc, topic, case_sensitive):
     return (topic in text) if case_sensitive else (topic.lower() in text.lower())
 
 
-def _person_match(doc, person, aliases=()):
+def _person_match(doc, person, aliases=(), authors=None):
     """这条发言是不是这个人说的：直接复用 P1-b 的 person_clause，不另写一份「谁说的」口径。
 
     aliases 是配置里认定「同一个人」的其他 person_id：在 local-dm 里整理时，他从 QQ 那个入口
@@ -228,6 +228,8 @@ def _person_match(doc, person, aliases=()):
     """
     if not person:
         return False
+    if authors is not None:
+        return doc.get("author") in authors           # resolved by label (people.py), not by name
     for sub in (person_clause(person, aliases) or {}).get("$or") or []:
         for key, value in sub.items():
             found, got = _lookup_doc(doc, key)
@@ -240,13 +242,13 @@ def _person_match(doc, person, aliases=()):
     return False
 
 
-def _seed_eligible(doc, topic, person, case_sensitive, aliases=()):
+def _seed_eligible(doc, topic, person, case_sensitive, aliases=(), authors=None):
     """这一行本身就会被字面筛选读到吗？会的话它总会在某一页作为命中项出现，不该再当链内后续送一遍。
 
     这是跨页不重复的关键：一行要么作为命中项被它所在那一页送（keyset 游标保证不重不漏），
     要么作为链内后续被链到它的那一页送，两边不会都送。
     """
-    return _topic_match(doc, topic, case_sensitive) or _person_match(doc, person, aliases)
+    return _topic_match(doc, topic, case_sensitive) or _person_match(doc, person, aliases, authors)
 
 
 def _thread_hit(doc, parts, sink_times):
@@ -346,7 +348,7 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
                 continue
             seen.add(mid)
             if _seed_eligible(doc, topic, person, case_sensitive,
-                              parts.get("person_aliases") or ()):
+                              parts.get("person_aliases") or (), parts.get("person_authors")):
                 stats["skipped_seed_eligible"] += 1
                 continue                       # 它由自己那一页作为命中项送，不在这里重复
             if mid in delivered:
@@ -361,7 +363,7 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
                 continue
             hit["thread"] = True
             hit["person_match"] = not person or _person_match(
-                doc, person, parts.get("person_aliases") or ())
+                doc, person, parts.get("person_aliases") or (), parts.get("person_authors"))
             docs[mid], hits[mid] = doc, hit
             if len(docs) >= MAX_THREAD_ROWS:
                 stats["truncated"] = True
@@ -407,6 +409,9 @@ def _peer_of(doc):
 # ── 整理主干 ───────────────────────────────────────────────────
 def _row(hit, doc):
     peer_id, display, role, verified, identity = _peer_of(doc)
+    speaker = _norm(hit.get("speaker"), 200)
+    if speaker and speaker != _norm(hit.get("author"), 40):
+        display = speaker          # the fixed label, when people.py named the writer (otherwise speaker is the bare author id)
     author = _norm(hit.get("author"), 40)
     body = hit.get("text") if isinstance(hit.get("text"), str) else ""
     seq = hit.get("scene_seq")
@@ -928,6 +933,12 @@ class DiscussionDigestService:
         inner, stored, carried, state = _unwrap_cursor(cursor or None)
         if cursor and stored != mark:
             raise ValueError("DIGEST_CURSOR_FILTER_MISMATCH")
+        notice = bind_people(self.store, scene, scene_doc, person)
+        if notice:
+            return {"degraded": False, "why": "person_unclear", "text": "[群讨论整理] " + notice,
+                    "coverage": {}, "participants": [], "corrections": [], "opinions": [],
+                    "open_items": [], "resolved": [], "replies": [], "notes": [],
+                    "source_ids": [], "more": False, "next_cursor": None}
         if state.get("literal_done"):
             # 上一页已把字面那一支读完，游标里只剩讨论流待走环节：这一页不重跑字面查询（重跑会
             # 从第一页把命中项再送一遍），时间窗沿用发放游标那一页，其余计数照实为空。
@@ -1020,7 +1031,21 @@ class DiscussionDigestService:
                                 for key in ("ok", "why", "candidates")},
                    "dropped": result.get("dropped") or {}, "fallback": result.get("fallback"),
                    "readback": _readback(topic, digest)}
+        if scene_doc.get("labeler"):
+            payload = _without_ids(payload)
         return _fit_budget(payload)
+
+
+ID_FIELDS = ("person_id", "key", "canonical", "aliases", "author")
+
+
+def _without_ids(value):
+    """What the model reads names people by label only: account and person ids stay in program data."""
+    if isinstance(value, dict):
+        return {k: _without_ids(v) for k, v in value.items() if k not in ID_FIELDS}
+    if isinstance(value, list):
+        return [_without_ids(item) for item in value]
+    return value
 
 
 def _readback(topic, digest):
@@ -1035,7 +1060,9 @@ def _readback(topic, digest):
                     + digest["resolved"]), None)
     example = {}
     if row:
-        example = {"person": row["person_id"] or row["who"], "since": _shift(row["at"], -2),
+        number = re.search(r"#\d+", row.get("who") or "")
+        example = {"person": number.group(0) if number else (row["person_id"] or row["who"]),
+                   "since": _shift(row["at"], -2),
                    "until": _shift(row["at"], 2)}
         if topic and topic.lower() in (row.get("text") or "").lower():
             example["query"] = topic

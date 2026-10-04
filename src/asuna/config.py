@@ -6,8 +6,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(os.environ.get('ASUNA_DATA_ROOT', Path(__file__).resolve().parents[2])).resolve()
+# Behavior files (core prompts, runtime schemas) ship inside the package and are
+# published with it; the workspace never supplies or overrides them.
 RESOURCES = Path(__file__).with_name('resources')
-BUNDLE = RESOURCES if RESOURCES.is_dir() else ROOT / 'docs/development_plans/ADR-001-asuna_v2_v1_handoff'
 
 
 def character_id(config):
@@ -16,7 +17,11 @@ def character_id(config):
 
 
 def prompt_path(config: dict, name: str) -> Path:
-    return Path(config.get('prompts_dir', BUNDLE / 'prompts')) / name
+    return RESOURCES / 'prompts' / name
+
+
+def schema(name: str) -> dict:
+    return json.loads((RESOURCES / 'schemas' / name).read_text(encoding='utf-8'))
 
 
 def redact_text(text: str, config: dict) -> str:
@@ -50,11 +55,17 @@ def load(path: str | Path = 'config/local.json') -> dict:
     for lane in ('character', 'executor'):
         value[lane] = validate(value[lane])
     value['_model_settings_path'] = str(override)
-    integration_path = Path(path).parent / 'integration.local.json'
-    if integration_path.exists():
+    # Channel and integration grants live in sibling files of the owner's main
+    # config only. Any other profile (e.g. the demo) names them explicitly, so
+    # a second config in the same folder never inherits real QQ routes.
+    def sibling(key, legacy_name):
+        name = value.get(key) or (legacy_name if Path(path).name == 'local.json' else None)
+        return Path(path).parent / name if name else None
+    integration_path = sibling('integration_config', 'integration.local.json')
+    if integration_path and integration_path.exists():
         value['integration'] = json.loads(integration_path.read_text(encoding='utf-8'))
-    channel_path = Path(path).parent / 'asuna-channel.local.json'
-    if channel_path.exists():
+    channel_path = sibling('channel_config', 'asuna-channel.local.json')
+    if channel_path and channel_path.exists():
         channels = json.loads(channel_path.read_text(encoding='utf-8'))
         if channels.get('enabled') is True:
             value['channels'] = channels['channels']
@@ -69,9 +80,7 @@ def load(path: str | Path = 'config/local.json') -> dict:
         validate_endpoint(value[lane]['base_url'])
     value.setdefault('provider_idle_timeout_seconds',1800)
     value.setdefault('workflow_timeout_seconds',1800)
-    for lane in ('character','executor'):
-        value[lane].setdefault('transport_read_timeout_seconds',1800)
-    for key in ('dsh_home', 'workdir'):
+    for key in ('dsh_home',):
         p = Path(value[key]).resolve()
         if not p.is_relative_to((ROOT / '.runtime').resolve()):
             raise ValueError(f'{key} must be isolated inside this repository .runtime')
@@ -80,7 +89,7 @@ def load(path: str | Path = 'config/local.json') -> dict:
 
 
 def validate_database(config: dict, name: str) -> str:
-    if name == config.get('legacy_database') or not (
+    if not (
         name in config['allowed_databases'] or name.startswith('asuna_v2_test_')
     ) or any(c in name for c in '/\\. $\x00'):
         raise ValueError('DATABASE_NOT_AUTHORIZED')
@@ -100,7 +109,6 @@ def validate_endpoint(url: str) -> None:
 def redacted(config: dict) -> dict:
     out = json.loads(json.dumps(config))
     out.pop('mongo_uri', None)
-    out.pop('legacy_database', None)
     if 'integration' in out:
         out['integration'].pop('adapter_config', None)
     for channel in out.get('channels', {}).values():
@@ -108,3 +116,15 @@ def redacted(config: dict) -> dict:
     for name in ('character', 'executor', 'embedding'):
         out[name].pop('api_key', None)
     return out
+
+
+def ago(hours):
+    """How long ago, as she and the owner read it: 刚才, N 分钟前, N 小时前, N 天前."""
+    return ('刚才' if hours * 60 < 5 else f'{hours * 60:.0f} 分钟前' if hours < 1
+            else f'{hours:.0f} 小时前' if hours < 48 else f'{hours / 24:.0f} 天前')
+
+
+def excerpt(text, limit):
+    """Bounded text for a context block; a cut always says so and how long the original was."""
+    text = str(text or '')
+    return text if len(text) <= limit else text[:limit] + f'…（截断，原文 {len(text)} 字）'

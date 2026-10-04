@@ -16,13 +16,15 @@
               compaction: true
               toolResultPruner: true
             config:
+              # DSH's basic engine with a Chinese role-play checkpoint (core). The summary
+              # cap leaves room for the character route's reasoning; a short tail keeps
+              # the re-prefill after each compaction small.
               - id: compaction-basic
-                name: '@deepseek-ai/dsh-compaction-basic'
+                name: '@asuna/cognition-core/compaction'
                 config:
-                  maxTokens: 8192
-                  retainRatio: 0.32
-              - id: command-compact
-                name: '@deepseek-ai/dsh-command-compact'
+                  maxTokens: 24576
+                  retainRatio: 0.16
+                  headroomTokens: 32768
               - id: tool-result-pruner
                 name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
                 config:

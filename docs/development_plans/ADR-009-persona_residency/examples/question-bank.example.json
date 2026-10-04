@@ -1,0 +1,13 @@
+{
+  "_comment": "示例：人格自定格式。题库只存锚点（答案在源文件里的位置），不存答案。真实题库是人格私有数据，不进任何包或仓库。全部内容为合成。",
+  "format": "demo-recall/1",
+  "questions": [
+    {"id": "q1", "text": "我最喜欢的饮料是什么？", "anchor": {"root": "old-home", "path": "notes/likes.md", "heading": "饮料"}, "as": "owner_private"},
+    {"id": "q2", "text": "上个月我们约好的那件事办了没有？", "anchor": {"root": "old-home", "path": "todo.md", "heading": "约定"}, "as": "owner_private"},
+    {"id": "q3", "text": "我此刻（导入时刻）的心情档位？", "anchor": {"root": "old-home", "path": "mood.json"}, "check": "affect_projection", "as": "owner_private"},
+    {"id": "q4", "text": "我在群里会怎么介绍自己？", "anchor": {"root": "old-home", "path": "persona.md", "heading": "我是谁"}, "as": "public"},
+    {"id": "q5", "text": "外部日记里那句话是什么？", "anchor": {"root": "diary", "path": "journal.md"}, "as": "owner_private",
+     "note": "源根 diary 未被 owner 授权 → NOT_RUN(scope)，不算通过"}
+  ],
+  "pass_rule": "所有授权范围内的题，其锚点都出现在 probe 前 6 中（或 check 指定的投影可读）；锚点文件未登记 → red"
+}

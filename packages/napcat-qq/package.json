@@ -1,0 +1,26 @@
+{
+  "name": "@asuna/napcat-qq",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "QQ through NapCat as an Asuna channel: id formats, the adapter, and its skill",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "python",
+    "integration",
+    "skills",
+    "resources-provenance.json",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x"
+  }
+}

@@ -11,37 +11,55 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
+import re
 import sys
 import threading
 import uuid
 
+from . import channel_kinds
 from .application import Application
 from .host import RuntimeHost
 from .config import ROOT, load, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
-from .resources import workspace_grant
-from .queue import RuntimeLease
+from .grants import workspace_grant
+from .people import People
 from .skills import skills_directory, skill_directories
 from .state import Denied, now, Conflict
-from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS
+from .queue import RuntimeLease
+from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 
 
 class NativeLane:
+    composes_context = True     # the plugin composes a role notice from structured context
     def __init__(self, worker, config, store, evidence, lane='character', *args):
         self.worker, self.store, self.lane = worker, store, lane
-        self.model = {**config['character' if lane == 'character' else 'executor'],
-                      **config.get('_native_routes', {}).get('character' if lane == 'character' else 'action', {})}
+        # The relevance gate (attend) is her own judgment: it uses the character route, at a low effort (index.js).
+        route = {'character': 'character', 'appraiser': 'appraiser', 'attend': 'character'}.get(lane, 'action')
+        self.model = {**config['character' if lane in ('character', 'attend') else 'executor'],
+                      **config.get('_native_routes', {}).get(route, {})}
         self.lock = threading.RLock()
+
+    def child_title(self, task, role_id, ep):
+        """What a person sees for a child session: the task's goal, or which conversation is summarized."""
+        if self.lane == 'executor' and task:
+            return '行动脑 · ' + ' '.join(str(task.get('goal') or task['_id']).split())[:48]
+        if self.lane in ('summary', 'attend'):
+            role = self.store.db.sessions.find_one({'_id': role_id}, {'native_title': 1}) or {}
+            return {'summary': '交流摘要', 'attend': '接话判断'}[self.lane] + ' · ' + (role.get('native_title') or ep['scene_id'])
+        return None
 
     def generate(self, binding, operation, phase, text, system, **kwargs):
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
             if prior and prior.get('native_host'):
-                return LaneResult(**prior['result'])
+                # A completed stage is final: its receipt answers a repeat without reopening the stage.
+                return LaneResult(**{k: v for k, v in prior['result'].items() if k in LaneResult.__dataclass_fields__})
             if not self.worker.navigation_ready.wait(self.store.config['workflow_timeout_seconds']):
                 raise RuntimeError('NATIVE_NAVIGATION_NOT_READY')
             task = None
+            # A repair (answers.py) is the same stage asked again in the same session: parse its base operation.
+            base = re.sub(r':fix-\d+$', '', operation)
             if self.lane == 'summary':
                 scene = self.store.db.scenes.find_one({'scope_key': kwargs['scope_key'],
                                                        'policy_epoch': kwargs['policy_epoch']})
@@ -49,27 +67,27 @@ class NativeLane:
                     raise Denied('SUMMARY_SCENE_STALE')
                 person = scene['members'][0]
                 self.store.authorize(scene['_id'], person)
-                ep = {'_id': operation, 'scene_id': scene['_id'], 'person_id': person,
+                ep = {'_id': base, 'scene_id': scene['_id'], 'person_id': person,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                       'character_context': scene.get('character_context'),
                       'persona': self.store.config['chat']['persona']}
                 ep['native_session_id'] = self.worker.resolve_role_session(ep)
             elif self.lane == 'executor' or phase == 'CONSULT':
-                task_id = operation.split(':execute:', 1)[0].split(':consult:', 1)[0]
+                task_id = base.split(':execute:', 1)[0].split(':consult:', 1)[0]
                 task = self.store.db.tasks.find_one({'_id': task_id})
                 if not task:
                     raise Denied('STALE_TASK_FENCE')
                 if self.lane == 'executor':
-                    if operation.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
+                    if base.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
                         raise Denied('STALE_TASK_FENCE')
                 else:
-                    artifact = self.store.db.artifacts.find_one({'_id':operation.split(':consult:',1)[1],
+                    artifact = self.store.db.artifacts.find_one({'_id':base.split(':consult:',1)[1],
                         'task_id':task_id,'intent_revision':task['intent_revision']})
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
                 ep = self.store.db.episodes.find_one({'_id': task['episode_id']})
             else:
-                ep = self.store.db.episodes.find_one({'_id': operation.split(':', 1)[0]})
+                ep = self.store.db.episodes.find_one({'_id': base.split(':', 1)[0]})
             if not ep:
                 raise ValueError('NATIVE_EPISODE_BINDING_REQUIRED')
             role_id = ep.get('native_session_id')
@@ -79,11 +97,25 @@ class NativeLane:
             if self.lane == 'executor':
                 native_id = self.worker.action_session_id(binding, role_id, ep, task)
             elif self.lane == 'summary':
-                native_id = 'asuna-summary-' + sha((binding + ':' + operation).encode())[:32]
+                native_id = 'asuna-summary-' + sha((binding + ':' + base).encode())[:32]
+            elif self.lane == 'appraiser':
+                native_id = 'asuna-appraiser-' + ep['persona']
+            elif self.lane == 'attend':
+                # One small gate session per group, shared by everyone who speaks there (attend.py).
+                native_id = 'asuna-attend-' + sha(ep['scene_id'].encode())[:24]
             else:
                 native_id = role_id
-            grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
-            cwd = (self.worker.qq_workspace if self.lane == 'character' and ep['scene_id'].startswith('qq:')
+            if self.lane == 'appraiser':
+                # One tool-free appraiser session per persona, owned by the local operator scene;
+                # each request carries only that episode's own visible material.
+                local = self.store.config['chat']
+                owner = self.store.authorize(local['scene_id'], local['person_id'])
+                grant, ep = local, {**ep, 'scene_id': owner['_id'], 'person_id': local['person_id'],
+                                    'scope_key': owner['scope_key'], 'policy_epoch': owner['policy_epoch']}
+            else:
+                grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
+            platform = channel_kinds.of(ep['scene_id'])
+            cwd = (self.worker.channel_workspace(platform) if self.lane in ('character', 'attend') and platform
                    else str(Path(grant['workspace']).resolve()))
             record = self.worker.bind_session(native_id, {
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
@@ -95,13 +127,15 @@ class NativeLane:
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
-                'system': system,
+                'system_sha256': sha(system.encode()),
                 'skills_dir': str(skills_directory(self.store.config, ep['scene_id'], ep['person_id']) or ''),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'])],
             })
-            request = {'kind': 'stage', 'token': operation, 'session_id': native_id,
+            scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+            request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
-                       'episode_id': ep['_id'], 'binding': record}
+                       'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
+                       **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {})}
             if self.lane == 'character':
                 source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
                 if source and source.get('event', {}).get('channel'):
@@ -123,6 +157,8 @@ class NativeLane:
                 self.worker.emit(request)
                 value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
                 result = LaneResult(**value)
+                # The receipt keeps the full result (the stage's single durable copy on the worker side);
+                # the audit records only its hash (state.commit over 16 KB, phase.output).
                 self.store.put('lane_receipts', {
                     '_id': operation, 'native_host': True, 'native_session_id': native_id,
                     'scope_key': ep['scope_key'], 'result': vars(result)}, stream=operation)
@@ -175,23 +211,29 @@ class BusinessWorker:
             sys.stdout.flush()
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, skill_workspace=None, native_sessions=None,
-                   deployment=None, secrets=None, qq_admission='explicit', apply_integrations=False):
+                   deployment=None, secrets=None, admission='explicit', apply_integrations=False,
+                   schedule=True, channels=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
+        # Channel plugins (e.g. @asuna/napcat-qq) bring their platform's id formats before any route is read.
+        channel_kinds.load(channels)
         from .native_settings import runtime_settings
-        config = {**(runtime_settings(deployment, secrets or {}, models, qq_admission, create_dirs=True)
-                     if deployment else load(self.config_path)), 'task_mode': 'workspace'}
-        # Share the legacy lane's ownership lock. Two frontends may never run
-        # the same business queue or publish the same scene concurrently.
-        self.stack.enter_context(RuntimeLease(Path(config['dsh_home']) / config['database'] / 'character' / 'runtime.lock'))
+        config = (runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True)
+                  if deployment else load(self.config_path))
+        # One Host per database: two Hosts may never run the same business queue
+        # or publish the same scene concurrently.
+        self.stack.enter_context(RuntimeLease(Path(config['dsh_home']) / config['database'] / 'host.lock'))
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')
-        config['chat'] = {**config['chat'], 'persona_file': persona['persona_file'],
-                          'display_name': persona['display_name']}
+        config['chat'] = {**config['chat'], 'display_name': persona['display_name']}
         config['character_id'] = persona['character_id']
         config['persona_contribution'] = persona
+        # The persona model is validated here (jsonschema); an invalid model keeps Core inert.
+        from .persona_model import load as load_model, neutral
+        config['persona_model'] = (load_model(persona['model'], persona['id']) if persona.get('model')
+                                   else neutral(persona['id'], persona['display_name']))
         config['_skill_directories'] = skill_directories or persona.get('skill_directories', [])
         config['_native_routes'] = routes or {}
         for lane, key in (('character', 'character'), ('action', 'executor')):
@@ -199,14 +241,11 @@ class BusinessWorker:
                 config[key] = {**config[key], **models[lane]}
         config['_integration_project'] = integration_project
         config['_native_apply_integrations'] = apply_integrations
-        if persona.get('integration_directory'):
-            config['_native_integration_release'] = str(Path(persona['resource_root']) / persona['integration_directory'])
+        # The installed adapter release belongs to the channel plugin that ships it.
+        releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
+        if releases:
+            config['_native_integration_release'] = releases[0]
         config['_skill_workspace'] = skill_workspace
-        # The immutable package supplies generic instructions; local state and
-        # source projects have separate roots and never replace live self heads.
-        from .config import RESOURCES
-        if RESOURCES.is_dir():
-            config['prompts_dir'] = str(RESOURCES / 'prompts')
         evidence = Evidence(ROOT / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
@@ -221,7 +260,7 @@ class BusinessWorker:
             self.app.service.on_fenced = self.task_fenced
         self.host = self.stack.enter_context(RuntimeHost(
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
-            schedule_lane=NativeScheduleLane(self, config), configure_controller=configure,
+            schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s)))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
@@ -233,23 +272,19 @@ class BusinessWorker:
         store, config = self.app.store, self.app.config
         known = {row['id']: row for row in native_sessions}
         local = config['chat']
-        qq_workspace = (ROOT / '.runtime' / 'work' / 'qq').resolve()
-        qq_workspace.mkdir(parents=True, exist_ok=True)
         Path(local['workspace']).mkdir(parents=True, exist_ok=True)
-        self.qq_workspace = str(qq_workspace)
-        scenes = [(local['scene_id'], local['person_id'], 'Local', '小满 · 本地私聊')]
+        name = local.get('display_name') or local['persona']          # from the persona package, never hard-coded
+        scenes = [(local['scene_id'], local['person_id'], 'Local', name + ' · 本地私聊')]
         for channel in config.get('channels', {}).values():
             for route in channel.get('routes', {}).values():
                 if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
                     continue
                 members = [grant for sender, grant in route_members(route).items()
                            if sender not in channel.get('blocked_senders', [])]
-                if not members or not route['scene_id'].startswith('qq:'):
+                platform = channel_kinds.of(route['scene_id'])
+                if not members or not platform:
                     continue
-                scene_id = route['scene_id']
-                label = '群聊' if ':group:' in scene_id else '私聊'
-                scenes.append((scene_id, members[0]['person_id'], 'QQ',
-                               label + ' · ' + (route.get('display_name') or scene_id.rsplit(':', 1)[-1])))
+                scenes.append((route['scene_id'], members[0]['person_id'], platform.TITLE, self.channel_title(route)))
         bindings = list(store.db.sessions.find({'native_host': True}))
         first = not any(row.get('navigation_version') == 1 for row in bindings)
         entries, retire = [], set()
@@ -267,7 +302,8 @@ class BusinessWorker:
                 'scene_id': scene_id, 'persona': local['persona'], 'policy_epoch': scene['policy_epoch'],
                 'character_context': scene.get('character_context')}))
             prior = store.db.sessions.find_one({'_id': session_id})
-            cwd = str(Path(local['workspace']).resolve()) if workspace == 'Local' else self.qq_workspace
+            cwd = (str(Path(local['workspace']).resolve()) if workspace == 'Local'
+                   else self.channel_workspace(channel_kinds.of(scene_id)))
             actor = source['person_id'] if source and source['person_id'] in scene['members'] else person
             values = {**(prior or {}), 'lane': 'character', 'scene_id': scene_id, 'person_id': actor,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
@@ -307,7 +343,15 @@ class BusinessWorker:
             retire.update(row['id'] for row in native_sessions
                           if row['id'] not in primary and row.get('agentPreset') != 'asuna-scheduler')
         return {'entries': entries, 'archive_ids': sorted(retire), 'first': first,
-                'workspaces': {'QQ': self.qq_workspace, 'Local': str(Path(local['workspace']).resolve())}}
+                'workspaces': {**{kind.TITLE: self.channel_workspace(kind) for kind in channel_kinds.kinds()},
+                               'Local': str(Path(local['workspace']).resolve())}}
+
+    @staticmethod
+    def channel_workspace(platform):
+        """The shared native workspace of one platform's conversations (.runtime/work/<kind>)."""
+        directory = (ROOT / '.runtime' / 'work' / platform.KIND).resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        return str(directory)
 
     @staticmethod
     def role_session_id(ep):
@@ -382,6 +426,7 @@ class BusinessWorker:
                 'workspace': self.app.config['chat']['workspace'] if self.app else None,
                 'transport': 'stdio', 'model_runtime': 'dsh-host',
                 'channels_active': bool(self.host and getattr(self.host, 'channel_server', None)),
+                'channel_titles': [kind.TITLE for kind in channel_kinds.kinds()],
                 'schedules_active': bool(self.host and getattr(self.host, 'schedule', None)),
                 'integration_active': integration['state'] == 'RUNNING',
                 'integration_state': integration['state'], 'integration_error': integration.get('error'),
@@ -392,18 +437,24 @@ class BusinessWorker:
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,
                 'active_task': self.controller.active_task if self.controller else None}
 
+    @staticmethod
+    def read_only_note(platform):
+        return platform.READ_ONLY_NOTE if platform else '这个会话仅供查看。'
+
     def bind_session(self, session_id, values):
         prior = self.app.store.db.sessions.find_one({'_id': session_id})
         identity = ('lane', 'scene_id', 'persona', 'cwd')
-        if values['lane'] != 'character':
+        if values['lane'] not in ('character', 'attend'):       # a group's sessions serve everyone in it
             identity += ('person_id',)
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')
         scene = self.app.store.authorize(values['scene_id'], values['person_id'])
         if scene['policy_epoch'] != values['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
+        # Bindings keep a hash of the stage system prompt, never its full text.
+        kept = {k: v for k, v in (prior or {}).items() if k != 'system'}
         return self.app.store.put('sessions', {
-            **(prior or {}), **values, '_id': session_id, 'native_host': True,
+            **kept, **values, '_id': session_id, 'native_host': True,
             'binding_key': 'native-host:' + session_id,
             'binding_updated_at': now(),
         }, expected=prior['revision'] if prior else None, stream='native-binding:' + session_id)
@@ -447,8 +498,22 @@ class BusinessWorker:
         if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
 
+    def channel_title(self, route):
+        """Conversation title a person can read: the configured name, else the group name or peer
+        name the platform last sent with a message in that scene, else the number."""
+        group = route['target']['type'] == 'group'
+        name = route.get('display_name')
+        if not name:
+            last = self.app.store.db.messages.find_one(
+                {'scene_id': route['scene_id'], 'direction': 'inbound', 'event.raw': {'$exists': True}},
+                {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
+            raw = (last or {}).get('event', {}).get('raw', {})
+            name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
+        name = ' '.join(str(name or '').split())[:40] or route['target']['id']
+        return ('群聊' if group else '私聊') + ' · ' + name
+
     def channel_input(self, row):
-        """A real processed QQ receipt, including quiet/error outcomes; never a model turn."""
+        """A real processed platform receipt, including quiet/error outcomes; never a model turn."""
         from .channels import route_for_scene
         store, config = self.app.store, self.app.config
         scene = store.authorize(row['scene_id'], row['author'])
@@ -462,23 +527,24 @@ class BusinessWorker:
         binding = store.db.sessions.find_one({'_id': session_id})
         if not binding or not binding.get('main_conversation'):
             binding = self.bind_session(session_id, {**(binding or {}), **ep, 'lane': 'character', 'scope_key': scene['scope_key'],
-                'cwd': self.qq_workspace, 'role_session_id': session_id, 'main_conversation': True,
-                'native_title': ('群聊' if route['target']['type'] == 'group' else '私聊') + ' · '
-                    + (route.get('display_name') or route['target']['id']), 'navigation_version': 1})
+                'cwd': self.channel_workspace(channel_kinds.of(scene['_id'])), 'role_session_id': session_id,
+                'main_conversation': True, 'native_title': self.channel_title(route), 'navigation_version': 1})
         indexer = getattr(self.app, 'memory_indexer', None)
         if indexer and scene['_id'] not in indexer.scene_ids:
             indexer.scene_ids.append(scene['_id'])
             if indexer.summarizer:
                 indexer.summarizer.scene_ids.append(scene['_id'])
                 indexer.summarizer.initialize()
+        # Label line + indented message (people.py): a name can't close the label or start a new speaker.
         return {'session_id': session_id, 'binding': binding, 'input': {
-            'id': row['_id'], 'text': row['text'], 'sender': row['event']['channel']['sender_id'],
+            'id': row['_id'], 'text': People(store).transcript(scene, row), 'sender': row['event']['channel']['sender_id'],
             'received_at': row['received_at'], 'state': row.get('ingress_state', 'ACCEPTED')}}
 
     def dispatch(self, method, args):
         if method == 'validate_settings':
             from .native_settings import runtime_settings
-            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['qq_admission'])
+            channel_kinds.load(args.get('channels'))
+            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['admission'])
             if config['chat']['persona'] != args['persona']:
                 raise ValueError('PERSONA_STATE_ID_MISMATCH')
             from .state import Store
@@ -555,14 +621,15 @@ class BusinessWorker:
         if method == 'input_policies':
             local = self.app.config['chat']
             ids = [row['id'] for row in args['sessions']]
-            policies = {row['_id']: ('QQ 会话仅供查看，请在 QQ 中回复。' if row['scene_id'] != local['scene_id']
-                else '这是内部工作会话，请回到小满的本地私聊。')
+            policies = {row['_id']: (self.read_only_note(channel_kinds.of(row['scene_id'])) if row['scene_id'] != local['scene_id']
+                else '这是内部工作会话，请回到本地私聊。')
                 for row in self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True})
                 if row['scene_id'] != local['scene_id'] or row['lane'] != 'character'
                 or row.get('successor_id') or row.get('retired')}
             for row in args['sessions']:
-                if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work/qq').resolve():
-                    policies[row['id']] = 'QQ 会话仅供查看，请在 QQ 中回复。'
+                for platform in channel_kinds.kinds():
+                    if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work' / platform.KIND).resolve():
+                        policies[row['id']] = self.read_only_note(platform)
             return policies
         if method == 'input':
             session_id = args['session_id']
@@ -622,12 +689,47 @@ class BusinessWorker:
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
             return self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
-            return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS]
+            return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        if method == 'persona.sources':
+            # Settings card: source roots (path masked to its last segment), states, jobs and recent runs.
+            from .persona_data import persona_sources, persona_runtime
+            from .render import render_status
+            persona = self.app.config['chat']['persona']
+            sources = [{'id': k, 'state': v['state'], 'path': '…/' + Path(v['path']).name}
+                       for k, v in persona_sources(self.app.config, persona).items()]
+            jobs = [{'id': j['id'], 'sources': j['sources'], 'grants': j['grants']}
+                    for j in (self.app.config.get('persona_contribution') or {}).get('jobs') or []]
+            runs = [{k: e['payload'].get(k) for k in ('run_id', 'job', 'status', 'exit_code', 'dry_run', 'counts', 'report_artifact_ids')}
+                    for e in self.app.store.db.audit_events.find({'type': 'persona_job.finished'}).sort('occurred_at', -1).limit(5)]
+            return {'persona': persona, 'sources': sources, 'jobs': jobs, 'runs': runs,
+                    'export_configured': bool(persona_runtime(self.app.config, persona).get('export_dir')),
+                    'render': render_status(self.app.store, persona)}
+        if method == 'persona.export':
+            # Owner-only rendering of the document layer to the locally configured directory.
+            from .persona_data import export_documents, persona_runtime
+            persona = self.app.config['chat']['persona']
+            target = persona_runtime(self.app.config, persona).get('export_dir')
+            if not target:
+                raise ValueError('EXPORT_DIR_NOT_CONFIGURED')
+            return export_documents(self.app.store, persona, target, ROOT)
+        if method == 'persona.job_run':
+            from .persona_jobs import JobRunner
+            persona = self.app.config['chat']['persona']
+            return JobRunner(self.app.store, persona, retrieval=self.app.retrieval).run(
+                args['job'], dry_run=bool(args.get('dry_run', True)), args=args.get('args') or {})
+        if method == 'affect.import':
+            # Persona-job import path (exposed through the persona data API in P4).
+            from .affect import AffectLedger
+            from .render import model_and_policy
+            persona = self.app.config['chat']['persona']
+            return AffectLedger(self.app.store, persona, *model_and_policy(self.app.store, persona)).import_batch(
+                args['origin'], args.get('events', []), args.get('amendments', []), dry_run=bool(args.get('dry_run')))
         if method == 'schedule.deliver':
+            if not self.host.schedule:
+                raise RuntimeError('SCHEDULE_NOT_MOUNTED')
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':
             self.app.config['_skill_directories'] = args['skill_directories']
-            self.app.config['chat']['persona_file'] = args['persona']['persona_file']
             return {'accepted': True, 'applies': 'new action scopes; existing self heads preserved'}
         if method == 'publication.activated':
             for publication in args['publications']:
@@ -703,16 +805,21 @@ class NativeDevelopmentBridge:
         return result
 
 
-def main():
-    for stream in (sys.stdin, sys.stdout, sys.stderr):
-        stream.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', required=True)
-    args = parser.parse_args()
-    worker = BusinessWorker(args.config)
-    pool = ThreadPoolExecutor(max_workers=8)
+# Host replies only complete a waiting Future: handled on the reader thread, never queued behind
+# their own waiters. Calls that may wait for a host reply (a CONSULT stage, a development host
+# call) or run long (persona jobs) get their own thread. So no dispatch-pool thread ever waits on
+# Future.result(), and a pool of any size cannot deadlock (ADR-009 D-8, T7.2).
+REPLIES = frozenset({'result', 'host_result'})
+DETACHED = frozenset({'tool', 'persona.job_run'})
 
-    def respond(request):
+
+class Dispatcher:
+    def __init__(self, worker, threads=8):
+        self.worker = worker
+        self.pool = ThreadPoolExecutor(max_workers=threads, thread_name_prefix='asuna-dispatch')
+
+    def respond(self, request):
+        worker = self.worker
         try:
             value = worker.dispatch(request['method'], request.get('args', {}))
             worker.emit({'id': request['id'], 'value': value})
@@ -727,13 +834,34 @@ def main():
                     message = message.replace(value, '[凭据已隐藏]')
             worker.emit({'id': request['id'], 'error': type(exc).__name__ + ': ' + message})
 
+    def handle(self, request):
+        method = request.get('method')
+        if method in REPLIES:
+            self.respond(request)
+        elif method in DETACHED:
+            threading.Thread(target=self.respond, args=(request,), name='asuna-call-' + method,
+                             daemon=True).start()
+        else:
+            self.pool.submit(self.respond, request)
+
+    def close(self):
+        self.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def main():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        stream.reconfigure(encoding='utf-8')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', required=True)
+    args = parser.parse_args()
+    worker = BusinessWorker(args.config)
+    dispatcher = Dispatcher(worker)
     try:
         for line in sys.stdin:
-            request = json.loads(line)
-            pool.submit(respond, request)
+            dispatcher.handle(json.loads(line))
     finally:
         worker.close()
-        pool.shutdown(wait=True, cancel_futures=True)
+        dispatcher.close()
 
 
 if __name__ == '__main__':

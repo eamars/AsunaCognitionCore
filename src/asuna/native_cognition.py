@@ -1,5 +1,7 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
-from .peer_context import peer_from_message, project_message
+from . import channel_kinds
+from .peer_context import peer_from_message
+from .people import People, safe_name
 
 
 class CognitionView:
@@ -40,7 +42,7 @@ class CognitionView:
 
     def usage(self, identifier, content=None, revision=None):
         if not self.snapshot:
-            return '已保存；当前会话暂无上下文可核对'
+            return '这个对话还没有可核对的一轮'
         context = self.snapshot['context']
         manifest = self.snapshot['manifest']
         kind, key = identifier.split(':', 1)
@@ -53,15 +55,17 @@ class CognitionView:
             elif entity.startswith(('character_core:', 'current_self:')):
                 selected = (context.get('self_state_from_program', {}).get(entity.split(':')[0]) or {}).get('revision_id')
             else:
-                overlay = context.get('overlay')
-                if overlay is not None:
-                    return '最近一次上下文已选用' if overlay == content else '已保存；最近一次上下文使用的是旧内容'
                 selected = None
             if selected:
-                return '最近一次上下文已选用' if selected == revision else '已保存；最近一次上下文使用的是旧版本'
+                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
+        elif kind == 'doc':
+            # The persona is a document (ADR-009); the manifest names the revision this turn rendered.
+            selected = manifest.get('persona_revision') if key == 'persona' else manifest.get('documents', {}).get(key)
+            if selected:
+                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
         elif kind == 'unit':
             if key in manifest.get('selected', []):
-                return '最近一次上下文已选用'
+                return '最近一轮（{time}）用到了这一版'
             if key in self.snapshot.get('monologue_refs', []):
                 return '最近一轮形成的理解，保存在该轮原生会话中'
         elif kind == 'source':
@@ -69,10 +73,10 @@ class CognitionView:
             group = context.get('group_continuity_from_program', {})
             rows += group.get('related_messages', []) + group.get('current_speaker_tail', [])
             if any(row.get('_id') == key for row in rows):
-                return '最近一次上下文已选用'
+                return '最近一轮（{time}）用到了这一版'
             if key == 'in-' + self.snapshot['_id']:
-                return '最近一次上下文的输入'
-        return '已保存；最近一次上下文未选用'
+                return '是最近一轮（{time}）的输入'
+        return '最近一轮（{time}）没有用到'
 
     def peer(self):
         query = {'$and': [self.memory.message_query, {
@@ -80,57 +84,42 @@ class CognitionView:
             'author': self.binding['person_id'], 'event.raw.asuna_peer': {'$exists': True}}]}
         # A rejected newest block must not make an older identity look current.
         message = self.store.db.messages.find_one(query, sort=[('scene_seq', -1)])
-        text = project_message(message) if message else None
+        scene = self.store.db.scenes.find_one({'_id': self.binding['scene_id']}) if message else None
+        # The same line her turn reads (people.py), so "用到了这一版" compares like with like.
+        text = People(self.store).identity_line(scene, message) if scene else None
         if not text:
             return None
         peer = peer_from_message(message)
         profile_at = peer.get('profile_at')
-        # The cognition projection contains a UTC wall-clock fragment. The Web
-        # view displays its timestamp separately in the browser's timezone.
-        body = text.replace('，时间 ' + str(profile_at)[:19], '') if profile_at else text
-        display = peer.get('display') or peer.get('card') or peer.get('nickname')
-        display = ' '.join(display.replace('\x00', '').split())[:60] if isinstance(display, str) else ''
+        body = text
+        display = safe_name(peer.get('card')) or safe_name(peer.get('nickname'))
         return {'id': 'cognition:peer', 'kind': 'relation', 'title': '对方身份资料',
                 'body': body, 'excerpt': body, 'category_label': '对人的认识', 'subject_name': display,
                 'scene_id': self.binding['scene_id'], 'updated_at': profile_at or message.get('occurred_at'),
                 'occurred_at': profile_at or message.get('occurred_at'),
                 'status_label': '已记录', 'source_ids': [message['_id']],
-                'usage': ('最近一次上下文已选用' if self.snapshot and
+                'usage': ('最近一轮（{time}）用到了这一版' if self.snapshot and
                           self.snapshot['context'].get('sender_identity') == text else
-                          '已保存；最近一次上下文未选用' if self.snapshot else
-                          '已保存；当前会话暂无上下文可核对')}
+                          '最近一轮（{time}）没有用到' if self.snapshot else
+                          '这个对话还没有可核对的一轮')}
 
     def supplements(self, kind):
-        rows = []
-        if kind in ('all', 'self'):
-            rows.append(self.placeholder('mood', 'self', '心情与情绪',
-                '未实现独立、持续更新的心情与情绪状态。当前自我描述和当时的理解仍可查看；它们不等同于当前心情。'))
-        if kind in ('all', 'relation'):
-            peer = self.peer()
-            rows.append(peer or self.placeholder('peer', 'relation', '对方身份资料',
-                '当前场景暂无可核对的身份资料。昵称、群名片等只显示随真实消息保存并通过身份绑定校验的内容。',
-                status='暂无记录'))
-            rows.append(self.placeholder('portrait', 'relation', '用户画像整理',
-                '未实现独立的事实、偏好和性格画像整理。已有内容保留在本人的关系理解、交流摘要与原始来源中；角色的主观判断不等于对方确认的事实。'))
-        if kind in ('all', 'world'):
-            rows.append(self.placeholder('world', 'world', '世界知识整理',
-                '未实现独立的世界知识整理。现有经验保存在交流摘要、当时的理解与原始来源中，仍可被检索使用；召回某个说法不等于角色已将其确认为知识。'))
-        for row in rows:
-            if row['kind'] == 'relation':
-                row['scene_id'] = self.binding['scene_id']
-        return rows
-
-    @staticmethod
-    def placeholder(key, kind, title, body, status='未实现'):
-        return {'id': 'cognition:' + key, 'kind': kind, 'title': title,
-                'body': body, 'excerpt': body if body.startswith(status) else status + ' · ' + body, 'status_label': status,
-                'category_label': {'self': '自我', 'relation': '对人的认识', 'world': '对世界的认识'}[kind],
-                'sources': [], 'interpretation': False}
+        """The platform identity saved with this person's latest message, when there is one."""
+        peer = self.peer() if kind in ('all', 'relation') else None
+        if peer:
+            peer['scene_id'] = self.binding['scene_id']
+        return [peer] if peer else []
 
     def subject_name(self):
         peer = self.peer()
         if peer and peer.get('subject_name'):
-            return peer['subject_name'] + '（' + self.binding['person_id'].replace('qq:', 'QQ · ', 1) + '）'
+            return peer['subject_name'] + '（' + self.account_title() + '）'
         row = self.store.db.identities.find_one({'person_id': self.binding['person_id']},
                                                {'display_name': 1})
-        return (row or {}).get('display_name') or self.binding['person_id'].replace('qq:', 'QQ · ', 1)
+        return (row or {}).get('display_name') or self.account_title()
+
+    def account_title(self):
+        """qq:<account> reads as `QQ · <account>` on the owner's page; a local id reads as itself."""
+        person = self.binding['person_id']
+        platform = channel_kinds.of(person)
+        return platform.TITLE + ' · ' + person.partition(':')[2] if platform else person

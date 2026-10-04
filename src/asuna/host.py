@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import threading
 import time
-from types import SimpleNamespace
 
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
@@ -34,26 +33,11 @@ def prepare_channels(store, *, dry_run=False):
     scene_ids, tokens = set(), set()
     def put(collection, document, **kwargs):
         return document if dry_run else store.put(collection, document, **kwargs)
-    new_identities = False
     local = store.config['chat']
     local_workspace = Path(local['workspace']).resolve()
     ordered_workspaces = [os.path.normcase(str(local_workspace))]
     known_workspaces = set(ordered_workspaces)
-    # The A2 resolver reads the same two collections for every channel member.
-    # Keep one startup-local read view and include any setup rows written below.
-    # The resolver itself, its aliases, and its results are unchanged.
-    if scene_links and scene_links.canonical_map(store.config):
-        identity_rows = list(store.db.identities.find({}))
-        scene_rows = list(store.db.scenes.find({}))
-        relationship_db = SimpleNamespace(
-            identities=SimpleNamespace(find=lambda _query: identity_rows),
-            scenes=SimpleNamespace(find=lambda _query: scene_rows))
-    else:
-        identity_rows = list(store.db.identities.find({}))
-        relationship_db = store.db
-    identities_by_id = {row['_id']: row for row in identity_rows}
-    relationship_heads = {row['_id'] for row in store.db.state_heads.find(
-        {'_id': {'$regex': '^relationship:'}}, {'_id': 1})}
+    identities_by_id = {row['_id']: row for row in store.db.identities.find({})}
     for channel_id, channel in store.config.get('channels', {}).items():
         token = channel.get('token', '')
         if not isinstance(token, str) or not token.isascii() or len(token) < 24 or token in tokens:
@@ -99,32 +83,18 @@ def prepare_channels(store, *, dry_run=False):
                     created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
                                                       'account_id': sender}, stream='host:setup')
                     identities_by_id[person] = created
-                    if relationship_db is not store.db:
-                        identity_rows.append(created)
-                    new_identities = True
                 elif (identity['platform'], identity['account_id']) != (channel_id, sender):
                     raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
-                target = (scene_links.relationship_target(
-                    store.config, relationship_db,
-                    {'_id': scene_id, 'scope_key': 'scene:' + scene_id}, person) if scene_links
-                    else {'entity': 'relationship:' + person, 'scope': 'scene:' + scene_id})
-                # 没配 canonical 映射时就是原来那一份；配了之后别名场景不再另起一条关系记录。
-                head_key = target['entity'] + '|' + target['scope']
-                if head_key not in relationship_heads:
-                    if not dry_run:
-                        store.init_head(target['entity'], target['scope'],
-                                        {'body': '这是当前授权场景中的参与者，不预设其他私域身份或共同经历。'}, [])
-                    relationship_heads.add(head_key)
+                # No relationship record is seeded: everyone starts with none, which her context says in
+                # words, and her first written understanding creates it (familiarity.py, memory.py).
                 if not dry_run:
                     workspace.mkdir(parents=True, exist_ok=True)
             scene = store.db.scenes.find_one({'_id': scene_id})
             if scene is None:
-                created = put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
-                                               'members': people, 'scope_key': 'scene:' + scene_id,
-                                               'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
-                                               'channel_account_id': channel['account_id']}, stream='host:setup')
-                if relationship_db is not store.db:
-                    scene_rows.append(created)
+                put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
+                               'members': people, 'scope_key': 'scene:' + scene_id,
+                               'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
+                               'channel_account_id': channel['account_id']}, stream='host:setup')
             else:
                 if (scene.get('channel_id') != channel_id or scene.get('channel_account_id') != channel['account_id'] or scene['kind'] != kind
                         or scene['scope_key'] != 'scene:' + scene_id):
@@ -138,10 +108,7 @@ def prepare_channels(store, *, dry_run=False):
                         'policy_epoch': scene['policy_epoch'] + int(bump)},
                         expected=scene['revision'], stream='channel-membership:' + scene_id)
     if scene_links and not dry_run:
-        # 派生投影：联动边与 canonical 映射写进 scenes／identities，只为可观察；
-        # 读路径每次现算自配置，删掉配置键立刻回到原状。
-        if new_identities:
-            scene_links.sync_identity_docs(store, store.config)
+        # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))
     return scene_ids
 
@@ -163,13 +130,22 @@ class RuntimeHost:
 
     def __enter__(self):
         try:
+            from .visibility import without_link_downgrades
+            self.config, rejected_links = without_link_downgrades(self.config)
             self.app = self.stack.enter_context(Application(
-                {**self.config, 'task_mode': 'workspace'}, self.evidence, self.database,
+                self.config, self.evidence, self.database,
                 lane_factory=self.lane_factory, broker_http=self.broker_http,
                 development_factory=self.development_factory))
+            for rejected in rejected_links:
+                # A public scene may never read an owner-private scene (ADR-009 §2.3).
+                self.app.store.audit('config', 'config.link_rejected', rejected)
+                self.evidence.record('host.link_rejected', rejected)
             self.evidence.record('host.recovery.start', {})
             recovery_start = time.perf_counter()
             self.settings = local_settings(self.config)
+            # Owner-local persona source roots must be well formed before any job can use them.
+            from .persona_data import persona_sources
+            persona_sources(self.config, self.settings['persona'])
             prepare_local_scene(self.app.store, self.settings)
             local_ready = time.perf_counter()
             from .channel_admission import restore_admissions
@@ -214,14 +190,17 @@ class RuntimeHost:
             if self.integration:
                 self.integration.restore()
             self.evidence.record('host.integration.ready', {})
-            from .schedule import ScheduleService
-            self.schedule = ScheduleService(self.app, self.controller, lane=self.schedule_lane)
-            self.app.coordinator.scheduler = self.schedule
-            self.evidence.record('host.schedule.ready', {})
+            self.schedule = None
+            if self.schedule_lane is not False:          # False: the native Host has no Schedule (mountSchedule=false)
+                from .schedule import ScheduleService
+                self.schedule = ScheduleService(self.app, self.controller, lane=self.schedule_lane)
+                self.app.coordinator.scheduler = self.schedule
+            self.evidence.record('host.schedule.ready', {'active': self.schedule is not None})
             self.controller.worker.start()
             self.controller.task_worker.start()
             self.stack.callback(self.controller.stop)
-            self.stack.callback(self.schedule.close)
+            if self.schedule:
+                self.stack.callback(self.schedule.close)
             self._complete_activations()
             self._restart_watch = threading.Thread(target=self._watch_published_restart,
                                                    name='asuna-restart-watch', daemon=True)

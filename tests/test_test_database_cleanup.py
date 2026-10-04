@@ -22,7 +22,7 @@ def test_cleanup_rejects_protected_or_unrelated_database_before_connecting(name)
 def test_fixture_drops_database_when_seed_fails_before_yield(monkeypatch):
     import conftest
     names = []
-    def fail(store):
+    def fail(store, *fixture):
         names.append(store.name)
         raise RuntimeError('deliberate seed failure')
     monkeypatch.setattr(Store, 'seed', fail)
@@ -37,5 +37,3 @@ def test_fixture_drops_database_when_seed_fails_before_yield(monkeypatch):
         observer.client.close()
 
 
-def test_teardown_handles_an_application_that_already_closed_its_store(store):
-    store.client.close()

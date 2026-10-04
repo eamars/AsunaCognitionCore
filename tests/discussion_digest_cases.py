@@ -18,14 +18,30 @@ for _path in (SRC, HERE):
 
 import discussion_digest as dd                       # noqa: E402
 import history_query as hq                           # noqa: E402
+from asuna import channel_kinds                      # noqa: E402
 
-BOT = "3768713357"
-GID = "905393941"
+
+def _qq_kind():
+    """The fixture is a QQ group. The core names no platform: use the channel package's kind module when
+    this tree has it (the repository), else the few id rules these cases rely on (a core candidate alone)."""
+    package = os.path.join(os.path.dirname(HERE), "packages", "napcat-qq", "python")
+    if os.path.isdir(package):
+        channel_kinds.load([{"python": package, "module": "napcat_qq"}])
+        return
+    channel_kinds.register(type("QQ", (), {"KIND": "qq", "ACCOUNT": re.compile(r"[1-9][0-9]{4,11}"),
+                                          "person_id": staticmethod(lambda account: "qq:" + str(account))}))
+
+
+if channel_kinds.get("qq") is None:
+    _qq_kind()
+
+BOT = "100357"
+GID = "300941"
 SCENE_ID = "qq:%s:group:%s" % (BOT, GID)
-OTHER_SCENE = "qq:%s:group:54369546" % BOT
+OTHER_SCENE = "qq:%s:group:300546" % BOT
 EPOCH = 7
-A_ID, A_ACC, A_CARD = "qq:458658853", "458658853", "雾灯修理工"
-B_ID, B_ACC, B_CARD = "qq:7777777", "7777777", "路人甲"
+A_ID, A_ACC, A_CARD = "qq:100853", "100853", "雾灯修理工"
+B_ID, B_ACC, B_CARD = "qq:100777", "100777", "路人甲"
 FULL = {"since": "2000-01-01", "until": "2999-12-31T23:59:59Z"}
 
 
@@ -46,7 +62,7 @@ def inbound(mid, seq, at, text, author=A_ID, peer=PEER_A, reply_to=None, scene=S
            "adapter_id": "p1c-fixture", "platform_event_id": "pe-" + mid}
     if peer is not None:
         doc["event"] = {"raw": {"asuna_peer": dict(peer)},
-                        "channel": {"sender_id": author.split(":")[-1],
+                        "channel": {"id": "qq", "sender_id": author.split(":")[-1],
                                     "target": {"type": "group", "id": scene.rsplit(":", 1)[-1]}}}
         if reply_to:
             doc["event"]["group_context"] = {"reply_to": "pe-" + reply_to,
@@ -59,7 +75,7 @@ def inbound(mid, seq, at, text, author=A_ID, peer=PEER_A, reply_to=None, scene=S
 def outbound(mid, seq, text, reply_to=None, receipt_at="2026-09-22T12:20:00Z",
              phase="SPEAK", delivery="DELIVERED", scene=SCENE_ID):
     doc = {"_id": mid, "scene_id": scene, "scope_key": "scene:" + scene, "policy_epoch": EPOCH,
-           "scene_seq": seq, "text": text, "author": "xiaoman", "direction": "outbound",
+           "scene_seq": seq, "text": text, "author": "demo", "direction": "outbound",
            "phase": phase, "delivery_state": delivery, "adapter_id": "p1c-fixture"}
     if receipt_at:
         doc["receipt_at"] = receipt_at
@@ -204,11 +220,11 @@ def case_participants_and_coverage():
     value, _store = digest_of(discussion_rows())
     assert value["degraded"] is False, value
     people = dict((person["display"], person) for person in value["participants"])
-    assert sorted(people) == sorted([A_CARD, B_CARD, "xiaoman"]), people
+    assert sorted(people) == sorted([A_CARD, B_CARD, "demo"]), people
     assert people[A_CARD]["identity"] == "peer" and people[A_CARD]["role"] == "管理员"
     assert people[A_CARD]["messages"] == 4 and people[A_CARD]["person_id"] == A_ID
     assert people[B_CARD]["messages"] == 2 and people[B_CARD]["role"] == "成员"
-    assert people["xiaoman"]["identity"] == "author" and people["xiaoman"]["side"] == "我说"
+    assert people["demo"]["identity"] == "author" and people["demo"]["side"] == "我说"
     cov = value["coverage"]
     assert (cov["read"], cov["inbound"], cov["outbound"]) == (8, 6, 2), cov
     assert cov["covered_from"] == "2026-09-22T12:00:00Z"

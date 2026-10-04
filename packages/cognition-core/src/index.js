@@ -8,10 +8,13 @@ import * as skillFilesystem from '@deepseek-ai/dsh-skill-filesystem';
 import SkillService from '@deepseek-ai/dsh-skill';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
+import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
+import { normalizePersona } from './persona.js';
+import { normalizeChannel } from './channel.js';
 import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { ActionRecords } from './action-records.js';
@@ -21,16 +24,23 @@ import z from '@deepseek-ai/schemastery';
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
-  'sessionController', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
+  'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
 export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),
   configPath: z.string().volatile(), persona: z.string().volatile(),
+  // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
+  // visible to every root agent; Asuna's role and action presets already restrict their own tools.
+  mountSchedule: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
   secrets: z.dict(z.string().role('secret')).volatile(),
-  qqAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
-  routes: z.object({ character: Route, action: Route }).volatile() });
+  channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
+  routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
+// Responsibility routes are configured independently; a lane name never implies a model.
+// The relevance gate (attend) is her own judgment, so it uses the character route.
+const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
+const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
 export class CognitionCore {
@@ -40,6 +50,8 @@ export class CognitionCore {
       value && typeof value.get === 'function' ? value.get() : value]));
     this.config = this.savedConfig();
     this.personas = new Map();
+    this.channels = new Map();
+    this.channelWaiters = [];
     this.states = new Map();
     this.handles = new Map();
     this.channelWrites = new Map();
@@ -50,14 +62,52 @@ export class CognitionCore {
   }
 
   registerPersona(persona) {
-    if (this.personas.has(persona.id)) throw new Error('Duplicate Asuna persona: ' + persona.id);
-    this.personas.set(persona.id, Object.freeze({ ...persona }));
+    if (this.personas.has(persona?.id)) throw new Error('Duplicate Asuna persona: ' + persona.id);
+    let normalized;
+    try { normalized = normalizePersona(persona); }
+    catch (error) {
+      // A malformed persona package never registers; Core stays inert and says why.
+      if (persona?.id === this.config.persona) { this.lifecycle.state = 'inert'; this.lifecycle.error = String(error); }
+      throw error;
+    }
+    this.personas.set(persona.id, normalized);
     if (persona.id === this.config.persona && this.config.python && this.config.configPath && this.config.workspace)
       this.ready().catch(error => {
         this.ctx.logger.warn(String(error));
         process.stderr.write('Asuna worker could not start: ' + String(error) + '\n');
       });
     return () => this.personas.delete(persona.id);
+  }
+
+  /** A platform plugin (e.g. @asuna/napcat-qq) contributes its channel kind, adapter and skills. */
+  registerChannel(channel) {
+    if (this.channels.has(channel?.kind)) throw new Error('Duplicate Asuna channel kind: ' + channel.kind);
+    this.channels.set(channel.kind, normalizeChannel(channel));
+    for (const wake of this.channelWaiters.splice(0)) wake();
+    return () => this.channels.delete(channel.kind);
+  }
+
+  channelOf(sceneId) {
+    const [kind, ...rest] = String(sceneId ?? '').split(':');
+    return rest.length ? this.channels.get(kind) ?? null : null;
+  }
+
+  /** Every configured channel's plugin, waited for (plugins register on their own schedule), with resolved paths. */
+  async channelPlugins(deployment, timeoutMs = 15000) {
+    const wanted = Object.keys(deployment?.channels ?? {}), deadline = Date.now() + timeoutMs;
+    for (let missing = wanted.filter(kind => !this.channels.has(kind)); missing.length;
+         missing = wanted.filter(kind => !this.channels.has(kind))) {
+      if (Date.now() >= deadline) throw new Error('CHANNEL_PLUGIN_NOT_INSTALLED: ' + missing.join(', '));
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 500);
+        this.channelWaiters.push(() => { clearTimeout(timer); resolve(); });
+      });
+    }
+    return Promise.all([...this.channels.values()].map(channel => this.ctx.asunaFloor.channel(channel)));
+  }
+
+  async skillDirectories(persona, channels) {
+    return [...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
   }
 
   ready() {
@@ -68,24 +118,24 @@ export class CognitionCore {
         throw new Error('Configure the Asuna Python worker, workspace, and local configuration');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
-      // Schedule is optional in the stock Web profile. Reuse it if installed;
-      // otherwise mount that same native service once in this Host.
-      if (!this.ctx.get('schedule')) await this.ctx.plugin(ScheduleService, {});
-      await new Promise(resolve => { this.ctx.inject(['schedule'], ctx => {
-        this.schedules.ctx = ctx; resolve();
-      }); });
+      this.efforts = await this.stageEfforts();
+      this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
+      const schedule = await this.attachSchedule();
       this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
         id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
+      const channels = await this.channelPlugins(this.config.deployment);
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
-        skill_directories: await this.ctx.asunaFloor.skillPaths(persona),
+        skill_directories: await this.skillDirectories(persona, channels),
         routes: Object.fromEntries(Object.entries(this.config.routes).map(([lane, route]) => [lane, nativeRoute(route)])), models,
-        integration_project: await this.ctx.asunaFloor.integrationProject(persona),
+        // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
+        integration_project: await this.ctx.asunaFloor.integrationProject(
+          [...this.channels.values()].find(channel => channel.integration_directory)),
         skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), native_sessions: nativeSessions,
-        deployment: this.config.deployment, secrets: this.config.secrets, qq_admission: this.config.qqAdmission,
-        apply_integrations: !!this.applying });
+        deployment: this.config.deployment, secrets: this.config.secrets, admission: this.config.channelAdmission,
+        channels, apply_integrations: !!this.applying, schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
       // Publish the native controller's own summaries after cold metadata
@@ -105,9 +155,23 @@ export class CognitionCore {
     return this.initializing;
   }
 
+  // Schedule is optional in the stock Web profile. Reuse it if installed; otherwise mount that
+  // same native service once in this Host, unless mountSchedule is false (then plans are off).
+  async attachSchedule() {
+    if (!this.ctx.get('schedule')) {
+      if (this.config.mountSchedule === false) return false;
+      if (!this.scheduleMounted) { this.scheduleMounted = true; await this.ctx.plugin(ScheduleService, {}); }
+    }
+    await new Promise(resolve => { this.ctx.inject(['schedule'], ctx => {
+      this.schedules.ctx = ctx; resolve();
+    }); });
+    return true;
+  }
+
   async resolveRoutes(routes) {
     const models = {};
-    for (const lane of ['character', 'action']) {
+    for (const lane of ['character', 'action', 'appraiser']) {
+      if (!routes[lane]?.provider && lane === 'appraiser') continue;   // optional: the affect appraiser is off when unset
       const route = nativeRoute(routes[lane]);
       if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
         throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
@@ -124,6 +188,22 @@ export class CognitionCore {
     return models;
   }
 
+  /** Per-stage effort on the character route, from what its model offers: the gate thinks briefly
+   * (default low), and group turns may think less than the local chat (deployment.reasoning_effort.group). */
+  async stageEfforts() {
+    const route = nativeRoute(this.config.routes.character);
+    const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
+    const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
+    const wanted = { attend: 'low', ...(this.config.deployment?.reasoning_effort ?? {}) };
+    return Object.fromEntries(Object.entries(wanted).filter(([, id]) => offered.has(id)));
+  }
+
+  effortFor(lane, stage) {
+    if (lane === 'attend') return this.efforts?.attend;
+    if (lane === 'character' && stage?.scene_kind === 'group') return this.efforts?.group;
+    return undefined;
+  }
+
   publicConfig() { return redactSecrets(Config, this.config).value; }
 
   async validateSettings(next) {
@@ -136,7 +216,8 @@ export class CognitionCore {
     const probe = new BusinessWorker({ ...next, pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
       await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
-        models, persona: next.persona, qq_admission: next.qqAdmission ?? 'explicit' });
+        models, persona: next.persona, admission: next.channelAdmission ?? 'explicit',
+        channels: await this.channelPlugins(next.deployment) });
     } finally { await probe.dispose(); }
   }
 
@@ -180,10 +261,18 @@ export class CognitionCore {
     });
   }
 
-  message(stage) {
-    return createUserMessage({ content: [{ type: 'text', text: stage.text }],
-      source: { kind: 'asuna', form: 'notice', summary: (stage.lane === 'character' ? '角色脑' : stage.lane === 'executor' ? '行动脑' : '交流摘要') + ' · ' + stage.phase,
-        operation: stage.token, lane: stage.lane, phase: stage.phase } });
+  message(stage, session, pending = []) {
+    let text = stage.text, carried;
+    if (stage.context && session) {
+      // Composed when the notice is created: only what the session no longer shows verbatim.
+      const composed = composeContext(stage.context, visibleCarried(session, pending));
+      text = JSON.stringify(composed.context) + '\n' + stage.tail;
+      carried = { ...composed.carried, episode: stage.episode_id };
+      stage.delivery = composed.omitted;
+    }
+    return createUserMessage({ content: [{ type: 'text', text }],
+      source: { kind: 'asuna', form: 'notice', summary: ({ character: '角色脑', executor: '行动脑', attend: '接话判断' }[stage.lane] ?? '交流摘要') + ' · ' + stage.phase,
+        operation: stage.token, lane: stage.lane, phase: stage.phase, ...(carried ? { carried } : {}) } });
   }
 
   async onEvent(event) {
@@ -209,7 +298,7 @@ export class CognitionCore {
             && value.state === 'APPLIED') {
           const persona = this.personas.get(this.config.persona);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
-            skill_directories: await this.ctx.asunaFloor.skillPaths(persona) });
+            skill_directories: await this.skillDirectories(persona, await this.channelPlugins(this.config.deployment)) });
           [value] = await this.ctx.asunaFloor.workerReady(value.project);
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
@@ -249,7 +338,7 @@ export class CognitionCore {
       if (state.current) { state.queue.push(event); return; }
       state.current = event;
       state.system = event.system;
-      agent.followup(this.message(event));
+      agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     }
@@ -258,12 +347,11 @@ export class CognitionCore {
   async ensureAgent(stage, parentAgent, descriptor) {
     // Native Archive hides a monitored conversation until its next activity.
     // It does not disable the channel. Reopen before DSH's archive gate.
-    if (stage.lane === 'character' && stage.binding.scene_id.startsWith('qq:'))
+    if (stage.lane === 'character' && this.channelOf(stage.binding.scene_id))
       await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
-    const preset = stage.lane === 'executor' ? 'asuna-action' : stage.lane === 'summary'
-      ? 'asuna-summary' : this.personas.get(this.config.persona).preset;
+    const preset = PRESETS[stage.lane] ?? this.personas.get(this.config.persona).preset;
     const setup = async agentCtx => {
       await this.ctx.agentPresets.mount(agentCtx, preset);
       if (descriptor) agentCtx.on('agent/pre-step', async ({ agent }, next) => {
@@ -272,7 +360,7 @@ export class CognitionCore {
         return next();
       });
     };
-    const options = nativeRoute(this.config.routes?.[stage.lane === 'character' ? 'character' : 'action']);
+    const options = nativeRoute(this.config.routes?.[routeOf(stage.lane)]);
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
     const handle = persisted
       ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, parentAgent, agentOptions: options, setup })
@@ -284,13 +372,13 @@ export class CognitionCore {
     this.handles.set(stage.session_id, handle);
     if (!parentAgent) {
       const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd,
-        stage.binding.scene_id.startsWith('qq:') ? 'QQ' : 'Local');
+        this.channelOf(stage.binding.scene_id)?.title ?? 'Local');
       await workspace.attachSession(stage.session_id);
     }
     if (!persisted && stage.lane === 'executor') {
       // Child Agents are owned by native subagent routing; the top-level
       // session command controller deliberately refuses to acquire them.
-      handle.agent.session.append('session/title', { title: '行动脑 · ' + stage.binding.task_id,
+      handle.agent.session.append('session/title', { title: stage.title ?? '行动脑 · ' + stage.binding.task_id,
         source: { kind: 'user' }, messageSeqs: [] });
       await this.ctx.sessions.flush(handle.agent.session);
     }
@@ -307,6 +395,7 @@ export class CognitionCore {
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
       receipt: stage.token, request_refs: [sessionId + ':' + last.seq],
+      ...(stage.delivery ? { delivery: stage.delivery } : {}),
     };
   }
 
@@ -361,8 +450,15 @@ export class CognitionCore {
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
       order: scope.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       interpolate: false, text: ({ agent }) => agent ? this.state(agent.session.id).system : '' });
+    // A role session's system prompt is exactly the worker render (ADR-009 D-1):
+    // no harness identity, no runtime-context snapshot. The render for a Web
+    // turn is only known inside the assemble waterfall below (after the worker
+    // admits the claimed input), so it is enforced there as the sole section;
+    // a `complete` section's text is resolved before the waterfall runs.
+    if (lane === 'character') scope.systemPrompt.suppressRuntimeContext();
+    // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
-      if (message.source.kind === 'user') this.state(agent.session.id).claimed.push(message);
+      if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);
     });
     // DSH assembles BEFORE pre-step. Claimed input is prepared at this public
     // scoped assembly boundary, so the first request has its actual persona.
@@ -387,8 +483,10 @@ export class CognitionCore {
       const assembly = await next();
       return { ...assembly,
         tools: assembly.tools.filter(tool => lane === 'executor' && state.allowed?.has(tool.name)),
-        sections: assembly.sections.map(section =>
-        section.name === PERSONA_PREFIX_SECTION ? { ...section, text: state.system } : section) };
+        sections: lane === 'character'
+          ? [{ name: PERSONA_PREFIX_SECTION, text: state.system, interpolate: false }]
+          : assembly.sections.map(section =>
+            section.name === PERSONA_PREFIX_SECTION ? { ...section, text: state.system } : section) };
     });
     // Route selection only. All model-visible material uses the durable inbox.
     scope.on('agent/request', async ({ agent, turn, step }, next) => {
@@ -407,8 +505,9 @@ export class CognitionCore {
       // A deliberate native model selection remains authoritative for this
       // session. The plugin routes are defaults for sessions without one.
       const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
-      const route = selected ?? this.config.routes?.[lane === 'character' ? 'character' : 'action'];
-      return nativeRoute({ ...request, ...route, reasoningEffort: route?.reasoningEffort });
+      const route = selected ?? this.config.routes?.[routeOf(lane)];
+      const effort = selected ? undefined : this.effortFor(lane, stage);
+      return nativeRoute({ ...request, ...route, reasoningEffort: effort ?? route?.reasoningEffort });
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
@@ -417,7 +516,7 @@ export class CognitionCore {
       const stage = state.admitted; state.admitted = null;
       if (!stage) return decision;
       return stage.kind === 'stage'
-        ? { ...decision, messages: [...decision.messages, this.message(stage)] }
+        ? { ...decision, messages: [...decision.messages, this.message(stage, agent.session)] }
         : { kind: 'reject' };
     });
     scope.on('agent/assistant-stream', ({ agent, frame }) => {
@@ -447,7 +546,7 @@ export class CognitionCore {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
-          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage));
+          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
         } else await this.actionRecords.resume(agent.id);
       }
     });

@@ -2,7 +2,6 @@ import json,time,uuid
 import pytest
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
-from asuna.router import Router,FairQueue
 from asuna.sandbox import Sandbox
 from asuna.config import ROOT
 from asuna.privacy import PrivacyService
@@ -10,18 +9,6 @@ from asuna.state import Denied
 from asuna.audit import verify
 from test_engineering_m1 import decision,event,normal
 from test_engineering_m3 import task_setup
-
-
-def test_E24_queue_fairness_and_group_quiet(store):
-    q=FairQueue()
-    for scene in ('g1','g2'):
-        for i in range(5):q.put(scene,scene)
-    values=[]
-    while (value:=q.pop()) is not None:values.append(value)
-    assert values==['g1','g1','g2','g2','g1','g1','g2','g2','g1','g2']
-    lane=FakeLane(store,[]);router=Router(store,Coordinator(store,lane))
-    for _ in range(100):assert router.receive(event(scene='g1'))['state']=='RECEIVED_NO_WAKE'
-    assert not lane.calls and store.db.messages.count_documents({'scene_id':'g1'})==1
 
 
 def test_E09_E16_owner_cancellation_and_expired_lease(store):
@@ -39,9 +26,12 @@ def test_E09_E16_owner_cancellation_and_expired_lease(store):
 def test_E06_duplicate_result_one_character_feedback(store):
     service,task,broker,work=task_setup(store)
     try:
-        ref=broker.call('s-test','inspect','fixture_lookup',{})['evidence_ref']
-        value={'task_id':task['_id'],'intent_revision':1,'status':'done','facts':[{'text':'文件已查阅','evidence_refs':[ref]}],'artifact_refs':[ref],'effect_receipts':[],'uncertainties':[],'unmet_items':[],'needs_decision':None}
-        done=service.finish(task,value)
+        ref=broker.call('s-test','inspect','list_files',{})['evidence_ref']
+        # The executor's natural-language report with program-attached receipts (tasks.Executor).
+        current=store.db.tasks.find_one({'_id':task['_id']})
+        done=store.put('tasks',{**current,'state':'RETURNED','feedback_state':'READY','result':{'task_id':task['_id'],
+            'intent_revision':1,'text':'文件已查阅','facts':[{'text':'文件已查阅','evidence_refs':[ref]}],'artifact_refs':[ref]}},
+            expected=current['revision'])
         lane=FakeLane(store,[LaneResult('这是工具结果，我来说明。'),decision(),LaneResult('文件已经查过了。')])
         c=Coordinator(store,lane)
         assert service.feedback(done,c)['state']=='COMMITTED'

@@ -179,7 +179,7 @@ class IntegrationRunner:
         self.lease.__enter__()
         try:
             from .config import RESOURCES
-            manual = RESOURCES/'RUNTIME_API.md' if RESOURCES.is_dir() else ROOT/'RUNTIME_API.md'
+            manual = RESOURCES/'RUNTIME_API.md' if (RESOURCES/'RUNTIME_API.md').is_file() else ROOT/'RUNTIME_API.md'
             shutil.copyfile(manual, self.dev/'RUNTIME_API.md')
         except BaseException:
             self.lease.__exit__(None, None, None); self.lease = None

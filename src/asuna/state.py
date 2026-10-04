@@ -3,14 +3,47 @@ from datetime import datetime, timezone
 import copy
 import json
 import uuid
+from pathlib import Path
 from bson import BSON
 from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
 from pymongo.errors import DuplicateKeyError
-from .config import BUNDLE, validate_database, character_id
+from .config import validate_database, character_id
 from .evidence import canonical, sha
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
-               'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts')
+               'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts',
+               'affect_events','affect_amendments','affect_proposals','scene_people')
+# Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
+INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
+
+
+AUDIT_INLINE_LIMIT = 16 * 1024
+# Counters written with $inc outside a revision (scene sequence, retrieval salience); not part of a document's digest.
+COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',)}
+
+
+def content_digest(collection, doc):
+    skip = COUNTER_FIELDS.get(collection, ())
+    return sha(canonical({k: v for k, v in doc.items() if k not in skip}))
+
+
+def commit_payload(operation, collection, doc, **extra):
+    """state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
+
+    The hash chain covers the reference; audit.verify_documents compares the stored
+    document with content_sha256, so tampering stays detectable.
+    """
+    body = canonical(doc)
+    if len(body) <= AUDIT_INLINE_LIMIT:
+        return {'operation': operation, 'collection': collection, 'document': doc, **extra}
+    return {'operation': operation, 'collection': collection, 'id': doc['_id'], 'revision': doc.get('revision'),
+            'content_sha256': content_digest(collection, doc), 'bytes': len(body), **extra}
+
+
+def content_ref(text):
+    """{content_sha256, bytes} for model output kept elsewhere (receipt or native transcript)."""
+    raw = (text or '').encode()
+    return {'content_sha256': sha(raw), 'bytes': len(raw)}
 
 
 def now():
@@ -35,8 +68,9 @@ class Store:
         self.fail_audit = False
 
     def migrate(self):
+        existing = set(self.db.list_collection_names())     # one round trip, not one per collection
         for name in COLLECTIONS:
-            if name not in self.db.list_collection_names():
+            if name not in existing:
                 self.db.create_collection(name, validator={'$jsonSchema':{'bsonType':'object','required':['_id','schema_version'],'properties':{'schema_version':{'enum':[1]}}}})
         specs = {
             'identities': [([('platform',1),('account_id',1)], {'unique':True})],
@@ -44,19 +78,29 @@ class Store:
                          ([('publication_key',1)],{'unique':True,'partialFilterExpression':{'publication_key':{'$type':'string'}}}),
                          ([('scene_id',1),('scene_seq',1)],{}),
                          ([('host_managed',1),('ingress_state',1),('received_at',1)],{}),
-                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{})],
-            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True})],
+                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{}),
+                         ([('author',1),('direction',1)],{})],
+            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
+                         ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
             'tasks': [([('request_key',1)], {'unique':True})],
             'plans': [([('scene_id',1),('person_id',1),('status',1)],{})],
-            'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{})],
+            'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{}),
+                             ([('scope_key',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
             'state_revisions': [([('mutation_id',1)], {'unique':True})],
             'sessions': [([('binding_key',1)], {'unique':True})],
             'audit_events': [([('stream_id',1),('seq',1)], {'unique':True})],
+            'affect_events': [([('persona',1),('ts',1)],{}),
+                              ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
+            'affect_amendments': [([('target',1)],{}),
+                                  ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
+            'affect_proposals': [([('persona',1),('kind_row',1),('created_at',1)],{})],
+            # One fixed label per person per scene (people.py).
+            'scene_people': [([('scene_id',1),('handle',1)],{'unique':True})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:
                 self.db[name].create_index(keys, **options)
-        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':1}
+        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':3}
 
     def audit(self, stream: str, kind: str, payload: dict, scope: str='operator') -> dict:
         if self.fail_audit:
@@ -81,11 +125,13 @@ class Store:
             raise ValueError('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
 
     def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state') -> dict:
-        if collection not in COLLECTIONS or collection in ('audit_events',):
+        if collection not in COLLECTIONS or collection in INSERT_ONLY:
             raise Denied('COLLECTION_NOT_WRITABLE')
         doc = copy.deepcopy(document)
         doc['schema_version'] = 1
         doc['revision'] = 1 if expected is None else expected + 1
+        if collection == 'state_revisions' or (collection == 'memory_units' and expected is None):
+            doc.setdefault('created_at' if collection == 'state_revisions' else 'formed_at', now())
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
         self._size(doc)
@@ -101,18 +147,18 @@ class Store:
         except DuplicateKeyError as exc:
             self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
-        self.audit(stream,'state.commit',{'operation':operation,'collection':collection,'document':doc},doc.get('scope_key','operator'))
+        self.audit(stream,'state.commit',commit_payload(operation,collection,doc),doc.get('scope_key','operator'))
         return doc
 
     def recover_commits(self):
         repaired = 0
         for name in COLLECTIONS:
-            if name == 'audit_events':
+            if name in INSERT_ONLY:
                 continue
             for doc in self.db[name].find({'_last_op':{'$exists':True}}):
                 op = doc['_last_op']
                 if not self.db.audit_events.find_one({'type':'state.commit','payload.operation':op}):
-                    self.audit('recovery','state.commit',{'operation':op,'collection':name,'document':doc,'reconciled':True},doc.get('scope_key','operator'))
+                    self.audit('recovery','state.commit',commit_payload(op,name,doc,reconciled=True),doc.get('scope_key','operator'))
                     repaired += 1
         return repaired
 
@@ -140,7 +186,9 @@ class Store:
             raise Denied('UNKNOWN_ACCOUNT')
         return doc['person_id']
 
-    def seed(self, fixture=BUNDLE/'fixtures/world.json'):
+    def seed(self, fixture):
+        """Test-only synthetic world; persona paths are relative to the fixture file."""
+        fixture = Path(fixture)
         world = json.loads(fixture.read_text(encoding='utf-8'))
         for name, rows, key in [('identities',world['identities'],'person_id'),('scenes',world['scenes'],'scene_id'),('memory_units',world['memories'],'id')]:
             for row in rows:
@@ -152,8 +200,11 @@ class Store:
                 if name=='memory_units':
                     row.update(character_id=character_id(self.config),embedding_status='PENDING',depends_on=row['source_event_ids'])
                 self.put(name,row,stream='seed')
+        from .documents import DocumentStore
         for persona,path in world['personas'].items():
-            self.init_head('persona:'+persona,'global-safe',{'body':(BUNDLE/path).read_text(encoding='utf-8')},[])
+            docs=DocumentStore(self,persona)
+            if not docs.head('persona'):
+                docs.seed('persona','persona',(fixture.parent/path).read_text(encoding='utf-8'),path=Path(path).name)
         for rel in world['relationships']:
             self.init_head('relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
 
@@ -175,19 +226,19 @@ class Store:
 
     def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
                sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=()):
-        allowed = {'body','familiarity','trust','closeness','tension'}
+        # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
+        allowed = {'body'}
         # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
         # 别名场景这一轮写的是 canonical 那一份。linked_scopes 就是本轮授权的那个场景 scope——
         # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
         linked = {item for item in (linked_scopes or ()) if isinstance(item, str) and item}
         readable_scopes = {'global-safe', scope} | linked
-        if actor!='character' or not entity.startswith(('persona:','overlay:','relationship:','scene_affect:')) or not set(content).issubset(allowed):
+        # The persona is a document (ADR-009 §5); state heads hold only relationships and scene affect.
+        if actor!='character' or not entity.startswith(('relationship:','scene_affect:')) or not set(content).issubset(allowed):
             raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
         if scope != request_scope and not (request_scope in linked
-                                           and entity.startswith(('relationship:', 'overlay:',
+                                           and entity.startswith(('relationship:',
                                                                   'scene_affect:'))):
-            raise Denied('SCOPE_PROMOTION_DENIED')
-        if entity.startswith('persona:') and scope != 'global-safe':
             raise Denied('SCOPE_PROMOTION_DENIED')
         if not sources:
             raise Denied('MUTATION_REQUIRES_SOURCES')
@@ -197,9 +248,6 @@ class Store:
             row=self.db.memory_units.find_one({'_id':source,'status':{'$ne':'tombstone'}})
             if not row or row['scope_key'] not in readable_scopes:
                 raise Denied('MUTATION_SOURCE_DENIED')
-        for field in ('familiarity','trust','closeness','tension'):
-            if field in content and (type(content[field]) is not int or not 0<=content[field]<=4):
-                raise Denied('RELATIONSHIP_PARAMETER_RANGE')
         head,base=self.head(entity,scope) or (None,None)
         existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
         if existing:
@@ -212,7 +260,9 @@ class Store:
                 parent=ancestor.get('parent_revision_id')
                 ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
             raise Conflict('MUTATION_ALREADY_ATTEMPTED')
-        if not head or head['revision_id']!=base_revision_id:
+        # A relationship has no record until she first writes one: that write starts from no base.
+        first=head is None and base_revision_id is None and entity.startswith('relationship:')
+        if not first and (not head or head['revision_id']!=base_revision_id):
             self.audit('mutation:'+mutation_id,'state.conflict',{'entity':entity,'base_revision_id':base_revision_id,'reason':'BASE_REVISION_STALE'},scope)
             raise Conflict('BASE_REVISION_STALE')
         evidence_ids=set();visited=set()
@@ -239,13 +289,16 @@ class Store:
                 if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
                 evidence_ids.add(key)
         for source in sources:roots(source,set())
-        processed=set(base.get('processed_source_ids',[]))
+        processed=set((base or {}).get('processed_source_ids',[]))
         if evidence_ids and evidence_ids.issubset(processed):
             raise Conflict('NO_NEW_SOURCE_EVENTS')
         new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
         metadata={k:v for k,v in {'reason':reason,'change_class':change_class}.items() if v is not None}
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':head['_id'],'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
-        self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
+        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':entity+'|'+scope,'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
+        if first:
+            self.put('state_heads',{'_id':entity+'|'+scope,'scope_key':scope,'revision_id':new_id},stream='mutation:'+mutation_id)
+        else:
+            self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
         return revision
 
     def public_messages(self, scene: str, person: str):

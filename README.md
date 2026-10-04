@@ -1,9 +1,10 @@
 # Asuna Cognition Core
 
-Asuna runs as two plugins in one native DSH **0.2.0-rc.2** Web Host:
+Asuna runs as plugins in one native DSH **0.2.0-rc.2** Web Host:
 
 - `@asuna/cognition-core` supplies cognition, task/channel authorization, the business worker, and publication tools.
-- `@asuna/xiaoman` supplies the existing 小满 persona baseline, selected skills, QQ adapter source, and its role preset.
+- A persona package (for example `packages/xiaoman`, the persona installed in this deployment) supplies the persona baseline, selected skills and its role preset. The core contains no persona; any persona package can replace it, and `tests/fixtures/personas/demo` is a synthetic one.
+- A channel package per platform (`packages/napcat-qq` for QQ through NapCat) supplies that platform's id formats, its adapter and the adapter's skill. The core names no platform.
 
 DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker reuses the existing Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
 
@@ -23,6 +24,6 @@ Existing Mongo persona, self, relationships, history and grants remain authorita
 
 ## Develop
 
-Owner actions edit the persistent `xiaoman` candidate by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start.
+Owner actions edit the persistent candidate of the selected persona package by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start.
 
 See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for package contracts and lifecycle, [RUNTIME_API.md](RUNTIME_API.md) for channel/tool semantics, and [AGENTS.md](AGENTS.md) for development rules. Plans in `docs/development_plans/` preserve design history rather than current runtime documentation.

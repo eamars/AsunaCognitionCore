@@ -1,6 +1,6 @@
-"""Project a verified QQ peer snapshot into the role context.
+"""Bind and store the verified platform peer snapshot; people.py turns it into what she reads.
 
-Adapted from XiaoMan's ADR-005 development draft (host_wiring/peer_context.py).
+Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.py).
 
 宿主侧落点：src/asuna/peer_context.py（新文件，纯标准库）。
 
@@ -9,9 +9,12 @@ Adapted from XiaoMan's ADR-005 development draft (host_wiring/peer_context.py).
   持久消息      message['event']['raw']['asuna_peer']  （落库后跟着事件走的那一层）
 不是 message['raw']。读不到就返回 None：没有身份块就别让角色以为自己知道什么。
 """
+try:
+    from . import channel_kinds
+except ImportError:                   # history_query 的平铺加载（离线自检）：用同一份已装平台登记
+    from asuna import channel_kinds
+
 PEER_KEY = "asuna_peer"
-ROLE_LABEL = {"owner": "群主", "admin": "管理员", "member": "成员", "unknown": "身份未知"}
-RELATION_LABEL = {"friend": "好友", "group": "群临时会话", "other": "临时会话"}
 CHANGE_LABEL = {"nickname": "昵称", "card": "群名片", "role": "身份", "title": "头衔"}
 MAX_NAME = 60
 MAX_ALIASES = 4
@@ -59,8 +62,12 @@ def verify_peer(peer, channel, expected_person_id=None):
     sender = _clean(channel.get("sender_id"), 32)
     if not sender:
         return False, "no_sender"
-    person_id = expected_person_id or "qq:%s" % sender
-    if _clean(peer.get("person_id"), 40) != person_id or person_id != "qq:%s" % sender:
+    # The platform comes from the host's side: the route's person, else the authenticated channel.
+    platform = channel_kinds.of(expected_person_id) or channel_kinds.get(channel.get("id"))
+    if platform is None:
+        return False, "no_platform"
+    person_id = expected_person_id or platform.person_id(sender)
+    if _clean(peer.get("person_id"), 40) != person_id or person_id != platform.person_id(sender):
         return False, "person_mismatch"
     if _clean(peer.get("account_id"), 32) != sender:
         return False, "account_mismatch"
@@ -106,80 +113,17 @@ def snapshot_event(event):
     return profile
 
 
-def project_peer(peer):
-    """身份块 → 一行中文；不是 dict 或缺 person_id 就 None。"""
-    if not isinstance(peer, dict):
-        return None
-    person_id = _clean(peer.get("person_id"), 32)
-    if not person_id:
-        return None
-    nickname = _clean(peer.get("nickname"))
-    card = _clean(peer.get("card"))
-    display = _clean(peer.get("display")) or card or nickname or "未取到名字"
-    scene = _clean(peer.get("scene"), 40)
-    parts = [display]
-    if scene.startswith("group:"):
-        parts.append("本群群名片 %s" % (card or "未设置"))
-        parts.append("QQ 昵称 %s" % (nickname or "未取到"))
-        role = _clean(peer.get("role"), 16) or "unknown"
-        parts.append("本群身份 %s" % ROLE_LABEL.get(role, role))
-        title = _clean(peer.get("title"))
-        if title:
-            parts.append("头衔 %s" % title)
-    else:
-        if nickname and nickname != display:
-            parts.append("昵称 %s" % nickname)
-        relation = _clean(peer.get("relation"), 16)
-        if relation:
-            parts.append(RELATION_LABEL.get(relation, relation))
-    profile_at = _clean(peer.get("profile_at"), 40)
-    if peer.get("verified") is True:
-        parts.append("QQ 平台已核实%s" % ("，时间 %s" % profile_at[:19] if profile_at else ""))
-    known = {display, card, nickname} - {""}
-    aliases = peer.get("aliases")
-    olds = [a for a in (_clean(x) for x in (aliases[:MAX_ALIASES] if isinstance(aliases, list) else []))
-            if a and a not in known][:2]
-    if olds:
-        parts.append("曾用名 %s" % "、".join(olds))
-    line = "[对方身份] %s（%s）" % ("；".join(parts), person_id)
-    changes = peer.get("changed")
-    changed = [f for f in (changes if isinstance(changes, list) else []) if isinstance(f, str)][:3]
-    previous = peer.get("previous") if isinstance(peer.get("previous"), dict) else {}
-    if changed:
-        bits = []
-        for field in changed:
-            label = CHANGE_LABEL.get(field, _clean(field, 16))
-            old = _clean(previous.get(field))
-            bits.append("%s（原「%s」）" % (label, old) if old else label)
-        line += "[刚改了%s，还是同一个人]" % "、".join(bits)
-    if not peer.get("verified"):
-        line += "[未核实：平台资料没查到，这只是这条消息自带的]"
-    return line
-
-
-def project_event(event):
-    """入站事件 → 一行；校验源是 event['channel']，不是 raw 自称。"""
-    peer = peer_from_event(event)
-    ok, _ = verify_peer(peer, channel_of(event), event.get("person_id") if isinstance(event, dict) else None)
-    return project_peer(peer) if ok else None
-
-
-def project_message(doc):
-    """持久消息 → 一行；校验源是 message['event']['channel']。"""
-    peer = peer_from_message(doc)
-    ok, _ = verify_peer(peer, channel_of(doc), doc.get("author") if isinstance(doc, dict) else None)
-    return project_peer(peer) if ok else None
-
-
-def apply_peer_context(context, doc, key="sender_identity"):
-    """ContextBuilder.prepare 用（在 context 字典造好之后）：校验通过才写。
-
-    只对当前这条写；不通过一个键都不加。返回 (那行或 None, 原因)；原因非空时
-    调用方值得记一行日志，别把通道自称的身份静默当成事实。
-    """
-    peer = peer_from_message(doc)
-    ok, reason = verify_peer(peer, channel_of(doc), doc.get("author") if isinstance(doc, dict) else None)
-    line = project_peer(peer) if ok else None
-    if line and isinstance(context, dict):
-        context[key] = line
-    return line, reason
+def speaker_name(config, person_id, row=None, db=None):
+    """Readable name for a stored author: a saved identity name, the character, the local user, or the platform profile saved with the row."""
+    chat = config.get("chat", {})
+    identity = db.identities.find_one({"_id": person_id}, {"display_name": 1}) if db is not None and person_id else None
+    if identity and _clean(identity.get("display_name")):
+        return _clean(identity["display_name"])
+    if person_id == (config.get("character_id") or chat.get("persona")):
+        return chat.get("display_name") or person_id
+    if person_id == chat.get("person_id"):
+        return "本机用户"
+    peer = peer_from_message(row) or {}
+    name = _clean(peer.get("display")) or _clean(peer.get("card")) or _clean(peer.get("nickname"))
+    platform = channel_kinds.of(person_id)
+    return name or (platform.TITLE + " · " + str(person_id).partition(":")[2] if platform else str(person_id or ""))

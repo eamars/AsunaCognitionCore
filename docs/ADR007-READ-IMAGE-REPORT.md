@@ -97,7 +97,7 @@
 
 **实测到的现象**（不是推断）：操作员在本机 owner 私聊（`local-dm`）里委托重试验图，ref 给的是
 `att-28d96d82c156`（= `ref_of('in-ep-245d91c91ae4294a9addd1fb644d67e9', 0)`，那条消息在 QQ 私聊
-`qq:3768713357:dm:673225019`，`scene_seq` 34，jpeg 148,285 B）。返回
+`qq:100357:dm:100019`，`scene_seq` 34，jpeg 148,285 B）。返回
 `IMAGE_ATTACHMENT_NOT_IN_SCENE`——而且是在能力门**之后**才报的，说明 `input_modalities` 已经声明了
 `image`、主机白名单也过了；拦下来的不是路由，是我自己那道只扫 `task['scene_id']` 的围栏。
 本机场景里一张图都没有（`messages` 查 `scene_id=local-dm` + `event.raw.asuna_media` 为空），

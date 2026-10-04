@@ -52,6 +52,43 @@ export class AsunaApi extends TypertRemoteService {
     return this.core.worker.call('input_policies', { sessions });
   }
 
+  /** For a character session: the context projections of its latest action session, exactly as DSH's
+   * own meter reads them (contextPressure, contextBreakdown). Null for any other session. */
+  async brainContext(sessionId) {
+    if (typeof sessionId !== 'string' || !sessionId) throw new Error('INVALID_SESSION_ID');
+    await this.core.ready();
+    const binding = await this.core.worker.call('session', { session_id: sessionId }).catch(() => null);
+    if (binding?.lane !== 'character') return null;
+    const role = this.core.ctx.sessions.get(sessionId);
+    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/action-linked')?.data.session_id;
+    return { action: action ? await this.contextProjections(action) : null };
+  }
+
+  async contextProjections(id) {
+    const { ctx } = this.core, keys = ['contextPressure', 'contextBreakdown'];
+    const hot = ctx.sessions.get(id);
+    if (hot) return ctx.sessionProjections.snapshot(hot, keys).values;
+    const header = (await ctx.sessionPersistence.stat(id))?.header;
+    return (header && ctx.sessionProjectionCache.cachedSnapshot(header, keys)?.values) ?? null;
+  }
+
+  async personaSources() {
+    await this.core.ready();
+    return this.core.worker.call('persona.sources', {});
+  }
+
+  /** Owner operations from the settings card: dry-run / run a persona job, export documents. */
+  async personaJob(request) {
+    if (!request || typeof request.job !== 'string') throw new Error('PERSONA_JOB_REQUIRED');
+    await this.core.ready();
+    return this.core.worker.call('persona.job_run', { job: request.job, dry_run: request.dry_run !== false, args: {} });
+  }
+
+  async personaExport() {
+    await this.core.ready();
+    return this.core.worker.call('persona.export', {});
+  }
+
   async applySettings() {
     await this.core.applySettings(this.core.savedConfig());
     return this.status();
@@ -73,7 +110,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'applySettings', 'saveSettings']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

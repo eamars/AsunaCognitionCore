@@ -1,10 +1,16 @@
 from __future__ import annotations
 import json
 import traceback
-from .config import prompt_path, redact_text
+from .config import excerpt, redact_text
+from . import visibility
+from .render import render_system, readable_sections, model_and_policy
+from .documents import DocumentStore, render_markdown
+from .persona_model import effective
 from .evidence import canonical, sha
 from .state import Store, Denied
-from .peer_context import apply_peer_context
+from .people import People
+from .familiarity import NO_UNDERSTANDING, words as familiarity_words
+from . import attend
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -21,7 +27,112 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
                   '说多少、还是继续旁听，都由你定。沉默不需要理由，也不因为"有机会"就该开口。'
                   'related_messages 里带 topic_id 的是这条话题线到目前为止的原话（含没@你的旁听行），'
-                  '谁说的以行上的 author 为准。')
+                  '谁说的以行上的 speaker 为准。')
+
+
+# Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
+HISTORY_ROW_CHARS = 1500
+MEMORY_CHARS = 1200
+EXPERIENCE_MESSAGE_CHARS = 400
+EXPERIENCE_TASK_CHARS = 800
+
+# ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
+BLOCKS = {
+    'self_state': ('self_state_from_program',),
+    'dossier': ('dossier_from_program',),
+    'affect': ('affect_from_program',),
+    'affect_proposals': ('affect_proposals_from_program',),
+    'relationship': ('relationship', 'relationship_shared_from_program'),
+    'ledgers': ('ledgers_from_program',),
+    'rhythm': ('rhythm_from_program',),
+    'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
+    'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
+    'tasks_plans': ('task_state_from_program', 'plans_from_program', 'schedule_control_from_program',
+                    'scheduled_plan_from_program'),
+    'recent_phrasing': ('recent_phrasing_from_program',),
+    'media': ('media_from_program',),
+    'group_continuity': ('group_continuity_from_program',),
+    'sender_identity': ('sender_identity',),
+}
+CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
+                'recent_experience_from_program')
+
+
+def catch_up(store, scene, rows, now_ts=None):
+    """A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke
+    there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines."""
+    from datetime import datetime, timezone
+    from .config import character_id
+    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': character_id(store.config),
+                                             'delivery_state': 'DELIVERED'}, {'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
+    since = (mine or {}).get('scene_seq') or 0
+    floor, always = now_ts - attend.WINDOW_MAX_MINUTES * 60, now_ts - attend.WINDOW_MIN_MINUTES * 60
+    kept = []
+    for index, row in enumerate(rows):
+        at = attend._seconds(row.get('received_at') or row.get('receipt_at'))
+        recent = at is not None and at >= floor and (row.get('scene_seq', 0) > since or at >= always)
+        if index >= 12 and not recent:
+            break
+        kept.append(row)
+    return kept
+
+
+def order_context(context, order=None):
+    """Fixed head, ordered blocks (persona order, then the core default for the rest), fixed tail."""
+    blocks = [b for b in (order or []) if b in BLOCKS] + [b for b in BLOCKS if b not in (order or [])]
+    keys = [*CONTEXT_HEAD, *[k for b in blocks for k in BLOCKS[b]]]
+    rest = [k for k in context if k not in keys and k not in CONTEXT_TAIL and k not in ('ref_index', 'event')
+            and not k.endswith('_from_host')]
+    tail = [*CONTEXT_TAIL, *[k for k in context if k.endswith('_from_host')], 'ref_index', 'event']
+    return {k: context[k] for k in [*keys, *rest, *tail] if k in context}
+
+
+def _section_view(section):
+    return {k: section[k] for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
+
+
+def dossier_block(docs, model, policy, person, cls):
+    """§7: preamble always-sections + last N injectable entries + a title index (owner-private);
+    public sessions see only public always-sections; the action brain sees none."""
+    slug = 'dossier:' + person
+    revision, content = docs.read(slug)
+    if not content:
+        return None
+    sections = content['sections']
+    if cls == visibility.OWNER_PRIVATE:
+        preamble = [s for s in sections if (s['sid'] == '_preamble' or 'preamble' in s['tags']) and s['inject'] == 'always']
+        entries = [s for s in sections if 'entry' in s['tags'] and 'injectable' in s['tags']]
+        last = effective(model, 'dossier.inject_last', policy) or 0
+        index_size = effective(model, 'dossier.index_size', policy) or 0
+        chosen = preamble + (entries[-last:] if last else [])
+        index = [{'sid': s['sid'], 'heading': s['heading'], 'entry_date': s.get('entry_date')} for s in entries[-index_size:]] if index_size else []
+    else:
+        chosen = [s for s in sections if s['visibility'] == 'public' and s['inject'] == 'always']
+        index = []
+    if not chosen and not index:
+        return None
+    return {'doc': slug, 'revision': revision, 'subject': content.get('subject'),
+            'sections': [_section_view(s) for s in chosen], 'index': index,
+            'note': '人物档案：只追加的积累式正文；需要别的条目原文时用 next=recall 加 read。'}
+
+
+def ledger_block(docs, cls):
+    out = []
+    for slug in docs.slugs():
+        revision, content = docs.read(slug)
+        if not content or content.get('kind') != 'ledger':
+            continue
+        sections = readable_sections(content, cls)
+        if sections:
+            out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
+                        'sections': [_section_view(s) for s in sections]})
+    return out
+
+
+INVENTED_MARK = '（自述编写，非共同经历）'
+
 
 
 class ContextBuilder:
@@ -75,14 +186,15 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
-    def prepare(self, event: dict, persona='P1'):
+    def prepare(self, event: dict, persona='P1', recall=False):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
-        head,revision=self.store.head('persona:'+persona,'global-safe') or (None,None)
-        if not revision:
-            raise ValueError('REQUIRED_PERSONA_MISSING')
-        body=revision['content']['body']
+        session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
+        system,system_ref=render_system(self.store,persona,session_class)
+        docs=DocumentStore(self.store,persona)
+        persona_doc=docs.read('persona')[1]
+        body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
         content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
         if len(''.join(content_lines))<80:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
@@ -94,7 +206,6 @@ class ContextBuilder:
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
         relation=self.store.head(target['entity'],target['scope'])
-        overlay=self.store.head('overlay:'+persona,scope)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
         from .ingress import episode_id
@@ -105,14 +216,20 @@ class ContextBuilder:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
-            'platform_reply_to':1,'event.group_context':1}
+            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1}
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
                                     receipt=1,received_at=1)
-        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1).limit(12))
+        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1)
+                     .limit(attend.MAX_LINES if scene['kind']=='group' else 12))
+        if scene['kind']=='group':
+            history=catch_up(self.store,scene,history)
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
+        else:
+            for row in history:                  # read only to size the catch-up window; not shown as raw times
+                row.pop('received_at',None); row.pop('receipt_at',None)
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
@@ -121,10 +238,24 @@ class ContextBuilder:
                                                        'scene_seq':{'$gte':source['scene_seq']}},
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
+        for row in history:
+            # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
+            row.pop('scene_seq',None)
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            if row.get('direction')!='outbound':
+                row.pop('episode_id',None)
         if self.retrieval:
             try:
+                from .persona_model import effective as _effective
+                from .render import model_and_policy as _model_and_policy
+                _m,_p=_model_and_policy(self.store,persona)
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
-                                                                   linked_scopes=read['linked_scope_keys'])
+                                                                   coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
+                                                                   forgetting={k:_effective(_m,'memory.forgetting.'+k,_p) for k in ('half_life_days','half_life_messages','step_back_below')},
+                                                                   record_use=True,automatic=not recall,
+                                                                   linked_scopes=read['linked_scope_keys'],
+                                                                   private_scope=visibility.owner_private_scope(persona)
+                                                                       if session_class==visibility.OWNER_PRIVATE else None)
             except (Denied, PermissionError):
                 raise
             except Exception:
@@ -134,10 +265,19 @@ class ContextBuilder:
                 retrieval_manifest={'path':'scoped_history_without_rag','vector_verified':False,
                                     'error':redact_text(traceback.format_exc(),self.store.config)}
         else:
-            memories=list(self.store.db.memory_units.find({'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}],'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
+            readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
+            if session_class==visibility.OWNER_PRIVATE:
+                readable.append({'scope_key':visibility.owner_private_scope(persona),'policy_epoch':1})
+            memories=list(self.store.db.memory_units.find({'$or':readable,'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
-        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by') if k in m} for m in memories]
+        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
+        for fact in facts:
+            # The whole unit stays readable through recall/read; the turn carries a bounded excerpt.
+            fact['body_markdown']=excerpt(fact.get('body_markdown'),MEMORY_CHARS)
+            if fact.get('invented'):
+                # Fixed mark on every injection of persona-authored, not shared, history (MEMORY §5).
+                fact['body_markdown']=INVENTED_MARK+fact['body_markdown']
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
@@ -166,15 +306,25 @@ class ContextBuilder:
         schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
         plans=[schedule_rules.project(row,schedule_rules.scene_timezone(self.store.config,scene,row),
                                       moment) for row in plan_rows]
+        # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
+        coverage_block=None
+        if retrieval_manifest.get('coverage')=='insufficient':
+            coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
+                            else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
-                 'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
+                 # How well she knows them (familiarity.py) and what she has written about them, in words.
+                 'relationship':{**familiarity_words(self.store,event['person_id'],persona),
+                                 'understanding':((relation[1]['content'] or {}).get('body') if relation else None)
+                                                 or NO_UNDERSTANDING},
                  'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
-                 'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要只在 participants 覆盖当前说话人时才算这个人的证据：participants 里只有别人的那段是背景，不能当成当前说话人说过什么；attribution.corrections 与 corrected_by 是程序按真实 reply 链算出的更正标注，非空就说明这段转述之后有人更正过，以更正后的原话为准。',
+                 'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。',
                  'task_state_from_program':task_states,
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if coverage_block:
+            context['coverage_from_program']=coverage_block
         if any(task['state'] == 'PAUSED' for task in task_states):
             context['task_continuation_from_program'] = (
                 'PAUSED 是重启后等待操作者决定的旧行动，历史与回执仍保留。'
@@ -184,15 +334,15 @@ class ContextBuilder:
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],
-                'note':'delivered_history 与 memories 里带 scene_id／scope_key 的行可能来自这些联动场景'
+                'note':'delivered_history 与 memories 里带 scene 的行来自这些联动场景'
                        '（配置认定是同一个人的另一个入口，只读）：它们不是这个场景里的新输入，不用当成'
                        '刚说的话再回应一次；要引用就说清那是在哪个入口说的。'}
         if target['shared']:
             context['relationship_shared_from_program']={
-                'entity':target['entity'],'scope':target['scope'],
+                'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
-                       '会写进 %s，来源仍只取本轮场景里真实给过你的证据。' % target['scope']}
-        if event.get('episode_kind') == 'self_development':
+                       '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
+        if event.get('episode_kind') in ('self_development', 'presence'):
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']
             # Local owner opportunity may read the real scenes already bound to
@@ -205,20 +355,26 @@ class ContextBuilder:
                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
                  'delivery_state':1}).sort('received_at',-1).limit(30))
+            for row in recent:
+                row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
             tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
                 {'scene_id':1,'state':1,'goal':1,'failure_type':1,'result':1,
                  'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(12))
             for item in tasks:
                 if item.get('result'):
-                    item['result_excerpt']=json.dumps(item.pop('result'),ensure_ascii=False,default=str)[:2400]
+                    item['result_excerpt']=excerpt(json.dumps(item.pop('result'),ensure_ascii=False,default=str),EXPERIENCE_TASK_CHARS)
             lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
                 {'candidate':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
                  'activated_at':1,'task_id':1,'reason':1}).sort('published_at',-1).limit(8))
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
+        people=People(self.store,persona)
+        if source and (source.get('event') or {}).get('channel'):
+            # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.
+            line=people.identity_line(scene,source)
+            if line:context['sender_identity']=line
         if source:
-            apply_peer_context(context,source)
             # 这条消息里出现过什么非文本段：只给有界事实与「能不能按需拉」，不替她决定要不要看图。
             from .vision import media_note
             media=media_note(source,self.store.config)
@@ -269,53 +425,116 @@ class ContextBuilder:
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
                 {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) if source else []
             self._reply_context(speaker_tail, scene)
+            for row in [*related, *speaker_tail]:
+                row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             continuity = {**group, 'related_messages': related,
                           'current_speaker_tail': list(reversed(speaker_tail))}
             if str(group.get('wake_reason') or '').startswith('proactive'):
                 continuity['proactive_from_program'] = PROACTIVE_NOTE
             context['group_continuity_from_program'] = continuity
-        manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
-        if self.store.config.get('task_mode')=='workspace':
-            if relation:
-                context['understanding_update_from_program']={
-                    'available':True,'target':target_note,
-                    'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
-            from .resources import workspace_grant
-            grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
-            context['action_capabilities_from_program']={
-                'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
-                'cancellation_available':True,
-                'network':'行动脑可以按需搜索公共网页并读取页面。',
-                'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-            development = (event.get('episode_kind') == 'self_development' or
-                event.get('development_profile') == 'owner' or
-                event.get('episode_kind') == 'task_feedback' and bool(
-                    (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
-            if development and (scene['_id'],event['person_id']) == (
-                    self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
-                context['action_capabilities_from_program']['development'] = {
-                    'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
-            context['action_capabilities_from_program']['history_query']=(
-                '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
-                '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
-            from .vision import vision_capability
-            if vision_capability(self.store.config)['supported']:
-                context['action_capabilities_from_program']['read_image']=(
-                    '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
-                    '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
-            context['action_capabilities_from_program']['group_discussion']=(
-                '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
-                '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
-                '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
-                '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
-                '判断，不自动总结、不自动发言。')
-            from .integration import event_granted
-            if event_granted(self.store.config, event):
-                context['action_capabilities_from_program']['integration'] = {
-                    'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
-            from .skills import skills_directory
-            if skills_directory(self.store.config,scene['_id'],event['person_id']):
-                context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
-            manifest['context_sha256']=sha(canonical(context))
-        system=prompt_path(self.store.config,'common.md').read_text(encoding='utf-8')+'\n'+body
+        model,policy=model_and_policy(self.store,persona)
+        documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
+        dossier=dossier_block(docs,model,policy,target.get('canonical') or event['person_id'],session_class)
+        if dossier:
+            context['dossier_from_program']=dossier
+            documents[dossier['doc']]=dossier['revision']
+        ledgers=ledger_block(docs,session_class)
+        if ledgers:
+            context['ledgers_from_program']=ledgers
+            documents.update({item['doc']:item['revision'] for item in ledgers})
+        from . import group_admin
+        place=group_admin.place(people,scene)
+        if place:
+            # Her own role in this group, what she may do there as an admin, and her notes about it (group_admin.py).
+            context['your_place_from_program']=place
+            notes_revision,context['group_notes_from_program']=group_admin.notes_block(docs,scene)
+            if notes_revision:
+                documents[group_admin.notes_slug(scene['_id'])]=notes_revision
+        from .ingress import episode_id as _episode_id
+        context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),*[m['_id'] for m in memories],
+            *[t['_id'] for t in task_states],
+            *['doc:%s#%s'%(item['doc'],section['sid']) for item in [*([dossier] if dossier else []),*ledgers] for section in item['sections']],
+            *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
+        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        # Available with or without a record: her first understanding of someone creates it.
+        context['understanding_update_from_program']={
+            'available':True,'target':target_note,
+            'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+        from .grants import workspace_grant
+        grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
+        context['action_capabilities_from_program']={
+            'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
+            'cancellation_available':True,
+            'network':'行动脑可以按需搜索公共网页并读取页面。',
+            'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+        development = (event.get('episode_kind') == 'self_development' or
+            event.get('development_profile') == 'owner' or
+            event.get('episode_kind') == 'task_feedback' and bool(
+                (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
+        if development and (scene['_id'],event['person_id']) == (
+                self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
+            context['action_capabilities_from_program']['development'] = {
+                'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
+        context['action_capabilities_from_program']['history_query']=(
+            '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
+            '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
+        from .vision import vision_capability
+        if vision_capability(self.store.config)['supported']:
+            context['action_capabilities_from_program']['read_image']=(
+                '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
+                '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
+        context['action_capabilities_from_program']['group_discussion']=(
+            '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
+            '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
+            '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
+            '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
+            '判断，不自动总结、不自动发言。')
+        from .integration import event_granted
+        if event_granted(self.store.config, event):
+            context['action_capabilities_from_program']['integration'] = {
+                'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
+        from .skills import skills_directory
+        if skills_directory(self.store.config,scene['_id'],event['person_id']):
+            context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
+        manifest['context_sha256']=sha(canonical(context))
+        from .affect import AffectLedger
+        ledger=AffectLedger(self.store,persona,model,policy)
+        if ledger.enabled:
+            # One heart per persona: the state is global; reasons, who and numbers stay owner-private (§6.5).
+            m=ledger.model
+            # Words only (AGENTS.md: interpreted state): her mood, its hints and reasons, and how to record one.
+            from .affect import interpret, recording_guide
+            context['affect_from_program']={**interpret(m,ledger.projection(),session_class),'how_to_record':recording_guide(m)}
+            proposals=ledger.proposals(scope,session_class)
+            if proposals:
+                context['affect_proposals_from_program']={'items':proposals,
+                    'note':'情感评估路由给出的提案，只是建议：用 affect_adopt 逐条 accept/decline/edit；过期的已明示，不再能采纳。'}
+        from .rhythm import rhythm_block, recent_phrasing
+        owner=(self.store.config.get('chat') or {}).get('person_id')
+        last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None
+        rhythm=rhythm_block(self.store,model,policy,session_class,moment=moment,owner_last_at=(last or {}).get('received_at'))
+        if rhythm:
+            context['rhythm_from_program']=rhythm
+        own=[row.get('text','') for row in self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound',
+             'delivery_state':'DELIVERED'},{'text':1}).sort('scene_seq',-1).limit(int(effective(model,'phrasing.window',policy) or 20))]
+        phrasing=recent_phrasing(own)
+        if phrasing:
+            context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
+                'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
+        if event.get('episode_kind')=='settlement':
+            from .rhythm import promotion_candidates
+            from .affect import kind_label
+            open_events=[{'event_id':e['_id'],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
+                         for e in ledger.events() if e.get('open')
+                         and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
+            context['settlement_from_program']={'open_affect_events':open_events,
+                'promotion_candidates':promotion_candidates(self.store,model,policy),
+                'promotion_quota':effective(model,'memory.promotion.daily_quota',policy) or 0,
+                'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
+        # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
+        context['session_class']=session_class
+        people.relabel(context,scene,event['person_id'])
+        context=order_context(context,effective(model,'recall_protocol.order',policy))
+        manifest['context_sha256']=sha(canonical(context))
+        manifest['system_ref']=system_ref
         return system,context,manifest

@@ -156,7 +156,7 @@ export function apply(ctx, config) {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF1cAAAAASUVORK5CYII=', 'base64'));
     const role = new URL('../../packages/cognition-core/src/role.js', import.meta.url).href;
     const action = new URL('../../packages/cognition-core/src/action.js', import.meta.url).href;
-    await ctx.agentPresets.register({ id: 'inline-role', title: '小满 · 角色脑', plugins: [{ name: role }] });
+    await ctx.agentPresets.register({ id: 'inline-role', title: '演示 · 角色脑', plugins: [{ name: role }] });
     await ctx.agentPresets.register({ id: 'asuna-action', title: '行动脑', plugins: [{ name: action }] });
     bindings.set(roleId, { _id: roleId, lane: 'character', cwd: config.root + '/Local',
       scene_id: 'local:inline-probe', persona: 'inline-fixture', allowed_capabilities: [] });

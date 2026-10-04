@@ -23,29 +23,71 @@ async function checkpointCold(ctx, header, inheritedEventCount, events) {
   } finally { clearTimeout(timer); await dispose?.(); }
 }
 
-/** Append a received platform message without opening an Agent or starting inference. */
+/** Lines kept waiting before her first turn in a conversation: the most a catch-up brings (context.py). */
+export const PENDING_LINES = 40;
+
+/** The next-step list DSH's inbox fold reconstructs from a log's durable splices. */
+const pendingOf = events => events.reduce((list, { type, data }) => type !== 'agent/inbox/spliced'
+  || data.target !== 'next-step' ? list : list.toSpliced(data.start, data.removedCount ?? 0, ...data.inserted), []);
+
+/** The splices that queue one line, dropping the oldest beyond PENDING_LINES (they stay in Mongo). */
+const queueing = (pending, message) => {
+  const excess = Math.max(pending.length + 1 - PENDING_LINES, 0);
+  return [...excess ? [{ target: 'next-step', start: 0, removedCount: excess, inserted: [], outcome: 'canceled' }] : [],
+    { target: 'next-step', start: pending.length - excess, inserted: [message] }];
+};
+
+/** Settles when a running first turn has written its head, or has stopped without one. */
+function headOrIdle(ctx, agent) {
+  let dispose;
+  const head = new Promise(resolve => { dispose = ctx.on('session/event', (session, event) => {
+    if (session === agent.session && event.type === 'system/message') resolve();
+  }); });
+  return Promise.race([head, agent.whenIdle()]).finally(() => dispose());
+}
+
+/** Record a received platform message in her conversation without starting inference.
+ *
+ * DSH requires a conversation's first visible event to be the system head its agent writes on its first
+ * step; a line placed before that makes the log unloadable after the turn. So a line that arrives before
+ * her first turn here waits in the conversation's durable inbox (next-step), and that turn's first step
+ * claims it right after the head, in arrival order, before the stage notice. Once headed, a line joins the
+ * surface as it arrives. The inbox is used only while no turn runs: a line claimed after a turn had begun
+ * would add a model step outside the stage it belongs to. */
 export async function recordChannelInput(core, receipt) {
   const { ctx } = core, { session_id: id, binding, input } = receipt;
+  const channel = core.channelOf(binding.scene_id);
   if (!await ctx.sessionPersistence.stat(id)) await organizeNativeWorkspaces(core, {
-    first: false, archive_ids: [], workspaces: { QQ: binding.cwd, Local: core.config.deployment.chat.workspace },
-    entries: [{ session_id: id, workspace: 'QQ', binding }] });
+    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: core.config.deployment.chat.workspace },
+    entries: [{ session_id: id, workspace: channel.title, binding }] });
   await ctx.workspaceRegistry.unarchiveSession(id);
   const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
-  const message = createUserMessage({ source: { kind: 'user', channel: 'qq', receipt: input.id,
+  const message = createUserMessage({ source: { kind: 'user', channel: channel.kind, receipt: input.id,
     sender: input.sender, received_at: input.received_at },
-    content: [{ type: 'text', text: 'QQ · ' + input.sender + '\n' + input.text }] });
+    content: [{ type: 'text', text: input.text }] });
+  const headed = events => events.some(event => event.type === 'system/message');
+  const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id)
+    || pendingOf(events).some(line => line.source.receipt === input.id);
+  const agent = ctx.agents.get(id);
+  if (agent?.status === 'running' && !headed(agent.session.snapshotEvents())) await headOrIdle(ctx, agent);
   const hot = ctx.sessions.get(id);
-  const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id);
   if (hot) {
-    if (!contains(hot.snapshotEvents())) hot.append('user/message', message, { surfaceOp: 'append' });
+    const events = hot.snapshotEvents();
+    if (contains(events)) { /* already recorded */ }
+    else if (headed(events)) hot.append('user/message', message, { surfaceOp: 'append' });
+    else if (agent) for (const splice of queueing(agent.inbox.nextStep, message))
+      agent.inbox.splice('next-step', splice.start, splice.removedCount ?? 0, splice.inserted);
+    else for (const splice of queueing(pendingOf(events), message)) hot.append('agent/inbox/spliced', splice);
     await ctx.sessions.flush(hot);
   } else {
     const handle = await ctx.sessionPersistence.open(id, 'write');
     try {
       const { events } = await handle.read();
       if (!contains(events)) {
-        const event = { type: 'user/message', data: message, surfaceOp: 'append', seq: events.length, time: Date.now() };
-        await handle.append([event]); events.push(event);
+        const added = (headed(events) ? [{ type: 'user/message', data: message, surfaceOp: 'append' }]
+          : queueing(pendingOf(events), message).map(data => ({ type: 'agent/inbox/spliced', data })))
+          .map((event, index) => ({ ...event, seq: events.length + index, time: Date.now() }));
+        await handle.append(added); events.push(...added);
       }
       await handle.flush(); await checkpointCold(ctx, handle.header, handle.inheritedEventCount, events);
     } finally { await handle.close(); }
@@ -123,5 +165,7 @@ export async function organizeNativeWorkspaces(core, plan) {
     for (const workspace of ctx.workspaceRegistry.list())
       if (!keep.has(workspace.id)) await ctx.workspaceRegistry.delete(workspace.id);
   }
-  await ctx.workspaceRegistry.insertBefore(workspaces.get('QQ').id, workspaces.get('Local').id);
+  // Platform workspaces (QQ, …) list above the local chat.
+  for (const [title, workspace] of workspaces)
+    if (title !== 'Local') await ctx.workspaceRegistry.insertBefore(workspace.id, workspaces.get('Local').id);
 }

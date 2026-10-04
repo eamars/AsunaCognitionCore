@@ -5,8 +5,6 @@ import uuid
 from .config import ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
-from .queue import RuntimeLease
-from contextlib import ExitStack
 
 
 class PrivacyService:
@@ -18,13 +16,10 @@ class PrivacyService:
         if not memory:raise ValueError('MEMORY_NOT_FOUND')
         scope=memory['scope_key']
         if scope=='global-safe':raise Denied('GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION')
-        # A separate CLI must not erase files still owned by a live DSH worker.
-        # Inline callers close their own lanes before acquiring these leases.
+        # Inline callers close their own lanes first. Native role sessions are fenced by the
+        # policy epoch bump in _erase (NATIVE_SESSION_EPOCH_CHANGED), not by a file lease.
         for lane in active_lanes:lane.close()
-        with ExitStack() as leases:
-            homes={s['dsh_home'] for s in db.sessions.find({'scope_key':scope})}
-            for home in sorted(homes):leases.enter_context(RuntimeLease(Path(home)/'runtime.lock'))
-            return self._erase(key,memory)
+        return self._erase(key,memory)
 
     def _erase(self,key,memory):
         db=self.store.db;scope=memory['scope_key']
@@ -42,9 +37,14 @@ class PrivacyService:
             new={m['_id'] for m in rows}-affected
             if not new:break
             affected|=new;sources|=new
-        roots=set();session_ids=set()
+        roots=set();session_ids=set();native_sessions=set()
         for session in db.sessions.find({'scope_key':scope}):
             roots.update(session.get('evidence_roots',[]));roots.add(session.get('evidence_root',''));session_ids.add(session['_id'])
+            if not session.get('dsh_home'):
+                # Native Host session: its transcript lives in the profile's DSH home; it is invalidated here.
+                db.sessions.update_one({'_id':session['_id']},{'$set':{'state':'INVALIDATED','deletion_id':deletion}})
+                native_sessions.add(session['_id'])
+                continue
             home=Path(session['dsh_home']).resolve()
             if not home.is_relative_to((ROOT/'.runtime').resolve()):raise Denied('ERASURE_HOME_OUTSIDE_REPOSITORY')
             for directory in (home/'sessions').glob('**/'+session['_id']):
@@ -105,6 +105,8 @@ class PrivacyService:
             for item in path.rglob('*'):
                 if item.is_file():item.unlink();removed_files+=1
             write_json(path/'erasure.json',{'deletion_id':deletion,'scope_key':scope,'reason':'conservative removal of the affected run evidence containing raw requests','previous_audit_roots':previous_roots})
-        result={'deletion_id':deletion,'scope_key':scope,'memory_ids':sorted(affected),'policy_epoch':scene['policy_epoch']+1,'invalidated_sessions':sorted(session_ids),'evidence_files_removed':removed_files,'gridfs_blobs_removed':erased_blobs,'old_roots':previous_roots,'new_roots':new_roots,'limitations':['global-safe deletion currently rejected','scope-wide generated content and affected run evidence are conservatively erased','previously downloaded exports and external backups cannot be recalled; backup retention not configured']}
+        result={'deletion_id':deletion,'scope_key':scope,'memory_ids':sorted(affected),'policy_epoch':scene['policy_epoch']+1,'invalidated_sessions':sorted(session_ids),'evidence_files_removed':removed_files,'gridfs_blobs_removed':erased_blobs,'old_roots':previous_roots,'new_roots':new_roots,'limitations':['global-safe deletion currently rejected','scope-wide generated content and affected run evidence are conservatively erased','previously downloaded exports and external backups cannot be recalled; backup retention not configured',
+            *(['native DSH session transcripts are invalidated (fenced by the policy epoch), not erased from the DSH home']
+              if native_sessions else [])]}
         self.store.audit(deletion,'privacy.completed',result,'operator')
         return result

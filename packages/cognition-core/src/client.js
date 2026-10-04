@@ -15,7 +15,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       hour: '2-digit', minute: '2-digit', hour12: false,
     }) : '';
   };
-  const memoryAuthor = value => typeof value === 'string' ? value.replace(/^qq:/, 'QQ · ') : '';
+  // A platform person id (qq:<account>) reads as `QQ · <account>`; local ids read as themselves.
+  const memoryAuthor = value => typeof value === 'string'
+    ? value.replace(/^([a-z][a-z0-9_]{0,15}):/, (_, kind) => kind.toUpperCase() + ' · ') : '';
   const stageLabel = stage => ({ character: '角色脑', executor: '行动脑' })[stage?.lane] ?? null;
   const brainClass = lane => ['character', 'executor'].includes(lane) ? 'asuna-brain-' + lane : undefined;
   function subscribeInputPolicies(ctx, rpc) {
@@ -68,6 +70,26 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     body[data-ds-dark-theme] .asuna-brain-character { color: #c4b5fd; background: color-mix(in srgb, #c4b5fd 10%, var(--dsw-alias-bg-base)); }
     body[data-ds-dark-theme] .asuna-brain-executor { color: var(--dsw-static-blue-300); background: color-mix(in srgb, var(--dsw-static-blue-300) 10%, var(--dsw-alias-bg-base)); }
   `;
+  // Palette only (pinned DSH version's class): DSH's meter is the character-brain purple, the second
+  // instance of the same meter (the action session) the action-brain blue.
+  const meterPalette = `
+    .JObwrW_fill { stroke: #7e22ce; }
+    body[data-ds-dark-theme] .JObwrW_fill { stroke: #c4b5fd; }
+    .asuna-action-meter { display: contents; }
+    .asuna-action-meter .JObwrW_fill { stroke: var(--dsw-static-blue-600); }
+    body[data-ds-dark-theme] .asuna-action-meter .JObwrW_fill { stroke: var(--dsw-static-blue-300); }
+  `;
+  /** DSH's own ContextMeter, read from the meter it already renders next to this dock. DSH does not
+   * export it; when the lookup fails (another DSH revision) the action meter is simply absent. */
+  function shippedContextMeter(anchor) {
+    for (const element of anchor?.parentElement?.parentElement?.children ?? []) {
+      const key = Object.keys(element).find(name => name.startsWith('__reactFiber$'));
+      for (let fiber = key && element[key], depth = 0; fiber && depth < 4; fiber = fiber.return, depth++)
+        if (typeof fiber.type === 'function' && fiber.type.name === 'ContextMeter' && fiber.memoizedProps?.t)
+          return { Meter: fiber.type, t: fiber.memoizedProps.t };
+    }
+    return null;
+  }
   function stageIdentity(source) {
     if (typeof source?.phase !== 'string' || !source.phase) return null;
     // Older source notices have phase but no lane. Infer only documented
@@ -202,7 +224,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return describedValue;
     };
 
-    // Use the shipped composer's block service, including blank/cold QQ
+    // Use the shipped composer's block service, including blank/cold platform
     // sessions. This is a service subscription, not a new UI slot/component.
     ctx.effect(() => subscribeInputPolicies(ctx, rpc));
 
@@ -238,23 +260,23 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       }, [visible, props.sessionId, selected]);
       return h('section', { style: { ...stack, height: '100%', minHeight: 0, overflow: 'hidden' }, 'aria-label': 'Asuna 记忆' },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 } },
-        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['self', '自我'],
-          ['relation', '对人的认识'], ['world', '对世界的认识'], ['summary', '交流摘要'],
+        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['documents', '文档'], ['affect', '情感'], ['jobs', '作业报告'], ['self', '自我'],
+          ['relation', '对人的认识'], ['summary', '交流摘要'],
           ['interpretation', '当时的理解'], ['source', '原始来源']],
           onChange: value => { setCategory(value); setOffset(0); } }),
         h(Input, { 'aria-label': '搜索记忆', placeholder: '搜索当前类型的全部记录', value: search, maxLength: 160,
           onChange: event => setSearch(event.target.value),
           onCompositionStart: () => setComposing(true), onCompositionEnd: () => setComposing(false) }),
         h(Button, { size: 'sm', onClick: () => setRefresh(x => x + 1) }, '刷新记忆'),
-        page && h('p', { style: { ...small, margin: 0 } }, page.persona_name + ' · ' + page.scene_title,
+        page && h('p', { style: { ...small, margin: 0 } }, page.scene_title,
           category === 'relation' ? ' · 当前交谈对象：' + page.subject_name : '',
-          page.linked_scene_titles?.length ? ' · 包含：' + page.linked_scene_titles.join('、') : '')),
+          page.linked_scene_titles?.length ? ' · 也能读到：' + page.linked_scene_titles.join('、') : '')),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, overflowY: 'auto' } },
         error && h('p', { role: 'alert' }, error.includes('NOT_BOUND') ? '当前会话尚无 Asuna 场景绑定。完成角色交互后可查看。' : error),
         !page && !error && h('p', null, '读取当前场景…'),
         page?.rows.map(row => h('article', { key: row.id },
           h(DisclosureRow, { icon: h(IconChevronDownOutlineRegular), previewChevron: false,
-            title: memoryDate(row.updated_at, true) || row.category_label,
+            title: memoryDate(row.updated_at, true) || row.status_label || row.category_label,
             collapsedContent: h('span', { style: { marginLeft: 8, minWidth: 0, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--dsw-alias-label-primary)' } }, row.title),
             keepContentWhenOpen: true,
@@ -263,24 +285,20 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             selected === row.id && (detail ? h('div', { style: { padding: '8px 0', color: 'var(--dsw-alias-label-primary)' } },
               h('p', { style: small }, [detail.category_label, detail.status_label].filter(Boolean).join(' · ')),
               h(MarkdownText, { text: detail.body, labels }),
-              detail.usage && h('p', { style: small }, detail.usage,
-                detail.context_at ? ' · ' + memoryDate(detail.context_at) + ' 准备的上下文' : ''),
-              detail.context_at && h('p', { style: small }, '此处核对准备的上下文材料；原生会话历史还可能包含该内容。选用不等于模型据此作出了判断。'),
+              detail.usage && h('p', { style: small }, detail.usage.replace('{time}', memoryDate(detail.context_at, true))),
               detail.correction_note && h('p', null, detail.correction_note),
               h('p', { style: small }, [typeof detail.revision === 'number' ? '版本 ' + detail.revision : '',
                 memoryAuthor(detail.speaker || detail.author),
                 detail.generated_at ? '整理于 ' + memoryDate(detail.generated_at) : memoryDate(detail.occurred_at)].filter(Boolean).join(' · ')),
-              detail.levels && Object.keys(detail.levels).length > 0 && h('p', { style: small },
-                '已有关系档位（0–4）：' + Object.entries(detail.levels).map(([name, value]) => name + ' ' + value).join(' · ')),
               detail.sources_truncated && h('p', { style: small }, '以下显示前 12 条来源。'),
               ...detail.sources.map(source => h('blockquote', { key: source._id },
                 h('p', { style: small }, [source.category_label || '原始消息', memoryAuthor(source.author), source.scene_title,
                   memoryDate(source.occurred_at)].filter(Boolean).join(' · ')),
                 h(MarkdownText, { text: source.text, labels })))) : h('p', null, '读取详情…'))),
-          selected !== row.id && h('p', { style: { margin: '4px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, row.excerpt),
-          (category === 'all' || row.scene_title !== page.scene_title) && h('p', { style: { ...small, margin: 0 } },
+          selected !== row.id && row.excerpt && h('p', { style: { margin: '4px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, row.excerpt),
+          (category === 'all' || (row.scene_title && row.scene_title !== page.scene_title)) && h('p', { style: { ...small, margin: 0 } },
             [category === 'all' ? row.category_label : '',
-              row.scene_title !== page.scene_title ? row.scene_title : ''].filter(Boolean).join(' · ')))),
+              row.scene_title && row.scene_title !== page.scene_title ? row.scene_title : ''].filter(Boolean).join(' · ')))),
         page && !page.rows.length && h('p', null, query ? '未找到匹配的记录。' : '当前范围暂无记录。')),
         page && h('div', { style: { display: 'flex', gap: 8, flexShrink: 0 } },
           h(Button, { disabled: offset === 0, onClick: () => setOffset(Math.max(0, offset - 24)) }, '上一页'),
@@ -296,11 +314,22 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     function SettingsEditor({ initial }) {
       const [status, setStatus] = React.useState(null);
       const [notice, setNotice] = React.useState(''), [busy, setBusy] = React.useState(false);
+      const [persona, setPersona] = React.useState(null);
+      const loadPersona = () => rpc('personaSources').then(setPersona).catch(() => setPersona(null));
+      React.useEffect(() => { loadPersona(); }, []);
+      const runJob = async (job, dryRun) => { setBusy(true); setNotice('');
+        try { const result = await rpc('personaJob', { request: { job, dry_run: dryRun } });
+          setNotice('作业 ' + job + (dryRun ? '（试运行）' : '') + '：' + result.status + (result.exit_code !== undefined ? ' · 退出码 ' + result.exit_code : '')
+            + (result.reason ? ' · ' + result.reason : '') + ' · 报告在「记忆 → 作业报告」中查看。');
+          loadPersona(); } catch (error) { setNotice(error.message); } finally { setBusy(false); } };
+      const exportDocs = async () => { setBusy(true); setNotice('');
+        try { const result = await rpc('personaExport'); setNotice('已导出 ' + result.exported.length + ' 份文档。'); }
+        catch (error) { setNotice(error.message); } finally { setBusy(false); } };
       const [editor] = React.useState(() => {
         const fields = [], add = (path, label, type = 'text') => fields.push({ path, label, type, field: JSON.stringify(path) });
-        for (const [key, label] of [['persona', '当前角色'], ['qqAdmission', 'QQ 接入策略'],
+        for (const [key, label] of [['persona', '当前角色'], ['channelAdmission', '外部渠道接入策略'],
           ['python', 'Python'], ['workspace', '工作目录'], ['configPath', '旧配置迁移来源']])
-          add([key], label, ['persona', 'qqAdmission'].includes(key) ? 'choice' : 'text');
+          add([key], label, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens'])
           add(['routes', lane, key], (lane === 'character' ? '角色脑 · ' : '行动脑 · ')
             + ({ provider: '模型服务', model: '模型', reasoningEffort: '推理强度', maxTokens: '最大输出 token' })[key],
@@ -364,7 +393,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const state = React.useSyncExternalStore(editor.store.subscribe, editor.store.getSnapshot);
       const routeValue = (lane, key) => state.fields[JSON.stringify(['routes', lane, key])].text;
       const choices = field => {
-        if (field.path[0] === 'qqAdmission') return [['automatic', '自动接入私聊、群及新成员'], ['explicit', '仅接入已配置身份']];
+        if (field.path[0] === 'channelAdmission') return [['automatic', '自动接入私聊、群及新成员'], ['explicit', '仅接入已配置身份']];
         if (field.path[0] === 'persona') return (status?.personas ?? []).map(persona => [persona.id, persona.name || persona.id]);
         const [, lane, key] = field.path, providers = status?.providers ?? [];
         if (key === 'provider') return providers.map(provider => [provider.id, provider.name || provider.id]);
@@ -401,7 +430,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h(SettingsForm, { state: state.shell, onSave: editor.actions.save, onDiscard: editor.actions.discard,
           labels: { unavailable: '配置暂不可用', readOnly: '当前配置只读', saveFailed: '保存失败，草稿已保留。', save: '保存设置', saving: '保存中…' } },
           ...editor.fields.map(field => {
-            const props = { key: field.field, id: 'asuna-setting-' + field.field, label: field.label,
+            // A valid element id (the field key is JSON, which no selector or label-for can address).
+            const props = { key: field.field, id: 'asuna-setting-' + field.path.join('-').replace(/[^A-Za-z0-9_-]/g, '_'), label: field.label,
               ...state.fields[field.field], disabled: busy || state.shell.saving || !state.shell.writable,
               overriddenLabel: '已覆盖', resetLabel: '恢复默认',
               invalidLabel: field.type === 'number' ? '请输入正整数' : '请输入有效的 JSON 值',
@@ -416,7 +446,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
                 hint: field.type === 'json' ? 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。' : undefined });
           })),
         status && h('p', { style: small }, '自我来源：' + (status.worker?.self_source || '等待连接')
-          + ' · QQ：' + (status.worker?.channels_active ? '本机入口已启动；适配器 ' + status.worker.integration_state
+          + ' · ' + (status.worker?.channel_titles?.join('、') || '外部渠道') + '：' + (status.worker?.channels_active ? '本机入口已启动；适配器 ' + status.worker.integration_state
             + '；平台连接未验证' : '未启用')
           + (status.worker?.integration_error ? ' · ' + status.worker.integration_error : '')
           + ' · 定时：' + (status.worker?.schedules_active ? '原生调度' : '未启用')),
@@ -424,6 +454,19 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h(Button, { disabled: busy || state.shell.dirty || state.shell.saving, onClick: activate, variant: 'outline' }, '应用已保存设置'),
           h(Button, { disabled: busy, onClick: () => rpc('status').then(setStatus).catch(error => setNotice(error.message)) }, '刷新状态')),
+        persona && h('section', { style: stack, 'aria-label': '人格数据' },
+          h('h4', null, '人格数据 · ' + persona.persona),
+          persona.render && h('p', { role: persona.render.over_budget ? 'alert' : 'status',
+            style: persona.render.over_budget ? { color: 'var(--dsw-alias-status-danger, #c00)' } : small },
+            '人格渲染估算 ' + persona.render.estimate_tokens + ' / 上限 ' + (persona.render.limit_tokens ?? '未设') + (persona.render.over_budget ? ' · 超出预算' : '')),
+          h('p', { style: small }, persona.sources.length ? '源根：' + persona.sources.map(s => s.id + '（' + s.state + '，' + s.path + '）').join('；') : '未配置源根（本机配置 persona_sources）。'),
+          ...persona.jobs.map(job => h('div', { key: job.id, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+            h('span', null, '作业 ' + job.id + ' · 源根 ' + job.sources.join('、')),
+            h(Button, { size: 'sm', disabled: busy, onClick: () => runJob(job.id, true) }, '试运行'),
+            h(Button, { size: 'sm', disabled: busy, variant: 'outline', onClick: () => runJob(job.id, false) }, '运行'))),
+          persona.runs.length > 0 && h('p', { style: small }, '最近运行：' + persona.runs.map(r => r.job + ' ' + r.status + (r.dry_run ? '（试）' : '')).join('；')),
+          h(Button, { size: 'sm', disabled: busy || !persona.export_configured, onClick: exportDocs },
+            persona.export_configured ? '导出文档' : '导出（未配置 export_dir）')),
         notice && h('p', { role: 'status' }, notice));
     }
 
@@ -431,6 +474,32 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       guide: [{ id: 'asuna-memory', order: 50, title: () => '记忆', description: () => '当前角色、场景与授权来源' }] }));
     ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name: 'sidebar.right.pane.tab', key: '@asuna/memory' }, Memory));
     ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: '@asuna/cognition-core' }, Settings));
+
+    // Two context wheels in a character conversation (owner-approved, 2026-10-04): DSH's own meter is
+    // the character brain (purple); a second instance of that same meter, fed the latest action
+    // session's projections, is the action brain (blue). Nothing is shown in other sessions.
+    function BrainMeters({ sessionId }) {
+      const [state, setState] = React.useState(null), [shipped, setShipped] = React.useState(null);
+      const anchor = React.useRef(null);
+      React.useEffect(() => {
+        if (!sessionId) return undefined;
+        let alive = true;
+        const load = () => rpc('brainContext', { sessionId }).then(value => {
+          if (!alive) return;
+          setState(value);
+          setShipped(current => current ?? shippedContextMeter(anchor.current));
+        }).catch(() => {});
+        load();
+        const timer = setInterval(load, 5000);
+        return () => { alive = false; clearInterval(timer); setState(null); };
+      }, [sessionId]);
+      const action = state?.action;
+      return h('span', { ref: anchor, className: 'asuna-action-meter' },
+        state && h('style', null, meterPalette),
+        action && shipped && h(shipped.Meter, { useProjection: key => action[key], t: shipped.t }));
+    }
+    ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+      name: 'conversation.composer.dock', id: 'asuna-brain-meters', order: 100 }, BrainMeters));
 
     // Add only Asuna business attribution in public extension points. Never
     // shadow assistant-step or replace the native Chat grouping definition.
@@ -461,7 +530,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           props.renderSlot('asuna.inline.fragment', { owner: props }))
           : h('p', { role: error ? 'alert' : 'status' }, error || '读取行动脑记录…'));
     }
-    const actionKinds = ['assistant-step', 'tool-call', 'turn-error', 'turn-max-tokens',
+    // The action turn's own native disclosure ('turn-process') folds and opens its records exactly as the
+    // character brain's turn does in the main Chat.
+    const actionKinds = ['turn-process', 'assistant-step', 'tool-call', 'turn-error', 'turn-max-tokens',
       'model-retry', 'compaction', 'manual-compaction', 'command'];
     function NativeFragment(props) {
       const range = props.owner.node.data;

@@ -5,7 +5,7 @@
 怎么用人话说出来。每日／每周把本地钟点存在现有 plans.rule 里，到期后由调用方再挂一次**原生单次**，
 这里不起线程、不轮询、不补发历史。
 
-时区口径：场景配置优先，未配置继承 Pacific/Auckland；确认时把用的哪个时区一并交出去。
+时区口径：场景配置优先，其次全局配置；都没配就按 UTC 并明说「未设置时区」，核心不带任何人的默认时区；确认时把用的哪个时区一并交出去。
 DST：每日／每周当日遇到不存在的钟点，顺延到该日之后第一个真实存在的本地时刻（就是跳变那一刻）；
 重叠的钟点只取较早的一次；单次安排遇到不存在的本地时间**不猜**，抛错让角色问那一句。
 换算只用标准库 zoneinfo。宿主环境没有 tz 数据库时退回这个场景里已配的固定偏移
@@ -21,8 +21,8 @@ try:
 except Exception:                                    # 极老的运行时：没有 zoneinfo 也要能跑
     ZoneInfo, ZoneInfoNotFoundError = None, Exception
 
-DEFAULT_TIMEZONE = 'Pacific/Auckland'
-MIN_INTERVAL_SECONDS = 300                            # 上游原生 every 的最小间隔，已核实
+# The only definition of the floor: DSH 0.2 MIN_EVERY_INTERVAL_SECONDS (verified in the pinned package).
+MIN_INTERVAL_SECONDS = 60
 MAX_INTERVAL_SECONDS = 366 * 86400
 TIMING_KEYS = ('after_seconds', 'every_seconds', 'at', 'clock')
 WEEKDAY_NAMES = ('周一', '周二', '周三', '周四', '周五', '周六', '周日')
@@ -75,7 +75,7 @@ def scene_timezone(config, scene, plan=None):
                          (block.get('timezone') or (route or {}).get('timezone'), 'route'),
                          ((scene or {}).get('timezone'), 'scene'),
                          ((config or {}).get('timezone'), 'config'),
-                         (DEFAULT_TIMEZONE, 'default')):
+                         ('UTC', 'unset')):
         if not (isinstance(name, str) and name):
             continue
         zone = _zone(name, offset)
@@ -234,6 +234,37 @@ def next_fire(rule, tz, moment=None):
     raise ValueError('SCHEDULE_CLOCK_NO_UPCOMING: 这条钟点规则算不出下一次')
 
 
+def local_moment(zone_name, moment=None):
+    """The moment on the wall clock of an IANA zone (rhythm, settlement dates)."""
+    return _aware(moment or now_utc()).astimezone(ZoneInfo(zone_name))
+
+
+def is_iana(zone_name) -> bool:
+    """An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept."""
+    if not isinstance(zone_name, str) or not (zone_name == 'UTC' or '/' in zone_name) or ZoneInfo is None:
+        return False
+    try:
+        ZoneInfo(zone_name)
+        return True
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return False
+
+
+def native_recurring(rule, zone_name):
+    """Clock rules in an IANA zone map to native daily/weekly (weekday 0…6 → ISO 1…7); else None.
+
+    A fixed-offset zone keeps the one-shot re-arm path.
+    """
+    if rule_kind(rule) != 'clock' or not is_iana(zone_name):
+        return None
+    clock = rule['clock']
+    time_text = clock['time'] if len(clock['time']) > 5 else clock['time'] + ':00'
+    if clock.get('weekdays'):
+        return {'weekly': {'time': time_text, 'time_zone': zone_name,
+                           'weekdays': sorted({int(day) + 1 for day in clock['weekdays']})}}
+    return {'daily': {'time': time_text, 'time_zone': zone_name}}
+
+
 def native_payload(rule, fire_at, moment=None):
     """给原生 /schedule/create 的载荷：固定间隔交给原生重复，其余一律换算成"多少秒之后"的单次。"""
     kind = rule_kind(rule)
@@ -274,7 +305,7 @@ def project(plan, zone, moment=None):
     tz = zone['tz']
     row = {'_id': plan['_id'], 'intent': plan.get('intent'), 'status': plan.get('status'),
            'rule': plan.get('rule'), 'plan_version': plan.get('plan_version', 1),
-           'timezone': zone['name'], 'tz_source': zone['source'],
+           'timezone': zone['name'],
            'created_at': plan.get('created_at'), 'updated_at': plan.get('updated_at'),
            'last_outcome': plan.get('last_outcome')}
     if zone['zone_unavailable']:
@@ -332,19 +363,16 @@ def local_clock(zone, moment=None):
     tz = zone['tz']
     local = moment.astimezone(tz)
     note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
-            'config': '全局配置的时区', 'default': '没配时区，按约定的默认 %s' % DEFAULT_TIMEZONE,
+            'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
     return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
-            'timezone': zone['name'], 'tz_source': zone['source'],
-            'tz_note': note.get(zone['source'], zone['source']),
-            'utc_offset_minutes': offset_minutes(tz, moment)}
+            'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 
 def control_note(zone, moment=None):
     """给角色的"安排"控制面：现场钟面 + 三个控制字段怎么写。她负责把话换算成这些键，
     本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
     return {**local_clock(zone, moment),
-            'min_interval_seconds': MIN_INTERVAL_SECONDS,
             'fields': {
                 'schedule': {'intent': '要做什么（给人看的短句）',
                              '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',

@@ -1,0 +1,95 @@
+{
+  "database": "asuna_v2_demo_main",
+  "allowed_databases": [
+    "asuna_v2_demo_main"
+  ],
+  "mongo_uri": "mongodb://127.0.0.1:27017/?directConnection=true",
+  "dsh_home": ".runtime/demo/asuna-dsh",
+  "character": {
+    "base_url": "http://127.0.0.1:8083/v1",
+    "model": "<character-model>",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 4096,
+    "context_window": 68608,
+    "token_counter": "llama_cpp",
+    "reasoning_effort": "high",
+    "reasoning_efforts": {
+      "high": "high",
+      "off": null
+    },
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": false,
+      "thinkingFormat": "chat-template",
+      "chatTemplateKwargs": {
+        "enable_thinking": false
+      },
+      "maxTokensField": "max_tokens"
+    }
+  },
+  "executor": {
+    "base_url": "http://127.0.0.1:8084/v1",
+    "model": "<action-model>",
+    "input_modalities": [
+      "text",
+      "image"
+    ],
+    "sampling": {
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "seed": 20260919
+    },
+    "max_tokens": 32768,
+    "context_window": 262144,
+    "token_counter": "anthropic_count",
+    "reasoning_effort": "high",
+    "reasoning_efforts": {
+      "high": "xhigh",
+      "off": null
+    },
+    "compat": {
+      "supportsDeveloperRole": false,
+      "supportsReasoningEffort": true,
+      "thinkingFormat": "qwen",
+      "maxTokensField": "max_tokens"
+    }
+  },
+  "embedding": {
+    "base_url": "http://127.0.0.1:1234/v1",
+    "model": "<embedding-model>",
+    "query_prefix": "search_query: ",
+    "document_prefix": "search_document: ",
+    "api_key": ""
+  },
+  "workflow_timeout_seconds": 1800,
+  "provider_idle_timeout_seconds": 1800,
+  "self_development": {
+    "enabled": false
+  },
+  "chat": {
+    "scene_id": "demo-local-dm",
+    "person_id": "demo-owner",
+    "persona": "demo",
+    "workspace": ".runtime/work/demo/demo-owner",
+    "skills_dir": ".runtime/skills/demo-owner",
+    "read_only_paths": []
+  },
+  "_comment": "Demo environment template (ADR-009 §0.3). tools/make_demo_config.py copies it to the ignored config/demo.local.json and fills mongo_uri and the model routes from your local config. No channels, integrations or QQ routes are ever configured for the demo profile.",
+  "persona_sources": {
+    "demo": {
+      "demo-home": {
+        "path": "tests/fixtures/personas/demo-home",
+        "state": "cohabiting"
+      }
+    }
+  },
+  "persona_runtime": {
+    "demo": {
+      "export_dir": ".runtime/demo/export"
+    }
+  }
+}

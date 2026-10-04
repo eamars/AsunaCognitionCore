@@ -1,0 +1,284 @@
+{
+  "model_version": 1,
+  "persona": {
+    "id": "demo",
+    "display_name": "演示"
+  },
+  "render": {
+    "budget_tokens": 4000,
+    "max_window_share": 0.25,
+    "values_tag": "values"
+  },
+  "recall_protocol": {
+    "order": [
+      "dossier",
+      "affect",
+      "self_state",
+      "ledgers",
+      "rhythm",
+      "relationship",
+      "memories",
+      "history",
+      "tasks_plans",
+      "affect_proposals",
+      "recent_phrasing"
+    ]
+  },
+  "affect": {
+    "enabled": true,
+    "default_half_h": 6,
+    "arl_half_h": 2,
+    "clamp": {
+      "val": [
+        -100,
+        100
+      ],
+      "arl": [
+        -100,
+        100
+      ]
+    },
+    "close_mode": "from_close",
+    "require_cost": true,
+    "allow_untyped": true,
+    "max_delta": {
+      "val": 40,
+      "arl": 40
+    },
+    "proposal_ttl_h": 12,
+    "kind_floor": 0,
+    "kinds": {
+      "joy": {
+        "half_h": 6,
+        "tendency": "多分享一点",
+        "tendency_visibility": "public",
+        "valence": "positive"
+      },
+      "surprise": {
+        "half_h": 1,
+        "tendency": "先弄清楚再说",
+        "tendency_visibility": "public"
+      },
+      "pride": {
+        "half_h": 10,
+        "tendency": "把方法记下来",
+        "tendency_visibility": "public",
+        "valence": "positive"
+      },
+      "calm": {
+        "half_h": 12,
+        "tendency": "安静地等，不催",
+        "tendency_visibility": "public",
+        "valence": "positive"
+      },
+      "unease": {
+        "half_h": 8,
+        "tendency": "再核对一遍",
+        "tendency_visibility": "public",
+        "valence": "negative"
+      },
+      "gratitude": {
+        "half_h": 16,
+        "tendency": "认真回报",
+        "tendency_visibility": "public",
+        "valence": "positive"
+      },
+      "attachment": {
+        "half_h": 36,
+        "tendency": "靠近一点",
+        "tendency_visibility": "owner_private",
+        "valence": "positive"
+      },
+      "sadness": {
+        "half_h": 20,
+        "tendency": "如实说出来",
+        "tendency_visibility": "owner_private",
+        "valence": "negative"
+      }
+    },
+    "bands": [
+      {
+        "if": {
+          "val_gte": 25,
+          "arl_gte": 55
+        },
+        "label": "高涨"
+      },
+      {
+        "if": {
+          "val_gte": 25
+        },
+        "label": "愉快"
+      },
+      {
+        "if": {
+          "val_gte": 10,
+          "arl_gte": 55
+        },
+        "label": "有劲"
+      },
+      {
+        "if": {
+          "val_gt": -10,
+          "arl_gte": 55
+        },
+        "label": "专注"
+      },
+      {
+        "if": {
+          "val_gt": -10
+        },
+        "label": "平稳"
+      },
+      {
+        "if": {
+          "arl_gte": 45
+        },
+        "label": "烦躁"
+      },
+      {
+        "label": "低落"
+      }
+    ],
+    "policy": [
+      {
+        "slot": "话量",
+        "visibility": "public",
+        "default": "常规长度",
+        "rules": [
+          {
+            "if": {
+              "val_gte": 10,
+              "arl_gte": 55
+            },
+            "text": "可以多说几句"
+          },
+          {
+            "if": {
+              "val_lte": -10
+            },
+            "text": "只说要紧的"
+          }
+        ]
+      },
+      {
+        "slot": "主动性",
+        "visibility": "public",
+        "default": "必做项加一件顺手的事",
+        "rules": [
+          {
+            "if": {
+              "arl_gte": 55
+            },
+            "text": "可以揽一件没人要求的事"
+          },
+          {
+            "if": {
+              "arl_lt": 25
+            },
+            "text": "只做必做项"
+          }
+        ]
+      },
+      {
+        "slot": "提要求",
+        "visibility": "owner_private",
+        "default": "先不提",
+        "rules": [
+          {
+            "if": {
+              "val_gte": 25
+            },
+            "text": "可以提"
+          }
+        ]
+      }
+    ]
+  },
+  "dossier": {
+    "inject_last": 3,
+    "index_size": 30
+  },
+  "rhythm": {
+    "settle_at": "04:30"
+  },
+  "heartbeat": {
+    "enabled": false,
+    "every_min": 30,
+    "min_gap_min": 20,
+    "skip_in_sleep": false
+  },
+  "memory": {
+    "coverage_floor": 0,
+    "promotion": {
+      "daily_quota": 3,
+      "min_roots": 2,
+      "min_dates": 2,
+      "window_days": 7
+    },
+    "forgetting": {
+      "half_life_days": 30,
+      "half_life_messages": 1500,
+      "step_back_below": 0.1
+    }
+  },
+  "speak": {
+    "max_messages": 1,
+    "split_marker": "---split---",
+    "chars_per_second": 12,
+    "min_gap_s": 1,
+    "max_gap_s": 5
+  },
+  "phrasing": {
+    "window": 20
+  },
+  "self_development": {
+    "every_min": 1440
+  },
+  "policy_keys": {
+    "heartbeat.enabled": {
+      "type": "boolean",
+      "what": "是否开启心跳机会回合"
+    },
+    "heartbeat.every_min": {
+      "type": "integer",
+      "min": 1,
+      "max": 1440,
+      "what": "心跳间隔（分钟）"
+    },
+    "heartbeat.skip_in_sleep": {
+      "type": "boolean",
+      "what": "睡眠窗内是否跳过心跳（由人格自己决定）"
+    },
+    "dossier.inject_last": {
+      "type": "integer",
+      "min": 0,
+      "max": 20,
+      "what": "档案注入最近几条可注入条目"
+    },
+    "memory.coverage_floor": {
+      "type": "number",
+      "min": 0,
+      "max": 1,
+      "what": "低于此分判为证据不足"
+    },
+    "speak.max_messages": {
+      "type": "integer",
+      "min": 1,
+      "max": 5,
+      "what": "一次发言最多几段"
+    },
+    "affect.kinds.calm.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "平静的半衰期（小时）"
+    },
+    "memory.forgetting.half_life_days": {
+      "type": "number",
+      "min": 1,
+      "max": 365,
+      "what": "记忆淡忘的时间半衰期（天）"
+    }
+  }
+}

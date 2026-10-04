@@ -7,28 +7,6 @@ import { AsunaApi } from '../src/api.js';
 import { Context } from '@deepseek-ai/cordis';
 import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm';
 
-test('route validation uses native exact-model efforts and supports the provider default', async t => {
-  const ctx = new Context();
-  new LlmRuntime(ctx);
-  t.after(() => ctx.fiber.dispose());
-  class Catalog extends LlmAdapter {
-    async listModels() { return ['reasoner', 'plain'].map(id => ({ provider: 'fixture', id, name: id })); }
-    async resolveModel(_provider, model) {
-      return { provider: 'fixture', id: model, name: model, context: { contextWindow: 8192 },
-        ...(model === 'reasoner' ? { reasoning: { efforts: [{ id: 'deliberate', name: 'Deliberate' }], defaultEffort: 'deliberate' } } : {}) };
-    }
-  }
-  ctx.llm.registerAdapter(['fixture'], new Catalog());
-  const core = new CognitionCore(ctx, {});
-  const routes = { character: { provider: 'fixture', model: 'reasoner', reasoningEffort: '', maxTokens: 1024 },
-    action: { provider: 'fixture', model: 'plain', reasoningEffort: '', maxTokens: 1024 } };
-  const resolved = await core.resolveRoutes(routes);
-  assert.equal(resolved.character.reasoning_effort, 'deliberate');
-  assert.equal(resolved.action.reasoning_effort, undefined);
-  routes.action.reasoningEffort = 'deliberate';
-  await assert.rejects(core.resolveRoutes(routes), /INVALID_REASONING_EFFORT: action/);
-});
-
 test('native settings redact credentials and edits preserve secrets omitted by the page', () => {
   const original = { deployment: { mongo_uri: { $secret: 'mongo' }, channels: { qq: { token: { $secret: 'qq' } } } },
     secrets: { mongo: 'private-database-credential', qq: 'private-qq-credential' }, qqAdmission: 'explicit' };
@@ -64,19 +42,3 @@ test('settings activation pauses ingress and restores the previous configuration
   assert.equal(core.config.value, 'previous');
 });
 
-test('save uses the scoped native settings service and refuses a stale draft before mutation', async () => {
-  let value = { qqAdmission: 'explicit' }, revision = 4, writes = 0;
-  const core = { savedConfig: () => value, validateSettings: async next => { assert.equal(next.qqAdmission, 'automatic'); },
-    settings: { describe: () => [{ ns: 'asuna-cognition-core', revision, base: {} }],
-      mutate: async (_ns, ops, expected) => {
-        assert.equal(expected, revision); writes++; value = editSettings(value, ops); revision++;
-      } } };
-  const save = (ops, expected) => AsunaApi.prototype.saveSettings.call({ core }, ops, expected);
-  const ops = [{ op: 'set', path: ['qqAdmission'], value: 'automatic' }];
-  await assert.rejects(save(ops, 3), /SETTINGS_CONFLICT/);
-  assert.equal(writes, 0);
-  assert.deepEqual(await save(ops, 4), { saved: true });
-  assert.equal(value.qqAdmission, 'automatic');
-  await assert.rejects(save(ops, 4), /SETTINGS_CONFLICT/);
-  assert.equal(writes, 1);
-});

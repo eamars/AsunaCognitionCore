@@ -25,6 +25,13 @@ class Application:
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
             self.broker=ToolBroker(self.service,serve_http=self.broker_http);self.stack.callback(self.broker.close)
+            def persona_jobs(task,args):
+                from .persona_jobs import JobRunner
+                result=JobRunner(self.store,self.config['chat']['persona'],retrieval=self.retrieval).run(
+                    args['job'],dry_run=bool(args.get('dry_run',True)),args=args.get('args') or {})
+                from .persona_jobs import tool_result
+                return tool_result(result)          # status, counts and artifact ids only (§7.4)
+            self.broker.persona_jobs=persona_jobs
             if self.development_factory:
                 self.broker.development=self.development_factory(self.config,self.store)
             # P1-b: the trusted read-only history entry reuses this store and retrieval;
@@ -57,6 +64,14 @@ class Application:
             self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval),task_service=self.service)
+            # The relevance gate's lane: one small session per group, on the character route (attend.py).
+            self.attend_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'attend'))
+            self.coordinator.attend=self.attend_lane
+            if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
+                # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).
+                from .affect import Appraiser
+                self.appraiser_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'appraiser'))
+                self.coordinator.appraiser=Appraiser(self.store,self.appraiser_lane)
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)

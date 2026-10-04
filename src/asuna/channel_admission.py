@@ -1,13 +1,10 @@
-"""Owner-configured QQ admission. Platform events never grant owner access."""
+"""Owner-configured channel admission. Platform events never grant owner access."""
 from copy import deepcopy
-from pathlib import Path
-import re
 
+from . import channel_kinds
 from .config import ROOT
 from .evidence import canonical, sha
 from .state import Denied
-
-DIGITS = re.compile(r'^[0-9]{4,20}$')
 
 
 def restore_admissions(store):
@@ -30,12 +27,13 @@ def admit(controller, channel_id, body):
     """Called only behind channel authentication; validate before changing state."""
     store = controller.app.store
     channel = store.config['channels'][channel_id]
+    platform = channel_kinds.of_channel(channel_id)
     sender, group = body.get('sender_id'), body.get('group_id')
     if body.get('account_id') != channel['account_id']:
         raise Denied('CHANNEL_IDENTITY_DENIED')
-    if not isinstance(sender, str) or not DIGITS.fullmatch(sender) or sender == channel['account_id']:
+    if not isinstance(sender, str) or not platform.ACCOUNT.fullmatch(sender) or sender == channel['account_id']:
         raise Denied('CHANNEL_SENDER_INVALID')
-    if group is not None and (not isinstance(group, str) or not DIGITS.fullmatch(group)):
+    if group is not None and (not isinstance(group, str) or not platform.ACCOUNT.fullmatch(group)):
         raise Denied('CHANNEL_GROUP_DENIED')
     if sender in channel.get('blocked_senders', []) or group and group in channel.get('blocked_groups', []):
         raise Denied('CHANNEL_BLOCKED')
@@ -55,12 +53,13 @@ def admit(controller, channel_id, body):
         if route['target'] == {'type': kind, 'id': target} and route_id != body['route_id']:
             raise Denied('CHANNEL_TARGET_ALREADY_BOUND')
     route = deepcopy(existing) if existing else {
-        'scene_id': f"qq:{channel['account_id']}:{kind}:{target}",
+        'scene_id': platform.scene_id(channel['account_id'], kind, target),
         'target': {'type': kind, 'id': target}, 'display_name': target}
     if route['target'] != {'type': kind, 'id': target}:
         raise Denied('CHANNEL_GROUP_DENIED')
     identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})
-    person = identity['person_id'] if identity else 'qq-person-' + sha(canonical([channel_id, sender]))[:24]
+    # One id form for every person on a platform, configured or admitted (qq:<account>).
+    person = identity['person_id'] if identity else platform.person_id(sender)
     grant = {'person_id': person, 'workspace': str(ROOT / '.runtime' / 'channels' /
         ('auto-' + sha(canonical([channel_id, channel['account_id'], kind, target, sender]))[:32])),
         'read_only_paths': []}

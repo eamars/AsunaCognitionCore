@@ -10,10 +10,12 @@ Use the existing Mongo database and private deployment configuration. A compatib
 npm.cmd ci
 .\.venv\Scripts\uv.exe sync
 node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
-npm.cmd run pack:plugins
-.\.venv\Scripts\python.exe tools\setup_native_profile.py --shared-action-model
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman --channel packages\napcat-qq
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --channel-package packages\napcat-qq --shared-action-model
 .\start-asuna.cmd
 ```
+
+The core names no persona and no platform: pass the persona package and each channel package to both the packer and the installer. A configured channel (`channels.qq`) needs its channel package installed; Core reports `CHANNEL_PLUGIN_NOT_INSTALLED` otherwise.
 
 The installer does not initialize, reset, copy or replace Mongo. `--shared-action-model` seeds independent character/action references pointing to the available action model. Omit it on a new profile to seed separate routes. Reinstallation preserves saved profile settings; change routes in the native settings card after initial installation.
 
@@ -21,13 +23,17 @@ Artifacts and hashes are in `.runtime/adr008/packages/manifest.json`. The two As
 
 ## Start, review, stop
 
-`start-asuna.cmd` launches the stable Node entry directly, so a broken Python worker cannot prevent the native repair interface from opening. `start-asuna-ui.cmd` and `asuna ui --config config/local.json --port 8780` select the same profile. `--native` remains a compatibility flag. The retired `/asuna/` page and `--read-only` Web server are no longer used.
+`start-asuna.cmd` launches the stable Node entry directly, so a broken Python worker cannot prevent the native repair interface from opening. `start-asuna-ui.cmd` and `asuna ui --config config/local.json --port 8780` select the same profile. Both launchers accept `--profile <name>` and `--config <path>` (or `ASUNA_PROFILE` / `ASUNA_CONFIG`); the defaults are `asuna-native` and `config/local.json`. A profile other than `asuna-native` keeps its own DSH home, activation state and candidates under `.runtime/adr008/profiles/<name>/`. `--dry-run` prints the resolved profile, config and database without starting anything. There is no terminal chat.
 
 Open the authenticated `dsh web:` address printed by the launcher. The token is private. Under **Local**, continue **小满 · 本地私聊**. Under **QQ**, each active DM or group has one continuous main conversation; its composer is view-only, so reply through QQ. Use native Chat for conversation and Trajectory for actual steps/tools. Actions and exchange summaries are native children of their role conversation. **Standard mode** remains ordinary DSH. Native New Session remains available for deliberate additional or recovery conversations. Older sessions remain accessible using native View options to show archives.
 
-The colored labels show only **角色脑** (purple) or **行动脑** (blue). Main Chat references the actual action session's thinking, tools and output inline, with character consultations between the corresponding action ranges. Both labels remain visible outside the native process disclosure by default; expanding or collapsing the records does not add another label. Expand DSH's process disclosure and analysis row to inspect full native reasoning, text and tools. DSH's own controls show execution status. Both brains can use the same model without losing their identity labels.
+The colored labels show only **角色脑** (purple) or **行动脑** (blue). Main Chat references the actual action session's thinking, tools and output inline, with character consultations between the corresponding action ranges. Both labels remain visible outside the native process disclosure by default; expanding or collapsing the records does not add another label. Expand DSH's process disclosure and analysis row to inspect full native reasoning, text and tools. DSH's own controls show execution status. Both brains can use the same model without losing their identity labels. In a character conversation the composer shows two context wheels, both DSH's own meter with its click-open breakdown: the stock one, tinted purple, for the character brain, and a second instance fed the latest action session's context projections, tinted blue. DSH does not export the meter; the plugin reads it from the rendered stock meter, and if a DSH revision changes that, the blue wheel is simply absent.
 
-Role, action, summary and recovery presets mount DSH's native compaction backend, `/compact` command and tool-result pruner. Automatic compaction replaces older model context with a summary while retaining the durable originals and recent history; this does not reset the conversation or merge the two brains' contexts. The preset reserves 8,192 summary output tokens and retains 32% of the available message budget. `/compact` remains subject to the model's capacity: an already oversized selected span can fail, and a summary must be smaller than the history it replaces. Check native compaction records and the actual reply before treating context recovery as successful.
+Role, action, summary and recovery presets mount DSH's native compaction backend and tool-result pruner; the action, summary and recovery presets also mount DSH's `/compact` command, the character preset does not (manual compaction is not something a person does; automatic compaction stays). Automatic compaction replaces older model context with a summary while retaining the durable originals and recent history; this does not reset the conversation or merge the two brains' contexts. The action, summary and recovery presets keep DSH's engineering summary template (8,192 output tokens, 32% retained). The character preset uses `@asuna/cognition-core/compaction`: DSH's engine with a Chinese role-play checkpoint (conversation thread, open threads, promises, corrections, the other person's state, delegated work) that leaves out the program-provided blocks, 24,576 output tokens (the character route reasons first), a 16% retained tail and a 32,768-token reserve. Where mounted, `/compact` remains subject to the model's capacity: an already oversized selected span can fail, and a summary must be smaller than the history it replaces. Check native compaction records and the actual reply before treating context recovery as successful.
+
+Each character turn's context is prepared in full by the worker and composed by the plugin when the notice enters the session: a block, history row or recalled memory identical to a copy within the newest 32,768 estimated tokens (inside every compaction's retained tail) is not repeated, and the notice names what it left out. Anything older, including what a compaction absorbed, is sent again. Long text in the context is cut with a marker: history rows at 1,500 characters, recalled memories at 1,200, task reports at 6,000 with the last four tool observations at 600 each; the full records stay readable.
+
+Recall ranking forgets by time and by volume (persona model `memory.forgetting`, defaults: 30-day and 1,500-message half-lives). Each candidate's score is multiplied by 0.5^(days since its last real use / half_life_days) × 0.5^(messages in its conversation since then / half_life_messages); a memory a character turn actually used is fresh again, while consultations, probes and the history tool do not count as use. Pinned memories (owner-private turns only) do not fade. A raw chat chunk below `step_back_below` (0.1) whose message a summary already covers is left out of automatic recall; an explicit recall round and the history tool still reach it. Nothing is deleted.
 
 Ctrl+C stops this Host and its managed worker/adapters. Let active work settle before a manual restart. Do not start two instances consuming the same channel routes. Restart with the same command. Unfinished old actions and task feedback pause instead of calling either brain automatically; their native context, results and receipts remain. In the existing local conversation, explicitly ask to continue the paused work. The character's new decision can reuse its original execution binding and must first check prior results. A task cancelled by the user cannot be revived this way. Completed feedback is reconciled without generation. External model services are not stopped by Asuna.
 
@@ -37,10 +43,12 @@ UI development uses an isolated native DSH profile with synthetic inference for 
 
 ## Settings and private files
 
-- `config/local.json`: migration source for existing Mongo, workspace and business configuration.
+- `config/local.json`: migration source for existing Mongo, workspace and business configuration. Set `timezone` (an IANA name) here; without it clocks and schedules are shown in UTC and say so — the core has no built-in time zone.
 - Adjacent `*.models.local.json`: deployment seed routes and model credentials. After installation, active model references belong to the native profile.
 - Adjacent `asuna-channel.local.json`: initial authenticated routes, identities, grants and A2 read links; imported only when enabled.
 - Adjacent `integration.local.json`: initial managed adapter configuration and approved network aliases.
+- These two sibling files belong to `config/local.json` only. Any other config file names them explicitly with `channel_config` / `integration_config`, so a second config never inherits real routes.
+- `config/personal-denylist.local.txt` (ignored; template `config/personal-denylist.example.txt`): your own account names, host names and similar literals for `tools/check_staged_secrets.py --personal`.
 - `.runtime/adr008/home/profiles/asuna-native/cordis.patch.yml`: editable native provider and Asuna settings. Do not pass it again as a command-line overlay.
 
 After migration the native profile's `deployment` and write-only `secrets` are authoritative; editing the old JSON files does not silently override saved settings. DSH's native Models page owns provider definitions and model API keys. No launcher environment override shadows keys changed there.
@@ -53,11 +61,24 @@ The **记忆** right tab reads bounded pages for the current native scene bindin
 
 ## Self-development and recovery
 
-`development_files/read/write/run/publish` target `xiaoman` by default; `project="core"` selects the existing authorized cognition source project. `/skills` is the writable persona candidate; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.
+`development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the existing authorized cognition source project. `/skills` is the writable persona candidate; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.
 
 `BOOT_FAILED` / `PACK_FAILED` preserve the failed candidate and diagnostics. `APPLIED` means selected, not yet confirmed running. `ACTIVE` means the relevant worker/resources loaded successfully. `HOST_RESTART_REQUIRED` means restart this Host to install the selected JS/composition/dependency artifact. The launcher retains installation failures and still opens the installed repair floor. There is no automatic rollback.
 
 If the worker fails, create a native session using **Asuna recovery** in the authorized local workspace. Its project tools operate independently of Python, preserve the selected candidate and publish a forward correction. A normal Python correction can restart only the worker. Protected publication/repair/persistence modules and the stable entry remain outside autonomous edits.
+
+## Demo environment
+
+Manual Web checks of new behavior use a synthetic persona and a separate database, never the real profile:
+
+```powershell
+.\.venv\Scripts\python.exe tools\make_demo_config.py
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona tests\fixtures\personas\demo
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --profile asuna-demo --config config\demo.local.json --persona-package tests\fixtures\personas\demo
+.\start-asuna.cmd --profile asuna-demo --config config\demo.local.json --port 8790
+```
+
+`make_demo_config.py` copies only the Mongo URI and model routes from `config/local.json` into the ignored `config/demo.local.json` (database `asuna_v2_demo_main`, persona `demo`, no channels, integrations or QQ routes, self-development off). Add `--shared-action-model` to the setup command when only the action model is running.
 
 ## Maintenance
 
@@ -67,13 +88,14 @@ Other CLI operations require `--debug`; use them for explicit maintenance and re
 .\.venv\Scripts\python.exe -m asuna.cli --debug inspect task TASK_ID
 ```
 
-Legacy `run`, `chat`, `reflect`, `compact` and model-evaluation drivers no longer start separate SDK runtimes. Historic reports and logs remain readable. Old UI/proxy-specific tests were retired with their implementation. The native contract suite and offline business checks do not require another Mongo database:
+The maintenance commands are `db-init`, `inspect`, `rollback`, `index`, `delete`, `cancel` and `replay`; `seed --fixture tests/fixtures/world.json` is for tests only. The ADR-001 evaluation commands (`doctor`, `report`, `export`, `review-*`) and the terminal chat were removed. Checks:
 
 ```powershell
 npm.cmd run test:native
-.\.venv\Scripts\python.exe -m pytest tests/test_native_worker.py tests/test_native_product.py -q
-.\.venv\Scripts\python.exe tools/probe_qq_admission.py
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe tools\check_staged_secrets.py --personal --all
+.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/napcat-qq
 node tools/probe_native_schedule.mjs
 ```
 
-The older tests using the `store` fixture create isolated Mongo databases; they are not part of the single-world migration verification. The fixture drops its database in teardown, including setup or test failure, after exporting requested file evidence. Do not retain server databases for audit. `tools/cleanup_test_databases.py --inventory PATH` inventories disposable test databases; `--apply` removes only names already recorded in that manifest and refuses runtime, allowed and unrelated databases. Skip Mongo tests while the service is unavailable.
+The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries, authorization and epoch fencing, exactly-once ingest/publication, crash recovery, audit integrity, sandbox isolation and the visible native behavior. The `store` fixture builds the migrated, audited fixture world once per session and resets a reused `asuna_v2_test_*` database to it for each test; every test database is dropped at session end. The personal-data scan prints only `file:line:category`, never the matched value, and always exits 0. `tools/p2_offline_check.py`, `tools/p3_offline_check.py`, `tools/p5_offline_check.py` and `tools/p1c_offline_check.py` need no Mongo; they are the persona's self-development checks inside its sandbox. Skip Mongo tests while the service is unavailable.

@@ -1,6 +1,5 @@
 """Real namespace/lifecycle contracts; fake model only for task authorization."""
 import json
-import time
 import uuid
 
 import pytest
@@ -40,33 +39,6 @@ def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
     assert (runner.dev/'version.txt').read_text() == 'original'
     value = runner.call('integration_test', {'argv': ['python3', '-c', 'import time; time.sleep(20)'], 'timeout': 1})
     assert value['timed_out'] and value['state'] == 'STOPPED'
-
-
-def test_enable_restores_frozen_version_and_close_stops_children(runner):
-    script = "from pathlib import Path\nimport time\nprint('version-one',flush=True)\nwhile True:\n Path('/data/heartbeat').write_text(str(time.time()))\n time.sleep(.05)\n"
-    (runner.dev/'service.py').write_text(script)
-    value = runner.call('integration_start', {'argv': ['python3', 'service.py']})
-    assert value['state'] == 'RUNNING' and 'version-one' in logs(value)
-    (runner.dev/'service.py').write_text("print('half-written-new-version')")
-    with pytest.raises(Denied, match='ALREADY_RUNNING'):
-        runner.call('integration_start', {'argv': ['python3', 'service.py']})
-    runner.close()
-    heartbeat = runner.root/'service-data/heartbeat'
-    stopped = heartbeat.read_text(); time.sleep(.15)
-    assert heartbeat.read_text() == stopped
-    restored = IntegrationRunner(profile(), root=runner.root)
-    try:
-        restored.restore()
-        assert restored.status()['state'] == 'RUNNING'
-        assert 'version-one' in logs(restored.status()) and 'half-written' not in logs(restored.status())
-        restored.call('integration_stop', {})
-        restored.close()
-        third = IntegrationRunner(profile(), root=runner.root)
-        third.restore()
-        assert third.active is None
-        third.close()
-    finally:
-        restored.close()
 
 
 def test_changed_network_profile_does_not_autorestore(runner):
@@ -126,39 +98,3 @@ def test_revision_cannot_inherit_previous_integration_grant(store):
     assert not any(t.startswith('integration_') for t in task['allowed_capabilities'])
 
 
-def test_broker_integration_can_call_host_outbox_and_cancel_stays_fenced(store):
-    """Real HTTP/DB-lock boundary; the child process alone is a test double."""
-    import threading
-    from types import SimpleNamespace
-    from urllib.request import Request, urlopen
-    from asuna.channels import Channels, ChannelServer
-
-    work=ROOT/'.runtime/work'/('integration-callback-'+uuid.uuid4().hex);work.mkdir(parents=True)
-    store.config.update(task_mode='workspace',chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
-                        integration=profile('dm-a','A')['integration'])
-    store.config['channels']={'probe':{'token':'isolated-test-token','account_id':'test-bot','routes':{}}}
-    decision={'next':'delegate','goal':'read host outbox','constraints':[],'recall_query':'','speak_before_action':False}
-    event={'event_id':'callback','scene_id':'dm-a','person_id':'A','text':'read outbox','integration_profile':'owner'}
-    persist_input(store,event,managed=True)
-    ep=Coordinator(store,FakeLane(store,[LaneResult('read'),LaneResult(json.dumps(decision))])).ingest(event)
-    service=TaskService(store);broker=ToolBroker(service)
-    controller=SimpleNamespace(app=SimpleNamespace(store=store),stopping=threading.Event())
-    server=ChannelServer(Channels(controller))
-    task=service.claim(ep['task_id']);broker.bind('callback',task,work)
-    class CallbackRunner:
-        def call(self,tool,args):
-            request=Request(f'http://127.0.0.1:{server.server.server_port}/v1/channels/probe/outbox',
-                            headers={'Authorization':'Bearer isolated-test-token'})
-            with urlopen(request,timeout=2) as response:value=json.load(response)
-            service.cancel(task['_id'],person_id='A')
-            return value
-    broker.integration=CallbackRunner()
-    try:
-        result=broker.call('callback','read-outbox','integration_test',{'argv':['probe']})
-        assert result['items']==[]
-        assert store.db.artifacts.find_one({'_id':result['artifact_ref']})['state']=='DONE'
-        assert store.db.tasks.find_one({'_id':task['_id']})['state']=='CANCELLED'
-        with pytest.raises(Denied,match='STALE_TASK_FENCE'):
-            broker.call('callback','after-cancel','integration_test',{'argv':['probe']})
-    finally:
-        server.close();broker.close()

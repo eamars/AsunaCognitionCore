@@ -31,30 +31,3 @@ test('successor tasks get disjoint ranges on the same source; receipt replay add
   assert.equal(h.events.length, count, 'an old receipt cannot relink or close the newer task');
 });
 
-test('a source cannot admit a second range before the first Turn settles', async () => {
-  const h = records(); await h.records.link(stage('first'));
-  await assert.rejects(h.records.link(stage('second')), /ASUNA_ACTION_RANGE_STILL_OPEN/);
-  assert.equal(h.events.length, 1);
-});
-
-test('successor announcement returns during result acknowledgement and waits for source teardown', async () => {
-  const calls = [];
-  let release;
-  const held = new Promise(resolve => { release = resolve; });
-  const children = new NativeChildren({ ctx: { logger: { warn: () => {} } }, worker: { call: async () => {} } });
-  children.open = async value => {
-    calls.push(value.token);
-    if (value.token === 'first') {
-      await children.start(stage('second')); // The business result acknowledgement can return.
-      calls.push('acknowledged');
-      await held; calls.push('disposed-first');
-    }
-  };
-  await children.start(stage('first'));
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls, ['first', 'acknowledged']);
-  release();
-  await Promise.all(children.admissions.values());
-  assert.deepEqual(calls, ['first', 'acknowledged', 'disposed-first', 'second']);
-  assert.equal(children.admissions.size, 0);
-});

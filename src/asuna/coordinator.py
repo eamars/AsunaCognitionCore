@@ -5,16 +5,19 @@ from pathlib import Path
 import threading
 import uuid
 import jsonschema
-from .config import BUNDLE, prompt_path, character_id
+from .config import prompt_path, character_id, schema
 from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
 from .publish import PublishService
+from . import schedule_rules
+from .render import episode_system
+from . import answers, decide_delta, visibility
 from .state import Store, Conflict, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
 
-DECISION_SCHEMA=json.loads((BUNDLE/'schemas/decision.schema.json').read_text(encoding='utf-8'))
+DECISION_SCHEMA=schema('decision.schema.json')
 # The number of natural-language constraints does not decide whether a valid
 # intention may proceed. Keep control-field validation, not a prose item quota.
 DECISION_SCHEMA['properties']['constraints'].pop('maxItems',None)
@@ -27,7 +30,7 @@ WORKSPACE_DECISION_SCHEMA['properties']['continue_task_id']={'type':'string','mi
 # 这里只管形状；at 与 clock 都按场景时区的本地钟点读，不要求模型自己换算 UTC。
 SCHEDULE_TIMING={'type':'object','additionalProperties':False,
     'properties':{'after_seconds':{'type':'integer','minimum':1,'maximum':31622400},
-        'every_seconds':{'type':'integer','minimum':300,'maximum':31622400},
+        'every_seconds':{'type':'integer','minimum':schedule_rules.MIN_INTERVAL_SECONDS,'maximum':31622400},
         'at':{'type':'string','minLength':10,'maxLength':40},
         'clock':{'type':'object','additionalProperties':False,'required':['time'],
             'properties':{'time':{'type':'string','minLength':4,'maxLength':5},
@@ -49,6 +52,12 @@ class ProtocolFailure(RuntimeError):
     pass
 
 
+# What each role stage needs, in words for her when a check fails (answers.py).
+STAGE_NEEDS={'MONOLOGUE':'1–4 句第一人称独白，写在正文里','DECIDE':'一个符合上面 DECIDE 说明的 JSON 决策对象，写在正文里',
+    'SELF':'一个 JSON 对象，只有 target 和 body 两个字段，写在正文里','REFLECT':'你对这个人的理解，写在正文里',
+    'SPEAK':'要说出口的话，写在正文里','CONSULT':'给行动脑的回答，写在正文里','WRITE':'要写进文档的正文'}
+
+
 class Coordinator:
     def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None,monologue_enabled=True,task_service=None):
         self.store,self.character = store,character
@@ -59,6 +68,9 @@ class Coordinator:
         self.monologue_enabled=monologue_enabled
         self.scheduler=None
         self.native_session_resolver=None
+        self.appraiser=None           # optional affect appraiser route; runs after commit, never inside a turn
+        self.attend=None              # the relevance gate's lane (attend.py); without it every wake runs the full turn
+        self.appraisals={}
         from .tasks import TaskService
         self.tasks=task_service or TaskService(store)
 
@@ -72,14 +84,36 @@ class Coordinator:
                 return existing
             from .ingress import persist_input
             persist_input(self.store,event)
-            system,context,manifest=self.context.prepare(event,persona)
+            from . import attend
+            if self.attend and attend.gated(scene,event):
+                # The gate first: nothing is recalled until she chooses to join (attend.py).
+                ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[]},stream=ep_id)
+                if scene.get('character_context'):
+                    ep=self._update(ep,character_context=scene['character_context'])
+                if self.native_session_resolver:
+                    ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
+                return self.advance(ep_id)
+            _,context,manifest=self.context.prepare(event,persona)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
+            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
-            if event.get('native_session_id'):
-                ep=self._update(ep,native_session_id=event['native_session_id'])
+            if event.get('native_session_id') or self.native_session_resolver:
+                ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
             return self.advance(ep_id)
+
+    def _binding(self, ep):
+        binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
+        return binding+':'+ep['character_context'] if ep.get('character_context') else binding
+
+    def _role_session(self, event, ep_id, scene, persona):
+        """The native role session this turn runs in; same rule as native binding."""
+        if event.get('native_session_id'):
+            return event['native_session_id']
+        proto={'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'person_id':event['person_id'],'persona':persona,
+               'policy_epoch':scene['policy_epoch'],**({'character_context':scene['character_context']} if scene.get('character_context') else {}),
+               **{k:event[k] for k in ('task_id',) if k in event}}
+        return self.native_session_resolver(proto)
 
     def _update(self, ep, **changes):
         return self.store.put('episodes',{**ep,**changes},expected=ep['revision'],stream=ep['_id'])
@@ -145,40 +179,129 @@ class Coordinator:
             'timezone':plan.get('timezone'),'rule':plan.get('rule'),
             'plan_version':plan.get('plan_version',1)}})
 
-    def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None):
-        require_current_feedback(self.store, ep)
+    def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None, shape=None, label=None):
+        """One role stage. Its answer must pass answers.py's checks (and `shape`, when given); a failed check
+        goes back to her in the same session and the stage asks again. Returns the text, or `shape`'s result."""
         operation=operation or f"{ep['_id']}:{phase}:{round_id}"
         if ep.get('resume_generation'):
             operation+=':resume:'+str(ep['resume_generation'])
-        if instruction is None:instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
-        feedback_continuation=(ep.get('episode_kind')=='task_feedback'
-            and ep.get('feedback_resume_phase')==phase)
-        if (phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation:
-            instruction=json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+instruction
-        instruction += '\n'+extra
-        if feedback_continuation:
-            # The original feedback input, result and incomplete output are
-            # already durable in this role's native session. Continue its
-            # stage there without injecting the large context a second time.
-            instruction=('原行动反馈的这个角色阶段尚未完成。沿同一会话接续，不重跑行动或重新登记输入。'
-                '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
-        elif ep.get('resume_diagnostic'):
-            instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
-        binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
-        if ep.get('character_context'):binding+=':'+ep['character_context']
-        self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
-        value=self.character.generate(binding,operation,phase,instruction,ep['system'])
-        self.crash('after_lane_delivery')
-        self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
-        require_current_feedback(self.store, ep)
+        label=label or ('INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT')
+        def generate(attempt, note):
+            if not attempt:
+                return self._generate(ep,phase,operation,instruction,extra)
+            return self._generate(ep,phase,operation+':fix-'+str(attempt),note,repair=True)
+        def rejected(attempt, issue, value):
+            self.store.audit(ep['_id'],'phase.rejected',{'operation':operation,'phase':phase,'attempt':attempt,
+                'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
+        try:
+            value,shaped=answers.ask(generate,STAGE_NEEDS.get(phase,'这一阶段要交的内容，写在正文里'),shape,rejected=rejected)
+        except answers.Rejected as exc:
+            raise ProtocolFailure(label+': '+json.dumps({'problem':exc.problem,'finish_reason':exc.value.finish_reason,
+                'request_refs':exc.value.request_refs},ensure_ascii=False))
         if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
-            label='INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT'
+            # Not the model's mistake (a transport error after DSH's retries, an interrupted turn).
             raise ProtocolFailure(label+': '+json.dumps({
                 'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
                 'content':value.content,'request_refs':value.request_refs},ensure_ascii=False))
-        return value.content
+        return shaped if shape else value.content
+
+    def _generate(self, ep, phase, operation, instruction=None, extra='', repair=False):
+        """One delivery of a stage to her role session. A repair carries only the program's note."""
+        require_current_feedback(self.store, ep)
+        carries_context=False
+        if repair:
+            text=instruction
+        else:
+            if instruction is None:
+                instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
+                # Program facts referenced by prompts come from their single source.
+                instruction=instruction.replace('{{min_interval_seconds}}',str(schedule_rules.MIN_INTERVAL_SECONDS))
+            feedback_continuation=(ep.get('episode_kind')=='task_feedback'
+                and ep.get('feedback_resume_phase')==phase)
+            carries_context=(phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation
+            instruction += '\n'+extra
+            if feedback_continuation:
+                # The original feedback input, result and incomplete output are
+                # already durable in this role's native session. Continue its
+                # stage there without injecting the large context a second time.
+                instruction=('原行动反馈的这个角色阶段尚未完成。沿同一会话接续，不重跑行动或重新登记输入。'
+                    '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
+            elif ep.get('resume_diagnostic'):
+                instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
+            context=json.dumps(ep['context'],ensure_ascii=False,default=str) if carries_context else None
+            text=context+'\n'+instruction if carries_context else instruction
+        binding=self._binding(ep)
+        self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
+        # A native role session composes the notice itself: what it still shows verbatim is not repeated.
+        delivery=({'context':json.loads(context),'tail':instruction,'episode_id':ep['_id']}
+                  if carries_context and getattr(self.character,'composes_context',False) else {})
+        value=self.character.generate(binding,operation,phase,text,episode_system(self.store,ep),**delivery)
+        self.crash('after_lane_delivery')
+        # D-4: the output itself stays in the lane receipt / native transcript; the audit keeps its hash.
+        from .state import content_ref
+        self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,**content_ref(value.content),
+            'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
+            'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
+        require_current_feedback(self.store, ep)
+        return value
+
+    def _attend(self, ep):
+        """Ask the gate (attend.py) in her per-group session; 不理 ends the episode before any recall."""
+        from . import attend
+        from .state import content_ref
+        event=ep['attend_event']
+        scene=self.store.authorize(ep['scene_id'],ep['person_id'])
+        row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
+        operation=ep['_id']+':ATTEND:0'
+        self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
+        try:
+            material=attend.material(self.store,scene,event,row,ep['persona'])
+            question=attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False)
+            system=attend.system(self.store,ep['persona'])
+            def generate(attempt, note):
+                current=operation if not attempt else operation+':fix-'+str(attempt)
+                value=self.attend.generate(self._binding(ep),current,'ATTEND',note or question,system)
+                self.store.audit(ep['_id'],'phase.output',{'operation':current,'phase':'ATTEND',**content_ref(value.content),
+                    'finish_reason':value.finish_reason,'request_refs':value.request_refs},ep['scope_key'])
+                return value
+            def rejected(attempt, issue, value):
+                self.store.audit(ep['_id'],'phase.rejected',{'operation':operation,'phase':'ATTEND','attempt':attempt,
+                    'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
+            value,verdict=answers.ask(generate,attend.NEED,attend.check,rejected=rejected)
+            if verdict is None:          # not the model's mistake: the gate could not answer
+                verdict={'choice':'quiet','reason':'没能判断：'+value.finish_reason}
+        except (Denied,ProtocolFailure):
+            raise
+        except answers.Rejected as exc:
+            verdict={'choice':'quiet','reason':'没能判断：没有按 接话／不理 回答'}
+            self.store.audit(ep['_id'],'attend.failed',{'problem':exc.problem},ep['scope_key'])
+        except Exception as exc:
+            # A gate that cannot answer lets the message pass quietly; it never fails the turn.
+            verdict={'choice':'quiet','reason':'没能判断：'+type(exc).__name__}
+            self.store.audit(ep['_id'],'attend.failed',{'error':str(exc)[:300]},ep['scope_key'])
+        self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
+        if row:
+            self.store.put('messages',{**row,'processing_outcome':'ATTEND_JOIN' if verdict['choice']=='join' else 'ATTEND_QUIET',
+                                       'attend':verdict},expected=row['revision'],stream=ep['_id'])
+        if verdict['choice']!='join':
+            return self._update(ep,state='COMMITTED',attend=verdict,silent_reason='不理：'+verdict['reason'])
+        _,context,manifest=self.context.prepare(event,ep['persona'])
+        context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
+        self.store.audit(ep['_id'],'context.prepared',{'manifest':manifest,'context':context},ep['scope_key'])
+        return self._update(ep,state='PREPARED',attend=verdict,context=context,manifest=manifest,
+                            system_ref=manifest['system_ref'])
 
     def advance(self, ep_id: str):
+        ep=self._advance(ep_id)
+        if (self.appraiser and ep.get('state') in ('COMMITTED','WAITING_TASK') and ep['_id'] not in self.appraisals
+                and (ep.get('attend') or {}).get('choice')!='quiet'):
+            import threading as _threading
+            worker=_threading.Thread(target=self.appraiser.run,args=(ep['_id'],),name='asuna-appraise',daemon=True)
+            self.appraisals[ep['_id']]=worker
+            worker.start()
+        return ep
+
+    def _advance(self, ep_id: str):
         with self.lock:
             ep=self.store.db.episodes.find_one({'_id':ep_id})
             if not ep:
@@ -211,6 +334,10 @@ class Coordinator:
                 phase='SPEAK_ACCEPTED' if ep.get('speech') else 'DECISION_ACCEPTED' if ep.get('decision') else 'MONOLOGUE_ACCEPTED' if ep.get('monologue_refs') else 'PREPARED'
                 ep=self._update(ep,state=phase,resume_generation=ep.get('resume_generation',0)+1,resume_diagnostic=ep.get('failure','宿主中断'))
             try:
+                if ep['state']=='ATTENDING':
+                    ep=self._attend(ep)
+                    if ep['state']=='COMMITTED':
+                        return ep
                 if ep['state']=='PREPARED':
                     if not self.monologue_enabled:
                         ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[],experiment_control='monologue_off')
@@ -221,29 +348,30 @@ class Coordinator:
                         self.store.put('memory_units',{'_id':memory_id,'character_id':character_id(self.store.config),'kind':'monologue','scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'body_markdown':text,'epistemic_type':'character_interpretation','source_event_ids':[ep['source_event_id']],'depends_on':[ep['source_event_id']],'episode_id':ep_id,'status':'active','embedding_status':'PENDING'},stream=ep_id)
                     ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[memory_id],feedback_resume_phase=None)
                 if ep['state']=='MONOLOGUE_ACCEPTED':
-                    decision_error=''
-                    for attempt in range(2):
-                        text=self._stage(ep,'DECIDE',ep.get('recall_rounds',0)*2+attempt,extra='上一条决策未被程序接受：'+decision_error+'。请修复必要控制字段或JSON格式，不改变意图。' if attempt else '')
+                    def decision_shape(text):
+                        decision=answers.json_object(text,'JSON 决策对象')
+                        # ADR-009 optional fields are validated item by item later; never fail the turn here.
+                        decision,delta=decide_delta.split(decision)
                         try:
-                            decision=json.loads(text)
-                            jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA if self.store.config.get('task_mode')=='workspace' else DECISION_SCHEMA)
-                            if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
-                                raise ValueError('SELF_STATE_ONLY_IN_INTERNAL_OPPORTUNITY')
-                            break
-                        except (ValueError,jsonschema.ValidationError) as exc:
-                            decision_error=str(exc) if isinstance(exc,ValueError) else f'{list(exc.absolute_path)}: {exc.message}'
-                            if attempt==1:
-                                raise ProtocolFailure('BAD_DECISION_JSON: '+decision_error)
-                    ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,feedback_resume_phase=None)
+                            jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA)
+                        except jsonschema.ValidationError as exc:
+                            where='.'.join(str(part) for part in exc.absolute_path) or '最外层'
+                            raise ValueError('决策不符合格式：'+where+'：'+exc.message+'。') from None
+                        if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
+                            raise ValueError('reflect_self 只能在内部的自我发展机会里用，这一次不能用。')
+                        return decision,delta
+                    decision,delta=self._stage(ep,'DECIDE',ep.get('recall_rounds',0),shape=decision_shape,label='BAD_DECISION_JSON')
+                    ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,decision_delta=delta,feedback_resume_phase=None)
                 if ep['state']=='DECISION_ACCEPTED':
+                    ep=decide_delta.apply(self,ep)
                     if ep['decision'].get('reflect_self') and not ep.get('self_state_update'):
                         from .self_state import SelfState
-                        try:
-                            update=json.loads(self._stage(ep,'SELF'))
-                        except ValueError as exc:
-                            raise ProtocolFailure('INVALID_SELF_STATE_JSON') from exc
-                        if not isinstance(update,dict) or set(update)!={'target','body'}:
-                            raise ProtocolFailure('INVALID_SELF_STATE_STAGE')
+                        def self_shape(text):
+                            update=answers.json_object(text)
+                            if set(update)!={'target','body'}:
+                                raise ValueError('上一条的字段是 '+('、'.join(sorted(update)) or '空')+'，这一步只能有 target 和 body。')
+                            return update
+                        update=self._stage(ep,'SELF',shape=self_shape,label='INVALID_SELF_STATE_STAGE')
                         committed=({'target':'none','committed':False} if update['target']=='none'
                                    else SelfState(self.store).commit(ep,update['target'],update['body']))
                         ep=self._update(ep,self_state_update=committed)
@@ -297,17 +425,23 @@ class Coordinator:
                         if rounds>=2:
                             return self._update(ep,state='NEEDS_INFORMATION',reason='recall budget exhausted')
                         event={'event_id':ep['source_event_id'],'scene_id':ep['scene_id'],'person_id':ep['person_id'],'text':ep['decision']['recall_query']}
-                        _, recalled,manifest=self.context.prepare(event,ep['persona'])
+                        _, recalled,manifest=self.context.prepare(event,ep['persona'],recall=True)
                         context={**ep['context'],'recall':{'query':ep['decision']['recall_query'],'memories':recalled['memories']}}
+                        reads=[(i,item) for i,item in enumerate((ep.get('decision_delta') or {}).get('read') or [])]
+                        if reads:
+                            valid,bad=decide_delta.validate_items({'read':[item for _,item in reads]})
+                            documents,denied=decide_delta.read_sections(self.store,ep,valid.get('read',[]),
+                                ep['manifest'].get('session_class',visibility.PUBLIC))
+                            context['recall']['documents']=documents
+                            ep=self._update(ep,rejections=[*(ep.get('rejections') or []),*bad,*denied])
                         for old_id in ep['monologue_refs']:
                             old=self.store.db.memory_units.find_one({'_id':old_id})
                             self.store.put('memory_units',{**old,'status':'superseded'},expected=old['revision'],stream=ep_id)
                         ep=self._update(ep,state='PREPARED',recall_rounds=rounds+1,context=context)
-                        return self.advance(ep_id)
+                        return self._advance(ep_id)
                     if next_step=='delegate':
-                        if self.store.config.get('task_mode')=='workspace':
-                            from .resources import workspace_grant
-                            workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
+                        from .grants import workspace_grant
+                        workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
                         # A persisted role decision can redirect its own live
                         # action. Fence the old revision before admitting its
                         # replacement; retain the real native execution source.
@@ -332,9 +466,9 @@ class Coordinator:
                             revised=self.tasks.activate_revision(ep)
                             intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
-                            from .tasks import WORKSPACE_TOOLS,TOOLS,ACTION_DSH_CAPABILITIES
+                            from .tasks import WORKSPACE_TOOLS,ACTION_DSH_CAPABILITIES
                             from .vision import route_filtered_tool_names
-                            capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
+                            capabilities=WORKSPACE_TOOLS
                             source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
                             development=(ep.get('episode_kind')=='self_development' or
                                 ((source or {}).get('event',{}).get('development_profile')=='owner'
@@ -344,8 +478,8 @@ class Coordinator:
                                 ep.get('episode_kind')=='task_feedback' and bool(
                                     (self.store.db.tasks.find_one({'_id':ep.get('task_id')}) or {}).get('development_grant')))
                             if development:
-                                from .development import DEVELOPMENT_TOOLS
-                                capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
+                                from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
+                                capabilities=[*capabilities,*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
                             from .integration import event_granted, INTEGRATION_TOOLS
                             integration = event_granted(self.store.config, source.get('event', {}))
                             if integration: capabilities = [*capabilities, *INTEGRATION_TOOLS]
@@ -380,15 +514,40 @@ class Coordinator:
                                 return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
                             ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
                     results={k:ep[k] for k in ('control_result','understanding_update','self_state_update','plan_result',
-                        'plan_update_result','plan_cancel_result') if k in ep}
+                        'plan_update_result','plan_cancel_result','delta_results','rejections') if ep.get(k)}
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text,feedback_resume_phase=None)
                 if ep['state']=='SPEAK_ACCEPTED':
-                    key=ep_id+':speak:0'
-                    if not self.store.db.messages.find_one({'_id':key}):
-                        sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-                        self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
-                    self.publisher.publish(key)
+                    # ADR-009 §11.1: up to speak.max_messages segments, published in order (default 1 = as before).
+                    from .persona_model import effective
+                    from .render import model_and_policy
+                    from .rhythm import split_speech, pacing
+                    from datetime import datetime as _dt, timezone as _tz
+                    model,policy=model_and_policy(self.store,ep['persona'])
+                    segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or '---split---',
+                                          effective(model,'speak.max_messages',policy) or 1)
+                    scene=self.store.db.scenes.find_one({'_id':ep['scene_id']})
+                    times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
+                                 effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
+                    keys=[]
+                    for index,segment in enumerate(segments):
+                        key=ep_id+':speak:'+str(index)
+                        keys.append(key)
+                        if not self.store.db.messages.find_one({'_id':key}):
+                            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+                            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+                            if len(segments)>1:
+                                row.update(segment_index=index,segment_count=len(segments))
+                                if scene.get('channel_id'):
+                                    row['not_before']=times[index].isoformat()
+                            self.store.put('messages',row,stream=ep_id)
+                    for key in keys:
+                        published=self.publisher.publish(key)
+                        if published.get('delivery_state') in ('FAILED','UNKNOWN'):
+                            self.publisher.cancel_after(published)
+                            break
+                        if len(keys)>1:
+                            self.crash('after_segment_publish')
                     self.crash('before_episode_commit')
                     delegated=ep['decision']['next']=='delegate' and ep.get('task_id')==(ep.get('supersedes_task_id') or 'task-'+ep_id)
                     ep=self._update(ep,state='WAITING_TASK' if delegated else 'COMMITTED')

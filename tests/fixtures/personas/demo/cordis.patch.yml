@@ -1,0 +1,33 @@
+- insert:
+    - id: asuna-demo
+      name: '@asuna/demo'
+    - id: asuna-demo-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-demo
+        name: 演示 · 角色脑
+        description: Synthetic demo persona on the Asuna core (test and demo environment only)
+        plugins:
+          - name: '@asuna/cognition-core/role'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              # DSH's basic engine with a Chinese role-play checkpoint (core). The summary
+              # cap leaves room for the character route's reasoning; a short tail keeps
+              # the re-prefill after each compaction small.
+              - id: compaction-basic
+                name: '@asuna/cognition-core/compaction'
+                config:
+                  maxTokens: 24576
+                  retainRatio: 0.16
+                  headroomTokens: 32768
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

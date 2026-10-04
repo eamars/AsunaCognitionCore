@@ -16,14 +16,15 @@ description: 在没有 pytest、没有 pymongo、不联网的隔离沙箱里验�
 ## 项目归属（ADR-008：跑之前先认准 project）
 
 `development_*` 工具不写 `project` 时绑定的是**默认的 xiaoman 角色插件**项目（本技能文件就存在这个候选里）。
-那个候选根目录只有 `skills/ integrations/ persona/ src/index.js`，**没有 `tools/` 也没有 `tests/`**，
+那个候选根目录只有 `skills/ seeds/ persona-model.json src/index.js`，**没有 `tools/` 也没有 `tests/`**，
 下面这套命令在里面跑只会红在 `No such file or directory`——那是挂错项目，不是产品坏了。
 
 - 跑这套离线套件：`development_run` 显式带 `project: "core"`（认知核候选里才有 `tools/` 和 `tests/`）。
 - 发布：`development_publish` 默认也只冻结并发布 **xiaoman 插件**；改的是认知核（`src/asuna`、`tools/`、
   `tests/`）必须显式 `project: "core"`，否则 publish 会照样成功返回，但核改动一点没上线。
-- 反过来也成立：只动插件（`skills/*/SKILL.md`、`integrations/`）就不必带 project，
-  而这套用例也不覆盖插件文件——插件侧改动靠各自的自测（如 `qqadapter/selftest.py`）。
+- 反过来也成立：只动插件（`skills/*/SKILL.md`）就不必带 project，而这套用例也不覆盖插件文件。
+- QQ 适配器和它的技能在 **napcat-qq** 通道包里（`project: "napcat-qq"`，候选里是 `integration/ skills/ python/`）；
+  `integration_*` 工具改的就是这个候选的 `integration/`，发布要带 `project: "napcat-qq"`，自测用 `qqadapter/selftest.py`。
 
 ## 入口（在认知核候选根目录 /task 里跑，`development_run` 带 `project="core"`）
 
@@ -44,7 +45,7 @@ python3 -m compileall -q src/asuna tests tools              # 语法面
 
 ## ADR-008 之后不再跑：`tools/p5b_ui_offline_check.py`
 
-自绘三栏旧工作台随 ADR-008 退役（`docs/development_plans/ADR-008-dsh-plugin/UI_SPEC.md`：本方案替代旧
+自绘三栏旧工作台随 ADR-008 退役（ADR-008 UI_SPEC：本方案替代旧
 "自绘 Asuna 三栏工作台"；`CODEX_START.md` 验收口径写明"旧工作台不再是默认入口"；`IMPLEMENTATION.md` P4
 "接回 QQ/定时/发布并退出旧工作台"）。随它一起退役的还有 `tools/p5b_ui_offline_check.py`——现在 `tools/`
 里已经没有这个文件，硬跑只会 `python3: can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2]

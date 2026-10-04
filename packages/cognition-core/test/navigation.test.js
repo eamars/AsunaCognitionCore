@@ -22,7 +22,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import Subagents from '@deepseek-ai/dsh-subagent';
 import Persistence from '../src/persistence.js';
 import { CognitionCore } from '../src/index.js';
-import { organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
+import { PENDING_LINES, organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
 
 test('native continuation preserves history and task children retain their actual execution directory', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-navigation-'));
@@ -53,8 +53,9 @@ test('native continuation preserves history and task children retain their actua
   }
   ctx.llm.registerAdapter(['fixture'], new Adapter());
   const route = { provider: 'fixture', model: 'single-model' };
-  const core = new CognitionCore(ctx, { persona: 'xiaoman', deployment: { chat: { workspace: local } }, routes: { character: route, action: route } });
-  core.ready = async () => {}; core.specs = []; core.personas.set('xiaoman', { preset: 'ordinary' });
+  const core = new CognitionCore(ctx, { persona: 'demo', deployment: { chat: { workspace: local } }, routes: { character: route, action: route } });
+  core.ready = async () => {}; core.specs = []; core.personas.set('demo', { preset: 'ordinary' });
+  core.channels.set('qq', { kind: 'qq', title: 'QQ' });          // what @asuna/napcat-qq registers
   ctx.provide('asuna', core);
   ctx.provide('attachments', {});
   ctx.provide('sessionController', { list: async () => ({ items: [] }), rename: async ({ sessionId, title }) => {
@@ -97,6 +98,32 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(quietEvents.filter(event => event.type === 'turn/start').length, prefix.filter(event => event.type === 'turn/start').length);
   assert.equal(requests, 1, 'quiet reception never starts a model turn');
   assert.ok(!ctx.workspaceRegistry.archivedSessionIds.includes(role._id), 'new platform activity reopens the same native conversation');
+  // A brand-new conversation has no system head until its agent's first step; a line placed before it would
+  // make DSH refuse to reload the log after that first turn, so it waits in the conversation's inbox.
+  const fresh = { _id: 'qq-fresh', cwd: qq, scene_id: 'qq:bot:group:two', native_title: '群聊 · two' };
+  const line = index => ({ session_id: fresh._id, binding: fresh,
+    input: { id: 'before-' + index, sender: '10002', text: 'line ' + index + ' before her first turn', received_at: '2026-10-03' } });
+  for (let index = 0; index < PENDING_LINES + 2; index++) await recordChannelInput(core, line(index));
+  await recordChannelInput(core, line(PENDING_LINES + 1));
+  const readFresh = await ctx.sessionPersistence.open(fresh._id, 'read');
+  const freshEvents = (await readFresh.read()).events; await readFresh.close();
+  assert.equal(freshEvents.filter(event => event.type === 'user/message').length, 0);
+  const waiting = ctx.sessionProjectionCache.cachedSnapshot(readFresh.header).values.inbox['next-step'];
+  assert.deepEqual(waiting.map(message => message.source.receipt),
+    Array.from({ length: PENDING_LINES }, (_, index) => 'before-' + (index + 2)), 'the newest lines wait, once each');
+  const first = await ctx.agents.resume({ resumeSessionId: fresh._id, agentOptions: route });
+  first.agent.followup(createUserMessage({ source: { kind: 'asuna', form: 'notice' }, content: [{ type: 'text', text: 'stage' }] }));
+  await first.agent.whenIdle();
+  await recordChannelInput(core, line(PENDING_LINES + 2));
+  const surface = first.agent.session.surface.nodes.map(seq => first.agent.session.eventAt(seq));
+  assert.equal(surface[0].type, 'system/message', 'the head stays first');
+  assert.deepEqual(surface.filter(event => event.type === 'user/message').map(event => event.data.source.receipt ?? 'notice'),
+    [...Array.from({ length: PENDING_LINES }, (_, index) => 'before-' + (index + 2)), 'notice', 'before-' + (PENDING_LINES + 2)]);
+  assert.equal(first.agent.inbox.nextStep.length, 0);
+  await first.dispose();
+  const again = await ctx.agents.resume({ resumeSessionId: fresh._id, agentOptions: route });
+  assert.equal(again.agent.session.eventAt(again.agent.session.surface.nodes[0]).type, 'system/message', 'the log reloads');
+  await again.dispose();
   let complete;
   const completed = new Promise(resolve => { complete = resolve; });
   const child = { _id: 'action', lane: 'executor', cwd: execution, scene_id: role.scene_id,
@@ -133,7 +160,7 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(range.data.state, 'completed');
   assert.ok(range.data.through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
   await core.children.start(stage);
-  assert.equal(requests, 2, 'a durable stage receipt must not rerun inference or tools');
+  assert.equal(requests, 3, 'a durable stage receipt must not rerun inference or tools');
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
   assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);

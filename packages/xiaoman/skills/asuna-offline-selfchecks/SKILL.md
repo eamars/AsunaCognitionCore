@@ -44,7 +44,7 @@ python3 -m compileall -q src/asuna tests tools              # 语法面
 
 ## ADR-008 之后不再跑：`tools/p5b_ui_offline_check.py`
 
-自绘三栏旧工作台随 ADR-008 退役（`docs/development_plans/ADR-008-dsh-plugin/UI_SPEC.md`：本方案替代旧
+自绘三栏旧工作台随 ADR-008 退役（ADR-008 UI_SPEC：本方案替代旧
 "自绘 Asuna 三栏工作台"；`CODEX_START.md` 验收口径写明"旧工作台不再是默认入口"；`IMPLEMENTATION.md` P4
 "接回 QQ/定时/发布并退出旧工作台"）。随它一起退役的还有 `tools/p5b_ui_offline_check.py`——现在 `tools/`
 里已经没有这个文件，硬跑只会 `python3: can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2]

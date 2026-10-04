@@ -9,14 +9,13 @@ from asuna.context import ContextBuilder
 from asuna.publish import PublishService
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
-from asuna.legacy_evidence import provider_finish
 from test_engineering_m1 import normal,event,decision
 from test_engineering_m3 import task_setup
 
 
 def test_E05_undelivered_are_explicit_and_survive_new_store(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
-        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','scene_seq':i,'text':state+'_body','author':'xiaoman','direction':'outbound','delivery_state':state})
+        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','scene_seq':i,'text':state+'_body','author':'demo','direction':'outbound','delivery_state':state})
     reopened=Store(load(),store.name)
     try:
         _,context,_=ContextBuilder(reopened).prepare(event())
@@ -91,7 +90,7 @@ def test_E23_mixed_state_replay_without_external_actions(store):
     store.mutate('persona:P1','global-safe',base['_id'],base['content'],[source],'global-safe','winning')
     with pytest.raises(Conflict):store.mutate('persona:P1','global-safe',base['_id'],base['content'],[source],'global-safe','conflicting')
     trace=list(store.db.audit_events.find({}));verify(trace)
-    target=Store(load(),'asuna_v2_test_mixed_replay_'+uuid.uuid4().hex[:16])
+    target=Store(load(),'asuna_v2_test_mixed_replay_'+uuid.uuid4().hex[:16]);store.derived_databases=[target.name]
     try:
         with patch('httpx.Client.send',side_effect=AssertionError('network forbidden')),patch('asuna.sandbox.Sandbox.run',side_effect=AssertionError('tool forbidden')):
             assert replay(trace,target)['sha256']==projection(store)['sha256']
@@ -100,6 +99,3 @@ def test_E23_mixed_state_replay_without_external_actions(store):
     finally:target.client.close()
 
 
-def test_E07_provider_length_is_not_stop():
-    assert provider_finish('data: {"choices":[{"finish_reason":"length"}]}\n\ndata: [DONE]\n')=='length'
-    assert provider_finish('data: {"choices":[{"finish_reason":"stop"}]}\n\ndata: {"usage":{"completion_tokens":10},"choices":[]}\n')=='stop'

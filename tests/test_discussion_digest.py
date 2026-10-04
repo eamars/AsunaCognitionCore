@@ -14,6 +14,7 @@ import uuid
 import pytest
 
 from asuna.config import ROOT, load
+from conftest import isolated_database, drop_database
 from asuna.state import Store, Denied
 from asuna.tasks import TaskService, ToolBroker, TOOLS, WORKSPACE_TOOLS
 from asuna.history_query import HISTORY_TOOL_NAME, HistoryQueryService
@@ -32,7 +33,7 @@ TASK_BASE = dict(state='READY', fencing_token=0, intent_revision=1, tool_steps=0
 
 @pytest.fixture
 def store():
-    db = Store(load(CONFIG_PATH), TEST_DATABASE)
+    db = Store(load(CONFIG_PATH), isolated_database(TEST_DATABASE))
     db.migrate()
     for name in CLEARED:
         db.db[name].delete_many({})
@@ -40,6 +41,7 @@ def store():
     for name in CLEARED:
         db.db[name].delete_many({})
     db.client.close()
+    drop_database(db.config, db.name)
 
 
 def seed(db, rows=None, sink=None):
@@ -99,9 +101,9 @@ def test_digest_on_real_mongo_separates_categories(store):
     value = DiscussionDigestService(store, None).digest_for_task(task, dict(FULL))
     assert value['degraded'] is False and value['why'] == ''
     people = dict((person['display'], person) for person in value['participants'])
-    assert sorted(people) == sorted([cases.A_CARD, cases.B_CARD, 'xiaoman']), people
+    assert sorted(people) == sorted([cases.A_CARD, cases.B_CARD, 'demo']), people
     assert people[cases.A_CARD]['identity'] == 'peer' and people[cases.A_CARD]['role'] == '管理员'
-    assert people['xiaoman']['identity'] == 'author' and people['xiaoman']['side'] == '我说'
+    assert people['demo']['identity'] == 'author' and people['demo']['side'] == '我说'
     assert [item['message_id'] for item in value['corrections']] == ['i4']
     assert value['corrections'][0]['basis'] == 'reply_link'
     assert value['corrections'][0]['corrects'] == 'i1'

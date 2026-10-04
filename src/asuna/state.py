@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 import copy
 import json
 import uuid
+from pathlib import Path
 from bson import BSON
 from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
 from pymongo.errors import DuplicateKeyError
-from .config import BUNDLE, validate_database, character_id
+from .config import validate_database, character_id
 from .evidence import canonical, sha
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
@@ -140,7 +141,9 @@ class Store:
             raise Denied('UNKNOWN_ACCOUNT')
         return doc['person_id']
 
-    def seed(self, fixture=BUNDLE/'fixtures/world.json'):
+    def seed(self, fixture):
+        """Test-only synthetic world; persona paths are relative to the fixture file."""
+        fixture = Path(fixture)
         world = json.loads(fixture.read_text(encoding='utf-8'))
         for name, rows, key in [('identities',world['identities'],'person_id'),('scenes',world['scenes'],'scene_id'),('memory_units',world['memories'],'id')]:
             for row in rows:
@@ -153,7 +156,7 @@ class Store:
                     row.update(character_id=character_id(self.config),embedding_status='PENDING',depends_on=row['source_event_ids'])
                 self.put(name,row,stream='seed')
         for persona,path in world['personas'].items():
-            self.init_head('persona:'+persona,'global-safe',{'body':(BUNDLE/path).read_text(encoding='utf-8')},[])
+            self.init_head('persona:'+persona,'global-safe',{'body':(fixture.parent/path).read_text(encoding='utf-8')},[])
         for rel in world['relationships']:
             self.init_head('relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
 

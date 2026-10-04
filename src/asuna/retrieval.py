@@ -1,5 +1,6 @@
 """Local embeddings and server-side, prefiltered Mongo vector retrieval."""
 from __future__ import annotations
+from .visibility import is_owner_private_scope
 from .config import character_id
 import math
 import re
@@ -76,13 +77,17 @@ class Retrieval:
         self.evidence.record('vector.index',{'database':self.store.name,'definition':definition,'status':rows})
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
-    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=()):
+    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None):
         # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
+        # owner-private 只看会话类（private_scope 仅在 owner_private 会话里由调用方给出），与联动无关。
         linked=[item for item in dict.fromkeys(linked_scopes or ())
-                if isinstance(item, str) and item and item not in ('global-safe', scope)]
+                if isinstance(item, str) and item and item not in ('global-safe', scope) and not is_owner_private_scope(item)]
+        if is_owner_private_scope(scope) or (private_scope is not None and not is_owner_private_scope(private_scope)):
+            raise ValueError('INVALID_RETRIEVAL_SCOPE')
         readable={scope} | set(linked)
+        private=[{'scope_key':private_scope,'policy_epoch':1}] if private_scope else []
         auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}]
-                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked],'character_id':character_id(self.store.config),'status':'active'}
+                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked]+private,'character_id':character_id(self.store.config),'status':'active'}
         vector_filter={**auth,'embedding_revision':self.revision}
         # Cache contains IDs/scores only, never bodies, vectors or raw queries.
         # Every hit still passes the authoritative read below. State revision
@@ -91,9 +96,9 @@ class Retrieval:
         # entire authorized history. A growing scene must not abort a turn.
         rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('occurred_at',-1),('_id',-1)]).limit(4096))
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
-        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked}},{'_id':1,'revision_id':1}).sort('_id',1))
+        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked+([private_scope] if private_scope else [])}},{'_id':1,'revision_id':1}).sort('_id',1))
         # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
-        key_fields={'scope':scope,'policy_epoch':epoch,'character_id':character_id(self.store.config),'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':character_id(self.store.config),'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
         cache_hit=bool(cacheable and cached and cached['expires']>time.monotonic())
         vector=[]; failure=None

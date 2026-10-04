@@ -55,7 +55,10 @@ async function run(command, args, options = {}) {
 export class PublicationFloor {
   constructor(config) {
     this.config = config;
-    this.base = path.join(config.workspace ?? packageRoot, '.runtime/adr008');
+    // A non-default profile (e.g. the demo) keeps its own activation, baselines
+    // and candidates so it can never select or publish the owner's artifacts.
+    this.base = path.join(config.workspace ?? packageRoot, config.stateDir ?? '.runtime/adr008');
+    this.workRoot = config.stateDir ? path.join(this.base, 'work') : path.join(config.workspace ?? packageRoot, '.runtime/work');
     this.activationFile = path.join(this.base, 'activation.json');
     this.projects = new Map((config.projects ?? []).map(project => [project.id, project]));
     this.serial = Promise.resolve();
@@ -112,7 +115,7 @@ export class PublicationFloor {
     const project = this.projects.get(id);
     if (!project || !/^[a-z][a-z0-9-]{0,50}$/.test(id)) throw new Error('DEVELOPMENT_PROJECT_NOT_AUTHORIZED');
     const source = path.resolve(project.root);
-    const candidate = path.join(this.config.workspace, '.runtime/work/self-development', id);
+    const candidate = path.join(this.workRoot, 'self-development', id);
     const baselineFile = path.join(this.base, 'development', id, 'baseline.json');
     const baseline = await json(baselineFile, {});
     const sourceFiles = await files(source);

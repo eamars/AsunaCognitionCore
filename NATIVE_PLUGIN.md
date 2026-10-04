@@ -1,6 +1,6 @@
 # Native DSH plugins
 
-Asuna uses DSH **0.2.0-rc.2** (release commit `639ed015397290b3745d163aafe02ffee4aa3f84`) in one Web Host. The two local installable packages are `@asuna/cognition-core` and `@asuna/xiaoman`. The Python SDK and separate Asuna Web workbench are retired.
+Asuna uses DSH **0.2.0-rc.2** (release commit `639ed015397290b3745d163aafe02ffee4aa3f84`) in one Web Host. The installable packages are `@asuna/cognition-core` and one persona package (this deployment installs `@asuna/xiaoman`; tests and the demo environment use the synthetic `@asuna/demo`). The Python SDK and separate Asuna Web workbench are retired.
 
 ## Build and install
 
@@ -8,8 +8,8 @@ Use the existing deployment configuration and Mongo database. Follow [RUN_ASUNA.
 
 ```powershell
 npm.cmd ci
-npm.cmd run pack:plugins
-.\.venv\Scripts\python.exe tools\setup_native_profile.py --shared-action-model
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\xiaoman --shared-action-model
 .\start-asuna.cmd
 ```
 
@@ -18,10 +18,10 @@ The optional shared-model flag seeds independent native provider references to t
 The packer writes content-addressed `.tgz` files and hashes to `.runtime/adr008/packages/manifest.json`. Setup calls the official DSH plugin installer and compares installed files to the tarballs. Nothing is published to npm. For another existing DSH Web profile, install both artifacts with:
 
 ```text
-dsh plugin --profile <web-profile> add <core.tgz> <xiaoman.tgz>
+dsh plugin --profile <web-profile> add <core.tgz> <persona.tgz>
 ```
 
-Core includes its Python business modules, generic prompts and JSON schemas. It runs without this checkout's `src/asuna`. Supply Python 3.12+ with the exact dependencies from the installed `python/pyproject.toml`, then configure the Core and publication-floor entries as described in [the Core package](packages/cognition-core/README.md). Source projects, private configuration, Mongo, model services and tool sandbox remain deployment inputs. Core alone does not invent a persona or start a worker without complete settings.
+Core includes its Python business modules and, under `python/asuna/resources/`, the neutral core prompts and JSON schemas (sources in `src/asuna/resources/`). It runs without this checkout's `src/asuna` or `docs/`. Supply Python 3.12+ with the exact dependencies from the installed `python/pyproject.toml`, then configure the Core and publication-floor entries as described in [the Core package](packages/cognition-core/README.md). Source projects, private configuration, Mongo, model services and tool sandbox remain deployment inputs. Core alone does not invent a persona or start a worker without complete settings.
 
 DSH's profile resolver supplies Core's native peer dependencies from the Host installation. A standalone `pnpm peers check` inside a profile does not see that runtime mapping. `tools/probe_plugin_install.mjs` installs the actual tarballs outside this checkout and imports all Host exports through DSH's public profile resolver, without starting business consumers.
 
@@ -29,7 +29,7 @@ The Xiaoman package contains the existing distributable persona baseline, select
 
 ## Enter the real sessions
 
-Open the private authenticated address printed by the launcher. Select the authorized owner workspace and **小满**. The native composer, Chat, Trajectory, attachments and model stream belong to DSH. A delegated task uses an actual **Asuna Action** session linked from its originating role turn. Consultation returns through the same role and task binding. **Standard mode** remains an ordinary DSH session.
+Open the private authenticated address printed by the launcher. Select the authorized owner workspace and the persona's preset. The native composer, Chat, Trajectory, attachments and model stream belong to DSH. A delegated task uses an actual **Asuna Action** session linked from its originating role turn. Consultation returns through the same role and task binding. **Standard mode** remains an ordinary DSH session.
 
 Core adds only the **记忆** right-tab body, its plugin settings card and the action association. Memory lists are bounded; details and original sources load on opening a row. Closing or switching releases the request scope. Read permissions come from the current session's scene, person, policy epoch and A2 links, not the operator's unrelated local workspace. The tab is not a Mongo editor.
 
@@ -37,7 +37,7 @@ Core adds only the **记忆** right-tab body, its plugin settings card and the a
 
 The Host owns native agents, model requests, tools, compaction, streaming, scheduling and durable transcripts. One managed private stdio Python worker retains Asuna's existing queues, coordinator, memory, task fences, publication, channels and integration supervision. It never starts another DSH runtime or proxies model tokens.
 
-DSH assembles before `agent/pre-step`; the scoped assembly boundary prepares claimed input before its first model call. Sourced business context enters the actual native request. Native assistant events are flushed before business receipts are committed. Recovery uses those events and original receipt IDs; it does not manufacture assistant history or replay completed side effects. Role/action hooks are scoped and state is keyed by native session ID.
+DSH assembles before `agent/pre-step`; the scoped assembly boundary prepares claimed input before its first model call. A role session's system prompt is exactly the worker's render (neutral core header, then the persona): the role scope suppresses runtime-context snapshots and replaces every other section, including the native harness identity sentence. Episodes store only `system_ref` (revisions and hashes) and re-render per stage. The action brain receives the neutral executor prompt and the persona's display name, never the persona body. Sourced business context enters the actual native request. Native assistant events are flushed before business receipts are committed. Recovery uses those events and original receipt IDs; it does not manufacture assistant history or replay completed side effects. Role/action hooks are scoped and state is keyed by native session ID.
 
 DSH 0.2's public `Session.append` does not accept an `ignorable` envelope option. Core therefore disables the stock JSONL component and inserts a thin public `SessionPersistence` adapter. It marks only `asuna/stage-result`, `asuna/action-linked` and `asuna/schedule` as informational, delegating storage, leases, compression and reading to the native backend. No DSH files are patched. The optional repair utility preserves original compressed backups and changes only those missing envelope flags in earlier development logs; use it offline.
 
@@ -47,7 +47,7 @@ QQ ingress, outbox receipts and enabled integration snapshots retain their exist
 
 ## Develop and publish forward
 
-The persistent writable candidate is `xiaoman` by default. Use `project="core"` for the authorized cognition source. Native skills discovery reads published resources; `/skills` mounts the authorized writable persona candidate. Ordinary QQ identities do not acquire the local owner's source or credential access.
+The persistent writable candidate is the selected persona package by default. Use `project="core"` for the authorized cognition source. Native skills discovery reads published resources; `/skills` mounts the authorized writable persona candidate. Ordinary QQ identities do not acquire the local owner's source or credential access.
 
 `development_files` is paged. Read/write/run act on the selected project; commands retain the configured isolated workspace execution boundary. Publication freezes a candidate, checks source revisions, performs minimum structural/import checks, packs an immutable artifact and keeps lineage and actual failure evidence. The current source is never imported halfway through an edit.
 

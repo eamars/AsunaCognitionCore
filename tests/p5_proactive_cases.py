@@ -30,7 +30,7 @@ from asuna.context import ContextBuilder                   # noqa: E402
 GROUP = base.GROUP
 GROUP_SCOPE = base.GROUP_SCOPE
 PERSON, PERSON_B, EPOCH, T0 = base.PERSON, base.PERSON_B, base.EPOCH, base.T0
-BOT = '2910137276'
+BOT = '100276'
 EVIDENCE = base.FakeEvidence
 _iso = base._iso
 
@@ -388,7 +388,7 @@ def topic_is_derived_for_every_group_row():
                     'event': {'channel': {'platform_event_id': 'evt-woken'},
                               'group_context': {'wake_reason': 'mentioned_account',
                                                 'topic_id': 'topic-B', 'topic_via': 'mentioned'}}}
-    store = SimpleNamespace(config={'character_id': 'xiaoman'}, db=base.FakeDB({
+    store = SimpleNamespace(config={'character_id': 'demo'}, db=base.FakeDB({
         'scenes': [{'_id': GROUP, 'kind': 'group', 'policy_epoch': EPOCH, 'members': [PERSON]}],
         'messages': [parent_overheard, parent_woken]}))
     route = {'scene_id': GROUP}

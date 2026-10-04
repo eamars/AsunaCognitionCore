@@ -62,7 +62,7 @@ def png_bytes(width=8, height=6, rgb=(16, 96, 176)):
 PNG = png_bytes()
 PNG_B64 = base64.b64encode(PNG).decode()
 MEDIA_MESSAGE = {
-    '_id': 'in-ep-435b26313c18e27b84c855c89e7ada05', 'scene_id': 'dm:718372664:3854949696',
+    '_id': 'in-ep-435b26313c18e27b84c855c89e7ada05', 'scene_id': 'dm:100664:100696',
     'policy_epoch': 'epoch-selfdev-1', 'scene_seq': 41, 'direction': 'inbound',
     'text': '[图片（未解析）]',
     'event': {'event_id': 'ep-435b26313c18e27b84c855c89e7ada05',
@@ -74,7 +74,7 @@ MEDIA_MESSAGE = {
                        'size': '46695', 'summary': '', 'sub_type': 0},
                       {'type': 'record', 'placeholder': '[语音（未解析）]', 'file': '', 'file_id': '',
                        'url': '', 'size': '0', 'summary': '', 'sub_type': 0}]}}}}
-TASK = {'_id': 'task-1', 'scene_id': 'dm:718372664:3854949696', 'scope_key': 'dm:718372664:3854949696',
+TASK = {'_id': 'task-1', 'scene_id': 'dm:100664:100696', 'scope_key': 'dm:100664:100696',
         'policy_epoch': 'epoch-selfdev-1'}
 
 
@@ -323,7 +323,7 @@ def main() -> int:
               vision.pull_bytes({'pull_via': 'url', 'url': f'{base}/png'},
                                 config(hosts=('127.0.0.1',), insecure=True))[0] == PNG)
         expect('未知 ref → IMAGE_ATTACHMENT_NOT_IN_SCENE',
-               lambda: vision.read_image_for_task(store, blobs, TASK, config(), {'ref': 'att-000000000000'}),
+               lambda: vision.read_image_for_task(store, blobs, TASK, config(), {'ref': 'att-ffffffffffff'}),
                'IMAGE_ATTACHMENT_NOT_IN_SCENE')
         expect('场景围栏不符 → Denied(VISION_SCENE_FENCE_MISMATCH)',
                lambda: vision.read_image_for_task(store_with(f'{base}/png', scene_ok=False), blobs, TASK, config(),
@@ -341,7 +341,7 @@ def main() -> int:
                'INVALID_READ_IMAGE_REF')
 
         # 5b. A2 只读联动：本场景之外那条边指向的场景里的图，也能按同一道围栏拉
-        LINKED = 'qq:3768713357:dm:673225019'
+        LINKED = 'qq:100357:dm:100019'
         own_doc = {'_id': TASK['scene_id'], 'scope_key': TASK['scope_key'],
                    'policy_epoch': TASK['policy_epoch']}
         linked_doc = {'_id': LINKED, 'scope_key': 'scene:' + LINKED, 'policy_epoch': TASK['policy_epoch']}

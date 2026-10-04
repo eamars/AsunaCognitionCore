@@ -171,3 +171,22 @@ test('selecting recovery on an existing blank native session exposes its indepen
     agent, signal: new AbortController().signal });
   assert.equal(ordinaryCalls, 0);
 });
+
+test('T0.5 role system prompt is exactly the worker render, without harness identity or runtime context', async t => {
+  const h = await harness(t);
+  h.ctx.systemPrompt.context({ name: 'fixture-runtime-context', order: 1, text: 'RUNTIME_CONTEXT_FIXTURE' });
+  const role = await h.create('role');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Human input' }] }));
+  await role.whenIdle();
+  const ordinary = await h.create('ordinary', false);
+  ordinary.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Ordinary input' }] }));
+  await ordinary.whenIdle();
+  const system = request => request.messages.filter(m => m.role === 'system')
+    .map(m => typeof m.content === 'string' ? m.content : m.content.map(x => x.text).join('')).join('\n');
+  const [roleRequest, ordinaryRequest] = h.requests;
+  assert.equal(system(roleRequest), 'Current persona from existing state: role');
+  assert.doesNotMatch(JSON.stringify(roleRequest.messages), /powered by DeepSeek Harness|RUNTIME_CONTEXT_FIXTURE/);
+  // Ordinary sessions keep the native identity and runtime context untouched.
+  assert.match(system(ordinaryRequest), /You are an AI agent powered by DeepSeek Harness\./);
+  assert.match(JSON.stringify(ordinaryRequest.messages), /RUNTIME_CONTEXT_FIXTURE/);
+});

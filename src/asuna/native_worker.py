@@ -20,8 +20,7 @@ from .host import RuntimeHost
 from .config import ROOT, load, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
-from .resources import workspace_grant
-from .queue import RuntimeLease
+from .grants import workspace_grant
 from .skills import skills_directory, skill_directories
 from .state import Denied
 from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS
@@ -72,7 +71,7 @@ class NativeLane:
                 'role_session_id': role_id, 'task_id': task['_id'] if task else None,
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
-                'system': system,
+                'system_sha256': sha(system.encode()),
                 'skills_dir': str(skills_directory(self.store.config, ep['scene_id'], ep['person_id']) or ''),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'])],
             })
@@ -141,9 +140,6 @@ class BusinessWorker:
         if self.app:
             return self.status()
         config = {**load(self.config_path), 'task_mode': 'workspace'}
-        # Share the legacy lane's ownership lock. Two frontends may never run
-        # the same business queue or publish the same scene concurrently.
-        self.stack.enter_context(RuntimeLease(Path(config['dsh_home']) / config['database'] / 'character' / 'runtime.lock'))
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')
@@ -158,11 +154,6 @@ class BusinessWorker:
                 config[key] = {**config[key], **models[lane]}
         config['_integration_project'] = integration_project
         config['_skill_workspace'] = skill_workspace
-        # The immutable package supplies generic instructions; local state and
-        # source projects have separate roots and never replace live self heads.
-        from .config import RESOURCES
-        if RESOURCES.is_dir():
-            config['prompts_dir'] = str(RESOURCES / 'prompts')
         evidence = Evidence(ROOT / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
@@ -223,8 +214,10 @@ class BusinessWorker:
         identity = ('lane', 'scene_id', 'person_id', 'persona', 'cwd')
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')
+        # Bindings keep a hash of the stage system prompt, never its full text.
+        kept = {k: v for k, v in (prior or {}).items() if k != 'system'}
         return self.app.store.put('sessions', {
-            **(prior or {}), **values, '_id': session_id, 'native_host': True,
+            **kept, **values, '_id': session_id, 'native_host': True,
             'binding_key': 'native-host:' + session_id,
         }, expected=prior['revision'] if prior else None, stream='native-binding:' + session_id)
 

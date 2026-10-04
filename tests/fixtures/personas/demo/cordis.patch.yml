@@ -1,0 +1,11 @@
+- insert:
+    - id: asuna-demo
+      name: '@asuna/demo'
+    - id: asuna-demo-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-demo
+        name: 演示
+        description: Synthetic demo persona on the Asuna core (test and demo environment only)
+        plugins:
+          - name: '@asuna/cognition-core/role'

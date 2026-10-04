@@ -19,6 +19,7 @@ from asuna import schedule_rules
 from asuna.config import load
 from asuna.context import ContextBuilder
 from asuna.schedule import ScheduleService
+from conftest import isolated_database, drop_database
 from asuna.state import Denied, Store
 
 import p2_summary_loop_cases as p2
@@ -81,7 +82,7 @@ class Evidence:
 
 @pytest.fixture
 def store():
-    db = Store(load(CONFIG_PATH), TEST_DATABASE)
+    db = Store(load(CONFIG_PATH), isolated_database(TEST_DATABASE))
     db.migrate()
     for name in CLEARED:
         db.db[name].delete_many({})
@@ -89,6 +90,7 @@ def store():
     for name in CLEARED:
         db.db[name].delete_many({})
     db.client.close()
+    drop_database(db.config, db.name)
 
 
 @pytest.fixture

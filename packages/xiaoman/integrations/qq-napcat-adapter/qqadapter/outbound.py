@@ -49,7 +49,7 @@ VERIFY_COUNTER = {"verified": "verify_verified",
                   "not_found": "verify_not_found",
                   "unavailable": "verify_unavailable"}
 
-# `@qq:900000001030` is the one spelling that means "point at this account".
+# `@qq:101030` is the one spelling that means "point at this account".
 # An ASCII word char or one of . @ _ - right before the `@` means the `@qq:` is
 # part of a longer token (an address, a path); a letter/_/- right after the
 # digits means the run is not a bare account id.  Real QQ ids are <= 12 digits,

@@ -22,8 +22,8 @@ from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.environ.get('ASUNA_LINKED_SRC') or os.path.join(ROOT, 'src', 'asuna')
-BUNDLE = os.path.join(ROOT, 'docs', 'development_plans', 'ADR-001-asuna_v2_v1_handoff')
-os.environ.setdefault('ASUNA_BUNDLE', BUNDLE)
+# 提示词与 schema 跟包走（src/asuna/resources）：替身 config 只指过去，不另备一份。
+os.environ.setdefault('ASUNA_LINKED_RESOURCES', os.path.join(SRC, 'resources'))
 sys.path.insert(0, SRC)
 
 import scene_links as sl                                              # noqa: E402
@@ -31,9 +31,9 @@ import history_query as hq                                            # noqa: E4
 import discussion_digest as dd                                        # noqa: E402
 
 LOCAL = 'local-dm'
-QQ = 'qq:3768713357:dm:673225019'
+QQ = 'qq:100357:dm:100019'
 ME = 'local-user'
-ALIAS = 'qq:673225019'
+ALIAS = 'qq:100019'
 ASUNA = 'asuna'
 SINCE = '2026-09-01T00:00:00Z'
 
@@ -205,7 +205,7 @@ class Store:
                 if stream is None or row['stream'] == stream]
 
 
-PERSONA = '沈小满，24 岁。' + '说话清淡直接，有一点不刻薄的机灵。' * 6
+PERSONA = '演示角色，24 岁。' + '说话清淡直接，有一点不刻薄的机灵。' * 6
 
 
 def rows_base():
@@ -215,11 +215,11 @@ def rows_base():
              'scope_key': 'scene:' + LOCAL, 'policy_epoch': 1, 'sequence': 40, 'revision': 1},
             {'_id': QQ, 'scene_id': QQ, 'kind': 'dm', 'members': [ALIAS], 'channel_id': 'qq',
              'scope_key': 'scene:' + QQ, 'policy_epoch': 1, 'sequence': 21, 'revision': 2,
-             'channel_account_id': '3768713357'}],
+             'channel_account_id': '100357'}],
         'identities': [
             {'_id': ME, 'person_id': ME, 'platform': 'local', 'account_id': ME,
              'display_name': '本机用户', 'revision': 1},
-            {'_id': ALIAS, 'person_id': ALIAS, 'platform': 'qq', 'account_id': '673225019',
+            {'_id': ALIAS, 'person_id': ALIAS, 'platform': 'qq', 'account_id': '100019',
              'revision': 3}],
         'sinks': [{'_id': 'r-l1', 'received_at': '2026-09-25T03:00:05Z', 'kind': 'outbound'}],
         'messages': [
@@ -262,14 +262,14 @@ def rows_base():
 
 
 def config_base(top=None):
-    config = {'timezone': 'Asia/Shanghai',
+    config = {'timezone': 'Etc/GMT-8',
               'chat': {'scene_id': LOCAL, 'person_id': ME, 'persona': 'P1'},
               'context_links': {LOCAL: [QQ]},
               'canonical_persons': {ALIAS: ME},
-              'channels': {'qq': {'account_id': '3768713357',
+              'channels': {'qq': {'account_id': '100357',
                                   'routes': {'owner-dm': {'scene_id': QQ, 'person_id': ALIAS,
                                                           'target': {'type': 'dm',
-                                                                     'id': '673225019'}}}}}}
+                                                                     'id': '100019'}}}}}}
     config.update(top or {})
     return config
 
@@ -286,10 +286,11 @@ TASK_QQ = {'scene_id': QQ, 'scope_key': 'scene:' + QQ, 'policy_epoch': 1}
 
 # ── 临时包：真 context.py / 真 memory.py 外面垫替身 ────────────────
 STUBS = {
-    'config.py': 'from pathlib import Path\nimport os\nBUNDLE=Path(os.environ["ASUNA_BUNDLE"])\n'
-                 'ROOT=BUNDLE\n'
-                 'def character_id(config):\n    return config.get("character_id", "xiaoman")\n'
-                 'def prompt_path(config, name):\n    return BUNDLE/"prompts"/name\n'
+    'config.py': 'import json, os\nfrom pathlib import Path\n'
+                 'RESOURCES=Path(os.environ["ASUNA_LINKED_RESOURCES"])\n'
+                 'def character_id(config):\n    return config.get("character_id", "demo")\n'
+                 'def prompt_path(config, name):\n    return RESOURCES/"prompts"/name\n'
+                 'def schema(name):\n    return json.loads((RESOURCES/"schemas"/name).read_text(encoding="utf-8"))\n'
                  'def redact_text(text, config):\n    return text\n'
                  'def validate_database(config, database):\n    return "asuna-test"\n',
     'evidence.py': 'import json, hashlib\ndef canonical(value):\n    return json.dumps(value, '
@@ -303,12 +304,18 @@ STUBS = {
 }
 
 
+# 真 context.py 拆分后同包 import render / visibility（render 用替身 config/evidence，visibility 用 scene_links）
+OPTIONAL_REAL = ('render.py', 'visibility.py')
+
+
 def load_package(name, real):
     root = tempfile.mkdtemp(prefix=name + '-')
     package = os.path.join(root, name)
     os.makedirs(package)
     open(os.path.join(package, '__init__.py'), 'w').close()
     for module in real:
+        if module in OPTIONAL_REAL and not os.path.exists(os.path.join(SRC, module)):
+            continue                                  # 拆分前的旧副本没有这两份
         shutil.copyfile(os.path.join(SRC, module), os.path.join(package, module))
     for module, body in STUBS.items():
         if module in real:
@@ -457,7 +464,7 @@ def c7_topic_digest_continues_a_thread_that_crosses_the_edge():
 @case
 def c8_context_merges_linked_history_by_effective_time():
     module = load_package('a2ctx', ('context.py', 'scene_links.py', 'schedule_rules.py',
-                                    'self_state.py', 'vision.py'))
+                                    'self_state.py', 'vision.py') + OPTIONAL_REAL)
     store = store_with()
     _system, context, manifest = module.ContextBuilder(store, retrieval=None).prepare(
         {'event_id': 'evt-1', 'scene_id': LOCAL, 'person_id': ME, 'text': '我说过什么'})
@@ -477,7 +484,7 @@ def c8_context_merges_linked_history_by_effective_time():
 @case
 def c9_without_the_config_key_everything_stays_exactly_as_before():
     module = load_package('a2ctx', ('context.py', 'scene_links.py', 'schedule_rules.py',
-                                    'self_state.py', 'vision.py'))
+                                    'self_state.py', 'vision.py') + OPTIONAL_REAL)
     store = store_with(config_base(top={'context_links': {}, 'canonical_persons': {}}))
     _system, context, manifest = module.ContextBuilder(store, retrieval=None).prepare(
         {'event_id': 'evt-1', 'scene_id': LOCAL, 'person_id': ME, 'text': '我说过什么'})

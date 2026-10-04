@@ -5,7 +5,7 @@
 怎么用人话说出来。每日／每周把本地钟点存在现有 plans.rule 里，到期后由调用方再挂一次**原生单次**，
 这里不起线程、不轮询、不补发历史。
 
-时区口径：场景配置优先，未配置继承 Pacific/Auckland；确认时把用的哪个时区一并交出去。
+时区口径：场景配置优先，其次全局配置；都没配就按 UTC 并明说「未设置时区」，核心不带任何人的默认时区；确认时把用的哪个时区一并交出去。
 DST：每日／每周当日遇到不存在的钟点，顺延到该日之后第一个真实存在的本地时刻（就是跳变那一刻）；
 重叠的钟点只取较早的一次；单次安排遇到不存在的本地时间**不猜**，抛错让角色问那一句。
 换算只用标准库 zoneinfo。宿主环境没有 tz 数据库时退回这个场景里已配的固定偏移
@@ -21,7 +21,6 @@ try:
 except Exception:                                    # 极老的运行时：没有 zoneinfo 也要能跑
     ZoneInfo, ZoneInfoNotFoundError = None, Exception
 
-DEFAULT_TIMEZONE = 'Pacific/Auckland'
 MIN_INTERVAL_SECONDS = 300                            # 上游原生 every 的最小间隔，已核实
 MAX_INTERVAL_SECONDS = 366 * 86400
 TIMING_KEYS = ('after_seconds', 'every_seconds', 'at', 'clock')
@@ -75,7 +74,7 @@ def scene_timezone(config, scene, plan=None):
                          (block.get('timezone') or (route or {}).get('timezone'), 'route'),
                          ((scene or {}).get('timezone'), 'scene'),
                          ((config or {}).get('timezone'), 'config'),
-                         (DEFAULT_TIMEZONE, 'default')):
+                         ('UTC', 'unset')):
         if not (isinstance(name, str) and name):
             continue
         zone = _zone(name, offset)
@@ -332,7 +331,7 @@ def local_clock(zone, moment=None):
     tz = zone['tz']
     local = moment.astimezone(tz)
     note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
-            'config': '全局配置的时区', 'default': '没配时区，按约定的默认 %s' % DEFAULT_TIMEZONE,
+            'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
     return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
             'timezone': zone['name'], 'tz_source': zone['source'],

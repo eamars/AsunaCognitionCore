@@ -6,11 +6,11 @@
 配置（写在 config/local.json 或 config/asuna-channel.local.json 顶层；config.load 原样带过，
 不新增校验器，形状不对的条目在读的时候照实丢掉）：
 
-  "context_links": {"local-dm": ["qq:3768713357:dm:673225019"]}
+  "context_links": {"local-dm": ["qq:demo-bot:dm:demo-user-1"]}
       有向边：左边的场景可以**只读**右边那些场景的历史。不做通配、不自动反向。
       通道路由里也可以写 read_scenes，语义等同于给该路由的 scene_id 挂同一条边。
 
-  "canonical_persons": {"qq:673225019": "local-user"}
+  "canonical_persons": {"qq:demo-user-1": "local-user"}
       同一个人的不同入口：键是别名（历史行里照旧写这个 person_id，不改写），值是 canonical person_id。
       归一只作用在两处——「按人过滤」把同一个人的其他入口算进来；「关系／偏好状态落在哪一份 head」
       用 canonical 那一份。别的都不动。

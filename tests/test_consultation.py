@@ -32,7 +32,7 @@ def test_consult_uses_bound_role_context_without_publication_or_new_task(store):
         result=broker.call('caller','question','consult_character',{'question':'按当前关系怎么呈现？','context':'计算结果 323'})
         assert result['internal'] and result['kind']=='character_interpretation'
         assert '资料不足' in result['judgment']
-        assert calls[0][0]=='xiaoman:dm-a:1:P1:original-role-context'
+        assert calls[0][0]=='demo:dm-a:1:P1:original-role-context'
         assert calls[0][2]=='CONSULT' and '323' in calls[0][3]
         assert 'scene:dm-b' not in calls[0][3]
         assert store.db.episodes.find_one({'_id':ep['_id']})==ep

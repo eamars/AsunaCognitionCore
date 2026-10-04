@@ -21,19 +21,18 @@ def test_E18_same_source_not_new_experience(store):
     assert store.head('relationship:A','scene:dm-a')[1]['content']['trust']==3
 
 
-def test_E19_bounded_proposal_and_next_context(store):
+def test_E19_bounded_revision_and_next_context(store):
+    # The ADR-001 proposal wrapper is gone; the same CAS revision path is Store.mutate.
     coordinator,lane=normal(store);old_ep=coordinator.ingest(event())
     head,base=store.head('relationship:A','scene:dm-a')
-    proposal={'entity_key':'relationship:A','scope_key':'scene:dm-a','base_revision_id':base['_id'],'change_class':'relationship','changes':[{'path':'/body','old':base['content']['body'],'new':'我可以先选择可逆方案，再听林的反馈。'}],'reason':'保留自主选择偏好','source_ids':['M02']}
-    result=MemoryService(store).proposal(proposal,'scene:dm-a','bounded')
+    body='我可以先选择可逆方案，再听林的反馈。';reason='保留自主选择偏好'
+    result=store.mutate('relationship:A','scene:dm-a',base['_id'],{'body':body},['M02'],'scene:dm-a','bounded',reason=reason,change_class='relationship')
     assert result['_id']!=base['_id']
-    assert result['reason']==proposal['reason'] and result['change_class']=='relationship'
-    assert store.db.audit_events.find_one({'type':'state.proposed','payload.reason':proposal['reason']})
+    assert result['reason']==reason and result['change_class']=='relationship'
     _,ctx,manifest=ContextBuilder(store).prepare(event('next'))
-    assert ctx['relationship']['body']==proposal['changes'][0]['new']
+    assert ctx['relationship']['body']==body
     assert old_ep['manifest']['relationship_revision']==base['_id']
-    proposal['scope_key']='global-safe'
-    with pytest.raises(Denied):MemoryService(store).proposal(proposal,'scene:dm-a','denied')
+    with pytest.raises(Denied):store.mutate('relationship:A','global-safe',result['_id'],{'body':body},['M02'],'scene:dm-a','denied')
 
 
 def test_E12_chunk_sources_and_scope(store):
@@ -76,9 +75,9 @@ def test_retrieval_keeps_newer_source_among_repeated_interpretations(store,tmp_p
         key='selection-'+str(i);ids.append(key)
         source=i in (0,8)
         store.put('memory_units',{'_id':key,'scope_key':'scene:dm-a','policy_epoch':1,
-            'character_id':'xiaoman','kind':'chat_chunk' if source else 'monologue',
+            'character_id':'demo','kind':'chat_chunk' if source else 'monologue',
             'epistemic_type':'reported_speech' if source else 'character_interpretation',
-            'speaker':'A' if source else 'xiaoman','scene_seq':i+1,
+            'speaker':'A' if source else 'demo','scene_seq':i+1,
             'body_markdown':'changed location' if i==8 else 'selection-policy old location',
             'source_event_ids':['source-'+str(i)],'status':'active','embedding_status':'READY',
             'embedding_revision':retrieval.revision})

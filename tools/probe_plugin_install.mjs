@@ -48,7 +48,13 @@ try {
     await import(pathToFileURL(path.join(coreRoot, target)).href);
     imported.push(subpath);
   }
-  await import(pathToFileURL(path.join(profileDir, 'node_modules/@asuna/xiaoman/src/index.js')).href);
+  // Persona packages come from the packed artifacts; core tooling never names a persona.
+  const personaPackages = artifacts.map(a => a.name)
+    .filter(name => name.startsWith('@asuna/') && name !== '@asuna/cognition-core');
+  assert(personaPackages.length >= 1, 'no persona package among the packed artifacts');
+  for (const name of personaPackages) {
+    await import(pathToFileURL(path.join(profileDir, 'node_modules', name, 'src/index.js')).href);
+  }
   const result = { passed: true, profile: profileDir, hostVersion: '0.2.0-rc.2',
     coreExports: imported, nativePeers: Object.keys(manifest.peerDependencies).length,
     artifacts: artifacts.map(({ name, sha256 }) => ({ name, sha256 })),

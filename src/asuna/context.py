@@ -1,7 +1,9 @@
 from __future__ import annotations
 import json
 import traceback
-from .config import prompt_path, redact_text
+from .config import redact_text
+from . import visibility
+from .render import render_system
 from .evidence import canonical, sha
 from .state import Store, Denied
 from .peer_context import apply_peer_context
@@ -86,6 +88,7 @@ class ContextBuilder:
         content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
         if len(''.join(content_lines))<80:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
+        session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
         read=(scene_links.read_scope(self.store.config,scene) if scene_links else
               {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
                'scope_keys':[scope],'linked_scope_keys':[]})
@@ -124,7 +127,9 @@ class ContextBuilder:
         if self.retrieval:
             try:
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
-                                                                   linked_scopes=read['linked_scope_keys'])
+                                                                   linked_scopes=read['linked_scope_keys'],
+                                                                   private_scope=visibility.owner_private_scope(persona)
+                                                                       if session_class==visibility.OWNER_PRIVATE else None)
             except (Denied, PermissionError):
                 raise
             except Exception:
@@ -257,13 +262,13 @@ class ContextBuilder:
             if str(group.get('wake_reason') or '').startswith('proactive'):
                 continuity['proactive_from_program'] = PROACTIVE_NOTE
             context['group_continuity_from_program'] = continuity
-        manifest={'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        manifest={'session_class':session_class,'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if self.store.config.get('task_mode')=='workspace':
             if relation:
                 context['understanding_update_from_program']={
                     'available':True,'target':target_note,
                     'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
-            from .resources import workspace_grant
+            from .grants import workspace_grant
             grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
             context['action_capabilities_from_program']={
                 'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
@@ -300,5 +305,5 @@ class ContextBuilder:
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
             manifest['context_sha256']=sha(canonical(context))
-        system=prompt_path(self.store.config,'common.md').read_text(encoding='utf-8')+'\n'+body
+        system,manifest['system_ref']=render_system(self.store,persona)
         return system,context,manifest

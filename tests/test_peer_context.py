@@ -9,7 +9,7 @@ def qq_event():
         'event_id': 'channel-test-peer',
         'scene_id': 'qq:999:group:123',
         'person_id': 'qq:42',
-        'text': '@小满 我现在的群名片是什么？',
+        'text': '@演示 我现在的群名片是什么？',
         'group_context': {'wake_reason': 'mention'},
         'channel': {'sender_id': '42', 'target': {'type': 'group', 'id': '123'}},
         'raw': {

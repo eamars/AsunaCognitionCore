@@ -1,6 +1,7 @@
 import uuid,os,shutil
 from pathlib import Path
 import pytest
+from pymongo import MongoClient
 from asuna.config import ROOT,load
 from asuna.state import Store
 from asuna.evidence import write_json,sha
@@ -23,11 +24,27 @@ def preserve_temporary_evidence(request):
     write_json(destination/'capture.json',{'node_id':request.node.nodeid,'files':files,'purpose':'preserve actual loopback and renderer artifacts from passing or failed tests'})
     request.node.user_properties.append(('auxiliary_evidence_path',destination.relative_to(ROOT).as_posix()))
 
+FIXTURES=Path(__file__).with_name('fixtures')
+WORLD=FIXTURES/'world.json'
+
+
+def isolated_database(prefix):
+    """A fresh test database name; every test drops what it created."""
+    return prefix+'_'+uuid.uuid4().hex[:12]
+
+
+def drop_database(config,name):
+    if not name.startswith('asuna_v2_test_'):raise ValueError('ONLY_TEST_DATABASES_ARE_DROPPED')
+    client=MongoClient(config['mongo_uri'],serverSelectionTimeoutMS=5000)
+    try:client.drop_database(name)
+    finally:client.close()
+
+
 @pytest.fixture
 def store(request):
-    config=load();config['character_id']='xiaoman'  # Identity of the existing fixture records.
-    db=Store(config,'asuna_v2_test_M1_'+uuid.uuid4().hex[:12])
-    db.migrate();db.seed()
+    config=load();config['character_id']='demo'  # Synthetic persona of the fixture world.
+    db=Store(config,isolated_database('asuna_v2_test_M1'))
+    db.migrate();db.seed(WORLD)
     yield db
     root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
     if root:
@@ -43,4 +60,6 @@ def store(request):
         finally:observer.client.close()
         request.node.user_properties.append(('evidence_path',path.relative_to(ROOT).as_posix()))
     db.client.close()
-    # Tests retain their isolated databases for audit; no broad cleanup.
+    # Evidence (when requested) is already on disk; the database itself is dropped.
+    for name in [db.name,*getattr(db,'derived_databases',[])]:
+        drop_database(config,name)

@@ -32,7 +32,7 @@ def test_E01_namespace_guard(store):
 def test_E02_actual_fake_request_and_missing_persona(store):
     coordinator,lane=normal(store)
     ep=coordinator.ingest(event())
-    assert '沈小满' in lane.calls[0]['messages'][0]['content']
+    assert '示例角色' in lane.calls[0]['messages'][0]['content']
     assert ep['manifest']['persona_revision']
     persona=store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['body']
     assert persona in lane.calls[0]['messages'][0]['content']
@@ -63,7 +63,7 @@ def test_E03_stops_advance_and_E04_private_public_split(store):
 
 def test_E05_delivered_projection_only(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
-        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','scene_seq':i,'text':'marker_'+state,'author':'xiaoman','direction':'outbound','delivery_state':state})
+        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','policy_epoch':1,'scene_seq':i,'text':'marker_'+state,'author':'demo','direction':'outbound','delivery_state':state})
     system,context,manifest=ContextBuilder(store).prepare(event())
     assert [x['text'] for x in context['delivered_history']]==['marker_DELIVERED']
 
@@ -149,7 +149,7 @@ def test_E23_state_replay_and_tamper(store,tmp_path):
     coordinator,lane=normal(store);coordinator.ingest(event())
     events=list(store.db.audit_events.find({}))
     verify(events)
-    target=Store(load(),store.name+'_replay')
+    target=Store(load(),store.name+'_replay');store.derived_databases=[target.name]
     assert replay(events,target)['sha256']==projection(store)['sha256']
     modified=copy.deepcopy(events);modified[0]['payload']['changed']=True
     with pytest.raises(ValueError):verify(modified)

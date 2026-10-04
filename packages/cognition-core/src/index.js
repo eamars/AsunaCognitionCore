@@ -257,6 +257,12 @@ export class CognitionCore {
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
       order: scope.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       interpolate: false, text: ({ agent }) => agent ? this.state(agent.session.id).system : '' });
+    // A role session's system prompt is exactly the worker render (ADR-009 D-1):
+    // no harness identity, no runtime-context snapshot. The render for a Web
+    // turn is only known inside the assemble waterfall below (after the worker
+    // admits the claimed input), so it is enforced there as the sole section;
+    // a `complete` section's text is resolved before the waterfall runs.
+    if (lane === 'character') scope.systemPrompt.suppressRuntimeContext();
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
       if (message.source.kind === 'user') this.state(agent.session.id).claimed.push(message);
     });
@@ -283,8 +289,10 @@ export class CognitionCore {
       const assembly = await next();
       return { ...assembly,
         tools: assembly.tools.filter(tool => lane === 'executor' && state.allowed?.has(tool.name)),
-        sections: assembly.sections.map(section =>
-        section.name === PERSONA_PREFIX_SECTION ? { ...section, text: state.system } : section) };
+        sections: lane === 'character'
+          ? [{ name: PERSONA_PREFIX_SECTION, text: state.system, interpolate: false }]
+          : assembly.sections.map(section =>
+            section.name === PERSONA_PREFIX_SECTION ? { ...section, text: state.system } : section) };
     });
     // Route selection only. All model-visible material uses the durable inbox.
     scope.on('agent/request', async (_payload, next) => ({ ...await next(),

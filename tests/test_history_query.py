@@ -25,20 +25,20 @@ from asuna.history_query import (HISTORY_TOOL_NAME, HistoryQueryService, identit
 
 CONFIG_PATH = os.environ.get('ASUNA_P1B_CONFIG', 'config/local.json')
 
-BOT = '3768713357'
-GID = '905393941'
+BOT = '100357'
+GID = '300941'
 SCENE_ID = 'qq:' + BOT + ':group:' + GID
-OTHER_SCENE = 'qq:' + BOT + ':group:54369546'
-ACCOUNT = '458658853'
+OTHER_SCENE = 'qq:' + BOT + ':group:300546'
+ACCOUNT = '100853'
 PERSON = 'qq:' + ACCOUNT
 EPOCH = 7
 FULL_WINDOW = {'since': '2000-01-01', 'until': '2999-12-31T23:59:59Z'}
 VERBATIM = '第一行' + chr(10) + '   第二行  尾随空格 '
 
 PEER = {'person_id': PERSON, 'account_id': ACCOUNT, 'scene': 'group:' + GID,
-        'group_id': GID, 'display': '雾灯修理工', 'nickname': '落郇之源', 'card': '雾灯修理工',
+        'group_id': GID, 'display': '雾灯修理工', 'nickname': '示例昵称', 'card': '雾灯修理工',
         'role': 'admin', 'verified': True, 'aliases': ['旧名片']}
-OTHER_PEER = dict(PEER, person_id='qq:7777777', account_id='7777777', display='路人甲',
+OTHER_PEER = dict(PEER, person_id='qq:100777', account_id='100777', display='路人甲',
                   card='路人甲', nickname='路人甲', aliases=[])
 
 
@@ -63,7 +63,7 @@ def store():
 
 def scene_row(scene_id):
     return {'_id': scene_id, 'scene_id': scene_id, 'kind': 'group',
-            'members': [PERSON, 'xiaoman'], 'scope_key': 'scene:' + scene_id,
+            'members': [PERSON, 'demo'], 'scope_key': 'scene:' + scene_id,
             'policy_epoch': EPOCH, 'sequence': 0}
 
 
@@ -170,14 +170,14 @@ def seed_time_sources(db):
     seed_scenes(db, OTHER_SCENE)
     message(db, 'i1', 5, '2026-09-22T12:00:00Z', '雾灯坏了，明天去修')
     message(db, 'i2', 6, '2026-09-22T12:05:00Z', VERBATIM)
-    message(db, 'o1', 7, '', '好的，我去看看', direction='outbound', author='xiaoman',
+    message(db, 'o1', 7, '', '好的，我去看看', direction='outbound', author='demo',
             peer=None, receipt_at='2026-09-22T12:06:05Z')
-    message(db, 'o2', 8, '', '已经记下了', direction='outbound', author='xiaoman',
+    message(db, 'o2', 8, '', '已经记下了', direction='outbound', author='demo',
             peer=None, receipt='sr-2')
     sink_receipt(db, 'sr-2', '2026-09-22T12:07:30Z')
-    message(db, 'o3', 9, '', '没送达的不算', direction='outbound', author='xiaoman', peer=None,
+    message(db, 'o3', 9, '', '没送达的不算', direction='outbound', author='demo', peer=None,
             delivery='READY')
-    message(db, 'o4', 10, '', '不是 SPEAK 的出站', direction='outbound', author='xiaoman',
+    message(db, 'o4', 10, '', '不是 SPEAK 的出站', direction='outbound', author='demo',
             peer=None, phase='REACT', receipt_at='2026-09-22T12:08:00Z')
     message(db, 'x1', 1, '2026-09-22T12:09:00Z', '别的群的雾灯', scene=OTHER_SCENE, peer=None)
     message(db, 'old', 2, '2026-08-01T12:00:00Z', '八百年前的雾灯')
@@ -198,7 +198,7 @@ def test_time_sources_authorship_and_verbatim(store):
     assert by_id['i2']['text'] == VERBATIM and by_id['i2']['verbatim']
     assert by_id['o1']['side'] == '我说' and by_id['i1']['side'] == '对方说'
     assert '雾灯修理工' in by_id['i1']['who'] and PERSON in by_id['i1']['who']
-    assert 'xiaoman' in by_id['o1']['who']          # 无身份块就退回已认证作者，不冒充
+    assert 'demo' in by_id['o1']['who']          # 无身份块就退回已认证作者，不冒充
     assert value['more'] is False and value['next_cursor'] is None
     assert value['scope']['scene_id'] == SCENE_ID
     assert '本机送达回执' in value['text']            # 行首就标明回执来源，不伪称发送时刻
@@ -209,7 +209,7 @@ def test_time_sources_authorship_and_verbatim(store):
 def test_person_filter_follows_verified_identity(store):
     seed_scenes(store)
     message(store, 'i1', 1, '2026-09-22T12:00:00Z', '一', peer=PEER)
-    message(store, 'i2', 2, '2026-09-22T12:01:00Z', '二', peer=OTHER_PEER, author='qq:7777777')
+    message(store, 'i2', 2, '2026-09-22T12:01:00Z', '二', peer=OTHER_PEER, author='qq:100777')
     message(store, 'i3', 3, '2026-09-22T12:02:00Z', '三', peer=None)
     tid = make_task(store, [HISTORY_TOOL_NAME])
     service = HistoryQueryService(store, None)
@@ -248,10 +248,10 @@ def test_pagination_no_loss_no_repeat_across_streams(store):
         message(store, 'i' + str(i), i, '2026-09-22T10:%02d:00Z' % i, '第%d条原话' % i)
     for i in (1, 2):
         message(store, 'o' + str(i), 20 + i, '', '平台出站%d' % i, direction='outbound',
-                author='xiaoman', peer=None, receipt_at='2026-09-22T11:0%d:00Z' % i)
+                author='demo', peer=None, receipt_at='2026-09-22T11:0%d:00Z' % i)
     for i in (1, 2, 3):
         message(store, 's' + str(i), 30 + i, '', '本机出站%d' % i, direction='outbound',
-                author='xiaoman', peer=None, receipt='sr-' + str(i))
+                author='demo', peer=None, receipt='sr-' + str(i))
         sink_receipt(store, 'sr-' + str(i), '2026-09-22T11:3%d:00Z' % i)
     tid = make_task(store, [HISTORY_TOOL_NAME])
     service = HistoryQueryService(store, None)
@@ -279,7 +279,7 @@ def test_fallback_keeps_more_until_truly_exhausted(store):
         base = 10 * 3600 + i
         at = '2026-09-22T%02d:%02d:%02dZ' % (base // 3600, base % 3600 // 60, base % 60)
         message(store, 'f%03d' % i, i, '', '本机出站%03d' % i, direction='outbound',
-                author='xiaoman', peer=None, receipt='fr-%03d' % i)
+                author='demo', peer=None, receipt='fr-%03d' % i)
         sink_receipt(store, 'fr-%03d' % i, at)
         expected.append('f%03d' % i)
     tid = make_task(store, [HISTORY_TOOL_NAME])
@@ -357,7 +357,7 @@ def test_broker_call_is_task_bound_and_idempotent(broker_env):
     assert [h['message_id'] for h in page1['hits']] == ['i1'] and page1['next_cursor']
     assert page1['next_cursor'] in page1['text']                   # 非裁剪续页路径同样一致
     with pytest.raises(ValueError, match='HISTORY_CURSOR_FILTER_MISMATCH'):
-        broker.call('s1', 'c6', HISTORY_TOOL_NAME, dict(FULL_WINDOW, query='雾灯', person='qq:7777777',
+        broker.call('s1', 'c6', HISTORY_TOOL_NAME, dict(FULL_WINDOW, query='雾灯', person='qq:100777',
                                                        limit=1, cursor=page1['next_cursor']))
     rest = broker.call('s1', 'c7', HISTORY_TOOL_NAME,
                        dict(FULL_WINDOW, query='雾灯', limit=1, cursor=page1['next_cursor']))

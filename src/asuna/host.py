@@ -143,10 +143,16 @@ class RuntimeHost:
 
     def __enter__(self):
         try:
+            from .visibility import without_link_downgrades
+            self.config, rejected_links = without_link_downgrades(self.config)
             self.app = self.stack.enter_context(Application(
                 {**self.config, 'task_mode': 'workspace'}, self.evidence, self.database,
                 lane_factory=self.lane_factory, broker_http=self.broker_http,
                 development_factory=self.development_factory))
+            for rejected in rejected_links:
+                # A public scene may never read an owner-private scene (ADR-009 §2.3).
+                self.app.store.audit('config', 'config.link_rejected', rejected)
+                self.evidence.record('host.link_rejected', rejected)
             self.evidence.record('host.recovery.start', {})
             recovery_start = time.perf_counter()
             self.settings = local_settings(self.config)

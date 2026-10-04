@@ -82,7 +82,7 @@ INBOUND = 'in-ep1'
 OUTBOUND = 'ep1:speak:0'
 SUMMARY = 'summary-1'
 MONO = 'mono-ep1:0'
-PERSONA_BODY = ('沈小满，24 岁。说话清淡直接，有一点不刻薄的机灵。分得清什么是看到的事实、'
+PERSONA_BODY = ('示例角色，24 岁。说话清淡直接，有一点不刻薄的机灵。分得清什么是看到的事实、'
                 '什么是自己猜的、什么只是想做的。愿意帮忙，也会说不想做什么；休息和聊天 '
                 '不算浪费。会被经历影响，允许自己改看法，不拿工作量证明自己值得被喜欢。')
 
@@ -220,10 +220,8 @@ class FakeDB:
 def bind_store(rows_by_collection=None, workspace=True):
     '''真 Store 方法绑到假库：put／audit／head／mutate／authorize 全走仓库实现。'''
     store = Store.__new__(Store)
-    store.config = {'character_id': 'xiaoman', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
-                    'allowed_databases': ['fake'],
-                    'prompts_dir': os.path.join(ROOT, 'docs', 'development_plans',
-                                                'ADR-001-asuna_v2_v1_handoff', 'prompts')}
+    store.config = {'character_id': 'demo', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
+                    'allowed_databases': ['fake']}
     if workspace:
         store.config['task_mode'] = 'workspace'
         store.config['chat'] = {'scene_id': SCENE, 'person_id': PERSON, 'workspace': '/task'}
@@ -235,33 +233,33 @@ def bind_store(rows_by_collection=None, workspace=True):
 
 # ── 一份 P2 私聊现场：两条原文 + 一条后台摘要 + 本轮独白 ──────────────
 def rows(**overrides):
-    scene = {'_id': SCENE, 'kind': 'dm', 'members': [PERSON, 'xiaoman'], 'scope_key': SCOPE,
+    scene = {'_id': SCENE, 'kind': 'dm', 'members': [PERSON, 'demo'], 'scope_key': SCOPE,
              'policy_epoch': EPOCH, 'sequence': 8, 'revision': 1}
     inbound = {'_id': INBOUND, 'scene_id': SCENE, 'scope_key': SCOPE, 'policy_epoch': EPOCH,
                'scene_seq': 7, 'direction': 'inbound', 'author': PERSON, 'text': '我周三去修雾灯',
                'platform_event_id': 'evt1', 'occurred_at': '2026-09-24T06:00:00+00:00', 'revision': 1}
     outbound = {'_id': OUTBOUND, 'scene_id': SCENE, 'scope_key': SCOPE, 'policy_epoch': EPOCH,
-                'scene_seq': 8, 'direction': 'outbound', 'author': 'xiaoman', 'text': '工具我带',
+                'scene_seq': 8, 'direction': 'outbound', 'author': 'demo', 'text': '工具我带',
                 'delivery_state': 'DELIVERED', 'receipt_at': '2026-09-24T06:01:00+00:00', 'revision': 1}
     summary = {'_id': SUMMARY, 'kind': 'dialogue_summary', 'scope_key': SCOPE, 'policy_epoch': EPOCH,
-               'character_id': 'xiaoman', 'epistemic_type': 'derived_summary', 'status': 'active',
+               'character_id': 'demo', 'epistemic_type': 'derived_summary', 'status': 'active',
                'body_markdown': '他说周三去修雾灯；我说工具我带。',
                'source_event_ids': [INBOUND, OUTBOUND], 'scene_id': SCENE, 'source_window': [7, 8],
                'generated_at': '2026-09-24T06:05:00+00:00', 'embedding_status': 'READY', 'revision': 1}
     monologue = {'_id': MONO, 'kind': 'monologue', 'episode_id': 'ep1', 'scope_key': SCOPE,
-                 'policy_epoch': EPOCH, 'character_id': 'xiaoman', 'status': 'active',
+                 'policy_epoch': EPOCH, 'character_id': 'demo', 'status': 'active',
                  'epistemic_type': 'character_interpretation', 'body_markdown': '他把日子说定了。',
                  'source_event_ids': ['evt1'], 'revision': 1}
     rel_head = {'_id': 'relationship:' + PERSON + '|' + SCOPE, 'scope_key': SCOPE,
                 'revision_id': 'rev-rel-0', 'revision': 1}
     rel_rev = {'_id': 'rev-rel-0', 'entity_key': 'relationship:' + PERSON + '|' + SCOPE,
-               'scope_key': SCOPE, 'mutation_id': 'seed', 'revision': 1,
+               'scope_key': SCOPE, 'mutation_id': 'seed:rev-rel-0', 'revision': 1,
                'content': {'body': '刚认识，还在试口径。', 'familiarity': 1},
                'source_ids': [], 'parent_revision_id': None}
     persona_head = {'_id': 'persona:P1|global-safe', 'scope_key': 'global-safe',
                     'revision_id': 'rev-persona-0', 'revision': 1}
     persona_rev = {'_id': 'rev-persona-0', 'entity_key': 'persona:P1|global-safe',
-                   'scope_key': 'global-safe', 'mutation_id': 'seed', 'revision': 1,
+                   'scope_key': 'global-safe', 'mutation_id': 'seed:rev-persona-0', 'revision': 1,
                    'content': {'body': PERSONA_BODY}, 'source_ids': [], 'parent_revision_id': None}
     data = {'scenes': [scene], 'messages': [inbound, outbound], 'memory_units': [summary, monologue],
             'state_heads': [rel_head, persona_head], 'state_revisions': [rel_rev, persona_rev]}
@@ -518,7 +516,7 @@ def _in(scene, seq, author, text, at, event=None, **extra):
 
 def _out(scene, seq, text, at, **extra):
     row = {'_id': '%s:speak:%d' % (scene, seq), 'scene_id': scene, 'scope_key': 'scene:' + scene,
-           'policy_epoch': EPOCH, 'scene_seq': seq, 'direction': 'outbound', 'author': 'xiaoman',
+           'policy_epoch': EPOCH, 'scene_seq': seq, 'direction': 'outbound', 'author': 'demo',
            'text': text, 'delivery_state': 'DELIVERED', 'phase': 'SPEAK',
            'receipt_at': _iso(at), 'revision': 1}
     row.update(extra)
@@ -532,7 +530,7 @@ def _heads(scope, persons):
         heads.append({'_id': key, 'scope_key': scope, 'revision_id': 'rev-rel-' + person,
                       'revision': 1})
         revisions.append({'_id': 'rev-rel-' + person, 'entity_key': key, 'scope_key': scope,
-                          'mutation_id': 'seed', 'revision': 1,
+                          'mutation_id': 'seed:rev-rel-' + person, 'revision': 1,
                           'content': {'body': '当前授权场景里的参与者，口径还在试。',
                                       'familiarity': 1},
                           'source_ids': [], 'parent_revision_id': None})
@@ -543,14 +541,14 @@ def _persona():
     return ([{'_id': 'persona:P1|global-safe', 'scope_key': 'global-safe',
               'revision_id': 'rev-persona-0', 'revision': 1}],
             [{'_id': 'rev-persona-0', 'entity_key': 'persona:P1|global-safe',
-              'scope_key': 'global-safe', 'mutation_id': 'seed', 'revision': 1,
+              'scope_key': 'global-safe', 'mutation_id': 'seed:rev-persona-0', 'revision': 1,
               'content': {'body': PERSONA_BODY}, 'source_ids': [], 'parent_revision_id': None}])
 
 
 def _scaffold(scene_id, kind, persons, messages, start_seq, sequence):
     heads, revisions = _heads('scene:' + scene_id, persons)
     persona_heads, persona_revs = _persona()
-    return {'scenes': [_scene(scene_id, kind, list(persons) + ['xiaoman'], start_seq, sequence)],
+    return {'scenes': [_scene(scene_id, kind, list(persons) + ['demo'], start_seq, sequence)],
             'messages': messages, 'memory_units': [],
             'state_heads': heads + persona_heads, 'state_revisions': revisions + persona_revs,
             'identities': [{'_id': PERSON, 'person_id': PERSON, 'platform': 'qq',
@@ -655,7 +653,7 @@ def legacy_rule(pending, moment, oldest_at):
 
 def monologue_unit(person, ep_id, scope=GROUP_SCOPE, body='他把日子说定了。'):
     return {'_id': 'mono-%s:0' % ep_id, 'kind': 'monologue', 'episode_id': ep_id,
-            'scope_key': scope, 'policy_epoch': EPOCH, 'character_id': 'xiaoman',
+            'scope_key': scope, 'policy_epoch': EPOCH, 'character_id': 'demo',
             'status': 'active', 'epistemic_type': 'character_interpretation',
             'body_markdown': body, 'source_event_ids': ['in-%s-14' % GROUP], 'revision': 1}
 
@@ -760,7 +758,7 @@ def t5_group_tick_saves_attribution_and_marks_sources():
     store = bind_store(data)
     saved, evidence, lane = _saved_group_summary(store)
     assert saved and saved['kind'] == 'dialogue_summary', saved
-    assert saved['participants'] == sorted([PERSON, PERSON_B, 'xiaoman']), saved
+    assert saved['participants'] == sorted([PERSON, PERSON_B, 'demo']), saved
     assert saved['source_by_speaker'][PERSON] == ['in-%s-11' % GROUP, 'in-%s-14' % GROUP], saved
     assert saved['source_window'] == [11, 14], saved
     assert saved['attribution']['multi_speaker'] is True, saved
@@ -780,7 +778,7 @@ def t5_group_tick_saves_attribution_and_marks_sources():
 # ── 归属与更正：谁的话算谁，被更正的要看得见 ────────────────
 def _summary_unit(unit_id, body, sources, participants, window):
     return {'_id': unit_id, 'kind': 'dialogue_summary', 'scope_key': GROUP_SCOPE,
-            'policy_epoch': EPOCH, 'character_id': 'xiaoman', 'epistemic_type': 'derived_summary',
+            'policy_epoch': EPOCH, 'character_id': 'demo', 'epistemic_type': 'derived_summary',
             'status': 'active', 'body_markdown': body, 'source_event_ids': sources,
             'scene_id': GROUP, 'source_window': window, 'participants': participants,
             'generated_at': _iso(T0 + 60), 'embedding_status': 'READY', 'revision': 1}
@@ -792,7 +790,7 @@ def a1_summary_about_someone_else_is_not_my_source():
     store = bind_store(data)
     saved = _summary_unit('summary-ab', '老陈说周三去修雾灯，小舟说他去并带工具。',
                           ['in-%s-11' % GROUP, 'in-%s-12' % GROUP],
-                          [PERSON, PERSON_B, 'xiaoman'], [11, 12])
+                          [PERSON, PERSON_B, 'demo'], [11, 12])
     add_row(store, 'memory_units', saved)
     add_row(store, 'memory_units', monologue_unit(PERSON, 'ep-g1'))
     both = MemoryService(store).commit_understanding(
@@ -800,7 +798,7 @@ def a1_summary_about_someone_else_is_not_my_source():
     assert both['state'] == 'COMMITTED' and both['auto_source_ids'] == [saved['_id']], both
     assert both['auto_source_skipped'] == [], both
     only_b = _summary_unit('summary-b-only', '小舟说他去，工具他带。', ['in-%s-12' % GROUP],
-                           [PERSON_B, 'xiaoman'], [12, 12])
+                           [PERSON_B, 'demo'], [12, 12])
     add_row(store, 'memory_units', only_b)
     add_row(store, 'memory_units', monologue_unit(PERSON, 'ep-g2', body='小舟热心，但这事老陈没定。'))
     moved = store.head('relationship:' + PERSON, GROUP_SCOPE)[0]['revision_id']
@@ -825,7 +823,7 @@ def stale_summary_rows():
     '''早一批已经被 summary-old 盖住，后一批里 A 更正了那句。'''
     data = group_rows()
     data['memory_units'] = [_summary_unit('summary-old', '老陈说他周三去修雾灯。',
-                                          ['in-%s-11' % GROUP], [PERSON, 'xiaoman'], [11, 11])]
+                                          ['in-%s-11' % GROUP], [PERSON, 'demo'], [11, 11])]
     data['messages'] = [dict(data['messages'][0], summary_batch_id='summary-old')] \
         + data['messages'][1:] + [correction_row()]
     return data
@@ -876,7 +874,7 @@ def r5_group_next_turn_shows_attribution_and_correction():
     _system, context, manifest = prepare_group(store, PERSON, '那到底周几去？')
     entry = next((m for m in context['memories'] if m['_id'] == saved['_id']), None)
     assert entry, context['memories']
-    assert entry['participants'] == sorted([PERSON, PERSON_B, 'xiaoman']), entry
+    assert entry['participants'] == sorted([PERSON, PERSON_B, 'demo']), entry
     assert entry['attribution']['corrections'][0]['corrects'] == 'in-%s-11' % GROUP, entry
     assert saved['_id'] in manifest['selected'], manifest
     rules = context['memory_source_rules']

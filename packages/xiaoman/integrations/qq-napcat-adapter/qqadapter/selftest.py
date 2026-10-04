@@ -26,7 +26,7 @@ ALLOWED_ENVELOPE_KEYS = inbound_mod.PRIVATE_ENVELOPE_KEYS
 ALLOWED_GROUP_ENVELOPE_KEYS = inbound_mod.GROUP_ENVELOPE_KEYS
 HERE = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_PATH = os.path.join(os.path.dirname(HERE), "GROUP_ROUTES_PREVIEW.json")
-OWNER = "900000001748"
+OWNER = "101748"
 HELPER_LOCK_CHILD = (
     "import fcntl,os,sys,time\n"
     "fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o644)\n"
@@ -87,7 +87,7 @@ def _msg_event(cfg, **over):
         "post_type": "message",
         "message_type": "private",
         "sub_type": "friend",
-        "message_id": 123456789,
+        "message_id": 654321,
         "user_id": int(cfg.allowed_private[0]),
         "message": [{"type": "text", "data": {"text": "测试正文"}}],
         "raw_message": "测试正文",
@@ -127,7 +127,7 @@ def _load_preview(rep):
         rep.check("preview_readable", False, "%s %s" % (type(exc).__name__, exc))
         return None
     rep.check("preview_readable", sorted(preview.get("allowed_group_ids") or []) ==
-              sorted(["900000000003", "900000001623", "900000001718", "900000001996"]),
+              sorted(["300003", "301623", "301718", "301996"]),
               str(preview.get("allowed_group_ids")))
     return preview
 
@@ -195,32 +195,32 @@ def _check_config(rep, cfg, gcfg):
         else:
             cases.append((want_tag, False, "accepted"))
 
-    mutate(lambda raw: raw["adapter"]["routes"]["group-900000001623"].update(
-        target={"type": "group", "id": "700000001"}), "cfg_group_outside_allowlist")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-900000001623"].update(allowed_sender_ids=[]),
+    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
+        target={"type": "group", "id": "700001"}), "cfg_group_outside_allowlist")
+    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(allowed_sender_ids=[]),
            "cfg_group_empty_members")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-900000001623"].update(
+    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
         allowed_sender_ids=[OWNER, "nick"]), "cfg_group_non_digit_member")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-900000001623"].update(
-        target={"type": "dm", "id": "900000001623"}), "cfg_group_wrong_target_type")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-900000001623"].update(sender_id=OWNER),
+    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
+        target={"type": "dm", "id": "301623"}), "cfg_group_wrong_target_type")
+    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(sender_id=OWNER),
            "cfg_group_pinned_sender")
     mutate(lambda raw: raw["adapter"]["routes"].update(
-        {"group-dup": {"message_type": "group", "target": {"type": "group", "id": "900000001623"},
+        {"group-dup": {"message_type": "group", "target": {"type": "group", "id": "301623"},
                        "allowed_sender_ids": [OWNER]}}), "cfg_group_duplicate_binding")
     mutate(lambda raw: raw["adapter"]["routes"]["owner-dm"].update(allowed_sender_ids=[OWNER]),
            "cfg_private_extra_keys")
-    mutate(lambda raw: raw["adapter"].update(allowed_group_ids=["900000001623"]), "cfg_group_route_without_allowlist")
+    mutate(lambda raw: raw["adapter"].update(allowed_group_ids=["301623"]), "cfg_group_route_without_allowlist")
     ok_all = True
     for tag, ok, detail in cases:
         rep.check(tag, ok, detail)
         ok_all = ok_all and ok
     raw = json.loads(json.dumps(gcfg.raw))
-    del raw["adapter"]["routes"]["group-900000001718"]
+    del raw["adapter"]["routes"]["group-301718"]
     try:
         loose = Config(raw, "loose")
         rep.check("cfg_group_allowed_without_route_loads",
-                  "900000001718" in loose.allowed_groups and loose.route_for_group("900000001718") is None,
+                  "301718" in loose.allowed_groups and loose.route_for_group("301718") is None,
                   "an allowlisted group without a route stays closed")
     except ConfigError as exc:
         rep.check("cfg_group_allowed_without_route_loads", False, str(exc))
@@ -241,13 +241,13 @@ def _check_private(rep, cfg):
     rep.check("envelope_raw_kept", isinstance(envelope.get("raw"), dict) and
               envelope["raw"].get("message_id") == good["message_id"], "")
     cases = [
-        ("filter_other_sender", _msg_event(cfg, user_id=10101010, message_id=2), "unauthorized_sender"),
+        ("filter_other_sender", _msg_event(cfg, user_id=909101, message_id=2), "unauthorized_sender"),
         ("filter_self_echo", _msg_event(cfg, user_id=int(cfg.napcat["account_id"]), message_id=3), "self_echo"),
         ("filter_notice", {"post_type": "notice", "self_id": int(cfg.napcat["account_id"]), "notice_type": "notify"}, "nonmessage"),
         ("filter_heartbeat", {"post_type": "meta_event", "self_id": int(cfg.napcat["account_id"]), "meta_event_type": "heartbeat"}, "nonmessage"),
         ("filter_image_only_now_accepted",
          _msg_event(cfg, message=[{"type": "image", "data": {"file": "a.jpg"}}], message_id=4), "accepted"),
-        ("filter_wrong_self", _msg_event(cfg, self_id=1234567, message_id=5), "wrong_self"),
+        ("filter_wrong_self", _msg_event(cfg, self_id=765432, message_id=5), "wrong_self"),
         ("filter_bad_shape", _msg_event(cfg, user_id=None, message_id=5), "bad_shape"),
         ("filter_duplicate", _msg_event(cfg), "duplicate_local"),
         ("filter_unsupported_type", _msg_event(cfg, message_type="discuss", message_id=9), "unsupported_message_type"),
@@ -277,9 +277,9 @@ def _check_private(rep, cfg):
 
 
 def _loose_cfg(gcfg):
-    """900000001718 stays on the allowlist but loses its route: must stay closed."""
+    """301718 stays on the allowlist but loses its route: must stay closed."""
     raw = json.loads(json.dumps(gcfg.raw))
-    del raw["adapter"]["routes"]["group-900000001718"]
+    del raw["adapter"]["routes"]["group-301718"]
     return Config(raw, "loose")
 
 
@@ -299,7 +299,7 @@ def _check_group_inbound(rep, gcfg, preview):
               "effective=%s preview=%s" % (groups, preview_groups))
     only_a = sorted(members[groups[0]] - members[groups[min(1, len(groups) - 1)]]) or sorted(members[groups[0]])
     only_a = only_a[0]
-    outsider = "1000000001"
+    outsider = "199001"
     while any(outsider in members[g] for g in groups):
         outsider = str(int(outsider) + 1)
 
@@ -340,15 +340,15 @@ def _check_group_inbound(rep, gcfg, preview):
               meta.get("non_text_segments") == 1 and "555" not in env.get("text"),
               "%r non_text=%s" % (env.get("text"), meta.get("non_text_segments")))
 
-    # the reported real case: at 小满 + "你刚刚回复 " + at 900000001030 + "了么？"
+    # the reported real case: at 小满 + "你刚刚回复 " + at 101030 + "了么？"
     pointed = [{"type": "at", "data": {"qq": gcfg.napcat["account_id"]}},
                {"type": "text", "data": {"text": "你刚刚回复 "}},
-               {"type": "at", "data": {"qq": "900000001030"}},
+               {"type": "at", "data": {"qq": "101030"}},
                {"type": "text", "data": {"text": "了么？"}}]
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4112, message=pointed), gcfg, seen)
     rep.check("group_at_position_preserved", reason == "accepted" and
-              res[0]["text"] == "@%s你刚刚回复 @900000001030了么？" % gcfg.napcat["account_id"] and
-              res[0]["mentioned_account_ids"] == [gcfg.napcat["account_id"], "900000001030"],
+              res[0]["text"] == "@%s你刚刚回复 @101030了么？" % gcfg.napcat["account_id"] and
+              res[0]["mentioned_account_ids"] == [gcfg.napcat["account_id"], "101030"],
               repr(res[0].get("text")) if reason == "accepted" else reason)
     rep.check("group_at_all_counted_not_id", meta.get("at_all_segments") == 1 and
               "all" not in env.get("mentioned_account_ids", []) and meta.get("has_reply") is True,
@@ -370,15 +370,15 @@ def _check_group_inbound(rep, gcfg, preview):
                   "%s (member of %s only)" % (reason, groups[0]))
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], outsider, 4104), gcfg, seen)
     rep.check("group_non_member_denied", reason == "unauthorized_group_member", reason)
-    res, reason = inbound_mod.classify(_group_event(gcfg, "700000001", OWNER, 4105), gcfg, seen)
+    res, reason = inbound_mod.classify(_group_event(gcfg, "700001", OWNER, 4105), gcfg, seen)
     rep.check("group_not_on_allowlist", reason == "group_not_allowed", reason)
     loose = _loose_cfg(gcfg)
-    res, reason = inbound_mod.classify(_group_event(loose, "900000001718", OWNER, 4106), loose, seen)
+    res, reason = inbound_mod.classify(_group_event(loose, "301718", OWNER, 4106), loose, seen)
     rep.check("group_allowed_without_route", reason == "group_route_missing", reason)
     rep.check("group_loose_config_built", loose is not None, "")
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], gcfg.napcat["account_id"], 4107), gcfg, seen)
     rep.check("group_self_echo", reason == "self_echo", reason)
-    res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4108, self_id=1234567), gcfg, seen)
+    res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4108, self_id=765432), gcfg, seen)
     rep.check("group_wrong_self", reason == "wrong_self", reason)
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4109,
                                                    message=[{"type": "image", "data": {"file": "a.jpg"}}]), gcfg, seen)
@@ -501,12 +501,12 @@ def _check_outbound_params(rep, gcfg, root):
 
     GRP = {"type": "group", "id": groups[0]}
     DM = {"type": "dm", "id": OWNER}
-    got = wire("at1", GRP, "收到 @qq:900000001030 的建议", reply_to="987654")
+    got = wire("at1", GRP, "收到 @qq:101030 的建议", reply_to="987654")
     rep.check("ob_group_at_marker_promoted",
-              got == [RP("987654"), T("收到 "), A("900000001030"), T(" 的建议")],
+              got == [RP("987654"), T("收到 "), A("101030"), T(" 的建议")],
               json.dumps(got, ensure_ascii=False))
-    got = wire("at2", GRP, "@qq:900000001748")
-    rep.check("ob_group_marker_only_message", got == [A("900000001748")], json.dumps(got, ensure_ascii=False))
+    got = wire("at2", GRP, "@qq:101748")
+    rep.check("ob_group_marker_only_message", got == [A("101748")], json.dumps(got, ensure_ascii=False))
     got = wire("at3", GRP, "@qq:10001 和 @qq:10002 都到了")
     rep.check("ob_group_two_markers_in_order",
               got == [A("10001"), T(" 和 "), A("10002"), T(" 都到了")], json.dumps(got, ensure_ascii=False))
@@ -525,14 +525,14 @@ def _check_outbound_params(rep, gcfg, root):
     got = wire("at8", GRP, "尾@qq:10003")
     rep.check("ob_group_marker_at_end_no_empty_text", got == [T("尾"), A("10003")],
               json.dumps(got, ensure_ascii=False))
-    got = wire("at9", DM, "@qq:900000001030 收到 @全体", reply_to="123")
-    rep.check("ob_dm_marker_never_promoted", got == [T("@qq:900000001030 收到 @全体")],
+    got = wire("at9", DM, "@qq:101030 收到 @全体", reply_to="123")
+    rep.check("ob_dm_marker_never_promoted", got == [T("@qq:101030 收到 @全体")],
               json.dumps(got, ensure_ascii=False))
 
     all_segs = []
-    for name, out_item in [("x1", item("x1", DM, text="@qq:900000001030 @全体")),
+    for name, out_item in [("x1", item("x1", DM, text="@qq:101030 @全体")),
                            ("x2", item("x2", {"type": "group", "id": groups[3]}, reply_to="7")),
-                           ("x3", item("x3", GRP, text="@全体 @qq:900000001030"))]:
+                           ("x3", item("x3", GRP, text="@全体 @qq:101030"))]:
         stub, _h, _c = run_case(name, gcfg, out_item)
         for call in stub.calls:
             all_segs.extend(call["params"]["message"])
@@ -545,12 +545,12 @@ def _check_outbound_params(rep, gcfg, root):
     rep.check("ob_at_all_never_becomes_a_segment",
               not any(s.get("data", {}).get("qq") == "all" for s in ats), json.dumps(ats))
 
-    stub, host, _c = run_case("deny", gcfg, item("deny", {"type": "group", "id": "700000001"}))
+    stub, host, _c = run_case("deny", gcfg, item("deny", {"type": "group", "id": "700001"}))
     rep.check("ob_group_outside_allowlist_no_send", stub.calls == [] and
               host.last().get("payload", {}).get("status") == "failed" and
               host.last().get("payload", {}).get("response", {}).get("reason") == "target_not_authorized",
               json.dumps(host.last().get("payload", {}).get("response"), ensure_ascii=False))
-    stub, host, _c = run_case("loose", _loose_cfg(gcfg), item("loose", {"type": "group", "id": "900000001718"}))
+    stub, host, _c = run_case("loose", _loose_cfg(gcfg), item("loose", {"type": "group", "id": "301718"}))
     rep.check("ob_allowed_group_without_route_no_send",
               stub.calls == [] and host.last().get("payload", {}).get("status") == "failed", json.dumps(host.last()))
     stub, host, _c = run_case("chan", gcfg, item("chan", {"type": "channel", "id": OWNER}))
@@ -662,13 +662,13 @@ def _check_outbound_verify(rep, gcfg, root):
 
     GRP = {"type": "group", "id": grp}
     DM = {"type": "dm", "id": OWNER}
-    sent_segs = [RP("987654"), T("收到 "), A("900000001030"), T(" 的建议")]
+    sent_segs = [RP("987654"), T("收到 "), A("101030"), T(" 的建议")]
     sent_types = ["reply", "text", "at", "text"]
 
     def actions(stub):
         return [c["action"] for c in stub.calls]
 
-    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:900000001030 的建议", reply_to="987654"),
+    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:101030 的建议", reply_to="987654"),
                                     verify_responses=[_stored_msg(sent_segs, group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -736,7 +736,7 @@ def _check_outbound_verify(rep, gcfg, root):
               ver.get("target_ok") is False and ver.get("stored_target_id") == str(other_grp),
               json.dumps(ver, ensure_ascii=False))
 
-    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:900000001030 的建议", reply_to="987654"),
+    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:101030 的建议", reply_to="987654"),
                               verify_responses=[_stored_msg([T("正文")], group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -752,7 +752,7 @@ def _check_outbound_verify(rep, gcfg, root):
               host.last().get("payload", {}).get("status") == "platform_accepted",
               json.dumps(ver, ensure_ascii=False))
 
-    # real shape (2026-09-24T23:47:00Z, dm:900000001748): the read-back of our own
+    # real shape (2026-09-24T23:47:00Z, dm:101748): the read-back of our own
     # private send carries user_id = our own account, not the peer
     stub, host, _c, _ob = run("dm", item("dm", DM, "正文"),
                               verify_responses=[_stored_msg([T("正文")], user_id=account, account=account)])
@@ -1051,7 +1051,7 @@ def _check_peers(rep, cfg, root):
     pdir = PeerDirectory(store, counters=counters)
     sender = {"user_id": int(member), "nickname": "深夜", "card": "夜猫", "role": "admin", "title": ""}
     api = StubIdentityApi({grp: {"group_id": int(grp), "user_id": int(member), "nickname": "深夜",
-                                 "card": "夜猫", "role": "admin", "title": "", "join_time": 1700000000,
+                                 "card": "夜猫", "role": "admin", "title": "", "join_time": 1700000000,  # personal-scan: ok (fixed epoch, not an id)
                                  "address": "深圳南山区", "interest": "红警3", "eMail": "a@b.c"}})
     env = _peer_env(cfg, member, grp, sender=sender, mid=1)
     shape_before = sorted(env)
@@ -1303,10 +1303,10 @@ def _check_media(rep, gcfg, root):
     rep.check("media_at_all_alone_still_dropped", reason == "no_text", reason)
 
     # an unauthorized member's picture is still never looked at
-    res, reason = inbound_mod.classify(_group_event(gcfg, grp, "1000000001", 5107, message=[dict(IMG_SEG)]),
+    res, reason = inbound_mod.classify(_group_event(gcfg, grp, "199001", 5107, message=[dict(IMG_SEG)]),
                                        gcfg, seen)
     rep.check("media_unauthorized_member_still_denied", reason == "unauthorized_group_member", reason)
-    res, reason = inbound_mod.classify(_group_event(gcfg, "700000001", member, 5108, message=[dict(IMG_SEG)]),
+    res, reason = inbound_mod.classify(_group_event(gcfg, "700001", member, 5108, message=[dict(IMG_SEG)]),
                                        gcfg, seen)
     rep.check("media_unauthorized_group_still_denied", reason == "group_not_allowed", reason)
 

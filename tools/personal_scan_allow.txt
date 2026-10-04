@@ -1,0 +1,22 @@
+# Allow list for `tools/check_staged_secrets.py --personal` (ADR-009 CLEANUP 9.1).
+# One exact token per line; a matched value equal to a token is not a hit. `#` starts a comment line.
+# ONLY non-personal constants may be listed here: byte sizes, protocol limits, upstream error codes, fixed dates.
+# Never list an account, group, host, user, address or anything that identifies the owner or another person;
+# those are replaced with demo values (demo-user-1, demo-group-1, 192.0.2.x) instead.
+# Prefer the inline marker `personal-scan: ok` for a one-off constant on a single line.
+
+# Byte-size limits (1, 4, 8, 512 MiB and 1 GiB) used by sandbox prlimit, read limits and image byte caps.
+1048576
+4194304
+8388608
+536870912
+1073741824
+# 366 * 86400: schedule after/every upper bound in seconds.
+31622400
+# Numeric sanity bound (one million) on a counter.
+1000000
+# Upstream QQ media API error code ("download url has expired"), not an identifier.
+5503007
+# Fixed dates: date-stamped authorized test database names and a model sampling seed.
+20260919
+20260924

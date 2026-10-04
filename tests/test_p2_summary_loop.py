@@ -20,6 +20,7 @@ from asuna.config import load
 from asuna.dialogue_summary import DialogueSummarizer
 from asuna.memory import MemoryService
 from asuna.memory_indexer import MemoryIndexer
+from conftest import isolated_database, drop_database
 from asuna.state import Store
 from asuna import summary_trigger
 
@@ -38,7 +39,7 @@ def workspace_config(config):
 
 @pytest.fixture
 def store():
-    db = Store(load(CONFIG_PATH), TEST_DATABASE)
+    db = Store(load(CONFIG_PATH), isolated_database(TEST_DATABASE))
     db.migrate()
     db.config = workspace_config(db.config)
     for name in CLEARED:
@@ -47,6 +48,7 @@ def store():
     for name in CLEARED:
         db.db[name].delete_many({})
     db.client.close()
+    drop_database(db.config, db.name)
 
 
 def test_offline_cases_all_pass():
@@ -131,7 +133,7 @@ def test_group_summary_loop_on_real_store(store):
     cases.seed_real(store, data)
     saved, evidence, lane = _tick_group(store)
     assert saved and saved['kind'] == 'dialogue_summary', saved
-    assert saved['participants'] == sorted([cases.PERSON, cases.PERSON_B, 'xiaoman']), saved
+    assert saved['participants'] == sorted([cases.PERSON, cases.PERSON_B, 'demo']), saved
     assert saved['source_by_speaker'][cases.PERSON] == ['in-grp-1-11', 'in-grp-1-14'], saved
     assert saved['attribution']['corrections'][0]['target_resolution'] == 'reply_link', saved
     assert saved['trigger']['signals'], saved
@@ -182,7 +184,7 @@ def test_summary_covering_someone_else_is_not_cited_on_real_store(store):
     cases.seed_real(store, data)
     cases.add_row(store, 'memory_units', cases._summary_unit(
         'summary-b-only', '小舟说他去，工具他带。', ['in-grp-1-12'],
-        [cases.PERSON_B, 'xiaoman'], [12, 12]))
+        [cases.PERSON_B, 'demo'], [12, 12]))
     cases.add_row(store, 'memory_units', cases.monologue_unit(cases.PERSON, 'ep-g2'))
     a_turn = MemoryService(store).commit_understanding(
         cases.group_episode(cases.PERSON, selected=['summary-b-only'], ep_id='ep-g2'), '小舟愿意去。')

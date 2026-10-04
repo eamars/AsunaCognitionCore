@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Asuna V1 Character Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "next",
+    "goal",
+    "constraints",
+    "recall_query",
+    "speak_before_action"
+  ],
+  "properties": {
+    "next": {
+      "enum": [
+        "speak",
+        "delegate",
+        "recall",
+        "silent"
+      ]
+    },
+    "goal": {
+      "type": "string",
+      "maxLength": 1200
+    },
+    "constraints": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      }
+    },
+    "recall_query": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "speak_before_action": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "next": {
+            "const": "delegate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "goal": {
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "next": {
+            "const": "recall"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "recall_query": {
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}

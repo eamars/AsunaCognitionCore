@@ -1,6 +1,6 @@
 """Project a verified QQ peer snapshot into the role context.
 
-Adapted from XiaoMan's ADR-005 development draft (host_wiring/peer_context.py).
+Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.py).
 
 宿主侧落点：src/asuna/peer_context.py（新文件，纯标准库）。
 

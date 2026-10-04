@@ -1,12 +1,25 @@
+import getpass
 import json
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 import pytest
 from asuna.config import ROOT
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
 from asuna.state import Denied,Conflict
 from asuna.tasks import TaskService,ToolBroker
+
+
+def mongo_endpoint(config):
+    """The configured Mongo host the sandbox must not reach; derived, never hard-coded."""
+    try:
+        parts = urlsplit(config.get('mongo_uri') or '')
+        if parts.hostname and ',' not in parts.netloc:
+            return parts.hostname, parts.port or 27017
+    except ValueError:
+        pass
+    return '192.0.2.10', 27017
 
 
 def task_setup(store):
@@ -47,7 +60,8 @@ def test_E14_simulated_effect_dedupe(store):
 def test_E06_sandbox_cannot_access_host_credentials_or_network(store):
     service,task,broker,work=task_setup(store)
     try:
-        result=broker.call('s-test','isolation','sandbox_run',{'argv':['python3','-c',"import pathlib,os,socket; assert not pathlib.Path('/mnt/c').exists(); assert not pathlib.Path('/home/rba90').exists(); assert not any('KEY' in k or 'TOKEN' in k or 'MONGO' in k for k in os.environ); s=socket.socket();s.settimeout(1); assert s.connect_ex(('192.168.2.10',27027))!=0;print('isolated')"]})
+        host_home='/home/'+getpass.getuser();mongo=mongo_endpoint(store.config)
+        result=broker.call('s-test','isolation','sandbox_run',{'argv':['python3','-c',"import pathlib,os,socket; assert not pathlib.Path('/mnt/c').exists(); assert not pathlib.Path(%r).exists(); assert not any('KEY' in k or 'TOKEN' in k or 'MONGO' in k for k in os.environ); s=socket.socket();s.settimeout(1); assert s.connect_ex(%r)!=0;print('isolated')"%(host_home,mongo)]})
         assert result['exit_code']==0,result
         with pytest.raises(Denied):broker.call('s-test','publish','publish',{'text':'bypass'})
         assert store.db.messages.count_documents({'direction':'outbound'})==0

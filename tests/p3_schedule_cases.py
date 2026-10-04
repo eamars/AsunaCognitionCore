@@ -5,7 +5,8 @@
 被测的是**真文件**：把 src/asuna/schedule.py 与 schedule_rules.py 复制进一个临时包，
 外面垫四个小替身（state/channels/integration/dsh_lane），于是 ScheduleService 的真 create /
 update / cancel / deliver / reconcile / _rearm 全部真跑一遍，只是底下没有 Mongo 也没有 DSH。
-时、日期、原生事件日志都是真算的：DST 用 Pacific/Auckland 的真规则，不拿 86400 秒冒充每日。
+时、日期、原生事件日志都是真算的：DST 用示例时区 ZONE（与任何部署无关的北半球 DST 时区）的真规则，
+不拿 86400 秒冒充每日。
 真 Mongo 那一层（真 CAS、真集合）由操作员跑 tests/test_p3_schedule.py。
 """
 import os
@@ -20,9 +21,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.environ.get('ASUNA_P3_SRC') or os.path.join(ROOT, 'src', 'asuna')
                                                 # 反证时把被测面指向改动前的副本
 
-T0 = datetime(2026, 9, 24, 5, 0, tzinfo=timezone.utc)      # 2026-09-24 17:00 Auckland（周四）
-DST_START = datetime(2026, 9, 26, 14, 0, tzinfo=timezone.utc)   # 当地 09-27 02:00→03:00
-DST_END = datetime(2026, 4, 4, 14, 0, tzinfo=timezone.utc)      # 当地 04-05 03:00→02:00
+ZONE = 'Europe/Berlin'  # personal-scan: ok (unrelated demo DST zone for the offline cases)
+OTHER_ZONE = 'Etc/GMT-9'                                     # 第二个时区，只验优先级
+T0 = datetime(2026, 9, 24, 5, 0, tzinfo=timezone.utc)      # 2026-09-24 07:00 ZONE（周四）
+DST_START = datetime(2027, 3, 28, 1, 0, tzinfo=timezone.utc)   # 当地 2027-03-28 02:00→03:00
+DST_END = datetime(2026, 10, 25, 1, 0, tzinfo=timezone.utc)    # 当地 10-25 03:00→02:00
 
 STUB_STATE = '''from datetime import datetime, timezone
 class Conflict(RuntimeError):
@@ -274,7 +277,7 @@ class Evidence:
 
 def setup(clock=T0, config=None, lane=None, controller=None):
     schedule, rules, state = load_package()
-    store = Store(config or config_with({'timezone': 'Pacific/Auckland'}))
+    store = Store(config or config_with({'timezone': ZONE}))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
     state.CLOCK[0] = clock
     lane = lane or Lane()
@@ -309,7 +312,7 @@ def case(function):
 @case
 def after_and_interval(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     fire = rules.next_fire(rules.normalize_rule({'intent': 'x', 'after_seconds': 600}), zone['tz'], env['state'].CLOCK[0])
     payload = rules.native_payload({'after_seconds': 600}, fire, env['state'].CLOCK[0])
     return fire == env['state'].CLOCK[0] + timedelta(seconds=600) and payload == {'after_seconds': 600}, payload
@@ -338,7 +341,7 @@ def every_uses_native_repeat(env):
 @case
 def past_absolute_time_is_refused(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'at': '2026-09-23T09:00'})
     try:
         rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
@@ -350,7 +353,7 @@ def past_absolute_time_is_refused(env):
 @case
 def absolute_with_offset_is_exact_instant(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'at': '2026-09-25T02:00:00Z'})
     fire = rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
     return rule.get('at_utc') is True and fire == datetime(2026, 9, 25, 2, tzinfo=timezone.utc), fire.isoformat()
@@ -359,8 +362,8 @@ def absolute_with_offset_is_exact_instant(env):
 @case
 def gap_absolute_time_asks_instead_of_guessing(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
-    rule = rules.normalize_rule({'intent': 'x', 'at': '2026-09-27T02:30'})   # 那天 02:00→03:00
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
+    rule = rules.normalize_rule({'intent': 'x', 'at': '2027-03-28T02:30'})   # 那天 02:00→03:00
     try:
         rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
         return False, '不存在的钟点被默默接受了'
@@ -371,21 +374,21 @@ def gap_absolute_time_asks_instead_of_guessing(env):
 @case
 def daily_uses_local_clock_not_86400(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'clock': {'time': '09:00'}})
     first = rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
     second = rules.next_fire(rule, zone['tz'], first + timedelta(seconds=1))
-    return (first == datetime.fromisoformat('2026-09-24T21:00:00+00:00')
-            and second == datetime.fromisoformat('2026-09-25T21:00:00+00:00')
+    return (first == datetime.fromisoformat('2026-09-24T07:00:00+00:00')
+            and second == datetime.fromisoformat('2026-09-25T07:00:00+00:00')
             and (second - first) == timedelta(hours=24)), [first.isoformat(), second.isoformat()]
 
 
 @case
 def daily_across_dst_start_shifts_by_one_hour(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'clock': {'time': '09:00'}})
-    before = rules.next_fire(rule, zone['tz'], datetime(2026, 9, 25, 3, tzinfo=timezone.utc))
+    before = rules.next_fire(rule, zone['tz'], datetime(2027, 3, 27, 3, tzinfo=timezone.utc))
     after = rules.next_fire(rule, zone['tz'], before + timedelta(seconds=1))
     return ((after - before) == timedelta(hours=23)
             and before.astimezone(zone['tz']).strftime('%H:%M') == '09:00'
@@ -396,9 +399,9 @@ def daily_across_dst_start_shifts_by_one_hour(env):
 @case
 def daily_across_dst_end_stays_local(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'clock': {'time': '09:00'}})
-    before = rules.next_fire(rule, zone['tz'], datetime(2026, 4, 3, 3, tzinfo=timezone.utc))
+    before = rules.next_fire(rule, zone['tz'], datetime(2026, 10, 24, 3, tzinfo=timezone.utc))
     after = rules.next_fire(rule, zone['tz'], before + timedelta(seconds=1))
     return ((after - before) == timedelta(hours=25)
             and after.astimezone(zone['tz']).strftime('%H:%M') == '09:00'), \
@@ -408,7 +411,7 @@ def daily_across_dst_end_stays_local(env):
 @case
 def weekly_only_named_weekdays(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'clock': {'time': '21:30', 'weekdays': [0, 2]}})
     fire = rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
     local = fire.astimezone(zone['tz'])
@@ -418,37 +421,40 @@ def weekly_only_named_weekdays(env):
 @case
 def clock_on_gap_day_moves_to_first_valid_moment(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rule = rules.normalize_rule({'intent': 'x', 'clock': {'time': '02:30', 'weekdays': [6]}})
-    fire = rules.next_fire(rule, zone['tz'], env['state'].CLOCK[0])
-    row = rules.project({'_id': 'p', 'intent': 'x', 'status': 'ACTIVE', 'rule': rule}, zone,
-                        env['state'].CLOCK[0])
+    eve = DST_START - timedelta(days=1, hours=13)              # 拨快那周的周五
+    fire = rules.next_fire(rule, zone['tz'], eve)
+    row = rules.project({'_id': 'p', 'intent': 'x', 'status': 'ACTIVE', 'rule': rule}, zone, eve)
     return (fire == DST_START and 'dst_note' in row and '02:30' in row['dst_note']), row.get('dst_note')
 
 
 @case
 def ambiguous_clock_takes_the_earlier_one(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
-    utc, kind = rules.wall_to_utc(datetime(2026, 4, 5, 2, 30), zone['tz'])
-    return kind == 'ambiguous' and utc == datetime(2026, 4, 4, 13, 30, tzinfo=timezone.utc), utc.isoformat()
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
+    utc, kind = rules.wall_to_utc(datetime(2026, 10, 25, 2, 30), zone['tz'])
+    return kind == 'ambiguous' and utc == datetime(2026, 10, 25, 0, 30, tzinfo=timezone.utc), utc.isoformat()
 
 
 @case
 def timezone_precedence_and_plan_override(env):
     rules = env['rules']
-    scene = dict(SCENE, timezone='Asia/Tokyo')
-    route_zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), scene)
+    scene = dict(SCENE, timezone=OTHER_ZONE)
+    route_zone = rules.scene_timezone(config_with({'timezone': ZONE}), scene)
     scene_zone = rules.scene_timezone(config_with(None), scene)
-    config_zone = rules.scene_timezone(config_with(None, {'timezone': 'Asia/Tokyo'}), SCENE)
+    config_zone = rules.scene_timezone(config_with(None, {'timezone': OTHER_ZONE}), SCENE)
     default_zone = rules.scene_timezone(config_with(None), SCENE)
-    plan_zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), scene,
-                                     {'timezone': 'Asia/Tokyo'})
-    return (route_zone['name'] == 'Pacific/Auckland' and route_zone['source'] == 'route'
-            and scene_zone['name'] == 'Asia/Tokyo' and scene_zone['source'] == 'scene'
+    plan_zone = rules.scene_timezone(config_with({'timezone': ZONE}), scene,
+                                     {'timezone': OTHER_ZONE})
+    # 核心不带任何人的默认时区：都没配就是 UTC/unset；反证跑的旧副本还有 DEFAULT_TIMEZONE/default。
+    legacy = getattr(rules, 'DEFAULT_TIMEZONE', None)
+    fallback = (legacy, 'default') if legacy else ('UTC', 'unset')
+    return (route_zone['name'] == ZONE and route_zone['source'] == 'route'
+            and scene_zone['name'] == OTHER_ZONE and scene_zone['source'] == 'scene'
             and config_zone['source'] == 'config'
-            and default_zone['name'] == 'Pacific/Auckland' and default_zone['source'] == 'default'
-            and plan_zone['name'] == 'Asia/Tokyo'), [z['source'] for z in (route_zone, scene_zone, config_zone, default_zone, plan_zone)]
+            and (default_zone['name'], default_zone['source']) == fallback
+            and plan_zone['name'] == OTHER_ZONE), [z['source'] for z in (route_zone, scene_zone, config_zone, default_zone, plan_zone)]
 
 
 @case
@@ -474,9 +480,9 @@ def create_daily_registers_one_native_single_shot(env):
     plan = service.create(EP, DAILY)
     creates = [e['data']['schedule'] for e in lane.events if e['data'].get('operation') == 'create']
     return (plan['status'] == 'ACTIVE' and plan['rule'] == {'clock': {'time': '09:00'}}
-            and plan['timezone'] == 'Pacific/Auckland' and len(creates) == 1
+            and plan['timezone'] == ZONE and len(creates) == 1
             and 'after_seconds' in creates[0] and 'every_seconds' not in creates[0]
-            and plan['next_fire_at'] == '2026-09-24T21:00:00+00:00'), creates
+            and plan['next_fire_at'] == '2026-09-24T07:00:00+00:00'), creates
 
 
 @case
@@ -506,7 +512,7 @@ def fired_daily_stays_active_and_arms_next_day(env):
     fire(env, plan['schedule_id'])
     after = store.db.plans.find_one({'_id': plan['_id']})
     return (after['status'] == 'ACTIVE' and len(controller.received) == 1
-            and after['next_fire_at'] == '2026-09-25T21:00:00+00:00'
+            and after['next_fire_at'] == '2026-09-25T07:00:00+00:00'
             and len(lane.live(plan['_id'])) == 1 and after['fire_count'] == 1), \
         {'status': after['status'], 'next': after['next_fire_at'], 'live': len(lane.live(plan['_id']))}
 
@@ -644,7 +650,7 @@ def outage_acts_once_and_arms_the_future(env):
     service.reconcile()
     after = store.db.plans.find_one({'_id': plan['_id']})
     fire_at = datetime.fromisoformat(after['next_fire_at'])
-    local = fire_at.astimezone(env['rules'].ZoneInfo('Pacific/Auckland'))
+    local = fire_at.astimezone(env['rules'].ZoneInfo(ZONE))
     return (len(controller.received) == 1 and after['status'] == 'ACTIVE'
             and fire_at > env['state'].CLOCK[0] and local.strftime('%H:%M') == '09:00'
             and after.get('fire_count') == 1), {'acts': len(controller.received),
@@ -653,9 +659,11 @@ def outage_acts_once_and_arms_the_future(env):
 
 # ── DECIDE 形状与控制字段：连 coordinator.py 的真 schema 一起验 ────────
 STUB_EXTRA = {
-    'config.py': 'from pathlib import Path\nimport os\nBUNDLE=Path(os.environ["ASUNA_BUNDLE"])\n'
-                 'def character_id(config):\n    return config.get("character_id", "xiaoman")\n'
-                 'def prompt_path(config, name):\n    return BUNDLE/"prompts"/name\n'
+    'config.py': 'import json, os\nfrom pathlib import Path\n'
+                 'RESOURCES=Path(os.environ["ASUNA_P3_RESOURCES"])\n'
+                 'def character_id(config):\n    return config.get("character_id", "demo")\n'
+                 'def prompt_path(config, name):\n    return RESOURCES/"prompts"/name\n'
+                 'def schema(name):\n    return json.loads((RESOURCES/"schemas"/name).read_text(encoding="utf-8"))\n'
                  'def redact_text(text, config):\n    return text\n',
     'evidence.py': 'import json, hashlib\ndef canonical(value):\n    return json.dumps(value, sort_keys=True).encode()\n'
                    'def sha(raw):\n    return hashlib.sha256(raw).hexdigest()\n',
@@ -670,8 +678,8 @@ def load_coordinator():
     if 'p3coord' in _PACKAGES:
         return _PACKAGES['p3coord']
     import json
-    os.environ['ASUNA_BUNDLE'] = os.path.join(ROOT, 'docs', 'development_plans',
-                                              'ADR-001-asuna_v2_v1_handoff')
+    # 提示词与 schema 跟包走（src/asuna/resources），替身 config 只指过去，不另备一份。
+    os.environ['ASUNA_P3_RESOURCES'] = os.path.join(SRC, 'resources')
     root = tempfile.mkdtemp(prefix='p3coord-')
     package = os.path.join(root, 'p3coord')
     os.makedirs(package)
@@ -680,8 +688,11 @@ def load_coordinator():
     # self_state 也得跟着装：真 context.prepare 读持久自我描述时 import 它。少带一个真文件，
     # 这条用例只会红在 ModuleNotFoundError 上，看不出是夹具缺文件——真文件新增同包 import 时这里同步。
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
+    # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
-                 'scene_links.py'):   # 真 context 现在 import 它：少带一个真文件只会红在 ModuleNotFound
+                 'scene_links.py', 'render.py', 'visibility.py'):   # 少带一个真文件只会红在 ModuleNotFound
+        if name in ('render.py', 'visibility.py') and not os.path.exists(os.path.join(SRC, name)):
+            continue
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))
     bodies = dict(STUB_EXTRA, **{'state.py': STUB_STATE, 'channels.py': STUB_CHANNELS,
                                  'integration.py': STUB_INTEGRATION, 'dsh_lane.py': STUB_LANE})
@@ -689,7 +700,7 @@ def load_coordinator():
         open(os.path.join(package, name), 'w', encoding='utf-8').write(body)
     sys.path.insert(0, root)
     for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
-                 'p3coord.vision', 'p3coord.scene_links'):
+                 'p3coord.vision', 'p3coord.scene_links', 'p3coord.render', 'p3coord.visibility'):
         sys.modules.pop(name, None)
     module = __import__('p3coord.coordinator', fromlist=['WORKSPACE_DECISION_SCHEMA'])
     _PACKAGES['p3coord'] = (module, json)
@@ -738,7 +749,7 @@ def decide_schema_still_rejects_bad_shapes(env):
 @case
 def rejected_time_does_not_kill_the_turn(env):
     module, _ = load_coordinator()
-    store = Store(config_with({'timezone': 'Pacific/Auckland'}))
+    store = Store(config_with({'timezone': ZONE}))
     episode = {'_id': 'ep-9', 'revision': 3, 'scope_key': 'scene:' + SCENE_ID}
     store.db.episodes.rows['ep-9'] = dict(episode)          # 这条回合已经在库里躺着了
     coordinator = module.Coordinator(store, None, context=object(), publisher=object())
@@ -780,7 +791,7 @@ def hooks_are_wired_in_context_and_coordinator(env):
 @case
 def projection_explains_active_cancelled_and_suspended(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     rows = [rules.project({'_id': 'a', 'intent': '每天喝水', 'status': 'ACTIVE',
                            'rule': {'clock': {'time': '09:00'}}}, zone, env['state'].CLOCK[0]),
             rules.project({'_id': 'b', 'intent': '旧的一次性', 'status': 'CANCELLED',
@@ -788,7 +799,7 @@ def projection_explains_active_cancelled_and_suspended(env):
             rules.project({'_id': 'c', 'intent': '挂着的每周', 'status': 'SUSPENDED',
                            'rule': {'clock': {'time': '09:00'}}, 'last_outcome': 'SCHEDULE_CLOCK_NO_UPCOMING'},
                           zone, env['state'].CLOCK[0])]
-    return (rows[0]['local'].startswith('2026-09-25T09:00') and rows[0]['timezone'] == 'Pacific/Auckland'
+    return (rows[0]['local'].startswith('2026-09-24T09:00') and rows[0]['timezone'] == ZONE
             and rows[1]['why_no_next'] == '已取消' and 'SCHEDULE_CLOCK_NO_UPCOMING' in rows[2]['why_no_next']), \
         [row.get('local') or row.get('why_no_next') for row in rows]
 
@@ -796,9 +807,9 @@ def projection_explains_active_cancelled_and_suspended(env):
 @case
 def control_note_carries_the_local_clock(env):
     rules = env['rules']
-    zone = rules.scene_timezone(config_with({'timezone': 'Pacific/Auckland'}), SCENE)
+    zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     note = rules.control_note(zone, env['state'].CLOCK[0])
-    return (note['now_local'] == '2026-09-24T17:00+12:00' and note['weekday'] == '周四'
+    return (note['now_local'] == '2026-09-24T07:00+02:00' and note['weekday'] == '周四'
             and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}
             and note['min_interval_seconds'] == 300), note['now_local']
 
@@ -807,11 +818,11 @@ def control_note_carries_the_local_clock(env):
 def context_projection_runs_end_to_end(env):
     """真 context.py 的 prepare 跑一遍：她拿到的计划行得是这个场景的钟面，不是 UTC 裸时刻。"""
     module, _ = load_coordinator()
-    store = Store(config_with({'timezone': 'Pacific/Auckland'}))
+    store = Store(config_with({'timezone': ZONE}))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
     store.db.state_revisions.rows['rev-persona'] = {
         '_id': 'rev-persona', 'entity_key': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-        'revision': 1, 'content': {'body': '沈小满，24 岁。' + '说话清淡直接。' * 12},
+        'revision': 1, 'content': {'body': '演示角色，24 岁。' + '说话清淡直接。' * 12},
         'source_ids': [], 'parent_revision_id': None}
     store.db.state_heads.rows['persona:P1|global-safe'] = {
         '_id': 'persona:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'rev-persona',
@@ -819,7 +830,7 @@ def context_projection_runs_end_to_end(env):
     store.db.plans.rows['plan-7'] = {'_id': 'plan-7', 'scene_id': SCENE_ID, 'person_id': PERSON,
                                      'scope_key': 'scene:' + SCENE_ID, 'policy_epoch': 7,
                                      'intent': '每天提醒我喝水', 'rule': {'clock': {'time': '09:00'}},
-                                     'status': 'ACTIVE', 'timezone': 'Pacific/Auckland',
+                                     'status': 'ACTIVE', 'timezone': ZONE,
                                      'tz_source': 'route', 'plan_version': 1, 'revision': 1,
                                      'created_at': '2026-09-24T04:00:00+00:00'}
     _system, context, _manifest = module.ContextBuilder(store, retrieval=None).prepare(
@@ -829,11 +840,11 @@ def context_projection_runs_end_to_end(env):
     # 这一条走的是真 now（不是假时钟），所以断言"形状与口径"而不是钉死某个日期：
     # 下一次必须落在本地 09:00、带这个场景的偏移、并且晚于她看到的现场钟面。
     fire = datetime.fromisoformat(rows[0]['local'])
-    return (len(rows) == 1 and rows[0]['timezone'] == 'Pacific/Auckland'
+    return (len(rows) == 1 and rows[0]['timezone'] == ZONE
             and '每天' in rows[0]['description'] and rows[0]['local'][11:16] == '09:00'
-            and rows[0]['local'].endswith(('+12:00', '+13:00'))
+            and rows[0]['local'].endswith(('+01:00', '+02:00'))
             and fire > datetime.fromisoformat(note['now_local'])
-            and note['timezone'] == 'Pacific/Auckland'
+            and note['timezone'] == ZONE
             and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}),         [rows[0].get('local'), note.get('now_local')]
 
 
@@ -846,7 +857,7 @@ def media_placeholder_reaches_the_character_scene(env):
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
     store.db.state_revisions.rows['rev-persona'] = {
         '_id': 'rev-persona', 'entity_key': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-        'revision': 1, 'content': {'body': '沈小满，24 岁。' + '说话清淡直接。' * 12},
+        'revision': 1, 'content': {'body': '演示角色，24 岁。' + '说话清淡直接。' * 12},
         'source_ids': [], 'parent_revision_id': None}
     store.db.state_heads.rows['persona:P1|global-safe'] = {
         '_id': 'persona:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'rev-persona',

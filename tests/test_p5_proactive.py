@@ -17,6 +17,7 @@ from asuna import proactive
 from asuna.channels import group_context
 from asuna.config import load
 from asuna.context import ContextBuilder
+from conftest import isolated_database, drop_database
 from asuna.state import Store
 
 import p2_summary_loop_cases as p2
@@ -30,7 +31,7 @@ CLEARED = ('identities', 'scenes', 'messages', 'memory_units', 'state_heads', 's
 
 @pytest.fixture
 def store():
-    db = Store(load(CONFIG_PATH), TEST_DATABASE)
+    db = Store(load(CONFIG_PATH), isolated_database(TEST_DATABASE))
     db.migrate()
     for name in CLEARED:
         db.db[name].delete_many({})
@@ -38,6 +39,7 @@ def store():
     for name in CLEARED:
         db.db[name].delete_many({})
     db.client.close()
+    drop_database(db.config, db.name)
 
 
 def test_offline_cases_all_pass():

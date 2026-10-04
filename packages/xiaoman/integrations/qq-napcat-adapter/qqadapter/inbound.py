@@ -6,7 +6,7 @@ snapshot -> self echo -> content -> local dedup.  Real `at` segments become
 `mentioned_account_ids` (list of account id strings) and a real `reply` segment
 becomes an optional `reply_to`.  In group text each real `at` is additionally
 rendered in place as `@<account>` so the sentence keeps its shape: "at 小满 +
-你刚刚回复 + at 900000001030 + 了么？" stays "@900000001354你刚刚回复 @900000001030了么？"
+你刚刚回复 + at 101030 + 了么？" stays "@101354你刚刚回复 @101030了么？"
 instead of collapsing into "你刚刚回复  了么？".  That rendering is a readable
 representation of position only - wake permission still comes from the segment
 list alone, and an "@" typed in plain text never becomes a mention.  `reply`

@@ -8,7 +8,8 @@ import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
-from .config import ROOT,BUNDLE,prompt_path,redact_text
+from .config import ROOT,prompt_path,redact_text,schema
+from .render import action_values
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .skills import skills_directory
@@ -21,7 +22,7 @@ from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES
 from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
                      route_filtered_tool_names, task_attachment_context)
 
-RESULT_SCHEMA=json.loads((BUNDLE/'schemas/task_result.schema.json').read_text(encoding='utf-8'))
+RESULT_SCHEMA=schema('task_result.schema.json')
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
 
 CONSULT_TOOL = {'name':'consult_character',
@@ -223,7 +224,7 @@ class ToolBroker:
 
     def bind(self,session,task,workspace):
         if self.store.config.get('task_mode')=='workspace':
-            from .resources import workspace_grant
+            from .grants import workspace_grant
             grant=workspace_grant(self.store.config,task['scene_id'],task['requester_id'])
             if Path(workspace).resolve()!=Path(grant['workspace']).resolve():raise Denied('WORKSPACE_GRANT_MISMATCH')
             protected=[Path(workspace)/p for p in grant.get('read_only_paths',[])]
@@ -391,7 +392,7 @@ class Executor:
         persona=self.service.store.db.state_revisions.find_one({'_id':task['persona_revision']})
         if self.service.store.config.get('task_mode')=='workspace':
             return self._run_workspace(task,binding,source,persona,healthy)
-        system=(BUNDLE/'prompts/executor.md').read_text(encoding='utf-8')+'\n共享身份与适用价值（不得生成或改写角色独白/公开回复）：\n'+persona['content']['body']
+        system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+action_values(self.service.store)
         text=json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],'allowed_capabilities':task['allowed_capabilities'],'workspace':'/task','result_schema':RESULT_SCHEMA},ensure_ascii=False)+'\n使用工具核实目标。最终只返回符合result_schema的JSON，不使用Markdown围栏。所有facts必须引用实际工具返回的evidence_ref。'
         text+='\nartifact_refs只能使用工具返回的artifact_ref，不得填文件路径。effect_receipts只能使用工具返回的effect_receipt。'
         for attempt in range(2):
@@ -409,9 +410,9 @@ class Executor:
                 text='结果未被接受：'+str(exc)+'。只修复结果JSON，不重复副作用。输出必须是单个原始JSON对象，以 { 开始、以 } 结束；禁止 Markdown 代码围栏、解释或前后文字。artifact_refs只使用实际返回的artifact_ref，effect_receipts只使用effect_receipt。'+json.dumps({'task_id':task['_id'],'intent_revision':task['intent_revision'],'result_schema':RESULT_SCHEMA},ensure_ascii=False)
 
     def _run_workspace(self,task,binding,source,persona,healthy):
-        from .resources import workspace_grant
+        from .grants import workspace_grant
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
-        system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+'\n共享角色价值（不代写角色台词或独白）：\n'+persona['content']['body']
+        system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+action_values(self.service.store)
         payload={'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
                  'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])}
         # Pull 模式：只告诉她有什么图、ref 是什么、能不能拉；图片正文不进输入。

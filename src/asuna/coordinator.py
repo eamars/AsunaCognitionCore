@@ -5,14 +5,15 @@ from pathlib import Path
 import threading
 import uuid
 import jsonschema
-from .config import BUNDLE, prompt_path, character_id
+from .config import prompt_path, character_id, schema
 from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
 from .publish import PublishService
+from .render import episode_system
 from .state import Store, Conflict, Denied, now
 
-DECISION_SCHEMA=json.loads((BUNDLE/'schemas/decision.schema.json').read_text(encoding='utf-8'))
+DECISION_SCHEMA=schema('decision.schema.json')
 # The number of natural-language constraints does not decide whether a valid
 # intention may proceed. Keep control-field validation, not a prose item quota.
 DECISION_SCHEMA['properties']['constraints'].pop('maxItems',None)
@@ -68,9 +69,9 @@ class Coordinator:
                 return existing
             from .ingress import persist_input
             persist_input(self.store,event)
-            system,context,manifest=self.context.prepare(event,persona)
+            _,context,manifest=self.context.prepare(event,persona)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system':system,'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
+            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
             if event.get('native_session_id'):
@@ -161,7 +162,7 @@ class Coordinator:
         binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
         if ep.get('character_context'):binding+=':'+ep['character_context']
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
-        value=self.character.generate(binding,operation,phase,instruction,ep['system'])
+        value=self.character.generate(binding,operation,phase,instruction,episode_system(self.store,ep))
         self.crash('after_lane_delivery')
         self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
         if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
@@ -292,7 +293,7 @@ class Coordinator:
                         return self.advance(ep_id)
                     if next_step=='delegate':
                         if self.store.config.get('task_mode')=='workspace':
-                            from .resources import workspace_grant
+                            from .grants import workspace_grant
                             workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
                         task_id=ep.get('supersedes_task_id') or 'task-'+ep_id
                         intent_revision=1

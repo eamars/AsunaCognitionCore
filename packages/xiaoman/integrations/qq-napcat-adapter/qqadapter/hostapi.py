@@ -105,7 +105,7 @@ class HostApi:
         """Reachability check that cannot consume a real publication."""
         saved = self.token
         try:
-            self.token = "probe-invalid-token-0000000000"
+            self.token = "probe-invalid-token-xxxxxxxxxx"
             res = self._request("GET", "/v1/channels/%s/outbox?wait_seconds=0" % self.channel_id, None, timeout=8)
         finally:
             self.token = saved

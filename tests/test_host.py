@@ -14,7 +14,7 @@ from asuna.evidence import Evidence
 from asuna.ingress import persist_input, input_state, episode_id
 from asuna.host import RuntimeHost, _workspace_overlaps
 from asuna.lanes import FakeLane, LaneResult
-from asuna.resources import workspace_grant
+from asuna.grants import workspace_grant
 from asuna.router import Router
 from asuna.state import Denied
 
@@ -121,7 +121,7 @@ def test_reply_history_identifies_recipient_without_cross_scene_lookup(store):
         'policy_epoch':1,'scene_seq':1,'direction':'inbound','author':'A','text':'my question',
         'event':{'channel':{'platform_event_id':'question-id'}}})
     store.put('messages', {'_id':'answer','scene_id':'dm-a','scope_key':'scene:dm-a',
-        'policy_epoch':1,'scene_seq':2,'direction':'outbound','author':'xiaoman','text':'my answer',
+        'policy_epoch':1,'scene_seq':2,'direction':'outbound','author':'demo','text':'my answer',
         'delivery_state':'DELIVERED','platform_message_id':'answer-id','platform_reply_to':'question-id'})
     _, context, _ = ContextBuilder(store).prepare(incoming)
     answer = next(row for row in context['delivered_history'] if row['_id']=='answer')
@@ -209,7 +209,7 @@ def test_retrieval_handles_null_timestamps_and_large_authorized_scope(store,tmp_
     retrieval=Retrieval(store,Evidence(tmp_path/'retrieval'))
     def unavailable(*args):raise RuntimeError('embedding unavailable in local check')
     retrieval.embed=unavailable
-    base={'scope_key':'scene:dm-a','policy_epoch':1,'character_id':'xiaoman','status':'active','revision':1,'schema_version':1,
+    base={'scope_key':'scene:dm-a','policy_epoch':1,'character_id':'demo','status':'active','revision':1,'schema_version':1,
           'body_markdown':'历史材料','embedding_status':'PENDING','source_event_ids':[],'occurred_at':None}
     store.db.memory_units.insert_many([{**base,'_id':'null-'+str(i)} for i in range(4100)])
     try:

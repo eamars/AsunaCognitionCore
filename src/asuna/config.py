@@ -6,8 +6,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(os.environ.get('ASUNA_DATA_ROOT', Path(__file__).resolve().parents[2])).resolve()
+# Behavior files (core prompts, runtime schemas) ship inside the package and are
+# published with it; the workspace never supplies or overrides them.
 RESOURCES = Path(__file__).with_name('resources')
-BUNDLE = RESOURCES if RESOURCES.is_dir() else ROOT / 'docs/development_plans/ADR-001-asuna_v2_v1_handoff'
 
 
 def character_id(config):
@@ -16,7 +17,11 @@ def character_id(config):
 
 
 def prompt_path(config: dict, name: str) -> Path:
-    return Path(config.get('prompts_dir', BUNDLE / 'prompts')) / name
+    return RESOURCES / 'prompts' / name
+
+
+def schema(name: str) -> dict:
+    return json.loads((RESOURCES / 'schemas' / name).read_text(encoding='utf-8'))
 
 
 def redact_text(text: str, config: dict) -> str:
@@ -50,11 +55,17 @@ def load(path: str | Path = 'config/local.json') -> dict:
     for lane in ('character', 'executor'):
         value[lane] = validate(value[lane])
     value['_model_settings_path'] = str(override)
-    integration_path = Path(path).parent / 'integration.local.json'
-    if integration_path.exists():
+    # Channel and integration grants live in sibling files of the owner's main
+    # config only. Any other profile (e.g. the demo) names them explicitly, so
+    # a second config in the same folder never inherits real QQ routes.
+    def sibling(key, legacy_name):
+        name = value.get(key) or (legacy_name if Path(path).name == 'local.json' else None)
+        return Path(path).parent / name if name else None
+    integration_path = sibling('integration_config', 'integration.local.json')
+    if integration_path and integration_path.exists():
         value['integration'] = json.loads(integration_path.read_text(encoding='utf-8'))
-    channel_path = Path(path).parent / 'asuna-channel.local.json'
-    if channel_path.exists():
+    channel_path = sibling('channel_config', 'asuna-channel.local.json')
+    if channel_path and channel_path.exists():
         channels = json.loads(channel_path.read_text(encoding='utf-8'))
         if channels.get('enabled') is True:
             value['channels'] = channels['channels']

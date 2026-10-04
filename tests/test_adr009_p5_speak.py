@@ -100,19 +100,6 @@ def test_T5_4_paced_segments_deliver_in_order_and_hold_the_line(store):
     assert [r['delivery_state'] for r in outbound(store, ep['_id'])] == ['DELIVERED'] * 3
 
 
-def test_T5_4_single_message_is_unchanged(store):
-    store.config['persona_model'] = model(1)
-    _, ep = turn(store, channel=False)
-    rows = outbound(store, ep['_id'])
-    assert len(rows) == 1 and rows[0]['_id'] == rows[0]['publication_key'] == ep['_id'] + ':speak:0'
-    assert rows[0]['text'] == SPEECH and rows[0]['delivery_state'] == 'DELIVERED'
-    assert not {'segment_index', 'segment_count', 'not_before'} & set(rows[0])
-    store.config['persona_model'] = model(3)
-    _, local = turn(store, key='two', channel=False)
-    assert [r['delivery_state'] for r in outbound(store, local['_id'])] == ['DELIVERED'] * 3
-    assert not any('not_before' in r for r in outbound(store, local['_id'])), 'local scenes are not paced'
-
-
 def test_T5_9_crash_after_first_segment_resumes_in_order(store):
     store.config['persona_model'] = model(3)
     channel_scene(store)

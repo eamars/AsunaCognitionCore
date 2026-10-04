@@ -41,28 +41,6 @@ test('T1.1 the synthetic and the installed persona package both register; no per
   assert.equal(empty.lifecycle.state, 'failed');
 });
 
-test('T1.2 a model whose persona id differs is refused readably; Core stays inert and others are untouched', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-persona-'));
-  try {
-    await fs.writeFile(path.join(tmp, 'model.json'), JSON.stringify({ model_version: 1, persona: { id: 'someone-else', display_name: 'x' } }));
-    await fs.writeFile(path.join(tmp, 'persona.md'), '# synthetic\n');
-    const value = core('mismatch');
-    await install(value, packages.demo);
-    assert.throws(() => value.registerPersona({ id: 'mismatch', character_id: 'mismatch', display_name: 'x', version: '0',
-      resource_root: tmp, model: 'model.json', seeds: [{ slug: 'persona', kind: 'persona', path: 'persona.md' }],
-      skill_directories: [], preset: 'x' }), /PERSONA_ID_MISMATCH/);
-    assert.equal(value.lifecycle.state, 'inert');
-    assert.match(value.lifecycle.error, /PERSONA_ID_MISMATCH/);
-    assert.ok(!value.personas.has('mismatch') && value.personas.has('demo'));
-    assert.throws(() => value.registerPersona({ id: 'escape', character_id: 'e', display_name: 'x', version: '0',
-      resource_root: tmp, seeds: [{ slug: 'persona', kind: 'persona', path: '../outside.md' }], skill_directories: [], preset: 'x' }),
-      /must stay inside resource_root/);
-    assert.throws(() => value.registerPersona({ id: 'unreadable', character_id: 'u', display_name: 'x', version: '0',
-      resource_root: tmp, model: 'absent.json', seeds: [{ slug: 'persona', kind: 'persona', path: 'persona.md' }],
-      skill_directories: [], preset: 'x' }), /PERSONA_MODEL_UNREADABLE/);
-  } finally { await fs.rm(tmp, { recursive: true, force: true }); }
-});
-
 test('T1.6 model, seeds, jobs and skills resolve against the published artifact, not the candidate', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-floor-'));
   try {

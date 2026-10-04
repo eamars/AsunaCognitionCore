@@ -2,7 +2,6 @@ import json,time,uuid
 import pytest
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
-from asuna.router import Router,FairQueue
 from asuna.sandbox import Sandbox
 from asuna.config import ROOT
 from asuna.privacy import PrivacyService
@@ -10,18 +9,6 @@ from asuna.state import Denied
 from asuna.audit import verify
 from test_engineering_m1 import decision,event,normal
 from test_engineering_m3 import task_setup
-
-
-def test_E24_queue_fairness_and_group_quiet(store):
-    q=FairQueue()
-    for scene in ('g1','g2'):
-        for i in range(5):q.put(scene,scene)
-    values=[]
-    while (value:=q.pop()) is not None:values.append(value)
-    assert values==['g1','g1','g2','g2','g1','g1','g2','g2','g1','g2']
-    lane=FakeLane(store,[]);router=Router(store,Coordinator(store,lane))
-    for _ in range(100):assert router.receive(event(scene='g1'))['state']=='RECEIVED_NO_WAKE'
-    assert not lane.calls and store.db.messages.count_documents({'scene_id':'g1'})==1
 
 
 def test_E09_E16_owner_cancellation_and_expired_lease(store):

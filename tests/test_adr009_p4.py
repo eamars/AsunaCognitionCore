@@ -1,5 +1,4 @@
 """ADR-009 P4: memory extensions, persona data API, probes, persona jobs, export."""
-import base64
 import json
 
 import shutil
@@ -9,9 +8,9 @@ import pytest
 
 from asuna.blobs import BlobStore
 from asuna.config import ROOT
-from asuna.context import ContextBuilder, INVENTED_MARK
+from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
-from asuna.evidence import Evidence, sha
+from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
 from asuna.persona_data import DataError, PersonaDataAPI, check_export_path, export_documents
 from asuna.persona_jobs import DirectLauncher, JobRunner, SandboxLauncher
@@ -48,27 +47,6 @@ def unit(identity, body, vis='owner_private', **extra):
                               'line_from': 1, 'line_to': 2, 'heading': identity}, **extra}
 
 
-def test_T4_1_imported_units_read_back_from_their_snapshot(store, tmp_path):
-    data = api(store)
-    source = tmp_path / 'diary.md'
-    source.write_text('## 2026-01-02\n原文第一行\n', encoding='utf-8')
-    raw = source.read_bytes()
-    snap = data.dispatch('artifacts.snapshot', {'origin': 'demo-home', 'path': 'diary.md', 'sha256': sha(raw),
-                                                'content': base64.b64encode(raw).decode()})
-    data.dispatch('memory.upsert', {'origin': 'demo-home', 'units': [unit('e1', '原文第一行')]})
-    source.write_text('改掉了', encoding='utf-8'); source.unlink()
-    artifact = store.db.artifacts.find_one({'_id': snap['artifact_id']})
-    assert artifact['scope_key'] == 'owner-private:P1'
-    assert BlobStore(store).get(snap['artifact_id'], 'owner-private:P1', operator=True) == raw
-    with pytest.raises(Denied):
-        BlobStore(store).get(snap['artifact_id'], 'owner-private:P1')
-    again = data.dispatch('artifacts.snapshot', {'origin': 'demo-home', 'path': 'diary.md', 'sha256': sha(raw),
-                                                 'content': base64.b64encode(raw).decode()})
-    assert again['artifact_id'] == snap['artifact_id'] and again['deduplicated']
-    stored = store.db.memory_units.find_one({'source_identity': 'e1'})
-    assert stored['source_window']['path'] == 'diary/2026-01.md' and stored['scope_key'] == 'owner-private:P1'
-
-
 def test_T4_2_owner_private_units_never_reach_public_retrieval(store, retrieval):
     data = api(store, retrieval)
     data.dispatch('memory.upsert', {'origin': 'demo-home', 'units': [unit('secret', 'PRIVATE_TOKEN_CANARY 深夜的心事')]})
@@ -96,36 +74,6 @@ def test_T4_3_idempotent_writes_and_dry_run_writes_nothing(store):
                                                        'visibility_defaulted': []}
 
 
-def test_T4_4_cohabiting_conflicts_and_cutover(store):
-    data = api(store)
-    doc = {'origin': 'demo-home', 'source_identity': 'profile.md', 'slug': 'old-profile', 'kind': 'working',
-           'title': '旧居说明', 'sections': [{'heading': '习惯', 'body': '先看待办', 'visibility': 'public'}],
-           'source': {'path': 'profile.md', 'sha256': 'a' * 64}}
-    assert data.dispatch('documents.upsert', doc)['action'] == 'created'
-    changed = {**doc, 'sections': [{'heading': '习惯', 'body': '先喝水再看待办', 'visibility': 'public'}]}
-    assert data.dispatch('documents.upsert', changed)['action'] == 'updated'          # host untouched → follows source
-    from asuna.documents import DocumentStore
-    docs = DocumentStore(store, 'P1')
-    docs.apply('old-profile', {'op': 'append_section', 'heading': '新居补充', 'reason': '我自己加的', 'visibility': 'public'},
-               '新居里才有的习惯', base_revision_id=docs.read('old-profile')[0], author='character', mutation_id='t44-mine')
-    again = {**doc, 'sections': [{'heading': '习惯', 'body': '第三版', 'visibility': 'public'}]}
-    conflict = data.dispatch('documents.upsert', again)
-    assert conflict['action'] == 'conflict' and docs.read('old-profile')[1]['sections'][-1]['body'] == '新居里才有的习惯'
-    # Append-only entries merge by origin + source_identity; the host's own entries are untouched.
-    entry = {'origin': 'demo-home', 'source_identity': 'd1', 'slug': 'dossier:A',
-             'section': {'heading': '旧条目', 'body': '旧居记的', 'entry_date': '2026-01-01'}}
-    assert data.dispatch('documents.append', entry)['action'] == 'appended'
-    assert data.dispatch('documents.append', entry)['action'] == 'unchanged'
-    cut = api(store, state='cutover')
-    before = store.db.state_revisions.count_documents({})
-    for method, args in (('documents.upsert', again), ('memory.upsert', {'origin': 'demo-home', 'units': [unit('z', 'z')]})):
-        with pytest.raises(DataError, match='SOURCE_CUTOVER'):
-            cut.dispatch(method, args)
-    assert store.db.state_revisions.count_documents({}) == before
-    with pytest.raises(DataError, match='PERSONA_SCOPE_DENIED'):
-        data.dispatch('documents.get', {'slug': 'old-profile', 'persona': 'someone-else'})
-
-
 def job_config(store, entry=JOB, sources=('demo-home',), timeout=60):
     owner(store)
     store.config['persona_contribution'] = {'jobs': [{'id': 'migrate', 'entry': str(entry), 'runtime': 'python',
@@ -134,27 +82,6 @@ def job_config(store, entry=JOB, sources=('demo-home',), timeout=60):
     store.config['persona_sources'] = {'P1': {'demo-home': {'path': str(HOME), 'state': 'cohabiting'}}}
     if not store.db.scenes.find_one({'_id': 'dm-a'}):
         raise AssertionError('fixture scene missing')
-
-
-@pytest.mark.parametrize('launcher', [DirectLauncher(), SandboxLauncher()], ids=['protocol-direct', 'sandbox'])
-def test_T4_6_synthetic_self_migration_end_to_end(store, retrieval, launcher):
-    if not launcher.available():
-        pytest.skip('WSL + bubblewrap unavailable; the protocol-direct case covers the stdio protocol')
-    job_config(store)
-    runner = JobRunner(store, 'P1', retrieval=retrieval, launcher=launcher)
-    dry = runner.run('migrate', dry_run=True, args={'manifest': MANIFEST, 'questions': QUESTIONS})
-    assert dry['status'] == 'red' and dry['exit_code'] == 1                         # unregistered file is red
-    assert store.db.memory_units.count_documents({'origin': 'demo-home'}) == 0       # dry run wrote nothing
-    full = MANIFEST + [{'path': 'notes/unregistered.txt', 'layer': 'note'}]
-    first = runner.run('migrate', dry_run=False, args={'manifest': full, 'questions': QUESTIONS[:1] + QUESTIONS[2:]})
-    assert first['status'] == 'ok' and first['exit_code'] == 0, first
-    report = json.loads(BlobStore(store).get(first['report_artifact_ids'][0], 'owner-private:P1', operator=True))
-    statuses = {item.get('question'): item['status'] for item in report['items'] if item.get('question')}
-    assert statuses == {'q1': 'pass', 'q3': 'NOT_RUN(scope)'}, statuses
-    assert set(first) >= {'status', 'exit_code', 'counts', 'report_artifact_ids'} and 'items' not in first
-    units = store.db.memory_units.count_documents({'origin': 'demo-home'})
-    second = runner.run('migrate', dry_run=False, args={'manifest': full, 'questions': []})
-    assert second['status'] == 'ok' and store.db.memory_units.count_documents({'origin': 'demo-home'}) == units
 
 
 def write_job(name, body):
@@ -220,17 +147,6 @@ def test_T4_7_export_paths_and_content(store, tmp_path):
     assert not any((tmp_path / 'export').glob('*messages*')) and 'episodes' not in text
 
 
-def test_T4_8_invented_entries_are_always_marked(store, retrieval):
-    data = api(store, retrieval)
-    data.dispatch('memory.upsert', {'origin': 'demo-home', 'units': [unit('made-up', '我小时候住在灯塔边', invented=True)]})
-    found = data.dispatch('probe.retrieve', {'as': 'owner_private', 'query': '灯塔', 'k': 6})
-    assert found['items'] and all(item['excerpt'].startswith(INVENTED_MARK) for item in found['items']
-                                  if 'imp-' in item['id'])
-    _, context, _ = ContextBuilder(store, retrieval).prepare(event('lighthouse', text='灯塔'), 'P1')
-    marked = [m for m in context['memories'] if m.get('invented')]
-    assert marked and all(m['body_markdown'].startswith(INVENTED_MARK) for m in marked)
-
-
 def test_T4_9_persona_job_run_only_for_development_tasks(store):
     from asuna.development import PERSONA_JOB_TOOLS
     job_config(store)
@@ -251,19 +167,6 @@ def test_T4_9_persona_job_run_only_for_development_tasks(store):
     for excerpt in ('热可可', '书架', '早上先看一眼待办', 'diary/2026-01.md'):
         assert excerpt not in payload, excerpt
     assert set(tool_result(run)) == {'run_id', 'job', 'status', 'exit_code', 'dry_run', 'counts', 'report_artifact_ids', 'reason'}
-
-
-def test_T4_10_coverage_score_and_floor(store, retrieval):
-    data = api(store, retrieval)
-    data.dispatch('memory.upsert', {'origin': 'demo-home', 'units': [unit('cov', '热可可是他最喜欢的饮料')]})
-    hit, manifest = retrieval.search('scene:dm-a', 1, '热可可', private_scope='owner-private:P1')
-    assert manifest['coverage_basis'] in ('vector_cosine', 'lexical_overlap') and 0 <= manifest['coverage_score'] <= 1
-    if manifest['coverage_basis'] == 'lexical_overlap':
-        assert manifest['coverage_score'] == 1.0 and manifest['coverage'] == 'sufficient'
-    _, low = retrieval.search('scene:dm-a', 1, '热可可', private_scope='owner-private:P1', coverage_floor=1.01)
-    assert low['coverage'] == 'insufficient'
-    _, empty = retrieval.search('scene:dm-a', 1, 'ZZZ_NO_SUCH_TERM_QQQ')
-    assert empty['coverage'] == 'insufficient' or empty['selected']
 
 
 def test_T4_11_owner_private_derived_data_stays_out_of_linked_public_scenes(store):

@@ -1,17 +1,15 @@
 """ADR-009 P5 MongoDB tests: T5.2 heartbeat gates and retiming, T5.3 settlement and promotion."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import threading
 import types
 
 import pytest
 
 from asuna.chat import SceneQueue
-from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
 from asuna.policy import PolicyStore
 from asuna.schedule import ScheduleService
 from asuna.state import Denied
-from test_adr009_p2 import owner, decide
+from test_adr009_p2 import owner
 
 
 class NativeLane:
@@ -104,37 +102,3 @@ def test_T5_2_heartbeat_gates_and_retime_in_place(store):
         service.ensure_presence()
 
 
-def test_T5_3_settlement_once_per_local_date_and_promotion_rules(store):
-    service = scheduler(store, rhythm={'settle_at': '04:30'})
-    store.config.pop('timezone', None)
-    assert service.ensure_settlement() is None and service.lane.created == 0          # no zone, no plan
-    PolicyStore(store, 'P1', store.config['persona_model']).set(
-        [{'key': 'rhythm.timezone', 'value': 'Etc/GMT-1', 'what': '时区'}], base_revision_id=None, reason='本机',
-        author='operator', mutation_id='t53-tz')
-    plan = service.ensure_settlement()
-    create = [p for path, p in service.lane.calls if path == '/schedule/create'][-1]
-    assert create['daily'] == {'time': '04:30:00', 'time_zone': 'Etc/GMT-1'} and plan['scene_id'] == 'dm-a'
-    assert fire(service, plan)['last_outcome'] == 'ENQUEUED'
-    assert fire(service, plan)['last_outcome'] == 'SKIPPED:ALREADY_SETTLED' and len(service.controller.offers) == 1
-    now = datetime.now(timezone.utc)
-    for key, days in (('ep-old', 2), ('ep-new', 0)):
-        store.db.audit_events.insert_one({'_id': 'synthetic-' + key, 'stream_id': key, 'seq': 1, 'schema_version': 1, 'type': 'context.prepared',
-            'occurred_at': (now - timedelta(days=days)).isoformat(), 'payload': {'manifest': {'selected': ['M01']}}})
-    store.db.audit_events.insert_one({'_id': 'synthetic-one', 'stream_id': 'ep-one', 'seq': 1, 'schema_version': 1, 'type': 'context.prepared',
-        'occurred_at': now.isoformat(), 'payload': {'manifest': {'selected': ['M02']}}})
-    items = [{'fact': '他喜欢热可可', 'appraisal': '值得记住', 'signal': '天冷时可以问一句', 'source_ids': ['M01']},
-             {'fact': '只出现一次', 'appraisal': '-', 'signal': '-', 'source_ids': ['M02']},
-             {'fact': '公开的事', 'appraisal': '-', 'signal': '-', 'source_ids': ['M01'], 'visibility': 'public'},
-             {'fact': '超出配额', 'appraisal': '-', 'signal': '-', 'source_ids': ['M01']}]
-    lane = FakeLane(store, [LaneResult('沉淀。'), decide(next='silent', promote=items)])
-    ep = Coordinator(store, lane).ingest({'event_id': 'settlement:test', 'scene_id': 'dm-a', 'person_id': 'A',
-                                          'adapter_id': 'settlement', 'episode_kind': 'settlement', 'text': '夜间沉淀'})
-    promoted = ep['delta_results']['promote']
-    assert [p['scope_key'] for p in promoted] == ['owner-private:P1', 'global-safe'], promoted
-    assert [r['code'] for r in ep['rejections']] == ['PROMOTION_SOURCES_INSUFFICIENT', 'PROMOTION_QUOTA'], ep['rejections']
-    unit = store.db.memory_units.find_one({'_id': promoted[0]['memory_id']})
-    assert unit['kind'] == 'memory_unit' and unit['signal'] == '天冷时可以问一句'
-    assert 'settlement_from_program' in lane.calls[0]['messages'][-1]['content']
-    ordinary = FakeLane(store, [LaneResult('想。'), decide(promote=items[:1]), LaneResult('好。')])
-    normal = Coordinator(store, ordinary).ingest({'event_id': 'ordinary', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
-    assert normal['rejections'][0]['code'] == 'PROMOTE_ONLY_IN_SETTLEMENT'

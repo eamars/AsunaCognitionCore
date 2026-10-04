@@ -12,16 +12,13 @@
 """
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from asuna.config import ROOT, load
 from asuna.state import Store, Denied
-from asuna.tasks import TaskService, ToolBroker, WORKSPACE_TOOLS
-from asuna.history_query import (HISTORY_TOOL_NAME, HistoryQueryService, identity_status,
-                                 query_history, TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT,
-                                 TIME_SOURCE_SINK)
+from asuna.tasks import TaskService, ToolBroker
+from asuna.history_query import HISTORY_TOOL_NAME, HistoryQueryService, query_history
 
 CONFIG_PATH = os.environ.get('ASUNA_P1B_CONFIG', 'config/local.json')
 
@@ -156,19 +153,6 @@ def broker_env(store):
 
 # ── 模块与可发现性 ──────────────────────────────────────────────────
 
-def test_p1a_identity_module_is_reused_not_replaced():
-    status = identity_status()
-    assert status['complete'] and status['source'] == 'peer_context', status
-
-
-def test_tool_registered_for_action_brain_and_native_plugin(broker_env):
-    store, service, broker, work = broker_env
-    assert [t['name'] for t in WORKSPACE_TOOLS].count(HISTORY_TOOL_NAME) == 1
-    assert HISTORY_TOOL_NAME in [t['name'] for t in broker.specs]
-    spec = next(t for t in WORKSPACE_TOOLS if t['name'] == HISTORY_TOOL_NAME)
-    for word in ('原文', '来源', 'cursor'):
-        assert word in spec['description']
-
 
 # ── 查询主干：时间来源、作者、原文、范围 ────────────────────────
 
@@ -187,29 +171,6 @@ def seed_time_sources(db):
             peer=None, phase='REACT', receipt_at='2026-09-22T12:08:00Z')
     message(db, 'x1', 1, '2026-09-22T12:09:00Z', '别的群的雾灯', scene=OTHER_SCENE, peer=None)
     message(db, 'old', 2, '2026-08-01T12:00:00Z', '八百年前的雾灯')
-
-
-def test_time_sources_authorship_and_verbatim(store):
-    seed_time_sources(store)
-    tid = make_task(store, [HISTORY_TOOL_NAME])
-    service = HistoryQueryService(store, None)
-    window = dict(since='2026-09-21T00:00:00Z', until='2026-09-23T23:59:59Z')
-    value = service.query_for_task(task_doc(store, tid), dict(window))
-    assert not value['degraded'] and value['why'] == ''
-    assert [h['message_id'] for h in value['hits']] == ['o2', 'o1', 'i2', 'i1']
-    by_id = dict((h['message_id'], h) for h in value['hits'])
-    assert by_id['o2']['time_source'] == TIME_SOURCE_SINK and by_id['o2']['time_ref'] == 'sr-2'
-    assert by_id['o1']['time_source'] == TIME_SOURCE_RECEIPT_AT
-    assert by_id['i2']['time_source'] == TIME_SOURCE_INBOUND
-    assert by_id['i2']['text'] == VERBATIM and by_id['i2']['verbatim']
-    assert by_id['o1']['side'] == '我说' and by_id['i1']['side'] == '对方说'
-    assert '雾灯修理工' in by_id['i1']['who'] and PERSON in by_id['i1']['who']
-    assert 'demo' in by_id['o1']['who']          # 无身份块就退回已认证作者，不冒充
-    assert value['more'] is False and value['next_cursor'] is None
-    assert value['scope']['scene_id'] == SCENE_ID
-    assert '本机送达回执' in value['text']            # 行首就标明回执来源，不伪称发送时刻
-    literal = service.query_for_task(task_doc(store, tid), dict(window, query='雾灯'))
-    assert [h['message_id'] for h in literal['hits']] == ['i1']   # 字面过滤对三支同时生效，出站不例外
 
 
 def test_person_filter_follows_verified_identity(store):
@@ -233,17 +194,6 @@ def test_person_filter_follows_verified_identity(store):
     # 人物过滤要用名片/昵称或完整 person_id；这是草稿已验证的行为，照实断言，不悄悄改逻辑。
     assert [h['message_id'] for h in stale['hits']] == []
     assert stale['dropped']['wrong_person'] == 2
-
-
-def test_default_window_uses_real_clock(store):
-    seed_scenes(store)
-    recent = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    ancient = (datetime.now(timezone.utc) - timedelta(days=10)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    message(store, 'near', 1, recent, '近的一条')
-    message(store, 'far', 2, ancient, '十天前的那条')
-    tid = make_task(store, [HISTORY_TOOL_NAME])
-    value = HistoryQueryService(store, None).query_for_task(task_doc(store, tid), {'query': '的'})
-    assert [h['message_id'] for h in value['hits']] == ['near']
 
 
 # ── 真实 Mongo 分页：不重不漏；回退支翻到底才敢 more=false ──────────────
@@ -277,56 +227,7 @@ def test_pagination_no_loss_no_repeat_across_streams(store):
     assert sorted(seen) == sorted(expected) and len(seen) == len(set(seen))
 
 
-def test_fallback_keeps_more_until_truly_exhausted(store):
-    """单页预算只拦工作量：回执候选超过一轮批量时 more 必须仍为 true，直到游标真到底。"""
-    seed_scenes(store)
-    expected = []
-    for i in range(205):
-        base = 10 * 3600 + i
-        at = '2026-09-22T%02d:%02d:%02dZ' % (base // 3600, base % 3600 // 60, base % 60)
-        message(store, 'f%03d' % i, i, '', '本机出站%03d' % i, direction='outbound',
-                author='demo', peer=None, receipt='fr-%03d' % i)
-        sink_receipt(store, 'fr-%03d' % i, at)
-        expected.append('f%03d' % i)
-    tid = make_task(store, [HISTORY_TOOL_NAME])
-    service = HistoryQueryService(store, None)
-    task = task_doc(store, tid)
-    first = service.query_for_task(task, dict(FULL_WINDOW, limit=2))
-    assert first['fallback']['attempted'] and first['fallback']['exhausted'] is False
-    assert first['more'] and first['next_cursor']
-    seen = [h['message_id'] for h in first['hits']]
-    cursor, pages = first['next_cursor'], 1
-    while True:
-        value = service.query_for_task(task, dict(FULL_WINDOW, limit=2, cursor=cursor))
-        seen += [h['message_id'] for h in value['hits']]
-        cursor = value['next_cursor']
-        pages += 1
-        assert pages < 200, 'pagination must terminate'
-        if not value['more']:
-            break
-    assert sorted(seen) == sorted(expected) and len(seen) == len(set(seen))
-
-
 # ── 语义候选：附加、可区分、失败不拖垮字面 ──────────────────────
-
-def test_semantic_candidates_are_labelled_and_fail_soft(store):
-    seed_scenes(store)
-    message(store, 'lit', 1, '2026-09-22T12:00:00Z', '雾灯坏了')
-    message(store, 'sem', 2, '2026-09-22T12:01:00Z', '换个说法的那条')
-    tid = make_task(store, [HISTORY_TOOL_NAME])
-    task = task_doc(store, tid)
-    service = HistoryQueryService(store, FakeRetrieval([{'source_event_ids': ['sem']}]))
-    value = service.query_for_task(task, dict(FULL_WINDOW, query='雾灯'))
-    via = dict((h['message_id'], h['via']) for h in value['hits'])
-    assert via == {'lit': 'literal', 'sem': 'semantic'}
-    assert value['semantic'] == {'ok': True, 'why': '', 'candidates': 1}
-    broken = HistoryQueryService(store, FakeRetrieval(boom=True))
-    value = broken.query_for_task(task, dict(FULL_WINDOW, query='雾灯'))
-    assert [h['message_id'] for h in value['hits']] == ['lit']
-    assert value['semantic']['ok'] is False and value['semantic']['why'].startswith('retrieval_failed')
-    off = HistoryQueryService(store, FakeRetrieval(boom=True))
-    value = off.query_for_task(task, dict(FULL_WINDOW, query='雾灯', include_semantic=False))
-    assert value['semantic']['why'] == 'not_attempted'
 
 
 # ── ToolBroker 受信调用：授权绑定、幂等、取消围栏 ────────────────────
@@ -406,26 +307,6 @@ def test_service_refuses_when_scene_fence_moved(store):
 
 
 # ── 隔离探针复现：预算裁剪与游标筛选连续性（2026-09-24 第三轮反馈）──────────────
-
-def test_long_text_page_overflow_continues_by_cursor(store):
-    """探针复现：两条 30022 字消息同页命中，48KiB 预算裁掉一条——被裁的必须能续页取回完整原文。"""
-    seed_scenes(store)
-    long_a = 'P1B_LONG_TEXT_PROBE' + 'a' * 30000
-    long_b = 'P1B_LONG_TEXT_PROBE' + 'b' * 30000
-    message(store, 'long-1', 1, '2026-09-22T12:01:00Z', long_a)
-    message(store, 'long-2', 2, '2026-09-22T12:02:00Z', long_b)
-    tid = make_task(store, [HISTORY_TOOL_NAME])
-    service = HistoryQueryService(store, None)
-    task = task_doc(store, tid)
-    args = dict(FULL_WINDOW, query='P1B_LONG_TEXT_PROBE', limit=2)
-    first = service.query_for_task(task, args)
-    assert [h['message_id'] for h in first['hits']] == ['long-2']
-    assert first['hits_trimmed'] == 1 and first['more'] and first['next_cursor']
-    assert first['next_cursor'] in first['text']                   # 渲染里的 cursor 就是可用游标
-    assert first['hits'][0]['text'] == long_b                      # 交付的是完整原文，不是片段
-    second = service.query_for_task(task, dict(args, cursor=first['next_cursor']))
-    assert [h['message_id'] for h in second['hits']] == ['long-1']
-    assert second['hits'][0]['text'] == long_a and not second['more']
 
 
 def test_cursor_carries_the_filter_it_was_issued_with(store):

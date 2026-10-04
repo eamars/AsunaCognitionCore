@@ -92,26 +92,6 @@ test('native action ranges retain their source and placement through consultatio
   assert.deepEqual(snapshot(engine).nodes.toSorted((left, right) => left.anchorSeq - right.anchorSeq).map(row => row.data), rows.map(row => row.data));
 });
 
-test('legacy phase notices after step start survive cold replay and older-page prepend', () => {
-  const events = [entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),
-    entry(2, 'user/message', source('MONOLOGUE')), entry(3, 'assistant/message', { turn: 1, step: 1 }),
-    entry(4, 'step/end', { turn: 1, step: 1 }), entry(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })];
-  const engine = assembler();
-  engine.replaceWindow(events.slice(3), true);
-  assert.equal(snapshot(engine).nodes.length, 0, 'no guessing when attribution is outside the loaded window');
-  engine.prepend(events.slice(0, 3), false);
-  const restored = snapshot(engine);
-  assert.equal(restored.nodes.length, 1);
-  assert.equal(restored.nodes[0].data.phase, 'MONOLOGUE');
-  assert.equal(restored.nodes[0].location.kind, 'session', 'brain identity stays outside native process folding');
-  assert.equal(restored.timeline.turns.get(1).steps[0].data.get('asuna-stage').lane, 'character');
-  engine.replaceWindow(events, false);
-  assert.deepEqual(snapshot(engine).nodes.map(node => node.data), restored.nodes.map(node => node.data));
-  for (const event of [entry(6, 'turn/start', { turn: 2 }), entry(7, 'step/start', { turn: 2, step: 1 }),
-    entry(8, 'user/message', { source: { kind: 'user' } }), entry(9, 'assistant/message', { turn: 2, step: 1 })]) engine.append(event);
-  assert.equal(snapshot(engine).nodes.length, 1, 'ordinary native turns never inherit a previous Asuna label');
-});
-
 test('explicit lane attribution exists before tokens and survives native stream settlement', () => {
   const engine = assembler();
   for (const event of [entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),

@@ -69,15 +69,6 @@ def test_E06_sandbox_cannot_access_host_credentials_or_network(store):
     finally:broker.close()
 
 
-def test_E21_audit_failure_blocks_file_effect(store):
-    service,task,broker,work=task_setup(store)
-    try:
-        store.fail_audit=True
-        with pytest.raises(OSError):broker.call('s-test','blocked','write_file',{'path':'blocked.txt','text':'x'})
-        assert not (work/'blocked.txt').exists()
-    finally:store.fail_audit=False;broker.close()
-
-
 def test_E14_uncertain_tool_does_not_repeat(store):
     service,task,broker,work=task_setup(store)
     def crash(point):

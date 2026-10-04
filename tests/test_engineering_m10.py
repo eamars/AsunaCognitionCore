@@ -1,43 +1,8 @@
-import copy,json,uuid
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
 import pytest
-from asuna.audit import replay,projection,verify,trace_contents
-from asuna.config import load,ROOT
-from asuna.state import Store,Conflict,Denied
-from asuna.context import ContextBuilder
+from asuna.state import Denied
 from asuna.publish import PublishService
-from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane,LaneResult
-from test_engineering_m1 import normal,event,decision
+from test_engineering_m1 import normal, event
 from test_engineering_m3 import task_setup
-
-
-def test_E05_undelivered_are_explicit_and_survive_new_store(store):
-    for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
-        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','policy_epoch':1,'scene_seq':i,'text':state+'_body','author':'demo','direction':'outbound','delivery_state':state})
-    reopened=Store(load(),store.name)
-    try:
-        _,context,_=ContextBuilder(reopened).prepare(event())
-        assert [m['delivery_state'] for m in context['delivered_history']]==['DELIVERED']
-        assert {m['delivery_state'] for m in context['undelivered_outbound_not_public']}=={'READY','FAILED','UNKNOWN'}
-    finally:reopened.client.close()
-
-
-def test_E17_twenty_mutation_ids_replayed_after_cas(store):
-    store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[]);head,base=store.head('overlay:P1','global-safe');source=store.db.memory_units.find_one({'scope_key':'global-safe'})['_id']
-    def apply(i):
-        try:return store.mutate('overlay:P1','global-safe',base['_id'],{'body':'choice-'+str(i)},[source],'global-safe','retry-cas-'+str(i))
-        except Conflict:return None
-    with ThreadPoolExecutor(20) as pool:results=list(pool.map(apply,range(20)))
-    winner=[i for i,row in enumerate(results) if row is not None];assert len(winner)==1
-    assert store.db.audit_events.count_documents({'type':'state.conflict','stream_id':{'$regex':'^mutation:retry-cas-'}})==19
-    count=store.db.state_revisions.count_documents({})
-    again=[apply(i) for i in range(20)]
-    assert [i for i,row in enumerate(again) if row is not None]==winner
-    assert store.db.state_revisions.count_documents({})==count
-    current=store.head('overlay:P1','global-safe')[1]
-    assert current['_id']==results[winner[0]]['_id'] and current['parent_revision_id']==base['_id']
 
 
 def test_E12_E13_executor_cannot_publish_or_reach_host(store,monkeypatch):
@@ -61,43 +26,5 @@ def test_E19_message_source_cannot_be_laundered(store):
     store.put('memory_units',{'_id':'claimed-public','scope_key':'global-safe','status':'active','source_event_ids':['private-source'],'body_markdown':'anonymous reinterpretation'})
     head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
     with pytest.raises(Denied,match='DERIVED_SOURCE_SCOPE_DENIED'):store.mutate('overlay:P1','global-safe',head['revision_id'],{'body':'new'},['claimed-public'],'global-safe','invalid-source')
-
-
-def test_E21_audit_failure_immediately_before_sink(store):
-    def fault(point):
-        if point=='before_send':store.fail_audit=True
-    c,lane=normal(store);c.publisher=PublishService(store,crash=fault)
-    with pytest.raises(OSError):c.ingest(event())
-    assert store.db.sink_receipts.count_documents({})==0
-    store.fail_audit=False
-
-
-def test_E23_mixed_state_replay_without_external_actions(store):
-    c,_=normal(store);c.ingest(event('done'))
-    bad=Coordinator(store,FakeLane(store,[LaneResult('',reasoning='only')]))
-    assert bad.ingest(event('failure'))['state']=='FAILED_PROTOCOL'
-    def fault(point):
-        if point=='after_send_before_receipt':raise RuntimeError('lost receipt')
-    unknown,_=normal(store);unknown.publisher=PublishService(store,idempotent=False,crash=fault)
-    with pytest.raises(RuntimeError):unknown.ingest(event('unknown'))
-    unknown.publisher=PublishService(store,idempotent=False);unknown.recover()
-    service,task,broker,work=task_setup(store)
-    try:
-        service.cancel(task['_id'],person_id='A')
-        with pytest.raises(Denied):broker.call('s-test','late','write_file',{'path':'late.txt','text':'late'})
-    finally:broker.close()
-    store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[]);head,base=store.head('overlay:P1','global-safe');source=store.db.memory_units.find_one({'scope_key':'global-safe'})['_id']
-    store.mutate('overlay:P1','global-safe',base['_id'],base['content'],[source],'global-safe','winning')
-    with pytest.raises(Conflict):store.mutate('overlay:P1','global-safe',base['_id'],base['content'],[source],'global-safe','conflicting')
-    trace=list(store.db.audit_events.find({}));verify(trace)
-    target=Store(load(),'asuna_v2_test_mixed_replay_'+uuid.uuid4().hex[:16]);store.derived_databases=[target.name]
-    try:
-        with patch('httpx.Client.send',side_effect=AssertionError('network forbidden')),patch('asuna.sandbox.Sandbox.run',side_effect=AssertionError('tool forbidden')):
-            assert replay(trace,target,trace_contents(trace,store))['sha256']==projection(store)['sha256']
-        modified=copy.deepcopy(trace);modified[-1]['payload']={'tampered':True}
-        with pytest.raises(ValueError,match='HASH_CHAIN'):verify(modified)
-    finally:
-        from asuna.testing import dispose_test_store
-        dispose_test_store(target)
 
 

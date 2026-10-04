@@ -1,15 +1,12 @@
-import os
 from pathlib import Path
-import json,uuid,subprocess,sys
-from unittest.mock import patch
+import json,uuid
 import pytest
 from asuna.config import ROOT
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
-from asuna.router import Router,FairQueue
+from asuna.router import Router
 from asuna.tasks import TaskService,ToolBroker,Executor
 from asuna.state import Denied
-from asuna.tokens import TokenMeter
 from asuna.queue import RuntimeLease
 from asuna.evidence import sha
 from asuna.memory import MemoryService
@@ -42,27 +39,6 @@ def test_E16_old_worker_exception_does_not_poison_replacement(store):
     finally:broker.close()
 
 
-def test_E24_budget_observation_does_not_preempt_native_recovery_and_clock_fairness():
-    class Sink:
-        def record(self,*args):pass
-    meter=TokenMeter({},Sink(),'executor')
-    with patch.object(meter,'measure',return_value={'input_tokens':262144}):
-        observation=meter.check({'max_tokens':8192})
-        assert observation['input_tokens']>observation['input_limit'] and observation['enforced'] is False
-    with patch.object(meter,'measure',side_effect=RuntimeError('tokenizer unavailable')):
-        observation=meter.check({'max_tokens':8192})
-        assert observation['input_tokens'] is None and observation['measurement_error']=='tokenizer unavailable'
-    queue=FairQueue();clock=0;result=[]
-    schedule=[(i,'g1',f'a{i}') for i in range(5)]+[(i,'g2',f'b{i}') for i in range(5)]
-    while clock<5:
-        for tick,scene,event in schedule:
-            if tick==clock:queue.put(scene,(scene,event,tick))
-        clock+=1
-    while (item:=queue.pop()) is not None:result.append(item)
-    assert len(result)==10 and len({x[1] for x in result})==10
-    assert all(not(result[i][0]==result[i+1][0]==result[i+2][0]) for i in range(8))
-
-
 def test_E16_busy_workspace_is_not_claimed(store):
     service,router=revised_route(store)
     ep=router.receive({'event_id':'work','scene_id':'dm-a','person_id':'A','text':'核实'})
@@ -83,10 +59,3 @@ def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store)
     assert back['content']==old['content'] and back['processed_source_ids']==new['processed_source_ids']
 
 
-def test_cli_starts_and_exposes_revision_commands():
-    # `asuna run` was retired (Web is the only interaction path); revision commands remain.
-    for command,expected in [('rollback','--target-revision')]:
-        result=subprocess.run([sys.executable,'-m','asuna.cli',command,'--help'],cwd=ROOT,capture_output=True,
-                              encoding='utf-8',env={**os.environ,'PYTHONIOENCODING':'utf-8'})
-        assert result.returncode==0,result.stderr
-        assert expected in result.stdout

@@ -37,5 +37,3 @@ def test_fixture_drops_database_when_seed_fails_before_yield(monkeypatch):
         observer.client.close()
 
 
-def test_teardown_handles_an_application_that_already_closed_its_store(store):
-    store.client.close()

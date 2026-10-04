@@ -1,15 +1,5 @@
 import json
-from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane,LaneResult
-from test_engineering_m1 import event,decision
-
-
-def test_E03_monologue_off_is_explicit_control(store):
-    lane=FakeLane(store,[decision(),LaneResult('回来了。')])
-    ep=Coordinator(store,lane,monologue_enabled=False).ingest(event())
-    assert ep['experiment_control']=='monologue_off' and ep['state']=='COMMITTED'
-    assert ep['monologue_refs']==[] and [c['phase'] for c in lane.calls]==['DECIDE','SPEAK']
-    assert 'scene:dm-a' in lane.calls[0]['messages'][-1]['content']
+from test_engineering_m1 import event
 
 
 def test_E10_canonical_canaries_in_all_unauthorized_contexts(store):

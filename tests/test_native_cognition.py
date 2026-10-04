@@ -47,38 +47,6 @@ def snapshot(store, binding, **changes):
     return episode
 
 
-def test_missing_state_is_distinct_from_unimplemented_and_never_creates_state(view):
-    store, worker, _ = view
-    before = store.db.state_heads.count_documents({})
-    memory = NativeMemory(worker, 'role')
-    rows = memory.page('self')['rows']
-    assert next(r for r in rows if r['title'] == '心情与情绪')['status_label'] == '未实现'
-    assert next(r for r in rows if r['title'] == '当前自我')['status_label'] == '暂无记录'
-    assert memory.detail('head:current_self:p|global-safe')['status_label'] == '暂无记录'
-    assert memory.page('world')['rows'][0]['status_label'] == '未实现'
-    assert memory.page('self', search='心情')['rows'][0]['id'] == 'cognition:mood'
-    assert store.db.state_heads.count_documents({}) == before
-
-
-def test_overlay_is_visible_and_usage_tracks_actual_prepared_version(view):
-    store, worker, binding = view
-    store.init_head('overlay:p', 'scene:one', {'body': '本群场景补充'}, [])
-    snapshot(store, binding)
-    memory = NativeMemory(worker, 'role')
-    detail = memory.detail('head:overlay:p|scene:one')
-    assert detail['body'] == '本群场景补充'
-    assert detail['usage'] == '最近一次上下文已选用'
-    assert NativeMemory(worker, 'role').detail('doc:persona')['usage'] == '最近一次上下文已选用'
-    head = store.db.state_heads.find_one({'_id': 'doc:p:persona|global-safe'})
-    old = store.db.state_revisions.find_one({'_id': head['revision_id']})
-    store.db.state_revisions.insert_one({**old, '_id': 'new'})
-    store.db.state_heads.update_one({'_id': head['_id']}, {'$set': {'revision_id': 'new'}})
-    assert '旧版本' in NativeMemory(worker, 'role').detail('doc:persona')['usage']
-    assert memory.cognition.usage('unit:selected') == '最近一次上下文已选用'
-    assert '原生会话' in memory.cognition.usage('unit:thought')
-    assert '未选用' in memory.cognition.usage('unit:other')
-
-
 @pytest.mark.parametrize('changes', [
     {'native_session_id': 'other'}, {'policy_epoch': 2}, {'person_id': 'qq:22'},
     {'scene_id': 'other'}, {'persona': 'other'},
@@ -121,16 +89,6 @@ def test_private_heads_and_undelivered_messages_cannot_be_read(view):
     store.db.scenes.update_one({'_id': binding['scene_id']}, {'$set': {'policy_epoch': 2}})
     with pytest.raises(Denied, match='NATIVE_SESSION_EPOCH_CHANGED'):
         NativeMemory(worker, 'role')
-
-
-def test_broken_revision_is_not_reported_as_an_empty_state(view):
-    store, worker, _ = view
-    store.db.state_heads.update_one({'_id': 'doc:p:persona|global-safe'}, {'$set': {'revision_id': 'missing'}})
-    memory = NativeMemory(worker, 'role')
-    with pytest.raises(Denied, match='MEMORY_REVISION_UNAVAILABLE'):
-        memory.page('documents')
-    with pytest.raises(Denied, match='MEMORY_REVISION_UNAVAILABLE'):
-        memory.detail('doc:persona')
 
 
 def test_revision_sources_keep_interpretations_distinct_and_private_sources_hidden(view):

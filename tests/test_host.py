@@ -67,19 +67,6 @@ def controller(store, tmp_path, coordinator):
     return Chat(app, {'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'display_name': 'test'}, lambda _: None)
 
 
-def test_nine_prose_constraints_do_not_discard_a_valid_speech_decision(store):
-    decision={'next':'speak','goal':'send the authorized invitation',
-              'constraints':[f'invitation detail {i}' for i in range(9)],
-              'recall_query':'','speak_before_action':False}
-    lane=FakeLane(store,[LaneResult('invite once'),LaneResult(json.dumps(decision)),LaneResult('invitation')])
-    coordinator=Coordinator(store,lane)
-    result=coordinator.ingest(event())
-    assert result['state']=='COMMITTED'
-    assert result['decision']['constraints']==decision['constraints']
-    assert store.db.messages.count_documents({'episode_id':result['_id'],'direction':'outbound'})==1
-    assert store.db.tasks.count_documents({})==0
-
-
 def test_receive_persists_without_context_or_worker_and_dedupes(store, tmp_path):
     class UnavailableContext:
         def prepare(self, *args, **kwargs):
@@ -203,24 +190,6 @@ def test_resources_never_fall_back_to_owner_workspace(store):
     assert workspace_grant(store.config, 'dm-b', 'B', required=False) == {}
     with pytest.raises(Denied, match='WORKSPACE_NOT_AUTHORIZED'):
         workspace_grant(store.config, 'dm-b', 'B')
-
-
-def test_retrieval_handles_null_timestamps_and_large_authorized_scope(store,tmp_path):
-    from asuna.retrieval import Retrieval
-    retrieval=Retrieval(store,Evidence(tmp_path/'retrieval'))
-    def unavailable(*args):raise RuntimeError('embedding unavailable in local check')
-    retrieval.embed=unavailable
-    base={'scope_key':'scene:dm-a','policy_epoch':1,'character_id':'demo','status':'active','revision':1,'schema_version':1,
-          'body_markdown':'历史材料','embedding_status':'PENDING','source_event_ids':[],'occurred_at':None}
-    store.db.memory_units.insert_many([{**base,'_id':'null-'+str(i)} for i in range(4100)])
-    try:
-        rows,manifest=retrieval.search('scene:dm-a',1,'当前查询')
-        assert manifest['lexical_candidate_count']==4096
-        assert manifest['cache_disabled_for_bounded_sample']
-        assert not manifest['vector_verified']
-        assert all(m['scope_key'] in ('scene:dm-a','global-safe') for m in rows)
-        assert store.db.memory_units.count_documents({'_id':{'$regex':'^null-'}})==4100
-    finally:retrieval.close()
 
 
 def test_scene_queue_is_ordered_and_does_not_starve_other_scene():

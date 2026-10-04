@@ -1,5 +1,5 @@
 import json,os,sys
-from asuna.config import ROOT,load
+from asuna.config import load
 from asuna.state import Store
 from asuna.lanes import FakeLane,LaneResult
 from asuna.coordinator import Coordinator

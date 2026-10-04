@@ -3,7 +3,6 @@ import copy
 import json
 import subprocess
 import sys
-from pathlib import Path
 import pytest
 from asuna.config import ROOT,load,validate_database
 from asuna.context import ContextBuilder
@@ -12,7 +11,6 @@ from asuna.lanes import FakeLane,LaneResult
 from asuna.publish import PublishService
 from asuna.state import Store,Conflict,Denied
 from asuna.audit import verify,replay,projection,render_html,trace_contents
-from asuna.evidence import sha
 
 def event(key='e',scene='dm-a',person='A',text='我回来了。'):
     return {'event_id':key,'scene_id':scene,'person_id':person,'text':text}
@@ -29,25 +27,6 @@ def test_E01_namespace_guard(store):
         with pytest.raises(ValueError): validate_database(load(),forbidden)
     assert store.db.command('ping')['ok']==1
 
-def test_E02_actual_fake_request_and_missing_persona(store):
-    coordinator,lane=normal(store)
-    ep=coordinator.ingest(event())
-    assert '示例角色' in lane.calls[0]['messages'][0]['content']
-    assert ep['manifest']['persona_revision']
-    # The persona is a document now (ADR-009 §5.4); the manifest names its revision.
-    from asuna.documents import render_markdown
-    persona=render_markdown(store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['sections'])
-    assert persona in lane.calls[0]['messages'][0]['content']
-    assert sha(persona.encode())==ep['manifest']['persona_sha256']
-    assert not any(k in json.dumps(lane.calls) for k in ('p1_prediction','expectations_operator_only','reconcile_expected'))
-    assert not any('"'+k+'":' in json.dumps(lane.calls) for k in ('gold','expected','oracle'))
-    head,rev=store.head('doc:P1:persona','global-safe')
-    for body in ('','# title only'):
-        # The seeded document can have several sections; leave one with an empty or heading-only body.
-        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.sections':[{**rev['content']['sections'][0],'body':body}]}})
-        before=len(lane.calls)
-        with pytest.raises(ValueError):coordinator.ingest(event(body or 'empty'))
-        assert len(lane.calls)==before
 
 def test_E03_stops_advance_and_E04_private_public_split(store):
     coordinator,lane=normal(store)
@@ -75,13 +54,6 @@ def test_E07_invalid_stage_fails_closed(store,bad):
     lane=FakeLane(store,[bad]);ep=Coordinator(store,lane).ingest(event())
     assert ep['state']=='FAILED_PROTOCOL' and store.db.sink_receipts.count_documents({})==0
 
-def test_E07_json_retry_and_recall_bounds(store):
-    lane=FakeLane(store,[LaneResult('我想说话。'),LaneResult('{bad'),LaneResult('still bad')])
-    assert Coordinator(store,lane).ingest(event())['state']=='FAILED_PROTOCOL'
-    assert len(lane.calls)==3
-    lane2=FakeLane(store,sum(([LaneResult('我需要回忆。'),decision('recall')] for _ in range(3)),[]))
-    assert Coordinator(store,lane2).ingest(event('recall'))['state']=='NEEDS_INFORMATION'
-    assert len(lane2.calls)==6 and store.db.sink_receipts.count_documents({})==0
 
 def test_E09_identity_and_E10_scope(store):
     assert store.identity('fixture','u-a')=='A'

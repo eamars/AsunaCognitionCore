@@ -3,7 +3,6 @@ import json
 import threading
 from types import SimpleNamespace
 
-import pytest
 
 from asuna.chat import Chat, prepare_local_scene, redact
 from asuna.coordinator import Coordinator

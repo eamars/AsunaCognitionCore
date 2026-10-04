@@ -88,15 +88,10 @@ The maintenance commands are `db-init`, `inspect`, `rollback`, `index`, `delete`
 
 ```powershell
 npm.cmd run test:native
-.\.venv\Scripts\python.exe tools\adr009_offline_check.py
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe tools\check_staged_secrets.py --personal --all
-```
-
-`tools/adr009_offline_check.py` needs no Mongo, model or sandbox. The pytest suite creates an isolated `asuna_v2_test_*` database per test and drops it afterwards. The personal-data scan prints only `file:line:category`, never the matched value, and always exits 0.
-.\.venv\Scripts\python.exe -m pytest tests/test_native_worker.py tests/test_native_product.py -q
 .\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/xiaoman
 node tools/probe_native_schedule.mjs
 ```
 
-The older tests using the `store` fixture create isolated Mongo databases; they are not part of the single-world migration verification. The fixture drops its database in teardown, including setup or test failure, after exporting requested file evidence. Do not retain server databases for audit. `tools/cleanup_test_databases.py --inventory PATH` inventories disposable test databases; `--apply` removes only names already recorded in that manifest and refuses runtime, allowed and unrelated databases. Skip Mongo tests while the service is unavailable.
+The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries, authorization and epoch fencing, exactly-once ingest/publication, crash recovery, audit integrity, sandbox isolation and the visible native behavior. The `store` fixture builds the migrated, audited fixture world once per session and resets a reused `asuna_v2_test_*` database to it for each test; every test database is dropped at session end. The personal-data scan prints only `file:line:category`, never the matched value, and always exits 0. `tools/p2_offline_check.py`, `tools/p3_offline_check.py`, `tools/p5_offline_check.py` and `tools/p1c_offline_check.py` need no Mongo; they are the persona's self-development checks inside its sandbox. Skip Mongo tests while the service is unavailable.

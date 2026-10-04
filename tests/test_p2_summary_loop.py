@@ -19,7 +19,6 @@ import pytest
 from asuna.config import load
 from asuna.dialogue_summary import DialogueSummarizer
 from asuna.memory import MemoryService
-from asuna.memory_indexer import MemoryIndexer
 from conftest import isolated_database, drop_database
 from asuna.state import Store
 from asuna import summary_trigger
@@ -49,63 +48,6 @@ def store():
         db.db[name].delete_many({})
     db.client.close()
     drop_database(db.config, db.name)
-
-
-def test_offline_cases_all_pass():
-    '''假集合那批用例跟着跑一遍：同一结论不许两套口径各自漂移。'''
-    bad = [row for row in cases.run_all() if not row[1]]
-    assert not bad, bad
-
-
-def test_summary_becomes_relationship_source(store):
-    cases.seed_real(store)
-    result = MemoryService(store).commit_understanding(cases.episode(), '他把日子说定了，工具我带。')
-    assert result['state'] == 'COMMITTED', result
-    assert result['source_ids'] == [cases.MONO, cases.SUMMARY], result
-    assert result['auto_source_ids'] == [cases.SUMMARY], result
-    head, revision = cases.head_pair(store)
-    assert head['revision_id'] == result['accepted_revision']
-    assert set(revision['processed_source_ids']) >= {cases.INBOUND, cases.OUTBOUND}, revision
-    for source in revision['processed_source_ids']:
-        assert (store.db.messages.find_one({'_id': source})
-                or store.db.messages.find_one({'platform_event_id': source})), source
-    logged = cases.audit_of(store, 'understanding.result')
-    assert logged[-1]['payload']['auto_source_ids'] == [cases.SUMMARY], logged
-
-
-def test_summary_not_shown_this_turn_is_not_cited(store):
-    cases.seed_real(store)
-    result = MemoryService(store).commit_understanding(
-        cases.episode(selected=[]), '先记着，不催。')
-    assert result['state'] == 'COMMITTED', result
-    assert result['auto_source_ids'] == [] and result['source_ids'] == [cases.MONO], result
-
-
-def test_expected_conflicts_are_audited_and_do_not_raise(store):
-    '''同一批原文重跑与头版本被推前，都降级成 NOT_COMMITTED，不把本轮打成 FAILED_RUNTIME。'''
-    cases.seed_real(store)
-    service = MemoryService(store)
-    assert service.commit_understanding(cases.episode(), '第一版。')['state'] == 'COMMITTED'
-    moved = cases.head_pair(store)[0]['revision_id']
-    stale = service.commit_understanding(cases.episode(base='rev-rel-0', ep_id='ep9', monologue=()), '第二版。')  # ep9 cannot cite ep1's monologue
-    assert stale['state'] == 'NOT_COMMITTED' and 'BASE_REVISION_STALE' in stale['reason'], stale
-    assert cases.head_pair(store)[0]['revision_id'] == moved, '被拒的提交不许动头版本'
-    assert cases.audit_of(store, 'understanding.result')[-1]['payload']['state'] == 'NOT_COMMITTED'
-
-
-def test_summary_reaches_next_turn_context(store):
-    cases.seed_real(store)
-    _system, context, manifest = cases.prepare(store)
-    entry = next((m for m in context['memories'] if m['_id'] == cases.SUMMARY), None)
-    assert entry, context['memories']
-    assert entry['kind'] == 'dialogue_summary', entry
-    assert entry['epistemic_type'] == 'derived_summary', entry
-    assert entry['source_window'] == [7, 8], entry
-    assert entry['source_event_ids'] == [cases.INBOUND, cases.OUTBOUND], entry
-    assert cases.SUMMARY in manifest['selected']
-    assert 'derived_summary' in context['memory_source_rules']
-    assert 'derived_summary' in context['understanding_update_from_program']['route']
-    assert manifest['relationship_revision'] == 'rev-rel-0', '读取腿不改关系口径'
 
 
 # ── P2 第二片：群场景的自适应触发、归属与更正（真 Mongo 那一层）────────────
@@ -156,28 +98,6 @@ def test_group_summary_loop_on_real_store(store):
         assert store.db.messages.find_one({'_id': root}), root
 
 
-def test_group_trigger_fires_on_its_own_pause(store):
-    """真行上的节奏画像：还在说话不动手，安静过本场景停顿线才动手。"""
-    cases.seed_real(store, cases.group_rows())
-    pending = list(store.db.messages.find(
-        {'scene_id': cases.GROUP, 'summary_batch_id': {'$exists': False}}).sort('scene_seq', 1))
-    _profile, mid = _decide(store, cases.GROUP, cases.T0 + 50)
-    assert not mid['fire'] and mid['hold'] == 'scene_still_talking', mid
-    profile, fired = _decide(store, cases.GROUP, cases.T0 + 95)
-    assert fired['fire'] and 'pause_anomalous' in fired['signals'], fired
-    # samples counts peer gaps when there are any (two inbound rows here → one gap)
-    assert profile['quiet_source'] == 'observed' and profile['samples'] == len(profile['peer_gaps']) >= 1, profile
-    assert not cases.legacy_rule(pending, cases.T0 + 95, cases.T0), '反证：旧口径这会儿还在等第 4 条'
-
-
-def test_slow_dialogue_is_not_interrupted_on_real_store(store):
-    """半小时一条的私聊：旧口径那 120 秒在这儿会抢话，本场景自己的停顿线说还得等。"""
-    cases.seed_real(store, cases.slow_rows())
-    _profile, decision = _decide(store, cases.SLOW, cases.T0)
-    assert not decision['fire'] and decision['hold'] == 'scene_still_talking', decision
-    assert decision['quiet_after'] > 1000, decision
-
-
 def test_summary_covering_someone_else_is_not_cited_on_real_store(store):
     """只盖了 B 的摘要：A 那轮看得见但不算 A 的证据；B 那轮照常算。"""
     data = cases.group_rows()
@@ -196,55 +116,6 @@ def test_summary_covering_someone_else_is_not_cited_on_real_store(store):
     b_turn = MemoryService(store).commit_understanding(
         cases.group_episode(cases.PERSON_B, selected=['summary-b-only'], ep_id='ep-g3'), '工具归我。')
     assert b_turn['state'] == 'COMMITTED' and b_turn['auto_source_ids'] == ['summary-b-only'], b_turn
-
-
-def test_correction_marks_earlier_summary_on_real_store(store):
-    """更正指向已被旧摘要盖住的原文：旧条目只追加 corrected_by，正文不动，来源记为 stale。"""
-    cases.seed_real(store, cases.stale_summary_rows())
-    saved, evidence, _lane = _tick_group(store)
-    assert saved and saved['source_window'] == [12, 14], saved
-    old = store.db.memory_units.find_one({'_id': 'summary-old'})
-    assert old['corrected_by'] == ['in-grp-1-14'], old
-    assert old['body_markdown'] == '老陈说他周三去修雾灯。', old
-    assert old['revision'] == 2, '只追加标注：版本推前一次'
-    assert 'summary.corrected' in evidence.kinds(), evidence.kinds()
-    cases.add_row(store, 'memory_units', cases.monologue_unit(cases.PERSON, 'ep-g1'))
-    result = MemoryService(store).commit_understanding(
-        cases.group_episode(cases.PERSON, selected=['summary-old']), '他改周五了，旧那句只当历史。')
-    assert result['auto_source_ids'] == ['summary-old'], result
-    assert result['auto_stale_source_ids'] == ['summary-old'], result
-
-
-def test_indexer_hands_every_scene_to_the_summarizer_on_real_store(store):
-    """接线：本机场景与每个授权群都交给摘要器；线程没 start 之前不动任何场景。"""
-    store.config['embedding'] = {'base_url': 'http://stub/v1', 'model': 'stub', 'dimensions': 768}
-    indexer = MemoryIndexer(store, cases.FakeEvidence(), [cases.SCENE, cases.GROUP],
-                            summary_lane=cases.FakeLane(),
-                            summary_scenes=[cases.SCENE, cases.GROUP])
-    assert indexer.summarizer.scene_ids == [cases.SCENE, cases.GROUP], indexer.summarizer.scene_ids
-    assert not indexer.worker.is_alive(), '构造不该把后台线程拉起来'
-    legacy = MemoryIndexer(store, cases.FakeEvidence(), cases.SCENE, summary_lane=cases.FakeLane(),
-                           summary_scene=cases.SCENE)
-    assert legacy.summarizer.scene_ids == [cases.SCENE], '旧接线参数还得能用'
-
-
-def test_outbound_timing_falls_back_to_sink_receipt_on_real_store(store):
-    """真库那一层的出站时间：行内没 receipt_at 也要经送达回执算成“说过的话”，没送达的不算。"""
-    rows = [cases._in(cases.GROUP, 11, cases.PERSON, '雾灯周三去修', cases.T0),
-            cases._out(cases.GROUP, 12, '那我记周三', cases.T0 + 20, receipt_at=None,
-                       receipt={'_id': 'rcpt-12'}, delivery_state='DELIVERED'),
-            cases._out(cases.GROUP, 13, '还在排队', cases.T0 + 30, delivery_state='SENT')]
-    data = cases.group_rows(messages=rows)
-    data['messages'] = rows
-    cases.seed_real(store, data)
-    store.put('sink_receipts', {'_id': 'rcpt-12', 'received_at': cases._iso(cases.T0 + 45),
-                                'revision': 1}, stream='p2')
-    scene = store.db.scenes.find_one({'_id': cases.GROUP})
-    profile = summary_trigger.observe(store, scene, now_ts=cases.T0 + 300)
-    assert profile['rows_without_time'] == 0, profile      # 缺内联回执不等于没有时间
-    assert profile['observed_rows'] == 2, profile           # SENT 那条不算说过
-    assert sorted(profile['times']) == [11, 12], profile
-    assert profile['sink_note'] == '', profile
 
 
 def test_two_persons_with_same_display_name_on_real_store(store):

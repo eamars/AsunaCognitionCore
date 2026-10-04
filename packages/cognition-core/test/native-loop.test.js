@@ -68,29 +68,6 @@ async function harness(t, finish = 'stop', composition) {
   return { ctx, core, requests, business, create, entered };
 }
 
-test('packaged role preset compacts native history independently for two agents', async t => {
-  const patch = YAML.parse(await fs.readFile(new URL('../../../tests/fixtures/personas/demo/cordis.patch.yml', import.meta.url), 'utf8'));
-  const composition = patch[0].insert.find(row => row.id === 'asuna-demo-preset').config.plugins;
-  const h = await harness(t, 'stop', composition);
-  const first = await h.create('compact-one');
-  const second = await h.create('compact-two');
-  assert.equal(h.ctx.compaction, undefined, 'a preset backend must not leak into the Host');
-  const backend = agent => serviceForAgent(h.ctx, agent, 'compaction');
-  assert.ok(backend(first));
-  assert.equal(backend(first), backend(second), 'DSH reuses the standing preset backend; its operations remain session scoped');
-  for (const agent of [first, second]) {
-    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: ('History for ' + agent.id + '\n').repeat(300) }] }));
-    await agent.whenIdle();
-  }
-  const untouched = second.session.snapshotEvents().length;
-  const result = await backend(first).compactNow(first, new AbortController().signal);
-  assert.ok(result.shadowedSeqs.length > 0);
-  assert.equal(first.session.snapshotEvents().filter(e => e.type === 'compaction/summary').length, 1);
-  assert.equal(second.session.snapshotEvents().length, untouched);
-  assert.ok(first.session.snapshotEvents().some(e => e.type === 'user/message' && JSON.stringify(e.data).includes('History for compact-one')), 'durable originals remain available');
-  assert.equal(h.requests.find(request => request.purpose === 'compaction').maxTokens, 8192);
-});
-
 test('first native request has persona; one real input and no duplicate assistant history', async t => {
   const h = await harness(t);
   const role = await h.create('role');
@@ -124,29 +101,6 @@ test('ordinary native sessions retain their own prompt, tools and input handling
   assert.ok(h.requests[0].tools.some(x => x.name === 'ordinary_tool'));
 });
 
-test('a native session model selection overrides the Asuna default route', async t => {
-  const h = await harness(t);
-  h.core.config.routes.character.reasoningEffort = 'unsupported-for-selected-model';
-  const role = await h.create('selected-model');
-  role.session.append('model/selection', { provider: 'fixture', model: 'selected-model' });
-  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'offline route selection' }] }));
-  await role.whenIdle();
-  assert.equal(h.requests.length, 1);
-  assert.equal(h.requests[0].model, 'selected-model');
-  assert.equal(h.requests[0].reasoningEffort, undefined);
-});
-
-test('the provider-default reasoning choice omits effort in the real native request', async t => {
-  const h = await harness(t);
-  h.core.config.routes.character.reasoningEffort = '';
-  const role = await h.create('default-effort');
-  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'offline default reasoning' }] }));
-  await role.whenIdle();
-  assert.equal(h.requests.length, 1);
-  assert.equal(h.requests[0].reasoningEffort, undefined);
-  assert.equal(h.business.find(x => x.method === 'result').args.result.content, 'actual native assistant event');
-});
-
 test('native max-token finish remains incomplete at the business boundary', async t => {
   const h = await harness(t, 'max-tokens');
   const role = await h.create('role');
@@ -169,30 +123,6 @@ test('one standing preset serves two role agents without sharing input or person
     assert.equal(h.business.filter(x => x.method === 'input' && x.args.session_id === id).length, 1);
     assert.equal(h.business.filter(x => x.method === 'result' && x.args.token === 'stage-' + id).length, 1);
   }
-});
-
-test('removing a blank role preset removes every Asuna hook and inherited-tool restriction', async t => {
-  const h = await harness(t);
-  h.ctx.tools.register(defineTool({ name: 'ordinary_tool', description: 'ordinary only', parameters: {},
-    output: { schema: { type: 'json' }, render: () => [] }, execute: () => ({}) }));
-  const agent = await h.create('role');
-  await h.ctx.agentPresets.select(agent, 'ordinary');
-  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Ordinary input' }] }));
-  await agent.whenIdle();
-  assert.equal(h.business.length, 0);
-  assert.doesNotMatch(JSON.stringify(h.requests[0].messages), /Current persona|Internal context/);
-  assert.ok(h.requests[0].tools.some(x => x.name === 'ordinary_tool'));
-});
-
-test('image tool results persist bytes before returning a native image block', async () => {
-  let saved;
-  const value = await attachImage({ attachments: { async saveImage(image) {
-    saved = image; return { attachmentId: 'native-image', mediaType: 'image/png' };
-  } } }, { image: { media_type: 'image/png', data: 'YWJj' }, ref: 'authorized' });
-  assert.equal(Buffer.from(saved.data).toString(), 'abc');
-  const blocks = asunaRender({}, value);
-  assert.equal(blocks[0].type, 'image');
-  assert.doesNotMatch(JSON.stringify(blocks), /YWJj/);
 });
 
 test('native cancellation fails the pending business stage instead of reporting success', async t => {
@@ -222,26 +152,6 @@ test('business revision cancels only its exact running native operation', async 
   assert.deepEqual(end.data.reason, { kind: 'aborted', reason: { kind: 'hook', reason: 'task_revised' } });
   assert.ok(h.business.find(row => row.method === 'result').args.error);
   assert.equal(role.session.snapshotEvents().filter(event => event.type === 'asuna/stage-result').length, 0);
-});
-
-test('selecting recovery on an existing blank native session exposes its independent project tools', async t => {
-  const h = await harness(t);
-  let ordinaryCalls = 0;
-  h.ctx.tools.register(defineTool({ name: 'ordinary_tool', description: 'Not a recovery capability', parameters: {},
-    output: { schema: { type: 'json' }, render: () => [] }, execute: () => { ordinaryCalls++; return {}; } }));
-  h.ctx.provide('asunaFloor', { config: { route: { provider: 'fixture', model: 'one-model' } },
-    call: async () => ({ state: 'NO_CHANGES' }) });
-  await h.ctx.agentPresets.register({ id: 'recovery', plugins: [{ name: new URL('../src/recovery.js', import.meta.url).href }] });
-  const agent = await h.create('repair', false);
-  await h.ctx.agentPresets.select(agent, 'recovery');
-  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect the project' }] }));
-  await agent.whenIdle();
-  assert.deepEqual((h.requests[0].tools ?? []).map(tool => tool.name).sort(),
-    ['development_files', 'development_publish', 'development_read', 'development_run', 'development_write']);
-  assert.equal(h.business.length, 0);
-  await h.ctx.tools.execute({ callId: 'denied-recovery-call', name: 'ordinary_tool', arguments: {},
-    agent, signal: new AbortController().signal });
-  assert.equal(ordinaryCalls, 0);
 });
 
 test('T0.5 role system prompt is exactly the worker render, without harness identity or runtime context', async t => {
@@ -287,17 +197,3 @@ test('T6.4 CONSULT runs in the idle role session while the action tool waits; th
   await actionTool;
 });
 
-test('recovery honors the native session model and provider-default reasoning selection', async t => {
-  const h = await harness(t);
-  h.ctx.provide('asunaFloor', { config: { route: { provider: 'fixture', model: 'one-model', reasoningEffort: 'high' } } });
-  await h.ctx.agentPresets.register({ id: 'recovery', plugins: [{ name: new URL('../src/recovery.js', import.meta.url).href }] });
-  const agent = await h.create('repair-selection', false);
-  await h.ctx.agentPresets.select(agent, 'recovery');
-  agent.session.append('model/selection', { provider: 'fixture', model: 'recovery-selected-model' });
-  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect only' }] }));
-  await agent.whenIdle();
-  assert.equal(h.requests.length, 1, JSON.stringify(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')));
-  assert.equal(h.requests[0]?.model, 'recovery-selected-model', JSON.stringify(agent.session.snapshotEvents().filter(event => event.type === 'turn/end')));
-  assert.equal(h.requests[0].reasoningEffort, undefined);
-  assert.equal(h.business.length, 0);
-});

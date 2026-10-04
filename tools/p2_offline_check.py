@@ -21,7 +21,7 @@ TARGETS = ('memory.py', 'context.py', 'dialogue_summary.py', 'memory_indexer.py'
 
 def run_cases():
     proc = subprocess.run([sys.executable, os.path.join(ROOT, 'tests', 'p2_summary_loop_cases.py')],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding='utf-8')
     print(proc.stdout, end='')
     if proc.stderr:
         print(proc.stderr, end='')

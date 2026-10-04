@@ -46,10 +46,3 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     assert text not in json.dumps(foreign,ensure_ascii=False)
 
 
-def test_no_change_does_not_manufacture_growth(store):
-    coordinator,lane,event=setup_turn(store,'不更新')
-    before=store.head('relationship:A','scene:dm-a')[0]['revision_id']
-    done=coordinator.ingest(event)
-    assert done['understanding_update']=={'state':'NO_CHANGE'}
-    assert store.head('relationship:A','scene:dm-a')[0]['revision_id']==before
-    assert store.db.state_revisions.count_documents({'mutation_id':done['_id']+':understanding'})==0

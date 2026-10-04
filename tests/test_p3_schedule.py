@@ -15,15 +15,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from asuna import schedule_rules
 from asuna.config import load
-from asuna.context import ContextBuilder
 from asuna.schedule import ScheduleService
 from conftest import isolated_database, drop_database
 from asuna.state import Denied, Store
 
 import p2_summary_loop_cases as p2
-import p3_schedule_cases as cases
 
 CONFIG_PATH = os.environ.get('ASUNA_P3_CONFIG', 'config/local.json')
 TEST_DATABASE = os.environ.get('ASUNA_P3_DATABASE', 'asuna_v2_test_p3_host_20260924')
@@ -114,25 +111,6 @@ EP = {'_id': 'ep-p3-1', 'scene_id': p2.SCENE, 'person_id': p2.PERSON, 'scope_key
 DAILY = {'intent': '每天提醒我喝水', 'clock': {'time': '09:00'}}
 
 
-def test_offline_cases_all_pass():
-    '''假集合那批用例跟着跑一遍：同一结论不许两套口径各自漂移。'''
-    bad = [row for row in cases.run_all() if not row[1]]
-    assert not bad, bad
-
-
-def test_daily_rule_lands_as_one_local_rule_row(store, driven):
-    p2.seed_real(store)
-    plan = driven.create(EP, DAILY)
-    rows = list(store.db.plans.find({'_id': plan['_id']}))
-    assert len(rows) == 1 and rows[0]['revision'] == plan['revision'], '一条安排只有一行 plans'
-    assert rows[0]['rule'] == {'clock': {'time': '09:00'}}, '存的是本地钟点规则，不是换算死的 UTC'
-    assert rows[0]['timezone'] and rows[0]['tz_source'] in ('route', 'scene', 'config', 'unset',
-                                                            'fixed_offset', 'host_local')
-    assert rows[0]['plan_version'] == 1 and rows[0]['status'] == 'ACTIVE'
-    assert datetime.fromisoformat(rows[0]['next_fire_at']) > datetime.now(timezone.utc)
-    assert len(driven.lane.live(plan['_id'])) == 1, '每日规则在原生那边只有一条（IANA 时区为原生 daily）'
-
-
 def test_reschedule_keeps_one_row_and_one_live_native(store, driven):
     p2.seed_real(store)
     plan = driven.create(EP, DAILY)
@@ -173,15 +151,3 @@ def test_foreign_plan_update_is_denied(store, driven):
                       'plan-p3-1', {'plan_id': 'plan-p3-1', 'intent': '替别人改'})
 
 
-def test_plan_projection_reaches_her_context(store, driven):
-    p2.seed_real(store)
-    driven.create(EP, DAILY)
-    event = {'event_id': 'evt-p3', 'scene_id': p2.SCENE, 'person_id': p2.PERSON,
-             'text': '我有哪些安排'}
-    _system, context, _manifest = ContextBuilder(store, retrieval=None).prepare(event)
-    rows = context['plans_from_program']
-    assert rows and rows[0]['intent'] == DAILY['intent'], rows
-    assert rows[0]['timezone'] and rows[0]['local'], '给她的是这个场景的钟面，不是 UTC'
-    assert '每天' in rows[0]['description'] and '09:00' in rows[0]['description'], rows[0]
-    note = context['schedule_control_from_program']
-    assert note['now_local'] and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}

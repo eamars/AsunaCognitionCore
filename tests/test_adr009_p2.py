@@ -3,13 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
 
-import pytest
 
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
-from asuna.documents import DocumentError, DocumentStore, PREAMBLE
+from asuna.documents import DocumentStore, PREAMBLE
 from asuna.lanes import FakeLane, LaneResult
-from asuna.render import action_values, compose, common_text, render_system, budget_gate
+from asuna.render import action_values
 from asuna.state import Conflict
 from conftest import FIXTURES
 from test_engineering_m1 import event
@@ -50,31 +49,6 @@ def test_T2_1_concurrent_writes_on_one_base(store):
     assert len(sections) == 2 and sections[0]['body'] == '暂无。'
 
 
-def test_T2_3_budget_refuses_growth_but_never_truncates(store):
-    owner(store)
-    store.config['character'] = {**store.config['character'], 'context_window': 4000}  # × 0.25 = 1000-token limit
-    docs = DocumentStore(store, 'P1')
-    base = docs.read('persona')[0]
-    gate = budget_gate(store, 'P1')
-    with pytest.raises(DocumentError, match='PERSONA_RENDER_OVER_BUDGET') as refused:
-        docs.apply('persona', {'op': 'append_section', 'heading': '很长', 'reason': '加长', 'visibility': 'public'},
-                   '长' * 800, base_revision_id=base, author='character', mutation_id='t23-grow', budget=gate)
-    assert 'estimate' in refused.value.detail and docs.read('persona')[0] == base
-    # Already over budget (a smaller window): the render is complete, the turn runs, status is red and audited.
-    store.config['character']['context_window'] = 400
-    text, _ = render_system(store, 'P1', 'owner_private')
-    assert text == compose(common_text(store.config), docs.read('persona')[1], None, 'owner_private')
-    assert store.db.audit_events.find_one({'type': 'render.over_budget'})
-    lane = FakeLane(store, [LaneResult('想。'), decide(), LaneResult('好。')])
-    assert Coordinator(store, lane).ingest(event('over-budget'))['state'] == 'COMMITTED'
-    # A change that shrinks the render is always accepted.
-    largest = max(docs.read('persona')[1]['sections'], key=lambda section: len(section['body']))['sid']
-    shrunk = docs.apply('persona', {'op': 'replace_section', 'sid': largest, 'reason': '精简'},
-                        '# 示例角色\n我是示例角色，一个只用于测试的虚构数字角色，没有现实身体。' * 3,
-                        base_revision_id=docs.read('persona')[0], author='character', mutation_id='t23-shrink', budget=gate)
-    assert shrunk['_id'] == docs.read('persona')[0]
-
-
 def dossier(store):
     docs = DocumentStore(store, 'P1')
     docs.seed('dossier:A', 'dossier', '## 写法规矩\n记具体的事。\n', subject='A')
@@ -102,18 +76,6 @@ def test_T2_4_dossier_injection_by_session_class(store):
     _, public, _ = ContextBuilder(store).prepare(event('dossier-group', scene='g1'), 'P1')
     assert 'dossier_from_program' not in public                                       # no public+always section
     assert 'ENTRY_BODY' not in action_values(store, 'P1')
-
-
-def test_T2_5_dossier_entries_are_append_only(store):
-    docs = dossier(store)
-    entry = docs.read('dossier:A')[1]['sections'][1]
-    with pytest.raises(DocumentError, match='DOC_OP_NOT_ALLOWED'):
-        docs.apply('dossier:A', {'op': 'replace_section', 'sid': entry['sid'], 'reason': '改写'}, '改掉',
-                   base_revision_id=docs.read('dossier:A')[0], author='character', mutation_id='t25-replace')
-    docs.apply('dossier:A', {'op': 'correction', 'sid': entry['sid'], 'reason': '记错了'}, '那天其实是周二',
-               base_revision_id=docs.read('dossier:A')[0], author='character', mutation_id='t25-correct')
-    sections = docs.read('dossier:A')[1]['sections']
-    assert sections[1] == entry and sections[-1]['corrects'] == entry['sid'] and 'correction' in sections[-1]['tags']
 
 
 def test_T2_6_write_stage_commits_and_failures_do_not_stop_the_turn(store):

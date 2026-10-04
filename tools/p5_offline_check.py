@@ -22,7 +22,7 @@ NEW = 'proactive.py'
 
 def run_cases(label):
     proc = subprocess.run([sys.executable, os.path.join(ROOT, 'tests', 'p5_proactive_cases.py')],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding='utf-8')
     print(proc.stdout, end='')
     rows = [line for line in proc.stdout.splitlines() if line.startswith(('PASS', 'FAIL'))]
     failed = [line.split(' ', 1)[1] for line in rows if line.startswith('FAIL')]

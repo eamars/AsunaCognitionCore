@@ -10,7 +10,8 @@
 | P0 卫生与地基 | 完成（见下方报告） |
 | P1 人格契约 v2、人格模型、政策存储 | 完成（见下方报告） |
 | P2 文档层、渲染、WRITE 阶段、人物档案 | 完成（见下方报告） |
-| P3–P7 | 未开始 |
+| P3 情感引擎 | 完成（见下方报告） |
+| P4–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -113,6 +114,28 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：P3 — affect.py（事件、修订、提案、投影），先对齐参考实现。
 ```
 
+## P3 报告
+
+```text
+阶段：P3
+提交：见本提交
+完成：
+  T3.1 PASS [离线] 黄金夹具 affect-events.example.json 全部期望点误差 < 1e-6；自建 36 条合成事件（种类半衰期、事件自带半衰期、缺省、挂账、已关闭、作废、fix_ts/fix_kind、钳位、活跃度半衰期、5 种时区偏移含 Z）在两种 close_mode × 60 个时刻（共 120 点）上与参考实现逐点一致，贡献明细顺序与 describe() 输出也一致
+  T3.2 PASS [离线] 同一已关闭挂账事件 from_close 与 retroactive 给出各自定义的值；ts > t 不计入；负半衰期被拒；kind_floor 过滤 top_kinds；无偏移时间被拒
+  T3.3 PASS [Mongo] DECIDE affect 合法条目提交：宿主时间戳、origin=asuna、source_scope 按会话类；ref 不在 ref_index / require_cost 下缺 cost / 超 max_delta / 未知 kind 各自被拒，回合照常完成
+  T3.4 PASS [Mongo] owner 私聊提交的事件，其 why/ref/who/cost 与 owner_private 倾向在随后群回合的上下文、群回合系统提示、行动脑提示中都搜不到；群回合只见 label、public 倾向与 public 档位
+  T3.5 PASS [离线]+[Mongo] affect.py 无 delete/replace/update/find_one_and_* 与 Store.put 写入；Store.put 对 affect_* 拒绝；void 缺 why 被拒；operator 擦除写 by=operator 的 void 修订，投影随之归零
+  T3.6 PASS [Mongo] 伪评估路由阻塞至放行：回合在提案返回前已 COMMITTED；放行后提案入库，带 source_scope 与 ref_index 快照，下一回合上下文出现 affect_proposals_from_program；提案字段集合不含任何台词字段；accept 以快照通过 ref 闸门；过期提案明示 expired 并写入决定记录
+  T3.7 PASS [Mongo] affect.import 同批两次第二次新增 0；同 source_identity 内容变 → EVENT_IMMUTABLE；源中新增 void → 恰好 1 条修订（重放为已存在）；fix_kind 缺 value 被拒；导入保留自带半衰期与原始时间串
+  T3.8 PASS [离线] bands/policy 首个命中，覆盖等号两侧边界
+反证：adr009_p3_cases 与 test_adr009_p3 在基线上无 affect 模块；基线决策 schema 把带 affect 的决策整体判为 BAD_DECISION_JSON。
+删除：无
+偏离：D3-1…D3-4（见下）
+未验证：评估路由的 JS 原生会话（asuna-appraiser-<persona>）未在真实模型上运行——演示环境未配置 appraiser 路由；Python 侧异步路径由 T3.6 覆盖
+人工检查：演示环境中角色在一次致谢后经 DECIDE affect 提交了一条 gratitude 事件（source_scope=owner-private:demo）；记忆右栏「情感」显示当前投影（label/val/arl/挂账数）与最近事件。此前一轮缺 cost 的提交被 require_cost 闸门逐条拒绝、回合照常。群场景 Trajectory 只见档位一项由 T3.4 覆盖（演示环境无渠道）
+下一步：P4 — memory_units 新字段、owner-private 检索、persona_data.py 与探针。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -143,3 +166,7 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D2-5 | `affect*`、`promote` 在其引擎上线前被逐条拒绝（FIELD_NOT_AVAILABLE），不静默丢弃 | 失败语义：单项失败只记 rejections |
 | D2-6 | `pin` 在 P2 先落地为记忆单元的 `pinned` 标记（须在本回合 ref_index 内且可读）；排序权重在 P5 | 协调器范围已列出 pin |
 | D2-7 | 人物档案种子的缺省可见性为 owner_private（其他种子仍为 public） | §2.2「人物档案 缺省 owner_private」 |
+| D3-1 | 提案的决定（accept/decline/edit/expired）以 `decision:<proposal_id>` 新文档插入 `affect_proposals`，而不是改写提案行的 status | 满足「affect_* 只插入、不更新」的静态检查（T3.5）；唯一 _id 保证一个提案只被决定一次。索引改为 `(persona, kind_row, created_at)` |
+| D3-2 | 情感块附带 `commit_rules`（require_cost、max_delta、kinds、allow_untyped） | 演示中角色因不知道 require_cost 而提交被拒；这些是人格模型参数，不是私密内容 |
+| D3-3 | 导入事件未声明可见性时 source_scope=`owner-private:<persona>`；声明 public 时为 `global-safe` | §2.2「导入：按写入方声明」；缺省从严 |
+| D3-4 | 评估路由的设置项未加入设置卡；在 profile 的 `asuna-cognition-core.routes.appraiser` 中配置（与 character/action 同形，未配置即关闭） | 时间所限；行为与 §6.7 一致 |

@@ -59,6 +59,8 @@ class Coordinator:
         self.monologue_enabled=monologue_enabled
         self.scheduler=None
         self.native_session_resolver=None
+        self.appraiser=None           # optional affect appraiser route; runs after commit, never inside a turn
+        self.appraisals={}
 
     def ingest(self, event: dict, *, persona='P1'):
         with self.lock:
@@ -174,6 +176,15 @@ class Coordinator:
         return value.content
 
     def advance(self, ep_id: str):
+        ep=self._advance(ep_id)
+        if self.appraiser and ep.get('state') in ('COMMITTED','WAITING_TASK') and ep['_id'] not in self.appraisals:
+            import threading as _threading
+            worker=_threading.Thread(target=self.appraiser.run,args=(ep['_id'],),name='asuna-appraise',daemon=True)
+            self.appraisals[ep['_id']]=worker
+            worker.start()
+        return ep
+
+    def _advance(self, ep_id: str):
         with self.lock:
             ep=self.store.db.episodes.find_one({'_id':ep_id})
             if not ep:
@@ -302,7 +313,7 @@ class Coordinator:
                             old=self.store.db.memory_units.find_one({'_id':old_id})
                             self.store.put('memory_units',{**old,'status':'superseded'},expected=old['revision'],stream=ep_id)
                         ep=self._update(ep,state='PREPARED',recall_rounds=rounds+1,context=context)
-                        return self.advance(ep_id)
+                        return self._advance(ep_id)
                     if next_step=='delegate':
                         if self.store.config.get('task_mode')=='workspace':
                             from .grants import workspace_grant

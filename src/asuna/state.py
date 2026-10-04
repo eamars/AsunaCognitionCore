@@ -11,7 +11,10 @@ from .config import validate_database, character_id
 from .evidence import canonical, sha
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
-               'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts')
+               'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts',
+               'affect_events','affect_amendments','affect_proposals')
+# Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
+INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
 
 def now():
@@ -53,11 +56,16 @@ class Store:
             'state_revisions': [([('mutation_id',1)], {'unique':True})],
             'sessions': [([('binding_key',1)], {'unique':True})],
             'audit_events': [([('stream_id',1),('seq',1)], {'unique':True})],
+            'affect_events': [([('persona',1),('ts',1)],{}),
+                              ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
+            'affect_amendments': [([('target',1)],{}),
+                                  ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
+            'affect_proposals': [([('persona',1),('kind_row',1),('created_at',1)],{})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:
                 self.db[name].create_index(keys, **options)
-        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':1}
+        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':3}
 
     def audit(self, stream: str, kind: str, payload: dict, scope: str='operator') -> dict:
         if self.fail_audit:
@@ -82,7 +90,7 @@ class Store:
             raise ValueError('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
 
     def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state') -> dict:
-        if collection not in COLLECTIONS or collection in ('audit_events',):
+        if collection not in COLLECTIONS or collection in INSERT_ONLY:
             raise Denied('COLLECTION_NOT_WRITABLE')
         doc = copy.deepcopy(document)
         doc['schema_version'] = 1
@@ -108,7 +116,7 @@ class Store:
     def recover_commits(self):
         repaired = 0
         for name in COLLECTIONS:
-            if name == 'audit_events':
+            if name in INSERT_ONLY:
                 continue
             for doc in self.db[name].find({'_last_op':{'$exists':True}}):
                 op = doc['_last_op']

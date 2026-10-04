@@ -64,12 +64,31 @@ class NativeMemory:
                          'scope_key': 'doc:' + slug, 'revision': revision})
         return rows
 
+    def affect_rows(self):
+        """Operator view: the current projection and the most recent events, each with its source scope."""
+        from .affect import AffectLedger
+        from .render import model_and_policy
+        ledger = AffectLedger(self.store, self.persona, *model_and_policy(self.store, self.persona))
+        if not ledger.enabled:
+            return []
+        view = ledger.description('owner_private')
+        rows = [{'id': 'affect:state', 'kind': 'affect', 'title': '情感 · 当前投影',
+                 'excerpt': f"{view['label']} · val {view['val']:.1f} · arl {view['arl']:.1f} · 挂账 {view['open_count']}",
+                 'scope_key': 'affect'}]
+        for event in self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20):
+            rows.append({'id': 'affect:' + event['_id'], 'kind': 'affect_event',
+                         'title': '情感事件 · ' + (event.get('kind') or '未分类'),
+                         'excerpt': f"val {event.get('val')} · arl {event.get('arl')} · {event.get('why', '')[:120]}",
+                         'scope_key': event.get('source_scope'), 'updated_at': event.get('ts')})
+        return rows
+
     def page(self, kind='all', offset=0):
-        if kind not in ('all', 'documents', 'self', 'relation', 'summary', 'source'):
+        if kind not in ('all', 'documents', 'affect', 'self', 'relation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
         heads = (self.document_rows() if kind in ('all', 'documents') else []) + (
+            self.affect_rows() if kind in ('all', 'affect') else []) + (
             self.head_rows(kind) if kind in ('all', 'self', 'relation') else [])
         rows = heads[offset:offset + self.PAGE + 1]
         if kind in ('all', 'summary', 'source'):
@@ -98,7 +117,23 @@ class NativeMemory:
         if not isinstance(identifier, str) or len(identifier) > 512 or ':' not in identifier:
             raise ValueError('INVALID_MEMORY_ID')
         kind, key = identifier.split(':', 1)
-        if kind == 'doc':
+        if kind == 'affect':
+            from .affect import AffectLedger
+            from .render import model_and_policy
+            import json as _json
+            ledger = AffectLedger(self.store, self.persona, *model_and_policy(self.store, self.persona))
+            if key == 'state':
+                row = ledger.description('owner_private') if ledger.enabled else None
+                result = row and {'id': identifier, 'body': _json.dumps(row, ensure_ascii=False, indent=2, default=str),
+                                  'interpretation': True, 'source_ids': []}
+            else:
+                row = self.store.db.affect_events.find_one({'_id': key, 'persona': self.persona})
+                amendments = list(self.store.db.affect_amendments.find({'target': key}, {'_id': 0, 'op': 1, 'at': 1, 'why': 1, 'by': 1}))
+                result = row and {'id': identifier, 'body': row.get('why', ''), 'interpretation': True, 'source_ids': [],
+                                  'scope_key': row.get('source_scope'),
+                                  'levels': {k: row.get(k) for k in ('kind', 'val', 'arl', 'ts', 'ref', 'who', 'cost', 'open', 'origin')}
+                                            | {'amendments': amendments}}
+        elif kind == 'doc':
             from .documents import DocumentStore
             from .render import render_status
             revision_id, content = DocumentStore(self.store, self.persona).read(key)

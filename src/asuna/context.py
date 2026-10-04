@@ -397,6 +397,18 @@ class ContextBuilder:
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
             manifest['context_sha256']=sha(canonical(context))
+        from .affect import AffectLedger
+        ledger=AffectLedger(self.store,persona,model,policy)
+        if ledger.enabled:
+            # One heart per persona: the state is global; reasons, who and numbers stay owner-private (§6.5).
+            m=ledger.model
+            context['affect_from_program']={**ledger.description(session_class),
+                'commit_rules':{'require_cost':bool(m.get('require_cost')),'max_delta':m.get('max_delta'),
+                                'kinds':sorted(m.get('kinds',{})),'allow_untyped':bool(m.get('allow_untyped',True))}}
+            proposals=ledger.proposals(scope,session_class)
+            if proposals:
+                context['affect_proposals_from_program']={'items':proposals,
+                    'note':'情感评估路由给出的提案，只是建议：用 affect_adopt 逐条 accept/decline/edit；过期的已明示，不再能采纳。'}
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         context=order_context(context,effective(model,'recall_protocol.order',policy))

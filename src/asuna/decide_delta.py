@@ -21,7 +21,7 @@ DELTA = schema('decision-delta.schema.json')
 DELTA_KEYS = tuple(DELTA['properties'])
 ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote')
 # Fields whose engines arrive in later phases are refused explicitly, not silently dropped.
-NOT_YET = {'affect': 'P3', 'affect_ops': 'P3', 'affect_adopt': 'P3', 'promote': 'P5'}
+NOT_YET = {'promote': 'P5'}
 
 
 def split(decision: dict):
@@ -35,7 +35,7 @@ def rejection(field, index, code, detail=''):
 
 
 def code_of(exc) -> str:
-    if isinstance(exc, DocumentError):
+    if isinstance(exc, DocumentError) or hasattr(exc, 'code'):
         return exc.code
     return str(exc).split(':', 1)[0].strip() or type(exc).__name__
 
@@ -70,10 +70,31 @@ def apply(coordinator, ep):
     valid, rejected = validate_items(ep['decision_delta'])
     cls = ep['manifest'].get('session_class', visibility.PUBLIC)
     results = dict(ep.get('delta_results') or {})
+    ledger = None
     for field in ORDER:
         for index, item in valid.get(field, []):
             if field in NOT_YET:
                 rejected.append(rejection(field, index, 'FIELD_NOT_AVAILABLE', 'arrives in ' + NOT_YET[field]))
+            elif field in ('affect_ops', 'affect_adopt', 'affect'):
+                if ledger is None:
+                    from .affect import AffectLedger
+                    from .render import model_and_policy
+                    ledger = AffectLedger(store, ep['persona'], *model_and_policy(store, ep['persona']))
+                try:
+                    if field == 'affect':
+                        row = ledger.commit(ep, index, item, cls)
+                        results.setdefault('affect', []).append({'index': index, 'event_id': row['_id'], 'kind': row.get('kind'),
+                                                                 'val': row.get('val'), 'arl': row.get('arl')})
+                    elif field == 'affect_ops':
+                        row = ledger.amend(ep, index, item, cls)
+                        results.setdefault('affect_ops', []).append({'index': index, 'op': item['op'], 'event_id': item['event_id']})
+                    else:
+                        row = ledger.adopt(ep, index, item, cls)
+                        results.setdefault('affect_adopt', []).append({'index': index, 'proposal_id': item['proposal_id'],
+                                                                       'decision': item['decision'],
+                                                                       'event_id': row['_id'] if row else None})
+                except Exception as exc:  # each item is independent
+                    rejected.append(rejection(field, index, code_of(exc), exc))
             elif field == 'policy_set':
                 _policy_set(store, ep, cls, index, item, results, rejected)
             elif field == 'pin':

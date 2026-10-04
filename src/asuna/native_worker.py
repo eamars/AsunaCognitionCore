@@ -29,8 +29,9 @@ from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS
 class NativeLane:
     def __init__(self, worker, config, store, evidence, lane='character', *args):
         self.worker, self.store, self.lane = worker, store, lane
+        route = {'character': 'character', 'appraiser': 'appraiser'}.get(lane, 'action')
         self.model = {**config['character' if lane == 'character' else 'executor'],
-                      **config.get('_native_routes', {}).get('character' if lane == 'character' else 'action', {})}
+                      **config.get('_native_routes', {}).get(route, {})}
         self.lock = threading.RLock()
 
     def generate(self, binding, operation, phase, text, system, **kwargs):
@@ -61,9 +62,17 @@ class NativeLane:
             role_id = ep.get('native_session_id')
             if not role_id:
                 raise ValueError('NATIVE_ROLE_SESSION_REQUIRED')
-            native_id = ('asuna-action-' + sha(binding.encode())[:32]
-                         if self.lane == 'executor' else role_id)
-            grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
+            native_id = ('asuna-action-' + sha(binding.encode())[:32] if self.lane == 'executor'
+                         else 'asuna-appraiser-' + ep['persona'] if self.lane == 'appraiser' else role_id)
+            if self.lane == 'appraiser':
+                # One tool-free appraiser session per persona, owned by the local operator scene;
+                # each request carries only that episode's own visible material.
+                local = self.store.config['chat']
+                owner = self.store.authorize(local['scene_id'], local['person_id'])
+                grant, ep = local, {**ep, 'scene_id': owner['_id'], 'person_id': local['person_id'],
+                                    'scope_key': owner['scope_key'], 'policy_epoch': owner['policy_epoch']}
+            else:
+                grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             record = self.worker.bind_session(native_id, {
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
                 'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
@@ -294,6 +303,13 @@ class BusinessWorker:
             return self.app.broker.call(record['broker_session'], args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
             return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS]
+        if method == 'affect.import':
+            # Persona-job import path (exposed through the persona data API in P4).
+            from .affect import AffectLedger
+            from .render import model_and_policy
+            persona = self.app.config['chat']['persona']
+            return AffectLedger(self.app.store, persona, *model_and_policy(self.app.store, persona)).import_batch(
+                args['origin'], args.get('events', []), args.get('amendments', []), dry_run=bool(args.get('dry_run')))
         if method == 'schedule.deliver':
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':

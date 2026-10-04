@@ -57,6 +57,11 @@ class Application:
             self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
             self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
+            if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
+                # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).
+                from .affect import Appraiser
+                self.appraiser_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'appraiser'))
+                self.coordinator.appraiser=Appraiser(self.store,self.appraiser_lane)
             self.broker.consult_character=self.coordinator.consult
             self.executor=Executor(self.service,self.executor_lane,self.broker)
             self.router=Router(self.store,self.coordinator,self.executor,self.service)

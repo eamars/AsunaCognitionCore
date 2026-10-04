@@ -26,6 +26,13 @@
         name: Asuna summaries
         plugins:
           - name: '@asuna/cognition-core/summary'
+    - id: asuna-appraiser-preset
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: asuna-appraiser
+        name: Asuna affect appraiser
+        plugins:
+          - name: '@asuna/cognition-core/appraiser'
     - id: asuna-scheduler-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:

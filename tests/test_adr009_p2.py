@@ -133,7 +133,7 @@ def test_T2_6_write_stage_commits_and_failures_do_not_stop_the_turn(store):
     assert entry['body'] == '今天他提到了一件小事。' and entry['visibility'] == 'owner_private'
     assert DocumentStore(store, 'P1').read('persona')[1]['sections'][0]['tags'] == ['values']
     codes = {(r['field'], r['code']) for r in ep['rejections']}
-    assert ('policy_set', 'POLICY_KEY_UNDECLARED') in codes and ('affect', 'FIELD_NOT_AVAILABLE') in codes
+    assert ('policy_set', 'POLICY_KEY_UNDECLARED') in codes and ('affect', 'AFFECT_DISABLED') in codes
     speak = lane.calls[-1]['messages'][-1]['content']
     assert '"write_docs"' in speak and 'POLICY_KEY_UNDECLARED' in speak
     # A group (public) turn may not write any document.

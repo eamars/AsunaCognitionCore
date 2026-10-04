@@ -22,8 +22,10 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
 export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),
   configPath: z.string().volatile(), persona: z.string().volatile(),
-  routes: z.object({ character: Route, action: Route }).volatile() });
+  routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
+// Responsibility routes are configured independently; a lane name never implies a model.
+const routeOf = lane => lane === 'character' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
 export class CognitionCore {
@@ -92,8 +94,9 @@ export class CognitionCore {
 
   async resolveRoutes(routes) {
     const models = {};
-    for (const lane of ['character', 'action']) {
+    for (const lane of ['character', 'action', 'appraiser']) {
       const route = routes[lane];
+      if (!route?.provider && lane === 'appraiser') continue;   // optional: the affect appraiser is off when unset
       const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
       if (!Number.isInteger(route.maxTokens) || route.maxTokens < 1
           || model.context && route.maxTokens >= model.context.contextWindow)
@@ -186,9 +189,9 @@ export class CognitionCore {
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
     const preset = stage.lane === 'executor' ? 'asuna-action' : stage.lane === 'summary'
-      ? 'asuna-summary' : this.personas.get(this.config.persona).preset;
+      ? 'asuna-summary' : stage.lane === 'appraiser' ? 'asuna-appraiser' : this.personas.get(this.config.persona).preset;
     const setup = agentCtx => this.ctx.agentPresets.mount(agentCtx, preset).then(() => undefined);
-    const options = this.config.routes?.[stage.lane === 'character' ? 'character' : 'action'];
+    const options = this.config.routes?.[routeOf(stage.lane)];
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
     const handle = persisted
       ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, agentOptions: options, setup })
@@ -304,7 +307,7 @@ export class CognitionCore {
     });
     // Route selection only. All model-visible material uses the durable inbox.
     scope.on('agent/request', async (_payload, next) => ({ ...await next(),
-      ...this.config.routes?.[lane === 'character' ? 'character' : 'action'] }));
+      ...this.config.routes?.[routeOf(lane)] }));
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
       const decision = await next();

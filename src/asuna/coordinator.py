@@ -338,7 +338,7 @@ class Coordinator:
                         if rounds>=2:
                             return self._update(ep,state='NEEDS_INFORMATION',reason='recall budget exhausted')
                         event={'event_id':ep['source_event_id'],'scene_id':ep['scene_id'],'person_id':ep['person_id'],'text':ep['decision']['recall_query']}
-                        _, recalled,manifest=self.context.prepare(event,ep['persona'])
+                        _, recalled,manifest=self.context.prepare(event,ep['persona'],recall=True)
                         context={**ep['context'],'recall':{'query':ep['decision']['recall_query'],'memories':recalled['memories']}}
                         reads=[(i,item) for i,item in enumerate((ep.get('decision_delta') or {}).get('read') or [])]
                         if reads:

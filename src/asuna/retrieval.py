@@ -78,8 +78,55 @@ class Retrieval:
         self.evidence.record('vector.index',{'database':self.store.name,'definition':definition,'status':rows})
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
+    def _scene_sequences(self, scopes):
+        """Current message count of each scene scope (conversation volume)."""
+        return {row['scope_key']: row.get('sequence', 0) for row in self.store.db.scenes.find(
+            {'scope_key': {'$in': list(scopes)}}, {'scope_key': 1, 'sequence': 1})}
+
+    def _forget(self, ranks, forgetting, sequences, automatic):
+        """Multiply each candidate's score by its freshness (persona model memory.forgetting).
+
+        freshness = 0.5^(days since last real use / half_life_days)
+                  × 0.5^(messages in its conversation since then / half_life_messages)
+        A pinned memory does not fade. Returns raw chat chunks that faded below step_back_below and whose
+        message a summary already covers: automatic recall leaves them out (explicit recall still reads them).
+        """
+        half_days = float(forgetting.get('half_life_days') or 0)
+        half_messages = float(forgetting.get('half_life_messages') or 0)
+        if not ranks or not (half_days or half_messages):
+            return set()
+        rows = {row['_id']: row for row in self.store.db.memory_units.find({'_id': {'$in': list(ranks)}}, {
+            'pinned': 1, 'salience': 1, 'occurred_at': 1, 'generated_at': 1, 'formed_at': 1, 'scene_seq': 1,
+            'source_window': 1, 'source_event_ids': 1, 'scope_key': 1, 'kind': 1})}
+        sources = {row['_id']: row for row in self.store.db.messages.find(
+            {'_id': {'$in': [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]}},
+            {'scene_seq': 1, 'summary_batch_id': 1})}
+        moment = datetime.now(timezone.utc)
+        floor, stepped = float(forgetting.get('step_back_below') or 0), set()
+        for key, row in rows.items():
+            if row.get('pinned') or (row.get('salience') or {}).get('pinned'):
+                ranks[key]['freshness'] = 1.0
+                continue
+            used = row.get('salience') or {}
+            stamp = used.get('last_ref_at') or row.get('occurred_at') or row.get('generated_at') or row.get('formed_at')
+            try:
+                days = max(0.0, (moment - datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))).total_seconds() / 86400) if stamp else 0.0
+            except ValueError:
+                days = 0.0
+            source = sources.get((row.get('source_event_ids') or [None])[-1]) or {}
+            window = row.get('source_window') if isinstance(row.get('source_window'), dict) else {}
+            anchor = used.get('last_ref_seq') or row.get('scene_seq') or window.get('to_seq') or window.get('to') or source.get('scene_seq')
+            current = sequences.get(row.get('scope_key'))
+            messages = max(0, current - anchor) if isinstance(current, int) and isinstance(anchor, int) else 0
+            freshness = (0.5 ** (days / half_days) if half_days else 1.0) * (0.5 ** (messages / half_messages) if half_messages else 1.0)
+            ranks[key]['score'] *= freshness
+            ranks[key]['freshness'] = round(freshness, 4)
+            if automatic and freshness < floor and row.get('kind') == 'chat_chunk' and source.get('summary_batch_id'):
+                stepped.add(key)
+        return stepped
+
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None,
-               coverage_floor=0.0, salience=None):
+               coverage_floor=0.0, forgetting=None, record_use=False, automatic=True):
         # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
         # owner-private 只看会话类（private_scope 仅在 owner_private 会话里由调用方给出），与联动无关。
         linked=[item for item in dict.fromkeys(linked_scopes or ())
@@ -140,22 +187,8 @@ class Retrieval:
         pending=sorted((m for m in rows if m.get('embedding_status')!='READY'),key=lambda m:(m.get('occurred_at') or '',m['_id']),reverse=True)[:6]
         for m in pending:
             ranks.setdefault(m['_id'],{'score':0,'origins':{}})['origins']['pending_backread']=True
-        weights=salience or {}
-        if any(float(weights.get(k) or 0) for k in ('w_pin','w_heat','w_age')):
-            # ADR-009 MEMORY §5.1: + w_pin·pinned + w_heat·log(1+ref_count) − w_age·age_days/half_life_days.
-            half=float(weights.get('half_life_days') or 30)
-            moment=datetime.now(timezone.utc)
-            for row in self.store.db.memory_units.find({'_id':{'$in':list(ranks)}},{'pinned':1,'salience':1,'occurred_at':1,'generated_at':1}):
-                heat=(row.get('salience') or {}).get('ref_count',0)
-                pinned=bool(row.get('pinned') or (row.get('salience') or {}).get('pinned'))
-                stamp=row.get('occurred_at') or row.get('generated_at')
-                try:
-                    age=(moment-datetime.fromisoformat(str(stamp).replace('Z','+00:00'))).total_seconds()/86400 if stamp else 0.0
-                except ValueError:
-                    age=0.0
-                bonus=float(weights.get('w_pin') or 0)*pinned+float(weights.get('w_heat') or 0)*math.log1p(heat)-float(weights.get('w_age') or 0)*max(0.0,age)/half
-                ranks[row['_id']]['score']+=bonus
-                ranks[row['_id']]['salience']=bonus
+        sequences=self._scene_sequences([scope,*linked])
+        stepped=self._forget(ranks,forgetting or {},sequences,automatic)
         ordered=sorted(ranks,key=lambda key:(-ranks[key]['score'],key))
         candidates=[];excluded=[]
         for key in ordered:
@@ -164,6 +197,8 @@ class Retrieval:
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
             if current.get('kind')!='monologue' and set(current.get('source_event_ids',[])) & set(exclude_sources):
                 excluded.append({'id':key,'reason':'source_in_recent_tail'});continue
+            if key in stepped:
+                excluded.append({'id':key,'reason':'faded_and_summarized'});continue
             candidates.append(current)
         # Repeated character interpretations must not crowd newer source speech
         # out of the same bounded retrieval. Reserve two slots for recent
@@ -190,9 +225,10 @@ class Retrieval:
             coverage_basis='lexical_overlap'
         coverage='insufficient' if not selected or coverage_score<float(coverage_floor or 0) else 'sufficient'
         moment=now()
-        for m in selected:
-            # Salience heat: how often a unit was actually selected (ranking weights arrive in P5).
-            self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{'salience.last_ref_at':moment}})
+        for m in selected if record_use else ():
+            # Rehearsal: a memory a real turn used is fresh again, in time and in conversation volume.
+            self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{
+                'salience.last_ref_at':moment,'salience.last_ref_seq':sequences.get(m['scope_key'])}})
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
                   'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',

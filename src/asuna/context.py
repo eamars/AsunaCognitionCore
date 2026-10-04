@@ -163,7 +163,7 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
-    def prepare(self, event: dict, persona='P1'):
+    def prepare(self, event: dict, persona='P1', recall=False):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
@@ -222,7 +222,8 @@ class ContextBuilder:
                 _m,_p=_model_and_policy(self.store,persona)
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
                                                                    coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
-                                                                   salience={k:_effective(_m,'memory.salience.'+k,_p) for k in ('w_pin','w_heat','w_age','half_life_days')},
+                                                                   forgetting={k:_effective(_m,'memory.forgetting.'+k,_p) for k in ('half_life_days','half_life_messages','step_back_below')},
+                                                                   record_use=True,automatic=not recall,
                                                                    linked_scopes=read['linked_scope_keys'],
                                                                    private_scope=visibility.owner_private_scope(persona)
                                                                        if session_class==visibility.OWNER_PRIVATE else None)

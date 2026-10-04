@@ -132,6 +132,9 @@ def _policy_set(store, ep, cls, index, item, results, rejected, scheduler=None):
 
 
 def _pin(store, ep, cls, index, item, results, rejected):
+    if cls != visibility.OWNER_PRIVATE:
+        rejected.append(rejection('pin', index, 'PIN_REQUIRES_OWNER_PRIVATE', item['memory_id']))
+        return
     memory = store.db.memory_units.find_one({'_id': item['memory_id']})
     readable = {ep['scope_key'], 'global-safe', *([visibility.owner_private_scope(ep['persona'])]
                                                  if cls == visibility.OWNER_PRIVATE else [])}

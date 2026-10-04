@@ -282,8 +282,11 @@ class PersonaDataAPI:
             raise DataError('PROBE_K_INVALID')
         scope, epoch, private = self._probe_scope(args.get('as'))
         model, policy = model_and_policy(self.store, self.persona)
+        # Same ranking as a real turn (forgetting included), without counting the probe as use.
         selected, manifest = self.retrieval.search(scope, epoch, args['query'], private_scope=private,
-                                                   coverage_floor=effective(model, 'memory.coverage_floor', policy) or 0)
+                                                   coverage_floor=effective(model, 'memory.coverage_floor', policy) or 0,
+                                                   forgetting={k: effective(model, 'memory.forgetting.' + k, policy) for k in
+                                                               ('half_life_days', 'half_life_messages', 'step_back_below')})
         ranks = manifest.get('ranks', {})
         items = [{'id': m['_id'], 'kind': m.get('kind'), 'score': (ranks.get(m['_id']) or {}).get('score', 0.0),
                   'source_window': m.get('source_window'),

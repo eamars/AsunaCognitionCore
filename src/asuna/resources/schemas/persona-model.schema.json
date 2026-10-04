@@ -371,27 +371,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "salience": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "w_pin": {
-              "type": "number",
-              "minimum": 0
-            },
-            "w_heat": {
-              "type": "number",
-              "minimum": 0
-            },
-            "w_age": {
-              "type": "number",
-              "minimum": 0
-            },
-            "half_life_days": {
-              "$ref": "#/definitions/positive"
-            }
-          }
-        },
         "coverage_floor": {
           "type": "number",
           "minimum": 0,
@@ -418,6 +397,23 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 90
+            }
+          }
+        },
+        "forgetting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "half_life_days": {
+              "$ref": "#/definitions/positive"
+            },
+            "half_life_messages": {
+              "$ref": "#/definitions/positive"
+            },
+            "step_back_below": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
             }
           }
         }

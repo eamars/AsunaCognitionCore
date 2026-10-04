@@ -126,8 +126,8 @@ class Store:
         doc = copy.deepcopy(document)
         doc['schema_version'] = 1
         doc['revision'] = 1 if expected is None else expected + 1
-        if collection == 'state_revisions':
-            doc.setdefault('created_at', now())      # revisions are written once; the page shows when
+        if collection == 'state_revisions' or (collection == 'memory_units' and expected is None):
+            doc.setdefault('created_at' if collection == 'state_revisions' else 'formed_at', now())
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
         self._size(doc)

@@ -202,18 +202,17 @@
     "skip_in_sleep": false
   },
   "memory": {
-    "salience": {
-      "w_pin": 0,
-      "w_heat": 0,
-      "w_age": 0,
-      "half_life_days": 30
-    },
     "coverage_floor": 0,
     "promotion": {
       "daily_quota": 3,
       "min_roots": 2,
       "min_dates": 2,
       "window_days": 7
+    },
+    "forgetting": {
+      "half_life_days": 30,
+      "half_life_messages": 1500,
+      "step_back_below": 0.1
     }
   },
   "speak": {
@@ -250,12 +249,6 @@
       "max": 20,
       "what": "档案注入最近几条可注入条目"
     },
-    "memory.salience.w_pin": {
-      "type": "number",
-      "min": 0,
-      "max": 1,
-      "what": "钉住加权"
-    },
     "memory.coverage_floor": {
       "type": "number",
       "min": 0,
@@ -273,6 +266,12 @@
       "min": 0.25,
       "max": 168,
       "what": "平静的半衰期（小时）"
+    },
+    "memory.forgetting.half_life_days": {
+      "type": "number",
+      "min": 1,
+      "max": 365,
+      "what": "记忆淡忘的时间半衰期（天）"
     }
   }
 }

@@ -155,7 +155,14 @@ class NativeLane:
                 self.worker.pending[operation] = future
             try:
                 self.worker.emit(request)
-                value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
+                try:
+                    value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
+                except TimeoutError:
+                    # Stop the native run this stage waited for: nothing reads its result any more, its tools
+                    # are already refused, and a continuation of the same task would meet it still running.
+                    self.worker.emit({'kind': 'task_fenced', 'token': operation, 'session_id': native_id,
+                                      'reason': 'STAGE_TIMEOUT'})
+                    raise
                 result = LaneResult(**value)
                 # The receipt keeps the full result (the stage's single durable copy on the worker side);
                 # the audit records only its hash (state.commit over 16 KB, phase.output).

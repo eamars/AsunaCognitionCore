@@ -103,3 +103,40 @@ def test_a_platform_turn_binds_its_role_session(store):
     assert episode['native_session_id'].startswith('asuna-role-') and episode['state'] != 'FAILED_RUNTIME'
     bound = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'native.context.bound'})
     assert bound and bound['scope_key'] == store.db.scenes.find_one({'_id': 'dm-a'})['scope_key']
+
+
+def test_a_stage_that_times_out_stops_its_native_run(store, tmp_path):
+    """Regression: on a stage timeout the worker stopped waiting but the native run went on, its tools
+    refused, for half an hour; continuing the same task then met it still running in the same session."""
+    owner(store)
+    store.config['chat']['workspace'] = str(tmp_path)
+    store.config['workflow_timeout_seconds'] = 0.2
+    ep = Coordinator(store, FakeLane(store, [LaneResult('想一想'), decide(), LaneResult('好')])).ingest(
+        {'event_id': 'e-timeout', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
+    store.put('episodes', {**store.db.episodes.find_one({'_id': ep['_id']}), 'native_session_id': 'role-1'},
+              expected=store.db.episodes.find_one({'_id': ep['_id']})['revision'], stream=ep['_id'])
+    emitted = []
+
+    class Worker:
+        pending_lock = threading.Lock()
+        pending = {}
+        navigation_ready = threading.Event()
+        navigation_ready.set()
+        controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+
+        def continued_session(self, session_id):
+            return session_id
+
+        def bind_session(self, session_id, values):
+            return {'_id': session_id, **values}
+
+        def emit(self, request):
+            emitted.append(request)          # the host never answers
+
+    native = NativeLane(Worker(), {'character': {'model': 'native-host'}}, store, None)
+    with pytest.raises(TimeoutError):
+        native.generate('b', ep['_id'] + ':EXTRA:0', 'EXTRA', 'text', 'system')
+    assert [e['kind'] for e in emitted] == ['stage', 'task_fenced']
+    assert emitted[1] == {'kind': 'task_fenced', 'token': ep['_id'] + ':EXTRA:0', 'session_id': 'role-1',
+                          'reason': 'STAGE_TIMEOUT'}
+    assert Worker.pending == {}

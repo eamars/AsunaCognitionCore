@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "asuna:persona-model:1",
+  "title": "ADR-009 persona model",
+  "description": "Persona parameters are data. Absent sections fall back to neutral core defaults (feature off or current behaviour). Private keys rhythm.timezone and rhythm.sleep_window must never be defaulted by a package.",
+  "type": "object",
+  "required": ["model_version", "persona"],
+  "additionalProperties": false,
+  "definitions": {
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "val_gte": {"type": "number"}, "val_gt": {"type": "number"}, "val_lte": {"type": "number"}, "val_lt": {"type": "number"},
+        "arl_gte": {"type": "number"}, "arl_gt": {"type": "number"}, "arl_lte": {"type": "number"}, "arl_lt": {"type": "number"}
+      }
+    },
+    "visibility": {"enum": ["public", "owner_private"]},
+    "range": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "positive": {"type": "number", "exclusiveMinimum": 0}
+  },
+  "properties": {
+    "model_version": {"const": 1},
+    "persona": {
+      "type": "object", "required": ["id", "display_name"], "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 64}
+      }
+    },
+    "render": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "budget_tokens": {"type": "integer", "minimum": 256, "maximum": 200000},
+        "max_window_share": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.6},
+        "values_tag": {"type": "string", "minLength": 1}
+      }
+    },
+    "recall_protocol": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "array", "uniqueItems": true,
+          "items": {"enum": ["dossier", "affect", "affect_proposals", "self_state", "ledgers", "rhythm", "relationship", "memories", "history", "tasks_plans", "recent_phrasing", "media", "group_continuity", "sender_identity"]}
+        }
+      }
+    },
+    "affect": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "default_half_h": {"$ref": "#/definitions/positive"},
+        "arl_half_h": {"$ref": "#/definitions/positive"},
+        "clamp": {"type": "object", "required": ["val", "arl"], "additionalProperties": false,
+                  "properties": {"val": {"$ref": "#/definitions/range"}, "arl": {"$ref": "#/definitions/range"}}},
+        "close_mode": {"enum": ["from_close", "retroactive"]},
+        "require_cost": {"type": "boolean"},
+        "allow_untyped": {"type": "boolean"},
+        "max_delta": {"type": "object", "additionalProperties": false,
+                      "properties": {"val": {"$ref": "#/definitions/positive"}, "arl": {"$ref": "#/definitions/positive"}}},
+        "proposal_ttl_h": {"$ref": "#/definitions/positive"},
+        "thresholds": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "required": ["begin", "sustain", "inactive"], "additionalProperties": false,
+             "properties": {"begin": {"type": "number"}, "sustain": {"type": "number"}, "inactive": {"type": "number"}}}
+          ]
+        },
+        "kinds": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,31}$"},
+          "additionalProperties": {
+            "type": "object", "required": ["half_h"], "additionalProperties": false,
+            "properties": {
+              "half_h": {"$ref": "#/definitions/positive"},
+              "tendency": {"type": "string", "maxLength": 200},
+              "tendency_visibility": {"$ref": "#/definitions/visibility"}
+            }
+          }
+        },
+        "bands": {
+          "type": "array",
+          "items": {"type": "object", "required": ["label"], "additionalProperties": false,
+                    "properties": {"if": {"$ref": "#/definitions/condition"}, "label": {"type": "string", "minLength": 1, "maxLength": 64}, "face": {"type": "string", "maxLength": 300}}}
+        },
+        "policy": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["slot", "rules"], "additionalProperties": false,
+            "properties": {
+              "slot": {"type": "string", "minLength": 1, "maxLength": 32},
+              "visibility": {"$ref": "#/definitions/visibility"},
+              "default": {"type": "string", "maxLength": 300},
+              "rules": {"type": "array", "items": {"type": "object", "required": ["text"], "additionalProperties": false,
+                        "properties": {"if": {"$ref": "#/definitions/condition"}, "text": {"type": "string", "maxLength": 300}}}}
+            }
+          }
+        }
+      }
+    },
+    "dossier": {"type": "object", "additionalProperties": false,
+                "properties": {"inject_last": {"type": "integer", "minimum": 0, "maximum": 20}, "index_size": {"type": "integer", "minimum": 0, "maximum": 200}}},
+    "rhythm": {"type": "object", "additionalProperties": false,
+               "properties": {"settle_at": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"}},
+               "not": {"anyOf": [{"required": ["timezone"]}, {"required": ["sleep_window"]}]}},
+    "heartbeat": {"type": "object", "additionalProperties": false,
+                  "properties": {"enabled": {"type": "boolean"}, "every_min": {"type": "integer", "minimum": 1, "maximum": 1440},
+                                 "min_gap_min": {"type": "integer", "minimum": 0, "maximum": 1440}, "skip_in_sleep": {"type": "boolean"}}},
+    "memory": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "salience": {"type": "object", "additionalProperties": false,
+                     "properties": {"w_pin": {"type": "number", "minimum": 0}, "w_heat": {"type": "number", "minimum": 0},
+                                    "w_age": {"type": "number", "minimum": 0}, "half_life_days": {"$ref": "#/definitions/positive"}}},
+        "coverage_floor": {"type": "number", "minimum": 0, "maximum": 1},
+        "promotion": {"type": "object", "additionalProperties": false,
+                      "properties": {"daily_quota": {"type": "integer", "minimum": 0, "maximum": 20}, "min_roots": {"type": "integer", "minimum": 1},
+                                     "min_dates": {"type": "integer", "minimum": 1}, "window_days": {"type": "integer", "minimum": 1, "maximum": 90}}}
+      }
+    },
+    "speak": {"type": "object", "additionalProperties": false,
+              "properties": {"max_messages": {"type": "integer", "minimum": 1, "maximum": 5}, "split_marker": {"type": "string", "minLength": 3, "maxLength": 32},
+                             "chars_per_second": {"$ref": "#/definitions/positive"}, "min_gap_s": {"type": "number", "minimum": 0}, "max_gap_s": {"type": "number", "minimum": 0}}},
+    "phrasing": {"type": "object", "additionalProperties": false, "properties": {"window": {"type": "integer", "minimum": 1, "maximum": 200}}},
+    "self_development": {"type": "object", "additionalProperties": false, "properties": {"every_min": {"type": "integer", "minimum": 60}}},
+    "policy_keys": {
+      "type": "object",
+      "propertyNames": {"not": {"enum": ["rhythm.timezone", "rhythm.sleep_window"]}},
+      "additionalProperties": {
+        "type": "object", "required": ["type", "what"], "additionalProperties": false,
+        "properties": {
+          "type": {"enum": ["boolean", "integer", "number", "string", "object"]},
+          "min": {"type": "number"}, "max": {"type": "number"},
+          "enum": {"type": "array"},
+          "what": {"type": "string", "minLength": 1, "maxLength": 300}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "_comment": "示例：人格自定格式，核心不规定其形状。真实清单存放在人格的私有文档中（例如 doc:<persona>:migration-manifest，owner_private，inject=never），不进任何包或仓库。此处路径与哈希全部为合成占位。",
+  "format": "demo-manifest/1",
+  "root": "old-home",
+  "files": [
+    {"path": "persona.md", "sha256": "<sha256>", "layer": "document:persona", "inject": "按节；身份节 always", "update": "incremental", "back_readable": true},
+    {"path": "voice.md", "sha256": "<sha256>", "layer": "document:voice", "inject": "always", "update": "incremental", "back_readable": true},
+    {"path": "about-owner.md", "sha256": "<sha256>", "layer": "document:dossier:demo-user-1", "inject": "前言 always + 最近 3 条 injectable", "update": "incremental", "back_readable": true},
+    {"path": "history.md", "sha256": "<sha256>", "layer": "memory:imported_entry(shared_history)", "inject": "检索", "update": "incremental", "back_readable": true, "notes": "自述编写段落标 invented=true"},
+    {"path": "logs/*.md", "sha256": "per-file", "layer": "memory:imported_entry(journal_entry)", "inject": "检索", "update": "incremental", "back_readable": true},
+    {"path": "mood.json", "sha256": "<sha256>", "layer": "affect", "inject": "投影", "update": "incremental", "back_readable": true, "notes": "close_mode 由人格裁定"},
+    {"path": "settings.json", "sha256": "<sha256>", "layer": "policy", "inject": "不注入", "update": "one-shot", "back_readable": true, "notes": "只导入 class=param 的键"},
+    {"path": "todo.md", "sha256": "<sha256>", "layer": "document:ledger", "inject": "未完成节 always", "update": "incremental", "back_readable": true},
+    {"path": "acceptance.md", "sha256": "<sha256>", "layer": "document:contract", "inject": "never", "update": "one-shot", "back_readable": true}
+  ],
+  "excluded": [
+    {"glob": "**/*.py", "why": "行为在新居重写"},
+    {"glob": "archive/**", "why": "旧居自己的备份副本"},
+    {"glob": "**/*.png", "why": "媒体不搬（白名单除外）"}
+  ],
+  "unregistered_policy": "red"
+}

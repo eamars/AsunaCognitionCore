@@ -1,0 +1,62 @@
+{
+  "_comment": "Synthetic request/response pairs for the persona data API (PERSONA_CONTRACT.md §5). Transport is the job's stdio JSONL channel; there is no HTTP endpoint. All identifiers are placeholders.",
+  "calls": [
+    {
+      "method": "documents.upsert",
+      "request": {"origin": "old-home", "source_identity": "persona.md", "slug": "persona", "kind": "persona", "title": "Demo",
+                  "sections": [
+                    {"sid": "identity", "heading": "我是谁", "body": "Demo 是一个合成人格。", "visibility": "public", "inject": "always", "tags": ["values"]},
+                    {"sid": "private-notes", "heading": "只在私聊里看的笔记", "body": "（合成内容）", "visibility": "owner_private", "inject": "on_demand", "tags": []}
+                  ],
+                  "source": {"path": "persona.md", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+                  "dry_run": true},
+      "response": {"result": "created", "dry_run": true, "sections": 2, "render_tokens_estimate": 31, "conflicts": []}
+    },
+    {
+      "method": "documents.append",
+      "request": {"origin": "old-home", "source_identity": "about-owner.md#2026-01-02", "slug": "dossier:demo-user-1",
+                  "section": {"sid": "e-2026-01-02", "heading": "01-02｜一件小事", "body": "（合成条目）", "visibility": "owner_private",
+                              "inject": "on_demand", "tags": ["entry"], "entry_date": "2026-01-02"},
+                  "dry_run": false},
+      "response": {"result": "updated", "revision_id": "rev-demo-1"}
+    },
+    {
+      "method": "affect.import",
+      "request": {"origin": "old-home", "dry_run": false,
+                  "events": [{"source_identity": "mood#1", "ts": "2026-01-01T09:00:00+13:00", "ref": "logs/2026-01-01.md#09:00", "ref_kind": "external",
+                              "why": "合成事件", "cost": "等待 30 分钟", "val": 8, "arl": 5, "kind": "joy", "who": "", "open": false, "half": 6}],
+                  "amendments": [{"source_identity": "mood#1:void", "target_source_identity": "mood#1", "op": "void", "at": "2026-01-02T00:00:00Z", "why": "前提不成立"}]},
+      "response": {"inserted": 1, "existing": 0, "amendments_inserted": 1, "rejected": []}
+    },
+    {
+      "method": "memory.upsert",
+      "request": {"origin": "old-home", "dry_run": false,
+                  "units": [{"source_identity": "logs/2026-01-01.md#L10-L18", "entry_type": "journal_entry", "body_markdown": "（合成日志条目）",
+                             "epistemic_type": "character_interpretation", "occurred_at": "2026-01-01T09:00:00+13:00",
+                             "source_window": {"origin": "old-home", "path": "logs/2026-01-01.md", "file_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+                                               "line_from": 10, "line_to": 18, "heading": "09:00｜开页"},
+                             "visibility": "owner_private", "invented": false}]},
+      "response": {"inserted": 1, "existing": 0, "pending_embedding": 1}
+    },
+    {
+      "method": "policy.set",
+      "request": {"origin": "old-home", "dry_run": false,
+                  "params": [{"key": "heartbeat.every_min", "value": 30, "what": "心跳间隔（分钟）", "class": "param"},
+                             {"key": "device.token", "value": "<redacted>", "what": "设备凭据", "class": "secret"}]},
+      "response": {"set": 1, "rejected": [{"key": "device.token", "code": "POLICY_CLASS_REFUSED"}]}
+    },
+    {
+      "method": "probe.retrieve",
+      "request": {"as": "owner_private", "query": "我最喜欢的饮料", "k": 6},
+      "response": {"coverage": "sufficient",
+                   "items": [{"id": "mu-demo-1", "kind": "imported_entry", "score": 0.031,
+                              "source_window": {"origin": "old-home", "path": "notes/likes.md", "line_from": 3, "line_to": 5, "heading": "饮料"},
+                              "excerpt": "（合成摘录）"}]}
+    },
+    {
+      "method": "documents.upsert",
+      "request": {"origin": "old-home", "source_identity": "persona.md", "slug": "persona", "kind": "persona", "title": "Demo", "sections": [], "source": {"path": "persona.md", "sha256": "2222222222222222222222222222222222222222222222222222222222222222"}, "dry_run": false},
+      "response": {"error": {"code": "SOURCE_CUTOVER", "detail": "source root old-home is in cutover; nothing written"}}
+    }
+  ]
+}

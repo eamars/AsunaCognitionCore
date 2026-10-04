@@ -3,10 +3,8 @@
   "allowed_databases": [
     "asuna_cognition_core_v2"
   ],
-  "legacy_database": "PROTECTED_OLD_DATABASE_NAME",
   "mongo_uri": "mongodb://127.0.0.1:27017/?directConnection=true",
   "dsh_home": ".runtime/asuna-dsh",
-  "workdir": ".runtime/work",
   "character": {
     "base_url": "http://127.0.0.1:8083/v1",
     "model": "<character-model>",
@@ -75,10 +73,8 @@
     "timeout_seconds": 15,
     "image_dirs": []
   },
-  "local_only": true,
   "workflow_timeout_seconds": 1800,
   "provider_idle_timeout_seconds": 1800,
-  "publish_adapter": "local-idempotent-sink",
   "self_development": {
     "enabled": true,
     "every_seconds": 86400

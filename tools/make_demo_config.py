@@ -19,8 +19,8 @@ def build(template: dict, local: dict) -> dict:
     for key in ('channels', 'integration', 'context_links', 'canonical_persons'):
         value.pop(key, None)
     # Paths become absolute under this checkout (the Host and the worker run from different directories).
-    for key in ('dsh_home', 'workdir'):
-        value[key] = (ROOT / value[key]).resolve().as_posix()
+    value.pop('workdir', None)
+    value['dsh_home'] = (ROOT / value['dsh_home']).resolve().as_posix()
     for key in ('workspace', 'skills_dir'):
         value['chat'][key] = (ROOT / value['chat'][key]).resolve().as_posix()
     for roots in (value.get('persona_sources') or {}).values():

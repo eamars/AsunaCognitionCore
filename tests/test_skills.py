@@ -1,7 +1,6 @@
 """Private discovery and the real persistent mount share the same ownership."""
 import uuid
 from asuna.config import ROOT
-from asuna.context import ContextBuilder
 from asuna.sandbox import Sandbox
 from asuna.skills import skills_directory
 
@@ -13,16 +12,7 @@ def test_private_skill_catalog_and_mount_do_not_follow_user_into_other_scene(sto
     store.config.update(task_mode='workspace', chat={
         **store.config['chat'], 'person_id': 'A', 'scene_id': 'dm-a',
         'skills_dir': str(root), 'workspace': str(work), 'read_only_paths': []})
-    calls = []
-    def catalog():
-        calls.append(True)
-        return {'complete': True, 'skills': [{'name': 'private-note', 'description': 'A 的私聊技能'}]}
-    builder = ContextBuilder(store, skill_catalog=catalog)
-    _, own, _ = builder.prepare({'event_id': 'own', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
-    _, foreign, _ = builder.prepare({'event_id': 'foreign', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '你好'})
-    assert own['available_skills_from_native_dsh']['skills'][0]['name'] == 'private-note'
-    assert 'available_skills_from_native_dsh' not in foreign
-    assert len(calls) == 1
+    # Skill discovery is native DSH's (the skill tool in the bound session); the core owns only the mount.
     assert skills_directory(store.config, 'dm-b', 'A') is None
     assert skills_directory(store.config, 'dm-a', 'B') is None
     mounted = Sandbox(work, skills_dir=skills_directory(store.config, 'dm-a', 'A'))

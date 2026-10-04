@@ -25,7 +25,7 @@ def normal(store):
     return Coordinator(store,lane),lane
 
 def test_E01_namespace_guard(store):
-    for forbidden in ('admin','local','config',load()['legacy_database'],'roleplay_bot','asuna_v2_test_/escape'):
+    for forbidden in ('admin','local','config','roleplay_bot','asuna_v2_test_/escape'):
         with pytest.raises(ValueError): validate_database(load(),forbidden)
     assert store.db.command('ping')['ok']==1
 

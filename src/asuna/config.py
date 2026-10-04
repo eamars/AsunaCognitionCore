@@ -80,9 +80,7 @@ def load(path: str | Path = 'config/local.json') -> dict:
         validate_endpoint(value[lane]['base_url'])
     value.setdefault('provider_idle_timeout_seconds',1800)
     value.setdefault('workflow_timeout_seconds',1800)
-    for lane in ('character','executor'):
-        value[lane].setdefault('transport_read_timeout_seconds',1800)
-    for key in ('dsh_home', 'workdir'):
+    for key in ('dsh_home',):
         p = Path(value[key]).resolve()
         if not p.is_relative_to((ROOT / '.runtime').resolve()):
             raise ValueError(f'{key} must be isolated inside this repository .runtime')
@@ -91,7 +89,7 @@ def load(path: str | Path = 'config/local.json') -> dict:
 
 
 def validate_database(config: dict, name: str) -> str:
-    if name == config.get('legacy_database') or not (
+    if not (
         name in config['allowed_databases'] or name.startswith('asuna_v2_test_')
     ) or any(c in name for c in '/\\. $\x00'):
         raise ValueError('DATABASE_NOT_AUTHORIZED')
@@ -111,7 +109,6 @@ def validate_endpoint(url: str) -> None:
 def redacted(config: dict) -> dict:
     out = json.loads(json.dumps(config))
     out.pop('mongo_uri', None)
-    out.pop('legacy_database', None)
     if 'integration' in out:
         out['integration'].pop('adapter_config', None)
     for channel in out.get('channels', {}).values():

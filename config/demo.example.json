@@ -3,10 +3,8 @@
   "allowed_databases": [
     "asuna_v2_demo_main"
   ],
-  "legacy_database": "PROTECTED_OLD_DATABASE_NAME",
   "mongo_uri": "mongodb://127.0.0.1:27017/?directConnection=true",
   "dsh_home": ".runtime/demo/asuna-dsh",
-  "workdir": ".runtime/demo/work",
   "character": {
     "base_url": "http://127.0.0.1:8083/v1",
     "model": "<character-model>",
@@ -67,10 +65,8 @@
     "document_prefix": "search_document: ",
     "api_key": ""
   },
-  "local_only": true,
   "workflow_timeout_seconds": 1800,
   "provider_idle_timeout_seconds": 1800,
-  "publish_adapter": "local-idempotent-sink",
   "self_development": {
     "enabled": false
   },

@@ -278,7 +278,11 @@ def head_pair(store):
 
 
 def audit_of(store, kind):
-    return [row for row in store.db.audit_events.rows.values() if row['type'] == kind]
+    from pymongo.collection import Collection
+    events = store.db.audit_events
+    if isinstance(events, Collection):          # real Mongo: attribute access would name a sub-collection
+        return list(events.find({'type': kind}).sort([('occurred_at', 1), ('seq', 1)]))
+    return [row for row in events.rows.values() if row['type'] == kind]
 
 
 def add_row(store, collection, row):

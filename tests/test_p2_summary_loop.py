@@ -87,7 +87,7 @@ def test_expected_conflicts_are_audited_and_do_not_raise(store):
     service = MemoryService(store)
     assert service.commit_understanding(cases.episode(), '第一版。')['state'] == 'COMMITTED'
     moved = cases.head_pair(store)[0]['revision_id']
-    stale = service.commit_understanding(cases.episode(base='rev-rel-0', ep_id='ep9'), '第二版。')
+    stale = service.commit_understanding(cases.episode(base='rev-rel-0', ep_id='ep9', monologue=()), '第二版。')  # ep9 cannot cite ep1's monologue
     assert stale['state'] == 'NOT_COMMITTED' and 'BASE_REVISION_STALE' in stale['reason'], stale
     assert cases.head_pair(store)[0]['revision_id'] == moved, '被拒的提交不许动头版本'
     assert cases.audit_of(store, 'understanding.result')[-1]['payload']['state'] == 'NOT_COMMITTED'
@@ -137,7 +137,7 @@ def test_group_summary_loop_on_real_store(store):
     assert saved['source_by_speaker'][cases.PERSON] == ['in-grp-1-11', 'in-grp-1-14'], saved
     assert saved['attribution']['corrections'][0]['target_resolution'] == 'reply_link', saved
     assert saved['trigger']['signals'], saved
-    assert store.db.audit_events.find_one({'type': 'summary.saved'}), evidence.kinds()
+    assert 'summary.saved' in evidence.kinds(), evidence.kinds()      # summarizer events go to run evidence
     for row in data['messages']:
         marked = store.db.messages.find_one({'_id': row['_id']})
         assert marked['summary_batch_id'] == saved['_id'], row['_id']
@@ -165,7 +165,8 @@ def test_group_trigger_fires_on_its_own_pause(store):
     assert not mid['fire'] and mid['hold'] == 'scene_still_talking', mid
     profile, fired = _decide(store, cases.GROUP, cases.T0 + 95)
     assert fired['fire'] and 'pause_anomalous' in fired['signals'], fired
-    assert profile['quiet_source'] == 'observed' and profile['samples'] >= 2, profile
+    # samples counts peer gaps when there are any (two inbound rows here → one gap)
+    assert profile['quiet_source'] == 'observed' and profile['samples'] == len(profile['peer_gaps']) >= 1, profile
     assert not cases.legacy_rule(pending, cases.T0 + 95, cases.T0), '反证：旧口径这会儿还在等第 4 条'
 
 
@@ -206,7 +207,7 @@ def test_correction_marks_earlier_summary_on_real_store(store):
     assert old['corrected_by'] == ['in-grp-1-14'], old
     assert old['body_markdown'] == '老陈说他周三去修雾灯。', old
     assert old['revision'] == 2, '只追加标注：版本推前一次'
-    assert store.db.audit_events.find_one({'type': 'summary.corrected'}), evidence.kinds()
+    assert 'summary.corrected' in evidence.kinds(), evidence.kinds()
     cases.add_row(store, 'memory_units', cases.monologue_unit(cases.PERSON, 'ep-g1'))
     result = MemoryService(store).commit_understanding(
         cases.group_episode(cases.PERSON, selected=['summary-old']), '他改周五了，旧那句只当历史。')

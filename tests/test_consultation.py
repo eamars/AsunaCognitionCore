@@ -2,7 +2,6 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-import httpx
 import pytest
 
 from asuna.coordinator import Coordinator
@@ -40,7 +39,6 @@ def test_consult_uses_bound_role_context_without_publication_or_new_task(store):
         assert service.valid(task)['goal']==task['goal']
         assert broker.call('caller','question','consult_character',{'question':'按当前关系怎么呈现？','context':'计算结果 323'})==result
         assert len(calls)==1
-        broker.call('caller','continue','task_status',{'status':'partial'})
         assert service.valid(task)['state']=='RUNNING'
     finally:broker.close()
 
@@ -79,19 +77,14 @@ def test_wait_releases_effects_lock_for_renewal_and_cancellation(store):
     finally:release.set();pool.shutdown();broker.close()
 
 
-def test_native_tool_http_error_returns_original_diagnostic_and_loop_can_continue(store):
+def test_native_tool_error_returns_original_diagnostic_and_loop_can_continue(store):
+    # The HTTP tool broker was retired with the native Host; tools are called in process.
     class BrokenRole:
         def generate(self,*args):raise RuntimeError('original role provider unavailable')
     ep,task,service,broker=bind(store,BrokenRole())
     try:
-        with httpx.Client(trust_env=False) as client:
-            response=client.post(f'http://127.0.0.1:{broker.server.server_port}/tool',
-                headers={'Authorization':'Bearer '+broker.token},
-                json={'session':'caller','call_id':'broken','tool':'consult_character','args':{'question':'判断'}})
-        assert response.status_code==409
-        assert response.json()['error_type']=='RuntimeError'
-        assert 'original role provider unavailable' in response.json()['traceback']
-        broker.call('caller','next','task_status',{'status':'partial'})
+        with pytest.raises(RuntimeError,match='original role provider unavailable'):
+            broker.call('caller','broken','consult_character',{'question':'判断'})
         assert service.valid(task)['state']=='RUNNING'
         assert store.db.tasks.count_documents({})==1
     finally:broker.close()

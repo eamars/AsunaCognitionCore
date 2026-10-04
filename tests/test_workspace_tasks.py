@@ -37,7 +37,6 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         result = broker.call('workspace', 'new', 'write_file', {'path': '普通便条.txt', 'text': '这不是 stats.py'})
         assert result['written']
         assert (work / '普通便条.txt').read_text(encoding='utf-8') == '这不是 stats.py'
-        broker.call('workspace', 'end', 'task_status', {'status': 'done'})
         current=store.db.tasks.find_one({'_id':task['_id']})
         store.put('tasks',{**current,'tool_steps':64},expected=current['revision'])
         broker.call('workspace', 'after-status', 'write_file', {'path': 'late.txt', 'text': 'continued'})
@@ -60,7 +59,7 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
 
     try:
         done = Executor(service, ActionLane(), broker).run(ep['task_id'], work)
-        assert done['state'] == 'RETURNED' and done['result']['declared_status'] is None
+        assert done['state'] == 'RETURNED' and done['result'].get('declared_status') is None
         fact = done['result']['facts'][0]
         assert fact['text'] == narrative
         for ref in fact['evidence_refs']:

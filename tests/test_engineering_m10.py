@@ -15,7 +15,7 @@ from test_engineering_m3 import task_setup
 
 def test_E05_undelivered_are_explicit_and_survive_new_store(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
-        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','scene_seq':i,'text':state+'_body','author':'demo','direction':'outbound','delivery_state':state})
+        store.put('messages',{'_id':state,'scene_id':'dm-a','scope_key':'scene:dm-a','policy_epoch':1,'scene_seq':i,'text':state+'_body','author':'demo','direction':'outbound','delivery_state':state})
     reopened=Store(load(),store.name)
     try:
         _,context,_=ContextBuilder(reopened).prepare(event())
@@ -46,7 +46,7 @@ def test_E12_E13_executor_cannot_publish_or_reach_host(store,monkeypatch):
     try:
         for tool in ('send_message','publish','mongo_write','persona_update'):
             with pytest.raises(Denied):broker.call('s-test',tool,tool,{'text':'executor text'})
-        code=f"import socket,os,pathlib; assert 'MONGODB_URI' not in os.environ; assert not pathlib.Path('/mnt/c').exists(); s=socket.socket();s.settimeout(1);assert s.connect_ex(('127.0.0.1',{broker.server.server_port}))!=0;pathlib.Path('allowed.txt').write_text('local effect only')"
+        code=f"import socket,os,pathlib; assert 'MONGODB_URI' not in os.environ; assert not pathlib.Path('/mnt/c').exists(); s=socket.socket();s.settimeout(1);assert s.connect_ex(('127.0.0.1',27017))!=0;pathlib.Path('allowed.txt').write_text('local effect only')"
         assert broker.call('s-test','script','sandbox_run',{'argv':['python3','-c',code]})['exit_code']==0
         store.put('messages',{'_id':'qwen-bypass','scope_key':'scene:dm-a','author':'qwen','phase':'SPEAK','text':'invented completion','delivery_state':'READY'})
         with pytest.raises(Denied):PublishService(store).publish('qwen-bypass')

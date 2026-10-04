@@ -117,6 +117,9 @@ def test_topic_line_reaches_context_on_real_store(store):
 
 def test_topic_is_derived_on_real_store(store):
     recent = p2._iso(cases.T0)
+    if not store.db.scenes.find_one({'_id': cases.GROUP}):        # the fixture world has no group scene
+        store.put('scenes', {'_id': cases.GROUP, 'kind': 'group', 'members': [cases.PERSON], 'scope_key': 'scene:' + cases.GROUP,
+                             'policy_epoch': cases.EPOCH, 'sequence': 0}, stream='p5')
     store.put('messages', {'_id': 'in-parent', 'scene_id': cases.GROUP, 'policy_epoch': cases.EPOCH,
                            'direction': 'inbound', 'author': cases.PERSON, 'received_at': recent,
                            'event': {'channel': {'platform_event_id': 'evt-parent'},

@@ -5,7 +5,8 @@ from asuna.lanes import FakeLane,LaneResult
 from asuna.coordinator import Coordinator
 from asuna.tasks import TaskService,ToolBroker
 
-store=Store(load(),sys.argv[1]);point=sys.argv[2]
+config=load();config['character_id']='demo'  # same synthetic identity as the conftest store
+store=Store(config,sys.argv[1]);point=sys.argv[2]
 decision={'next':'delegate' if point in ('after_task_persist','after_tool_commit') else 'speak','goal':'复制受控文件','constraints':[],'recall_query':'','speak_before_action':False}
 lane=FakeLane(store,[LaneResult('内部。'),LaneResult(json.dumps(decision)),LaneResult('回来了。')])
 def crash(p):

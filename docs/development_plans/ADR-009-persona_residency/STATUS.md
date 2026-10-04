@@ -14,7 +14,7 @@
 | P4 记忆扩展、人格数据 API、探针、人格作业、导出 | 完成（见下方报告） |
 | P5 调度对齐、节律、心跳、沉淀、表达、显著度 | 完成（两部分报告见下方；人工检查见第二部分） |
 | P6 DSH 对齐（其余） | 完成（报告见下方） |
-| P7 协调器拆分与遗留收尾 | 未开始 |
+| P7 协调器拆分与遗留收尾 | 部分完成（第一部分见下方报告；D-8 与依赖数据迁移的删除留给 owner 决定） |
 
 ## 基线（`549beb4c`）
 
@@ -69,7 +69,7 @@
 | probe_blob.py、probe_host_seam.py、probe_integration_lifecycle.py、probe_integration_transport.py、probe_sandbox.py、read_search_deployment.py | `--debug` 级隔离探针 |
 | probe_native_atomicity.mjs、probe_native_schedule.mjs、probe_plugin_install.mjs | 原生 Host 探针 |
 
-### 基线即失败、仍失败的 17 条（未在 P0 修复）
+### 基线即失败的 17 条（已在 P5–P7 全部修复，见 P7 报告）
 
 test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_engineering_m10 E05/E12_E13、m11 CLI `run`、m7 两个崩溃点、test_p2_summary_loop ×5（真库路径的陈旧断言）、test_p3_schedule reschedule、test_p5 topic_is_derived、test_skills（`skill_catalog` 参数）、test_workspace_tasks ×2（`declared_status`）。它们是 ADR-001/005 时代的陈旧用例，与本 ADR 改动无关；计划在 P7 收尾时连同夹具模式一并清理或改写。
 
@@ -218,8 +218,31 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 删除：phase.output 与原生回执中的全文
 偏离：D6-1…D6-4（见下）
 未验证：真实 DSH 会话中 compaction/end 事件计数随压缩增加（固定版的 dsh-compaction-basic 写入该事件，已读源码核实；未在演示环境触发一次真实压缩）
-人工检查：见下方「P6 演示检查」（若有）
+人工检查：演示环境（合成人格 demo，Web 界面，同一原生会话）连续两轮：第一轮无游标，给出完整窗口 11 行；第二轮 given 0 / omitted 12，会话游标前移；两轮回复都切题。原生回执只含 content_sha256/bytes 与 native_ref（session:seq），真实 DSH 报告 compaction_generation=0
 下一步：P7 — D-8 拆分 Coordinator.advance；CLEANUP 剩余删除；T7.3。
+```
+
+## P7 报告（第一部分）
+
+```text
+阶段：P7（第一部分）
+提交：见本提交
+完成：
+  T7.1 PASS [Mongo] 崩溃矩阵（crash_matrix_worker / crash_worker 与 m 系列）全部通过：m7 两个崩溃点的失败原因是子进程 worker 没有像 conftest 一样使用合成身份 character_id=demo，消息作者与恢复进程不一致（ONLY_CHARACTER_SPEAK_CAN_PUBLISH）；对齐后 7/7
+  全套 Python 211 passed / 0 failed（基线 34 failed），JS 18/18，adr009 离线 37/37
+  基线遗留失败全部处理：consultation ×2 与 workspace_tasks ×2 去掉已退役的 task_status 能力与 HTTP 工具代理；m10 E05 补 policy_epoch（与 m1 同名用例一致）、E12_E13 改为检查沙箱连不上本机 Mongo 端口；m11 去掉已退役的 `asuna run`，并以 UTF-8 读取帮助输出；skills 去掉已移交原生 DSH 的技能目录注入，保留挂载所有权断言；p5 topic 在测试内建群场景；p2_summary_loop ×5：audit_of 认真库、摘要事件在运行证据里、ep9 不能引用 ep1 的独白（守卫正确，用例数据陈旧）、samples 按 peer 间隔计
+  CLEANUP 遗留配置键：删除 legacy_database（数据库仍受 allowed_databases 白名单保护）、transport_read_timeout_seconds、workdir、示例中的 local_only / publish_adapter
+  T7.3（部分）：§10 的 6 项检查中 5 项为 0；剩余 task_mode/cli-fixture/runtime.lock 共 17 处（见「未做」）
+未做（按专业判断留给 owner，理由见 D7-1…D7-3）：
+  D-8 Coordinator.advance 事件驱动拆分与 T7.2
+  夹具模式（task_mode 非 workspace 分支、cli-fixture、DECISION_SCHEMA 回退）的删除
+  episodes.system 兼容与 persona:<id> 头读取路径的删除
+反证：m7 两个崩溃点在对齐身份前失败（基线即失败）
+删除：legacy_database 与上述无读取者的配置键；退役能力的陈旧断言
+偏离：D7-1…D7-3（见下）
+未验证：—
+人工检查：未做（ACCEPTANCE §4 的整套人工检查待 D-8 之后一并进行）
+下一步：owner 决定 D-8 的时机；生产库迁移（转换 persona 头、清理在途旧回合）之后删除 system 兼容与 persona 头读取
 ```
 
 ## 决定与偏离
@@ -267,8 +290,13 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D6-2 | 压缩代数 = 会话中无 error 的 `compaction/end` 事件数，随每个阶段结果回传；在角色阶段前比较「游标设置时的代数」与「最近观测的代数」 | 固定版有可观测的持久事件，按 D-3 不用启发式；压缩发生在本回合内时下一回合重发 |
 | D6-3 | `scenes.sequence` 与 `memory_units.salience` 是 `$inc` 计数器，不进入文档摘要（COUNTER_FIELDS）；隐私删除对审计的既有改写不在篡改检测范围内 | 这些字段本来就不产生修订；否则任何一次发言都会被判为篡改 |
 | D6-4 | FakeLane（测试替身）的回执仍保存全文；配置项名为 `mountSchedule`（JS 配置的驼峰命名），即 ADR 中的 `mount_schedule` | 测试替身没有原生转录可回读；命名与同一对象的其他配置项一致 |
+| D7-1 | D-8（advance 拆分为事件驱动续接）本次不做 | 计划自述「风险高」；它改变每个阶段的线程模型，门槛是崩溃矩阵（本次刚修复成绿）。在 owner 不在场时推送这种改动收益小于风险；建议在 owner 可以同步做人工 Web 检查的时段进行 |
+| D7-2 | `episodes.system` 兼容与 `persona:<id>` 头转换不删 | 只读核查生产库：仍有 2 个未转换的 `persona:` 头、52 个带 `system` 全文的非终态回合（WAITING_TASK/INTERRUPTED）。ADR 的删除条件「确认没有在途旧回合后」尚不满足；现在删除会让正式迁移前的真实部署无法启动或续接 |
+| D7-3 | 夹具模式本次不删，`privacy.py` 的 DSH home `runtime.lock` 租约保留 | 夹具模式仍被大量 m 系列用例当作驱动（D0-2）；删除要逐个改写为工作区模式，适合与 D-8 同批。租约是隐私删除时防止并发写 DSH home 的守卫，CLEANUP 所指的旧 lane 锁（native_worker）已不存在 |
 
 ## 给 owner 的待决事项
 
 1. 人格包 QQ 适配器自检 `preview_readable` 现在期望占位群号；对着真实部署的预览文件会失败，需要改成从预览/配置读取期望值（属于人格包行为改动，未擅改）。
 2. 公开前是否清理 git 历史与历史设计文档中的个人标识（扫描器对 `docs/development_plans/**` 其他 ADR 报告 78 处，只报告不改）。
+3. D-8 的时机（D7-1），以及之后夹具模式的删除（D7-3）。
+4. 生产库正式迁移：首次启动新运行时会把 `persona:` 头转换为人格文档；在途旧回合（52 个）需要收尾或作废，之后才能删除 `system` 兼容（D7-2）。

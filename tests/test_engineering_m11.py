@@ -1,3 +1,4 @@
+import os
 import json,uuid,subprocess,sys
 from unittest.mock import patch
 import pytest
@@ -82,7 +83,9 @@ def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store)
 
 
 def test_cli_starts_and_exposes_revision_commands():
-    for command,expected in [('run','--supersedes-task'),('rollback','--target-revision')]:
-        result=subprocess.run([sys.executable,'-m','asuna.cli',command,'--help'],cwd=ROOT,capture_output=True,text=True)
+    # `asuna run` was retired (Web is the only interaction path); revision commands remain.
+    for command,expected in [('rollback','--target-revision')]:
+        result=subprocess.run([sys.executable,'-m','asuna.cli',command,'--help'],cwd=ROOT,capture_output=True,
+                              encoding='utf-8',env={**os.environ,'PYTHONIOENCODING':'utf-8'})
         assert result.returncode==0,result.stderr
         assert expected in result.stdout

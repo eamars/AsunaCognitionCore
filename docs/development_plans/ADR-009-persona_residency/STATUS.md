@@ -380,6 +380,6 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
   新会话的第一轮：触发这一轮的那条平台消息有时排在她第一步（MONOLOGUE）之后才进会话正文，
     页面上显示为独白在前、消息在后，那一轮的阶段也不再折叠。只影响一个会话的第一轮；待复现后修。
   她决定不说话（委托且不先说、或沉默）时，那一轮最后一步是 DECIDE 的 JSON，DSH 把它当作这一轮的回答显示。
-    DSH 原生的做法是把委托做成工具调用（参数由 schema 校验），这是阶段协议的设计变更，先提方案。
+    DSH 原生的做法是把委托做成工具调用（参数由 schema 校验），方案见 ADR-010/PROPOSAL-DECISION-DISPLAY.md。
   旧的子会话标题（行动脑 · task-ep-…、交流摘要 · local-dm）是改用任务目标与会话名之前建的，新会话已是可读标题。
 ```

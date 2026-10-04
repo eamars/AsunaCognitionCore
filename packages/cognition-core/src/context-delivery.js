@@ -19,11 +19,17 @@ const HEAD = ['scene', 'speaker', 'session_class'];
 
 const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);
 
-/** What the newest stretch of the surface already carries (DSH's chars/4 token estimate). */
-export function visibleCarried(session, windowTokens = REUSE_WINDOW_TOKENS) {
+/** What the newest stretch of the surface already carries (DSH's chars/4 token estimate). Lines still
+ * waiting in the inbox (navigation.js) count too: the same step claims them just before this notice. */
+export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDOW_TOKENS) {
   const visible = { blocks: new Set(), rows: new Set(), memories: new Set(), episodes: new Set() };
   const nodes = session.surface.nodes;
   let used = 0;
+  for (const line of pending.toReversed()) {
+    used += Math.ceil(JSON.stringify(line.content).length / 4);
+    if (used > windowTokens) return visible;
+    if (line.source?.channel && line.source.receipt) visible.rows.add(line.source.receipt);
+  }
   for (let index = nodes.length - 1; index >= 0; index--) {
     const event = session.eventAt(nodes[index]);
     if (!event) continue;

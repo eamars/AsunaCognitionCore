@@ -261,11 +261,11 @@ export class CognitionCore {
     });
   }
 
-  message(stage, session) {
+  message(stage, session, pending = []) {
     let text = stage.text, carried;
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
-      const composed = composeContext(stage.context, visibleCarried(session));
+      const composed = composeContext(stage.context, visibleCarried(session, pending));
       text = JSON.stringify(composed.context) + '\n' + stage.tail;
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;
@@ -338,7 +338,7 @@ export class CognitionCore {
       if (state.current) { state.queue.push(event); return; }
       state.current = event;
       state.system = event.system;
-      agent.followup(this.message(event, agent.session));
+      agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     }
@@ -456,8 +456,9 @@ export class CognitionCore {
     // admits the claimed input), so it is enforced there as the sole section;
     // a `complete` section's text is resolved before the waterfall runs.
     if (lane === 'character') scope.systemPrompt.suppressRuntimeContext();
+    // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
-      if (message.source.kind === 'user') this.state(agent.session.id).claimed.push(message);
+      if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);
     });
     // DSH assembles BEFORE pre-step. Claimed input is prepared at this public
     // scoped assembly boundary, so the first request has its actual persona.

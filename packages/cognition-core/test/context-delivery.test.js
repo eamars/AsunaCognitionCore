@@ -49,3 +49,13 @@ test('group lines already projected into the conversation are not listed again a
   assert.deepEqual(composed.context.delivered_history.map(row => row._id), ['in-6']);
   assert.equal(composed.omitted.history_rows, 2);
 });
+
+test('lines waiting for a conversation\'s first turn are not repeated in its first notice', () => {
+  const waiting = ['in-1', 'in-2'].map(receipt => ({ content: [{ type: 'text', text: '群里的话' }],
+    source: { kind: 'user', channel: 'qq', receipt } }));
+  const rows = [{ _id: 'in-1', direction: 'inbound', text: '群里的话' }, { _id: 'in-2', direction: 'inbound', text: '群里的话' },
+    { _id: 'in-3', direction: 'inbound', text: '叫她的话' }];
+  const first = composeContext(context(rows), visibleCarried(surface([]), waiting));
+  assert.deepEqual(first.context.delivered_history, [{ _id: 'in-3', direction: 'inbound', text: '叫她的话' }]);
+  assert.equal(first.omitted.history_rows, 2);
+});

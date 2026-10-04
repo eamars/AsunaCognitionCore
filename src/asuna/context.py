@@ -280,7 +280,7 @@ class ContextBuilder:
                 'entity':target['entity'],'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
                        '会写进 %s，来源仍只取本轮场景里真实给过你的证据。' % target['scope']}
-        if event.get('episode_kind') == 'self_development':
+        if event.get('episode_kind') in ('self_development', 'presence'):
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']
             # Local owner opportunity may read the real scenes already bound to
@@ -444,6 +444,15 @@ class ContextBuilder:
         if phrasing:
             context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
+        if event.get('episode_kind')=='settlement':
+            from .rhythm import promotion_candidates
+            open_events=[{'event_id':e['_id'],'kind':e.get('kind'),'why':e.get('why'),'ts':e.get('ts')}
+                         for e in ledger.events() if e.get('open')
+                         and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
+            context['settlement_from_program']={'open_affect_events':open_events,
+                'promotion_candidates':promotion_candidates(self.store,model,policy),
+                'promotion_quota':effective(model,'memory.promotion.daily_quota',policy) or 0,
+                'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         context=order_context(context,effective(model,'recall_protocol.order',policy))

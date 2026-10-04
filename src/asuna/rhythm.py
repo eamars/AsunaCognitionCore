@@ -51,6 +51,78 @@ def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
     return block
 
 
+def heartbeat_rest_gate(model, policy, config, moment=None) -> bool:
+    """True only when the persona chose heartbeat.skip_in_sleep and the local time is in her sleep window."""
+    if not effective(model, 'heartbeat.skip_in_sleep', policy):
+        return False
+    zone, _ = persona_timezone(model, policy, config)
+    local = (moment or datetime.now(timezone.utc)).astimezone(ZoneInfo(zone)) if ZoneInfo else moment
+    return in_window(local, effective(model, 'rhythm.sleep_window', policy))
+
+
+def episode_dates(store, episode_ids, zone):
+    """{episode id: local date} from the audited context preparation of each episode."""
+    from zoneinfo import ZoneInfo
+    out = {}
+    for row in store.db.audit_events.find({'type': 'context.prepared', 'stream_id': {'$in': list(episode_ids)}},
+                                          {'stream_id': 1, 'occurred_at': 1}):
+        moment = datetime.fromisoformat(row['occurred_at'].replace('Z', '+00:00')).astimezone(ZoneInfo(zone))
+        out[row['stream_id']] = moment.date().isoformat()
+    return out
+
+
+def selections(store, window_days, *, moment=None):
+    """{memory id: [episode ids]} for memories actually selected into turns within the window."""
+    from datetime import timedelta
+    moment = moment or datetime.now(timezone.utc)
+    since = (moment - timedelta(days=float(window_days or 7))).isoformat()
+    out = {}
+    for row in store.db.audit_events.find({'type': 'context.prepared', 'occurred_at': {'$gte': since}},
+                                          {'stream_id': 1, 'payload.manifest.selected': 1}):
+        for memory_id in ((row.get('payload') or {}).get('manifest') or {}).get('selected') or []:
+            out.setdefault(memory_id, [])
+            if row['stream_id'] not in out[memory_id]:
+                out[memory_id].append(row['stream_id'])
+    return out
+
+
+def promotion_candidates(store, model, policy, *, limit=20):
+    """Deterministic: units or monologues referenced by ≥ 2 different turns within promotion.window_days."""
+    window = effective(model, 'promotion.window_days', policy) or effective(model, 'memory.promotion.window_days', policy) or 7
+    picked = [(memory_id, episodes) for memory_id, episodes in selections(store, window).items() if len(episodes) >= 2]
+    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': [m for m, _ in picked]}, 'status': 'active'},
+                                                                 {'body_markdown': 1, 'kind': 1, 'scope_key': 1})}
+    return [{'memory_id': m, 'kind': rows[m].get('kind'), 'excerpt': rows[m].get('body_markdown', '')[:300], 'episodes': e}
+            for m, e in sorted(picked, key=lambda item: (-len(item[1]), item[0])) if m in rows][:limit]
+
+
+def split_speech(text, marker='---split---', max_messages=1):
+    """SPEAK → ≤ max_messages segments on lines equal to the marker; extra pieces stay in the last one.
+
+    With max_messages == 1 the text is returned untouched (behaviour before ADR-009).
+    """
+    if int(max_messages or 1) <= 1:
+        return [text]
+    pieces = [part.strip('\n') for part in re.split(r'(?m)^\s*' + re.escape(marker) + r'\s*$', text)]
+    pieces = [part for part in pieces if part.strip()]
+    if not pieces:
+        return [text]
+    head, tail = pieces[:int(max_messages) - 1], pieces[int(max_messages) - 1:]
+    return head + (['\n'.join(tail)] if tail else [])
+
+
+def pacing(segments, start, chars_per_second=12, min_gap_s=1, max_gap_s=5):
+    """not_before for each segment: previous not_before + clamp(len / cps, min_gap, max_gap)."""
+    from datetime import timedelta
+    out, moment = [], start
+    for index, segment in enumerate(segments):
+        if index:
+            gap = min(float(max_gap_s), max(float(min_gap_s), len(segments[index - 1]) / float(chars_per_second or 12)))
+            moment = moment + timedelta(seconds=gap)
+        out.append(moment)
+    return out
+
+
 def _grams(text: str):
     """4-grams: CJK by character, other scripts by word."""
     tokens = []

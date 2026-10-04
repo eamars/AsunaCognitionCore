@@ -137,12 +137,21 @@ class Channels:
         while not self.controller.stopping.is_set():
             with database_effects_lock(self.store.name):
                 row = self.store.db.messages.find_one({'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}, sort=[('scene_seq', 1)])
+                # A paced segment holds the line until its time and until earlier segments are delivered,
+                # so later messages never overtake it (ADR-009 §11.1).
+                if row and row.get('not_before') and row['not_before'] > now():
+                    row = None
+                if row and row.get('segment_index') and self.store.db.messages.find_one({'episode_id': row['episode_id'],
+                        'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']}, 'delivery_state': {'$ne': 'DELIVERED'}}):
+                    row = None
                 if row:
                     try:
                         self._valid_publication(row, channel_id)
                     except Denied as exc:
-                        self.store.put('messages', {**row, 'delivery_state': 'FAILED', 'failure': str(exc)},
-                                       expected=row['revision'], stream=row['episode_id'])
+                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED', 'failure': str(exc)},
+                                                expected=row['revision'], stream=row['episode_id'])
+                        from .publish import PublishService
+                        PublishService(self.store).cancel_after(failed)
                         continue
                     attempt = uuid.uuid4().hex
                     self.store.put('messages', {**row, 'delivery_state': 'SENDING',
@@ -180,13 +189,18 @@ class Channels:
                            'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
                            'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},
                            expected=row['revision'], stream=row['episode_id'])
+            if state != 'DELIVERED':
+                from .publish import PublishService
+                PublishService(self.store).cancel_after({**row, 'delivery_state': state})
             return {'status': state}
 
     def recover_sending(self):
         # A lost HTTP response may hide an actual send. Never reclaim automatically.
+        from .publish import PublishService
         for row in self.store.db.messages.find({'channel_id': {'$exists': True}, 'delivery_state': 'SENDING'}):
-            self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
-                           expected=row['revision'], stream=row['episode_id'])
+            unknown = self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
+                                     expected=row['revision'], stream=row['episode_id'])
+            PublishService(self.store).cancel_after(unknown)
 
 
 class ChannelServer:

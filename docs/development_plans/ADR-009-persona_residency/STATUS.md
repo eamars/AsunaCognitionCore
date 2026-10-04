@@ -12,7 +12,7 @@
 | P2 文档层、渲染、WRITE 阶段、人物档案 | 完成（见下方报告） |
 | P3 情感引擎 | 完成（见下方报告） |
 | P4 记忆扩展、人格数据 API、探针、人格作业、导出 | 完成（见下方报告） |
-| P5 调度对齐、节律、心跳、沉淀、表达、显著度 | 部分完成（第一部分见下方报告；心跳、沉淀、多段发言未做） |
+| P5 调度对齐、节律、心跳、沉淀、表达、显著度 | 完成（两部分报告见下方；人工检查见第二部分） |
 | P6–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
@@ -184,6 +184,24 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：心跳（presence）计划与预闸门，然后夜间沉淀与多段发言。
 ```
 
+## P5 报告（第二部分）
+
+```text
+阶段：P5（第二部分）
+提交：见本提交
+完成：
+  T5.2 PASS [Mongo]+[离线] 心跳是 kind=presence 的原生 every 计划，只投递到 owner_private 目标（非 owner_private → PRESENCE_TARGET_NOT_OWNER_PRIVATE）；预闸门只有 BUSY（场景队列有待处理）、MIN_GAP（距上次心跳不足 heartbeat.min_gap_min）与 REST_WINDOW（仅当人格自选 heartbeat.skip_in_sleep 且处于睡眠窗），每次跳过都写 presence.skipped 审计；政策改 heartbeat.every_min 后经 schedule_update 原地改期，不删不建
+  T5.3 PASS [Mongo] 夜间沉淀是 kind=settlement 的原生 daily 计划（rhythm.settle_at + IANA 时区；未设时区不建计划），同一本地日期只运行一次（SKIPPED:ALREADY_SETTLED）；沉淀回合的上下文带 settlement_from_program（未结情感事件、晋升候选、配额）；promote 只在沉淀回合可用（否则 PROMOTE_ONLY_IN_SETTLEMENT），检查每日配额（PROMOTION_QUOTA）与来源 ≥ min_roots 个不同回合且 ≥ min_dates 个本地日期（PROMOTION_SOURCES_INSUFFICIENT）；public 声明进 global-safe，其余进 owner-private
+  T5.4 PASS [Mongo] speak.max_messages=3 时 SPEAK 按独占一行的 split_marker 切成 3 段，出站 <ep>:speak:0..2；渠道场景每段带 not_before，相邻间隔 = clamp(上一段字数 / chars_per_second, min_gap_s, max_gap_s)；claim 不返回未到时刻的段，也不越过尚未送达的前段（且不让后来的消息插队）；第 1 段回执 failed 后第 2、3 段为 CANCELLED_AFTER_FAILURE；max_messages=1 时出站行（键、文本、投递状态、无分段字段）与改动前相同；本地场景不排时
+  T5.9 PASS [Mongo] 第 1 段发布后注入崩溃，recover 后按原键继续第 2、3 段、不生成新行；第 1 段处于 SENDING 时 recover_sending 按 SENDING→UNKNOWN 处理并取消后续段
+反证：adr009_p5_cases 的 t5_2 在本部分之前失败（无 heartbeat_rest_gate）；T5.4/T5.9 用例在改动前无分段行
+删除：decide_delta 中 promote 的 NOT_YET 拒绝
+偏离：D5-3…D5-5（见下）
+未验证：心跳/沉淀计划在真实 Host 上的到期派发（演示环境未配置 heartbeat_target 与 settle_at）
+人工检查：未做（演示环境只有行动模型可用，且人工项依赖真实到期派发）
+下一步：P6 — D-3 历史增量、D-4 审计/回执去重、D-6 mount_schedule、CONSULT 的 JS 测试。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -200,10 +218,6 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D0-10 | 演示环境的人工检查用 `--shared-action-model`（两条路由都指向行动模型） | 当时角色模型端点不可用；路由名不推断模型，不影响验证点 |
 | D0-11 | `dsh plugin add` 需要 PATH 上有 pnpm；本机用 corepack 缓存的 pnpm 通过临时 shim 安装 | 环境事实，记录以便复现 |
 
-## 给 owner 的待决事项
-
-1. 人格包 QQ 适配器自检 `preview_readable` 现在期望占位群号；对着真实部署的预览文件会失败，需要改成从预览/配置读取期望值（属于人格包行为改动，未擅改）。
-2. 公开前是否清理 git 历史与历史设计文档中的个人标识（扫描器对 `docs/development_plans/**` 其他 ADR 报告 78 处，只报告不改）。
 | D1-1 | 完整 schema 校验在 worker `initialize` 中进行（Python jsonschema）；JS `registerPersona` 只做契约形状、路径不越界与 `PERSONA_ID_MISMATCH` 的同步校验 | DSH 侧没有 JSON Schema 校验依赖；两处任一失败都使 Core 惰性并显示原因 |
 | D1-2 | 人格包里的路径（model、seeds、jobs、skills、persona_file）一律存为相对 `resource_root` 的路径，由 floor 按已发布产物根或包根解析为绝对路径 | 满足 PERSONA_CONTRACT §2.3；也让同一份贡献可在候选与已发布产物间切换 |
 | D1-3 | 已安装人格包的人格正文原样从 `persona/core.md` 移到 `seeds/persona.md`（未改一字），模型只含 id 与显示名；核心与该包版本升到 0.2.0 / 对等依赖 0.2.x | CLEANUP §8 与契约 v2；不替人格取参数或标注可见性 |
@@ -226,3 +240,11 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D4-6 | 演示环境的迁移清单文档由实施者写入演示库 | 合成人格 `demo` 没有自己写清单的历史；真实人格的清单由她自己写 |
 | D5-1 | 原生 daily/weekly 的计划标 `native_recurring`，到期后不重挂，只前移 `next_fire_at` 并计 `fire_count`；改节奏时若新旧都是原生重复规则则用 schedule_update 原地修改，否则仍「先建后删」 | 与 D-5 一致，同时保留固定偏移时区与一次性计划的既有路径 |
 | D5-2 | 生产库中已存在的一次性重挂式 clock 计划不迁移，继续按旧路径运行直到被改期 | 不改动在途计划；改期时自然切到原生规则 |
+| D5-3 | 心跳与沉淀计划只在本机配置 `persona_runtime.<persona>.heartbeat_target` 指向 owner_private 场景、或人格模型有 `rhythm.settle_at` 且时区为 IANA 时才建立；建立失败写审计 `rhythm.plan_refused`，不影响启动 | 不替人格选目标或时刻；目标场景属于本机部署事实（§6） |
+| D5-4 | 晋升的来源回合从 `context.prepared` 审计的 manifest 中计（记忆单元被选入的回合），本地日期按人格时区 | 「被 ≥2 个回合引用」需要一个确定、可审计的事实来源 |
+| D5-5 | 分段的 not_before 只用于渠道场景；分段的后续段在前段未送达前不可被 claim，且排在队首时整条渠道等待 | 保证同一场景的出站次序；本地场景没有平台节奏需要模拟 |
+
+## 给 owner 的待决事项
+
+1. 人格包 QQ 适配器自检 `preview_readable` 现在期望占位群号；对着真实部署的预览文件会失败，需要改成从预览/配置读取期望值（属于人格包行为改动，未擅改）。
+2. 公开前是否清理 git 历史与历史设计文档中的个人标识（扫描器对 `docs/development_plans/**` 其他 ADR 报告 78 处，只报告不改）。

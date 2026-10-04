@@ -31,6 +31,11 @@ class ScheduleService:
         self._migrate_native_links()
         self.reconcile()
         self.ensure_self_development()
+        for ensure in (self.ensure_presence, self.ensure_settlement):
+            try:
+                ensure()
+            except Exception as exc:          # a refused heartbeat/settlement plan never blocks the host
+                self.store.audit('rhythm-plans', 'rhythm.plan_refused', {'plan': ensure.__name__, 'error': str(exc)[:300]})
 
     def close(self):
         if self.lane:
@@ -150,6 +155,133 @@ class ScheduleService:
         self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
+
+    # ── ADR-009 §10: heartbeat (presence) and nightly settlement ─────
+    def _persona(self):
+        from .render import model_and_policy
+        persona = self.controller.settings['persona']
+        return persona, *model_and_policy(self.store, persona)
+
+    def _owner_private_target(self, scene_id, label):
+        from . import visibility
+        scene = self.store.db.scenes.find_one({'_id': scene_id})
+        if not scene:
+            raise Denied(label + '_TARGET_UNKNOWN')
+        person = self.app.config['chat']['person_id'] if scene_id == self.app.config['chat']['scene_id'] else scene['members'][0]
+        if visibility.session_class(self.app.config, self.store.db, scene, person) != visibility.OWNER_PRIVATE:
+            raise Denied(label + '_TARGET_NOT_OWNER_PRIVATE')
+        return scene, person
+
+    def _rhythm_plan(self, plan_id, kind, scene, person, rule, timing, extra=None):
+        """Create the plan and its native rule, or retime it in place with schedule_update."""
+        plan = self.store.db.plans.find_one({'_id': plan_id})
+        if plan and (plan['scene_id'] != scene['_id'] or plan.get('kind') != kind):
+            self.cancel(plan_id, plan['scene_id'], plan['person_id'], plan['policy_epoch'])
+            plan = None
+        if plan and plan['status'] == 'CANCELLED':
+            self.store.put('plans', {**plan, 'status': 'CREATING', 'schedule_id': None, 'rule': rule, **(extra or {})},
+                           expected=plan['revision'], stream=plan_id)
+            plan = self.store.db.plans.find_one({'_id': plan_id})
+        if not plan:
+            plan = self.store.put('plans', {'_id': plan_id, 'kind': kind, 'scene_id': scene['_id'], 'person_id': person,
+                'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'], 'status': 'CREATING',
+                'intent': {'presence': '在场机会（心跳）', 'settlement': '夜间沉淀'}[kind], 'rule': rule,
+                'plan_version': 1, 'created_at': now(), **(extra or {})}, stream=plan_id)
+        creates, _, deleted = self._grouped(self._native_events())
+        live = plan.get('schedule_id') in creates and plan['schedule_id'] not in deleted
+        if live and plan['rule'] == rule:
+            return plan
+        if live:
+            native = self.lane.schedule('/schedule/update', {'id': plan['schedule_id'],
+                                                             'change': {'kind': next(iter(timing)), **timing}})
+            if not isinstance(native, dict) or native.get('id') != plan['schedule_id']:
+                raise ValueError('NATIVE_SCHEDULE_UPDATE_FAILED')
+            self.store.audit(plan_id, 'rhythm.retimed', {'from': plan['rule'], 'to': rule}, plan['scope_key'])
+        else:
+            native = self.lane.schedule('/schedule/create', {'plan_id': plan_id, **timing})
+            if not isinstance(native, dict) or not native.get('id'):
+                raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
+        current = self.store.db.plans.find_one({'_id': plan_id})
+        return self.store.put('plans', {**current, 'rule': rule, 'schedule_id': native['id'], 'status': 'ACTIVE',
+            'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native.get('scheduledAt'),
+            'native_recurring': True, **(extra or {})}, expected=current['revision'], stream=plan_id)
+
+    def _retire(self, plan_id, reason):
+        plan = self.store.db.plans.find_one({'_id': plan_id})
+        if plan and plan['status'] not in ('CANCELLED',):
+            self.cancel(plan_id, plan['scene_id'], plan['person_id'], plan['policy_epoch'])
+            self.store.audit(plan_id, 'rhythm.disabled', {'reason': reason}, plan['scope_key'])
+
+    def ensure_presence(self):
+        """Heartbeat needs the persona model (heartbeat.enabled) and the owner's local target scene."""
+        from .persona_data import persona_runtime
+        from .persona_model import effective
+        persona, model, policy = self._persona()
+        target = persona_runtime(self.app.config, persona).get('heartbeat_target')
+        if not (effective(model, 'heartbeat.enabled', policy) and target):
+            self._retire('plan-asuna-presence', 'heartbeat disabled or no heartbeat_target')
+            return None
+        scene, person = self._owner_private_target(target, 'PRESENCE')
+        every = max(schedule_rules.MIN_INTERVAL_SECONDS, int(effective(model, 'heartbeat.every_min', policy) or 30) * 60)
+        return self._rhythm_plan('plan-asuna-presence', 'presence', scene, person, {'every_seconds': every},
+                                 {'every_seconds': every})
+
+    def ensure_settlement(self):
+        """Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date."""
+        from .persona_data import persona_runtime
+        from .persona_model import effective, timezone as persona_timezone
+        persona, model, policy = self._persona()
+        settle_at = effective(model, 'rhythm.settle_at', policy)
+        zone, source = persona_timezone(model, policy, self.app.config)
+        if not settle_at or source == 'unset' or not schedule_rules.is_iana(zone):
+            self._retire('plan-asuna-settlement', 'no settle_at or no IANA time zone')
+            return None
+        target = persona_runtime(self.app.config, persona).get('internal_scene') or self.app.config['chat']['scene_id']
+        scene, person = self._owner_private_target(target, 'SETTLEMENT')
+        rule = {'clock': {'time': settle_at}, 'settlement_zone': zone}
+        return self._rhythm_plan('plan-asuna-settlement', 'settlement', scene, person, rule,
+                                 {'daily': {'time': settle_at + ':00', 'time_zone': zone}}, {'timezone': zone})
+
+    def _presence(self, plan, occurrence):
+        """Deterministic pre-gates; a skip calls no model and leaves one counting audit."""
+        from .persona_model import effective
+        from .rhythm import heartbeat_rest_gate
+        persona, model, policy = self._persona()
+        reason = None
+        with self.controller.pending.mutex:
+            queued = bool(self.controller.pending.queue.queues.get(plan['scene_id']))
+        if queued or self.controller.active is not None or self.controller.active_task is not None:
+            reason = 'BUSY'
+        last = plan.get('last_presence_at')
+        if not reason and last:
+            gap = (schedule_rules._aware(now()) - schedule_rules._aware(last)).total_seconds() / 60
+            newer = self.store.db.messages.find_one({'scene_id': plan['scene_id'], 'direction': 'inbound',
+                                                     'received_at': {'$gt': last}})
+            if gap < float(effective(model, 'heartbeat.min_gap_min', policy) or 0) and not newer:
+                reason = 'MIN_GAP'
+        if not reason and heartbeat_rest_gate(model, policy, self.app.config):
+            reason = 'REST_WINDOW'
+        if reason:
+            self.store.audit(plan['_id'], 'presence.skipped', {'reason': reason, 'occurrence': occurrence}, plan['scope_key'])
+            return 'SKIPPED:' + reason
+        self.controller.offer_internal('presence', 'presence:' + occurrence, plan['scene_id'], plan['person_id'],
+            '这是一次内部在场机会（心跳），不是用户消息或新授权。看看此刻的节律、心情、活账和最近发生的事，'
+            '自己决定是否想说一句、做点什么、写下点什么，或者安静待着。大多数时候什么都不做也完全正常。')
+        current = self.store.db.plans.find_one({'_id': plan['_id']})
+        self.store.put('plans', {**current, 'last_presence_at': now()}, expected=current['revision'], stream=plan['_id'])
+        return 'ENQUEUED'
+
+    def _settlement(self, plan, occurrence):
+        local_date = schedule_rules.local_moment(plan['rule']['settlement_zone'], now()).date().isoformat()
+        if plan.get('last_settled_date') == local_date:
+            self.store.audit(plan['_id'], 'settlement.skipped', {'reason': 'ALREADY_SETTLED', 'date': local_date}, plan['scope_key'])
+            return 'SKIPPED:ALREADY_SETTLED'
+        self.controller.offer_internal('settlement', 'settlement:' + local_date, plan['scene_id'], plan['person_id'],
+            '这是今天的夜间沉淀机会，不是用户消息。看看挂着的情绪、待决的提案、活账和晋升候选，'
+            '决定哪些了结（close）、哪些作废（void，要写理由）、哪些值得晋升成长期记忆（promote），也可以什么都不做。')
+        current = self.store.db.plans.find_one({'_id': plan['_id']})
+        self.store.put('plans', {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])
+        return 'ENQUEUED'
 
     def create(self, ep, spec):
         intent = spec.get('intent') if isinstance(spec, dict) else None
@@ -404,6 +536,10 @@ class ScheduleService:
             if plan.get('kind') == 'self_development':
                 self.controller.offer_self_development('self-development:' + occurrence)
                 outcome = 'ENQUEUED'
+            elif plan.get('kind') == 'presence':
+                outcome = self._presence(plan, occurrence)
+            elif plan.get('kind') == 'settlement':
+                outcome = self._settlement(plan, occurrence)
             else:
                 channel = None
                 if scene.get('channel_id'):

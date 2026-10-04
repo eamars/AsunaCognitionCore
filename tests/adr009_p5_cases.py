@@ -42,6 +42,17 @@ def t5_1_rhythm_block_windows_and_public_clock():
 
 
 @case
+def t5_2_heartbeat_rest_gate_only_when_the_persona_chose_it():
+    from asuna.rhythm import heartbeat_rest_gate
+    model = {'model_version': 1, 'persona': {'id': 'demo', 'display_name': 'x'}, 'heartbeat': {'skip_in_sleep': True}}
+    night = datetime(2026, 1, 1, 23, 30, tzinfo=timezone.utc)
+    p = policy(rhythm__timezone='Etc/GMT-1', rhythm__sleep_window='23:00-07:00')
+    assert heartbeat_rest_gate(model, p, {}, night) is True
+    assert heartbeat_rest_gate({**model, 'heartbeat': {'skip_in_sleep': False}}, p, {}, night) is False
+    assert heartbeat_rest_gate(model, p, {}, datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)) is False
+
+
+@case
 def t5_1_sleep_window_is_input_not_gate():
     source = (ROOT / 'src/asuna/coordinator.py').read_text(encoding='utf-8') + (ROOT / 'src/asuna/chat.py').read_text(encoding='utf-8')
     assert 'in_sleep_window' not in source, 'no program path blocks a reply on the sleep window'

@@ -373,11 +373,36 @@ class Coordinator:
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text,feedback_resume_phase=None)
                 if ep['state']=='SPEAK_ACCEPTED':
-                    key=ep_id+':speak:0'
-                    if not self.store.db.messages.find_one({'_id':key}):
-                        sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-                        self.store.put('messages',{'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'},stream=ep_id)
-                    self.publisher.publish(key)
+                    # ADR-009 §11.1: up to speak.max_messages segments, published in order (default 1 = as before).
+                    from .persona_model import effective
+                    from .render import model_and_policy
+                    from .rhythm import split_speech, pacing
+                    from datetime import datetime as _dt, timezone as _tz
+                    model,policy=model_and_policy(self.store,ep['persona'])
+                    segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or '---split---',
+                                          effective(model,'speak.max_messages',policy) or 1)
+                    scene=self.store.db.scenes.find_one({'_id':ep['scene_id']})
+                    times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
+                                 effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
+                    keys=[]
+                    for index,segment in enumerate(segments):
+                        key=ep_id+':speak:'+str(index)
+                        keys.append(key)
+                        if not self.store.db.messages.find_one({'_id':key}):
+                            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+                            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+                            if len(segments)>1:
+                                row.update(segment_index=index,segment_count=len(segments))
+                                if scene.get('channel_id'):
+                                    row['not_before']=times[index].isoformat()
+                            self.store.put('messages',row,stream=ep_id)
+                    for key in keys:
+                        published=self.publisher.publish(key)
+                        if published.get('delivery_state') in ('FAILED','UNKNOWN'):
+                            self.publisher.cancel_after(published)
+                            break
+                        if len(keys)>1:
+                            self.crash('after_segment_publish')
                     self.crash('before_episode_commit')
                     delegated=ep['decision']['next']=='delegate' and ep.get('task_id')==(ep.get('supersedes_task_id') or 'task-'+ep_id)
                     ep=self._update(ep,state='WAITING_TASK' if delegated else 'COMMITTED')

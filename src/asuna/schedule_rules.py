@@ -234,6 +234,11 @@ def next_fire(rule, tz, moment=None):
     raise ValueError('SCHEDULE_CLOCK_NO_UPCOMING: 这条钟点规则算不出下一次')
 
 
+def local_moment(zone_name, moment=None):
+    """The moment on the wall clock of an IANA zone (rhythm, settlement dates)."""
+    return _aware(moment or now_utc()).astimezone(ZoneInfo(zone_name))
+
+
 def is_iana(zone_name) -> bool:
     """An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept."""
     if not isinstance(zone_name, str) or not (zone_name == 'UTC' or '/' in zone_name) or ZoneInfo is None:

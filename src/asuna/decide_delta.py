@@ -21,7 +21,7 @@ DELTA = schema('decision-delta.schema.json')
 DELTA_KEYS = tuple(DELTA['properties'])
 ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote')
 # Fields whose engines arrive in later phases are refused explicitly, not silently dropped.
-NOT_YET = {'promote': 'P5'}
+NOT_YET = {}
 
 
 def split(decision: dict):
@@ -96,16 +96,18 @@ def apply(coordinator, ep):
                 except Exception as exc:  # each item is independent
                     rejected.append(rejection(field, index, code_of(exc), exc))
             elif field == 'policy_set':
-                _policy_set(store, ep, cls, index, item, results, rejected)
+                _policy_set(store, ep, cls, index, item, results, rejected, getattr(coordinator, 'scheduler', None))
             elif field == 'pin':
                 _pin(store, ep, cls, index, item, results, rejected)
             elif field == 'write_docs':
                 ep = _write(coordinator, ep, cls, index, item, results, rejected)
+            elif field == 'promote':
+                _promote(store, ep, cls, index, item, results, rejected)
     return coordinator._update(ep, rejections=[*(ep.get('rejections') or []), *rejected],
                                delta_results=results, delta_applied=True)
 
 
-def _policy_set(store, ep, cls, index, item, results, rejected):
+def _policy_set(store, ep, cls, index, item, results, rejected, scheduler=None):
     if cls != visibility.OWNER_PRIVATE:
         rejected.append(rejection('policy_set', index, 'POLICY_SET_REQUIRES_OWNER_PRIVATE'))
         return
@@ -121,6 +123,10 @@ def _policy_set(store, ep, cls, index, item, results, rejected):
                               mutation_id=f"{ep['_id']}:policy_set:{index}", sources=[ep['source_event_id']])
         results.setdefault('policy_set', []).append({'index': index, 'key': item['key'], 'value': item['value'],
                                                      'revision_id': revision['_id']})
+        if scheduler and hasattr(scheduler, 'ensure_presence') and item['key'].startswith(('heartbeat.', 'rhythm.')):
+            # A new rhythm takes effect through schedule_update, never delete + create.
+            scheduler.ensure_presence()
+            scheduler.ensure_settlement()
     except Exception as exc:  # each item is independent
         rejected.append(rejection('policy_set', index, code_of(exc), exc))
 
@@ -137,6 +143,52 @@ def _pin(store, ep, cls, index, item, results, rejected):
         return
     store.put('memory_units', {**memory, 'pinned': item['pinned']}, expected=memory['revision'], stream=ep['_id'])
     results.setdefault('pin', []).append({'index': index, 'memory_id': item['memory_id'], 'pinned': item['pinned']})
+
+
+def _promote(store, ep, cls, index, item, results, rejected):
+    """Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources."""
+    from .config import character_id
+    from .evidence import canonical, sha
+    from .persona_model import effective, timezone as persona_timezone
+    from .render import model_and_policy
+    from .rhythm import episode_dates, selections
+    if ep.get('episode_kind') != 'settlement':
+        rejected.append(rejection('promote', index, 'PROMOTE_ONLY_IN_SETTLEMENT'))
+        return
+    model, policy = model_and_policy(store, ep['persona'])
+    quota = int(effective(model, 'memory.promotion.daily_quota', policy) or 0)
+    if len(results.get('promote', [])) >= quota:
+        rejected.append(rejection('promote', index, 'PROMOTION_QUOTA', quota))
+        return
+    picked = selections(store, effective(model, 'memory.promotion.window_days', policy) or 7)
+    episodes = set()
+    for source in item['source_ids']:
+        unit = store.db.memory_units.find_one({'_id': source}, {'episode_id': 1})
+        if store.db.episodes.find_one({'_id': source}, {'_id': 1}):
+            episodes.add(source)
+        elif source.startswith('in-') and store.db.episodes.find_one({'_id': source[3:]}, {'_id': 1}):
+            episodes.add(source[3:])
+        elif unit:
+            episodes.update([unit['episode_id']] if unit.get('episode_id') else picked.get(source, []))
+    zone, _ = persona_timezone(model, policy, store.config)
+    dates = set(episode_dates(store, episodes, zone).values())
+    need_roots = int(effective(model, 'memory.promotion.min_roots', policy) or 2)
+    need_dates = int(effective(model, 'memory.promotion.min_dates', policy) or 2)
+    if len(episodes) < need_roots or len(dates) < need_dates:
+        rejected.append(rejection('promote', index, 'PROMOTION_SOURCES_INSUFFICIENT',
+                                  f'{len(episodes)} turns / {len(dates)} dates; need {need_roots} / {need_dates}'))
+        return
+    scope = 'global-safe' if item.get('visibility') == 'public' else visibility.owner_private_scope(ep['persona'])
+    body = f"事实：{item['fact']}\n评价：{item['appraisal']}\n信号：{item['signal']}"
+    doc = {'_id': 'mu-' + sha(canonical([ep['_id'], 'promote', index])), 'kind': 'memory_unit', 'scope_key': scope,
+           'policy_epoch': 1, 'persona': ep['persona'], 'character_id': character_id(store.config),
+           'fact': item['fact'], 'appraisal': item['appraisal'], 'signal': item['signal'], 'body_markdown': body,
+           'epistemic_type': 'character_interpretation', 'source_ids': item['source_ids'],
+           'source_event_ids': item['source_ids'], 'depends_on': item['source_ids'], 'episode_id': ep['_id'],
+           'status': 'active', 'embedding_status': 'PENDING', 'origin': 'asuna'}
+    if not store.db.memory_units.find_one({'_id': doc['_id']}):
+        store.put('memory_units', doc, stream=ep['_id'])
+    results.setdefault('promote', []).append({'index': index, 'memory_id': doc['_id'], 'scope_key': scope})
 
 
 def _seed_text(store, slug):

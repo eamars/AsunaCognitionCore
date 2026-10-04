@@ -177,6 +177,13 @@ class Chat:
                 event['development_profile']='owner'
         return self.receive(event)
 
+    def offer_internal(self, kind, event_id, scene_id, person_id, text):
+        """Queue a heartbeat or settlement opportunity in an owner-private scene (ADR-009 §10)."""
+        if kind not in ('presence', 'settlement') or not event_id.startswith(kind + ':'):
+            raise ValueError('INVALID_INTERNAL_EVENT')
+        return self.receive({'event_id': event_id, 'scene_id': scene_id, 'person_id': person_id,
+                             'adapter_id': kind, 'episode_kind': kind, 'text': text})
+
     def offer_self_development(self, event_id: str, *, text=None, trusted_context_events=None,
                                task_id=None):
         """Queue a host-origin opportunity in the owner's existing role scene."""

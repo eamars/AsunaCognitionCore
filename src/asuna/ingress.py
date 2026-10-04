@@ -3,6 +3,9 @@ from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 
 
+INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement'}
+
+
 def episode_id(event):
     return 'ep-' + sha(canonical([event['scene_id'], event['event_id'],
                                 event.get('episode_kind', 'external')]))[:32]
@@ -10,9 +13,10 @@ def episode_id(event):
 
 def persist_input(store, event, *, managed=False):
     scene = store.authorize(event['scene_id'], event['person_id'])
-    internal = event.get('episode_kind') == 'self_development'
-    if internal and (event.get('adapter_id') != 'self-development' or scene['kind'] != 'dm'):
-        raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED')
+    # Host-origin opportunities (no user message): self-development, heartbeat, nightly settlement.
+    internal = event.get('episode_kind') in INTERNAL_KINDS
+    if internal and (event.get('adapter_id') != INTERNAL_KINDS[event['episode_kind']] or scene['kind'] != 'dm'):
+        raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED' if event['episode_kind'] == 'self_development' else 'INTERNAL_SOURCE_DENIED')
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:

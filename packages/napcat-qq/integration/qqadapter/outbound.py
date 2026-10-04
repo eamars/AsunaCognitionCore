@@ -16,6 +16,16 @@ The platform's own response is the only source of truth.  A send whose result
 cannot be verified becomes `unknown` and is never re-sent; a receipt may be
 re-reported with the identical attempt_id.
 
+An outbox item may also declare one image attachment (metadata only: the host
+says an artifact exists and what its sha256 is).  The bytes are then fetched
+from the host channel API for that very publication -- the adapter never reads
+a host file path -- and a private send carries [image, text].  Anything odd
+about those bytes (unreachable, over the ceiling, wrong sha256, not an image)
+is a `failed` receipt with nothing sent: a text-only send that reports
+platform_accepted would claim a picture the peer never received.  Whether
+NapCat renders a `base64://` image data URI in a private chat is NOT yet
+verified against a real client.
+
 After a send the platform accepted, the adapter reads that one message back
 with `get_msg` (0.2.3).  The id queried is always the one this very send
 returned, and the answer is checked against the route we sent to.  It is
@@ -24,6 +34,7 @@ trigger a re-send, and never widens what we read (no inbound ids, no reply ids,
 no history).  It answers "did the platform store the segments we submitted, in
 this conversation, as us" -- not "did a client render a mention".
 """
+import base64
 import re
 import time
 
@@ -37,9 +48,18 @@ SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
 # member by account, or recall one message by its platform id.  Nothing else is ever called.
 ADMIN_KINDS = ("mute", "unmute", "kick", "recall")
 MAX_MUTE_SECONDS = 30 * 86400
-# a group send may carry these; a private send only ever carries `text`
+# a group send may carry these; a private send carries `text`, plus one leading
+# `image` when the host attached a picture to this publication
 ALLOWED_OUT_SEGMENTS = ("reply", "text", "at")
 PRIVATE_OUT_SEGMENTS = ("text",)
+PRIVATE_IMAGE_SEGMENTS = ("image", "text")
+
+ATTACHMENT_KEY = "attachment"
+MAX_IMAGE_BYTES = 8 * 1024 * 1024          # the adapter's own ceiling for one image
+ALLOWED_OUT_MEDIA_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+IMAGE_MAGICS = (("image/png", b"\x89PNG\r\n\x1a\n"), ("image/jpeg", b"\xff\xd8\xff"),
+                ("image/gif", b"GIF87a"), ("image/gif", b"GIF89a"))
 
 # 0.2.3 read-back verification: one `get_msg` per accepted send, for the id that
 # send returned, after a short settle gap; one retry only when the platform has
@@ -82,12 +102,16 @@ def encode_group_text(text):
     return segments
 
 
-def build_send_params(target_type, target_id, text, reply_to=None):
+def build_send_params(target_type, target_id, text, reply_to=None, image_b64=None):
     """Return (action, params) for a host outbox target, or None if unusable.
 
     Group sends get a `reply` segment only when the host actually provided
     `reply_to`, and their text goes through encode_group_text; private sends are
-    byte-for-byte the 0.1.0 shape (one text segment, markers included).
+    byte-for-byte the 0.1.0 shape (one text segment, markers included) unless
+    `image_b64` is given, in which case the private send carries
+    [image, text] -- her words are never dropped to make room for the picture.
+    The image uses the OneBot `base64://` data URI, which NapCat documents but
+    which has not been verified against a real client yet.
     """
     action = SEND_ACTIONS.get(target_type)
     if action is None:
@@ -102,6 +126,9 @@ def build_send_params(target_type, target_id, text, reply_to=None):
     else:
         segments = [{"type": "text", "data": {"text": text}}]
         allowed = PRIVATE_OUT_SEGMENTS
+        if image_b64:
+            segments.insert(0, {"type": "image", "data": {"file": "base64://" + image_b64}})
+            allowed = PRIVATE_IMAGE_SEGMENTS
     if not segments:
         return None
     for seg in segments:
@@ -109,6 +136,48 @@ def build_send_params(target_type, target_id, text, reply_to=None):
             return None
     key = "group_id" if target_type == "group" else "user_id"
     return action, {key: int(target_id), "message": segments}
+
+
+def sniff_image(data):
+    """The media type these bytes really are, by magic number only; None if not a supported image."""
+    for media, magic in IMAGE_MAGICS:
+        if data.startswith(magic):
+            return media
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def attachment_plan(item, target_type, max_bytes=MAX_IMAGE_BYTES):
+    """(descriptor, None) when this item's image may be fetched, else (None, reason).
+
+    Everything here is checked before a single byte is requested, so a doomed
+    attachment costs no download.  Only private routes are enabled for images
+    for now: a group picture raises a "who can see this" question the host has
+    not answered yet, and refusing is cheaper than guessing.
+    """
+    raw = item.get(ATTACHMENT_KEY)
+    if raw is None:
+        return None, "no_attachment"
+    if not isinstance(raw, dict):
+        return None, "attachment_descriptor_invalid"
+    if target_type != "dm":
+        return None, "attachment_target_not_enabled"
+    artifact = raw.get("artifact_id")
+    if not isinstance(artifact, str) or not artifact or len(artifact) > 200:
+        return None, "attachment_artifact_id_missing"
+    sha256 = str(raw.get("sha256") or "").strip().lower()
+    if not SHA256_HEX.match(sha256):
+        return None, "attachment_sha256_missing"
+    media = str(raw.get("media_type") or "").strip().lower()
+    if media not in ALLOWED_OUT_MEDIA_TYPES:
+        return None, "attachment_media_type_unsupported"
+    size = raw.get("size")
+    if size is not None and (isinstance(size, bool) or not isinstance(size, int) or size <= 0):
+        return None, "attachment_size_invalid"
+    if size is not None and size > int(max_bytes):
+        return None, "attachment_over_limit"
+    return {"artifact_id": artifact, "media_type": media, "sha256": sha256, "declared_size": size}, None
 
 
 def _now():
@@ -196,6 +265,45 @@ class Outbound:
         self.verify_delay = float(verify_delay)
         self.verify_retry_delay = float(verify_retry_delay)
         self.verify_timeout = float(verify_timeout)
+
+    # ---- one claimed publication's image attachment ---------------------
+    def fetch_attachment(self, pub, attempt, plan):
+        """(base64 text, meta, None) when these bytes may be sent, else (None, meta, reason).
+
+        Bytes come only from the host channel API, for this very publication and
+        attempt, with the channel token -- never from a host file path.  Nothing
+        is written to disk, and nothing is sent when this returns a reason.
+        """
+        meta = {"artifact_id": plan["artifact_id"], "media_type": plan["media_type"],
+                "sha256": plan["sha256"], "declared_size": plan["declared_size"]}
+        getter = getattr(self.host, "get_attachment", None)
+        if getter is None:
+            meta["fetch_error"] = "endpoint_unsupported"
+            return None, meta, "attachment_fetch_unsupported"
+        res = getter(pub, attempt, artifact_id=plan["artifact_id"], expect_sha256=plan["sha256"],
+                     max_bytes=MAX_IMAGE_BYTES)
+        obj = res.obj if isinstance(res.obj, dict) else {}
+        if res.kind != "ok":
+            detail = str(obj.get("error") or res.error or ("http_%s" % res.code))[:80]
+            meta["fetch_error"] = " ".join(detail.split())[:120]
+            if res.kind == "retry":
+                return None, meta, "attachment_fetch_unavailable"
+            return None, meta, "attachment_fetch_" + "_".join(detail.split())[:60]
+        data = obj.get("data")
+        if not isinstance(data, (bytes, bytearray)):
+            meta["fetch_error"] = "no_bytes"
+            return None, meta, "attachment_fetch_no_bytes"
+        sniffed = sniff_image(bytes(data))
+        if sniffed is None:
+            meta["sniffed_media_type"] = None
+            return None, meta, "attachment_not_an_image"
+        if sniffed != plan["media_type"]:
+            meta["sniffed_media_type"] = sniffed
+            return None, meta, "attachment_media_type_mismatch"
+        meta.update({"bytes": len(data), "sha256_verified": True, "sniffed_media_type": sniffed,
+                     "content_type": obj.get("content_type"), "base64_chars": ((len(data) + 2) // 3) * 4})
+        self.counters.inc("attachment_fetched")
+        return base64.b64encode(bytes(data)).decode("ascii"), meta, None
 
     # ---- one claimed group admin action ---------------------------------
     @staticmethod
@@ -293,7 +401,28 @@ class Outbound:
         if not isinstance(text, str) or not text.strip():
             self.report(pub, receipt_payload("failed", attempt, {"reason": "empty_text"}), "empty_text")
             return
-        built = build_send_params(ttype, tid, text, item.get("reply_to"))
+        plan, reason = attachment_plan(item, ttype)
+        image_b64, attachment = None, None
+        if plan is None and reason != "no_attachment":
+            # an attachment this build cannot even ask for: send nothing, and
+            # say why -- text alone would report a picture nobody received
+            self.counters.inc("attachment_failed")
+            self.log("ATTACHMENT pub=%s attempt=%s reject=%s" % (pub, attempt, reason))
+            self.report(pub, receipt_payload("failed", attempt,
+                                            {"reason": reason, "target_type": ttype}), reason)
+            return
+        if plan is not None:
+            image_b64, attachment, reason = self.fetch_attachment(pub, attempt, plan)
+            if image_b64 is None:
+                self.counters.inc("attachment_failed")
+                self.log("ATTACHMENT pub=%s attempt=%s fail=%s detail=%s"
+                         % (pub, attempt, reason, (attachment or {}).get("fetch_error", "-")))
+                self.report(pub, receipt_payload("failed", attempt, {"reason": reason, "target_type": ttype,
+                                                                     "attachment": attachment or plan}), reason)
+                return
+            self.log("ATTACHMENT pub=%s attempt=%s fetched=%s bytes=%s sha256=%s"
+                     % (pub, attempt, plan["media_type"], attachment.get("bytes"), plan["sha256"][:12]))
+        built = build_send_params(ttype, tid, text, item.get("reply_to"), image_b64=image_b64)
         if built is None:
             self.counters.inc("outbox_shape_reject")
             self.report(pub, receipt_payload("failed", attempt,
@@ -303,6 +432,8 @@ class Outbound:
         meta = {"publication_id": pub, "attempt_id": attempt, "target_type": ttype, "target_id": tid,
                 "account_id": self.cfg.napcat["account_id"],
                 "chars": len(text), "segments": [seg["type"] for seg in params["message"]]}
+        if attachment is not None:
+            meta["attachment"] = attachment
         try:
             resp = self.onebot.api_call(action, params, timeout=self.ack_timeout, meta=meta)
         except ApiNotConnected as exc:
@@ -335,6 +466,11 @@ class Outbound:
             self.counters.inc("send_failed")
             status, pmid, tag = "failed", None, "retcode_%s" % retcode
             response = resp if isinstance(resp, dict) else {"unparsed_response": True}
+        if isinstance(meta.get("attachment"), dict):
+            # what actually went out, into the response object the host already
+            # stores verbatim; like the read-back, it cannot move `status`
+            response = dict(response)
+            response["attachment"] = meta["attachment"]
         verification = None
         if status == "platform_accepted" and self.verify:
             # the read-back runs before the receipt so the host can keep it in
@@ -343,9 +479,10 @@ class Outbound:
             response = dict(response)
             response["verification"] = verification
         self.log("SEND_RESULT pub=%s attempt=%s target=%s status=%s retcode=%s platform_message_id=%s chars=%s"
-                 " segments=%s"
+                 " segments=%s attachment=%s"
                  % (pub, attempt, meta.get("target_type"), status, retcode, pmid or "-", meta.get("chars"),
-                    ",".join(meta.get("segments") or [])))
+                    ",".join(meta.get("segments") or []),
+                    str((meta.get("attachment") or {}).get("sha256") or "-")[:12]))
         if verification is not None:
             self.log("VERIFY pub=%s attempt=%s pmid=%s result=%s sent=%s stored=%s target_ok=%s self_sent=%s%s"
                      % (pub, attempt, pmid, verification.get("result"),
@@ -361,6 +498,7 @@ class Outbound:
                                            "status": status, "retcode": retcode,
                                            "platform_message_id": pmid, "chars": meta.get("chars"),
                                            "segments": meta.get("segments"),
+                                           "attachment": meta.get("attachment"),
                                            "verification": verification})
 
     # ---- read-back verification (observation only) ----------------------

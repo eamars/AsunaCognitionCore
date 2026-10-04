@@ -6,6 +6,8 @@ Group coverage is config-driven: the four authorized groups come from
 GROUP_ROUTES_PREVIEW.json, which is loaded through the same Config parser the
 live config will use once the host switches it into adapter.routes.
 """
+import base64
+import hashlib
 import json
 import os
 import select
@@ -13,6 +15,7 @@ import subprocess
 import sys
 import time
 
+from . import hostapi as hostapi_mod
 from . import inbound as inbound_mod
 from . import outbound as outbound_mod
 from .peers import PEER_KEY, PeerDirectory
@@ -67,14 +70,29 @@ class StubOneBot:
 
 
 class StubHost:
-    """SUBSTITUTE for the host receipt endpoint; keeps every payload verbatim."""
+    """SUBSTITUTE for the host receipt + attachment endpoints; keeps every payload verbatim."""
 
-    def __init__(self):
+    def __init__(self, attachment=None):
         self.receipts = []
+        self.attachment_calls = []
+        self.attachment = attachment
 
     def post_receipt(self, publication_id, payload):
         self.receipts.append({"publication_id": publication_id, "payload": payload})
         return Result("ok", 200, {"status": "accepted"})
+
+    def get_attachment(self, publication_id, attempt_id, artifact_id=None, expect_sha256=None,
+                       max_bytes=None, timeout=30.0):
+        """SUBSTITUTE for the host byte endpoint: records the call, answers the canned Result.
+
+        Unstubbed it refuses, so an attachment can never look delivered by
+        accident in a check that forgot to hand it bytes.
+        """
+        self.attachment_calls.append({"publication_id": publication_id, "attempt_id": attempt_id,
+                                      "artifact_id": artifact_id, "expect_sha256": expect_sha256,
+                                      "max_bytes": max_bytes})
+        return self.attachment if self.attachment is not None else Result("reject", 404,
+                                                                          {"error": "no_stub_attachment"})
 
     def last(self):
         return self.receipts[-1] if self.receipts else {}
@@ -820,6 +838,258 @@ def _check_outbound_verify(rep, gcfg, root):
               len(stub.verify_ids))
 
 
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"selftest-png-body" * 4
+PNG_SHA = hashlib.sha256(PNG_BYTES).hexdigest()
+JPEG_BYTES = b"\xff\xd8\xff" + b"selftest-jpeg-body"
+ABSENT = object()
+
+
+def _att_ok(data=None, media="image/png"):
+    data = PNG_BYTES if data is None else data
+    return Result("ok", 200, {"data": data, "bytes": len(data),
+                              "sha256": hashlib.sha256(data).hexdigest(), "content_type": media})
+
+
+def _att_descriptor(data=None, media="image/png", sha=None, **over):
+    data = PNG_BYTES if data is None else data
+    out = {"artifact_id": "blob-selftest-image", "media_type": media,
+           "sha256": sha if sha is not None else hashlib.sha256(data).hexdigest()}
+    out.update(over)
+    return out
+
+
+class StubImageOneBot:
+    """SUBSTITUTE answering both the send and the one `get_msg` read-back."""
+
+    def __init__(self, stored_segments, account):
+        self.stored = stored_segments
+        self.account = account
+        self.calls = []
+
+    def api_call(self, action, params=None, timeout=15.0, meta=None):
+        self.calls.append({"action": action, "params": params, "timeout": timeout})
+        if action == "get_msg":
+            return {"retcode": 0, "data": {"message": [{"type": t} for t in self.stored],
+                                           "message_type": "private", "user_id": int(self.account),
+                                           "sender": {"user_id": int(self.account)},
+                                           "message_sent_type": "self"}}
+        return {"retcode": 0, "msg": "", "data": {"message_id": 777001}}
+
+
+def _check_outbound_attachments(rep, cfg, root):
+    """Outbound image attachments against StubOneBot/StubHost: nothing is sent to
+    QQ, nothing is claimed, and no host file path is opened -- the bytes only
+    ever arrive through the stubbed channel API call.
+    """
+    if not cfg.allowed_private:
+        rep.check("attachment_checks_ran", False, "no private route in config")
+        return
+    owner, account = cfg.allowed_private[0], cfg.napcat["account_id"]
+    DM = {"type": "dm", "id": owner}
+    GRP = {"type": "group", "id": (cfg.allowed_groups or ["900000001"])[0]}
+    actions = set()
+
+    def item(name, target, text="这张给你", attachment=ABSENT, reply_to=None):
+        row = {"publication_id": "att-%s" % name, "attempt_id": "attempt-%s" % name,
+               "target": target, "text": text, "reply_to": reply_to}
+        if attachment is not ABSENT:
+            row["attachment"] = attachment
+        return row
+
+    def run(name, out_item, attachment=None, verify=False):
+        stub, host, counters = StubOneBot(), StubHost(attachment=attachment), Counters()
+        outbound_mod.Outbound(cfg, host, stub, Journal(root + "/att_" + name), counters,
+                              log=lambda _m: None, ack_timeout=5.0, verify=verify,
+                              verify_delay=0.0, verify_timeout=3.0).handle_item(out_item)
+        actions.update(c["action"] for c in stub.calls)
+        return stub, host, counters
+
+    def reason_of(host):
+        return ((host.last().get("payload") or {}).get("response") or {}).get("reason")
+
+    # 1. the happy path: one private send carrying [image, text], her words intact
+    stub, host, counters = run("ok", item("ok", DM, attachment=_att_descriptor()), attachment=_att_ok())
+    call = stub.calls[0] if stub.calls else {}
+    msg = (call.get("params") or {}).get("message") or []
+    b64 = base64.b64encode(PNG_BYTES).decode("ascii")
+    rep.check("att_dm_sends_image_then_text",
+              call.get("action") == "send_private_msg" and len(msg) == 2
+              and msg[0] == {"type": "image", "data": {"file": "base64://" + b64}}
+              and msg[1] == {"type": "text", "data": {"text": "这张给你"}},
+              json.dumps(msg, ensure_ascii=False)[:220])
+    payload = host.last().get("payload") or {}
+    rep.check("att_ok_receipt_accepted", payload.get("status") == "platform_accepted"
+              and payload.get("platform_message_id") == "990001", json.dumps(payload.get("status")))
+    sent_att = (payload.get("response") or {}).get("attachment") or {}
+    rep.check("att_receipt_reports_what_was_sent",
+              sent_att.get("sha256") == PNG_SHA and sent_att.get("bytes") == len(PNG_BYTES)
+              and sent_att.get("sha256_verified") is True
+              and sent_att.get("artifact_id") == "blob-selftest-image",
+              json.dumps(sent_att, sort_keys=True)[:220])
+    calls = host.attachment_calls
+    rep.check("att_bytes_asked_for_this_publication_only",
+              len(calls) == 1 and calls[0]["publication_id"] == "att-ok"
+              and calls[0]["attempt_id"] == "attempt-ok" and calls[0]["expect_sha256"] == PNG_SHA
+              and calls[0]["max_bytes"] == outbound_mod.MAX_IMAGE_BYTES,
+              json.dumps(calls[:1], sort_keys=True)[:220])
+    rep.check("att_counter_fetched", counters.snapshot().get("attachment_fetched") == 1,
+              json.dumps(counters.snapshot(), sort_keys=True))
+
+    # 2-5. every byte-level failure: nothing is sent, and the receipt says failed
+    for name, given, want in (
+            ("retry", Result("retry", None, error="ConnectionRefusedError"), "attachment_fetch_unavailable"),
+            ("sha", Result("reject", 200, {"error": "sha256_mismatch", "expected": PNG_SHA,
+                                           "observed": "0" * 64}), "attachment_fetch_sha256_mismatch"),
+            ("toolarge", Result("reject", 200, {"error": "over_limit", "read_bytes": 900000}),
+             "attachment_fetch_over_limit"),
+            ("notimage", _att_ok(data=b"a plain text body, not a picture"), "attachment_not_an_image"),
+            ("typemismatch", _att_ok(data=JPEG_BYTES), "attachment_media_type_mismatch")):
+        stub, host, counters = run(name, item(name, DM, attachment=_att_descriptor()), attachment=given)
+        payload = host.last().get("payload") or {}
+        rep.check("att_%s_sends_no_text_instead" % name,
+                  not any(str(c["action"]).startswith("send_") for c in stub.calls)
+                  and payload.get("status") == "failed" and reason_of(host) == want
+                  and "platform_message_id" not in payload,
+                  "%s actions=%s %s" % (reason_of(host), [c["action"] for c in stub.calls],
+                                        json.dumps(payload, ensure_ascii=False)[:160]))
+        rep.check("att_%s_counter" % name, counters.snapshot().get("attachment_failed") == 1,
+                  json.dumps(counters.snapshot(), sort_keys=True))
+
+    # 6-9. a descriptor that cannot work is refused before a single byte is asked for
+    for name, descriptor, want in (
+            ("oversize", _att_descriptor(size=outbound_mod.MAX_IMAGE_BYTES + 1), "attachment_over_limit"),
+            ("badshape", "blob-selftest-image", "attachment_descriptor_invalid"),
+            ("nosha", _att_descriptor(sha=None), "attachment_sha256_missing"),
+            ("pdf", _att_descriptor(media="application/pdf"), "attachment_media_type_unsupported")):
+        if name == "nosha":
+            descriptor = dict(descriptor)
+            descriptor.pop("sha256")
+        stub, host, _c = run(name, item(name, DM, attachment=descriptor), attachment=_att_ok())
+        rep.check("att_%s_refused_without_download" % name,
+                  stub.calls == [] and host.attachment_calls == []
+                  and (host.last().get("payload") or {}).get("status") == "failed"
+                  and reason_of(host) == want,
+                  "%s fetches=%d %s" % (reason_of(host), len(host.attachment_calls),
+                                        json.dumps((host.last().get("payload") or {}).get("response"),
+                                                   ensure_ascii=False)[:160]))
+    stub, host, _c = run("group", item("group", GRP, attachment=_att_descriptor()), attachment=_att_ok())
+    rep.check("att_group_refused_for_now",
+              stub.calls == [] and host.attachment_calls == []
+              and reason_of(host) == "attachment_target_not_enabled", reason_of(host) or "-")
+
+    # 10. an item without an attachment is byte-for-byte the text send it always was
+    stub, host, _c = run("plain", item("plain", DM))
+    plain = (stub.calls[0].get("params") or {}).get("message") if stub.calls else None
+    rep.check("att_absent_shape_unchanged",
+              plain == [{"type": "text", "data": {"text": "这张给你"}}] and host.attachment_calls == []
+              and (host.last().get("payload") or {}).get("status") == "platform_accepted",
+              json.dumps(plain, ensure_ascii=False)[:160])
+
+    # 11. the read-back expects the image segment, so it does not cry mismatch
+    stub = StubImageOneBot(["image", "text"], account)
+    host = StubHost(attachment=_att_ok())
+    outbound_mod.Outbound(cfg, host, stub, Journal(root + "/att_verify"), Counters(),
+                          log=lambda _m: None, ack_timeout=5.0, verify=True, verify_delay=0.0,
+                          verify_timeout=3.0).handle_item(item("verify", DM, attachment=_att_descriptor()))
+    actions.update(c["action"] for c in stub.calls)
+    payload = host.last().get("payload") or {}
+    ver = (payload.get("response") or {}).get("verification") or {}
+    rep.check("att_verification_allows_image_segment",
+              ver.get("result") == "verified" and ver.get("stored_segments") == ["image", "text"]
+              and ver.get("sent_segments") == ["image", "text"], json.dumps(ver, sort_keys=True)[:220])
+    rep.check("att_verification_cannot_move_status", payload.get("status") == "platform_accepted"
+              and (payload.get("response") or {}).get("attachment", {}).get("sha256") == PNG_SHA,
+              json.dumps(payload.get("status")))
+    rep.check("att_get_msg_params_bounded",
+              [c for c in stub.calls if c["action"] == "get_msg"][0]["params"] == {"message_id": 777001},
+              json.dumps([c["params"] for c in stub.calls if c["action"] == "get_msg"]))
+
+    # 12. the platform surface this whole section touched is still the same three actions
+    rep.check("att_api_surface_bounded", actions <= {"send_private_msg", "send_group_msg", "get_msg"},
+              json.dumps(sorted(actions)))
+
+
+def _check_attachment_http(rep, cfg):
+    """The real HostApi byte path against a real loopback HTTP server: no QQ, no
+    host, nothing claimed.  This is the check that a 1.5 MiB image survives the
+    client at all -- the JSON path would have truncated it at 256 KiB.
+    """
+    import http.server
+    import threading
+
+    body = (b"\x89PNG\r\n\x1a\n" + bytes((i * 7) % 251 for i in range(65528))) * 24
+    digest = hashlib.sha256(body).hexdigest()
+    seen, auths = [], []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _send(self, code, payload, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            try:
+                self.wfile.write(payload)
+            except ConnectionError:
+                pass  # the client stopped reading early, which is what over_limit means
+
+        def do_GET(self):
+            seen.append(self.path)
+            auths.append(self.headers.get("Authorization") or "")
+            if self.path.startswith("/v1/channels/qq/outbox/att-http/attachment"):
+                if "attempt-missing" in self.path:
+                    return self._send(404, b'{"error":"PUBLICATION_NOT_FOUND"}', "application/json")
+                if "attempt-down" in self.path:
+                    return self._send(503, b'{"error":"HOST_TEMPORARILY_UNAVAILABLE"}', "application/json")
+                if "attempt-json" in self.path:
+                    return self._send(200, b'{"error":"ARTIFACT_NOT_IMAGE"}', "application/json")
+                return self._send(200, body, "application/octet-stream")
+            if self.path.startswith("/v1/channels/qq/outbox"):
+                return self._send(200, b'{"items":[]}', "application/json")
+            return self._send(404, b'{"error":"NO_ROUTE"}', "application/json")
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        api = hostapi_mod.HostApi({"base_url": "http://127.0.0.1:%d" % server.server_address[1],
+                                   "token": cfg.host["token"], "channel_id": "qq"}, timeout=10)
+        res = api.get_attachment("att-http", "attempt-ok", artifact_id="blob-1", expect_sha256=digest)
+        obj = res.obj if isinstance(res.obj, dict) else {}
+        rep.check("att_http_big_body_not_truncated",
+                  res.kind == "ok" and isinstance(obj.get("data"), bytes) and len(body) > 262144
+                  and obj.get("bytes") == len(body) and obj.get("sha256") == digest,
+                  "kind=%s bytes=%s served=%d" % (res.kind, obj.get("bytes"), len(body)))
+        rep.check("att_http_uses_the_channel_bearer_token",
+                  auths and all(a == "Bearer " + cfg.host["token"] for a in auths),
+                  json.dumps(auths[:1])[:120])
+        for name, kwargs, want_kind, want_error in (
+                ("sha", {"expect_sha256": "0" * 64}, "reject", "sha256_mismatch"),
+                ("limit", {"max_bytes": 4096}, "reject", "over_limit"),
+                ("json", {}, "reject", "unexpected_content_type"),
+                ("missing", {}, "reject", "http_404"),
+                ("down", {}, "retry", "http_503")):
+            attempt = {"sha": "attempt-ok", "limit": "attempt-ok", "json": "attempt-json",
+                       "missing": "attempt-missing", "down": "attempt-down"}[name]
+            res = api.get_attachment("att-http", attempt, **kwargs)
+            obj = res.obj if isinstance(res.obj, dict) else {}
+            rep.check("att_http_%s" % name, res.kind == want_kind and obj.get("error") == want_error,
+                      repr(res)[:180])
+        res = api.claim_outbox(0, timeout=5)
+        paths = [p for p in seen if p.startswith("/v1/channels/qq/outbox?")]
+        rep.check("att_claim_declares_image_capability",
+                  res.kind == "empty" and paths and "supports=image" in paths[-1], json.dumps(paths[-1:]))
+        api.claim_outbox(0, timeout=5, supports=())
+        paths = [p for p in seen if p.startswith("/v1/channels/qq/outbox?")]
+        rep.check("att_claim_capability_can_be_withdrawn", "supports=" not in paths[-1], json.dumps(paths[-1:]))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def _check_live(rep, adapter):
     adapter.onebot.start()
     api_up = adapter.onebot.wait_up("/api", 15)
@@ -895,6 +1165,8 @@ def run(cfg, data_dir, live=True):
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
+    _check_outbound_attachments(rep, cfg, root)
+    _check_attachment_http(rep, cfg)
     _check_peers(rep, gcfg or cfg, root)
     _check_lock_and_spool(rep, gcfg or cfg, root)
     _check_live(rep, adapter)

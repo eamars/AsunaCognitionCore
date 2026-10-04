@@ -14,7 +14,7 @@ class LaneResult:
     request_refs: list=field(default_factory=list)
     receipt: str | None=None
     diagnostic: dict | None=None
-    compaction_generation: int | None=None     # completed native compactions in this session (D-3)
+    delivery: dict | None=None     # what a native role notice left out because the session still shows it
 
 
 class Lane(Protocol):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 import traceback
-from .config import redact_text
+from .config import excerpt, redact_text
 from . import visibility
 from .render import render_system, readable_sections, model_and_policy
 from .documents import DocumentStore, render_markdown
@@ -27,6 +27,12 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   'related_messages 里带 topic_id 的是这条话题线到目前为止的原话（含没@你的旁听行），'
                   '谁说的以行上的 author 为准。')
 
+
+# Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
+HISTORY_ROW_CHARS = 1500
+MEMORY_CHARS = 1200
+EXPERIENCE_MESSAGE_CHARS = 400
+EXPERIENCE_TASK_CHARS = 800
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
@@ -157,7 +163,7 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
-    def prepare(self, event: dict, persona='P1', history_session=None):
+    def prepare(self, event: dict, persona='P1'):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
@@ -203,14 +209,12 @@ class ContextBuilder:
                                                        'scene_seq':{'$gte':source['scene_seq']}},
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
-        history_delta=None
-        if history_session:
-            # D-3: rows this role session already holds are not given again (full window after compaction).
-            from .history_delta import select
-            history,history_delta=select(self.store,history_session,history,scene['_id'],
-                                         source['scene_seq'] if source else None)
         for row in history:
-            row.pop('episode_id',None);row.pop('scene_seq',None)
+            # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
+            row.pop('scene_seq',None)
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            if row.get('direction')!='outbound':
+                row.pop('episode_id',None)
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -239,6 +243,8 @@ class ContextBuilder:
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
         for fact in facts:
+            # The whole unit stays readable through recall/read; the turn carries a bounded excerpt.
+            fact['body_markdown']=excerpt(fact.get('body_markdown'),MEMORY_CHARS)
             if fact.get('invented'):
                 # Fixed mark on every injection of persona-authored, not shared, history (MEMORY §5).
                 fact['body_markdown']=INVENTED_MARK+fact['body_markdown']
@@ -287,9 +293,6 @@ class ContextBuilder:
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
-        if history_delta and history_delta['omitted']:
-            context['history_from_program']={'given':history_delta['given'],'omitted':history_delta['omitted'],
-                'note':'这个会话里已经给过的行和你自己在本会话说过的话不再重复列出；delivered_history 只含新行。'}
         if any(task['state'] == 'PAUSED' for task in task_states):
             context['task_continuation_from_program'] = (
                 'PAUSED 是重启后等待操作者决定的旧行动，历史与回执仍保留。'
@@ -320,12 +323,14 @@ class ContextBuilder:
                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
                  'delivery_state':1}).sort('received_at',-1).limit(30))
+            for row in recent:
+                row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
             tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
                 {'scene_id':1,'state':1,'goal':1,'failure_type':1,'result':1,
                  'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(12))
             for item in tasks:
                 if item.get('result'):
-                    item['result_excerpt']=json.dumps(item.pop('result'),ensure_ascii=False,default=str)[:2400]
+                    item['result_excerpt']=excerpt(json.dumps(item.pop('result'),ensure_ascii=False,default=str),EXPERIENCE_TASK_CHARS)
             lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
                 {'candidate':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
                  'activated_at':1,'task_id':1,'reason':1}).sort('published_at',-1).limit(8))
@@ -384,6 +389,8 @@ class ContextBuilder:
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
                 {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) if source else []
             self._reply_context(speaker_tail, scene)
+            for row in [*related, *speaker_tail]:
+                row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             continuity = {**group, 'related_messages': related,
                           'current_speaker_tail': list(reversed(speaker_tail))}
             if str(group.get('wake_reason') or '').startswith('proactive'):
@@ -405,8 +412,6 @@ class ContextBuilder:
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in [*([dossier] if dossier else []),*ledgers] for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
-        if history_delta:
-            manifest['history_delta']=history_delta
         if relation:
             context['understanding_update_from_program']={
                 'available':True,'target':target_note,

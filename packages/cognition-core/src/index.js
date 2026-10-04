@@ -8,6 +8,7 @@ import * as skillFilesystem from '@deepseek-ai/dsh-skill-filesystem';
 import SkillService from '@deepseek-ai/dsh-skill';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
+import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
@@ -202,10 +203,18 @@ export class CognitionCore {
     });
   }
 
-  message(stage) {
-    return createUserMessage({ content: [{ type: 'text', text: stage.text }],
+  message(stage, session) {
+    let text = stage.text, carried;
+    if (stage.context && session) {
+      // Composed when the notice is created: only what the session no longer shows verbatim.
+      const composed = composeContext(stage.context, visibleCarried(session));
+      text = JSON.stringify(composed.context) + '\n' + stage.tail;
+      carried = { ...composed.carried, episode: stage.episode_id };
+      stage.delivery = composed.omitted;
+    }
+    return createUserMessage({ content: [{ type: 'text', text }],
       source: { kind: 'asuna', form: 'notice', summary: (stage.lane === 'character' ? '角色脑' : stage.lane === 'executor' ? '行动脑' : '交流摘要') + ' · ' + stage.phase,
-        operation: stage.token, lane: stage.lane, phase: stage.phase } });
+        operation: stage.token, lane: stage.lane, phase: stage.phase, ...(carried ? { carried } : {}) } });
   }
 
   async onEvent(event) {
@@ -271,7 +280,7 @@ export class CognitionCore {
       if (state.current) { state.queue.push(event); return; }
       state.current = event;
       state.system = event.system;
-      agent.followup(this.message(event));
+      agent.followup(this.message(event, agent.session));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     }
@@ -329,9 +338,7 @@ export class CognitionCore {
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
       receipt: stage.token, request_refs: [sessionId + ':' + last.seq],
-      // D-3: completed compactions; the worker resends the full history window when this changes.
-      compaction_generation: (this.ctx.agents.get(sessionId)?.session.snapshotEvents() ?? [])
-        .filter(event => event.type === 'compaction/end' && !event.data?.error).length,
+      ...(stage.delivery ? { delivery: stage.delivery } : {}),
     };
   }
 
@@ -450,7 +457,7 @@ export class CognitionCore {
       const stage = state.admitted; state.admitted = null;
       if (!stage) return decision;
       return stage.kind === 'stage'
-        ? { ...decision, messages: [...decision.messages, this.message(stage)] }
+        ? { ...decision, messages: [...decision.messages, this.message(stage, agent.session)] }
         : { kind: 'reject' };
     });
     scope.on('agent/assistant-stream', ({ agent, frame }) => {
@@ -480,7 +487,7 @@ export class CognitionCore {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
-          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage));
+          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
         } else await this.actionRecords.resume(agent.id);
       }
     });

@@ -8,7 +8,7 @@ import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
-from .config import ROOT,prompt_path,redact_text
+from .config import ROOT,prompt_path,redact_text,excerpt
 from .render import action_values
 from .evidence import canonical,sha
 from .sandbox import Sandbox
@@ -23,6 +23,19 @@ from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as re
                      route_filtered_tool_names, task_attachment_context)
 
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
+
+
+# Per-turn budget for task feedback (the largest context block): the action brain's report and the
+# last few tool observations as evidence. Cuts are marked; the full records stay in the task.
+REPORT_CHARS = 6000
+OBSERVATIONS = 4
+OBSERVATION_CHARS = 600
+
+
+def bounded_result(result):
+    if isinstance(result, dict) and isinstance(result.get('text'), str):
+        return {**result, 'text': excerpt(result['text'], REPORT_CHARS)}
+    return result
 
 
 class FeedbackStale(Denied):
@@ -204,7 +217,7 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':task['_id']+':result:'+str(task['intent_revision']),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'行动结果或诊断已到达。自然语言是行动侧的报告；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或公开措辞。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','value':task.get('result') or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':task['_id']+':result:'+str(task['intent_revision']),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'行动结果或诊断已到达。自然语言是行动侧的报告；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或公开措辞。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             if original.get('native_session_id'):
                 event['native_session_id']=original['native_session_id']
@@ -213,8 +226,10 @@ class TaskService:
             if task.get('integration_profile') == 'owner': event['integration_profile'] = 'owner'
             observations=[]
             for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
-                observations.append({'source':item['_id'],'tool':item['tool'],'result_excerpt':json.dumps(item['result'],ensure_ascii=False)[:4096]})
-            event['trusted_context_events'][0].update(original_input=source['text'],goal=task['goal'],observations=observations[-8:])
+                observations.append({'source':item['_id'],'tool':item['tool'],
+                                     'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
+            event['trusted_context_events'][0].update(original_input=source['text'],goal=task['goal'],
+                observations=observations[-OBSERVATIONS:],observations_total=len(observations))
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','MONOLOGUE_ACCEPTED','DECISION_ACCEPTED','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])

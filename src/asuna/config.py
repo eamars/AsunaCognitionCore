@@ -116,3 +116,9 @@ def redacted(config: dict) -> dict:
     for name in ('character', 'executor', 'embedding'):
         out[name].pop('api_key', None)
     return out
+
+
+def excerpt(text, limit):
+    """Bounded text for a context block; a cut always says so and how long the original was."""
+    text = str(text or '')
+    return text if len(text) <= limit else text[:limit] + f'…（截断，原文 {len(text)} 字）'

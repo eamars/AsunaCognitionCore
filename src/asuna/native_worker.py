@@ -29,6 +29,7 @@ from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSON
 
 
 class NativeLane:
+    composes_context = True     # the plugin composes a role notice from structured context
     def __init__(self, worker, config, store, evidence, lane='character', *args):
         self.worker, self.store, self.lane = worker, store, lane
         route = {'character': 'character', 'appraiser': 'appraiser'}.get(lane, 'action')
@@ -123,7 +124,8 @@ class NativeLane:
             })
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
-                       'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep)}
+                       'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
+                       **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {})}
             if self.lane == 'character':
                 source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
                 if source and source.get('event', {}).get('channel'):

@@ -1,4 +1,4 @@
-"""ADR-009 P6 MongoDB tests: T6.1 history delta, T6.2 audit and receipt dedupe."""
+"""ADR-009 P6 MongoDB tests: T6.2 audit and receipt dedupe (T6.1 history delivery is a plugin test)."""
 import json
 import threading
 import types
@@ -7,57 +7,10 @@ import pytest
 
 from asuna.audit import projection, replay, trace_contents, verify, verify_documents
 from asuna.coordinator import Coordinator
-from asuna.ingress import persist_input
 from asuna.lanes import FakeLane, LaneResult
 from asuna.native_worker import NativeLane
 from asuna.state import Store, content_digest, content_ref
 from test_adr009_p2 import decide, owner
-
-
-def said(store, key, text):
-    """An input that is stored but does not wake her (like an unaddressed group line)."""
-    persist_input(store, {'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': text})
-
-
-def turn(coordinator, key, text, generation=None):
-    coordinator.character.outputs = iter([LaneResult('想。', compaction_generation=generation), decide(),
-                                          LaneResult('回' + text, compaction_generation=generation)])
-    ep = coordinator.ingest({'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': text})
-    return [row['text'] for row in ep['context']['delivered_history']], ep
-
-
-def test_T6_1_history_is_given_once_per_session(store):
-    coordinator = Coordinator(store, FakeLane(store, []))
-    said(store, 'old-1', '旧一')
-    said(store, 'old-2', '旧二')
-    first, ep1 = turn(coordinator, 't1', '第一轮')
-    assert first == ['旧一', '旧二'] and ep1['manifest']['history_delta']['full_window'] is True
-    second, ep2 = turn(coordinator, 't2', '第二轮')
-    assert second == [], 'rows given in turn 1, its input and her own reply are already in the session'
-    assert ep2['context']['history_from_program']['omitted'] == 4
-    said(store, 'side-1', '旁一')
-    said(store, 'side-2', '旁二')
-    third, _ = turn(coordinator, 't3', '第三轮')
-    assert third == ['旁一', '旁二'], 'lines that never woke her arrive exactly once'
-    fourth, _ = turn(coordinator, 't4', '第四轮', generation=1)       # the native session compacted during t4
-    assert fourth == []
-    fifth, ep5 = turn(coordinator, 't5', '第五轮', generation=1)
-    assert ep5['manifest']['history_delta']['full_window'] is True and 'history_from_program' not in ep5['context']
-    assert len(fifth) == 12 and fifth[-1] == '回第四轮', 'after compaction the full window is given again'
-    sixth, _ = turn(coordinator, 't6', '第六轮', generation=1)
-    assert sixth == []
-    cursor = store.db.sessions.find_one({'_id': ep5['history_session']})
-    assert cursor['history_only'] and cursor['compaction_generation'] == 1 and cursor['history_generation'] == 1
-
-
-def test_T6_1_a_new_session_gets_the_full_window(store):
-    coordinator = Coordinator(store, FakeLane(store, []))
-    turn(coordinator, 't1', '第一轮')
-    coordinator.character.outputs = iter([LaneResult('想。'), decide(), LaneResult('好')])
-    ep = coordinator.ingest({'event_id': 'web-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '新会话',
-                             'native_session_id': 'web-session-2'})
-    assert [r['text'] for r in ep['context']['delivered_history']] == ['第一轮', '回第一轮']
-    assert ep['history_session'] == 'web-session-2'
 
 
 def big_message(store, text):

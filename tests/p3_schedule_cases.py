@@ -736,7 +736,7 @@ STUB_EXTRA = {
     'lanes.py': 'class Lane:\n    pass\n',
     'publish.py': 'class PublishService:\n    def __init__(self, *a, **k):\n        pass\n',
     'peer_context.py': 'def apply_peer_context(context, source):\n    return context\n',
-    'people.py': 'class People:\n    owner_label = \"本机用户\"\n    def __init__(self, store, persona=None):\n        pass\n    def identity_line(self, scene, row):\n        return None\n    def relabel(self, context, scene, author):\n        return context\n',
+    'people.py': 'class People:\n    owner_label = \"本机用户\"\n    def __init__(self, store, persona=None):\n        pass\n    def identity_line(self, scene, row):\n        return None\n    def self_role(self, scene):\n        return None\n    def relabel(self, context, scene, author):\n        return context\n',
     'ingress.py': 'def episode_id(event):\n    return \"ep-\" + str(event[\"event_id\"])\n',
     'tasks.py': 'import threading\nclass FeedbackStale(Exception):\n    pass\ndef require_current_feedback(store, ep):\n    return None\n'
                 'class TaskService:\n    def __init__(self, store, *a, **k):\n        self.store, self.lock = store, threading.RLock()\n',
@@ -763,7 +763,7 @@ def load_coordinator():
     optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
-                 'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
+                 'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
         if name in optional and not os.path.exists(os.path.join(SRC, name)):
             continue
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))

@@ -16,6 +16,7 @@ from .journal import Counters, Journal
 from .onebot import OneBot
 from .outbound import Outbound
 from .peers import PeerDirectory
+from .selfrole import SelfRoles
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
@@ -65,6 +66,8 @@ class Adapter:
         if peer_mode != "off":
             self.peers = PeerDirectory(data_dir, log=self.log, counters=self.counters,
                                        inject=(peer_mode == "full"))
+        # her own role in each group (owner/admin/member), carried to the host as raw.asuna_self
+        self.self_roles = SelfRoles(cfg.napcat["account_id"], counters=self.counters)
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.claim_wait = claim_wait
@@ -180,6 +183,12 @@ class Adapter:
                             profile["display"], profile["nickname"], profile.get("card", "-"),
                             profile["role"], profile["source"], profile["verified"],
                             profile["seen_messages"], ",".join(profile.get("changed") or []) or "-"))
+        if envelope.get("group_id"):
+            try:
+                self.self_roles.attach(envelope, self.onebot)
+            except Exception as exc:
+                self.counters.inc("self_role_errors")
+                self.log("SELF_ROLE_ERROR type=%s" % type(exc).__name__)
         res = self.host.post_event(envelope)
         if res.kind == "reject":
             # any 4xx with an injected block on board gets one clean retry: the

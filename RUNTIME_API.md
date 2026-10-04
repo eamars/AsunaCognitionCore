@@ -166,6 +166,32 @@ The history and discussion-digest tools take `person` as a label, a `#number`, a
 
 How well she knows the current speaker reaches her in `relationship` as words: `familiarity` is one level (the owner; known, when she has written an understanding of them or answered them many times; regular; met; new), computed from the owner's account, her written understanding, the turns in which she answered them and the lines they wrote, across every conversation of the canonical person. Nothing a message says raises it. A persona words each level and gives its `stance` in `people.familiarity`. `understanding` is what she has written about them. No relationship record is seeded: everyone starts with none, which reads as 你还没写过对这个人的理解, and her first reflected understanding creates the record.
 
+## Her place in a group
+
+Her own role in each group reaches her in words in `your_place_from_program`: 群主, 管理员, 普通成员, or not yet known. The adapter asks the platform for the logged-in account's own role (cached for ten minutes) and sends it in `raw.asuna_self`. The host keeps only a valid role, and only on group events.
+
+Where she is the group's owner or an admin, the block also tells her how to use `group_action`. That field is an optional DECIDE item, at most one per turn:
+
+- `kind`: `mute`, `unmute`, `recall` or `kick`;
+- `who`: a label or `#n`;
+- `duration`: 1分钟, 10分钟, 1小时 or 1天 (mute only);
+- `which`: 这条 or 他刚才那条 (recall only);
+- `reason`.
+
+The program refuses any of these, by name:
+
+- she is not an admin;
+- the route sets `admin_actions: false` (admin actions are on by default);
+- the target is unclear or unknown;
+- the target is the owner, herself, the group's owner or another admin;
+- a mute without a duration;
+- there is no recent message to recall (recall takes the message that woke her, or the target's last line within 10 minutes);
+- more than 6 actions in an hour in that group.
+
+An accepted action becomes a `group_action` artifact. The outbox hands it to the adapter before any message, and the adapter calls `set_group_ban`, `delete_msg` or `set_group_kick`. The platform's answer arrives through the same receipt endpoint and updates the artifact (DONE, FAILED or UNKNOWN). An action interrupted while it was being sent becomes UNKNOWN and is never retried. Her words for the result say 已交给平台，等确认 until the platform answers; the account and message numbers stay in program data.
+
+`group_notes_from_program` shows her own notes about the group: who is who, its customs, how she acts there. She writes them from that group's own turns with `write_docs` and `doc: "group_notes"` (`append_section` or `replace_section`). The program maps that name to the group's document and makes its sections public to that group.
+
 ## Media and image reading
 
 An adapter may normalize non-text segments into bounded `raw.asuna_media` metadata. The host preserves placeholders and does not treat them as visual input. The action task receives a bounded list of image attachments from its own scene and policy epoch, plus images from scenes it may read only through a configured cross-scene read link; every entry carries `scene_id` and `linked_scene`, so the listing states where each image came from.

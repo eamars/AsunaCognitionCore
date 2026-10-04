@@ -339,6 +339,53 @@
           }
         }
       }
+    },
+    "group_action": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "who",
+          "reason"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "mute",
+              "unmute",
+              "recall",
+              "kick"
+            ]
+          },
+          "who": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "duration": {
+            "enum": [
+              "1分钟",
+              "10分钟",
+              "1小时",
+              "1天"
+            ]
+          },
+          "which": {
+            "enum": [
+              "这条",
+              "他刚才那条"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
     }
   },
   "examples": [

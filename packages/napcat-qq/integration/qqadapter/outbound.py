@@ -33,6 +33,10 @@ RETRY_WAITS = (0, 2, 5)
 MAX_SPOOL_TRIES = 20
 
 SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
+# Group admin actions the host may queue (its own checks decide whether she may): mute/unmute/kick a
+# member by account, or recall one message by its platform id.  Nothing else is ever called.
+ADMIN_KINDS = ("mute", "unmute", "kick", "recall")
+MAX_MUTE_SECONDS = 30 * 86400
 # a group send may carry these; a private send only ever carries `text`
 ALLOWED_OUT_SEGMENTS = ("reply", "text", "at")
 PRIVATE_OUT_SEGMENTS = ("text",)
@@ -193,8 +197,74 @@ class Outbound:
         self.verify_retry_delay = float(verify_retry_delay)
         self.verify_timeout = float(verify_timeout)
 
+    # ---- one claimed group admin action ---------------------------------
+    @staticmethod
+    def admin_call(item, own_account):
+        """(OneBot action, params) for a host-queued admin action, or (None, reason)."""
+        admin = item.get("admin") if isinstance(item.get("admin"), dict) else {}
+        target = item.get("target") or {}
+        group = str(target.get("id") or "")
+        kind = admin.get("kind")
+        if target.get("type") != "group" or not group.isdigit():
+            return None, "admin_needs_a_group"
+        if kind not in ADMIN_KINDS:
+            return None, "unknown_admin_kind"
+        if kind == "recall":
+            mid = str(admin.get("message_id") or "")
+            if not mid or len(mid) > 40:
+                return None, "bad_message_id"
+            return "delete_msg", {"message_id": int(mid) if mid.lstrip("-").isdigit() else mid}
+        account = str(admin.get("account") or "")
+        if not account.isdigit() or account == str(own_account):
+            return None, "bad_account"
+        if kind == "kick":
+            return "set_group_kick", {"group_id": int(group), "user_id": int(account), "reject_add_request": False}
+        seconds = 0 if kind == "unmute" else admin.get("seconds")
+        if type(seconds) is not int or not 0 <= seconds <= MAX_MUTE_SECONDS or (kind == "mute" and seconds < 60):
+            return None, "bad_duration"
+        return "set_group_ban", {"group_id": int(group), "user_id": int(account), "duration": seconds}
+
+    def handle_admin(self, item, stopping=False):
+        pub = str(item.get("publication_id") or "")
+        attempt = str(item.get("attempt_id") or "")
+        target = item.get("target") or {}
+        self.counters.inc("admin_claims")
+        self.log("ADMIN_CLAIMED pub=%s attempt=%s target=%s:%s kind=%s"
+                 % (pub, attempt, target.get("type"), target.get("id"), (item.get("admin") or {}).get("kind")))
+        if stopping:
+            self.report(pub, receipt_payload("unknown", attempt, {"reason": "adapter_stopping_before_send"}), "stopping")
+            return
+        if not pub or not attempt:
+            return
+        if self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": "target_not_authorized"}), "target_not_authorized")
+            return
+        action, params = self.admin_call(item, self.cfg.napcat["account_id"])
+        if action is None:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": params}), params)
+            return
+        meta = {"publication_id": pub, "attempt_id": attempt, "admin": True, "action": action}
+        try:
+            resp = self.onebot.api_call(action, params, timeout=self.ack_timeout, meta=meta)
+        except ApiNotConnected as exc:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": "ws_not_connected", "detail": str(exc)[:200]}),
+                        "ws_not_connected")
+            return
+        except (ApiTransportError, ApiTimeout) as exc:
+            self.report(pub, receipt_payload("unknown", attempt, {"reason": type(exc).__name__}), "admin_unknown")
+            return
+        retcode = resp.get("retcode") if isinstance(resp, dict) else None
+        status = "platform_accepted" if retcode == 0 else "failed"
+        self.log("ADMIN_RESULT pub=%s action=%s status=%s retcode=%s" % (pub, action, status, retcode))
+        self.journal.append("admin.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
+                                           "action": action, "status": status, "retcode": retcode})
+        self.report(pub, receipt_payload(status, attempt, resp if isinstance(resp, dict) else {"unparsed_response": True}),
+                    "admin_" + status)
+
     # ---- one claimed publication ---------------------------------------
     def handle_item(self, item, stopping=False):
+        if item.get("admin") is not None:
+            return self.handle_admin(item, stopping=stopping)
         pub = str(item.get("publication_id") or "")
         attempt = str(item.get("attempt_id") or "")
         target = item.get("target") or {}
@@ -393,7 +463,10 @@ class Outbound:
         retcode = response.get("retcode") if isinstance(response, dict) else None
         data = response.get("data") if isinstance(response, dict) else None
         mid = data.get("message_id") if isinstance(data, dict) else None
-        if retcode == 0 and mid is not None:
+        if (meta or {}).get("admin"):
+            # an admin action has no message of its own: the platform's retcode is the whole answer
+            status, pmid = ("platform_accepted" if retcode == 0 else "failed"), None
+        elif retcode == 0 and mid is not None:
             status, pmid = "platform_accepted", str(mid)
         else:
             status, pmid = "failed", None

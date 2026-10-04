@@ -48,6 +48,10 @@ def kept_raw(event, raw):
         kept[MEDIA_KEY] = raw[MEDIA_KEY]
     if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
         kept['group_name'] = ' '.join(raw['group_name'].split())[:60]
+    own = raw.get('asuna_self')
+    if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
+            and own.get('role') in ('owner', 'admin', 'member'):
+        kept['asuna_self'] = {'role': own['role']}            # her own role in this group (group_admin.py)
     return kept
 
 
@@ -190,11 +194,15 @@ class Channels:
                 raise Denied('PUBLICATION_INTENT_STALE')
 
     def claim(self, channel_id, wait_seconds=0):
+        from . import group_admin
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
             if self.controller.reconfiguring:
                 return {'items': []}
             with database_effects_lock(self.store.name):
+                action = group_admin.claim(self.store, channel_id)       # an admin action goes before her words
+                if action:
+                    return {'items': [action]}
                 row = self.store.db.messages.find_one({'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}, sort=[('scene_seq', 1)])
                 # A paced segment holds the line until its time and until earlier segments are delivered,
                 # so later messages never overtake it (ADR-009 §11.1).
@@ -234,6 +242,10 @@ class Channels:
             raise ValueError('INVALID_PLATFORM_RECEIPT')
         if status == 'platform_accepted' and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip()):
             raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
+        if publication_id.startswith('ga-'):
+            from . import group_admin
+            with database_effects_lock(self.store.name):
+                return group_admin.receipt(self.store, channel_id, publication_id, body)
         with database_effects_lock(self.store.name):
             row = self.store.db.messages.find_one({'_id': publication_id})
             # An already claimed send may have happened before revocation. Preserve
@@ -259,6 +271,8 @@ class Channels:
     def recover_sending(self):
         # A lost HTTP response may hide an actual send. Never reclaim automatically.
         from .publish import PublishService
+        from . import group_admin
+        group_admin.recover_sending(self.store)
         for row in self.store.db.messages.find({'channel_id': {'$exists': True}, 'delivery_state': 'SENDING'}):
             unknown = self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
                                      expected=row['revision'], stream=row['episode_id'])

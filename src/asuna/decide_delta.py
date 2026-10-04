@@ -19,7 +19,7 @@ from . import visibility
 
 DELTA = schema('decision-delta.schema.json')
 DELTA_KEYS = tuple(DELTA['properties'])
-ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote')
+ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote', 'group_action')
 # Fields whose engines arrive in later phases are refused explicitly, not silently dropped.
 NOT_YET = {}
 
@@ -104,6 +104,12 @@ def apply(coordinator, ep):
                 ep = _write(coordinator, ep, cls, index, item, results, rejected)
             elif field == 'promote':
                 _promote(store, ep, cls, index, item, results, rejected)
+            elif field == 'group_action':
+                from . import group_admin
+                try:
+                    results.setdefault('group_action', []).append(group_admin.queue(store, ep, index, item))
+                except Exception as exc:  # each item is independent; a refusal is said, never acted on
+                    rejected.append(rejection(field, index, code_of(exc), exc))
     return coordinator._update(ep, rejections=[*(ep.get('rejections') or []), *rejected],
                                delta_results=results, delta_applied=True)
 
@@ -207,7 +213,15 @@ def _write(coordinator, ep, cls, index, item, results, rejected):
     done = {r['index'] for r in (ep.get('write_results') or [])}
     if index in done:
         return ep
-    if cls != visibility.OWNER_PRIVATE:
+    if item['doc'] == 'group_notes':
+        # Her notes about the group she is in: written from that group's own turns, public to it.
+        from .group_admin import notes_slug
+        scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+        if (scene or {}).get('kind') != 'group' or item['op'] not in ('append_section', 'replace_section'):
+            rejected.append(rejection('write_docs', index, 'GROUP_NOTES_ONLY_IN_ITS_GROUP'))
+            return ep
+        item = {**item, 'doc': notes_slug(ep['scene_id']), 'visibility': 'public', 'inject': 'always'}
+    elif cls != visibility.OWNER_PRIVATE:
         rejected.append(rejection('write_docs', index, 'DOC_WRITE_REQUIRES_OWNER_PRIVATE'))
         return ep
     from .render import budget_gate

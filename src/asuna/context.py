@@ -442,6 +442,14 @@ class ContextBuilder:
         if ledgers:
             context['ledgers_from_program']=ledgers
             documents.update({item['doc']:item['revision'] for item in ledgers})
+        from . import group_admin
+        place=group_admin.place(people,scene)
+        if place:
+            # Her own role in this group, what she may do there as an admin, and her notes about it (group_admin.py).
+            context['your_place_from_program']=place
+            notes_revision,context['group_notes_from_program']=group_admin.notes_block(docs,scene)
+            if notes_revision:
+                documents[group_admin.notes_slug(scene['_id'])]=notes_revision
         from .ingress import episode_id as _episode_id
         context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),*[m['_id'] for m in memories],
             *[t['_id'] for t in task_states],

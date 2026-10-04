@@ -96,6 +96,31 @@ class People:
     def is_owner(self, doc):
         return bool(self.owner) and doc.get('person') == self.owner
 
+    # ---- her own place in a group ----------------------------------------
+    def self_role(self, scene):
+        """Her role in this group as the adapter last reported it (owner/admin/member), else None."""
+        doc = self.db.scene_people.find_one({'_id': scene['_id'] + '|' + str(self.self_id)}, {'role': 1})
+        return (doc or {}).get('role') if (doc or {}).get('role') in ROLES else None
+
+    def note_self(self, scene, row):
+        """Keep her role from a message's raw.asuna_self (channels.kept_raw checked it); handle 0 is hers."""
+        raw = ((row.get('event') or {}).get('raw') or {}).get('asuna_self') or {}
+        role, moment = raw.get('role'), str(row.get('received_at') or '')
+        if role not in ROLES or not self.self_id:
+            return
+        key = scene['_id'] + '|' + str(self.self_id)
+        doc = self.db.scene_people.find_one({'_id': key})
+        if doc and (doc.get('role') == role or str(doc.get('seen_at') or '') > moment):
+            return
+        values = {'_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': self.self_id,
+                  'author': self.self_id, 'handle': 0, 'card': '', 'nickname': '', 'role': role, 'previous': [],
+                  'seen_at': moment, 'created_at': (doc or {}).get('created_at') or now()}
+        try:
+            self.store.put('scene_people', {**(doc or {}), **values}, expected=doc['revision'] if doc else None,
+                           stream='people:' + scene['_id'])
+        except Conflict:
+            pass                                             # a newer report won; the next message says again
+
     # ---- records ----------------------------------------------------------
     def roster(self, scene_id):
         if scene_id not in self._rosters:
@@ -309,7 +334,7 @@ class People:
 
         A label that names nobody here is sent as a plain @name, never as a number she guessed.
         """
-        by_handle = {str(d.get('handle')): d for d in self.roster(scene['_id']).values()}
+        by_handle = {str(d.get('handle')): d for d in self.roster(scene['_id']).values() if d.get('person') != self.self_id}
 
         def swap(match):
             doc = by_handle.get(match.group(2) or match.group(3))
@@ -349,6 +374,7 @@ class People:
         for number in group.get('mentioned_account_ids') or []:
             if str(number) != str(account):
                 self.entry(scene, self.account_person(scene['_id'], number))
+        self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now()))]
         parent_id = group.get('reply_message_id')

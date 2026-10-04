@@ -24,7 +24,9 @@ qqadapter/inbound.py           事件 → 信封 + 私聊/群两道闸门 + at/r
 qqadapter/journal.py           磁盘 spool（就是入站队列）、journal、计数器、flock 单实例锁
 qqadapter/onebot.py            两条 WS 连接、echo 关联、迟到响应、重连退避
 qqadapter/hostapi.py           宿主 HTTP（stdlib urllib），结果分类 ok/duplicate/retry/reject
-qqadapter/outbound.py          领取 → 按 target 选 action 发送 → 读回核实（只观测）→ 回执；回执可重报，unknown 不重发
+qqadapter/outbound.py          领取 → 按 target 选 action 发送 → 读回核实（只观测）→ 回执；回执可重报，unknown 不重发；
+                               宿主排队的群管理动作（禁言/解禁/踢人/撤回）→ set_group_ban / set_group_kick / delete_msg，平台 retcode 即回执
+qqadapter/selfrole.py          自己在每个群的身份（群主/管理员/成员）：get_group_member_info 查本号，缓存十分钟，随群事件放进 raw.asuna_self
 qqadapter/service.py           线程装配、身份校验、STATUS/health、入站前注入对方身份
 qqadapter/peers.py             对方身份目录：昵称/群名片/群身份 + 改名换名片仍是同一人（ADR-005 一阶段）
 qqadapter/selftest.py          离线 + 在线自检（群部分用预览配置，发送用替身）

@@ -1,12 +1,12 @@
 diff --git a/packages/client/ui-chat/README.md b/packages/client/ui-chat/README.md
-index f09b12c461..a8588dde21 100644
+index f09b12c461..3d62e6dc9f 100644
 --- a/packages/client/ui-chat/README.md
 +++ b/packages/client/ui-chat/README.md
 @@ -10,6 +10,8 @@ Desktop product events use the optional [product analytics service](../product-a
  
  ## Summary
  
-+`conversation.chat.content` is a Session-scoped Component Factory. Its `main` variant renders the normal Chat view; `fragment` renders selected native Node kinds between an exclusive `after` and inclusive `through` anchor sequence. The caller supplies an authorized retained Session binding through `SessionProvider`. A fragment shares native message, tool, image and disclosure components, with no composer or separate scrollport. It does not copy events into the enclosing Session or affect model context. History loading remains with the Session Controller; the native older-history control remains available. Fragment DOM anchors are excluded from enclosing Chat navigation and scroll memory.
++`conversation.chat.content` is a Session-scoped Component Factory. Its `main` variant renders the normal Chat view; `fragment` renders the Session's grouped Chat entries of selected native Node kinds between an exclusive `after` and inclusive `through` anchor sequence (a group by its first member), through the same list, Turn-process folding and disclosures as the main Chat. The caller supplies an authorized retained Session binding through `SessionProvider`. A fragment shares native message, tool, image and disclosure components, with no composer or separate scrollport. It does not copy events into the enclosing Session or affect model context. History loading remains with the Session Controller; the native older-history control remains available. Fragment DOM anchors are excluded from enclosing Chat navigation and scroll memory.
 +
  Use this package to render a browser chat from recorded Session conversations, including historical images, localized actions, and restored scroll position. Work-details modes control reasoning previews and process visibility without hiding final answers; Verbose keeps completed-turn process rows visible. Local transcript and steering submissions appear immediately, remain in their original surface, and disappear atomically when authoritative Session records arrive, while queued submissions stay outside Chat. The package does not assemble or modify model requests.
  
@@ -57,18 +57,17 @@ index e5807726ac..bf7c587fb9 100644
    // the Chat panel that reported it. Its chain child lets a package with a
 diff --git a/packages/client/ui-chat/src/client/chat/ChatContent.tsx b/packages/client/ui-chat/src/client/chat/ChatContent.tsx
 new file mode 100644
-index 0000000000..2e3601ad19
+index 0000000000..e4772b9142
 --- /dev/null
 +++ b/packages/client/ui-chat/src/client/chat/ChatContent.tsx
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,74 @@
 +/** Reusable native Chat occurrences over the current authorized Session binding. */
 +import { useCallback, useEffect, useMemo } from 'react'
 +import { MarkdownDelegateProvider } from '@deepseek-ai/dsh-client-ui-primitives'
 +import { fileMediaUrl, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
-+import type { RenderMessageImages } from '@deepseek-ai/dsh-client-ui-conversation/client'
++import type { NodeKey, RenderEntry, RenderMessageImages } from '@deepseek-ai/dsh-client-ui-conversation/client'
 +import type { ChatContentProps, ChatEntryProps } from '../contract/slots.ts'
-+import { ChatView } from './ChatView.tsx'
-+import { ChatNodeSeat } from './ChatNodeSeat.tsx'
++import { ChatNodeList, ChatView } from './ChatView.tsx'
 +import css from './ChatView.module.css'
 +
 +/** @param props - current Conversation owner. @returns the native main Chat occurrence. */
@@ -84,11 +83,14 @@ index 0000000000..2e3601ad19
 +}
 +
 +function ChatFragment(props: ChatContentProps & { variant: 'fragment' }) {
-+  const { useChat, useSession, useChatNode, useChatNodeProcess, usePresentation, useStore,
-+    actions, renderSlot, loadImage, openFile, openSkill, openExternalLink,
++  const { useChat, useSession, useConversation, useChatGroup, useChatNode, useChatNodeProcess, usePresentation,
++    useStore, actions, renderSlot, loadImage, openFile, openSkill, openExternalLink,
 +    fileMentions, forkAt, loadOlder, loadThrough, after, through, kinds, t } = props
 +  const order = useChat(s => s.order)
 +  const nodeStore = useChat(s => s.nodes)
++  // The same grouped entries the main Chat renders, so a fragment folds and discloses exactly like it.
++  const grouped = useConversation(snapshot => snapshot.views.grouped('chat'))
++  const groupedEntries = useConversation(snapshot => snapshot.views.grouped('chat')?.entries)
 +  const cwd = props.useSessions(s => s.byId[props.sessionId]?.cwd)
 +  const fileImages = useMemo(() => ({
 +    resolve: (path: string) => fileMediaUrl(document.baseURI, resolveWorkspacePath(cwd, path)),
@@ -100,12 +102,15 @@ index 0000000000..2e3601ad19
 +  const hasMore = useSession(s => s.hasMore)
 +  const loadingOlder = useSession(s => s.loadingOlder)
 +  const openError = useSession(s => s.openError)
-+  const keys = useMemo(() => order.filter(key => {
-+    const node = nodeStore.get(key)
++  const entries = useMemo<readonly RenderEntry[]>(() => (groupedEntries
++    ?? order.map(key => ({ kind: 'node' as const, key: key as NodeKey }))).filter(entry => {
++    // A group belongs to the occurrence holding its first member.
++    const key = entry.kind === 'node' ? entry.key : grouped?.groupSource(entry.key).getSnapshot()?.members[0]?.key
++    const node = key === undefined ? undefined : nodeStore.get(key)
 +    return node !== undefined && kinds.some(kind => kind === node.kind)
 +      && (after === undefined || node.anchorSeq > after)
 +      && (through === undefined || node.anchorSeq <= through)
-+  }), [order, nodeStore, after, through, kinds])
++  }), [groupedEntries, grouped, order, nodeStore, after, through, kinds])
 +  useEffect(() => {
 +    if (through !== undefined) void loadThrough(through)
 +  }, [through, loadThrough])
@@ -121,45 +126,29 @@ index 0000000000..2e3601ad19
 +        {loadingOlder ? t('loading') : t('chat.loadOlder')}
 +      </button></div>}
 +    <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile} fileImages={fileImages}>
-+      {keys.map(key => <ChatNodeSeat key={key} nodeKey={key} nodeStore={nodeStore}
-+        individualRecords useChatNode={useChatNode} useChatNodeProcess={useChatNodeProcess}
++      <ChatNodeList entries={entries} pendingInputs={[]} lastInputTurn={undefined} nodeStore={nodeStore}
++        useChatGroup={useChatGroup} useChatNode={useChatNode} useChatNodeProcess={useChatNodeProcess}
 +        usePresentation={usePresentation} useStore={useStore} actions={actions} cwd={cwd}
 +        openFile={openFile} openSkill={openSkill} inspectCall={undefined} forkAt={forkAt}
 +        loadImage={loadImage} renderMessageImages={renderMessageImages}
-+        fileMentions={fileMentions} renderSlot={renderSlot} t={t} />)}
++        fileMentions={fileMentions} renderSlot={renderSlot} t={t} />
 +    </MarkdownDelegateProvider>
 +  </div>
 +}
-diff --git a/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx b/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx
-index f2269daf9d..674c92e145 100644
---- a/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx
-+++ b/packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx
-@@ -11,6 +11,8 @@ import { useSearchableHidden } from './searchable-hidden.ts'
- import css from './ChatView.module.css'
+diff --git a/packages/client/ui-chat/src/client/chat/ChatView.tsx b/packages/client/ui-chat/src/client/chat/ChatView.tsx
+index 460f98b014..93d0af3ab6 100644
+--- a/packages/client/ui-chat/src/client/chat/ChatView.tsx
++++ b/packages/client/ui-chat/src/client/chat/ChatView.tsx
+@@ -63,7 +63,8 @@ type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey' | '
+   readonly lastInputTurn: number | undefined
+ }
  
- interface ChatNodeSeatProps extends ChatNodeOwnerProps {
-+  /** A source fragment keeps each record's native disclosure instead of folding an entire Turn. */
-+  readonly individualRecords?: boolean
-   readonly nodeKey: string
-   /** A replaced Builder must rebind keyed hooks even when references and keys survive. */
-   readonly nodeStore: ChatNodeStore
-@@ -46,6 +48,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
-   nodeKey, groupPart, useChatNode, useChatNodeProcess, usePresentation,
-   cwd, openFile, openSkill, inspectCall, forkAt,
-   loadImage, renderMessageImages, fileMentions, useStore, actions, renderSlot, t,
-+  individualRecords = false,
- }: ChatNodeSeatProps) {
-   const node = useChatNode(nodeKey)
-   const routedNode = node as ChatNode | undefined
-@@ -72,7 +75,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
-   // A loaded end makes a partial historical Turn eligible without its start.
-   const processWindowReady = processSpec !== undefined
-     && processPresentation !== undefined
--    && foldCompleted
-+    && foldCompleted && !individualRecords
-     && processPresentation.turn === processSpec.turn
-     && (processPresentation.turnStarted || processPresentation.turnClosed)
-   const processMember = routedNode !== undefined
+-const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pendingInputs, lastInputTurn, ...seatProps }: ChatNodeListProps) {
++/** Native rows for grouped entries; also seats a source-scoped Chat fragment (ChatContent). */
++export const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pendingInputs, lastInputTurn, ...seatProps }: ChatNodeListProps) {
+   const rows = entries.map((entry) => {
+     switch (entry.kind) {
+       case 'node':
 diff --git a/packages/client/ui-chat/src/client/chat/use-chat-viewport.ts b/packages/client/ui-chat/src/client/chat/use-chat-viewport.ts
 index f74153097c..798b8e3fa7 100644
 --- a/packages/client/ui-chat/src/client/chat/use-chat-viewport.ts

@@ -530,7 +530,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           props.renderSlot('asuna.inline.fragment', { owner: props }))
           : h('p', { role: error ? 'alert' : 'status' }, error || '读取行动脑记录…'));
     }
-    const actionKinds = ['assistant-step', 'tool-call', 'turn-error', 'turn-max-tokens',
+    // The action turn's own native disclosure ('turn-process') folds and opens its records exactly as the
+    // character brain's turn does in the main Chat.
+    const actionKinds = ['turn-process', 'assistant-step', 'tool-call', 'turn-error', 'turn-max-tokens',
       'model-retry', 'compaction', 'manual-compaction', 'command'];
     function NativeFragment(props) {
       const range = props.owner.node.data;

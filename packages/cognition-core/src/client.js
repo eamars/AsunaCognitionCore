@@ -2,7 +2,7 @@
 window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => {
   const React = require('react');
   const { Button, Input, Menu, Pill, IconChevronDownOutlineRegular, DisclosureRow, MarkdownText, CodeBlock, SettingsForm, SettingsFormModel,
-    SettingsValueField, SettingsSecretField, Tooltip } = require('@deepseek-ai/dsh-client-ui-primitives');
+    SettingsValueField, SettingsSecretField } = require('@deepseek-ai/dsh-client-ui-primitives');
   const h = React.createElement;
   const labels = { code: { copyLabel: '复制', copiedLabel: '已复制' }, footnotes: '来源' };
   const stack = { display: 'flex', flexDirection: 'column', gap: 12, padding: 16, minWidth: 0,
@@ -68,17 +68,26 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     body[data-ds-dark-theme] .asuna-brain-character { color: #c4b5fd; background: color-mix(in srgb, #c4b5fd 10%, var(--dsw-alias-bg-base)); }
     body[data-ds-dark-theme] .asuna-brain-executor { color: var(--dsw-static-blue-300); background: color-mix(in srgb, var(--dsw-static-blue-300) 10%, var(--dsw-alias-bg-base)); }
   `;
-  // DSH's meter (pinned DSH version's class) takes the character-brain purple; the action ring matches its geometry.
-  const characterMeterTint = `
+  // Palette only (pinned DSH version's class): DSH's meter is the character-brain purple, the second
+  // instance of the same meter (the action session) the action-brain blue.
+  const meterPalette = `
     .JObwrW_fill { stroke: #7e22ce; }
     body[data-ds-dark-theme] .JObwrW_fill { stroke: #c4b5fd; }
-    .asuna-action-meter { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; flex: none;
-      color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px);
-      font-variant-numeric: tabular-nums; line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px)); white-space: nowrap; }
-    .asuna-meter-track { fill: none; stroke: var(--dsw-alias-border-l3); stroke-width: 2px; }
-    .asuna-meter-fill { fill: none; stroke: var(--dsw-static-blue-600); stroke-width: 2px; stroke-linecap: round; }
-    body[data-ds-dark-theme] .asuna-meter-fill { stroke: var(--dsw-static-blue-300); }
+    .asuna-action-meter { display: contents; }
+    .asuna-action-meter .JObwrW_fill { stroke: var(--dsw-static-blue-600); }
+    body[data-ds-dark-theme] .asuna-action-meter .JObwrW_fill { stroke: var(--dsw-static-blue-300); }
   `;
+  /** DSH's own ContextMeter, read from the meter it already renders next to this dock. DSH does not
+   * export it; when the lookup fails (another DSH revision) the action meter is simply absent. */
+  function shippedContextMeter(anchor) {
+    for (const element of anchor?.parentElement?.parentElement?.children ?? []) {
+      const key = Object.keys(element).find(name => name.startsWith('__reactFiber$'));
+      for (let fiber = key && element[key], depth = 0; fiber && depth < 4; fiber = fiber.return, depth++)
+        if (typeof fiber.type === 'function' && fiber.type.name === 'ContextMeter' && fiber.memoizedProps?.t)
+          return { Meter: fiber.type, t: fiber.memoizedProps.t };
+    }
+    return null;
+  }
   function stageIdentity(source) {
     if (typeof source?.phase !== 'string' || !source.phase) return null;
     // Older source notices have phase but no lane. Infer only documented
@@ -465,33 +474,28 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name: 'sidebar.right.pane.tab', key: '@asuna/memory' }, Memory));
     ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: '@asuna/cognition-core' }, Settings));
 
-    // Two context wheels in a character conversation (owner-approved, 2026-10-04): DSH's own meter,
-    // tinted purple, is the character brain; one matching blue ring beside it is the latest action
-    // session. Nothing is shown in other sessions.
-    const formatK = value => value >= 1000 ? Math.round(value / 100) / 10 + 'K' : String(value);
+    // Two context wheels in a character conversation (owner-approved, 2026-10-04): DSH's own meter is
+    // the character brain (purple); a second instance of that same meter, fed the latest action
+    // session's projections, is the action brain (blue). Nothing is shown in other sessions.
     function BrainMeters({ sessionId }) {
-      const [state, setState] = React.useState(null);
+      const [state, setState] = React.useState(null), [shipped, setShipped] = React.useState(null);
+      const anchor = React.useRef(null);
       React.useEffect(() => {
         if (!sessionId) return undefined;
         let alive = true;
-        const load = () => rpc('brainContext', { sessionId }).then(value => alive && setState(value)).catch(() => {});
+        const load = () => rpc('brainContext', { sessionId }).then(value => {
+          if (!alive) return;
+          setState(value);
+          setShipped(current => current ?? shippedContextMeter(anchor.current));
+        }).catch(() => {});
         load();
         const timer = setInterval(load, 5000);
         return () => { alive = false; clearInterval(timer); setState(null); };
       }, [sessionId]);
-      if (!state) return null;
-      const action = state.action;
-      const length = 2 * Math.PI * 5.5;
-      return h(React.Fragment, null,
-        h('style', null, characterMeterTint),
-        action && h(Tooltip, { label: '行动脑上下文已用 ' + action.percent + '%（' + formatK(action.used) + ' / ' + formatK(action.window) + '）',
-          side: 'top', delayMs: 200 },
-          h('span', { className: 'asuna-action-meter', 'aria-label': '行动脑上下文已用 ' + action.percent + '%' },
-            h('svg', { viewBox: '0 0 14 14', width: 14, height: 14, 'aria-hidden': true },
-              h('circle', { cx: 7, cy: 7, r: 5.5, className: 'asuna-meter-track' }),
-              h('circle', { cx: 7, cy: 7, r: 5.5, className: 'asuna-meter-fill', transform: 'rotate(-90 7 7)',
-                strokeDasharray: length * action.percent / 100 + ' ' + length })),
-            h('span', null, action.percent + '%'))));
+      const action = state?.action;
+      return h('span', { ref: anchor, className: 'asuna-action-meter' },
+        state && h('style', null, meterPalette),
+        action && shipped && h(shipped.Meter, { useProjection: key => action[key], t: shipped.t }));
     }
     ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
       name: 'conversation.composer.dock', id: 'asuna-brain-meters', order: 100 }, BrainMeters));

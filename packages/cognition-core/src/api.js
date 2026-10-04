@@ -52,7 +52,8 @@ export class AsunaApi extends TypertRemoteService {
     return this.core.worker.call('input_policies', { sessions });
   }
 
-  /** Context occupancy of a character session and of its latest action session (DSH contextPressure). */
+  /** For a character session: the context projections of its latest action session, exactly as DSH's
+   * own meter reads them (contextPressure, contextBreakdown). Null for any other session. */
   async brainContext(sessionId) {
     if (typeof sessionId !== 'string' || !sessionId) throw new Error('INVALID_SESSION_ID');
     await this.core.ready();
@@ -60,22 +61,15 @@ export class AsunaApi extends TypertRemoteService {
     if (binding?.lane !== 'character') return null;
     const role = this.core.ctx.sessions.get(sessionId);
     const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/action-linked')?.data.session_id;
-    return { character: await this.occupancy(sessionId), action: action ? await this.occupancy(action) : null };
+    return { action: action ? await this.contextProjections(action) : null };
   }
 
-  async occupancy(id) {
-    const { ctx } = this.core;
+  async contextProjections(id) {
+    const { ctx } = this.core, keys = ['contextPressure', 'contextBreakdown'];
     const hot = ctx.sessions.get(id);
-    let pressure;
-    if (hot) pressure = ctx.sessionProjections.snapshot(hot, ['contextPressure']).values.contextPressure;
-    else {
-      const header = (await ctx.sessionPersistence.stat(id))?.header;
-      pressure = header && ctx.sessionProjectionCache.cachedSnapshot(header, ['contextPressure'])?.values.contextPressure;
-    }
-    // The same reading DSH's own meter shows.
-    const used = pressure?.projectedTokens ?? pressure?.pressureTokens;
-    if (used === undefined || !pressure?.contextWindow) return null;
-    return { used, window: pressure.contextWindow, percent: Math.min(100, Math.round(used / pressure.contextWindow * 100)) };
+    if (hot) return ctx.sessionProjections.snapshot(hot, keys).values;
+    const header = (await ctx.sessionPersistence.stat(id))?.header;
+    return (header && ctx.sessionProjectionCache.cachedSnapshot(header, keys)?.values) ?? null;
   }
 
   async personaSources() {

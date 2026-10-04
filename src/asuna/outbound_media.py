@@ -131,14 +131,15 @@ def declared(row):
 
 
 def attachment_for_speak(ep):
-    """这一轮被程序接受的那张图 → SPEAK 第一行要写的元数据（没有就 None）。"""
-    for item in ((ep or {}).get('delta_results') or {}).get('attach') or []:
-        if not isinstance(item, dict):
-            continue
-        meta = descriptor({ATTACHMENT_KEY: item})
-        if meta:
-            return meta
-    return None
+    """这一轮被程序接受的那张图 → SPEAK 第一行要写的元数据（没有就 None）。
+
+    图只跟最后一次 DECIDE 走：``decide_delta.apply`` 每一轮都把 ``delta_results['attach']`` 重写成
+    本轮接受的那一张 —— 本轮没给、或给的那张被退回，就没有这一项，也就没有图（前一轮那张不会跟着走）。
+    schema 一轮至多一条，所以这里只看那一条，形状不对就当没有。
+    """
+    items = ((ep or {}).get('delta_results') or {}).get('attach') or []
+    item = items[0] if items and isinstance(items[0], dict) else None
+    return descriptor({ATTACHMENT_KEY: item}) if item else None
 
 
 def target_allowed(config, scene, session_class):

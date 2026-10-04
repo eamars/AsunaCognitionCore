@@ -388,7 +388,7 @@
       }
     },
     "attach": {
-      "description": "随这一条要说的话一起发出去的图片（至多 1 条）。artifact_id 只能照抄上下文 image_artifacts_from_program.items 里给出的值——它不是文件路径也不是文件名。第一版只允许 session_class=owner_private 且该场景路由 target.type=dm 的回合，群方向确定性拒绝；不接受的条目只进 rejections，不影响这一轮。",
+      "description": "随这一条要说的话一起发出去的图片（至多 1 条）。图只看最后一次 DECIDE：那一份里写了 attach 就发那张（同一轮里先 next=recall 再决定时，以重写后的那一份为准），没写 attach 就不带图，不会沿用前一次那张；被退回时这条也不带图，原因写在本轮结果里，不无声丢图。artifact_id 只能照抄上下文 image_artifacts_from_program.items 里给出的值——它不是文件路径也不是文件名。第一版只允许 session_class=owner_private 且该场景路由 target.type=dm 的回合，群方向确定性拒绝；不接受的条目只进 rejections，不影响这一轮。",
       "maxItems": 1,
       "items": {
         "type": "object",

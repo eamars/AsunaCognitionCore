@@ -439,6 +439,9 @@ class Coordinator:
                         event={'event_id':ep['source_event_id'],'scene_id':ep['scene_id'],'person_id':ep['person_id'],'text':ep['decision']['recall_query']}
                         _, recalled,manifest=self.context.prepare(event,ep['persona'],recall=True)
                         context={**ep['context'],'recall':{'query':ep['decision']['recall_query'],'memories':recalled['memories']}}
+                        # read 这一轮只在这里验一遍：DECIDE 那侧的 apply 在 recall 会处理它时跳过校验
+                        # （decide_delta._recall_will_read 与本分支的 rounds<2 同一条判断）。两边都验过一遍，
+                        # 同一条拒收就会被记两次。
                         reads=[(i,item) for i,item in enumerate((ep.get('decision_delta') or {}).get('read') or [])]
                         if reads:
                             valid,bad=decide_delta.validate_items({'read':[item for _,item in reads]})

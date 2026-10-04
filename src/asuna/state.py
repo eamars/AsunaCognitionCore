@@ -68,8 +68,9 @@ class Store:
         self.fail_audit = False
 
     def migrate(self):
+        existing = set(self.db.list_collection_names())     # one round trip, not one per collection
         for name in COLLECTIONS:
-            if name not in self.db.list_collection_names():
+            if name not in existing:
                 self.db.create_collection(name, validator={'$jsonSchema':{'bsonType':'object','required':['_id','schema_version'],'properties':{'schema_version':{'enum':[1]}}}})
         specs = {
             'identities': [([('platform',1),('account_id',1)], {'unique':True})],

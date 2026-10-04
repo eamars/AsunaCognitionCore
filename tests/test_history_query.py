@@ -46,19 +46,26 @@ TEST_DATABASE = os.environ.get('ASUNA_P1B_DATABASE', 'asuna_v2_test_p1b_host_202
 CLEARED = ('scenes', 'messages', 'tasks', 'artifacts', 'sink_receipts', 'audit_events')
 
 
-@pytest.fixture
-def store():
-    # 固定授权库：受限账号只被授权这一库，建库/改名都不在本测试的职责内。
-    db = Store(load(CONFIG_PATH), TEST_DATABASE)
+@pytest.fixture(scope='module')
+def module_database():
+    # One isolated database for this module (migrated once), dropped when the module finishes.
+    from conftest import isolated_database, drop_database
+    db = Store(load(CONFIG_PATH), isolated_database(TEST_DATABASE))
     db.migrate()
+    yield db
+    db.client.close()
+    drop_database(db.config, db.name)
+
+
+@pytest.fixture
+def store(module_database):
+    db = module_database
     # 单库顺序跑：用例开头清掉上一个用例的残留，等价于原来的每用例独立新库。
     for name in CLEARED:
         db.db[name].delete_many({})
     yield db
     for name in CLEARED:
-        # 结束时再清一次：不给同库 Web 重启留 READY 合成任务（_recover_tasks 会踩空 raw_input_refs）。
         db.db[name].delete_many({})
-    db.client.close()
 
 
 def scene_row(scene_id):

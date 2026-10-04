@@ -257,17 +257,17 @@ class StageWorker:
         return method
 
 
-def _alternate(dispatcher, worker):
+def _alternate(dispatcher, worker, stage_wait=2, reply_wait=3):
     import time
     dispatcher.handle({'id': 1, 'method': 'tool', 'args': {'token': 'scene-a'}})
     dispatcher.handle({'id': 2, 'method': 'tool', 'args': {'token': 'scene-b'}})
-    deadline = time.monotonic() + 2
+    deadline = time.monotonic() + stage_wait
     while len([e for e in worker.emitted if e.get('kind') == 'stage']) < 2 and time.monotonic() < deadline:
         time.sleep(.01)
     dispatcher.handle({'id': 3, 'method': 'result', 'args': {'token': 'scene-b', 'value': 'B'}})
     dispatcher.handle({'id': 4, 'method': 'status', 'args': {}})
     dispatcher.handle({'id': 5, 'method': 'result', 'args': {'token': 'scene-a', 'value': 'A'}})
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + reply_wait
     while time.monotonic() < deadline and not {1, 2, 4} <= {e.get('id') for e in worker.emitted if 'value' in e}:
         time.sleep(.01)
     return {e['id']: e.get('value', e.get('error')) for e in worker.emitted if 'id' in e}
@@ -298,10 +298,10 @@ def test_T7_2_counterexample_replies_queued_behind_their_waiter_deadlock(monkeyp
     from asuna import native_worker
     monkeypatch.setattr(native_worker, 'REPLIES', frozenset())
     monkeypatch.setattr(native_worker, 'DETACHED', frozenset())
-    worker = StageWorker(wait=.5)
+    worker = StageWorker(wait=.3)
     dispatcher = native_worker.Dispatcher(worker, threads=1)
     try:
-        replies = _alternate(dispatcher, worker)
+        replies = _alternate(dispatcher, worker, stage_wait=.2, reply_wait=.6)
     finally:
         dispatcher.close()
     assert str(replies.get(1, '')).startswith('TimeoutError'), replies     # the old routing starves

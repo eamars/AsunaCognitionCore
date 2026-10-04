@@ -1,4 +1,4 @@
-import uuid,os,shutil
+import copy,uuid,os,shutil
 from pathlib import Path
 import pytest
 from pymongo import MongoClient
@@ -28,6 +28,68 @@ def preserve_temporary_evidence(request):
 FIXTURES=Path(__file__).with_name('fixtures')
 WORLD=FIXTURES/'world.json'
 
+# Every test gets its own database with the same migrated, audited fixture world. Building it costs
+# hundreds of small round trips (collections, indexes, audited seed writes), so it is built once per
+# session and each test database is filled from that snapshot with a few bulk commands per collection.
+_ORIGINAL_SEED=Store.seed
+_WORLD_SNAPSHOT=None
+
+
+def _world_snapshot(config):
+    global _WORLD_SNAPSHOT
+    if _WORLD_SNAPSHOT is None:
+        template=Store(config,'asuna_v2_test_TPL_'+uuid.uuid4().hex[:12])
+        try:
+            template.migrate();_ORIGINAL_SEED(template,WORLD)
+            options={row['name']:row.get('options',{}) for row in template.db.list_collections()}
+            _WORLD_SNAPSHOT={name:(options[name],
+                                   {k:v for k,v in template.db[name].index_information().items() if k!='_id_'},
+                                   list(template.db[name].find({})))
+                             for name in options}
+        finally:
+            dispose_test_store(template)
+    return _WORLD_SNAPSHOT
+
+
+def install_world(db):
+    """Reset a test database to exactly the fixture world.
+
+    Creating collections and indexes is server-side catalog work (about 10 ms each), so a test database
+    is built once and then reused: its rows are replaced with the seed and anything a test added is
+    removed. A test that patches Store.seed gets the real seeding call.
+    """
+    if Store.seed is not _ORIGINAL_SEED:
+        db.migrate();db.seed(WORLD);return
+    from concurrent.futures import ThreadPoolExecutor
+    from pymongo import IndexModel
+    snapshot=_world_snapshot(db.config)
+    present=set(db.db.list_collection_names())
+    def one(name):
+        if name not in snapshot:
+            db.db.drop_collection(name);return
+        options,indexes,documents=snapshot[name]
+        if name in present:
+            db.db[name].delete_many({})
+        else:
+            db.db.create_collection(name,**({'validator':options['validator']} if options.get('validator') else {}))
+            if indexes:
+                db.db[name].create_indexes([IndexModel(spec['key'],name=index,**{k:spec[k] for k in ('unique','partialFilterExpression') if k in spec})
+                                            for index,spec in indexes.items()])
+        if documents:
+            db.db[name].insert_many(copy.deepcopy(documents),ordered=True)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(one,sorted(present|set(snapshot))))
+
+
+_POOL=[]      # built test databases ready for reuse
+_OWNED=set()  # every pooled database this session created; all are dropped at session end
+
+
+def pytest_sessionfinish(session,exitstatus):
+    config=load()
+    for name in sorted(_OWNED):
+        drop_database(config,name)
+
 
 def isolated_database(prefix):
     """A fresh test database name; every test drops what it created."""
@@ -44,12 +106,15 @@ def drop_database(config,name):
 @pytest.fixture
 def store(request):
     config=load();config['character_id']='demo'  # Synthetic persona of the fixture world.
-    name=isolated_database('asuna_v2_test_M1')
+    pooled=Store.seed is _ORIGINAL_SEED
+    name=_POOL.pop() if pooled and _POOL else isolated_database('asuna_v2_test_M1')
+    if pooled:_OWNED.add(name)
     from fixture_grant import fixture_grant
+    shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)   # a reused database gets an empty workspace
     fixture_grant(config,name)
     db=Store(config,name)
     try:
-        db.migrate();db.seed(WORLD)
+        install_world(db)
         yield db
     finally:
         try:
@@ -67,6 +132,9 @@ def store(request):
                 finally:observer.client.close()
                 request.node.user_properties.append(('evidence_path',path.relative_to(ROOT).as_posix()))
         finally:
-            dispose_test_store(db)
+            if pooled:
+                db.client.close();_POOL.append(name)                # reset by the next test; dropped at session end
+            else:
+                dispose_test_store(db)
             for derived in getattr(db,'derived_databases',[]):   # replay targets etc.
                 drop_database(config,derived)

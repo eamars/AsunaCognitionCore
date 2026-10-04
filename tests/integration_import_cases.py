@@ -82,12 +82,12 @@ from asuna.integration_import import (DEFAULT_MAX_BYTES, IMPORT_TOOL, IMPORT_TOO
                                       MAX_ARTIFACT_BYTES, import_artifact, integration_gated)
 
 # 配置里已有的端点：真取字节时只用这里的地址，模型说什么都换不掉。
-ENDPOINTS = [{'name': 'napcat', 'host': '10.0.0.5', 'port': 18080, 'target_port': 3001},
+ENDPOINTS = [{'name': 'napcat', 'host': '192.0.2.5', 'port': 18080, 'target_port': 3001},
              {'name': 'reports', 'host': '127.0.0.1', 'port': 18081, 'target_port': 8090}]
 
 LOCAL = {'chat': {'scene_id': 'local', 'person_id': 'owner'},
          'integration': {'enabled': True, 'scene_id': 'local', 'person_id': 'owner',
-                         'endpoints': [{'name': 'napcat', 'host': '10.0.0.5', 'port': 18080,
+                         'endpoints': [{'name': 'napcat', 'host': '192.0.2.5', 'port': 18080,
                                         'target_port': 3001}]}}
 
 

@@ -23,7 +23,7 @@ import z from '@deepseek-ai/schemastery';
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
-  'sessionController', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
+  'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
 export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),

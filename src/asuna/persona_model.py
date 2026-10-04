@@ -27,7 +27,7 @@ CORE_WRITABLE_KEYS = {
     'render.budget_tokens': {'type': 'integer', 'min': 256, 'max': 200000, 'what': '人格渲染的绝对 token 预算'},
 }
 CORE_DEFAULTS = {
-    'render': {'budget_tokens': None, 'max_window_share': 0.25, 'values_tag': 'values'},
+    'render': {'budget_tokens': None, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'values'},
     'recall_protocol': {'order': None},
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,

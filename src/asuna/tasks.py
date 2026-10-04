@@ -10,6 +10,7 @@ from contextlib import contextmanager,nullcontext
 import jsonschema
 from .config import ROOT,prompt_path,redact_text,excerpt
 from .render import action_values
+from . import visibility
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .skills import skills_directory
@@ -395,7 +396,10 @@ class Executor:
     def _run_workspace(self,task,binding,source,healthy):
         from .grants import workspace_grant
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
-        system=prompt_path(self.service.store.config,'executor.md').read_text(encoding='utf-8')+action_values(self.service.store)
+        store=self.service.store
+        # Who she is, at the class of the conversation the task came from (render.action_persona).
+        cls=visibility.session_class(store.config,store.db,store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']},task['requester_id'])
+        system=prompt_path(store.config,'executor.md').read_text(encoding='utf-8')+action_values(store,cls=cls)
         payload={'goal':task['goal'],'constraints':task['constraints'],'original_input':source['text'],
                  'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])}
         # Pull 模式：只告诉她有什么图、ref 是什么、能不能拉；图片正文不进输入。

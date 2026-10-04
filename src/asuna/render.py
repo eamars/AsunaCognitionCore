@@ -170,22 +170,29 @@ def episode_system(store, ep: dict) -> str:
     return system_for(store, ep['system_ref'], stream=ep.get('_id'), scope=ep.get('scope_key', 'operator'))
 
 
-def action_values(store, persona=None) -> str:
-    """Action-brain system suffix: always a public render (ADR-009 §8.3).
+def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
+    """Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).
 
-    Only persona sections that are public and tagged with ``render.values_tag``;
-    the display name alone when there are none. Never owner-private text.
+    ``render.action_persona``:
+    - ``values`` (core default): public persona sections tagged ``render.values_tag``, else the name alone;
+    - ``persona``: who she is — the persona document's every-turn sections readable in the class of the
+      conversation the task came from. Never memory, relationships, emotion or other state.
     """
     name = (store.config.get('chat') or {}).get('display_name') or 'character'
     persona = persona or (store.config.get('chat') or {}).get('persona')
-    values = []
-    if persona:
-        from .persona_model import effective
-        model, policy = model_and_policy(store, persona)
-        tag = effective(model, 'render.values_tag', policy) or 'values'
-        _, content = DocumentStore(store, persona).read('persona')
-        values = [s for s in (content or {}).get('sections', [])
-                  if s['visibility'] == 'public' and tag in s.get('tags', [])]
+    if not persona:
+        return '\n你服务的角色：' + name + '。共享其公开价值，但不代写角色台词、独白或感受。'
+    from .persona_model import effective
+    model, policy = model_and_policy(store, persona)
+    _, content = DocumentStore(store, persona).read('persona')
+    if effective(model, 'render.action_persona', policy) == 'persona':
+        sections = readable_sections(content, cls)
+        text = ('\n你是' + name + '的行动侧：以下是她是谁，照她的为人做事、写汇报。上面的行动规则优先；'
+                '人格不扩大授权，也不让你替她对外说话、写独白或决定感受。')
+        return text + ('\n' + render_markdown(sections) if sections else '')
+    tag = effective(model, 'render.values_tag', policy) or 'values'
+    values = [s for s in (content or {}).get('sections', [])
+              if s['visibility'] == 'public' and tag in s.get('tags', [])]
     text = '\n你服务的角色：' + name + '。共享其公开价值，但不代写角色台词、独白或感受。'
     if values:
         text += '\n' + render_markdown(values)

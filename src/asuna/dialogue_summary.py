@@ -156,6 +156,7 @@ class DialogueSummarizer:
         attribution = summary_attribution.attribute(self.store, scene, rows)
         if not saved:
             prompt = ('请总结这一小段已确认交流；窗口与来源由程序保存，不需复制 ID。'
+                      '称呼说话人只用 speaker_label，不要写 author、person_id 或其他 ID。'
                       'attribution 是程序从这些行算出来的归属事实，与它冲突就以它为准。\n'
                       + json.dumps({'window': window, 'attribution': attribution}, ensure_ascii=False))
             operation = key

@@ -52,6 +52,32 @@ export class AsunaApi extends TypertRemoteService {
     return this.core.worker.call('input_policies', { sessions });
   }
 
+  /** Context occupancy of a character session and of its latest action session (DSH contextPressure). */
+  async brainContext(sessionId) {
+    if (typeof sessionId !== 'string' || !sessionId) throw new Error('INVALID_SESSION_ID');
+    await this.core.ready();
+    const binding = await this.core.worker.call('session', { session_id: sessionId }).catch(() => null);
+    if (binding?.lane !== 'character') return null;
+    const role = this.core.ctx.sessions.get(sessionId);
+    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/action-linked')?.data.session_id;
+    return { character: await this.occupancy(sessionId), action: action ? await this.occupancy(action) : null };
+  }
+
+  async occupancy(id) {
+    const { ctx } = this.core;
+    const hot = ctx.sessions.get(id);
+    let pressure;
+    if (hot) pressure = ctx.sessionProjections.snapshot(hot, ['contextPressure']).values.contextPressure;
+    else {
+      const header = (await ctx.sessionPersistence.stat(id))?.header;
+      pressure = header && ctx.sessionProjectionCache.cachedSnapshot(header, ['contextPressure'])?.values.contextPressure;
+    }
+    // The same reading DSH's own meter shows.
+    const used = pressure?.projectedTokens ?? pressure?.pressureTokens;
+    if (used === undefined || !pressure?.contextWindow) return null;
+    return { used, window: pressure.contextWindow, percent: Math.min(100, Math.round(used / pressure.contextWindow * 100)) };
+  }
+
   async personaSources() {
     await this.core.ready();
     return this.core.worker.call('persona.sources', {});
@@ -90,7 +116,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

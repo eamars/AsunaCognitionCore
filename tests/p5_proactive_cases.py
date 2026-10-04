@@ -390,7 +390,8 @@ def topic_is_derived_for_every_group_row():
                                                 'topic_id': 'topic-B', 'topic_via': 'mentioned'}}}
     store = SimpleNamespace(config={'character_id': 'demo'}, db=base.FakeDB({
         'scenes': [{'_id': GROUP, 'kind': 'group', 'policy_epoch': EPOCH, 'members': [PERSON]}],
-        'messages': [parent_overheard, parent_woken]}))
+        'messages': [parent_overheard, parent_woken]}),
+        head=lambda entity, scope: None)        # no persona policy written: People reads the model defaults
     route = {'scene_id': GROUP}
     over = group_context(store, route, {'account_id': BOT, 'mentioned_account_ids': [],
                                         'reply_to': 'evt-parent'}, 'evt-new')

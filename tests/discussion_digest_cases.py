@@ -18,6 +18,22 @@ for _path in (SRC, HERE):
 
 import discussion_digest as dd                       # noqa: E402
 import history_query as hq                           # noqa: E402
+from asuna import channel_kinds                      # noqa: E402
+
+
+def _qq_kind():
+    """The fixture is a QQ group. The core names no platform: use the channel package's kind module when
+    this tree has it (the repository), else the few id rules these cases rely on (a core candidate alone)."""
+    package = os.path.join(os.path.dirname(HERE), "packages", "napcat-qq", "python")
+    if os.path.isdir(package):
+        channel_kinds.load([{"python": package, "module": "napcat_qq"}])
+        return
+    channel_kinds.register(type("QQ", (), {"KIND": "qq", "ACCOUNT": re.compile(r"[1-9][0-9]{4,11}"),
+                                          "person_id": staticmethod(lambda account: "qq:" + str(account))}))
+
+
+if channel_kinds.get("qq") is None:
+    _qq_kind()
 
 BOT = "100357"
 GID = "300941"

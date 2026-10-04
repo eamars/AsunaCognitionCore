@@ -409,7 +409,9 @@ def _peer_of(doc):
 # ── 整理主干 ───────────────────────────────────────────────────
 def _row(hit, doc):
     peer_id, display, role, verified, identity = _peer_of(doc)
-    display = _norm(hit.get("speaker"), 200) or display        # the fixed label, when people.py named the writer
+    speaker = _norm(hit.get("speaker"), 200)
+    if speaker and speaker != _norm(hit.get("author"), 40):
+        display = speaker          # the fixed label, when people.py named the writer (otherwise speaker is the bare author id)
     author = _norm(hit.get("author"), 40)
     body = hit.get("text") if isinstance(hit.get("text"), str) else ""
     seq = hit.get("scene_seq")

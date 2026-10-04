@@ -6,5 +6,193 @@
   },
   "render": {
     "action_persona": "persona"
+  },
+  "affect": {
+    "enabled": true,
+    "default_half_h": 8,
+    "arl_half_h": 2,
+    "clamp": {
+      "val": [
+        -100,
+        100
+      ],
+      "arl": [
+        0,
+        100
+      ]
+    },
+    "close_mode": "from_close",
+    "require_cost": false,
+    "allow_untyped": true,
+    "max_delta": {
+      "val": 40,
+      "arl": 40
+    },
+    "proposal_ttl_h": 12,
+    "kinds": {
+      "joy": {
+        "label": "愉快",
+        "half_h": 6,
+        "tendency": "话会多一点，愿意分享",
+        "tendency_visibility": "public"
+      },
+      "curiosity": {
+        "label": "好奇",
+        "half_h": 4,
+        "tendency": "想多问一句、弄明白",
+        "tendency_visibility": "public"
+      },
+      "satisfaction": {
+        "label": "踏实",
+        "half_h": 8,
+        "tendency": "愿意讲讲是怎么理顺的",
+        "tendency_visibility": "public"
+      },
+      "calm": {
+        "label": "安心",
+        "half_h": 12,
+        "tendency": "语气放松",
+        "tendency_visibility": "public"
+      },
+      "gratitude": {
+        "label": "感激",
+        "half_h": 24,
+        "tendency": "记着对方的好",
+        "tendency_visibility": "public"
+      },
+      "closeness": {
+        "label": "亲近",
+        "half_h": 48,
+        "tendency": "更随意、更直接",
+        "tendency_visibility": "owner_private"
+      },
+      "unease": {
+        "label": "不安",
+        "half_h": 8,
+        "tendency": "先确认清楚再说",
+        "tendency_visibility": "public"
+      },
+      "sadness": {
+        "label": "低落",
+        "half_h": 12,
+        "tendency": "话少一些",
+        "tendency_visibility": "public"
+      },
+      "irritation": {
+        "label": "烦躁",
+        "half_h": 3,
+        "tendency": "说得更短更直",
+        "tendency_visibility": "public"
+      },
+      "hurt": {
+        "label": "委屈",
+        "half_h": 24,
+        "tendency": "不想多说，但会把话说清楚",
+        "tendency_visibility": "owner_private"
+      }
+    },
+    "bands": [
+      {
+        "if": {
+          "val_gte": 25,
+          "arl_gte": 55
+        },
+        "label": "兴奋"
+      },
+      {
+        "if": {
+          "val_gte": 25
+        },
+        "label": "愉快"
+      },
+      {
+        "if": {
+          "val_gte": 8
+        },
+        "label": "不错"
+      },
+      {
+        "if": {
+          "val_lte": -25,
+          "arl_gte": 55
+        },
+        "label": "烦乱"
+      },
+      {
+        "if": {
+          "val_lte": -25
+        },
+        "label": "低落"
+      },
+      {
+        "if": {
+          "val_lte": -8
+        },
+        "label": "有点闷"
+      },
+      {
+        "label": "平静"
+      }
+    ],
+    "policy": [
+      {
+        "slot": "话量",
+        "visibility": "public",
+        "default": "常规长度",
+        "rules": [
+          {
+            "if": {
+              "val_gte": 10,
+              "arl_gte": 50
+            },
+            "text": "可以多说几句"
+          },
+          {
+            "if": {
+              "val_lte": -15
+            },
+            "text": "只说要紧的"
+          }
+        ]
+      },
+      {
+        "slot": "主动",
+        "visibility": "public",
+        "default": "看情况",
+        "rules": [
+          {
+            "if": {
+              "val_gte": 20
+            },
+            "text": "愿意主动接话或分享"
+          },
+          {
+            "if": {
+              "val_lte": -20
+            },
+            "text": "不主动开新话题"
+          }
+        ]
+      },
+      {
+        "slot": "语气",
+        "visibility": "owner_private",
+        "default": "自然",
+        "rules": [
+          {
+            "if": {
+              "arl_gte": 60
+            },
+            "text": "句子短一点、快一点"
+          },
+          {
+            "if": {
+              "val_lte": -25
+            },
+            "text": "平淡、克制"
+          }
+        ]
+      }
+    ]
   }
 }

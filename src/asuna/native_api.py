@@ -23,6 +23,54 @@ EMPTY_HEAD = {'self': '她只在每天一次的内部自省时间里决定要不
               'relation': '她在对话中觉得对这个人的理解有了变化时才会写下。'}
 
 
+# Emotion in words. val is how good or bad she feels (−100…100), arl how stirred up (0…100).
+AMENDMENT_WORDS = {'close': '已了结', 'void': '作废（前提不成立）', 'fix_ts': '更正时间', 'fix_kind': '更正种类'}
+
+
+def kind_label(model, kind):
+    return (model.get('kinds', {}).get(kind) or {}).get('label') or kind or '未分类'
+
+
+def ago(hours):
+    return '刚才' if hours < 1 else f'{hours:.0f} 小时前' if hours < 48 else f'{hours / 24:.0f} 天前'
+
+
+def mood_line(view):
+    line = f"{view['label'] or '平静'} · 心情 {view['val']:+.0f} · 激动 {view['arl']:.0f}"
+    return line + (f" · {view['open_count']} 件事还挂着" if view.get('open_count') else '')
+
+
+def event_line(event, settled):
+    held = ' · 还挂着' if event.get('open') and not settled else ''
+    return f"心情 {float(event.get('val', 0)):+.0f} · 激动 {float(event.get('arl', 0)):.0f}{held} · {event.get('why', '')[:120]}"
+
+
+def mood_body(model, view):
+    lines = [f"**{view['label'] or '平静'}**（心情 {view['val']:+.0f}，范围 −100～100；激动 {view['arl']:.0f}，范围 0～100）"]
+    if view.get('policy'):
+        lines.append('此刻的倾向：' + '；'.join(f"{slot['slot']}：{slot['text']}" for slot in view['policy']))
+    if view.get('tendencies'):
+        lines.append('主要的情绪带来：' + '、'.join(view['tendencies']))
+    if view.get('contributions'):
+        lines.append('来自：')
+        lines += [f"- {kind_label(model, row['kind'])} · 心情 {row['val']:+.0f} · 激动 {row['arl']:.0f} · "
+                  f"{ago(row['age_h'])}{'（还挂着，不会淡去）' if row.get('held') else ''}：{row.get('why', '')}"
+                  for row in view['contributions']]
+    lines.append('每件触动会随时间淡去（各种情绪淡得快慢不同）；还挂着的事要等了结后才开始淡。')
+    return '\n\n'.join(lines)
+
+
+def event_body(model, event, amendments):
+    lines = [event.get('why', ''),
+             f"种类：{kind_label(model, event.get('kind'))} · 心情 {float(event.get('val', 0)):+.0f} · 激动 {float(event.get('arl', 0)):.0f}"]
+    if event.get('cost'):
+        lines.append('代价：' + event['cost'])
+    if event.get('open'):
+        lines.append('这是一件还挂着的事：了结之前不会淡去。')
+    lines += [f"{AMENDMENT_WORDS.get(item['op'], item['op'])}：{item.get('why') or '（未写原因）'}" for item in amendments]
+    return '\n\n'.join(line for line in lines if line)
+
+
 def document_title(content, slug):
     kind = DOCUMENT_KINDS.get(content['kind'], '文档')
     title = content.get('title') or slug
@@ -143,22 +191,30 @@ class NativeMemory:
                          'updated_at': stored.get('created_at')})
         return rows
 
-    def affect_rows(self):
-        """Operator view: the current projection and the most recent events, each with its source scope."""
+    def affect_ledger(self):
         from .affect import AffectLedger
         from .render import model_and_policy
-        ledger = AffectLedger(self.store, self.persona, *model_and_policy(self.store, self.persona))
+        return AffectLedger(self.store, self.persona, *model_and_policy(self.store, self.persona))
+
+    def affect_rows(self):
+        """Owner view: her mood now, then the most recent things that moved her, each from its conversation."""
+        ledger = self.affect_ledger()
         if not ledger.enabled:
             return []
         view = ledger.description('owner_private')
-        rows = [{'id': 'affect:state', 'kind': 'affect', 'title': '情感 · 当前投影',
-                 'excerpt': f"{view['label']} · val {view['val']:.1f} · arl {view['arl']:.1f} · 挂账 {view['open_count']}",
-                 'scope_key': 'affect'}]
-        for event in self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20):
+        # "Now" sorts first: the mood is computed for this moment.
+        rows = [{'id': 'affect:state', 'kind': 'affect', 'title': '此刻的心情', 'excerpt': mood_line(view),
+                 'updated_at': datetime.now().astimezone().isoformat()}]
+        events = list(self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20))
+        closed = {row['target'] for row in self.store.db.affect_amendments.find(
+            {'target': {'$in': [event['_id'] for event in events]}, 'op': {'$in': ['close', 'void']}}, {'target': 1})}
+        scenes = {row['_id']: row['scene_id'] for row in self.store.db.episodes.find(
+            {'_id': {'$in': [event.get('episode_id') for event in events]}}, {'scene_id': 1})}
+        for event in events:
             rows.append({'id': 'affect:' + event['_id'], 'kind': 'affect_event',
-                         'title': '情感事件 · ' + (event.get('kind') or '未分类'),
-                         'excerpt': f"val {event.get('val')} · arl {event.get('arl')} · {event.get('why', '')[:120]}",
-                         'scope_key': event.get('source_scope'), 'updated_at': event.get('ts')})
+                         'title': '触动 · ' + kind_label(ledger.model, event.get('kind')),
+                         'excerpt': event_line(event, event['_id'] in closed),
+                         'scene_id': scenes.get(event.get('episode_id')), 'updated_at': event.get('ts')})
         return rows
 
     def job_rows(self):
@@ -233,7 +289,7 @@ class NativeMemory:
             row.pop('source_ids', None)
             row['category_label'] = self.LABELS.get(row['kind'], '记忆')
             # Documents and job reports belong to the persona, not to any one conversation.
-            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report') else self.scene_title(
+            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report', 'affect') else self.scene_title(
                 row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:'))
         return {'scene_id': self.scene['_id'], 'scene_title': self.scene_title(self.scene['_id']),
                 'persona': self.binding['persona'], 'subject_name': self.cognition.subject_name(),
@@ -263,15 +319,13 @@ class NativeMemory:
             ledger = AffectLedger(self.store, self.persona, *model_and_policy(self.store, self.persona))
             if key == 'state':
                 row = ledger.description('owner_private') if ledger.enabled else None
-                result = row and {'id': identifier, 'body': _json.dumps(row, ensure_ascii=False, indent=2, default=str),
-                                  'interpretation': True, 'source_ids': []}
+                result = row and {'id': identifier, 'body': mood_body(ledger.model, row), 'interpretation': True,
+                                  'source_ids': []}
             else:
                 row = self.store.db.affect_events.find_one({'_id': key, 'persona': self.persona})
-                amendments = list(self.store.db.affect_amendments.find({'target': key}, {'_id': 0, 'op': 1, 'at': 1, 'why': 1, 'by': 1}))
-                result = row and {'id': identifier, 'body': row.get('why', ''), 'interpretation': True, 'source_ids': [],
-                                  'scope_key': row.get('source_scope'),
-                                  'levels': {k: row.get(k) for k in ('kind', 'val', 'arl', 'ts', 'ref', 'who', 'cost', 'open', 'origin')}
-                                            | {'amendments': amendments}}
+                amendments = list(self.store.db.affect_amendments.find({'target': key}).sort('at', 1))
+                result = row and {'id': identifier, 'body': event_body(ledger.model, row, amendments),
+                                  'interpretation': True, 'source_ids': [], 'scope_key': row.get('source_scope')}
         elif kind == 'doc':
             from .documents import DocumentStore
             pair = DocumentStore(self.store, self.persona).head(key)

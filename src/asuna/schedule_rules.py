@@ -21,7 +21,8 @@ try:
 except Exception:                                    # 极老的运行时：没有 zoneinfo 也要能跑
     ZoneInfo, ZoneInfoNotFoundError = None, Exception
 
-MIN_INTERVAL_SECONDS = 300                            # 上游原生 every 的最小间隔，已核实
+# The only definition of the floor: DSH 0.2 MIN_EVERY_INTERVAL_SECONDS (verified in the pinned package).
+MIN_INTERVAL_SECONDS = 60
 MAX_INTERVAL_SECONDS = 366 * 86400
 TIMING_KEYS = ('after_seconds', 'every_seconds', 'at', 'clock')
 WEEKDAY_NAMES = ('周一', '周二', '周三', '周四', '周五', '周六', '周日')
@@ -231,6 +232,32 @@ def next_fire(rule, tz, moment=None):
         if fire > moment:
             return fire
     raise ValueError('SCHEDULE_CLOCK_NO_UPCOMING: 这条钟点规则算不出下一次')
+
+
+def is_iana(zone_name) -> bool:
+    """An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept."""
+    if not isinstance(zone_name, str) or not (zone_name == 'UTC' or '/' in zone_name) or ZoneInfo is None:
+        return False
+    try:
+        ZoneInfo(zone_name)
+        return True
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return False
+
+
+def native_recurring(rule, zone_name):
+    """Clock rules in an IANA zone map to native daily/weekly (weekday 0…6 → ISO 1…7); else None.
+
+    A fixed-offset zone keeps the one-shot re-arm path.
+    """
+    if rule_kind(rule) != 'clock' or not is_iana(zone_name):
+        return None
+    clock = rule['clock']
+    time_text = clock['time'] if len(clock['time']) > 5 else clock['time'] + ':00'
+    if clock.get('weekdays'):
+        return {'weekly': {'time': time_text, 'time_zone': zone_name,
+                           'weekdays': sorted({int(day) + 1 for day in clock['weekdays']})}}
+    return {'daily': {'time': time_text, 'time_zone': zone_name}}
 
 
 def native_payload(rule, fire_at, moment=None):

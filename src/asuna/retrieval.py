@@ -3,6 +3,7 @@ from __future__ import annotations
 from .visibility import is_owner_private_scope
 from .config import character_id
 import math
+from datetime import datetime, timezone
 import re
 import time
 from collections import Counter,OrderedDict
@@ -78,7 +79,7 @@ class Retrieval:
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None,
-               coverage_floor=0.0):
+               coverage_floor=0.0, salience=None):
         # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
         # owner-private 只看会话类（private_scope 仅在 owner_private 会话里由调用方给出），与联动无关。
         linked=[item for item in dict.fromkeys(linked_scopes or ())
@@ -139,6 +140,22 @@ class Retrieval:
         pending=sorted((m for m in rows if m.get('embedding_status')!='READY'),key=lambda m:(m.get('occurred_at') or '',m['_id']),reverse=True)[:6]
         for m in pending:
             ranks.setdefault(m['_id'],{'score':0,'origins':{}})['origins']['pending_backread']=True
+        weights=salience or {}
+        if any(float(weights.get(k) or 0) for k in ('w_pin','w_heat','w_age')):
+            # ADR-009 MEMORY §5.1: + w_pin·pinned + w_heat·log(1+ref_count) − w_age·age_days/half_life_days.
+            half=float(weights.get('half_life_days') or 30)
+            moment=datetime.now(timezone.utc)
+            for row in self.store.db.memory_units.find({'_id':{'$in':list(ranks)}},{'pinned':1,'salience':1,'occurred_at':1,'generated_at':1}):
+                heat=(row.get('salience') or {}).get('ref_count',0)
+                pinned=bool(row.get('pinned') or (row.get('salience') or {}).get('pinned'))
+                stamp=row.get('occurred_at') or row.get('generated_at')
+                try:
+                    age=(moment-datetime.fromisoformat(str(stamp).replace('Z','+00:00'))).total_seconds()/86400 if stamp else 0.0
+                except ValueError:
+                    age=0.0
+                bonus=float(weights.get('w_pin') or 0)*pinned+float(weights.get('w_heat') or 0)*math.log1p(heat)-float(weights.get('w_age') or 0)*max(0.0,age)/half
+                ranks[row['_id']]['score']+=bonus
+                ranks[row['_id']]['salience']=bonus
         ordered=sorted(ranks,key=lambda key:(-ranks[key]['score'],key))
         candidates=[];excluded=[]
         for key in ordered:

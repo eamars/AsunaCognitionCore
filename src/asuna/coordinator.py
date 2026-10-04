@@ -10,6 +10,7 @@ from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
 from .publish import PublishService
+from . import schedule_rules
 from .render import episode_system
 from . import decide_delta, visibility
 from .state import Store, Conflict, Denied, now
@@ -27,7 +28,7 @@ WORKSPACE_DECISION_SCHEMA['properties']['continue_task_id']={'type':'string','mi
 # 这里只管形状；at 与 clock 都按场景时区的本地钟点读，不要求模型自己换算 UTC。
 SCHEDULE_TIMING={'type':'object','additionalProperties':False,
     'properties':{'after_seconds':{'type':'integer','minimum':1,'maximum':31622400},
-        'every_seconds':{'type':'integer','minimum':300,'maximum':31622400},
+        'every_seconds':{'type':'integer','minimum':schedule_rules.MIN_INTERVAL_SECONDS,'maximum':31622400},
         'at':{'type':'string','minLength':10,'maxLength':40},
         'clock':{'type':'object','additionalProperties':False,'required':['time'],
             'properties':{'time':{'type':'string','minLength':4,'maxLength':5},
@@ -148,7 +149,10 @@ class Coordinator:
         operation=operation or f"{ep['_id']}:{phase}:{round_id}"
         if ep.get('resume_generation'):
             operation+=':resume:'+str(ep['resume_generation'])
-        if instruction is None:instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
+        if instruction is None:
+            instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
+            # Program facts referenced by prompts come from their single source.
+            instruction=instruction.replace('{{min_interval_seconds}}',str(schedule_rules.MIN_INTERVAL_SECONDS))
         feedback_continuation=(ep.get('episode_kind')=='task_feedback'
             and ep.get('feedback_resume_phase')==phase)
         if (phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation:

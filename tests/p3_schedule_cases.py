@@ -206,14 +206,23 @@ class Lane:
             self.created += 1
             rule = {key: value for key, value in payload.items() if key != 'plan_id'}
             at = sys.modules['p3pkg.state'].CLOCK[0]
-            step = rule.get('after_seconds', rule.get('every_seconds'))
+            step = rule.get('after_seconds', rule.get('every_seconds', 3600))
             native_id = 'native-%d' % self.created
             scheduled = (at + timedelta(seconds=step)).isoformat()
+            kind = next(k for k in ('every', 'daily', 'weekly', 'after') if k == 'after' or k in rule or k + '_seconds' in rule)
             self.events.append({'seq': self._next_seq(), 'data': {'operation': 'create',
                 'schedule': dict({'id': native_id, 'prompt': 'ASUNA_PLAN:' + payload['plan_id'],
-                                  'kind': 'every' if 'every_seconds' in rule else 'after',
-                                  'scheduledAt': scheduled}, **rule)}})
-            return {'id': native_id, 'scheduledAt': scheduled}
+                                  'kind': kind, 'scheduledAt': scheduled}, **rule)}})
+            return {'id': native_id, 'scheduledAt': scheduled, 'kind': kind}
+        if path == '/schedule/update':
+            current = [e['data']['schedule'] for e in self.events if e['data'].get('operation') in ('create', 'update')
+                       and e['data']['schedule']['id'] == payload['id']][-1]
+            change = dict(payload['change'])
+            kind = change.pop('kind')
+            record = {**{k: v for k, v in current.items() if k not in ('daily', 'weekly', 'every_seconds')},
+                      'kind': kind, **change}
+            self.events.append({'seq': self._next_seq(), 'data': {'operation': 'update', 'schedule': record}})
+            return record
         if path == '/schedule/delete':
             self.events.append({'seq': self._next_seq(),
                                 'data': {'operation': 'delete', 'id': payload['id']}})
@@ -227,7 +236,10 @@ class Lane:
         return event
 
     def live(self, plan_id):
-        dispatched = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'dispatch'}
+        # Native recurring records (every/daily/weekly) stay live after a dispatch.
+        recurring = {e['data']['schedule']['id'] for e in self.events if e['data'].get('operation') in ('create', 'update')
+                     and e['data']['schedule'].get('kind') in ('every', 'daily', 'weekly')}
+        dispatched = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'dispatch'} - recurring
         deleted = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'delete'}
         return [e['data']['schedule'] for e in self.events
                 if e['data'].get('operation') == 'create'
@@ -275,9 +287,15 @@ class Evidence:
         return {}
 
 
+# ADR-009 D-5: a clock rule in an IANA zone is a native daily/weekly schedule. The driver cases
+# below exercise the one-shot re-arm path, which remains for fixed-offset zones; FIXED has the
+# same +2 h offset as ZONE in late September, so their expected UTC instants are unchanged.
+FIXED = {'timezone': 'Fixed/Plus-Two', 'utc_offset_minutes': 120}
+
+
 def setup(clock=T0, config=None, lane=None, controller=None):
     schedule, rules, state = load_package()
-    store = Store(config or config_with({'timezone': ZONE}))
+    store = Store(config or config_with(FIXED))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
     state.CLOCK[0] = clock
     lane = lane or Lane()
@@ -321,9 +339,11 @@ def after_and_interval(env):
 @case
 def interval_below_native_minimum(env):
     rules = env['rules']
+    # ADR-009 D-5: the native floor is 60 s (DSH 0.2); 60 passes, 59 is refused.
+    rules.normalize_rule({'intent': 'x', 'every_seconds': 60})
     try:
-        rules.normalize_rule({'intent': 'x', 'every_seconds': 120})
-        return False, '120 秒被接受了'
+        rules.normalize_rule({'intent': 'x', 'every_seconds': 59})
+        return False, '59 秒被接受了'
     except ValueError as exc:
         return 'INVALID_SCHEDULE_INTERVAL' in str(exc), str(exc)
 
@@ -480,9 +500,38 @@ def create_daily_registers_one_native_single_shot(env):
     plan = service.create(EP, DAILY)
     creates = [e['data']['schedule'] for e in lane.events if e['data'].get('operation') == 'create']
     return (plan['status'] == 'ACTIVE' and plan['rule'] == {'clock': {'time': '09:00'}}
-            and plan['timezone'] == ZONE and len(creates) == 1
+            and plan['timezone'] == FIXED['timezone'] and len(creates) == 1
             and 'after_seconds' in creates[0] and 'every_seconds' not in creates[0]
             and plan['next_fire_at'] == '2026-09-24T07:00:00+00:00'), creates
+
+
+@case
+def native_daily_and_weekly_for_iana_zones(env):
+    """ADR-009 D-5: IANA clock rules become native daily/weekly; weekdays 0…6 → ISO 1…7."""
+    native = setup(config=config_with({'timezone': ZONE}))
+    daily = native['service'].create(EP, DAILY)
+    weekly_ep = dict(EP, _id='ep-3002')
+    weekly = native['service'].create(weekly_ep, {'intent': '周一和周日', 'clock': {'time': '21:30', 'weekdays': [0, 6]}})
+    creates = [e['data']['schedule'] for e in native['lane'].events if e['data'].get('operation') == 'create']
+    return (daily['native_recurring'] and weekly['native_recurring']
+            and creates[0]['daily'] == {'time': '09:00:00', 'time_zone': ZONE}
+            and creates[1]['weekly'] == {'time': '21:30:00', 'time_zone': ZONE, 'weekdays': [1, 7]}), creates
+
+
+@case
+def native_daily_fires_without_rearm_and_updates_in_place(env):
+    native = setup(config=config_with({'timezone': ZONE}))
+    service, store, lane, controller = native['service'], native['store'], native['lane'], native['controller']
+    plan = service.create(EP, DAILY)
+    created = lane.created
+    fire(native, plan['schedule_id'])
+    after = store.db.plans.find_one({'_id': plan['_id']})
+    updated = service.update(EP, plan['_id'], {'plan_id': plan['_id'], 'schedule': {'clock': {'time': '10:15'}}})
+    paths = [path for path, _ in lane.calls]
+    return (after['status'] == 'ACTIVE' and len(controller.received) == 1 and lane.created == created
+            and updated['schedule_id'] == plan['schedule_id'] and '/schedule/update' in paths
+            and '/schedule/delete' not in paths and lane.created == created and updated['plan_version'] == 2
+            and len(lane.live(plan['_id'])) == 1), {'paths': paths, 'created': lane.created}
 
 
 @case
@@ -690,7 +739,7 @@ def load_coordinator():
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
     # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py')
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
         if name in optional and not os.path.exists(os.path.join(SRC, name)):
@@ -813,7 +862,7 @@ def control_note_carries_the_local_clock(env):
     note = rules.control_note(zone, env['state'].CLOCK[0])
     return (note['now_local'] == '2026-09-24T07:00+02:00' and note['weekday'] == '周四'
             and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}
-            and note['min_interval_seconds'] == 300), note['now_local']
+            and note['min_interval_seconds'] == 60), note['now_local']
 
 
 @case

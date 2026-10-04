@@ -45,14 +45,14 @@ class Lane:
         if path == '/schedule/create':
             self.created += 1
             native_id = 'native-%d' % self.created
-            step = payload.get('after_seconds', payload.get('every_seconds'))
+            step = payload.get('after_seconds', payload.get('every_seconds', 3600))     # daily/weekly: native recurring
             at = (datetime.now(timezone.utc) + timedelta(seconds=step)).isoformat(timespec='seconds')
             self.events.append({'seq': len(self.events) + 1, 'data': {'operation': 'create',
                 'schedule': dict({'id': native_id, 'prompt': 'ASUNA_PLAN:' + payload['plan_id'],
-                                  'kind': 'every' if 'every_seconds' in payload else 'after',
+                                  'kind': next((k for k in ('daily', 'weekly') if k in payload), 'every' if 'every_seconds' in payload else 'after'),
                                   'scheduledAt': at},
                                  **{k: v for k, v in payload.items() if k != 'plan_id'})}})
-            return {'id': native_id, 'scheduledAt': at}
+            return {'id': native_id, 'scheduledAt': at, 'kind': self.events[-1]['data']['schedule']['kind']}
         if path == '/schedule/delete':
             self.events.append({'seq': len(self.events) + 1,
                                 'data': {'operation': 'delete', 'id': payload['id']}})
@@ -60,7 +60,9 @@ class Lane:
         raise AssertionError('UNEXPECTED_NATIVE_CALL:' + path)
 
     def live(self, plan_id):
-        fired = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'dispatch'}
+        recurring = {e['data']['schedule']['id'] for e in self.events if e['data'].get('operation') == 'create'
+                     and e['data']['schedule']['kind'] in ('every', 'daily', 'weekly')}
+        fired = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'dispatch'} - recurring
         gone = {e['data']['id'] for e in self.events if e['data'].get('operation') == 'delete'}
         return [e['data']['schedule'] for e in self.events if e['data'].get('operation') == 'create'
                 and e['data']['schedule']['prompt'] == 'ASUNA_PLAN:' + plan_id
@@ -124,11 +126,11 @@ def test_daily_rule_lands_as_one_local_rule_row(store, driven):
     rows = list(store.db.plans.find({'_id': plan['_id']}))
     assert len(rows) == 1 and rows[0]['revision'] == plan['revision'], '一条安排只有一行 plans'
     assert rows[0]['rule'] == {'clock': {'time': '09:00'}}, '存的是本地钟点规则，不是换算死的 UTC'
-    assert rows[0]['timezone'] and rows[0]['tz_source'] in ('route', 'scene', 'config', 'default',
+    assert rows[0]['timezone'] and rows[0]['tz_source'] in ('route', 'scene', 'config', 'unset',
                                                             'fixed_offset', 'host_local')
     assert rows[0]['plan_version'] == 1 and rows[0]['status'] == 'ACTIVE'
     assert datetime.fromisoformat(rows[0]['next_fire_at']) > datetime.now(timezone.utc)
-    assert len(driven.lane.live(plan['_id'])) == 1, '每日规则在原生那边只挂了一次单次'
+    assert len(driven.lane.live(plan['_id'])) == 1, '每日规则在原生那边只有一条（IANA 时区为原生 daily）'
 
 
 def test_reschedule_keeps_one_row_and_one_live_native(store, driven):
@@ -145,7 +147,7 @@ def test_reschedule_keeps_one_row_and_one_live_native(store, driven):
     assert len(driven.lane.live(plan['_id'])) == 1, '底层同时有效的只有那一条'
     assert [e['data']['id'] for e in driven.lane.events
             if e['data'].get('operation') == 'delete'] == [old], '旧的那一次被删掉了'
-    kinds = [row['type'] for row in store.db.audit_events.find({'stream': plan['_id']})]
+    kinds = [row['type'] for row in store.db.audit_events.find({'stream_id': plan['_id']})]
     assert 'schedule.updated' in kinds, kinds
 
 

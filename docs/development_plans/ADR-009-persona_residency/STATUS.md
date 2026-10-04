@@ -12,7 +12,8 @@
 | P2 文档层、渲染、WRITE 阶段、人物档案 | 完成（见下方报告） |
 | P3 情感引擎 | 完成（见下方报告） |
 | P4 记忆扩展、人格数据 API、探针、人格作业、导出 | 完成（见下方报告） |
-| P5–P7 | 未开始 |
+| P5 调度对齐、节律、心跳、沉淀、表达、显著度 | 部分完成（第一部分见下方报告；心跳、沉淀、多段发言未做） |
+| P6–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -163,6 +164,26 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：P5 — 先做 D-5（60 秒下限、原生 daily/weekly、schedule_update）。
 ```
 
+## P5 报告（第一部分）
+
+```text
+阶段：P5（第一部分）
+提交：见本提交
+完成：
+  T5.1 PASS [离线] 节律块按 IANA 时区与睡眠窗计算 in_sleep_window（含跨午夜）；since_owner_message_min 只在 owner_private；public 缺省无节律块，rhythm.public_clock=true 时只有 local_time；协调器与 chat 中无睡眠窗拦截路径
+  T5.5 PASS [离线] recent_phrasing 对给定出站序列给出确定的 4-gram 列表（CJK 按字、其他按词，≥3 次、≤5 条）；无重复时为空
+  T5.6 PASS [Mongo] 阶段起点先录制 tests/fixtures/retrieval_golden.json（固定合成语料与查询、词法路径）；权重全 0 时排序与黄金文件完全一致；加 pinned 权重后被钉单元在相关查询中排第一
+  T5.7 PASS [离线] 自开发间隔 政策 > 本地 every_seconds > 人格模型 > 1440 分钟（T1.4 覆盖优先级函数）；schedule.py 中无写死的缺省间隔
+  T5.8 PASS [离线]+[JS] every_seconds=60 通过、59 被拒，常量只在 schedule_rules 一处，DECIDE schema 与提示词从它取值；IANA 时区的 clock 规则映射为原生 daily/weekly（星期 0→1、6→7）；固定偏移时区仍走一次性重挂（原有驱动用例改在固定偏移下运行，期望的 UTC 时刻不变）；schedule.js 的 /schedule/update 调原生 schedule_update 并写 update 日志，对账不当成删除再创建
+  T5.2 / T5.3 / T5.4 / T5.9 未做：心跳、夜间沉淀、多段发言与其崩溃恢复
+反证：adr009_p5_cases 在基线上失败（无 rhythm 模块、下限为 300）；T5.6 的黄金文件在加入显著度之前录制
+删除：schedule_rules 中 300 秒下限；schedule.py 的写死 86400
+偏离：D5-1、D5-2（见下）
+未验证：原生 daily/weekly 与 schedule_update 在真实 Host 上的到期派发（演示环境未建计划）
+人工检查：未做（P5 的人工项依赖心跳与多段发言）
+下一步：心跳（presence）计划与预闸门，然后夜间沉淀与多段发言。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -203,3 +224,5 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D4-4 | `salience.ref_count` 与 `last_ref_at` 用计数器式 `$inc` 写入，不生成修订 | 计数不是状态修订；排序权重在 P5 |
 | D4-5 | 设置卡新增「人格数据」：源根与状态、作业试运行/运行、导出、渲染预算；报告在记忆右栏「作业报告」 | ACCEPTANCE §4 P4；未做设置卡上编辑源根（源根只在本机配置中改，§6） |
 | D4-6 | 演示环境的迁移清单文档由实施者写入演示库 | 合成人格 `demo` 没有自己写清单的历史；真实人格的清单由她自己写 |
+| D5-1 | 原生 daily/weekly 的计划标 `native_recurring`，到期后不重挂，只前移 `next_fire_at` 并计 `fire_count`；改节奏时若新旧都是原生重复规则则用 schedule_update 原地修改，否则仍「先建后删」 | 与 D-5 一致，同时保留固定偏移时区与一次性计划的既有路径 |
+| D5-2 | 生产库中已存在的一次性重挂式 clock 计划不迁移，继续按旧路径运行直到被改期 | 不改动在途计划；改期时自然切到原生规则 |

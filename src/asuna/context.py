@@ -211,6 +211,7 @@ class ContextBuilder:
                 _m,_p=_model_and_policy(self.store,persona)
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
                                                                    coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
+                                                                   salience={k:_effective(_m,'memory.salience.'+k,_p) for k in ('w_pin','w_heat','w_age','half_life_days')},
                                                                    linked_scopes=read['linked_scope_keys'],
                                                                    private_scope=visibility.owner_private_scope(persona)
                                                                        if session_class==visibility.OWNER_PRIVATE else None)
@@ -431,6 +432,18 @@ class ContextBuilder:
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
                     'note':'情感评估路由给出的提案，只是建议：用 affect_adopt 逐条 accept/decline/edit；过期的已明示，不再能采纳。'}
+        from .rhythm import rhythm_block, recent_phrasing
+        owner=(self.store.config.get('chat') or {}).get('person_id')
+        last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None
+        rhythm=rhythm_block(self.store,model,policy,session_class,moment=moment,owner_last_at=(last or {}).get('received_at'))
+        if rhythm:
+            context['rhythm_from_program']=rhythm
+        own=[row.get('text','') for row in self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound',
+             'delivery_state':'DELIVERED'},{'text':1}).sort('scene_seq',-1).limit(int(effective(model,'phrasing.window',policy) or 20))]
+        phrasing=recent_phrasing(own)
+        if phrasing:
+            context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
+                'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         context=order_context(context,effective(model,'recall_protocol.order',policy))

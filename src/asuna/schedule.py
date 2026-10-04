@@ -86,6 +86,10 @@ class ScheduleService:
         """原生事件日志分三份：建过哪些、派发过哪些、删过哪些——认领与版本护栏只看这三样。"""
         creates = {e['data']['schedule']['id']: e['data']['schedule'] for e in events
                    if e['data'].get('operation') == 'create'}
+        for e in events:
+            # An in-place update keeps the id; it is neither a delete nor a second create.
+            if e['data'].get('operation') == 'update' and e['data'].get('schedule', {}).get('id') in creates:
+                creates[e['data']['schedule']['id']] = e['data']['schedule']
         dispatched = {e['data'].get('id') for e in events if e['data'].get('operation') == 'dispatch'}
         deleted = {e['data'].get('id') for e in events if e['data'].get('operation') == 'delete'}
         return creates, dispatched, deleted
@@ -113,7 +117,11 @@ class ScheduleService:
         settings = self.app.config.get('self_development', {})
         if not settings.get('enabled'):
             return
-        interval = settings.get('every_seconds', 86400)
+        # ADR-009 §10.3: policy > existing local every_seconds (until P7) > persona model > 1440 min.
+        from .persona_model import self_development_minutes
+        from .render import model_and_policy
+        minutes, _ = self_development_minutes(*model_and_policy(self.store, self.controller.settings['persona']), self.app.config)
+        interval = int(minutes) * 60
         if type(interval) is not int or not schedule_rules.MIN_INTERVAL_SECONDS <= interval <= schedule_rules.MAX_INTERVAL_SECONDS:
             raise ValueError('SELF_DEVELOPMENT_INTERVAL_INVALID')
         scene_id, person_id = self.controller.settings['scene_id'], self.controller.settings['person_id']
@@ -170,14 +178,15 @@ class ScheduleService:
         if plan.get('schedule_id'):
             return plan
         existing = self._created(plan_id, self._native_events())
+        recurring = schedule_rules.native_recurring(rule, zone['name'])
         native = existing or self.lane.schedule('/schedule/create',
-            {'plan_id': plan_id, **schedule_rules.native_payload(rule, fire_at, now())})
+            {'plan_id': plan_id, **(recurring or schedule_rules.native_payload(rule, fire_at, now()))})
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
         current = self.store.db.plans.find_one({'_id': plan_id})
         return self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
-            'scheduled_at': native['scheduledAt'], 'status': current['status']
-                if current['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
+            'scheduled_at': native['scheduledAt'], 'native_recurring': native.get('kind') in ('daily', 'weekly'),
+            'status': current['status'] if current['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
 
     def update(self, ep, plan_id, spec):
@@ -208,8 +217,17 @@ class ScheduleService:
         current = self.store.db.plans.find_one({'_id': plan_id})
         if current['rule'] == rule and current['intent'] == intent:
             return current                                  # 什么都没变就别动原生记录
-        native = self.lane.schedule('/schedule/create',
-            {'plan_id': plan_id, **schedule_rules.native_payload(rule, fire_at, now())})
+        recurring = schedule_rules.native_recurring(rule, zone['name'])
+        change = recurring and {'kind': next(iter(recurring)), **recurring} or (
+            {'kind': 'every', 'every_seconds': rule['every_seconds']} if 'every_seconds' in rule else None)
+        native = None
+        if change and current.get('schedule_id') and (current.get('native_recurring') or 'every_seconds' in current['rule']):
+            # ADR-009 D-5: change a native recurring rule in place (schedule_update), no delete + create.
+            updated_native = self.lane.schedule('/schedule/update', {'id': current['schedule_id'], 'change': change})
+            if isinstance(updated_native, dict) and updated_native.get('id') == current['schedule_id']:
+                native = updated_native
+        native = native or self.lane.schedule('/schedule/create',
+            {'plan_id': plan_id, **(recurring or schedule_rules.native_payload(rule, fire_at, now()))})
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
         stale, note = current.get('schedule_id'), None
@@ -221,6 +239,7 @@ class ScheduleService:
         updated = self.store.put('plans', {**current, 'rule': rule, 'intent': intent,
             'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
             'next_fire_at': fire_at.isoformat(timespec='seconds'), 'timezone': zone['name'],
+            'native_recurring': native.get('kind') in ('daily', 'weekly'),
             'tz_source': zone['source'], 'plan_version': current.get('plan_version', 1) + 1,
             'updated_at': now(), 'status': 'ACTIVE',
             'last_update': {'from_rule': current['rule'], 'from_schedule_id': stale, 'note': note}},
@@ -330,7 +349,7 @@ class ScheduleService:
                     newest = live[-1]
                     self.store.put('plans', {**plan, 'schedule_id': newest['id'], 'native_scheduler_session': self.lane.scheduler_session,
                         'scheduled_at': newest['scheduledAt']}, expected=plan['revision'], stream=plan_id)
-                elif schedule_rules.rearms_after_fire(plan['rule']):
+                elif schedule_rules.rearms_after_fire(plan['rule']) and not plan.get('native_recurring'):
                     self._rearm(plan_id)
 
     def deliver(self, payload):
@@ -413,14 +432,21 @@ class ScheduleService:
             # 一次到期没排进去，只记在这一条计划上：下一次登记、这个场景的聊天都不跟着消失。
             outcome = str(exc) or type(exc).__name__
         current = self.store.db.plans.find_one({'_id': plan_id})
-        repeating = schedule_rules.rearms_after_fire(current['rule'])
+        repeating = schedule_rules.rearms_after_fire(current['rule']) and not current.get('native_recurring')
         status = current['status']
         if status != 'CANCELLED':
-            status = 'ACTIVE' if repeating else ('FIRED' if native['kind'] != 'every' else status)
+            status = 'ACTIVE' if repeating else ('FIRED' if native['kind'] in ('after', 'at') else status)
+        next_fire_at = None if status == 'FIRED' else current.get('next_fire_at')
+        extra = {}
+        if current.get('native_recurring') and status == 'ACTIVE':
+            # The native rule repeats by itself; only the displayed next occurrence moves on.
+            zone = self.zone_of(self.store.db.scenes.find_one({'_id': current['scene_id']}), current)
+            moment = max(schedule_rules._aware(now()), schedule_rules._aware(native.get('scheduledAt') or now()))
+            next_fire_at = schedule_rules.next_fire(current['rule'], zone['tz'], moment).isoformat(timespec='seconds')
+            extra = {'fire_count': current.get('fire_count', 0) + 1}
         self.store.put('plans', {**current, 'last_occurrence_id': occurrence,
             'last_dispatch_seq': seq, 'last_occurrence_at': now(), 'last_outcome': outcome,
-            'next_fire_at': None if status == 'FIRED' else current.get('next_fire_at'),
-            'status': status}, expected=current['revision'], stream=plan_id)
+            'next_fire_at': next_fire_at, 'status': status, **extra}, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.dispatched', {'occurrence': occurrence,
             'native_schedule_id': schedule_id, 'outcome': outcome, 'rearm': repeating}, plan['scope_key'])
         return {'plan_id': plan_id, 'rearm': repeating and status == 'ACTIVE',

@@ -44,7 +44,7 @@ export class NativeChildren {
         return;
       }
     }
-    if (!this.registered) {
+    if (stage.lane === 'executor' && !this.registered) {
       this.registered = ctx.subagents.registerProvider({ name: 'asuna-worker', inheritsParentContext: false,
         capabilities: { agentOptions: true, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
         start: request => this.create(this.pending.get(request.prompt), request) });
@@ -63,7 +63,10 @@ export class NativeChildren {
     // human continuation is deliberately unavailable on this action preset.
     const catalogued = parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog'
       && event.data.childId === stage.session_id);
-    const run = descriptor && catalogued ? await this.create(stage, { ...request, descriptor })
+    // Only a task is a delegation. A summary, attention gate or appraisal is the worker's own
+    // machinery: a hidden child session (its header keeps it out of the sidebar) without a catalog
+    // entry, so the conversation's subagent list shows her tasks only (ADR-011 §4).
+    const run = stage.lane !== 'executor' || (descriptor && catalogued) ? await this.create(stage, { ...request, descriptor })
       : await ctx.subagents.start('asuna-worker', request);
     this.pending.delete(prompt);
     this.runs.add(run);

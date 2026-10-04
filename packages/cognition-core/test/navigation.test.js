@@ -63,6 +63,7 @@ test('native continuation preserves history and task children retain their actua
   } });
   await ctx.agentPresets.register({ id: 'ordinary', plugins: [] });
   await ctx.agentPresets.register({ id: 'asuna-action', plugins: [{ name: new URL('../src/action.js', import.meta.url).href }] });
+  await ctx.agentPresets.register({ id: 'asuna-summary', plugins: [{ name: new URL('../src/summary.js', import.meta.url).href }] });
   const original = await ctx.agents.create({ sessionId: 'original', meta: { cwd: local }, agentOptions: route });
   original.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'existing conversation' }] }));
   await original.agent.whenIdle();
@@ -138,6 +139,25 @@ test('native continuation preserves history and task children retain their actua
   await core.children.start(stage);
   const result = await completed;
   assert.equal(result.content, 'native response');
+  // A summary is the worker's own bookkeeping, not a delegation: a hidden child without a catalog entry.
+  let summarized;
+  const summaryDone = new Promise(resolve => { summarized = resolve; });
+  const summaryBinding = { _id: 'summary-one', lane: 'summary', cwd: execution, scene_id: role.scene_id,
+    parent_session_id: role._id, role_session_id: role._id, allowed_capabilities: [] };
+  core.worker = { async call(method, args) {
+    if (method === 'stage.valid') return { valid: true };
+    if (method === 'session') return args.session_id === role._id ? role : summaryBinding;
+    if (method === 'result') summarized(args);
+  } };
+  await core.children.start({ session_id: 'summary-one', lane: 'summary', phase: 'dialogue-summary',
+    token: 'summary-one:0', text: 'summarize this', system: 'summary role', binding: summaryBinding });
+  assert.ok((await summaryDone).result, 'the summary still ran');
+  const summaryHeader = (await ctx.sessionPersistence.stat('summary-one')).header;
+  assert.equal(summaryHeader.origin, 'subagent', 'a child header keeps it out of the sidebar');
+  assert.equal(summaryHeader.parentSession, role._id);
+  const listed = ctx.agents.get(role._id).session.snapshotEvents().filter(event => event.type === 'subagent/catalog');
+  assert.deepEqual(listed.map(event => event.data.childId), ['action'], 'the subagent list shows the task only');
+  const settledRequests = requests;
   await core.children.dispose();
   const saved = await ctx.sessionPersistence.stat('action');
   assert.equal(saved.header.cwd, execution);
@@ -160,7 +180,7 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(range.data.state, 'completed');
   assert.ok(range.data.through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
   await core.children.start(stage);
-  assert.equal(requests, 3, 'a durable stage receipt must not rerun inference or tools');
+  assert.equal(requests, settledRequests, 'a durable stage receipt must not rerun inference or tools');
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
   assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);

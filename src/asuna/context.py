@@ -112,6 +112,20 @@ def ledger_block(docs, cls):
 INVENTED_MARK = '（自述编写，非共同经历）'
 
 
+
+def rounded_affect(view):
+    """Whole numbers for her to read (and an identical block while nothing moved, so it is not repeated)."""
+    view = dict(view)
+    for key in ('val', 'arl'):
+        if key in view:
+            view[key] = round(view[key])
+    if view.get('top_kinds'):
+        view['top_kinds'] = [{**item, 'share': round(item['share'], 2)} for item in view['top_kinds']]
+    if view.get('contributions'):
+        view['contributions'] = [{**row, 'val': round(row['val']), 'arl': round(row['arl']), 'age_h': round(row['age_h'])}
+                                 for row in view['contributions']]
+    return view
+
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
@@ -459,7 +473,7 @@ class ContextBuilder:
         if ledger.enabled:
             # One heart per persona: the state is global; reasons, who and numbers stay owner-private (§6.5).
             m=ledger.model
-            context['affect_from_program']={**ledger.description(session_class),
+            context['affect_from_program']={**rounded_affect(ledger.description(session_class)),
                 'commit_rules':{'require_cost':bool(m.get('require_cost')),'max_delta':m.get('max_delta'),
                                 'kinds':sorted(m.get('kinds',{})),'allow_untyped':bool(m.get('allow_untyped',True))}}
             proposals=ledger.proposals(scope,session_class)

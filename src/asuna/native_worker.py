@@ -147,6 +147,10 @@ class BusinessWorker:
                           'display_name': persona['display_name']}
         config['character_id'] = persona['character_id']
         config['persona_contribution'] = persona
+        # The persona model is validated here (jsonschema); an invalid model keeps Core inert.
+        from .persona_model import load as load_model, neutral
+        config['persona_model'] = (load_model(persona['model'], persona['id']) if persona.get('model')
+                                   else neutral(persona['id'], persona['display_name']))
         config['_skill_directories'] = skill_directories or persona.get('skill_directories', [])
         config['_native_routes'] = routes or {}
         for lane, key in (('character', 'character'), ('action', 'executor')):

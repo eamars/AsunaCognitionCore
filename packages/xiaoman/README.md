@@ -1,8 +1,8 @@
 # 小满 — Asuna persona plugin
 
-Install with `@asuna/cognition-core` 0.1.x in DSH **0.2.0-rc.2**. The contribution registers the **小满** native role preset, persona ID `local-xiaoman`, and existing persisted character ID `xiaoman`.
+Install with `@asuna/cognition-core` 0.2.x (persona contract v2) in DSH **0.2.0-rc.2**. The contribution registers the **小满** native role preset, persona ID `local-xiaoman`, and existing persisted character ID `xiaoman`.
 
-`persona/core.md` is the original distributable `config/prompts/persona_local.md`, copied unchanged. It seeds an absent head only. Existing Mongo persona, Character Core, Current Self, voice and relationships remain authoritative across package updates.
+`seeds/persona.md` is the original distributable persona text, unchanged (formerly `persona/core.md`). It is declared as the `persona` seed and seeds an absent head only. `persona-model.json` carries only neutral defaults; persona-private values belong in the local policy store. Existing Mongo persona, Character Core, Current Self, voice and relationships remain authoritative across package updates.
 
 `skills/` contains the selected existing offline-check and QQ adapter skills. `integrations/qq-napcat-adapter/` contains the current adapter implementation and its dependency license. `resources-provenance.json` records the original selection and source hashes; later autonomous publications retain their own lineage. Private account/route examples were anonymized on export. No private config, sample conversation log, inbox/outbox, media cache or live memory is included.
 

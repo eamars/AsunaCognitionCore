@@ -1,10 +1,27 @@
 {
   "name": "@asuna/xiaoman",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Xiaoman's persona resources and native Asuna preset",
-  "exports": {".": "./src/index.js"},
-  "files": ["src", "persona", "skills", "integrations", "resources-provenance.json", "cordis.patch.yml", "README.md"],
-  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}},
-  "peerDependencies": {"@asuna/cognition-core": "0.1.x"}
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "skills",
+    "integrations",
+    "resources-provenance.json",
+    "cordis.patch.yml",
+    "README.md",
+    "seeds",
+    "persona-model.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x"
+  }
 }

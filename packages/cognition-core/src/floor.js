@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { resolvePersona } from './persona.js';
 
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -76,15 +77,13 @@ export class PublicationFloor {
   }
 
   async skillPaths(persona) {
-    const root = (await this.effective(this.config.defaultProject))?.packageRoot;
-    return root ? [path.join(root, 'skills')] : persona.skill_directories;
+    return (await this.persona(persona)).skill_directories;
   }
 
+  /** Every persona path resolves against the published package artifact when one is selected. */
   async persona(persona) {
     const root = (await this.effective(this.config.defaultProject))?.packageRoot;
-    if (!root) return persona;
-    return { ...persona, persona_file: path.join(root, 'persona/core.md'),
-      skill_directories: [path.join(root, 'skills')] };
+    return resolvePersona(persona, root ?? persona.resource_root);
   }
 
   async workerReady(projectId) {

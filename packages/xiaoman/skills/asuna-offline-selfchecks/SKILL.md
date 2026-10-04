@@ -16,7 +16,7 @@ description: 在没有 pytest、没有 pymongo、不联网的隔离沙箱里验�
 ## 项目归属（ADR-008：跑之前先认准 project）
 
 `development_*` 工具不写 `project` 时绑定的是**默认的 xiaoman 角色插件**项目（本技能文件就存在这个候选里）。
-那个候选根目录只有 `skills/ integrations/ persona/ src/index.js`，**没有 `tools/` 也没有 `tests/`**，
+那个候选根目录只有 `skills/ integrations/ seeds/ persona-model.json src/index.js`，**没有 `tools/` 也没有 `tests/`**，
 下面这套命令在里面跑只会红在 `No such file or directory`——那是挂错项目，不是产品坏了。
 
 - 跑这套离线套件：`development_run` 显式带 `project: "core"`（认知核候选里才有 `tools/` 和 `tests/`）。

@@ -12,6 +12,7 @@ import { BusinessWorker } from './worker.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
+import { normalizePersona } from './persona.js';
 import z from '@deepseek-ai/schemastery';
 
 export const name = 'asuna-cognition-core';
@@ -39,8 +40,15 @@ export class CognitionCore {
   }
 
   registerPersona(persona) {
-    if (this.personas.has(persona.id)) throw new Error('Duplicate Asuna persona: ' + persona.id);
-    this.personas.set(persona.id, Object.freeze({ ...persona }));
+    if (this.personas.has(persona?.id)) throw new Error('Duplicate Asuna persona: ' + persona.id);
+    let normalized;
+    try { normalized = normalizePersona(persona); }
+    catch (error) {
+      // A malformed persona package never registers; Core stays inert and says why.
+      if (persona?.id === this.config.persona) { this.lifecycle.state = 'inert'; this.lifecycle.error = String(error); }
+      throw error;
+    }
+    this.personas.set(persona.id, normalized);
     if (persona.id === this.config.persona && this.config.python && this.config.configPath && this.config.workspace)
       this.ready().catch(error => {
         this.ctx.logger.warn(String(error));

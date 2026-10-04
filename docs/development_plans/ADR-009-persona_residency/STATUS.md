@@ -8,7 +8,8 @@
 | 阶段 | 状态 |
 |---|---|
 | P0 卫生与地基 | 完成（见下方报告） |
-| P1–P7 | 未开始 |
+| P1 人格契约 v2、人格模型、政策存储 | 完成（见下方报告） |
+| P2–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -67,6 +68,26 @@
 
 test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_engineering_m10 E05/E12_E13、m11 CLI `run`、m7 两个崩溃点、test_p2_summary_loop ×5（真库路径的陈旧断言）、test_p3_schedule reschedule、test_p5 topic_is_derived、test_skills（`skill_catalog` 参数）、test_workspace_tasks ×2（`declared_status`）。它们是 ADR-001/005 时代的陈旧用例，与本 ADR 改动无关；计划在 P7 收尾时连同夹具模式一并清理或改写。
 
+## P1 报告
+
+```text
+阶段：P1
+提交：见本提交
+完成：
+  T1.1 PASS [JS] 合成包 @asuna/demo 与已安装人格包都按契约 v2 注册；不装人格时 ready() 报「Select an installed Asuna persona」，Core 惰性。演示环境中 v2 demo 包经 worker 校验模型后完整跑通一个 Web 回合
+  T1.2 PASS [JS]+[离线] 模型 persona.id 不符 → PERSONA_ID_MISMATCH；模型不合 schema → PERSONA_MODEL_INVALID（带路径）；不可读 → PERSONA_MODEL_UNREADABLE；Core 惰性、显示原因，其他已注册人格不受影响
+  T1.3 PASS [Mongo] 政策写入带 what 并生成修订（理由、作者、父修订）；secret/counter → POLICY_CLASS_REFUSED；缺 what 被拒；未声明键、超范围值被拒；并发同基修订恰好一个成功、另一个 BASE_REVISION_STALE；同 mutation_id 重放幂等
+  T1.4 PASS [离线] 生效值 政策 > 模型 > 核心缺省；包给私有键默认值或在 policy_keys 声明私有键/核心可写键 → 拒绝；时区 政策 > 全局配置 > UTC（明示）；自开发间隔 政策 > 本地 every_seconds > 模型 > 1440
+  T1.5 部分 PASS [Mongo] 政策按人格 id 隔离（另一人格的键不可见、不可写）。文档/情感/记忆的隔离随 P2/P3/P4 各自的存储补测
+  T1.6 PASS [JS] model、seeds、jobs、skills 相对已发布产物根解析；未发布时相对包根
+反证：adr009_p1_cases 4 条与 persona.test.js 3 条在基线上全部失败（无 persona_model 模块、registerPersona 不校验、floor 写死 persona/core.md）。
+删除：floor.js 写死的 persona/core.md 改写
+偏离：D1-1、D1-2（见下）
+未验证：已安装人格包在真实 profile 上的启动（未启动真实 profile）
+人工检查：演示环境 v2 包回合成功（P1 无 ACCEPTANCE §4 条目）
+下一步：P2 — DocumentStore 与 persona:<id> 头的转换。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -87,3 +108,6 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 
 1. 人格包 QQ 适配器自检 `preview_readable` 现在期望占位群号；对着真实部署的预览文件会失败，需要改成从预览/配置读取期望值（属于人格包行为改动，未擅改）。
 2. 公开前是否清理 git 历史与历史设计文档中的个人标识（扫描器对 `docs/development_plans/**` 其他 ADR 报告 78 处，只报告不改）。
+| D1-1 | 完整 schema 校验在 worker `initialize` 中进行（Python jsonschema）；JS `registerPersona` 只做契约形状、路径不越界与 `PERSONA_ID_MISMATCH` 的同步校验 | DSH 侧没有 JSON Schema 校验依赖；两处任一失败都使 Core 惰性并显示原因 |
+| D1-2 | 人格包里的路径（model、seeds、jobs、skills、persona_file）一律存为相对 `resource_root` 的路径，由 floor 按已发布产物根或包根解析为绝对路径 | 满足 PERSONA_CONTRACT §2.3；也让同一份贡献可在候选与已发布产物间切换 |
+| D1-3 | 已安装人格包的人格正文原样从 `persona/core.md` 移到 `seeds/persona.md`（未改一字），模型只含 id 与显示名；核心与该包版本升到 0.2.0 / 对等依赖 0.2.x | CLEANUP §8 与契约 v2；不替人格取参数或标注可见性 |

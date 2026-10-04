@@ -156,6 +156,27 @@ class Examples(unittest.TestCase):
         with self.assertRaises(ValueError):
             ar.project(model, [{**event, 'ts': '2026-01-01T00:00:00'}], [], '2026-01-02T00:00:00Z')
 
+    def test_half_life_sign_and_kind_floor(self):
+        model, fixture = affect_case()
+        event = {'id': 'n', 'ts': '2026-01-01T00:00:00Z', 'val': 1, 'arl': 1, 'open': False, 'half': -2}
+        with self.assertRaises(ValueError):
+            ar.project(model, [event], [], '2026-01-02T00:00:00Z')
+        last = max(ar.parse_ts(e['ts']) for e in fixture['events'])
+        state = ar.project(model, fixture['events'], fixture['amendments'], last)
+        everything = ar.describe({**model, 'kind_floor': 0}, state, 'owner_private')['top_kinds']
+        nothing = ar.describe({**model, 'kind_floor': 1e9}, state, 'owner_private')['top_kinds']
+        self.assertTrue(everything)
+        self.assertEqual(nothing, [])
+
+    @unittest.skipIf(jsonschema is None, 'jsonschema 未安装')
+    def test_enabled_affect_requires_core_parameters(self):
+        model = load('persona-model.example.json')
+        schema = load('persona-model.schema.json')
+        broken = {**model, 'affect': {k: v for k, v in model['affect'].items() if k != 'clamp'}}
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(broken, schema)
+        jsonschema.validate({**model, 'affect': {'enabled': False}}, schema)
+
     def test_markdown_links_and_anchors(self):
         files = list(ADR.rglob('*.md'))
         anchors = {}

@@ -18,7 +18,8 @@
 | 运行时 schema | `src/asuna/resources/schemas/*.json` | 源与打包同构 |
 | 核心中性 prompt（`common`、`executor`、`stage_*`，以及新增的 `stage_write`、`stage_settlement`、`stage_presence`） | `src/asuna/resources/prompts/*.md` | **行为文件**，随 `development_publish` 发布 |
 | `RUNTIME_API.md` 副本 | 打包时复制（不变） | — |
-| 测试夹具 `world.json` 等 | `tests/fixtures/` | 不再由运行时读取 |
+| 测试夹具 `world.json` 等，以及 `Store.seed`（`state.py:143-156`）读取的夹具人格文件 | `tests/fixtures/` | 不再由运行时读取；夹具人格改为合成人格 `demo` |
+| ADR-001 的 `reflect.md` | 删除 | 随 `MemoryService.reflect` 一起删除（§3） |
 | 现有 `src/asuna/resources.py`（授权解析） | 改名 `src/asuna/grants.py` | 避免与 `resources/` 数据目录同名 |
 
 - 删除 `config/prompts/` 目录和配置键 `prompts_dir`。`config.prompt_path` 只读包内资源。
@@ -41,7 +42,7 @@
 | ADR-001 验收与评分工具链 | `review.py`、`review_material.py`、`review_scores.py`、`experiments.py`、`reporting.py`、`legacy_evidence.py`、`doctor.py`，以及 CLI 子命令 `doctor`、`report`、`export`、`review-pack`、`review-import`、`review-aggregate` | 服务于 ADR-001 验收与旧证据目录；`doctor` 写死了已不存在的启动路径 | 原生 profile 启动器；`tools/check_dsh_release.py`、`tools/check_mongo_host.py` |
 | 测试替身留在运行时包 | `lanes.py` 的 `FakeLane` | 只有测试使用 | 移到 `tests/fakes.py`；`LaneResult` 若仍被运行时使用则保留 |
 | 旧 UI 设置函数 | `model_settings.py` 中只被测试或工具使用的 `native_thinking` 兼容、`edited_models`、`public_models`、`persist`、`revision`；`tokens.py` 的 `TokenMeter`（若只被它们使用） | 旧设置界面已退役 | 原生设置卡 |
-| 遗留配置键 | `config.py` 的 `legacy_database`（`:83`、`:103`）；运行时不读的 `workdir`、`transport_read_timeout_seconds`、`publish_adapter`、`local_only`；角色/行动路由的 `base_url` 必须是本机地址的校验（模型调用已归 DSH；**嵌入端点的校验保留**） | 无读取者或语义已转移 | — |
+| 遗留配置键 | `config.py` 的 `legacy_database`（`:83`、`:103`）；运行时不读的 `transport_read_timeout_seconds`、`publish_adapter`、`local_only`；`workdir`（`config.load` 会为它创建目录，`config.py:72` 一带）——先确认除创建目录外再无读取者，若有则保留；角色/行动路由的 `base_url` 必须是本机地址的校验（模型调用已归 DSH；**嵌入端点的校验保留**） | 无读取者或语义已转移 | — |
 | 旧 lane 锁 | `native_worker.py:146` 的 `RuntimeLease(.../character/runtime.lock)` | 旧 lane 已退役 | 原生单 Host |
 | 导入兼容垫片 | `context.py`、`schedule.py`、`proactive.py`、`summary_trigger.py` 的扁平离线加载 `try/except`；`chat.py`、`host.py`、`memory.py` 中永远不会走到的 `scene_links = None` 分支 | 打包后路径固定 | 正常相对导入；离线检查脚本改为设置 `PYTHONPATH` |
 | 隐藏 CLI 开关 | `cli.py` 的 `--native`、`--read-only` 与"legacy UI switches are retired"分支 | 已退役 | — |
@@ -51,6 +52,8 @@
 | 一次性修复脚本 | `tools/repair_asuna_event_envelopes.mjs` | 已完成使命 | — |
 | 人格专属导出工具 | `tools/import_persona_resources.py` | 核心工具不得为某个人格服务（R-5） | 人格作者在自己的包内维护 |
 | 含个人标识的工具 | 文件名含群号的检查脚本；`tools/probe_embedding_host.py` | 个人数据（R-6） | 删除；需要时以本地未跟踪脚本存在 |
+| 含个人标识的跟踪配置 | `config/` 下三个以群号命名的文件（`group-<id>.host-route.fragment.json`、`group-<id>.integration-adapter.patch.json`、`group-<id>.member-snapshot.json`；最后一个含群名、账号与成员名单） | 个人数据（R-6） | 移出版本控制（`git rm --cached`）并加入 `.gitignore`（模式 `config/group-*.json`）；若有代码或手册引用它们，改为引用占位示例 `config/group.example.*.json` |
+| 保留工具中的人格名或人格文本 | `tools/linked_scenes_offline_check.py`、`tools/probe_retrieval.py`、`tools/probe_plugin_install.mjs`、`tools/setup_native_profile.py` 的 `defaultProject` 等 | R-5 | 改为参数或合成人格 `demo` |
 
 `tools/` 的最终去留以一张表交付：保留的每个脚本必须**能导入**（`python -c "import runpy; runpy.run_path(...)"` 或 `--help` 正常），并且服务于当前运行、维护或测试。
 
@@ -61,7 +64,7 @@
 | 项 | 位置 | 修复 |
 |---|---|---|
 | 擦除命令 `KeyError` | `privacy.py:25,48` 读取原生会话行没有的 `dsh_home` | 改为按原生会话 id 定位：DSH 会话文件只报告位置，不由 Asuna 删除原生日志（原生日志归 DSH 管）；Mongo 侧擦除照常 |
-| 擦除覆盖新数据 | `privacy.py` | 擦除扩展到 `owner-private` 记忆单元、文档节（写墓碑修订）、情感事件（写 `void` 修订，`by=operator`，理由必填） |
+| 擦除覆盖新数据 | `privacy.py` | 擦除扩展到 `owner-private` 记忆单元、文档节（写墓碑修订）、情感事件（写 `void` 修订，`by=operator`，理由必填）。文档节的擦除用新方法 `erase_doc_section`：文档头的 scope 固定为 `global-safe`，因此不受现有 `GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION`（`privacy.py:20`）的限制 |
 | 行动脑人格泄漏 | `tasks.py:414` | D-2 |
 | harness 身份句 | `index.js` | D-1 |
 
@@ -69,7 +72,7 @@
 
 | 项 | 条件 |
 |---|---|
-| `schedule.py:45-83` 一次性计划迁移（字段 `legacy_schedule_binding`） | 在本机库上执行只读检查：`plans` 中没有任何未迁移的行。检查结果写进阶段报告后才删除；否则保留并报告行数 |
+| `schedule.py:45-83` 一次性计划迁移（字段 `legacy_schedule_binding`） | 实施者提供一条只读计数命令（`--debug` 维护命令或一次性脚本，只输出计数）。**由 owner 在本机库上执行**，并把计数告诉实施者。计数为 0 才删除；不为 0 就保留代码并按停止条件报告 |
 | `persona:<id>` 头的读取路径 | P2 完成文档化转换且 T2.8 通过后，于 P7 删除 |
 | `registerPersona.persona_file` | P7 删除（P1 起已由 `seeds` 取代） |
 
@@ -115,10 +118,10 @@
 
 | 类别 | 检测模式（`check_staged_secrets.py --personal`） | 替换为 |
 |---|---|---|
-| 平台账号、群号 | 文件名或内容中 ≥7 位的连续数字（白名单：哈希、时间戳字段、测试中明确合成的 id 前缀 `demo-`） | `demo-user-1`、`demo-group-1` |
+| 平台账号、群号 | 文件名或内容中 ≥7 位的连续数字。不算命中的情况：① 紧邻小数点的数字（小数部分）；② 64 位十六进制哈希；③ 同一行带内联标记 `personal-scan: ok` 的非个人常量（例如 `366 * 86400` 展开的上限值）；④ 列在跟踪文件 `tools/personal_scan_allow.txt` 中的常量（**只许放非个人常量**） | `demo-user-1`、`demo-group-1` |
 | 局域网与私有地址 | RFC 1918 三段私有网段（`10/8`、`172.16/12`、`192.168/16`） | `192.0.2.x`（RFC 5737）或 `127.0.0.1` |
 | 主机名、用户名 | 本地拒绝清单中的条目（见 9.2） | `example.invalid`、`<user>` |
-| 时区与地点 | 核心代码与示例中的具体 IANA 时区字面量（测试夹具中的 `UTC` 和明确合成的时区除外） | 政策键 `rhythm.timezone` |
+| 时区与地点 | 核心代码、示例与测试中的具体 IANA 时区字面量。例外：`UTC`/`Etc/*`；测试需要夏令时时，可用一个与 owner 无关的时区，并在同一行标 `personal-scan: ok` | 政策键 `rhythm.timezone`；测试中的现有时区字面量（例如 `tests/p3_schedule_cases.py`）替换为与 owner 无关的时区 |
 | 人格名 | 核心目录中的人格显示名与 id（人格包与测试夹具除外） | `<persona-id>` |
 | 私密内容 | 由拒绝清单覆盖 | — |
 
@@ -126,21 +129,25 @@
 
 - 位置：`config/personal-denylist.local.txt`，加入 `.gitignore`，每行一个字面量或正则。
 - 内容：owner 自己的账号、昵称、主机名、用户名、地址片段等。**由 owner 在本机填写，仓库只提供空模板** `config/personal-denylist.example.txt`。
-- `tools/check_staged_secrets.py --personal [--all]` 扫描暂存文件（或 `--all` 扫描全部跟踪文件），命中时打印"文件:行:类别"，**不打印命中值本身**，退出码为 0（告警级软规则，R-7）。
+- `tools/check_staged_secrets.py --personal [--all | --paths <文件…>]`：缺省扫描暂存文件，`--all` 扫描全部跟踪文件，`--paths` 扫描指定文件（测试用）。
+  - 输出每个命中一行 `文件:行:类别`，**不打印命中值本身**；结束时打印一行汇总 `personal-scan: <n> hit(s)`。
+  - 退出码恒为 0（告警级软规则，R-7）。
+  - 原有的密钥扫描模式（无 `--personal`）的输出格式与退出码**保持不变**。
 
 ### 9.3 范围
 
-- **必须清理**：`src/`、`packages/`、`tools/`、`tests/`、`config/*.example.*`、根目录手册。
-- **只报告不改**：`docs/development_plans/**`（设计史）。是否清理，由 owner 决定。
+- **必须清理**：`src/`、`packages/`（包括人格包中 skills、集成、自检脚本里出现的 owner 标识——这不算修改人格）、`tools/`、`tests/`、`config/`（跟踪文件）、根目录手册（含 `RUNTIME_API.md`）、`docs/ADR007-READ-IMAGE-REPORT.md`。
+- **必须扫描且为零**：本 ADR 文件夹 `docs/development_plans/ADR-009-persona_residency/`。
+- **只报告不改**：`docs/development_plans/**` 中除本 ADR 以外的设计史。是否清理，由 owner 决定。
 - **不做**：重写 git 历史。公开前是否需要清理历史（或另起公开仓库），是 owner 的独立决定；本 ADR 只在最终报告中提醒。
 
 ## 10. 完成判据（P7 末尾一次性检查）
 
 ```text
-grep -rnE "def terminal|def chat\(|prompt_toolkit|prompt-toolkit"   src pyproject.toml          → 0
-grep -rn  "docs/development_plans"                                  src packages tools/pack_plugins.py → 0
-grep -rnE "retrieval_trials|review_material|review_scores|legacy_evidence|from \.experiments|from \.reporting|from \.doctor" src tests tools → 0
-grep -rnE "task_mode|cli-fixture|legacy_database|runtime\.lock"     src                         → 0
-grep -rniE "xiaoman|小满"                                            src/asuna packages/cognition-core config tools → 0
-python tools/check_staged_secrets.py --personal --all               → 跟踪文件中（除 docs/development_plans）无命中
+git grep -nE "def terminal|def chat\(|prompt_toolkit|prompt-toolkit" -- src pyproject.toml         → 0
+git grep -n  "docs/development_plans" -- src packages tools/pack_plugins.py                      → 0
+git grep -nE "retrieval_trials|review_material|review_scores|legacy_evidence|from \.experiments|from \.reporting|from \.doctor" -- src tests tools → 0
+git grep -nE "task_mode|cli-fixture|legacy_database|runtime\.lock" -- src                       → 0
+git grep -niE "xiaoman|小满" -- src/asuna packages/cognition-core config tools                  → 0
+python tools/check_staged_secrets.py --personal --all   → 跟踪文件中，除"只报告"范围外 0 命中（本 ADR 文件夹包括在内）
 ```

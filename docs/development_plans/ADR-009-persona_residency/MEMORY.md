@@ -57,9 +57,9 @@
 | `kind` 新值 `imported_entry` | 人格作业导入的条目；`entry_type` 由人格定义，例如日志条目、共同史条目 |
 | `kind` 新值 `memory_unit` | 夜间沉淀晋升的三件套：`fact`、`appraisal`、`signal`（"下次怎么对这个人"） |
 | `source_window` 扩展 | 对话来源保持现状；文件来源为 `{origin, path, file_sha256, line_from, line_to, heading}` |
-| `invented` | `true` 表示人格自述编写、并非共同经历。注入时附固定标记，回答"我们一起……"类问题时不得当证据 |
+| `invented` | `true` 表示人格自述编写、并非共同经历。**任何**注入（检索结果、探针摘录）都附固定标记"（自述编写，非共同经历）"；程序不对问题做分类，判断交给角色 |
 | `salience` | `{pinned: bool, ref_count: int, last_ref_at: ts}`；`ref_count` 由 `retrieval.selected` 审计累加 |
-| `scope_key` 新值 | `owner-private:<persona>` |
+| `scope_key` 新值 | `owner-private:<persona>`。写入方声明的 `visibility` 映射为：`public` → `global-safe`，`owner_private` → `owner-private:<persona>`。该 scope 的条目 `policy_epoch` 固定为 1，不支持纪元轮换；擦除用墓碑（[CLEANUP.md §4](CLEANUP.md#4-修复清单)） |
 | `origin` | `asuna` 或源根 id |
 
 ### 5.1 检索排序
@@ -75,7 +75,12 @@ score = RRF(向量, 词法)                               # 现状
 
 ### 5.2 证据判定（coverage）
 
-检索结果附 `coverage ∈ {sufficient, insufficient}`：最高分低于 `memory.coverage_floor`（缺省为 0，即永远 sufficient），或候选为空时，判为 `insufficient`。判为 `insufficient` 时，上下文明确告诉角色：**"证据不足，只能当灵感，不能当事实说。"**
+检索结果附 `coverage ∈ {sufficient, insufficient}`、`coverage_score ∈ [0,1]` 和 `coverage_basis`。**RRF 分数只表示排名，不能用来判断"够不够"**，因此另行计算：
+
+- 向量检索跑过时：`coverage_score` = 入选结果中最大的向量相似度（`vectorSearchScore`），`coverage_basis=vector_cosine`。
+- 只有词法时：`coverage_score` = 入选结果中查询 CJK 二元组（及词）被覆盖比例的最大值，即 |查询项 ∩ 条目项| / |查询项|，`coverage_basis=lexical_overlap`。
+
+`coverage_score < memory.coverage_floor`（缺省为 0，即永远 sufficient）或候选为空时，判为 `insufficient`。判为 `insufficient` 时，上下文明确告诉角色：**"证据不足，只能当灵感，不能当事实说。"**
 
 ### 5.3 淡忘与钉住
 
@@ -99,7 +104,7 @@ score = RRF(向量, 词法)                               # 现状
 
 | 情形 | 处理 |
 |---|---|
-| `cohabiting`，源文件变了，宿主中对应实体自导入后**没动过** | 按源更新，生成新修订，`author=persona_job` |
+| `cohabiting`，源文件变了，宿主中对应实体自导入后**没动过** | 按源更新，生成新修订，`author=persona_job:<id>` |
 | `cohabiting`，源文件变了，宿主中对应文档**已被角色改过**（头修订 ≠ `import_base`） | **不覆盖**；产生冲突报告（RED），列出双方差异；由人格决定 |
 | `cohabiting`，只追加类数据（情感事件、日志条目、档案条目） | 按 `origin + source_identity` 求并集；新居事件 `origin=asuna`，互不覆盖 |
 | `cutover` 后源文件变了 | RED（`SOURCE_CUTOVER`），一条不写 |
@@ -109,7 +114,7 @@ score = RRF(向量, 词法)                               # 现状
 
 ### 6.3 回读
 
-导入时，把源文件快照按 `file_sha256` 存进 `artifacts`/GridFS（同一 sha 只存一份）。之后即使源文件移动或修改，`source_window` 仍能逐字节回读当时的原文。
+导入时，把源文件快照按 `file_sha256` 存进 `artifacts`/GridFS（同一 sha 只存一份，`scope_key=owner-private:<persona>`，`blobs.py` 需支持该 scope，只有 operator 视图可读）。之后即使源文件移动或修改，`source_window` 仍能逐字节回读当时的原文。
 
 ## 7. 写入量与去重
 
@@ -123,7 +128,8 @@ score = RRF(向量, 词法)                               # 现状
 ## 8. 备份与导出
 
 - 导出是**派生物**：把文档层渲染成 md，每节带修订 id 和可见性标注。**不导出**原始消息和回合。
-- 导出目标路径只能来自 owner 本地配置，并且必须**位于本仓库工作树之外**，或者是被 `.gitignore` 忽略的路径（R-7）。
+- 触发：设置卡上的"导出"按钮，调用 worker 方法 `persona.export`（只限 owner）。核心不提供定时导出；人格若需要定时导出，可以排计划后在到期回合中请 owner 操作，或用自己的作业读取渲染结果。
+- 导出目标路径只能来自 owner 本地配置 `persona_runtime.<persona>.export_dir`，并且必须**位于本仓库工作树之外**，或者是被 `.gitignore` 忽略的路径（R-7）。
 - 人格若想把导出写回自己的私有备份仓，用人格作业自己完成。核心只提供渲染。
 
 ## 9. 现有数据如何过渡

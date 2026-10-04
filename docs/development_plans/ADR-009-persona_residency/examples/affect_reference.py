@@ -57,7 +57,9 @@ def fold(events, amendments):
 def half_life(event, model):
     """val 半衰期优先级：事件自带 > 种类表 > 缺省。"""
     own = event.get('half')
-    if own:
+    if own is not None and float(own) != 0:          # None/0 表示"未设置"（兼容旧账本）
+        if float(own) < 0:
+            raise ValueError('HALF_LIFE_MUST_BE_POSITIVE: %s' % event.get('id'))
         return float(own)
     kind = model.get('kinds', {}).get(event.get('kind') or '')
     if kind:
@@ -84,6 +86,8 @@ def project(model, events, amendments, at):
         if start > moment or event['_void']:
             continue
         half_v = half_life(event, model)
+        if event.get('half_arl') is not None and float(event['half_arl']) < 0:
+            raise ValueError('HALF_LIFE_MUST_BE_POSITIVE: %s' % event.get('id'))
         half_a = float(event.get('half_arl') or model['arl_half_h'])
         age_h = (moment - start).total_seconds() / SECONDS_PER_HOUR
         closed_at = event['_closed_at']
@@ -138,7 +142,10 @@ def describe(model, state, session_class):
     total = sum(weights.values()) or 1.0
     kinds = model.get('kinds', {})
     top = []
+    floor = float(model.get('kind_floor') or 0.0)           # 无状态下限：低于它的种类不列出
     for kind, weight in sorted(weights.items(), key=lambda item: -item[1])[:3]:
+        if weight < floor:
+            continue
         spec = kinds.get(kind, {})
         visible = spec.get('tendency_visibility', 'owner_private') == 'public' or session_class == 'owner_private'
         top.append({'kind': kind, 'share': weight / total, 'tendency': spec.get('tendency') if visible else None})

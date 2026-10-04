@@ -38,7 +38,7 @@
 
 - **现状**：`tasks.py:414` 把完整人格正文接在 `executor.md` 后面。
 - **目标**：只接 [ARCHITECTURE.md §8.3](ARCHITECTURE.md#83-行动脑系统提示) 的 public 价值段。
-- **验收**：T0.6，P2 的 T2.4。
+- **验收**：T0.6（P0，只给显示名）、T2.10（P2 起的 public 价值段）。
 
 ### D-3 历史只注入增量
 
@@ -61,23 +61,25 @@
   - `audit_events` 中 `state.commit` 对大于 16 KB 的文档只存 `{collection, id, revision, content_sha256, bytes}`；哈希链不变，篡改检测改为比对集合中文档的 sha。
   - `lane_receipts` 与 `phase.output` 改存 `{content_sha256, bytes, native_ref}`。
   - 必须先改造依赖审计全文的现有测试（重放与篡改相关的 m 系列），保持其**检测能力**不降。
+  - `system_ref` 本身在 P0 引入（T0.4）；升级前在途的回合仍带 `system` 全文，读取兼容，P7 删除兼容（见 [ARCHITECTURE.md §8.1](ARCHITECTURE.md#81-系统提示角色作用域每会话)）。
 - **文件**：`state.py`、`coordinator.py`、`native_worker.py`、相关测试。
 - **验收**：T0.4、T6.2。
 
-### D-5 调度：60 秒下限与原生规则
+### D-5 调度：60 秒下限与原生规则（P5，先于心跳）
 
 - **现状**：300 秒下限分散在三处（`schedule_rules.py:25`、`coordinator.py:28`、`stage_decide.md`）；墙钟规则换算成一次性定时后重挂。
 - **目标**：
   - 三处统一为 60 秒，常量只定义在 `schedule_rules.py` 一处，另两处从它生成或引用。
   - `clock` 规则在时区为 IANA 名称时直接映射为原生 `daily`/`weekly`；星期映射 Asuna `0…6`（周一…周日）→ ISO `1…7`。
   - 固定偏移时区（非 IANA）保留一次性重挂路径。
-  - 删除核心默认时区（`schedule_rules.py:24`），改由政策 `rhythm.timezone` 提供；场景配置的时区优先级不变。
-- **验收**：T6.3。
+  - `packages/cognition-core/src/schedule.js` 目前只处理 `/schedule/create` 与 `/schedule/delete`：新增 `/schedule/update`（调用原生 `schedule_update`），并把 `update` 操作写入同一 `asuna/schedule` 会话日志，与 create/delete 的对账逻辑一致。
+  - 核心默认时区的删除在 P0 完成（未设置时以 UTC 明示），见 [IMPLEMENTATION.md P0](IMPLEMENTATION.md#p0-卫生与地基)。
+- **验收**：T5.8。
 
 ### D-6 Schedule 挂载开关
 
 - **目标**：`CognitionCore` 配置项 `mount_schedule`（缺省 `true`，仅在 Host 未安装 Schedule 时生效，即现行为）。文档中写明 DSH 设计下 `schedule_*` 工具对所有根 agent 可见；Asuna 的角色和行动 preset 已经限制了工具。
-- **验收**：T6.4。
+- **验收**：T6.3。
 
 ### D-7 心跳与夜间沉淀走原生调度
 
@@ -115,7 +117,7 @@
 |---|---|
 | 准备/消费拆分 | D-8（P7） |
 | Schedule 外溢 | D-6（记录 + 开关） |
-| CONSULT 无 JS 测试 | P6 补一条 JS 测试：CONSULT 期间角色会话不持锁，行动工具等待的是真实结果 |
+| CONSULT 无 JS 测试 | P6 补一条 JS 测试（T6.4）：CONSULT 期间角色会话不持锁，行动工具等待的是真实结果；隐私面由 T4.12 覆盖 |
 | Core 部署工具默认人格 | [CLEANUP.md §8](CLEANUP.md#8-人格中立化) |
 | 人格贡献接口缺默认值 | [PERSONA_CONTRACT.md §2](PERSONA_CONTRACT.md#2-registerpersona-v2) |
 | 设置卡偏离 | D-9（接受并记录） |

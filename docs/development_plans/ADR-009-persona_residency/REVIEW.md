@@ -173,6 +173,10 @@ start-asuna.cmd → tools/asuna-launch.mjs → dsh ui --profile asuna-native（D
 | 完整人格正文进入所有行动会话 | `src/asuna/tasks.py:414` | 未来私密段经行动脑外流（含联网工具） |
 | harness 身份句未抑制 | `packages/cognition-core/src/index.js`（无抑制调用） | 与人格自述冲突 |
 | 规范人物判定不看场景 | `src/asuna/scene_links.py`（`canonical_person_id`） | 若按人物挂档案，owner 在群里说话时会被注入私密档案 |
+| 以群号命名、含群名/账号/成员名单的跟踪配置 | `config/` 下三个 `group-<id>.*.json` 文件 | 个人数据入库 |
+| 真实账号标识出现在手册与报告里 | 根目录 `RUNTIME_API.md`、`docs/ADR007-READ-IMAGE-REPORT.md` | 个人数据入库 |
+| 测试用例使用 owner 所在时区 | `tests/p3_schedule_cases.py` | 位置信息入库 |
+| 人格包代码与文档中出现 owner 标识 | `packages/xiaoman` 的 QQ 适配 skill 与自检脚本 | 个人数据入库 |
 | 历史设计文档可能含个人标识 | `docs/development_plans/**` | 设计史；只报告，不擅改（owner 决定） |
 
 ## 10. 结论

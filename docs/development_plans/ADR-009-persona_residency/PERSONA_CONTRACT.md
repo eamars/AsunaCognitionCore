@@ -28,23 +28,46 @@
 
 TypeScript 形状见 [examples/persona-contract.ts](examples/persona-contract.ts)。
 
+### 2.1 标识口径
+
+- 本 ADR 中的 `<persona>` 一律指**人格 id**，即 `registerPersona` 的 `id`。它也是现有 `persona:<id>` 头、配置 `chat.persona` 所用的值（现有校验见 `native_worker.py:148`）。
+- 人格模型的 `persona.id` 必须等于它，否则注册被拒（`PERSONA_ID_MISMATCH`）。
+- `character_id` 保留为现有记录（`memory_units`、`episodes` 等）的过滤字段（`retrieval.py:85` 一带）。新增的 `memory_units` 同时写 `character_id`（沿用现有过滤）和 `persona`；新集合（`affect_*`）、文档、政策只以人格 id 为键。
+- 旧键映射：`persona:<id>|global-safe` → `doc:<id>:persona`（转换规则见 [ARCHITECTURE.md §5.4](ARCHITECTURE.md#54-与现有自我状态的关系)）；`character_core:<id>`、`current_self:<id>`、`relationship:*` 不变；新增 `owner-private:<id>`。
+
+### 2.2 种子 front-matter
+
+md 种子可以在文件开头放一段 HTML 注释形式的 JSON。没有它时取缺省值：
+
+```text
+<!-- asuna-seed {"visibility": "public", "inject": "always", "tags": [],
+                 "sections": {"<sid>": {"visibility": "owner_private", "inject": "on_demand", "tags": ["values"], "entry_date": "2026-01-02"}}} -->
+```
+
+- 文件级缺省：`visibility=public`；`inject` 按种类决定，`persona`/`voice`/`ledger` 为 `always`，其他为 `on_demand`；`tags=[]`。
+- `sections` 按 `sid` 覆盖（`sid` 的生成规则见 [ARCHITECTURE.md §5.1](ARCHITECTURE.md#51-存储)）。引用了不存在的 `sid` 时，注册成功，但状态标红并列出该 `sid`。
+
+### 2.3 相对已发布产物解析
+
+`floor.persona()`（`floor.js:80-84`）目前把 `persona_file` 改写为已发布产物下的 `persona/core.md`。P1 起改为：`model`、`seeds[].path`、`jobs[].entry`、`skill_directories` 一律相对**已发布人格包产物根**解析，并删除写死的 `persona/core.md`。人格包的 `peerDependencies` 随契约版本更新（契约 v2 对应核心 `0.2.x`）。
+
 ## 3. 人格模型（persona model）
 
 JSON Schema 见 [examples/persona-model.schema.json](examples/persona-model.schema.json)，合成示例见 [examples/persona-model.example.json](examples/persona-model.example.json)。各段如下：
 
 | 段 | 内容 | 核心缺省（未给出时） |
 |---|---|---|
-| `render` | `budget_tokens`、`max_window_share`、`values_tag` | 预算 4000，窗口占比 0.25，标签 `values` |
+| `render` | `budget_tokens`、`max_window_share`、`values_tag` | 预算为空（只受窗口占比约束），窗口占比 0.25，标签 `values` |
 | `recall_protocol.order` | 上下文块顺序（[ARCHITECTURE.md §8.2](ARCHITECTURE.md#82-阶段上下文monologue-前置的-json)） | 核心缺省顺序 |
-| `affect` | `enabled`、`default_half_h`、`arl_half_h`、`clamp`、`close_mode`、`require_cost`、`allow_untyped`、`max_delta`、`kinds`、`bands`、`policy`、`thresholds`、`proposal_ttl_h` | `enabled=false`（无情感） |
-| `dossier` | `inject_last`、`index_size` | 3、30 |
+| `affect` | `enabled`、`default_half_h`、`arl_half_h`、`clamp`、`close_mode`、`require_cost`、`allow_untyped`、`max_delta`、`kinds`、`bands`、`policy`、`kind_floor`、`proposal_ttl_h` | `enabled=false`（无情感）。开启时必须给出 `default_half_h`、`arl_half_h`、`clamp`；其余缺省见 [ARCHITECTURE.md §6.4](ARCHITECTURE.md#64-提交只有角色能提交) |
+| `dossier` | `inject_last`、`index_size` | 0（只注入前言）、30 |
 | `rhythm` | `settle_at`（本地时刻） | 无（不建沉淀计划） |
 | `heartbeat` | `enabled`、`every_min`、`min_gap_min`、`skip_in_sleep` | `enabled=false` |
-| `memory` | `salience{w_pin, w_heat, w_age, half_life_days}`、`coverage_floor`、`promotion{daily_quota, min_roots, min_dates, window_days}` | 权重全 0、floor 0、`{3,2,2,7}` |
+| `memory` | `salience{w_pin, w_heat, w_age, half_life_days}`、`coverage_floor`、`promotion{daily_quota, min_roots, min_dates, window_days}` | 权重全 0、floor 0；晋升 `daily_quota=0`（不晋升），其余为 `min_roots=2`、`min_dates=2`、`window_days=7` |
 | `speak` | `max_messages`、`split_marker`、`chars_per_second`、`min_gap_s`、`max_gap_s` | `1`、`---split---`、12、1、5 |
 | `phrasing` | `window` | 20 |
 | `self_development` | `every_min` | 1440 |
-| `policy_keys` | 允许经 `policy_set` 或数据 API 修改的键：`{key: {type, min?, max?, enum?, what}}` | 只有核心私有键（见下） |
+| `policy_keys` | 允许经 `policy_set` 或数据 API 修改的键：`{key: {type, min?, max?, enum?, what}}` | 空。核心私有键与核心可写键始终可写，不需要、也不允许在此声明 |
 
 **核心私有键**：值属于部署者或人格本人，**人格包不得给默认值**，只能在本机设置。
 
@@ -52,8 +75,14 @@ JSON Schema 见 [examples/persona-model.schema.json](examples/persona-model.sche
 |---|---|---|
 | `rhythm.timezone` | IANA 名称 | 节律、沉淀、本地时刻显示都依赖它 |
 | `rhythm.sleep_window` | `HH:MM-HH:MM` | 作息声明；是输入，不是闸门 |
+| `rhythm.public_clock` | boolean，缺省 false | 是否在 `public` 会话中给出本地时刻（会暴露时区） |
 
-**生效值**：政策存储中的值 > 人格模型默认值 > 核心缺省。
+**核心可写键**：人格包可以给默认值，但不必声明：`render.budget_tokens`。
+
+**生效值**：政策存储中的值 > 人格模型默认值 > 核心缺省。与现有本地配置的关系：
+
+- 时区：场景级 `timezone`（只用于该场景计划的计时）> 政策 `rhythm.timezone` > 现有全局 `timezone` > UTC。
+- 自开发间隔：政策 `self_development.every_min` > 现有 `self_development.every_seconds`（P7 前兼容读取）> 人格模型 > 1440 分钟。
 
 **政策存储** `policy:<persona>`：每个键 `{value, what, class: "param"}`。`class` 为 `secret` 或 `counter` 的写入一律拒绝（`POLICY_CLASS_REFUSED`）——凭据和运行计数不是政策。每次修改都生成修订（理由、来源、作者）。
 
@@ -73,24 +102,24 @@ API 只对**人格作业**开放（§7），不对模型直接开放。方法以
 |---|---|---|
 | `documents.upsert` | `origin, source_identity, slug, kind, title, subject?, sections[], source{path, sha256}, dry_run` | `created / updated / unchanged / conflict` + 差异摘要 |
 | `documents.append` | `origin, source_identity, slug, section, dry_run` | 同上 |
-| `affect.import` | `origin, events[{source_identity, ts(含时区偏移), …}], amendments[{source_identity, target_source_identity, op, at, why}], dry_run` | 新增 / 已存在 / 拒绝计数 + 拒绝明细。导入事件 `ref_kind=external`，不受回合内 `ref_index` 闸门约束，但 `ref`/`why` 必填、`kind` 必须在模型种类表中或为空、`void` 必须有理由；`ts` 必须带时区偏移 |
+| `affect.import` | `origin, events[{source_identity, ts(含时区偏移), …}], amendments[{source_identity, target_source_identity, op, value?, at, why}], dry_run` | 新增 / 已存在 / 拒绝计数 + 拒绝明细。同一 `source_identity` 的内容变了 → `EVENT_IMMUTABLE`（须改用修订）；`fix_ts`/`fix_kind` 必须带 `value`。导入事件 `ref_kind=external`，不受回合内 `ref_index` 闸门约束，但 `ref`/`why` 必填、`kind` 必须在模型种类表中或为空、`void` 必须有理由；`ts` 必须带时区偏移 |
 | `memory.upsert` | `origin, units[{source_identity, entry_type, body_markdown, epistemic_type, occurred_at, source_window, visibility, invented}], dry_run` | 计数 + 待嵌入数 |
 | `policy.set` | `origin, params[{key, value, what, class}], dry_run` | 计数 + 拒绝明细 |
 | `artifacts.snapshot` | `origin, path, sha256, content(base64，≤ 8 MB)` | `artifact_id`（同 sha 去重） |
-| `report.put` | `run_id, status: ok | red | error, summary, items[]` | 报告存为 artifact，记忆右栏可见 |
+| `report.put` | `run_id, status: ok | red | error, summary, items[]` | 报告存为 artifact（`scope_key=owner-private:<persona>`），记忆右栏可见 |
 
 ### 5.2 读取方法（需要授权 `probe`）
 
 | 方法 | 请求要点 | 结果 |
 |---|---|---|
 | `documents.get` | `slug` | 当前修订全文（含节标签） |
-| `probe.retrieve` | `as: owner_private | public`、`query`、`k ≤ 12` | `items[{id, kind, score, source_window, excerpt}]` + `coverage`；**走与真实回合完全相同的检索与可见性路径** |
+| `probe.retrieve` | `as: owner_private | public`、`query`、`k ≤ 12` | `items[{id, kind, score, source_window, excerpt}]` + `coverage`、`coverage_score`、`coverage_basis`（定义见 [MEMORY.md §5.2](MEMORY.md#52-证据判定coverage)）；**走与真实回合完全相同的检索与可见性路径** |
 | `probe.context` | `as: owner_private | public`、`blocks?` | 渲染后的系统提示 sha 与各块内容（只读），用于"醒来能不能看见"的验证 |
 | `sources.list` | — | 本次运行被授权的源根 id 及其权威状态 |
 
 ### 5.3 通用规则
 
-- **幂等**：写入以 `origin + source_identity + content_sha256` 为键，重复提交为空操作。
+- **幂等**：同一 `origin + source_identity`、内容 sha256 也相同 → 空操作。内容不同时：文档和记忆单元走更新（受 [MEMORY.md §6.2](MEMORY.md#62-冲突规则) 的冲突规则约束）；情感事件拒绝（`EVENT_IMMUTABLE`），须改用修订。
 - **dry_run**：返回将要发生的变化，不写任何东西（包括审计以外的集合）。
 - **origin 约束**：写入的 `origin` 必须是本次运行授权的源根 id 之一，且该源根处于 `cohabiting`；处于 `cutover` 时返回 `SOURCE_CUTOVER`，不写。
 - **配额**：单次请求 ≤ 200 项、≤ 2 MB（`artifacts.snapshot` 例外，≤ 8 MB）。
@@ -126,11 +155,11 @@ owner 本地配置（被 git 忽略，例如 `config/local.json`）：
 
 ### 7.2 运行环境
 
-- 由 `IntegrationRunner` 新增的 **run-to-completion** 形态执行，复用现有 WSL bubblewrap 沙箱。
+- 由 `IntegrationRunner` 新增的 **run-to-completion** 形态执行，复用现有 WSL bubblewrap 沙箱（`integration.py`、`sandbox.py`）。宿主不具备 WSL 与 bubblewrap 时，作业功能报告"不可用"，不退化为无沙箱运行。
 - 网络：`--unshare-all`，**无网络**。
 - 代码：只读挂载**已发布**的人格包产物中的作业目录（不是候选工作树）。
 - 源根：每个授权源根只读挂载到 `/src/<root-id>`，未授权的不可见。
-- 输出：可写临时目录 `/out`，上限 64 MB，结束后打包为报告 artifact。
+- 输出：可写临时目录 `/out`，上限 64 MB，结束后打包为报告 artifact（`scope_key=owner-private:<persona>`）。
 - 超时：到 `timeout_s` 强杀，报告状态为 `error`。
 
 ### 7.3 传输（stdio JSONL）
@@ -151,7 +180,7 @@ owner 本地配置（被 git 忽略，例如 `config/local.json`）：
 
 | 触发方 | 方式 |
 |---|---|
-| 人格 | 在 owner 自开发任务中，行动脑使用新工具 `persona_job_run {job, dry_run, args}`。只授予带 `development_grant` 的任务，返回报告摘要 |
+| 人格 | 在 owner 自开发任务中，行动脑使用新工具 `persona_job_run {job, dry_run, args}`。只授予带 `development_grant` 的任务。**返回给行动脑的只有状态、退出码、计数和报告 artifact id**，不含任何摘录或正文（示例见 [examples/persona-data-api.example.json](examples/persona-data-api.example.json) 的 `tool_result_example`）。报告全文只在记忆右栏（operator 视图）中查看 |
 | owner | 设置卡上的"试运行 / 运行" |
 | 定时 | 人格可以排一个计划，在到期回合中委托行动脑运行作业。**核心不自动定时运行任何作业** |
 
@@ -180,6 +209,7 @@ owner 本地配置（被 git 忽略，例如 `config/local.json`）：
 - [ ] 核心中没有写死的时区、账号、地址、主机名、用户名；示例只用文档保留地址（`192.0.2.0/24`、`example.invalid`）与合成 id。
 - [ ] 人格包的 `files` 只列出代码、模型 JSON、种子、skills、集成；不含 `.runtime`、本地配置、Mongo dump、媒体原图（除非人格作者明确选入且可公开）。
 - [ ] 人格包种子不含 owner 个人信息。
+- [ ] 人格包的代码和文档（skills、集成、自检脚本）中出现的 owner 个人标识已替换为占位。这不算"修改人格"，实施者可以做。
 - [ ] `tools/check_staged_secrets.py --personal` 在仓库全部跟踪文件上无告警（历史设计文档只报告，由 owner 决定）。
 - [ ] 合成人格 `demo` 能跑通全部测试。
 

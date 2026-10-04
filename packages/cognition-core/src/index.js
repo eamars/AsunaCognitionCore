@@ -312,7 +312,7 @@ export class CognitionCore {
     if (!persisted && stage.lane === 'executor') {
       // Child Agents are owned by native subagent routing; the top-level
       // session command controller deliberately refuses to acquire them.
-      handle.agent.session.append('session/title', { title: '行动脑 · ' + stage.binding.task_id,
+      handle.agent.session.append('session/title', { title: stage.title ?? '行动脑 · ' + stage.binding.task_id,
         source: { kind: 'user' }, messageSeqs: [] });
       await this.ctx.sessions.flush(handle.agent.session);
     }

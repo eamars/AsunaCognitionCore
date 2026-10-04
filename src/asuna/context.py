@@ -34,7 +34,7 @@ BLOCKS = {
     'dossier': ('dossier_from_program',),
     'affect': ('affect_from_program',),
     'affect_proposals': ('affect_proposals_from_program',),
-    'relationship': ('relationship', 'overlay', 'relationship_shared_from_program'),
+    'relationship': ('relationship', 'relationship_shared_from_program'),
     'ledgers': ('ledgers_from_program',),
     'rhythm': ('rhythm_from_program',),
     'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
@@ -177,7 +177,6 @@ class ContextBuilder:
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
         relation=self.store.head(target['entity'],target['scope'])
-        overlay=self.store.head('overlay:'+persona,scope)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
         from .ingress import episode_id
@@ -278,7 +277,7 @@ class ContextBuilder:
         else:
             coverage_block=None
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
-                 'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
+                 'relationship':relation[1]['content'] if relation else None,
                  'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要只在 participants 覆盖当前说话人时才算这个人的证据：participants 里只有别人的那段是背景，不能当成当前说话人说过什么；attribution.corrections 与 corrected_by 是程序按真实 reply 链算出的更正标注，非空就说明这段转述之后有人更正过，以更正后的原话为准。',

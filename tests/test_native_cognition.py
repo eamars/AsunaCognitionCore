@@ -38,7 +38,7 @@ def snapshot(store, binding, **changes):
                'person_id': binding['person_id'], 'scope_key': binding['scope_key'],
                'policy_epoch': 1, 'persona': 'p', 'monologue_refs': ['thought'],
                'context': {'person_id': binding['person_id'], 'policy_epoch': 1,
-                           'overlay': {'body': '本群场景补充'}, 'self_state_from_program': {}},
+                           'self_state_from_program': {}},
                'manifest': {'persona_revision': persona['revision_id'], 'selected': ['selected'],
                             'relationship_entity_key': relation['_id'],
                             'relationship_revision': relation['revision_id']}, **changes}
@@ -73,13 +73,14 @@ def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):
     assert '同学' in detail['body'] and '本群身份 成员' in detail['body']
     assert detail['sources'][0]['text'] == '原话'
     store.db.messages.update_one({'_id': 'message'}, {'$set': {'event.raw.asuna_peer.person_id': 'qq:22'}})
-    assert NativeMemory(worker, 'role').detail('cognition:peer')['status_label'] == '暂无记录'
+    with pytest.raises(Denied, match='MEMORY_NOT_VISIBLE'):      # a mismatched identity block is never shown
+        NativeMemory(worker, 'role').detail('cognition:peer')
 
 
 def test_private_heads_and_undelivered_messages_cannot_be_read(view):
     store, worker, binding = view
     memory = NativeMemory(worker, 'role')
-    for identifier in ('head:relationship:qq:22|scene:one', 'head:overlay:p|scene:private', 'cognition:invented'):
+    for identifier in ('head:relationship:qq:22|scene:one', 'cognition:invented'):
         with pytest.raises(Denied, match='MEMORY_NOT_VISIBLE'):
             memory.detail(identifier)
     store.db.messages.insert_one({'_id': 'unsent', 'scene_id': binding['scene_id'], 'policy_epoch': 1,

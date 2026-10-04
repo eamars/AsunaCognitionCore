@@ -63,8 +63,8 @@ def test_E09_identity_and_E10_scope(store):
         _,context,_=ContextBuilder(store).prepare(event(scene=scene,person=person))
         if scene!='dm-a':assert 'PRIVATE_A_CANARY' not in json.dumps(context)
     with pytest.raises(Denied):store.get('memory_units','M09','scene:g1')
-    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
-    with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
+    with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
 
 def test_E14_100_duplicates(store):
     coordinator,lane=normal(store)
@@ -94,25 +94,25 @@ def test_E15_nonidempotent_unknown(store):
     assert msg['delivery_state']=='UNKNOWN' and store.db.sink_receipts.count_documents({})==1
 
 def test_E17_twenty_cas_proposals(store):
-    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
     # M07 is global-safe in the immutable world fixture.
     source=store.db.memory_units.find_one({'scope_key':'global-safe'})['_id']
     def mutate(i):
         try:
-            return store.mutate('overlay:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
+            return store.mutate('relationship:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
         except Conflict:return None
     with concurrent.futures.ThreadPoolExecutor(20) as pool:result=list(pool.map(mutate,range(20)))
     winners=[x for x in result if x]
     assert len(winners)==1
-    assert store.head('overlay:P1','global-safe')[0]['revision_id']==winners[0]['_id']
+    assert store.head('relationship:P1','global-safe')[0]['revision_id']==winners[0]['_id']
 
 def test_E19_scope_inheritance_and_policy_denial(store):
-    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
-    with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
+    head=store.init_head('relationship:P1','global-safe',{'body':'fixture relationship'},[])
+    with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
     for field in ('ACL','audit','model_route','threshold','tools'):
-        with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
-    scoped=store.init_head('overlay:P1','scene:dm-a',{'body':'私域'},['M09'])
-    result=store.mutate('overlay:P1','scene:dm-a',scoped['revision_id'],{'body':'保留我的私域看法'},['M09'],'scene:dm-a','allowed-overlay')
+        with pytest.raises(Denied):store.mutate('relationship:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
+    scoped=store.init_head('relationship:P1','scene:dm-a',{'body':'私域'},['M09'])
+    result=store.mutate('relationship:P1','scene:dm-a',scoped['revision_id'],{'body':'保留我的私域看法'},['M09'],'scene:dm-a','allowed-relationship')
     assert result['scope_key']=='scene:dm-a'
 
 def test_E21_audit_failure_prevents_calls_and_effects(store):

@@ -53,9 +53,6 @@ class CognitionView:
             elif entity.startswith(('character_core:', 'current_self:')):
                 selected = (context.get('self_state_from_program', {}).get(entity.split(':')[0]) or {}).get('revision_id')
             else:
-                overlay = context.get('overlay')
-                if overlay is not None:
-                    return '最近一轮（{time}）用到了这一版' if overlay == content else '最近一轮（{time}）用的还是旧版本'
                 selected = None
             if selected:
                 return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
@@ -106,31 +103,11 @@ class CognitionView:
                           '这个对话还没有可核对的一轮')}
 
     def supplements(self, kind):
-        rows = []
-        if kind in ('all', 'self'):
-            rows.append(self.placeholder('mood', 'self', '心情与情绪',
-                '未实现独立、持续更新的心情与情绪状态。当前自我描述和当时的理解仍可查看；它们不等同于当前心情。'))
-        if kind in ('all', 'relation'):
-            peer = self.peer()
-            rows.append(peer or self.placeholder('peer', 'relation', '对方身份资料',
-                '当前场景暂无可核对的身份资料。昵称、群名片等只显示随真实消息保存并通过身份绑定校验的内容。',
-                status='暂无记录'))
-            rows.append(self.placeholder('portrait', 'relation', '用户画像整理',
-                '未实现独立的事实、偏好和性格画像整理。已有内容保留在本人的关系理解、交流摘要与原始来源中；角色的主观判断不等于对方确认的事实。'))
-        if kind in ('all', 'world'):
-            rows.append(self.placeholder('world', 'world', '世界知识整理',
-                '未实现独立的世界知识整理。现有经验保存在交流摘要、当时的理解与原始来源中，仍可被检索使用；召回某个说法不等于角色已将其确认为知识。'))
-        for row in rows:
-            if row['kind'] == 'relation':
-                row['scene_id'] = self.binding['scene_id']
-        return rows
-
-    @staticmethod
-    def placeholder(key, kind, title, body, status='未实现'):
-        return {'id': 'cognition:' + key, 'kind': kind, 'title': title,
-                'body': body, 'excerpt': body if body.startswith(status) else status + ' · ' + body, 'status_label': status,
-                'category_label': {'self': '自我', 'relation': '对人的认识', 'world': '对世界的认识'}[kind],
-                'sources': [], 'interpretation': False}
+        """The QQ identity saved with this person's latest message, when there is one."""
+        peer = self.peer() if kind in ('all', 'relation') else None
+        if peer:
+            peer['scene_id'] = self.binding['scene_id']
+        return [peer] if peer else []
 
     def subject_name(self):
         peer = self.peer()

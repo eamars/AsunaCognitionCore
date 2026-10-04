@@ -126,6 +126,8 @@ class Store:
         doc = copy.deepcopy(document)
         doc['schema_version'] = 1
         doc['revision'] = 1 if expected is None else expected + 1
+        if collection == 'state_revisions':
+            doc.setdefault('created_at', now())      # revisions are written once; the page shows when
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
         self._size(doc)
@@ -226,11 +228,11 @@ class Store:
         # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
         linked = {item for item in (linked_scopes or ()) if isinstance(item, str) and item}
         readable_scopes = {'global-safe', scope} | linked
-        # The persona is a document (ADR-009 §5); state heads hold only overlays, relationships and scene affect.
-        if actor!='character' or not entity.startswith(('overlay:','relationship:','scene_affect:')) or not set(content).issubset(allowed):
+        # The persona is a document (ADR-009 §5); state heads hold only relationships and scene affect.
+        if actor!='character' or not entity.startswith(('relationship:','scene_affect:')) or not set(content).issubset(allowed):
             raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
         if scope != request_scope and not (request_scope in linked
-                                           and entity.startswith(('relationship:', 'overlay:',
+                                           and entity.startswith(('relationship:',
                                                                   'scene_affect:'))):
             raise Denied('SCOPE_PROMOTION_DENIED')
         if not sources:

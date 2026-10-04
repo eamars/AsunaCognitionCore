@@ -54,7 +54,7 @@ export class NativeChildren {
     const prompt = [{ type: 'text', text: stage.text }];
     this.pending.set(prompt, stage);
     const request = { parent, prompt,
-      label: stage.lane === 'executor' ? '行动脑 · ' + stage.binding.task_id : '交流摘要 · ' + stage.binding.scene_id,
+      label: stage.title ?? (stage.lane === 'executor' ? '行动脑 · ' + stage.binding.task_id : '交流摘要 · ' + stage.binding.scene_id),
       signal: new AbortController().signal, agentOptions: nativeRoute(core.config.routes.action) };
     const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data;
     // Resume the owned native source for a crash recovery or a successor task

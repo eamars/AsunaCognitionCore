@@ -14,13 +14,12 @@ import threading
 import time
 
 from . import summary_attribution, summary_trigger
+from .ingress import NOT_CORE_NOTICE
 from .peer_context import speaker_name
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
 
-
-CORE_NOTICE_KINDS = ('task_feedback', 'scheduled')
 
 
 class DialogueSummarizer:
@@ -63,8 +62,7 @@ class DialogueSummarizer:
         query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
                  'scene_seq': {'$gt': scene['summary_start_seq']},
                  'summary_batch_id': {'$exists': False},
-                 # Core notices (task results, due plans) ride the requester's scene but are not their words.
-                 'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)},
+                 **NOT_CORE_NOTICE,
                  '$or': [{'direction': 'inbound'},
                          {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
         rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))

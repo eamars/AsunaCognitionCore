@@ -4,6 +4,10 @@ from .state import Conflict, Denied, now
 
 
 INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement'}
+# Core notices queued in a person's scene (task results, due plans). They wake the role but are not
+# that person's words, so memory, summaries and the source list never treat them as speech.
+CORE_NOTICE_KINDS = ('task_feedback', 'scheduled')
+NOT_CORE_NOTICE = {'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)}}
 
 
 def episode_id(event):

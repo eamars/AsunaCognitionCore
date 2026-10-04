@@ -36,6 +36,15 @@ class NativeLane:
                       **config.get('_native_routes', {}).get(route, {})}
         self.lock = threading.RLock()
 
+    def child_title(self, task, role_id, ep):
+        """What a person sees for a child session: the task's goal, or which conversation is summarized."""
+        if self.lane == 'executor' and task:
+            return '行动脑 · ' + ' '.join(str(task.get('goal') or task['_id']).split())[:48]
+        if self.lane == 'summary':
+            role = self.store.db.sessions.find_one({'_id': role_id}, {'native_title': 1}) or {}
+            return '交流摘要 · ' + (role.get('native_title') or ep['scene_id'])
+        return None
+
     def generate(self, binding, operation, phase, text, system, **kwargs):
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
@@ -114,7 +123,7 @@ class NativeLane:
             })
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
-                       'episode_id': ep['_id'], 'binding': record}
+                       'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep)}
             if self.lane == 'character':
                 source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
                 if source and source.get('event', {}).get('channel'):

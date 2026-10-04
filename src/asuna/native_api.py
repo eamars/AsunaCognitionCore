@@ -9,15 +9,18 @@ import re
 from .config import character_id
 from .state import Denied
 from . import scene_links
-from .dialogue_summary import CORE_NOTICE_KINDS
+from .ingress import NOT_CORE_NOTICE
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
 
-# Task results and due plans are core notices queued in the requester's scene, not things they said.
-NOT_CORE_NOTICE = {'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)}}
 VISIBILITY_LABELS = {'public': '公开', 'owner_private': '仅主人可见'}
 INJECT_LABELS = {'always': '每轮都用', 'on_demand': '相关时才用', 'never': '不放进对话'}
 DOCUMENT_KINDS = {'persona': '人格设定', 'voice': '说话方式', 'ledger': '承诺与挂账', 'dossier': '人物档案', 'working': '工作笔记'}
+
+
+# When an empty entry gets written, so an empty row explains itself.
+EMPTY_HEAD = {'self': '她只在每天一次的内部自省时间里决定要不要写下或改写。',
+              'relation': '她在对话中觉得对这个人的理解有了变化时才会写下。'}
 
 
 def document_title(content, slug):
@@ -34,7 +37,7 @@ def plain(text):
 
 class NativeMemory:
     PAGE = 24
-    LABELS = {'self': '自我', 'relation': '对人的认识', 'world': '对世界的认识', 'derived_summary': '交流摘要',
+    LABELS = {'self': '自我', 'relation': '对人的认识', 'derived_summary': '交流摘要',
               'character_interpretation': '当时的理解', 'public_statement': '角色的发言',
               'reported_speech': '他人的原话', 'observed_fact': '事实记录', 'source': '原始消息',
               'document': '文档', 'affect': '情感', 'affect_event': '情感', 'persona_job_report': '作业报告'}
@@ -53,9 +56,9 @@ class NativeMemory:
         # The persona itself is a document now; legacy persona heads are not listed.
         self.heads = {f'{kind}:{persona}|global-safe': ('self', title) for kind, title in (
             ('character_core', '核心自我'), ('current_self', '当前自我'))}
-        self.heads[f"overlay:{persona}|{self.scene['scope_key']}"] = ('self', '当前场景的自我补充')
         relation = scene_links.relationship_target(self.store.config, self.store.db, self.scene, self.binding['person_id'])
         self.heads[relation['entity'] + '|' + relation['scope']] = ('relation', '关系与偏好')
+        self.subject = relation.get('canonical') or self.binding['person_id']
         # Operator view: owner-private imported entries are listed too, each with its scope label.
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
                            '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
@@ -66,7 +69,7 @@ class NativeMemory:
 
     def scene_title(self, scene_id):
         if not scene_id or scene_id == 'global-safe':
-            return '角色共用'
+            return '所有对话共用'
         if scene_id == self.scene['_id'] and self.binding.get('native_title'):
             return self.binding['native_title']
         # The same title the conversation list shows for that scene.
@@ -89,7 +92,7 @@ class NativeMemory:
         heads = list(self.store.db.state_heads.find({'_id': {'$in': keys}}))
         revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
             {'_id': {'$in': [head['revision_id'] for head in heads]}},
-            {'content': 1, 'updated_at': 1, 'generated_at': 1})}
+            {'content': 1, 'updated_at': 1, 'generated_at': 1, 'created_at': 1})}
         by_key = {head['_id']: head for head in heads}
         rows = []
         for key in keys:
@@ -101,10 +104,15 @@ class NativeMemory:
             body = revision.get('content', {}).get('body', '') if revision else ''
             row = {'id': 'head:' + key, 'kind': category, 'title': title,
                    'scope_key': key.rsplit('|', 1)[1], 'excerpt': body[:200],
-                   'updated_at': (head or {}).get('updated_at') or
-                       (revision or {}).get('generated_at') or (revision or {}).get('updated_at')}
+                   'updated_at': (head or {}).get('updated_at') or (revision or {}).get('generated_at')
+                       or (revision or {}).get('updated_at') or (revision or {}).get('created_at')}
+            if revision and not row['updated_at']:
+                # Older revisions carry no time of their own; the audited commit has it.
+                commit = self.store.db.audit_events.find_one({'type': 'state.commit', 'payload.collection': 'state_revisions',
+                                                              'payload.document._id': revision['_id']}, {'occurred_at': 1})
+                row['updated_at'] = (commit or {}).get('occurred_at')
             if not revision:
-                row.update(status_label='暂无记录', excerpt='暂无记录 · 尚未保存' + title + '。')
+                row.update(status_label='还没有写过', excerpt=EMPTY_HEAD[category])
             else:
                 row['usage'] = self.cognition.usage(row['id'], revision['content'], revision['_id'])
             if not search or search.casefold() in (title + '\n' + (body or row['excerpt'])).casefold():
@@ -162,7 +170,7 @@ class NativeMemory:
         return rows
 
     def page(self, kind='summary', offset=0, search=''):
-        if kind not in ('all', 'documents', 'affect', 'jobs', 'self', 'relation', 'world', 'interpretation', 'summary', 'source'):
+        if kind not in ('all', 'documents', 'affect', 'jobs', 'self', 'relation', 'interpretation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
@@ -170,7 +178,8 @@ class NativeMemory:
             raise ValueError('INVALID_MEMORY_SEARCH')
         search = search.strip()
         # ADR-009 operator rows (documents, affect, job reports) come first; search applies to their titles.
-        extra = (self.document_rows() if kind in ('all', 'documents') else []) + (
+        extra = (self.document_rows() if kind in ('all', 'documents') else
+                 [row for row in self.document_rows() if row['id'] == 'doc:dossier:' + self.subject] if kind == 'relation' else []) + (
             self.affect_rows() if kind in ('all', 'affect') else []) + (
             self.job_rows() if kind in ('all', 'jobs') else [])
         heads = [row for row in extra if not search or search.casefold() in (row['title'] + '\n' + row['excerpt']).casefold()]
@@ -299,8 +308,8 @@ class NativeMemory:
             else:
                 row = {'missing': True}
                 title = self.heads[key][1]
-                result = {'id': identifier, 'body': '暂无记录 · 尚未保存' + title + '。',
-                          'category_label': title, 'status_label': '暂无记录', 'source_ids': []}
+                result = {'id': identifier, 'body': EMPTY_HEAD[self.heads[key][0]],
+                          'category_label': title, 'status_label': '还没有写过', 'source_ids': []}
         elif kind == 'cognition':
             row = next((item for item in self.cognition.supplements('all') if item['id'] == identifier), None)
             if row:

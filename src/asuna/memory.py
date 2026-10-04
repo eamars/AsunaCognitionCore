@@ -5,6 +5,7 @@ from .config import character_id
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict
 from .queue import database_effects_lock
+from .ingress import NOT_CORE_NOTICE
 from . import summary_attribution
 
 try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
@@ -108,7 +109,7 @@ class MemoryService:
     def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):
         """Append an audited revision; do not erase history or reapply events."""
         if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
-        if not entity.startswith(('overlay:','relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
+        if not entity.startswith(('relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
         with database_effects_lock(self.store.name):
             pair=self.store.head(entity,scope)
             if not pair:raise Denied('UNKNOWN_STATE_ENTITY')
@@ -138,7 +139,7 @@ class MemoryService:
 
     def chunk(self,scene_id):
         scene=self.store.db.scenes.find_one({'_id':scene_id})
-        rows=list(self.store.db.messages.find({'scene_id':scene_id,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
+        rows=list(self.store.db.messages.find({'scene_id':scene_id,**NOT_CORE_NOTICE,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
         made=[]
         for row in rows:
             if row.get('policy_epoch',1)!=scene['policy_epoch']:continue

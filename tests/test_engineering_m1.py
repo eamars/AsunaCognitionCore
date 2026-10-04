@@ -34,14 +34,16 @@ def test_E02_actual_fake_request_and_missing_persona(store):
     ep=coordinator.ingest(event())
     assert '示例角色' in lane.calls[0]['messages'][0]['content']
     assert ep['manifest']['persona_revision']
-    persona=store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['body']
+    # The persona is a document now (ADR-009 §5.4); the manifest names its revision.
+    from asuna.documents import render_markdown
+    persona=render_markdown(store.db.state_revisions.find_one({'_id':ep['manifest']['persona_revision']})['content']['sections'])
     assert persona in lane.calls[0]['messages'][0]['content']
     assert sha(persona.encode())==ep['manifest']['persona_sha256']
     assert not any(k in json.dumps(lane.calls) for k in ('p1_prediction','expectations_operator_only','reconcile_expected'))
     assert not any('"'+k+'":' in json.dumps(lane.calls) for k in ('gold','expected','oracle'))
-    head,rev=store.head('persona:P1','global-safe')
+    head,rev=store.head('doc:P1:persona','global-safe')
     for body in ('','# title only'):
-        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.body':body}})
+        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.sections.0.body':body}})
         before=len(lane.calls)
         with pytest.raises(ValueError):coordinator.ingest(event(body or 'empty'))
         assert len(lane.calls)==before

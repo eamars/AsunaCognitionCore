@@ -80,7 +80,7 @@ def load(path, persona_id: str) -> dict:
 
 def neutral(persona_id: str, display_name: str) -> dict:
     """Model used for a v1 contribution that ships none: every feature at its core default."""
-    return validate({'model_version': 1, 'persona': {'id': persona_id, 'display_name': display_name}}, persona_id)
+    return {'model_version': 1, 'persona': {'id': persona_id, 'display_name': display_name}}
 
 
 _MISSING = object()

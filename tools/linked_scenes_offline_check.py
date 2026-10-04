@@ -305,7 +305,7 @@ STUBS = {
 
 
 # 真 context.py 拆分后同包 import render / visibility（render 用替身 config/evidence，visibility 用 scene_links）
-OPTIONAL_REAL = ('render.py', 'visibility.py')
+OPTIONAL_REAL = ('render.py', 'visibility.py', 'documents.py', 'persona_model.py', 'policy.py')
 
 
 def load_package(name, real):

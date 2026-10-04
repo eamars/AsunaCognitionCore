@@ -9,7 +9,8 @@
 |---|---|
 | P0 卫生与地基 | 完成（见下方报告） |
 | P1 人格契约 v2、人格模型、政策存储 | 完成（见下方报告） |
-| P2–P7 | 未开始 |
+| P2 文档层、渲染、WRITE 阶段、人物档案 | 完成（见下方报告） |
+| P3–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -88,6 +89,30 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：P2 — DocumentStore 与 persona:<id> 头的转换。
 ```
 
+## P2 报告
+
+```text
+阶段：P2
+提交：见本提交
+完成：
+  T2.1 PASS [Mongo] 同基修订、同文档并发追加：恰好一个成功，另一个 BASE_REVISION_STALE，无丢失更新
+  T2.2 PASS [离线] public 会话只含 public+always 节；owner_private 两类都含且 public 在前；on_demand/never 不出现；上下文块按 recall_protocol.order，缺省为核心顺序，不丢键
+  T2.3 PASS [离线]+[Mongo] 让渲染变大且超预算的修改被拒（PERSONA_RENDER_OVER_BUDGET，带估算值），头不变；变小的修改被接受；已超预算时渲染完整（与无预算渲染逐字节相同）、回合照常完成、写 render.over_budget 审计，记忆右栏标红
+  T2.4 PASS [Mongo] 档案注入：owner 私聊 = 前言 always 节 + 最近 N 条 injectable 条目 + 可注入条目标题索引；群聊无；行动脑无；未标 injectable 的条目从不自动注入
+  T2.5 PASS [Mongo] 档案条目 replace_section → DOC_OP_NOT_ALLOWED；correction 追加引用原 sid 的节，原条目字节不变
+  T2.6 PASS [Mongo] 伪 lane：DECIDE write_docs(append_section) → WRITE 阶段 → 提交，SPEAK 的「程序已提交的结果」含 write_docs 摘要与 rejections；set_tags 不产生 WRITE；无效意图进 rejections、回合照常 SPEAK；群回合 write_docs 全拒（DOC_WRITE_REQUIRES_OWNER_PRIVATE）
+  T2.7 PASS [Mongo] next=recall + read：可读节原文进入 recall 上下文；public 会话读 owner_private 节被拒并记录
+  T2.8 PASS [Mongo] 旧 persona:<id> 头 + 包内种子并存 → 转换而非种子，正文等于旧头；之后回合的 manifest 记录文档修订 id，system_ref 带 render_sha256
+  T2.9 PASS [离线]+[Mongo] 种子只在头缺失时导入、重启不覆盖；sid 生成确定（同名加 -2，CJK 保留）；front-matter 覆盖生效、未知 sid 列出；adopt_seed 按 sid 合并，双方都改过的节列为冲突不覆盖
+  T2.10 PASS [Mongo] 行动脑系统提示只含 public 且带 values 标签的节；owner_private 节与无标签 public 节都不出现
+反证：adr009_p2_cases 与 test_adr009_p2 在基线上无法导入 documents 模块而全部失败；T2.6 前的基线决策 schema（additionalProperties:false）会把整条带 write_docs 的决策判为 BAD_DECISION_JSON。
+删除：无
+偏离：D2-1…D2-7（见下）
+未验证：真实人格 profile 未启动
+人工检查：演示环境中「文档」出现在记忆右栏，每节带可见性/注入/标签标注；在 owner 本机对话里请角色记下一件事，角色经 DECIDE write_docs → WRITE 追加了 dossier:demo-owner 的条目（owner_private、带 entry_date），右栏出现新修订
+下一步：P3 — affect.py（事件、修订、提案、投影），先对齐参考实现。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -111,3 +136,10 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D1-1 | 完整 schema 校验在 worker `initialize` 中进行（Python jsonschema）；JS `registerPersona` 只做契约形状、路径不越界与 `PERSONA_ID_MISMATCH` 的同步校验 | DSH 侧没有 JSON Schema 校验依赖；两处任一失败都使 Core 惰性并显示原因 |
 | D1-2 | 人格包里的路径（model、seeds、jobs、skills、persona_file）一律存为相对 `resource_root` 的路径，由 floor 按已发布产物根或包根解析为绝对路径 | 满足 PERSONA_CONTRACT §2.3；也让同一份贡献可在候选与已发布产物间切换 |
 | D1-3 | 已安装人格包的人格正文原样从 `persona/core.md` 移到 `seeds/persona.md`（未改一字），模型只含 id 与显示名；核心与该包版本升到 0.2.0 / 对等依赖 0.2.x | CLEANUP §8 与契约 v2；不替人格取参数或标注可见性 |
+| D2-1 | 运行时 decision-delta schema 的 `doc_ref` 放宽为 `^[A-Za-z0-9][A-Za-z0-9:_.-]{0,127}$` | `dossier:<规范人物 id>` 中的人物 id 不保证小写（测试夹具即为大写） |
+| D2-2 | 档案 512 KB 滚动分卷未实现；单个修订仍受 1 MB 上限（DOC_REVISION_TOO_LARGE） | 当前没有接近该规模的档案；分卷不影响任何已定义测试，留作后续 |
+| D2-3 | 角色 WRITE 未声明 visibility 的新节按 owner_private 保存，并在结果中可见 | 与数据 API 的缺省一致（§2.2），宁私勿泄 |
+| D2-4 | 上下文头部加 `session_class` | 演示中角色在 DECIDE 里明确表示无法判断本回合能否写文档；这是程序事实，应当明示 |
+| D2-5 | `affect*`、`promote` 在其引擎上线前被逐条拒绝（FIELD_NOT_AVAILABLE），不静默丢弃 | 失败语义：单项失败只记 rejections |
+| D2-6 | `pin` 在 P2 先落地为记忆单元的 `pinned` 标记（须在本回合 ref_index 内且可读）；排序权重在 P5 | 协调器范围已列出 pin |
+| D2-7 | 人物档案种子的缺省可见性为 owner_private（其他种子仍为 public） | §2.2「人物档案 缺省 owner_private」 |

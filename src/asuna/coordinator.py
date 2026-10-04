@@ -11,6 +11,7 @@ from .evidence import canonical, sha
 from .lanes import Lane
 from .publish import PublishService
 from .render import episode_system
+from . import decide_delta, visibility
 from .state import Store, Conflict, Denied, now
 
 DECISION_SCHEMA=schema('decision.schema.json')
@@ -214,6 +215,9 @@ class Coordinator:
                         text=self._stage(ep,'DECIDE',ep.get('recall_rounds',0)*2+attempt,extra='上一条决策未被程序接受：'+decision_error+'。请修复必要控制字段或JSON格式，不改变意图。' if attempt else '')
                         try:
                             decision=json.loads(text)
+                            if not isinstance(decision,dict):raise ValueError('DECISION_NOT_AN_OBJECT')
+                            # ADR-009 optional fields are validated item by item later; never fail the turn here.
+                            decision,delta=decide_delta.split(decision)
                             jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA if self.store.config.get('task_mode')=='workspace' else DECISION_SCHEMA)
                             if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
                                 raise ValueError('SELF_STATE_ONLY_IN_INTERNAL_OPPORTUNITY')
@@ -222,8 +226,9 @@ class Coordinator:
                             decision_error=str(exc) if isinstance(exc,ValueError) else f'{list(exc.absolute_path)}: {exc.message}'
                             if attempt==1:
                                 raise ProtocolFailure('BAD_DECISION_JSON: '+decision_error)
-                    ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,feedback_resume_phase=None)
+                    ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,decision_delta=delta,feedback_resume_phase=None)
                 if ep['state']=='DECISION_ACCEPTED':
+                    ep=decide_delta.apply(self,ep)
                     if ep['decision'].get('reflect_self') and not ep.get('self_state_update'):
                         from .self_state import SelfState
                         try:
@@ -286,6 +291,13 @@ class Coordinator:
                         event={'event_id':ep['source_event_id'],'scene_id':ep['scene_id'],'person_id':ep['person_id'],'text':ep['decision']['recall_query']}
                         _, recalled,manifest=self.context.prepare(event,ep['persona'])
                         context={**ep['context'],'recall':{'query':ep['decision']['recall_query'],'memories':recalled['memories']}}
+                        reads=[(i,item) for i,item in enumerate((ep.get('decision_delta') or {}).get('read') or [])]
+                        if reads:
+                            valid,bad=decide_delta.validate_items({'read':[item for _,item in reads]})
+                            documents,denied=decide_delta.read_sections(self.store,ep,valid.get('read',[]),
+                                ep['manifest'].get('session_class',visibility.PUBLIC))
+                            context['recall']['documents']=documents
+                            ep=self._update(ep,rejections=[*(ep.get('rejections') or []),*bad,*denied])
                         for old_id in ep['monologue_refs']:
                             old=self.store.db.memory_units.find_one({'_id':old_id})
                             self.store.put('memory_units',{**old,'status':'superseded'},expected=old['revision'],stream=ep_id)
@@ -342,7 +354,7 @@ class Coordinator:
                                 return self._update(ep,state='WAITING_TASK',task_id=task_id,intent_revision=intent_revision)
                             ep=self._update(ep,task_id=task_id,intent_revision=intent_revision)
                     results={k:ep[k] for k in ('control_result','understanding_update','self_state_update','plan_result',
-                        'plan_update_result','plan_cancel_result') if k in ep}
+                        'plan_update_result','plan_cancel_result','delta_results','rejections') if ep.get(k)}
                     text=self._stage(ep,'SPEAK',extra='程序已提交的结果：'+json.dumps(results,ensure_ascii=False) if results else '')
                     ep=self._update(ep,state='SPEAK_ACCEPTED',speech=text,feedback_resume_phase=None)
                 if ep['state']=='SPEAK_ACCEPTED':

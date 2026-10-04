@@ -3,7 +3,9 @@ import json
 import traceback
 from .config import redact_text
 from . import visibility
-from .render import render_system
+from .render import render_system, readable_sections, model_and_policy
+from .documents import DocumentStore, render_markdown
+from .persona_model import effective
 from .evidence import canonical, sha
 from .state import Store, Denied
 from .peer_context import apply_peer_context
@@ -24,6 +26,81 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   '说多少、还是继续旁听，都由你定。沉默不需要理由，也不因为"有机会"就该开口。'
                   'related_messages 里带 topic_id 的是这条话题线到目前为止的原话（含没@你的旁听行），'
                   '谁说的以行上的 author 为准。')
+
+
+# ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
+BLOCKS = {
+    'self_state': ('self_state_from_program',),
+    'dossier': ('dossier_from_program',),
+    'affect': ('affect_from_program',),
+    'affect_proposals': ('affect_proposals_from_program',),
+    'relationship': ('relationship', 'overlay', 'relationship_shared_from_program'),
+    'ledgers': ('ledgers_from_program',),
+    'rhythm': ('rhythm_from_program',),
+    'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
+    'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
+    'tasks_plans': ('task_state_from_program', 'plans_from_program', 'schedule_control_from_program',
+                    'scheduled_plan_from_program'),
+    'recent_phrasing': ('recent_phrasing_from_program',),
+    'media': ('media_from_program',),
+    'group_continuity': ('group_continuity_from_program',),
+    'sender_identity': ('sender_identity',),
+}
+CONTEXT_HEAD = ('scene_id', 'scope_key', 'policy_epoch', 'person_id', 'session_class')
+CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
+                'recent_experience_from_program')
+
+
+def order_context(context, order=None):
+    """Fixed head, ordered blocks (persona order, then the core default for the rest), fixed tail."""
+    blocks = [b for b in (order or []) if b in BLOCKS] + [b for b in BLOCKS if b not in (order or [])]
+    keys = [*CONTEXT_HEAD, *[k for b in blocks for k in BLOCKS[b]]]
+    rest = [k for k in context if k not in keys and k not in CONTEXT_TAIL and k not in ('ref_index', 'event')
+            and not k.endswith('_from_host')]
+    tail = [*CONTEXT_TAIL, *[k for k in context if k.endswith('_from_host')], 'ref_index', 'event']
+    return {k: context[k] for k in [*keys, *rest, *tail] if k in context}
+
+
+def _section_view(section):
+    return {k: section[k] for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
+
+
+def dossier_block(docs, model, policy, person, cls):
+    """§7: preamble always-sections + last N injectable entries + a title index (owner-private);
+    public sessions see only public always-sections; the action brain sees none."""
+    slug = 'dossier:' + person
+    revision, content = docs.read(slug)
+    if not content:
+        return None
+    sections = content['sections']
+    if cls == visibility.OWNER_PRIVATE:
+        preamble = [s for s in sections if (s['sid'] == '_preamble' or 'preamble' in s['tags']) and s['inject'] == 'always']
+        entries = [s for s in sections if 'entry' in s['tags'] and 'injectable' in s['tags']]
+        last = effective(model, 'dossier.inject_last', policy) or 0
+        index_size = effective(model, 'dossier.index_size', policy) or 0
+        chosen = preamble + (entries[-last:] if last else [])
+        index = [{'sid': s['sid'], 'heading': s['heading'], 'entry_date': s.get('entry_date')} for s in entries[-index_size:]] if index_size else []
+    else:
+        chosen = [s for s in sections if s['visibility'] == 'public' and s['inject'] == 'always']
+        index = []
+    if not chosen and not index:
+        return None
+    return {'doc': slug, 'revision': revision, 'subject': content.get('subject'),
+            'sections': [_section_view(s) for s in chosen], 'index': index,
+            'note': '人物档案：只追加的积累式正文；需要别的条目原文时用 next=recall 加 read。'}
+
+
+def ledger_block(docs, cls):
+    out = []
+    for slug in docs.slugs():
+        revision, content = docs.read(slug)
+        if not content or content.get('kind') != 'ledger':
+            continue
+        sections = readable_sections(content, cls)
+        if sections:
+            out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
+                        'sections': [_section_view(s) for s in sections]})
+    return out
 
 
 class ContextBuilder:
@@ -81,14 +158,14 @@ class ContextBuilder:
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
-        head,revision=self.store.head('persona:'+persona,'global-safe') or (None,None)
-        if not revision:
-            raise ValueError('REQUIRED_PERSONA_MISSING')
-        body=revision['content']['body']
+        session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
+        system,system_ref=render_system(self.store,persona,session_class)
+        docs=DocumentStore(self.store,persona)
+        persona_doc=docs.read('persona')[1]
+        body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
         content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
         if len(''.join(content_lines))<80:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
-        session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
         read=(scene_links.read_scope(self.store.config,scene) if scene_links else
               {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
                'scope_keys':[scope],'linked_scope_keys':[]})
@@ -262,7 +339,22 @@ class ContextBuilder:
             if str(group.get('wake_reason') or '').startswith('proactive'):
                 continuity['proactive_from_program'] = PROACTIVE_NOTE
             context['group_continuity_from_program'] = continuity
-        manifest={'session_class':session_class,'persona_revision':head['revision_id'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        model,policy=model_and_policy(self.store,persona)
+        documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
+        dossier=dossier_block(docs,model,policy,target.get('canonical') or event['person_id'],session_class)
+        if dossier:
+            context['dossier_from_program']=dossier
+            documents[dossier['doc']]=dossier['revision']
+        ledgers=ledger_block(docs,session_class)
+        if ledgers:
+            context['ledgers_from_program']=ledgers
+            documents.update({item['doc']:item['revision'] for item in ledgers})
+        from .ingress import episode_id as _episode_id
+        context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),*[m['_id'] for m in memories],
+            *[t['_id'] for t in task_states],
+            *['doc:%s#%s'%(item['doc'],section['sid']) for item in [*([dossier] if dossier else []),*ledgers] for section in item['sections']],
+            *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
+        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if self.store.config.get('task_mode')=='workspace':
             if relation:
                 context['understanding_update_from_program']={
@@ -305,5 +397,9 @@ class ContextBuilder:
             if skills_directory(self.store.config,scene['_id'],event['person_id']):
                 context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
             manifest['context_sha256']=sha(canonical(context))
-        system,manifest['system_ref']=render_system(self.store,persona)
+        # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
+        context['session_class']=session_class
+        context=order_context(context,effective(model,'recall_protocol.order',policy))
+        manifest['context_sha256']=sha(canonical(context))
+        manifest['system_ref']=system_ref
         return system,context,manifest

@@ -689,9 +689,11 @@ def load_coordinator():
     # 这条用例只会红在 ModuleNotFoundError 上，看不出是夹具缺文件——真文件新增同包 import 时这里同步。
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
+    # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
+    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py')
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
-                 'scene_links.py', 'render.py', 'visibility.py'):   # 少带一个真文件只会红在 ModuleNotFound
-        if name in ('render.py', 'visibility.py') and not os.path.exists(os.path.join(SRC, name)):
+                 'scene_links.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
+        if name in optional and not os.path.exists(os.path.join(SRC, name)):
             continue
         shutil.copyfile(os.path.join(SRC, name), os.path.join(package, name))
     bodies = dict(STUB_EXTRA, **{'state.py': STUB_STATE, 'channels.py': STUB_CHANNELS,

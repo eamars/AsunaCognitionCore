@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         return () => controller.abort();
       }, [visible, props.sessionId, selected]);
       return h('section', { style: { ...stack, height: '100%', overflowY: 'auto' }, 'aria-label': 'Asuna 记忆' },
-        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['self', '自我'],
+        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['documents', '文档'], ['self', '自我'],
           ['relation', '关系与偏好'], ['summary', '交流摘要'], ['source', '原始来源']],
           onChange: value => { setCategory(value); setOffset(0); } }),
         h(Button, { size: 'sm', onClick: () => setRefresh(x => x + 1) }, '刷新记忆'),

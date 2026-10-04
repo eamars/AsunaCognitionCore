@@ -25,7 +25,7 @@ def test_T0_4_episode_keeps_system_ref_not_system_text(store):
     assert 'system' not in doc
     ref = doc['system_ref']
     assert {'persona_doc_revision', 'common_sha256', 'render_sha256'} <= set(ref)
-    assert ref['persona_doc_revision'] == store.head('persona:P70', 'global-safe')[0]['revision_id']
+    assert ref['persona_doc_revision'] == store.head('doc:P70:persona', 'global-safe')[0]['revision_id']
     assert len(BSON.encode(doc)) <= 64 * 1024
     rendered, _ = render_system(store, 'P70')
     assert [call['messages'][0]['content'] for call in lane.calls] == [rendered] * 3

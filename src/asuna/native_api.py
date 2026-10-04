@@ -21,8 +21,10 @@ class NativeMemory:
         self.scopes = [{'scope_key': row['scope_key'], 'policy_epoch': row['policy_epoch']} for row in scenes]
         self.sources = [{'scene_id': row['_id'], 'policy_epoch': row['policy_epoch']} for row in scenes]
         persona = self.binding['persona']
+        self.persona = persona
+        # The persona itself is a document now; legacy persona heads are not listed.
         self.heads = {f'{kind}:{persona}|global-safe': ('self', title) for kind, title in (
-            ('persona', 'VOICE / 人格基线'), ('character_core', 'Character Core'), ('current_self', 'Current Self'))}
+            ('character_core', 'Character Core'), ('current_self', 'Current Self'))}
         relation = scene_links.relationship_target(self.store.config, self.store.db, self.scene, self.binding['person_id'])
         self.heads[relation['entity'] + '|' + relation['scope']] = ('relation', '关系与偏好')
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
@@ -43,12 +45,32 @@ class NativeMemory:
                  'revision': head['revision_id'], 'updated_at': head.get('updated_at')}
                 for head in heads]
 
+    def document_rows(self):
+        """Operator view of the persona's documents: every section, each with its visibility label."""
+        from .documents import DocumentStore
+        from .render import render_status
+        docs = DocumentStore(self.store, self.persona)
+        status = render_status(self.store, self.persona) if docs.head('persona') else None
+        rows = []
+        for slug in docs.slugs():
+            revision, content = docs.read(slug)
+            counts = {}
+            for section in content['sections']:
+                counts[section['visibility']] = counts.get(section['visibility'], 0) + 1
+            labels = ' / '.join(f'{k} {v}' for k, v in sorted(counts.items()))
+            red = status and status['over_budget'] and slug in ('persona', 'voice')
+            rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': f"{content['kind']} · {content.get('title') or slug}",
+                         'excerpt': f"{len(content['sections'])} 节 · {labels}" + (' · 超出渲染预算' if red else ''),
+                         'scope_key': 'doc:' + slug, 'revision': revision})
+        return rows
+
     def page(self, kind='all', offset=0):
-        if kind not in ('all', 'self', 'relation', 'summary', 'source'):
+        if kind not in ('all', 'documents', 'self', 'relation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
-        heads = self.head_rows(kind) if kind in ('all', 'self', 'relation') else []
+        heads = (self.document_rows() if kind in ('all', 'documents') else []) + (
+            self.head_rows(kind) if kind in ('all', 'self', 'relation') else [])
         rows = heads[offset:offset + self.PAGE + 1]
         if kind in ('all', 'summary', 'source'):
             messages = kind == 'source'
@@ -76,7 +98,23 @@ class NativeMemory:
         if not isinstance(identifier, str) or len(identifier) > 512 or ':' not in identifier:
             raise ValueError('INVALID_MEMORY_ID')
         kind, key = identifier.split(':', 1)
-        if kind == 'head' and key in self.heads:
+        if kind == 'doc':
+            from .documents import DocumentStore
+            from .render import render_status
+            revision_id, content = DocumentStore(self.store, self.persona).read(key)
+            row = content
+            if row:
+                lines = []
+                for section in content['sections']:
+                    label = ' · '.join([section['visibility'], section['inject'], *section.get('tags', []),
+                                        *([section['entry_date']] if section.get('entry_date') else [])])
+                    lines.append(('## ' + section['heading'] if section['heading'] else '（前言）') + f'\n〔{label}〕\n' + section['body'])
+                status = render_status(self.store, self.persona) if key in ('persona', 'voice') else None
+                result = {'id': identifier, 'body': '\n\n'.join(lines), 'interpretation': True, 'revision': revision_id,
+                          'scope_key': 'global-safe', 'source_ids': [],
+                          'levels': {'kind': content['kind'], 'sections': len(content['sections']),
+                                     **({'render': status} if status else {})}}
+        elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
             pair = self.store.head(entity, scope)
             row = pair[1] if pair else None

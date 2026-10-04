@@ -42,6 +42,22 @@ except Exception:
     scene_links = None
 
 
+def seed_documents(store, settings):
+    """Conversion before seeding; seeds only fill missing document heads (ADR-009 §5.4)."""
+    from .documents import DocumentStore
+    docs = DocumentStore(store, settings['persona'])
+    docs.convert_legacy_persona()
+    seeds = (store.config.get('persona_contribution') or {}).get('seeds') or []
+    for seed in seeds:
+        if not docs.head(seed['slug']):
+            docs.seed(seed['slug'], seed['kind'], Path(seed['path']).read_text(encoding='utf-8'),
+                      path=Path(seed['path']).name, title=seed.get('title'))
+    if not docs.head('persona') and settings.get('persona_file'):
+        # A v1 contribution without seeds: its persona file is the persona seed.
+        source = Path(settings['persona_file'])
+        docs.seed('persona', 'persona', source.read_text(encoding='utf-8'), path=source.name)
+
+
 def prepare_local_scene(store, settings):
     """Initialize only missing local state; never reseed memories or revisions."""
     person, scene = settings['person_id'], settings['scene_id']
@@ -55,10 +71,7 @@ def prepare_local_scene(store, settings):
     authorized = store.authorize(scene, person)
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
-    if not store.head('persona:' + settings['persona'], 'global-safe'):
-        source = Path(settings['persona_file'])
-        store.init_head('persona:' + settings['persona'], 'global-safe',
-                        {'body': source.read_text(encoding='utf-8')}, [str(source)])
+    seed_documents(store, settings)
     if scene_links:
         # 派生投影：配置里的联动边与 canonical 映射在库里留一份看得见的副本（读路径现算自配置）。
         scene_links.sync_identity_docs(store, store.config)

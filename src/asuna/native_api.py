@@ -9,14 +9,35 @@ import re
 from .config import character_id
 from .state import Denied
 from . import scene_links
+from .dialogue_summary import CORE_NOTICE_KINDS
 from .native_cognition import CognitionView
+from .peer_context import speaker_name
+
+# Task results and due plans are core notices queued in the requester's scene, not things they said.
+NOT_CORE_NOTICE = {'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)}}
+VISIBILITY_LABELS = {'public': '公开', 'owner_private': '仅主人可见'}
+INJECT_LABELS = {'always': '每轮都用', 'on_demand': '相关时才用', 'never': '不放进对话'}
+DOCUMENT_KINDS = {'persona': '人格设定', 'voice': '说话方式', 'ledger': '承诺与挂账', 'dossier': '人物档案', 'working': '工作笔记'}
+
+
+def document_title(content, slug):
+    kind = DOCUMENT_KINDS.get(content['kind'], '文档')
+    title = content.get('title') or slug
+    return kind if title in (slug, content['kind']) else kind + ' · ' + title
+
+
+def plain(text):
+    """One line of readable text: markdown markers and emphasis removed."""
+    text = re.sub(r'^\s*(?:[-*#>]\s*)+', '', ' '.join(text.split()))
+    return re.sub(r'\*\*|__|`', '', text)
 
 
 class NativeMemory:
     PAGE = 24
     LABELS = {'self': '自我', 'relation': '对人的认识', 'world': '对世界的认识', 'derived_summary': '交流摘要',
               'character_interpretation': '当时的理解', 'public_statement': '角色的发言',
-              'reported_speech': '他人的原话', 'observed_fact': '事实记录', 'source': '原始消息'}
+              'reported_speech': '他人的原话', 'observed_fact': '事实记录', 'source': '原始消息',
+              'document': '文档', 'affect': '情感', 'affect_event': '情感', 'persona_job_report': '作业报告'}
 
     def __init__(self, worker, session_id):
         self.store = worker.app.store
@@ -39,7 +60,7 @@ class NativeMemory:
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
                            '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
                                                  {'scope_key': 'owner-private:' + persona, 'policy_epoch': 1}]}
-        self.message_query = {'$and': [{'$or': self.sources}, {'$or': [
+        self.message_query = {'$and': [{'$or': self.sources}, NOT_CORE_NOTICE, {'$or': [
             {'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}]}
         self.cognition = CognitionView(self)
 
@@ -48,6 +69,11 @@ class NativeMemory:
             return '角色共用'
         if scene_id == self.scene['_id'] and self.binding.get('native_title'):
             return self.binding['native_title']
+        # The same title the conversation list shows for that scene.
+        main = self.store.db.sessions.find_one({'scene_id': scene_id, 'main_conversation': True,
+                                                'native_title': {'$exists': True}}, {'native_title': 1})
+        if main:
+            return main['native_title']
         match = re.fullmatch(r'qq:[^:]+:(group|dm):(.+)', scene_id)
         return ('群聊 · ' if match[1] == 'group' else '私聊 · ') + match[2] if match else '本地聊天'
 
@@ -95,15 +121,18 @@ class NativeMemory:
         status = render_status(self.store, self.persona) if docs.head('persona') else None
         rows = []
         for slug in docs.slugs():
-            revision, content = docs.read(slug)
+            head, stored = docs.head(slug)
+            revision, content = head['revision_id'], stored['content']
             counts = {}
             for section in content['sections']:
-                counts[section['visibility']] = counts.get(section['visibility'], 0) + 1
-            labels = ' / '.join(f'{k} {v}' for k, v in sorted(counts.items()))
+                label = VISIBILITY_LABELS[section['visibility']]
+                counts[label] = counts.get(label, 0) + 1
+            labels = '，'.join(f'{k} {v} 节' for k, v in counts.items())
             red = status and status['over_budget'] and slug in ('persona', 'voice')
-            rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': f"{content['kind']} · {content.get('title') or slug}",
-                         'excerpt': f"{len(content['sections'])} 节 · {labels}" + (' · 超出渲染预算' if red else ''),
-                         'scope_key': 'doc:' + slug, 'revision': revision})
+            rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': document_title(content, slug),
+                         'excerpt': labels + ('，超出渲染预算' if red else ''),
+                         'scope_key': 'doc:' + slug, 'revision': revision,
+                         'updated_at': stored.get('created_at')})
         return rows
 
     def affect_rows(self):
@@ -160,7 +189,7 @@ class NativeMemory:
             if search:
                 query = {'$and': [query, {'text' if messages else 'body_markdown': {
                     '$regex': re.escape(search), '$options': 'i'}}]}
-            projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1,
+            projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1, 'event.raw.asuna_peer': 1,
                 'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1, '_memory_time': 1,
                 'excerpt': {'$substrCP': [{'$ifNull': ['$text' if messages else '$body_markdown', '']}, 0, 200]}}
             collection = self.store.db.messages if messages else self.store.db.memory_units
@@ -183,9 +212,10 @@ class NativeMemory:
                 source = row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:')
                 rows.append({'id': ('source:' if messages else 'unit:') + row['_id'],
                     'kind': 'source' if messages else row.get('epistemic_type', row.get('kind')),
-                    'title': ('原话 · ' + str(row.get('author', '')).replace('qq:', 'QQ · ', 1)) if messages else
-                        re.sub(r'^\s*(?:[-*#>]\s*)+', '', ' '.join(row['excerpt'].split()))[:48] or '无正文的记忆',
-                    'excerpt': row['excerpt'], 'scene_id': source,
+                    'title': ('原话 · ' + speaker_name(self.store.config, row.get('author'), row, self.store.db)) if messages else
+                        plain(row['excerpt'])[:48] or '无正文的记忆',
+                    # A memory's title is already the start of its text; only original messages show both.
+                    'excerpt': row['excerpt'] if messages else '', 'scene_id': source,
                     'updated_at': row.get('_memory_time') or row.get('generated_at') or row.get('occurred_at')})
         rows.sort(key=lambda row: (self.timestamp(row), row['id']), reverse=True)
         rows = rows[offset - skipped:]
@@ -193,8 +223,9 @@ class NativeMemory:
             row.pop('body', None)
             row.pop('source_ids', None)
             row['category_label'] = self.LABELS.get(row['kind'], '记忆')
-            row['scene_title'] = self.scene_title(row.get('scene_id') or
-                row.get('scope_key', '').removeprefix('scene:'))
+            # Documents and job reports belong to the persona, not to any one conversation.
+            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report') else self.scene_title(
+                row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:'))
         return {'scene_id': self.scene['_id'], 'scene_title': self.scene_title(self.scene['_id']),
                 'persona': self.binding['persona'], 'subject_name': self.cognition.subject_name(),
                 'persona_name': self.store.config.get('chat', {}).get('display_name', '当前角色'),
@@ -234,7 +265,6 @@ class NativeMemory:
                                             | {'amendments': amendments}}
         elif kind == 'doc':
             from .documents import DocumentStore
-            from .render import render_status
             pair = DocumentStore(self.store, self.persona).head(key)
             if pair and pair[1] is None:
                 raise Denied('MEMORY_REVISION_UNAVAILABLE')
@@ -243,14 +273,12 @@ class NativeMemory:
             if row:
                 lines = []
                 for section in content['sections']:
-                    label = ' · '.join([section['visibility'], section['inject'], *section.get('tags', []),
-                                        *([section['entry_date']] if section.get('entry_date') else [])])
-                    lines.append(('## ' + section['heading'] if section['heading'] else '（前言）') + f'\n〔{label}〕\n' + section['body'])
-                status = render_status(self.store, self.persona) if key in ('persona', 'voice') else None
-                result = {'id': identifier, 'body': '\n\n'.join(lines), 'interpretation': True, 'revision': revision_id,
+                    # Who may see it and when it is used, in words; the section body follows unchanged.
+                    label = '，'.join([VISIBILITY_LABELS[section['visibility']], INJECT_LABELS[section['inject']],
+                                      *([section['entry_date']] if section.get('entry_date') else [])])
+                    lines.append(('### ' + section['heading'] + '\n' if section['heading'] else '') + f'*{label}*\n\n' + section['body'])
+                result = {'id': identifier, 'body': '\n\n'.join(lines), 'interpretation': True,
                           'scope_key': 'global-safe', 'source_ids': [],
-                          'levels': {'kind': content['kind'], 'sections': len(content['sections']),
-                                     **({'render': status} if status else {})},
                           'usage': self.cognition.usage(identifier, revision=revision_id)}
         elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
@@ -301,7 +329,7 @@ class NativeMemory:
                 result['usage'] = self.cognition.usage(identifier)
         elif kind == 'source':
             row = self.store.db.messages.find_one({**self.message_query, '_id': key},
-                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1})
+                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1})
             if row:
                 result = {'id': identifier, 'body': row.pop('text', ''), 'interpretation': False,
                           'category_label': '原始消息', 'usage': self.cognition.usage(identifier), **row}
@@ -324,7 +352,7 @@ class NativeMemory:
         result['sources_truncated'] = len(ids) > 12
         ids = ids[:12]
         result['sources'] = list(self.store.db.messages.find({**self.message_query, '_id': {'$in': ids}},
-            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1}).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
+            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'event.raw.asuna_peer': 1}).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
         # Self/relationship revisions can cite interpretation or summary units,
         # not only original messages. Keep the source type and the same scope.
         for source in self.store.db.memory_units.find({**self.unit_query, '_id': {'$in': ids}},
@@ -340,4 +368,10 @@ class NativeMemory:
         for source in result['sources']:
             source['text'] = source.get('text', '')[:8192]
             source['scene_title'] = self.scene_title(source.get('scene_id'))
+            source['author'] = speaker_name(self.store.config, source.get('author'), source, self.store.db) if source.get('author') else None
+            source.pop('event', None)
+        for field in ('author', 'speaker'):
+            if result.get(field):
+                result[field] = speaker_name(self.store.config, result[field], row, self.store.db)
+        result.pop('event', None)
         return result

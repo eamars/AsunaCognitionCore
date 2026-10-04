@@ -14,9 +14,13 @@ import threading
 import time
 
 from . import summary_attribution, summary_trigger
+from .peer_context import speaker_name
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
+
+
+CORE_NOTICE_KINDS = ('task_feedback', 'scheduled')
 
 
 class DialogueSummarizer:
@@ -59,6 +63,8 @@ class DialogueSummarizer:
         query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
                  'scene_seq': {'$gt': scene['summary_start_seq']},
                  'summary_batch_id': {'$exists': False},
+                 # Core notices (task results, due plans) ride the requester's scene but are not their words.
+                 'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)},
                  '$or': [{'direction': 'inbound'},
                          {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
         rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
@@ -80,17 +86,13 @@ class DialogueSummarizer:
         return rows
 
     def _labels(self, rows):
-        """给多说话人的批次带上显示名：模型按名字顺句子，程序仍按 person_id 认归属。"""
-        if len({row.get('author') for row in rows}) < 2:
-            return {}
+        """Display names for the model; attribution itself stays keyed by person_id."""
         names = {}
         for row in rows:
             author = row.get('author')
-            if not author or author in names:
-                continue
-            identity = self.store.db.identities.find_one({'_id': author}, {'display_name': 1}) or {}
-            names[author] = identity.get('display_name') or author
-        # 同名不合并人物：显示名撞车时把 person_id 一起给模型，否则两个人在转述里会长成一个。
+            if author and author not in names:
+                names[author] = speaker_name(self.store.config, author, row, self.store.db)
+        # Two people with the same name are never merged: give the model the person_id too.
         shared = {name for name in names.values() if list(names.values()).count(name) > 1}
         return {author: (name + '（' + author + '）' if name in shared else name)
                 for author, name in names.items()}

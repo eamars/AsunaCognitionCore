@@ -21,6 +21,7 @@ from .config import ROOT, load, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
+from .peer_context import speaker_name
 from .skills import skills_directory, skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
@@ -260,10 +261,7 @@ class BusinessWorker:
                            if sender not in channel.get('blocked_senders', [])]
                 if not members or not route['scene_id'].startswith('qq:'):
                     continue
-                scene_id = route['scene_id']
-                label = '群聊' if ':group:' in scene_id else '私聊'
-                scenes.append((scene_id, members[0]['person_id'], 'QQ',
-                               label + ' · ' + (route.get('display_name') or scene_id.rsplit(':', 1)[-1])))
+                scenes.append((route['scene_id'], members[0]['person_id'], 'QQ', self.qq_title(route)))
         bindings = list(store.db.sessions.find({'native_host': True}))
         first = not any(row.get('navigation_version') == 1 for row in bindings)
         entries, retire = [], set()
@@ -463,6 +461,20 @@ class BusinessWorker:
         if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
 
+    def qq_title(self, route):
+        """Conversation title a person can read: the configured name, else the group name or peer
+        name QQ last sent with a message in that scene, else the number."""
+        group = route['target']['type'] == 'group'
+        name = route.get('display_name')
+        if not name:
+            last = self.app.store.db.messages.find_one(
+                {'scene_id': route['scene_id'], 'direction': 'inbound', 'event.raw': {'$exists': True}},
+                {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
+            raw = (last or {}).get('event', {}).get('raw', {})
+            name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
+        name = ' '.join(str(name or '').split())[:40] or route['target']['id']
+        return ('群聊' if group else '私聊') + ' · ' + name
+
     def channel_input(self, row):
         """A real processed QQ receipt, including quiet/error outcomes; never a model turn."""
         from .channels import route_for_scene
@@ -479,8 +491,7 @@ class BusinessWorker:
         if not binding or not binding.get('main_conversation'):
             binding = self.bind_session(session_id, {**(binding or {}), **ep, 'lane': 'character', 'scope_key': scene['scope_key'],
                 'cwd': self.qq_workspace, 'role_session_id': session_id, 'main_conversation': True,
-                'native_title': ('群聊' if route['target']['type'] == 'group' else '私聊') + ' · '
-                    + (route.get('display_name') or route['target']['id']), 'navigation_version': 1})
+                'native_title': self.qq_title(route), 'navigation_version': 1})
         indexer = getattr(self.app, 'memory_indexer', None)
         if indexer and scene['_id'] not in indexer.scene_ids:
             indexer.scene_ids.append(scene['_id'])
@@ -489,6 +500,7 @@ class BusinessWorker:
                 indexer.summarizer.initialize()
         return {'session_id': session_id, 'binding': binding, 'input': {
             'id': row['_id'], 'text': row['text'], 'sender': row['event']['channel']['sender_id'],
+            'sender_name': speaker_name(config, row['author'], row, store.db),
             'received_at': row['received_at'], 'state': row.get('ingress_state', 'ACCEPTED')}}
 
     def dispatch(self, method, args):

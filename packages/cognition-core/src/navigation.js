@@ -33,7 +33,7 @@ export async function recordChannelInput(core, receipt) {
   const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
   const message = createUserMessage({ source: { kind: 'user', channel: 'qq', receipt: input.id,
     sender: input.sender, received_at: input.received_at },
-    content: [{ type: 'text', text: 'QQ · ' + input.sender + '\n' + input.text }] });
+    content: [{ type: 'text', text: (input.sender_name || 'QQ · ' + input.sender) + '\n' + input.text }] });
   const hot = ctx.sessions.get(id);
   const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id);
   if (hot) {

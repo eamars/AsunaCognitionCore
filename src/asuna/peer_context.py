@@ -183,3 +183,18 @@ def apply_peer_context(context, doc, key="sender_identity"):
     if line and isinstance(context, dict):
         context[key] = line
     return line, reason
+
+
+def speaker_name(config, person_id, row=None, db=None):
+    """Readable name for a stored author: a saved identity name, the character, the local user, or the QQ profile saved with the row."""
+    chat = config.get("chat", {})
+    identity = db.identities.find_one({"_id": person_id}, {"display_name": 1}) if db is not None and person_id else None
+    if identity and _clean(identity.get("display_name")):
+        return _clean(identity["display_name"])
+    if person_id == (config.get("character_id") or chat.get("persona")):
+        return chat.get("display_name") or person_id
+    if person_id == chat.get("person_id"):
+        return "本机用户"
+    peer = peer_from_message(row) or {}
+    name = _clean(peer.get("display")) or _clean(peer.get("card")) or _clean(peer.get("nickname"))
+    return name or str(person_id or "").replace("qq:", "QQ · ", 1)

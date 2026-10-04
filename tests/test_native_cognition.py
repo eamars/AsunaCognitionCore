@@ -56,7 +56,7 @@ def test_usage_never_borrows_another_context(view, changes):
     snapshot(store, binding, **changes)
     memory = NativeMemory(worker, 'role')
     assert memory.cognition.snapshot is None
-    assert '暂无上下文' in memory.detail('doc:persona')['usage']
+    assert '还没有可核对的一轮' in memory.detail('doc:persona')['usage']
 
 
 def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):

@@ -40,7 +40,7 @@ class CognitionView:
 
     def usage(self, identifier, content=None, revision=None):
         if not self.snapshot:
-            return '已保存；当前会话暂无上下文可核对'
+            return '这个对话还没有可核对的一轮'
         context = self.snapshot['context']
         manifest = self.snapshot['manifest']
         kind, key = identifier.split(':', 1)
@@ -55,18 +55,18 @@ class CognitionView:
             else:
                 overlay = context.get('overlay')
                 if overlay is not None:
-                    return '最近一次上下文已选用' if overlay == content else '已保存；最近一次上下文使用的是旧内容'
+                    return '最近一轮（{time}）用到了这一版' if overlay == content else '最近一轮（{time}）用的还是旧版本'
                 selected = None
             if selected:
-                return '最近一次上下文已选用' if selected == revision else '已保存；最近一次上下文使用的是旧版本'
+                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
         elif kind == 'doc':
             # The persona is a document (ADR-009); the manifest names the revision this turn rendered.
             selected = manifest.get('persona_revision') if key == 'persona' else manifest.get('documents', {}).get(key)
             if selected:
-                return '最近一次上下文已选用' if selected == revision else '已保存；最近一次上下文使用的是旧版本'
+                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
         elif kind == 'unit':
             if key in manifest.get('selected', []):
-                return '最近一次上下文已选用'
+                return '最近一轮（{time}）用到了这一版'
             if key in self.snapshot.get('monologue_refs', []):
                 return '最近一轮形成的理解，保存在该轮原生会话中'
         elif kind == 'source':
@@ -74,10 +74,10 @@ class CognitionView:
             group = context.get('group_continuity_from_program', {})
             rows += group.get('related_messages', []) + group.get('current_speaker_tail', [])
             if any(row.get('_id') == key for row in rows):
-                return '最近一次上下文已选用'
+                return '最近一轮（{time}）用到了这一版'
             if key == 'in-' + self.snapshot['_id']:
-                return '最近一次上下文的输入'
-        return '已保存；最近一次上下文未选用'
+                return '是最近一轮（{time}）的输入'
+        return '最近一轮（{time}）没有用到'
 
     def peer(self):
         query = {'$and': [self.memory.message_query, {
@@ -100,10 +100,10 @@ class CognitionView:
                 'scene_id': self.binding['scene_id'], 'updated_at': profile_at or message.get('occurred_at'),
                 'occurred_at': profile_at or message.get('occurred_at'),
                 'status_label': '已记录', 'source_ids': [message['_id']],
-                'usage': ('最近一次上下文已选用' if self.snapshot and
+                'usage': ('最近一轮（{time}）用到了这一版' if self.snapshot and
                           self.snapshot['context'].get('sender_identity') == text else
-                          '已保存；最近一次上下文未选用' if self.snapshot else
-                          '已保存；当前会话暂无上下文可核对')}
+                          '最近一轮（{time}）没有用到' if self.snapshot else
+                          '这个对话还没有可核对的一轮')}
 
     def supplements(self, kind):
         rows = []

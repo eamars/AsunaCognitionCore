@@ -22,6 +22,9 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
 export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),
   configPath: z.string().volatile(), persona: z.string().volatile(),
+  // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
+  // visible to every root agent; Asuna's role and action presets already restrict their own tools.
+  mountSchedule: z.boolean().default(true),
   routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
 // Responsibility routes are configured independently; a lane name never implies a model.
@@ -67,19 +70,14 @@ export class CognitionCore {
         throw new Error('Configure the Asuna Python worker, workspace, and local configuration');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
-      // Schedule is optional in the stock Web profile. Reuse it if installed;
-      // otherwise mount that same native service once in this Host.
-      if (!this.ctx.get('schedule')) await this.ctx.plugin(ScheduleService, {});
-      await new Promise(resolve => { this.ctx.inject(['schedule'], ctx => {
-        this.schedules.ctx = ctx; resolve();
-      }); });
+      const schedule = await this.attachSchedule();
       this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
         skill_directories: await this.ctx.asunaFloor.skillPaths(persona), routes: this.config.routes, models,
         integration_project: await this.ctx.asunaFloor.integrationProject(persona),
-        skill_workspace: await this.ctx.asunaFloor.skillWorkspace() });
+        skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await this.ctx.workspaceController.create({ path: status.workspace });
       this.specs = await this.worker.call('tool_specs');
@@ -90,6 +88,19 @@ export class CognitionCore {
       throw error;
     });
     return this.initializing;
+  }
+
+  // Schedule is optional in the stock Web profile. Reuse it if installed; otherwise mount that
+  // same native service once in this Host, unless mountSchedule is false (then plans are off).
+  async attachSchedule() {
+    if (!this.ctx.get('schedule')) {
+      if (this.config.mountSchedule === false) return false;
+      if (!this.scheduleMounted) { this.scheduleMounted = true; await this.ctx.plugin(ScheduleService, {}); }
+    }
+    await new Promise(resolve => { this.ctx.inject(['schedule'], ctx => {
+      this.schedules.ctx = ctx; resolve();
+    }); });
+    return true;
   }
 
   async resolveRoutes(routes) {
@@ -223,6 +234,9 @@ export class CognitionCore {
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
       receipt: stage.token, request_refs: [agent.session.id + ':' + last.seq],
+      // D-3: completed compactions; the worker resends the full history window when this changes.
+      compaction_generation: agent.session.snapshotEvents()
+        .filter(event => event.type === 'compaction/end' && !event.data?.error).length,
     };
   }
 

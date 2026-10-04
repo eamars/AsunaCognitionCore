@@ -133,6 +133,8 @@ The default byte limit equals the 8 MiB hard limit: QQ photos are routinely 4-6 
 
 The host uses DSH's native scheduler; it does not run a second host timer wheel. Scheduling, updating, or cancelling a plan is a character decision in the authorized scene. A due plan re-enters that scene and asks the character to decide what to do. A due event is not new authorization and does not mean its requested work has completed. Plan status and policy epoch are checked before dispatch.
 
+Asuna reuses an installed DSH Schedule service. When the Host has none, it mounts that same service once, unless the `asuna-cognition-core` setting `mountSchedule` is `false`; then plans, heartbeat and settlement are off. By DSH design the `schedule_*` tools of a mounted Schedule are visible to every root agent in the Host; Asuna's role and action presets restrict their own tools.
+
 ## Managed integration and self-development
 
 The managed integration runner is available only to the configured local owner profile. It uses a separate persistent development directory. `integration_test` runs a frozen, read-only `/app` snapshot with separate writable `/data`; `integration_start` enables a new frozen snapshot as a managed process; later development edits are not deployed automatically. `integration_status` reports process state and bounded logs, not platform connectivity or delivery. `integration_stop` stops the managed process and disables host restart restoration.

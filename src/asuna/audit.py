@@ -5,7 +5,7 @@ import html
 import json
 from pathlib import Path
 from .evidence import canonical,sha
-from .state import Store,Denied
+from .state import Store,Denied,content_digest
 
 
 def reconcile_calls(observed_body_hashes,events):
@@ -29,17 +29,73 @@ def verify(events: list[dict]):
     return heads
 
 
-def replay(events: list[dict], target: Store):
+def _commit_key(payload):
+    return payload['collection'], (payload['document']['_id'] if 'document' in payload else payload['id'])
+
+
+def verify_documents(events: list[dict], store: Store):
+    """Compare each document's latest audited commit with the collection (ADR-009 D-4).
+
+    Inline commits are compared by value, reference commits by content_sha256. A document
+    whose stored revision differs from the trace's latest is outside the trace and not judged.
+    """
+    latest={}
+    for event in sorted(events,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):
+        if event['type']=='state.commit':
+            latest[_commit_key(event['payload'])]=event['payload']
+    tampered=[]
+    for (collection,key),payload in latest.items():
+        doc=store.db[collection].find_one({'_id':key})
+        expected=payload.get('document')
+        revision=expected.get('revision') if expected is not None else payload.get('revision')
+        if doc is None or (doc.get('revision') or 0)!=(revision or 0):
+            continue
+        wanted=content_digest(collection,expected) if expected is not None else payload['content_sha256']
+        if content_digest(collection,doc)!=wanted:
+            tampered.append(collection+'/'+str(key))
+    if tampered:
+        raise ValueError('AUDIT_DOCUMENT_TAMPERED: '+', '.join(sorted(tampered)))
+    return len(latest)
+
+
+def trace_contents(events: list[dict], store: Store):
+    """{content_sha256: document} for reference commits that still match the collection; exported with a trace."""
+    out={}
+    for event in events:
+        payload=event['payload']
+        if event['type']=='state.commit' and 'content_sha256' in payload:
+            doc=store.db[payload['collection']].find_one({'_id':payload['id']})
+            if doc is not None and content_digest(payload['collection'],doc)==payload['content_sha256']:
+                out[payload['content_sha256']]=doc
+    return out
+
+
+def replay(events: list[dict], target: Store, contents: dict | None=None):
     if not target.name.startswith('asuna_v2_test_'):
         raise Denied('REPLAY_REQUIRES_NEW_TEST_DATABASE')
     verify(events)
+    contents=contents or {}
+    last={}
+    for event in sorted(events,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):
+        if event['type']=='state.commit':
+            last[_commit_key(event['payload'])]=event['_id']
     if any(target.db[c].count_documents({}) for c in ('state_heads','tasks','messages')):
         raise Denied('REPLAY_TARGET_NOT_EMPTY')
     target.migrate()
     # Only state projections; this function has no lane/tool/publication dependency.
     for event in sorted(events,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):
         if event['type']=='state.commit':
-            payload=event['payload'];doc=payload['document']; collection=payload['collection']
+            payload=event['payload'];collection=payload['collection']
+            doc=payload.get('document')
+            if doc is None:
+                doc=contents.get(payload['content_sha256'])
+                if doc is None:
+                    # Only the final revision of a referenced document has to be supplied.
+                    if last[_commit_key(payload)]==event['_id']:
+                        raise ValueError('REPLAY_CONTENT_MISSING: '+collection+'/'+str(payload['id']))
+                    continue
+                if content_digest(collection,doc)!=payload['content_sha256']:
+                    raise ValueError('REPLAY_CONTENT_MISMATCH: '+collection+'/'+str(payload['id']))
             current=target.db[collection].find_one({'_id':doc['_id']})
             if not current or current.get('revision',0)<doc.get('revision',0):
                 target.db[collection].replace_one({'_id':doc['_id']},copy.deepcopy(doc),upsert=True)
@@ -55,7 +111,7 @@ def render_html(events, output: Path):
     verify(events)
     from .config import ROOT
     groups={};responses={}
-    revisions={e['payload']['document']['_id']:e['payload']['document'] for e in events if e['type']=='state.commit' and e['payload'].get('collection')=='state_revisions'}
+    revisions={e['payload']['document']['_id']:e['payload']['document'] for e in events if e['type']=='state.commit' and e['payload'].get('collection')=='state_revisions' and 'document' in e['payload']}
     def pretty(value):return '<pre>'+html.escape(json.dumps(value,ensure_ascii=False,indent=2,default=str))+'</pre>'
     def requests(event):
         refs=event['payload'].get('request_refs',[])

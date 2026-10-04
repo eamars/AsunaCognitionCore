@@ -200,14 +200,17 @@ class RuntimeHost:
             if self.integration:
                 self.integration.restore()
             self.evidence.record('host.integration.ready', {})
-            from .schedule import ScheduleService
-            self.schedule = ScheduleService(self.app, self.controller, lane=self.schedule_lane)
-            self.app.coordinator.scheduler = self.schedule
-            self.evidence.record('host.schedule.ready', {})
+            self.schedule = None
+            if self.schedule_lane is not False:          # False: the native Host has no Schedule (mountSchedule=false)
+                from .schedule import ScheduleService
+                self.schedule = ScheduleService(self.app, self.controller, lane=self.schedule_lane)
+                self.app.coordinator.scheduler = self.schedule
+            self.evidence.record('host.schedule.ready', {'active': self.schedule is not None})
             self.controller.worker.start()
             self.controller.task_worker.start()
             self.stack.callback(self.controller.stop)
-            self.stack.callback(self.schedule.close)
+            if self.schedule:
+                self.stack.callback(self.schedule.close)
             self._complete_activations()
             self._restart_watch = threading.Thread(target=self._watch_published_restart,
                                                    name='asuna-restart-watch', daemon=True)

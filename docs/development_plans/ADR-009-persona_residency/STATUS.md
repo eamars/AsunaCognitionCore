@@ -13,7 +13,8 @@
 | P3 情感引擎 | 完成（见下方报告） |
 | P4 记忆扩展、人格数据 API、探针、人格作业、导出 | 完成（见下方报告） |
 | P5 调度对齐、节律、心跳、沉淀、表达、显著度 | 完成（两部分报告见下方；人工检查见第二部分） |
-| P6–P7 | 未开始 |
+| P6 DSH 对齐（其余） | 完成（报告见下方） |
+| P7 协调器拆分与遗留收尾 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -202,6 +203,25 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：P6 — D-3 历史增量、D-4 审计/回执去重、D-6 mount_schedule、CONSULT 的 JS 测试。
 ```
 
+## P6 报告
+
+```text
+阶段：P6
+提交：见本提交
+完成：
+  T6.1 PASS [Mongo] 历史增量：sessions 行记 history_hwm（按来源场景）、history_generation 与 compaction_generation；私聊连续两轮，第二轮 delivered_history 不再包含第一轮已给出的行、第一轮的输入与她自己的回复（上下文附 history_from_program 说明省略数）；未唤醒的行在下一次唤醒回合中恰好出现一次；阶段结果报告的压缩代数 +1 后下一回合重发完整 12 条窗口；新的原生会话（如 Web 新建对话）没有游标，得到完整窗口
+  T6.2 PASS [Mongo] 大于 16 KB 的文档提交后 audit_events 只存 {collection, id, revision, content_sha256, bytes}；哈希链照旧（verify）；新增 audit.verify_documents 按每个文档最近一次提交比对集合（内联按值、引用按 sha），手工篡改大文档或小文档都报 AUDIT_DOCUMENT_TAMPERED；replay 对引用提交需要 trace 附带的内容（缺最终修订时报 REPLAY_CONTENT_MISSING），CLI trace 导出 {events, contents}；phase.output 只存 content_sha256/bytes（reasoning 同样）；原生 lane_receipts 只存 {content_sha256, bytes, native_ref, blank}，同一 operation 重复请求由 Host 从已保存的阶段结果回答（不重新生成）并校验 sha
+  T6.3 PASS [JS] CognitionCore 配置 mountSchedule（缺省 true）：false 时 Asuna 不挂载 Schedule，worker 以 schedule=false 初始化、计划功能关闭；true 且 Host 未安装时恰好挂载一次；已安装时复用
+  T6.4 PASS [JS] CONSULT 阶段在空闲的角色会话中运行，行动工具仍在等待；返回值是真实的原生助手事件；结束后角色会话不等待下一阶段（无 waiter），随即可以接纳新的人类输入
+  T6.5 PASS [JS] native-loop、publication 等全部 JS 用例通过（18/18）
+反证：T6.1/T6.2 用例在改动前失败（无 history_delta 模块、state.commit 内联全文）；T6.3 在改动前无 attachSchedule
+删除：phase.output 与原生回执中的全文
+偏离：D6-1…D6-4（见下）
+未验证：真实 DSH 会话中 compaction/end 事件计数随压缩增加（固定版的 dsh-compaction-basic 写入该事件，已读源码核实；未在演示环境触发一次真实压缩）
+人工检查：见下方「P6 演示检查」（若有）
+下一步：P7 — D-8 拆分 Coordinator.advance；CLEANUP 剩余删除；T7.3。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -243,6 +263,10 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D5-3 | 心跳与沉淀计划只在本机配置 `persona_runtime.<persona>.heartbeat_target` 指向 owner_private 场景、或人格模型有 `rhythm.settle_at` 且时区为 IANA 时才建立；建立失败写审计 `rhythm.plan_refused`，不影响启动 | 不替人格选目标或时刻；目标场景属于本机部署事实（§6） |
 | D5-4 | 晋升的来源回合从 `context.prepared` 审计的 manifest 中计（记忆单元被选入的回合），本地日期按人格时区 | 「被 ≥2 个回合引用」需要一个确定、可审计的事实来源 |
 | D5-5 | 分段的 not_before 只用于渠道场景；分段的后续段在前段未送达前不可被 claim，且排在队首时整条渠道等待 | 保证同一场景的出站次序；本地场景没有平台节奏需要模拟 |
+| D6-1 | 历史游标在 prepare 时按「本回合将进入的角色会话」计算：Web 输入用其原生会话 id，渠道与计划输入用与原生绑定相同的解析规则（在 ingest 时解析一次并写入 episode）；无原生会话的 lane（测试）用 `history:<binding>` 行 | 上下文快照（context.prepared）与实际给出的历史一致、可审计；会话变了（新建对话）自然得到完整窗口 |
+| D6-2 | 压缩代数 = 会话中无 error 的 `compaction/end` 事件数，随每个阶段结果回传；在角色阶段前比较「游标设置时的代数」与「最近观测的代数」 | 固定版有可观测的持久事件，按 D-3 不用启发式；压缩发生在本回合内时下一回合重发 |
+| D6-3 | `scenes.sequence` 与 `memory_units.salience` 是 `$inc` 计数器，不进入文档摘要（COUNTER_FIELDS）；隐私删除对审计的既有改写不在篡改检测范围内 | 这些字段本来就不产生修订；否则任何一次发言都会被判为篡改 |
+| D6-4 | FakeLane（测试替身）的回执仍保存全文；配置项名为 `mountSchedule`（JS 配置的驼峰命名），即 ADR 中的 `mount_schedule` | 测试替身没有原生转录可回读；命名与同一对象的其他配置项一致 |
 
 ## 给 owner 的待决事项
 

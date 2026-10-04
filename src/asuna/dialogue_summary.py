@@ -165,9 +165,11 @@ class DialogueSummarizer:
             # known not to contain a usable summary. DSH replays DONE operations,
             # so use a fresh operation only for that explicit terminal result.
             # Unknown delivery still reuses the original idempotency key.
-            while receipt and not (
-                    receipt.get('result', {}).get('finish_reason') == 'stop'
-                    and str(receipt.get('result', {}).get('content') or '').strip()):
+            def usable(result):
+                text = result.get('content')
+                return result.get('finish_reason') == 'stop' and (
+                    str(text).strip() if text is not None else result.get('bytes') and not result.get('blank'))
+            while receipt and not usable(receipt.get('result', {})):
                 attempt += 1
                 operation = key + ':retry-' + str(attempt)
                 receipt = self.store.db.lane_receipts.find_one({'_id': operation})

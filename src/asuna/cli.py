@@ -71,7 +71,13 @@ def main():
             if args.format=='html':
                 if not args.out:raise ValueError('OUT_REQUIRED')
                 render_html(value,Path(args.out));value={'path':args.out}
-        elif args.command=='replay':value=replay(json.loads(Path(args.trace).read_text(encoding='utf-8')),store)
+            elif args.kind=='trace':
+                # Documents over 16 KB are audited by reference (D-4); a trace carries their content.
+                from .audit import trace_contents
+                value={'events':value,'contents':trace_contents(value,store)}
+        elif args.command=='replay':
+            trace=json.loads(Path(args.trace).read_text(encoding='utf-8'))
+            value=replay(trace['events'],store,trace.get('contents')) if isinstance(trace,dict) else replay(trace,store)
         if ev:write_json(ev.root/'command_result.json',value)
         print(json.dumps(value,ensure_ascii=False,default=str))
         return 1 if isinstance(value,dict) and value.get('status')=='FAIL' else 0

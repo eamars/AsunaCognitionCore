@@ -9,6 +9,7 @@ from asuna.chat import Chat, prepare_local_scene, redact
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
+from asuna.state import content_ref
 from asuna.router import Router
 
 
@@ -88,8 +89,8 @@ def test_input_queue_accepts_while_generating_and_emits_only_new_speech(store, t
         assert len(lane.histories) == 1
         incoming = list(store.db.messages.find({'direction': 'inbound'}).sort('scene_seq', 1))
         assert [m['text'] for m in incoming] == ['第一条输入', '生成期间收到的第二条输入']
-        outputs = [e['payload']['content'] for e in store.db.audit_events.find({'type': 'phase.output'})]
-        assert 'PRIVATE_2' in outputs
+        outputs = [e['payload']['content_sha256'] for e in store.db.audit_events.find({'type': 'phase.output'})]
+        assert content_ref('PRIVATE_2')['content_sha256'] in outputs
         assert store.db.messages.count_documents({'direction': 'outbound', 'text': 'PRIVATE_2'}) == 0
     finally:
         release.set()

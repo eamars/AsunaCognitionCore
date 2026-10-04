@@ -81,7 +81,7 @@ def test_nine_prose_constraints_do_not_discard_a_valid_speech_decision(store):
 
 def test_receive_persists_without_context_or_worker_and_dedupes(store, tmp_path):
     class UnavailableContext:
-        def prepare(self, *args):
+        def prepare(self, *args, **kwargs):
             raise RuntimeError('retrieval unavailable')
     lane = FakeLane(store, [])
     coordinator = Coordinator(store, lane, context=UnavailableContext())

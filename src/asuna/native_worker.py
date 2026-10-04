@@ -22,7 +22,7 @@ from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
 from .skills import skills_directory, skill_directories
-from .state import Denied
+from .state import Denied, content_ref
 from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 
 
@@ -37,8 +37,8 @@ class NativeLane:
     def generate(self, binding, operation, phase, text, system, **kwargs):
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
-            if prior and prior.get('native_host'):
-                return LaneResult(**prior['result'])
+            if prior and prior.get('native_host') and 'content' in prior['result']:
+                return LaneResult(**prior['result'])           # receipt written before ADR-009 D-4
             task = None
             if self.lane == 'summary':
                 scene = self.store.db.scenes.find_one({'scope_key': kwargs['scope_key'],
@@ -96,9 +96,19 @@ class NativeLane:
             try:
                 value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
                 result = LaneResult(**value)
+                # D-4: the text lives in the native transcript. A repeated operation is answered by the
+                # host from its saved stage result (no new generation) and must match this hash.
+                ref = {**content_ref(result.content), 'native_ref': (result.request_refs or [None])[0]}
+                if prior and prior.get('native_host'):
+                    if prior['result'].get('content_sha256') != ref['content_sha256']:
+                        raise RuntimeError('NATIVE_RECEIPT_MISMATCH')
+                    return result
                 self.store.put('lane_receipts', {
                     '_id': operation, 'native_host': True, 'native_session_id': native_id,
-                    'scope_key': ep['scope_key'], 'result': vars(result)}, stream=operation)
+                    'scope_key': ep['scope_key'], 'result': {
+                        **{k: v for k, v in vars(result).items() if k not in ('content', 'reasoning')},
+                        **ref, 'reasoning': content_ref(result.reasoning), 'blank': not result.content.strip()}},
+                    stream=operation)
                 return result
             finally:
                 with self.worker.pending_lock:
@@ -144,7 +154,8 @@ class BusinessWorker:
             sys.stdout.write(json.dumps(value, ensure_ascii=False, default=str) + '\n')
             sys.stdout.flush()
 
-    def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, skill_workspace=None):
+    def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, skill_workspace=None,
+                   schedule=True):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -174,7 +185,7 @@ class BusinessWorker:
             self.app.coordinator.native_session_resolver = self.resolve_role_session
         self.host = self.stack.enter_context(RuntimeHost(
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
-            schedule_lane=NativeScheduleLane(self, config), configure_controller=configure,
+            schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s)))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
@@ -338,6 +349,8 @@ class BusinessWorker:
             return AffectLedger(self.app.store, persona, *model_and_policy(self.app.store, persona)).import_batch(
                 args['origin'], args.get('events', []), args.get('amendments', []), dry_run=bool(args.get('dry_run')))
         if method == 'schedule.deliver':
+            if not self.host.schedule:
+                raise RuntimeError('SCHEDULE_NOT_MOUNTED')
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':
             self.app.config['_skill_directories'] = args['skill_directories']

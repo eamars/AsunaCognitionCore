@@ -190,3 +190,26 @@ test('T0.5 role system prompt is exactly the worker render, without harness iden
   assert.match(system(ordinaryRequest), /You are an AI agent powered by DeepSeek Harness\./);
   assert.match(JSON.stringify(ordinaryRequest.messages), /RUNTIME_CONTEXT_FIXTURE/);
 });
+
+test('T6.4 CONSULT runs in the idle role session while the action tool waits; the role keeps no lock', async t => {
+  const h = await harness(t);
+  const role = await h.create('role');
+  let toolDone = false;
+  let releaseTool;
+  const actionTool = new Promise(resolve => { releaseTool = resolve; }).then(() => { toolDone = true; });
+  await h.core.onEvent({ kind: 'stage', session_id: 'role', token: 'task-1:consult:0', phase: 'CONSULT',
+    lane: 'character', system: 'Current persona from existing state: role', text: 'Question from the action' });
+  await role.whenIdle();
+  const consult = h.business.find(x => x.method === 'result' && x.args.token === 'task-1:consult:0');
+  assert.equal(consult.args.result.content, 'actual native assistant event');
+  assert.equal(toolDone, false, 'the action tool was still waiting when the role answered');
+  const state = h.core.states.get('role');
+  assert.equal(state.current, null);
+  assert.equal(state.waiter, null, 'a consultation does not wait for a next stage');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Human input' }] }));
+  await role.whenIdle();
+  assert.equal(h.business.filter(x => x.method === 'input').length, 1);
+  assert.equal(h.business.filter(x => x.method === 'result').length, 2);
+  releaseTool();
+  await actionTool;
+});

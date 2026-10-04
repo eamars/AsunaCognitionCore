@@ -157,7 +157,7 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
-    def prepare(self, event: dict, persona='P1'):
+    def prepare(self, event: dict, persona='P1', history_session=None):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
@@ -188,7 +188,7 @@ class ContextBuilder:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
-            'platform_reply_to':1,'event.group_context':1}
+            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1}
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -204,6 +204,14 @@ class ContextBuilder:
                                                        'scene_seq':{'$gte':source['scene_seq']}},
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
+        history_delta=None
+        if history_session:
+            # D-3: rows this role session already holds are not given again (full window after compaction).
+            from .history_delta import select
+            history,history_delta=select(self.store,history_session,history,scene['_id'],
+                                         source['scene_seq'] if source else None)
+        for row in history:
+            row.pop('episode_id',None);row.pop('scene_seq',None)
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -269,6 +277,9 @@ class ContextBuilder:
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
+        if history_delta and history_delta['omitted']:
+            context['history_from_program']={'given':history_delta['given'],'omitted':history_delta['omitted'],
+                'note':'这个会话里已经给过的行和你自己在本会话说过的话不再重复列出；delivered_history 只含新行。'}
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],
@@ -378,6 +389,8 @@ class ContextBuilder:
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in [*([dossier] if dossier else []),*ledgers] for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        if history_delta:
+            manifest['history_delta']=history_delta
         if self.store.config.get('task_mode')=='workspace':
             if relation:
                 context['understanding_update_from_program']={

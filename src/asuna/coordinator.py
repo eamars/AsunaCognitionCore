@@ -73,14 +73,31 @@ class Coordinator:
                 return existing
             from .ingress import persist_input
             persist_input(self.store,event)
-            _,context,manifest=self.context.prepare(event,persona)
+            history_session=self._history_session(event,ep_id,scene,persona)
+            _,context,manifest=self.context.prepare(event,persona,history_session=history_session)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
+            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],'history_session':history_session,**{k:event[k] for k in ('task_id','intent_revision','delegation_depth','supersedes_task_id') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
-            if event.get('native_session_id'):
-                ep=self._update(ep,native_session_id=event['native_session_id'])
+            if event.get('native_session_id') or self.native_session_resolver:
+                ep=self._update(ep,native_session_id=history_session)
             return self.advance(ep_id)
+
+    def _binding(self, ep):
+        binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
+        return binding+':'+ep['character_context'] if ep.get('character_context') else binding
+
+    def _history_session(self, event, ep_id, scene, persona):
+        """The role session this turn's history block goes to (D-3); same rule as native binding."""
+        if event.get('native_session_id'):
+            return event['native_session_id']
+        proto={'_id':ep_id,'scene_id':scene['_id'],'person_id':event['person_id'],'persona':persona,
+               'policy_epoch':scene['policy_epoch'],**({'character_context':scene['character_context']} if scene.get('character_context') else {}),
+               **{k:event[k] for k in ('task_id',) if k in event}}
+        if self.native_session_resolver:
+            return self.native_session_resolver(proto)
+        from .history_delta import HISTORY_ONLY_PREFIX
+        return HISTORY_ONLY_PREFIX+self._binding(proto)
 
     def _update(self, ep, **changes):
         return self.store.put('episodes',{**ep,**changes},expected=ep['revision'],stream=ep['_id'])
@@ -166,17 +183,26 @@ class Coordinator:
                 '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
         elif ep.get('resume_diagnostic'):
             instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
-        binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
-        if ep.get('character_context'):binding+=':'+ep['character_context']
+        binding=self._binding(ep)
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
         value=self.character.generate(binding,operation,phase,instruction,episode_system(self.store,ep))
         self.crash('after_lane_delivery')
-        self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
+        # D-4: the output itself stays in the lane receipt / native transcript; the audit keeps its hash.
+        from .state import content_ref
+        self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':phase,**content_ref(value.content),
+            'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
+            'request_refs':value.request_refs,'receipt':value.receipt},ep['scope_key'])
         if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
             label='INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT'
             raise ProtocolFailure(label+': '+json.dumps({
                 'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
                 'content':value.content,'request_refs':value.request_refs},ensure_ascii=False))
+        if ep.get('history_session'):
+            from . import history_delta
+            history_delta.observe(self.store,ep['history_session'],value.compaction_generation)
+            delta=ep.get('manifest',{}).get('history_delta')
+            if delta and (phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation:
+                history_delta.advance(self.store,delta)
         return value.content
 
     def advance(self, ep_id: str):

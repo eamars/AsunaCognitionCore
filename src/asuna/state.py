@@ -17,6 +17,35 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
 
+AUDIT_INLINE_LIMIT = 16 * 1024
+# Counters written with $inc outside a revision (scene sequence, retrieval salience); not part of a document's digest.
+COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',)}
+
+
+def content_digest(collection, doc):
+    skip = COUNTER_FIELDS.get(collection, ())
+    return sha(canonical({k: v for k, v in doc.items() if k not in skip}))
+
+
+def commit_payload(operation, collection, doc, **extra):
+    """state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
+
+    The hash chain covers the reference; audit.verify_documents compares the stored
+    document with content_sha256, so tampering stays detectable.
+    """
+    body = canonical(doc)
+    if len(body) <= AUDIT_INLINE_LIMIT:
+        return {'operation': operation, 'collection': collection, 'document': doc, **extra}
+    return {'operation': operation, 'collection': collection, 'id': doc['_id'], 'revision': doc.get('revision'),
+            'content_sha256': content_digest(collection, doc), 'bytes': len(body), **extra}
+
+
+def content_ref(text):
+    """{content_sha256, bytes} for model output kept elsewhere (receipt or native transcript)."""
+    raw = (text or '').encode()
+    return {'content_sha256': sha(raw), 'bytes': len(raw)}
+
+
 def now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -111,7 +140,7 @@ class Store:
         except DuplicateKeyError as exc:
             self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
-        self.audit(stream,'state.commit',{'operation':operation,'collection':collection,'document':doc},doc.get('scope_key','operator'))
+        self.audit(stream,'state.commit',commit_payload(operation,collection,doc),doc.get('scope_key','operator'))
         return doc
 
     def recover_commits(self):
@@ -122,7 +151,7 @@ class Store:
             for doc in self.db[name].find({'_last_op':{'$exists':True}}):
                 op = doc['_last_op']
                 if not self.db.audit_events.find_one({'type':'state.commit','payload.operation':op}):
-                    self.audit('recovery','state.commit',{'operation':op,'collection':name,'document':doc,'reconciled':True},doc.get('scope_key','operator'))
+                    self.audit('recovery','state.commit',commit_payload(op,name,doc,reconciled=True),doc.get('scope_key','operator'))
                     repaired += 1
         return repaired
 

@@ -118,6 +118,12 @@ def redacted(config: dict) -> dict:
     return out
 
 
+def ago(hours):
+    """How long ago, as she and the owner read it: 刚才, N 分钟前, N 小时前, N 天前."""
+    return ('刚才' if hours * 60 < 5 else f'{hours * 60:.0f} 分钟前' if hours < 1
+            else f'{hours:.0f} 小时前' if hours < 48 else f'{hours / 24:.0f} 天前')
+
+
 def excerpt(text, limit):
     """Bounded text for a context block; a cut always says so and how long the original was."""
     text = str(text or '')

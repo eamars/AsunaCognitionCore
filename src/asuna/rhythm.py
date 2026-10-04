@@ -13,6 +13,7 @@ import re
 
 from .persona_model import effective, timezone as persona_timezone
 from . import visibility
+from .config import ago
 
 try:
     from zoneinfo import ZoneInfo
@@ -47,7 +48,7 @@ def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
         block['note'] = '未设置时区，以 UTC 显示'
     if owner_last_at:
         last = datetime.fromisoformat(str(owner_last_at).replace('Z', '+00:00'))
-        block['since_owner_message_min'] = max(0, int((moment - last).total_seconds() // 60))
+        block['owner_last_message'] = ago(max(0.0, (moment - last).total_seconds() / 3600))
     return block
 
 

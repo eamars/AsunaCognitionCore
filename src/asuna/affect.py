@@ -16,6 +16,7 @@ from pymongo.errors import DuplicateKeyError
 from .evidence import canonical, sha
 from .state import Denied, now
 from . import visibility
+from .config import ago
 
 SECONDS_PER_HOUR = 3600.0
 COLLECTIONS = ('affect_events', 'affect_amendments', 'affect_proposals')
@@ -222,7 +223,7 @@ def interpret(model, state, cls):
         out['unsettled'] = f"{view['open_count']} 件事还挂着"
     out['reasons'] = [{'feeling': kind_label(model, row['kind']),
                        'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
-                       'when': '刚才' if row['age_h'] < 1 else f"{row['age_h']:.0f} 小时前" if row['age_h'] < 48 else f"{row['age_h'] / 24:.0f} 天前",
+                       'when': ago(row['age_h']),
                        **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''), 'event_id': row['event_id']}
                       for row in view['contributions']]
     return out

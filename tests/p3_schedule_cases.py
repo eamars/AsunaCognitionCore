@@ -879,7 +879,8 @@ def control_note_carries_the_local_clock(env):
     note = rules.control_note(zone, env['state'].CLOCK[0])
     return (note['now_local'] == '2026-09-24T07:00+02:00' and note['weekday'] == '周四'
             and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}
-            and note['min_interval_seconds'] == 60), note['now_local']
+            and '最小 60 秒' in note['fields']['schedule']['计时四选一']['every_seconds']
+            and not {'utc_offset_minutes', 'tz_source', 'min_interval_seconds'} & set(note)), note['now_local']
 
 
 @case

@@ -6,7 +6,7 @@ Lists carry excerpts; full bodies and authorized sources are read on demand.
 from datetime import datetime
 import re
 
-from .config import character_id
+from .config import ago, character_id
 from .state import Denied
 from . import scene_links
 from .ingress import NOT_CORE_NOTICE
@@ -29,10 +29,6 @@ AMENDMENT_WORDS = {'close': '已了结', 'void': '作废（前提不成立）', 
 
 def kind_label(model, kind):
     return (model.get('kinds', {}).get(kind) or {}).get('label') or kind or '未分类'
-
-
-def ago(hours):
-    return '刚才' if hours < 1 else f'{hours:.0f} 小时前' if hours < 48 else f'{hours / 24:.0f} 天前'
 
 
 def mood_line(view):

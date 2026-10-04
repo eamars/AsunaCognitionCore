@@ -305,7 +305,7 @@ def project(plan, zone, moment=None):
     tz = zone['tz']
     row = {'_id': plan['_id'], 'intent': plan.get('intent'), 'status': plan.get('status'),
            'rule': plan.get('rule'), 'plan_version': plan.get('plan_version', 1),
-           'timezone': zone['name'], 'tz_source': zone['source'],
+           'timezone': zone['name'],
            'created_at': plan.get('created_at'), 'updated_at': plan.get('updated_at'),
            'last_outcome': plan.get('last_outcome')}
     if zone['zone_unavailable']:
@@ -366,16 +366,13 @@ def local_clock(zone, moment=None):
             'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
     return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
-            'timezone': zone['name'], 'tz_source': zone['source'],
-            'tz_note': note.get(zone['source'], zone['source']),
-            'utc_offset_minutes': offset_minutes(tz, moment)}
+            'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 
 def control_note(zone, moment=None):
     """给角色的"安排"控制面：现场钟面 + 三个控制字段怎么写。她负责把话换算成这些键，
     本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
     return {**local_clock(zone, moment),
-            'min_interval_seconds': MIN_INTERVAL_SECONDS,
             'fields': {
                 'schedule': {'intent': '要做什么（给人看的短句）',
                              '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',

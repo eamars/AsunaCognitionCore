@@ -164,6 +164,18 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           id: context.id, target: 'chat', anchorSeq: context.state.anchor, location,
           visibility: 'visible', data: context.state.stage };
       },
+    }, { kind: 'asuna-stage-finish',
+      // How the Turn's last stage ended. DSH keeps a Turn's end at max-tokens once any step hit the
+      // cap, even when the platform retried that stage in the same Turn and the retry finished.
+      match: event => event.type === 'asuna/stage-result' && Number.isInteger(event.data.turn)
+        ? { id: String(event.data.turn), role: 'start' } : null,
+      start: (_context, match) => ({ turn: match.event.data.turn, finish: match.event.data.finish_reason }),
+      update: (_context, match) => ({ turn: match.event.data.turn, finish: match.event.data.finish_reason }),
+      buildLocationData: (context, scope, previous) => {
+        if (scope !== 'turn' || !context.state) return null;
+        if (previous?.value === context.state.finish) return previous;
+        return { kind: 'turn', turn: context.state.turn, key: 'asuna-stage-finish', value: context.state.finish };
+      },
     }];
   }
   function actionDefinitions() {
@@ -545,6 +557,19 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       },
     }, InlineAction));
     ctx.slots.inject('asuna.inline.fragment', () => ctx.slots.register({ name: 'asuna.inline.fragment' }, NativeFragment));
+    // DSH's max-tokens notice says the reply was cut off and asks for "continue". A Turn whose last
+    // stage finished (the platform retried the cut-off attempt itself) was not cut off, so it has no
+    // notice; every other Turn, in any session, renders DSH's own notice unchanged.
+    function MaxTokensNotice(props) {
+      const finish = props.useTurnData('asuna-stage-finish');
+      if (finish === 'stop') return null;
+      const shipped = ctx.slots.entries('conversation.chat.node')
+        .find(entry => entry.options.key === 'turn-max-tokens' && entry.component !== MaxTokensNotice);
+      return shipped ? h(shipped.component, props) : null;
+    }
+    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+      name: 'conversation.chat.node', key: 'turn-max-tokens', priority: -1, locale: 'chat',
+    }, MaxTokensNotice));
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-stage',
     }, props => stageLabel(props.node.data)

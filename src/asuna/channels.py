@@ -13,6 +13,7 @@ from .evidence import canonical, sha
 from .config import redact_text, character_id
 from .queue import database_effects_lock
 from .state import Denied, now
+from .people import People
 
 
 def route_for_scene(config, channel_id, scene_id):
@@ -187,8 +188,11 @@ class Channels:
                     attempt = uuid.uuid4().hex
                     self.store.put('messages', {**row, 'delivery_state': 'SENDING',
                                    'attempt_id': attempt, 'claimed_at': now()}, expected=row['revision'], stream=row['episode_id'])
+                    # Her @[label] becomes the adapter's @qq:<account> here, at the edge (people.py).
+                    scene = self.store.db.scenes.find_one({'_id': row['scene_id']})
+                    text = People(self.store).outbound(scene, row['text']) if scene else row['text']
                     return {'items': [{'publication_id': row['_id'], 'attempt_id': attempt,
-                                       'target': row['target'], 'text': row['text'],
+                                       'target': row['target'], 'text': text,
                                        'reply_to': row['platform_reply_to']}]}
             if time.monotonic() >= deadline:
                 break

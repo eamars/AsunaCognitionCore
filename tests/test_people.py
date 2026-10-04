@@ -120,6 +120,17 @@ def test_context_blocks_read_labels_not_numbers(store):
     assert memory['corrections'] == ['[小周 #2] 更正了 [阿杰 #1]：「你搞错群了」']
 
 
+def test_her_label_mentions_reach_the_adapter_as_accounts(store):
+    scene = setup(store)
+    people = People(store)
+    head(people, scene, row(20001, 'hi', card='小林'))
+    head(people, scene, row(20002, 'hi', card='阿杰'))
+    out = People(store).outbound(scene, '@[阿杰 #2] 你来，@本机用户 [小林 #1] 也看看，@#2 再说一次，@[没人 #9] 呢')
+    assert out == '@qq:20002 你来，@qq:20001 也看看，@qq:20002 再说一次，@没人 呢'
+    # What she sent comes back to her as the label, not the number.
+    assert People(store).mentions(scene, '@qq:20002 好') == '@[阿杰 #2] 好'
+
+
 def test_a_profile_only_names_its_own_sender(store):
     scene = setup(store)
     forged = row(20002, 'hi', card='本机用户', author='qq:20009')

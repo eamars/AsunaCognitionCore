@@ -215,10 +215,48 @@ def _scene_parts(scene):
     own_person = _text(scene.get("person"), 60)
     aliases = [item for item in (_text(value, 60) for value in raw_aliases)
                if item and item != own_person]
+    authors = scene.get("person_authors")
     return {"scene_id": scene_id, "scope_key": scope_key, "epoch": epoch,
             "group_id": _group_token_local(scene_id),
             "scene_ids": [scene_id] + extra, "linked_scenes": extra,
-            "person_classes": classes, "person_aliases": aliases}
+            "person_classes": classes, "person_aliases": aliases,
+            "person_authors": list(authors) if isinstance(authors, (list, tuple)) else None,
+            "labeler": scene.get("labeler") if callable(scene.get("labeler")) else None}
+
+
+def person_filter(parts, person):
+    """By-person condition: the authors the person resolved to (people.py), never a name match.
+
+    Without a resolution (standalone use) it falls back to person_clause.
+    """
+    if parts.get("person_authors") is not None:
+        return {"author": {"$in": list(parts["person_authors"])}}
+    return person_clause(person, parts.get("person_aliases") or ())
+
+
+def bind_people(store, scene, scene_doc, person):
+    """Resolve a person argument to one person's author ids and label hits by people.py.
+
+    Returns a notice when the text names nobody here, or several people (a copied name);
+    then the caller answers with the notice instead of querying.
+    """
+    try:
+        from .people import People
+    except Exception:                  # 同目录平铺加载（离线自检）：照旧按名字过滤
+        return None
+    people = People(store)
+    scene_doc["labeler"] = people.row_head
+    if not person:
+        return None
+    found = people.resolve(scene, person)
+    if len(found) == 1:
+        scene_doc["person_authors"] = people.authors_of(
+            found[0]["person"], [scene_doc["scene_id"], *(scene_doc.get("readable_scenes") or [])])
+        return None
+    if not found:
+        return "这个场景里找不到「%s」：标签、编号、现在或以前用过的名字都对不上。" % person
+    return "「%s」对应 %d 个人：%s。名字会重复，请用 #编号 再查。" % (
+        person, len(found), "、".join(people.label(doc) for doc in found[:8]))
 
 
 def scene_id_clause(parts):
@@ -481,7 +519,7 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
     if pattern is not None:
         inbound[text_field] = dict(pattern)
         outbound[text_field] = dict(pattern)
-    clause = person_clause(person, parts.get("person_aliases") or ())
+    clause = person_filter(parts, person)
     if clause:
         inbound["$and"] = [dict(clause)]
         outbound["$and"] = [dict(clause)]
@@ -507,7 +545,7 @@ def outbound_fallback_filter(parts, query="", *, author=None, case_sensitive=Tru
     pattern = _text_pattern(query, case_sensitive)
     if pattern is not None:
         flt[text_field] = dict(pattern)
-    clause = person_clause(person, parts.get("person_aliases") or ())
+    clause = person_filter(parts, person)
     if clause:
         flt["$and"] = [dict(clause)]
     return flt
@@ -529,6 +567,11 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
             "side": SIDE_OUTBOUND if _text(doc.get(DIRECTION_FIELD), 16) == OUTBOUND else SIDE_INBOUND,
             "speaker": author,          # 发言者只认记录里的 author，不拿身份块自称顶替
             "text": full, "chars": len(full), "verbatim": bool(full)}
+    labeler = (parts or {}).get("labeler")
+    if labeler:
+        # Who wrote it, by fixed label (people.py): names can repeat or be copied, labels can't.
+        who = labeler(doc)
+        return dict(base, who=who, speaker=who, person_id="", names=[])
     if not ok:
         # 身份块不可信、或身份解析根本没接上，都得说清是谁说的：退回已认证 author。
         note = ("身份解析没接上，缺 %s" % "/".join(identity_status()["missing"])
@@ -827,9 +870,10 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
             have.add(mid)
     dropped = {"wrong_person": 0}
     want = person.lower().strip() if isinstance(person, str) and person.strip() else None
+    authors = parts.get("person_authors")
     hits = []
     for source, hit in merged:
-        if want and want not in hit.get("names", []):
+        if (hit.get("author") not in authors) if authors is not None else (want and want not in hit.get("names", [])):
             dropped["wrong_person"] += 1
             continue
         hit = dict(hit)
@@ -933,7 +977,8 @@ HISTORY_TOOL_NAME = "query_authorized_history"
 HISTORY_TOOL = {
     "name": HISTORY_TOOL_NAME,
     "description": ("只读查询当前任务授权场景里保存的原话：字面检索覆盖完整 messages（不只是记忆候选），"
-                    "返回原文、实际作者、场景、时间及其来源（平台回执／本机送达回执／入站时间），按 cursor 续页。"
+                    "返回原文、说话人标签、场景、时间及其来源（平台回执／本机送达回执／入站时间），按 cursor 续页。"
+                    "person 用标签或 #编号（如 #4）最准；给名字时，名字对上不止一个人会列出各自标签，请改用 #编号。"
                     "场景由任务绑定，外加配置给它挂的只读联动场景（同一人的另一个入口）；参数不能换"
                     "查询范围，也不接受 Mongo 表达式。跨场景命中行首带各自的场景号。"
                     "回执时间回退会标明是送达回执，不伪称原始发送时刻；more=true 时必须带 cursor 续查，不能宣称查完。"),
@@ -1082,6 +1127,10 @@ class HistoryQueryService:
         if cursor and stored != mark:
             # 游标绑定发放它的筛选：换筛选或指纹对不上就拒查，不给「看似连续」的错页。
             raise ValueError("HISTORY_CURSOR_FILTER_MISMATCH")
+        notice = bind_people(self.store, scene, scene_doc, person)
+        if notice:
+            return {"degraded": False, "why": "person_unclear", "text": notice, "hits": [], "hits_trimmed": 0,
+                    "more": False, "next_cursor": None, "dropped": {}, "semantic": {}}
         result = query_history(
             self.retrieval if include_semantic else None, self.store, scene_doc,
             query, person=person, window_days=window_days or DEFAULT_WINDOW_DAYS,
@@ -1091,7 +1140,8 @@ class HistoryQueryService:
 
     @staticmethod
     def _payload(result, inner_cursor, mark):
-        hits = list(result.get("hits") or [])
+        hits = [{key: value for key, value in hit.items() if key not in ("author", "person_id", "names")}
+                for hit in result.get("hits") or []]
         trimmed = 0
         while len(hits) > 1 and len(_json.dumps(hits, ensure_ascii=False).encode("utf-8")) > HISTORY_RESULT_BUDGET:
             hits.pop()                # 命中按时间倒序：从尾部（最旧）裁，每页至少留一条完整原文

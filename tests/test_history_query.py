@@ -10,6 +10,7 @@
 只补本次集成未证明的部分：真实查询调用、授权绑定、真实 Mongo 三支分页；
 离线 400 条截断与 32768 输出配置是既有证据，这里不重跑。
 """
+import json
 import os
 import uuid
 
@@ -185,15 +186,23 @@ def test_person_filter_follows_verified_identity(store):
     def ids(**args):
         return [h['message_id'] for h in service.query_for_task(task, dict(FULL_WINDOW, **args))['hits']]
 
-    assert ids(person='雾灯修理工') == ['i1']            # 名片（身份块已校验）
-    assert ids(person='旧名片') == ['i1']                # 曾用名也算同一个人
-    # 倒序（最新在前）是查询契约：与 keyset 游标的降序、渲染行序同源；i3=12:02 比 i1=12:00 新。
+    # A name resolves to one account (people.py), and the filter is that account's messages:
+    # i3 carries no profile but is the same author. 倒序（最新在前）是查询契约。
+    assert ids(person='雾灯修理工') == ['i3', 'i1']      # 名片
+    assert ids(person='旧名片') == ['i3', 'i1']          # 曾用名也算同一个人
     assert ids(person='qq:' + ACCOUNT) == ['i3', 'i1']   # 已认证作者
-    stale = service.query_for_task(task, dict(FULL_WINDOW, person=ACCOUNT))
-    # 裸账号（不带 qq: 前缀）会在查询侧被归一化匹上，但后过滤按 names 精确比对会滤掉：
-    # 人物过滤要用名片/昵称或完整 person_id；这是草稿已验证的行为，照实断言，不悄悄改逻辑。
-    assert [h['message_id'] for h in stale['hits']] == []
-    assert stale['dropped']['wrong_person'] == 2
+    assert ids(person=ACCOUNT) == ['i3', 'i1']           # 裸账号
+    label = service.query_for_task(task, dict(FULL_WINDOW, person='雾灯修理工'))['hits'][0]['who']
+    number = label.split('#')[1].split(']')[0]
+    assert ids(person='#' + number) == ['i3', 'i1']      # 标签编号
+    hit = service.query_for_task(task, dict(FULL_WINDOW, person='#' + number))['hits'][0]
+    assert not {'author', 'person_id', 'names'} & set(hit) and ACCOUNT not in json.dumps(hit, ensure_ascii=False)
+    # Someone copies the name: the lookup names both people and asks for the number, it never picks one.
+    message(store, 'i4', 4, '2026-09-22T12:03:00Z', '四', author='qq:100778',
+            peer=dict(PEER, person_id='qq:100778', account_id='100778', aliases=[]))
+    copied = service.query_for_task(task, dict(FULL_WINDOW, person='雾灯修理工'))
+    assert copied['hits'] == [] and copied['why'] == 'person_unclear' and copied['text'].count('[雾灯修理工 #') == 2
+    assert ids(person='#' + number) == ['i3', 'i1']      # the label still names exactly one of them
 
 
 # ── 真实 Mongo 分页：不重不漏；回退支翻到底才敢 more=false ──────────────

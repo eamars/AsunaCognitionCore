@@ -28,7 +28,10 @@ PREVIOUS_NAMES = 4
 LOOKALIKE_NOTES = 2
 ROLE_NOTES = {'owner': '群主', 'admin': '管理员'}
 ROLES = ('owner', 'admin', 'member')
-MENTION = re.compile(r'@(\d{5,12})')
+# QQ text conventions: the adapter writes a real @ as @<account>; her outbound @ reaches it as @qq:<account>.
+MENTION = re.compile(r'@(?:qq:)?(\d{5,12})')
+# What she writes to @ someone: their label, e.g. @[name #4] (the owner's may start with the owner word), or @#4.
+LABEL_MENTION = re.compile(r'@\s*(?:[^\s@\[\]#]{1,12}\s*)?\[([^\[\]#\n]*)#\s*(\d{1,6})\s*\]|@#(\d{1,6})')
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
 
@@ -112,6 +115,7 @@ class People:
             try:
                 doc = self.store.put('scene_people', {
                     '_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': person,
+                    'author': person_id,
                     'handle': (last or {}).get('handle', 0) + 1, 'card': '', 'nickname': '', 'role': '',
                     'previous': [], 'seen_at': '', 'created_at': now()}, stream='people:' + scene['_id'])
             except Conflict:
@@ -234,6 +238,93 @@ class People:
             doc = self.roster(scene['_id']).get(scene['_id'] + '|' + self.person(self.account_person(number)))
             return '@' + self.label(doc) if doc else match.group(0)
         return MENTION.sub(swap, text or '')
+
+    # ---- lookups (history tools) ------------------------------------------
+    def ensure_roster(self, scene):
+        """Label everyone who has written in this scene, so a lookup can name them all."""
+        roster = self.roster(scene['_id'])
+        for author in self.db.messages.distinct('author', {'scene_id': scene['_id'], 'direction': 'inbound'}):
+            if author and author != self.self_id and scene['_id'] + '|' + self.person(author) not in roster:
+                self.entry(scene, author)
+        return roster
+
+    def resolve(self, scene, text):
+        """The people of this scene a lookup may mean.
+
+        A label or #number names exactly one person; so does an id. A name matches everyone who has
+        shown it here (now or before, by their own verified profile) or was given it by the operator,
+        so a copied name returns both people instead of quietly picking one.
+        """
+        text = ' '.join(str(text or '').split())
+        docs = [d for d in self.ensure_roster(scene).values() if d.get('person') != self.self_id]
+        number = re.fullmatch(r'\[?[^#\[\]]*#\s*(\d{1,6})\s*\]?', text)
+        if number:
+            return [d for d in docs if str(d.get('handle')) == number.group(1)]
+        ids = {self.person(text)} | ({self.person(self.account_person(text))} if text.isdigit() else set())
+        by_id = [d for d in docs if d.get('person') in ids]
+        if by_id:
+            return by_id
+        if name_key(text) and name_key(text) == name_key(self.owner_label):
+            return [d for d in docs if self.is_owner(d)]
+        name = safe_name(text, 60)
+        if not name:
+            return []
+        persons = {d.get('person') for d in docs
+                   if name in {self.shown(d), self.named(d.get('person')), safe_name(d.get('card'), 60),
+                               safe_name(d.get('nickname'), 60), *(safe_name(p.get('name'), 60) for p in d.get('previous') or [])}}
+        for row in self.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', '$or': [
+                {'event.raw.asuna_peer.' + field: text} for field in ('card', 'nickname', 'display', 'aliases')]},
+                {'author': 1, 'event': 1, 'received_at': 1}).limit(200):
+            if self._profile(row) is not None:
+                persons.add(self.person(row['author']))
+        found = [d for d in docs if d.get('person') in persons]
+        if found:
+            return found
+        key = name_key(text)
+        return [d for d in docs if key and key in {name_key(self.shown(d)), name_key(d.get('card')), name_key(d.get('nickname'))}]
+
+    def account_of(self, scene, doc):
+        """The QQ account behind a person in this scene, for the adapter's @ marker; None when unknown."""
+        for author in [doc.get('author'), *self.authors_of(doc['person'], [scene['_id']]), doc['person']]:
+            if not author:
+                continue
+            if str(author).startswith('qq:') and str(author)[3:].isdigit():
+                return str(author)[3:]
+            row = self.db.identities.find_one({'person_id': author}, {'account_id': 1})
+            if row and str(row.get('account_id') or '').isdigit():
+                return str(row['account_id'])
+        return None
+
+    def outbound(self, scene, text):
+        """Her @ of a label becomes the adapter's @qq:<account>; the stored text keeps the label she wrote.
+
+        A label that names nobody here is sent as a plain @name, never as a number she guessed.
+        """
+        by_handle = {str(d.get('handle')): d for d in self.roster(scene['_id']).values()}
+
+        def swap(match):
+            doc = by_handle.get(match.group(2) or match.group(3))
+            account = self.account_of(scene, doc) if doc else None
+            if account:
+                return '@qq:' + account
+            name = ' '.join((match.group(1) or '').split())
+            return '@' + name if name else match.group(0).replace('#', '')
+        return LABEL_MENTION.sub(swap, text or '')
+
+    def authors_of(self, person, scene_ids):
+        """Every stored author id in these scenes that is this person (aliases by configuration)."""
+        return sorted(a for a in self.db.messages.distinct('author', {'scene_id': {'$in': list(scene_ids)}})
+                      if a and self.person(a) == person)
+
+    def row_head(self, row):
+        """Who wrote a stored row, as a history result names them: her own rows read as her name."""
+        if row.get('author') == self.self_id or row.get('direction') == 'outbound':
+            return self.self_name
+        scene = self._scene(row.get('scene_id'))
+        if not scene:
+            return self._author(None, row.get('author'))
+        doc = self.entry(scene, row.get('author'), row if row.get('event') else None)
+        return self.head(scene['_id'], doc, str(row.get('received_at') or now()))
 
     def speaker(self, scene, author, row=None, me=None):
         """Label for a stored author (no notes): her own rows read `me` when given."""

@@ -23,6 +23,12 @@ def build(template: dict, local: dict) -> dict:
         value[key] = (ROOT / value[key]).resolve().as_posix()
     for key in ('workspace', 'skills_dir'):
         value['chat'][key] = (ROOT / value['chat'][key]).resolve().as_posix()
+    for roots in (value.get('persona_sources') or {}).values():
+        for root in roots.values():
+            root['path'] = (ROOT / root['path']).resolve().as_posix()
+    for runtime in (value.get('persona_runtime') or {}).values():
+        if runtime.get('export_dir'):
+            runtime['export_dir'] = (ROOT / runtime['export_dir']).resolve().as_posix()
     if not value['database'].startswith('asuna_v2_demo_') or value['allowed_databases'] != [value['database']]:
         raise ValueError('DEMO_DATABASE_REQUIRED')
     return value

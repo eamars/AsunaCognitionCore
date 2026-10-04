@@ -18,7 +18,7 @@ from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
-from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES
+from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
 from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
                      route_filtered_tool_names, task_attachment_context)
 
@@ -128,7 +128,7 @@ class TaskService:
             source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
             integration=event_granted(self.store.config,source.get('event',{}))
             capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
-            if revised.get('development_grant'):capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
+            if revised.get('development_grant'):capabilities=[*capabilities,*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
             revised.update(integration_profile='owner' if integration else None,
             allowed_capabilities=[*dict.fromkeys([
                 *route_filtered_tool_names(capabilities, self.store.config),
@@ -220,7 +220,7 @@ class ToolBroker:
 
     @property
     def specs(self):
-        return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS] if self.store.config.get('task_mode')=='workspace' else TOOLS
+        return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS] if self.store.config.get('task_mode')=='workspace' else TOOLS
 
     def bind(self,session,task,workspace):
         if self.store.config.get('task_mode')=='workspace':
@@ -270,7 +270,11 @@ class ToolBroker:
                 self.store.audit(task['_id'],'fault.injected',{'kind':'transient_read_failure','artifact':key},task['scope_key'])
                 self.store.put('artifacts',{**artifact,'state':'DONE','result':result},expected=artifact['revision'],stream=task['_id'])
                 return result
-            if tool in DEVELOPMENT_NAMES:
+            if tool=='persona_job_run':
+                if not task.get('development_grant'):raise Denied('DEVELOPMENT_GRANT_REQUIRED')
+                result=self.persona_jobs(task,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool in DEVELOPMENT_NAMES:
                 if not getattr(self,'development',None):raise Denied('DEVELOPMENT_UNAVAILABLE')
                 result=self.development.call(task,tool,args)
                 with self.service.lock:self.service.valid(task)

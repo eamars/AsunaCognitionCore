@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         return () => controller.abort();
       }, [visible, props.sessionId, selected]);
       return h('section', { style: { ...stack, height: '100%', overflowY: 'auto' }, 'aria-label': 'Asuna 记忆' },
-        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['documents', '文档'], ['affect', '情感'], ['self', '自我'],
+        h(Select, { label: '记忆类型', value: category, options: [['all', '全部'], ['documents', '文档'], ['affect', '情感'], ['jobs', '作业报告'], ['self', '自我'],
           ['relation', '关系与偏好'], ['summary', '交流摘要'], ['source', '原始来源']],
           onChange: value => { setCategory(value); setOffset(0); } }),
         h(Button, { size: 'sm', onClick: () => setRefresh(x => x + 1) }, '刷新记忆'),
@@ -78,6 +78,17 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const saved = React.useSyncExternalStore(subscribe, snapshot);
       const [draft, setDraft] = React.useState(null), [status, setStatus] = React.useState(null);
       const [notice, setNotice] = React.useState(''), [busy, setBusy] = React.useState(false);
+      const [persona, setPersona] = React.useState(null);
+      const loadPersona = () => rpc('personaSources').then(setPersona).catch(() => setPersona(null));
+      React.useEffect(() => { loadPersona(); }, []);
+      const runJob = async (job, dryRun) => { setBusy(true); setNotice('');
+        try { const result = await rpc('personaJob', { request: { job, dry_run: dryRun } });
+          setNotice('作业 ' + job + (dryRun ? '（试运行）' : '') + '：' + result.status + (result.exit_code !== undefined ? ' · 退出码 ' + result.exit_code : '')
+            + (result.reason ? ' · ' + result.reason : '') + ' · 报告在「记忆 → 作业报告」中查看。');
+          loadPersona(); } catch (error) { setNotice(error.message); } finally { setBusy(false); } };
+      const exportDocs = async () => { setBusy(true); setNotice('');
+        try { const result = await rpc('personaExport'); setNotice('已导出 ' + result.exported.length + ' 份文档。'); }
+        catch (error) { setNotice(error.message); } finally { setBusy(false); } };
       React.useEffect(() => { if (!draft && saved.value) setDraft(structuredClone(saved.value)); }, [saved.value, draft]);
       React.useEffect(() => { const controller = new AbortController();
         rpc('status', {}, controller.signal).then(setStatus).catch(error => { if (!controller.signal.aborted) setNotice(error.message); });
@@ -127,6 +138,19 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           h(Button, { disabled: busy || !draft || !saved.writable, onClick: save, variant: 'primary' }, '保存设置'),
           h(Button, { disabled: busy, onClick: activate, variant: 'outline' }, '应用已保存设置'),
           h(Button, { disabled: busy, onClick: () => rpc('status').then(setStatus).catch(error => setNotice(error.message)) }, '刷新状态')),
+        persona && h('section', { style: stack, 'aria-label': '人格数据' },
+          h('h4', null, '人格数据 · ' + persona.persona),
+          persona.render && h('p', { role: persona.render.over_budget ? 'alert' : 'status',
+            style: persona.render.over_budget ? { color: 'var(--dsw-alias-status-danger, #c00)' } : small },
+            '人格渲染估算 ' + persona.render.estimate_tokens + ' / 上限 ' + (persona.render.limit_tokens ?? '未设') + (persona.render.over_budget ? ' · 超出预算' : '')),
+          h('p', { style: small }, persona.sources.length ? '源根：' + persona.sources.map(s => s.id + '（' + s.state + '，' + s.path + '）').join('；') : '未配置源根（本机配置 persona_sources）。'),
+          ...persona.jobs.map(job => h('div', { key: job.id, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+            h('span', null, '作业 ' + job.id + ' · 源根 ' + job.sources.join('、')),
+            h(Button, { size: 'sm', disabled: busy, onClick: () => runJob(job.id, true) }, '试运行'),
+            h(Button, { size: 'sm', disabled: busy, variant: 'outline', onClick: () => runJob(job.id, false) }, '运行'))),
+          persona.runs.length > 0 && h('p', { style: small }, '最近运行：' + persona.runs.map(r => r.job + ' ' + r.status + (r.dry_run ? '（试）' : '')).join('；')),
+          h(Button, { size: 'sm', disabled: busy || !persona.export_configured, onClick: exportDocs },
+            persona.export_configured ? '导出文档' : '导出（未配置 export_dir）')),
         notice && h('p', { role: 'status' }, notice));
     }
 

@@ -156,6 +156,9 @@ class RuntimeHost:
             self.evidence.record('host.recovery.start', {})
             recovery_start = time.perf_counter()
             self.settings = local_settings(self.config)
+            # Owner-local persona source roots must be well formed before any job can use them.
+            from .persona_data import persona_sources
+            persona_sources(self.config, self.settings['persona'])
             prepare_local_scene(self.app.store, self.settings)
             local_ready = time.perf_counter()
             scenes = prepare_channels(self.app.store)

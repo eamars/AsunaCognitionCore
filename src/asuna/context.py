@@ -103,6 +103,9 @@ def ledger_block(docs, cls):
     return out
 
 
+INVENTED_MARK = '（自述编写，非共同经历）'
+
+
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
@@ -203,7 +206,11 @@ class ContextBuilder:
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
         if self.retrieval:
             try:
+                from .persona_model import effective as _effective
+                from .render import model_and_policy as _model_and_policy
+                _m,_p=_model_and_policy(self.store,persona)
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
+                                                                   coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
                                                                    linked_scopes=read['linked_scope_keys'],
                                                                    private_scope=visibility.owner_private_scope(persona)
                                                                        if session_class==visibility.OWNER_PRIVATE else None)
@@ -216,10 +223,17 @@ class ContextBuilder:
                 retrieval_manifest={'path':'scoped_history_without_rag','vector_verified':False,
                                     'error':redact_text(traceback.format_exc(),self.store.config)}
         else:
-            memories=list(self.store.db.memory_units.find({'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}],'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
+            readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
+            if session_class==visibility.OWNER_PRIVATE:
+                readable.append({'scope_key':visibility.owner_private_scope(persona),'policy_epoch':1})
+            memories=list(self.store.db.memory_units.find({'$or':readable,'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
-        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by') if k in m} for m in memories]
+        facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
+        for fact in facts:
+            if fact.get('invented'):
+                # Fixed mark on every injection of persona-authored, not shared, history (MEMORY §5).
+                fact['body_markdown']=INVENTED_MARK+fact['body_markdown']
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
@@ -237,6 +251,12 @@ class ContextBuilder:
         schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
         plans=[schedule_rules.project(row,schedule_rules.scene_timezone(self.store.config,scene,row),
                                       moment) for row in plan_rows]
+        if 'coverage' in retrieval_manifest:
+            coverage_block={k:retrieval_manifest[k] for k in ('coverage','coverage_score','coverage_basis')}
+            if retrieval_manifest['coverage']=='insufficient':
+                coverage_block['note']='证据不足，只能当灵感，不能当事实说。'
+        else:
+            coverage_block=None
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  'relationship':relation[1]['content'] if relation else None,'overlay':overlay[1]['content'] if overlay else None,
                  'self_state_from_program':self_state,
@@ -246,6 +266,8 @@ class ContextBuilder:
                  'plans_from_program':plans,
                  'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        if coverage_block:
+            context['coverage_from_program']=coverage_block
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],

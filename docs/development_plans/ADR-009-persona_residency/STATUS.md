@@ -11,7 +11,8 @@
 | P1 人格契约 v2、人格模型、政策存储 | 完成（见下方报告） |
 | P2 文档层、渲染、WRITE 阶段、人物档案 | 完成（见下方报告） |
 | P3 情感引擎 | 完成（见下方报告） |
-| P4–P7 | 未开始 |
+| P4 记忆扩展、人格数据 API、探针、人格作业、导出 | 完成（见下方报告） |
+| P5–P7 | 未开始 |
 
 ## 基线（`549beb4c`）
 
@@ -136,6 +137,32 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：P4 — memory_units 新字段、owner-private 检索、persona_data.py 与探针。
 ```
 
+## P4 报告
+
+```text
+阶段：P4
+提交：见本提交
+完成：
+  T4.1 PASS [Mongo] 导入条目带文件 source_window；源文件改动并删除后，快照回读逐字节等于导入时内容；快照 scope=owner-private:<persona>，非 operator 读取被拒；同 sha 去重
+  T4.2 PASS [Mongo] owner-private 记忆单元在 public 检索中出现 0 次，连词法候选都不是；本机向量检索可用，向量路径也一并覆盖；owner-private scope 不能作为普通或联动 scope 传入
+  T4.3 PASS [Mongo] 同一写请求两次第二次为空操作；dry_run 前后各集合计数不变，计划数与随后真实执行一致
+  T4.4 PASS [Mongo] cohabiting：宿主未改 → 按源更新；角色改过（头 ≠ import_base）→ conflict 不覆盖；只追加类按 origin+source_identity 并集；cutover → SOURCE_CUTOVER、计数不变；跨人格 → PERSONA_SCOPE_DENIED
+  T4.5 PASS [沙箱] WSL bubblewrap 中：看不到 /mnt/c、只见授权源根、网络不可达、/out 超 64 MB 判 error；跨人格请求得 PERSONA_SCOPE_DENIED；超时强杀判 error（直连启动器跑协议部分）
+  T4.6 PASS [沙箱]+[离线替身] 合成自迁移：试运行未登记文件为红、退出码 1、零写入；补全清单后正式导入；按私有题库探针校验：可答题的锚点出现在 probe.retrieve(as=owner_private) 前 6，超范围题记 NOT_RUN(scope)；重跑为空操作。沙箱与直连两种启动器各跑一遍
+  T4.7 PASS [Mongo] 导出：工作树内未忽略路径被拒；工作树外或被忽略路径接受；内容只有文档层，每节带修订 id 与可见性
+  T4.8 PASS [Mongo] invented=true 的条目在探针摘录与回合上下文中总带固定标记
+  T4.9 PASS [Mongo] persona_job_run 只随开发授权授予；工具返回值只含 run_id/job/status/exit_code/dry_run/counts/report_artifact_ids/reason，报告中的合成摘录不出现
+  T4.10 PASS [Mongo] coverage：向量时取最大相似度、仅词法时取覆盖比例；低于 coverage_floor 或无结果判 insufficient；RRF 不参与
+  T4.11 PASS [Mongo] owner 私聊产生的独白在配置了（被拒的）链接的群回合上下文中出现 0 次
+  T4.12 PASS [Mongo] 群场景任务的 CONSULT 系统提示与上下文中没有 owner_private 人格节
+反证：adr009_p4 全部依赖新模块 persona_data/persona_jobs，基线上无法导入；基线 retrieval 没有 private_scope 与 coverage。
+删除：无
+偏离：D4-1…D4-6（见下）
+未验证：真实人格的旧居与题库（属于人格本人，按 ADR 不在本阶段）
+人工检查：演示环境设置卡显示源根（cohabiting，路径遮蔽）、作业与渲染预算状态；「试运行」与「运行」都经 WSL bubblewrap 执行并因未登记文件判红、退出码 1；记忆右栏「作业报告」可读红项；导入条目出现在右栏，展开后显示 source_window 与导入时快照的逐行回读
+下一步：P5 — 先做 D-5（60 秒下限、原生 daily/weekly、schedule_update）。
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -170,3 +197,9 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D3-2 | 情感块附带 `commit_rules`（require_cost、max_delta、kinds、allow_untyped） | 演示中角色因不知道 require_cost 而提交被拒；这些是人格模型参数，不是私密内容 |
 | D3-3 | 导入事件未声明可见性时 source_scope=`owner-private:<persona>`；声明 public 时为 `global-safe` | §2.2「导入：按写入方声明」；缺省从严 |
 | D3-4 | 评估路由的设置项未加入设置卡；在 profile 的 `asuna-cognition-core.routes.appraiser` 中配置（与 character/action 同形，未配置即关闭） | 时间所限；行为与 §6.7 一致 |
+| D4-1 | 人格作业用新的 `SandboxLauncher`（同一 WSL bubblewrap 环境，Popen 双向 stdio）而不是直接复用 `IntegrationRunner` | IntegrationRunner 管理常驻集成进程；作业需要双向管道与 run-to-completion。隔离参数一致：--unshare-all、只读代码与源根、仅 /out 可写、prlimit |
+| D4-2 | 试运行时宿主对所有写方法强制 dry_run，不依赖作业自觉 | 「试运行不写」是宿主的保证 |
+| D4-3 | `probe.retrieve(as=public)` 以一个不存在的场景 scope 检索，只看得到 global-safe | 契约只给 `as: owner_private|public`，没有场景参数；这是最保守的 public 视图 |
+| D4-4 | `salience.ref_count` 与 `last_ref_at` 用计数器式 `$inc` 写入，不生成修订 | 计数不是状态修订；排序权重在 P5 |
+| D4-5 | 设置卡新增「人格数据」：源根与状态、作业试运行/运行、导出、渲染预算；报告在记忆右栏「作业报告」 | ACCEPTANCE §4 P4；未做设置卡上编辑源根（源根只在本机配置中改，§6） |
+| D4-6 | 演示环境的迁移清单文档由实施者写入演示库 | 合成人格 `demo` 没有自己写清单的历史；真实人格的清单由她自己写 |

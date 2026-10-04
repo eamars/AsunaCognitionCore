@@ -36,6 +36,23 @@ export class AsunaApi extends TypertRemoteService {
     });
   }
 
+  async personaSources() {
+    await this.core.ready();
+    return this.core.worker.call('persona.sources', {});
+  }
+
+  /** Owner operations from the settings card: dry-run / run a persona job, export documents. */
+  async personaJob(request) {
+    if (!request || typeof request.job !== 'string') throw new Error('PERSONA_JOB_REQUIRED');
+    await this.core.ready();
+    return this.core.worker.call('persona.job_run', { job: request.job, dry_run: request.dry_run !== false, args: {} });
+  }
+
+  async personaExport() {
+    await this.core.ready();
+    return this.core.worker.call('persona.export', {});
+  }
+
   async applySettings() {
     const core = this.core, next = core.savedConfig();
     const status = core.lifecycle.state === 'ready' ? await core.worker.call('status') : null;
@@ -56,7 +73,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'applySettings']) {
+for (const name of ['status', 'memory', 'applySettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

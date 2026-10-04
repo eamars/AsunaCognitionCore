@@ -23,7 +23,7 @@ from .lanes import LaneResult
 from .grants import workspace_grant
 from .skills import skills_directory, skill_directories
 from .state import Denied
-from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS
+from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 
 
 class NativeLane:
@@ -302,7 +302,34 @@ class BusinessWorker:
             self.app.broker.bind(record['broker_session'], task, Path(record['cwd']))
             return self.app.broker.call(record['broker_session'], args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
-            return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS]
+            return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        if method == 'persona.sources':
+            # Settings card: source roots (path masked to its last segment), states, jobs and recent runs.
+            from .persona_data import persona_sources, persona_runtime
+            from .render import render_status
+            persona = self.app.config['chat']['persona']
+            sources = [{'id': k, 'state': v['state'], 'path': '…/' + Path(v['path']).name}
+                       for k, v in persona_sources(self.app.config, persona).items()]
+            jobs = [{'id': j['id'], 'sources': j['sources'], 'grants': j['grants']}
+                    for j in (self.app.config.get('persona_contribution') or {}).get('jobs') or []]
+            runs = [{k: e['payload'].get(k) for k in ('run_id', 'job', 'status', 'exit_code', 'dry_run', 'counts', 'report_artifact_ids')}
+                    for e in self.app.store.db.audit_events.find({'type': 'persona_job.finished'}).sort('occurred_at', -1).limit(5)]
+            return {'persona': persona, 'sources': sources, 'jobs': jobs, 'runs': runs,
+                    'export_configured': bool(persona_runtime(self.app.config, persona).get('export_dir')),
+                    'render': render_status(self.app.store, persona)}
+        if method == 'persona.export':
+            # Owner-only rendering of the document layer to the locally configured directory.
+            from .persona_data import export_documents, persona_runtime
+            persona = self.app.config['chat']['persona']
+            target = persona_runtime(self.app.config, persona).get('export_dir')
+            if not target:
+                raise ValueError('EXPORT_DIR_NOT_CONFIGURED')
+            return export_documents(self.app.store, persona, target, ROOT)
+        if method == 'persona.job_run':
+            from .persona_jobs import JobRunner
+            persona = self.app.config['chat']['persona']
+            return JobRunner(self.app.store, persona, retrieval=self.app.retrieval).run(
+                args['job'], dry_run=bool(args.get('dry_run', True)), args=args.get('args') or {})
         if method == 'affect.import':
             # Persona-job import path (exposed through the persona data API in P4).
             from .affect import AffectLedger

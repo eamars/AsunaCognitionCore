@@ -15,6 +15,8 @@ export function apply(ctx) {
       { slug: 'voice', kind: 'voice', path: 'seeds/voice.md' },
       { slug: 'ledger', kind: 'ledger', path: 'seeds/ledger.md' },
     ],
+    jobs: [{ id: 'migrate', entry: 'jobs/migrate/main.py', runtime: 'python', grants: ['persona_data.write', 'probe'],
+      sources: ['demo-home'], timeout_s: 120 }],
     skill_directories: ['skills'],
     preset: 'asuna-demo',
   });

@@ -16,6 +16,14 @@ DEVELOPMENT_TOOLS = [
      'parameters':{'reason':{'type':'string'}}},
 ]
 DEVELOPMENT_NAMES = {tool['name'] for tool in DEVELOPMENT_TOOLS}
+# ADR-009 §7.4: a persona runs her own published jobs from an owner development task.
+# Granted with development tools; the result carries status, counts and report ids only.
+PERSONA_JOB_TOOLS = [
+    {'name': 'persona_job_run', 'description': 'Run one of the selected persona package\'s published jobs in the sandbox. '
+     'Returns status, exit code, counts and report artifact ids only; reports are read in the memory tab.',
+     'parameters': {'job': {'type': 'string', 'required': True}, 'dry_run': {'type': 'boolean'},
+                    'args': {'type': 'object', 'additionalProperties': True}}},
+]
 for _tool in DEVELOPMENT_TOOLS:
     _tool['parameters']['project'] = {'type': 'string',
         'description': 'Authorized project ID; defaults to the selected persona project. Use core for cognition runtime changes.'}

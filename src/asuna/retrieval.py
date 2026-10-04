@@ -77,7 +77,8 @@ class Retrieval:
         self.evidence.record('vector.index',{'database':self.store.name,'definition':definition,'status':rows})
         return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
 
-    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None):
+    def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None,
+               coverage_floor=0.0):
         # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
         # owner-private 只看会话类（private_scope 仅在 owner_private 会话里由调用方给出），与联动无关。
         linked=[item for item in dict.fromkeys(linked_scopes or ())
@@ -162,7 +163,21 @@ class Retrieval:
             for old_id in m.get('supersedes',[])[:8]:
                 old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
-        manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback','vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
+        # Evidence sufficiency (ADR-009 MEMORY §5.2): RRF ranks only; it never decides "enough".
+        if failure is None and vector:
+            scores={row['_id']:row.get('score',0.0) for row in vector}
+            coverage_score=max((scores.get(m['_id'],0.0) for m in selected),default=0.0);coverage_basis='vector_cosine'
+        else:
+            raw=terms(query)
+            coverage_score=max((len(raw & terms(m['body_markdown']))/len(raw) for m in selected),default=0.0) if raw else 0.0
+            coverage_basis='lexical_overlap'
+        coverage='insufficient' if not selected or coverage_score<float(coverage_floor or 0) else 'sufficient'
+        moment=now()
+        for m in selected:
+            # Salience heat: how often a unit was actually selected (ranking weights arrive in P5).
+            self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{'salience.last_ref_at':moment}})
+        manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
+                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',
                         recent_source_ids=[m['_id'] for m in recent_sources], lexical_candidate_count=len(rows), lexical_candidate_limit=4096,
                         cache_disabled_for_bounded_sample=not cacheable)

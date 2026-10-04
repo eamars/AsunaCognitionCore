@@ -27,8 +27,10 @@ class NativeMemory:
             ('character_core', 'Character Core'), ('current_self', 'Current Self'))}
         relation = scene_links.relationship_target(self.store.config, self.store.db, self.scene, self.binding['person_id'])
         self.heads[relation['entity'] + '|' + relation['scope']] = ('relation', '关系与偏好')
+        # Operator view: owner-private imported entries are listed too, each with its scope label.
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
-                           '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1}]}
+                           '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
+                                                 {'scope_key': 'owner-private:' + persona, 'policy_epoch': 1}]}
         self.message_query = {'$and': [{'$or': self.sources}, {'$or': [
             {'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}]}
 
@@ -82,13 +84,22 @@ class NativeMemory:
                          'scope_key': event.get('source_scope'), 'updated_at': event.get('ts')})
         return rows
 
+    def job_rows(self):
+        rows = []
+        for item in self.store.db.artifacts.find({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + self.persona},
+                                                 {'_id': 1, 'size': 1}).sort('_id', -1).limit(20):
+            rows.append({'id': 'report:' + item['_id'], 'kind': 'persona_job_report', 'title': '作业报告',
+                         'excerpt': item['_id'], 'scope_key': 'owner-private:' + self.persona})
+        return rows
+
     def page(self, kind='all', offset=0):
-        if kind not in ('all', 'documents', 'affect', 'self', 'relation', 'summary', 'source'):
+        if kind not in ('all', 'documents', 'affect', 'jobs', 'self', 'relation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
         heads = (self.document_rows() if kind in ('all', 'documents') else []) + (
             self.affect_rows() if kind in ('all', 'affect') else []) + (
+            self.job_rows() if kind in ('all', 'jobs') else []) + (
             self.head_rows(kind) if kind in ('all', 'self', 'relation') else [])
         rows = heads[offset:offset + self.PAGE + 1]
         if kind in ('all', 'summary', 'source'):
@@ -117,7 +128,17 @@ class NativeMemory:
         if not isinstance(identifier, str) or len(identifier) > 512 or ':' not in identifier:
             raise ValueError('INVALID_MEMORY_ID')
         kind, key = identifier.split(':', 1)
-        if kind == 'affect':
+        if kind == 'report':
+            from .blobs import BlobStore
+            import json as _json
+            row = self.store.db.artifacts.find_one({'_id': key, 'kind': 'persona_job_report'})
+            if row:
+                report = _json.loads(BlobStore(self.store).get(key, row['scope_key'], operator=True))
+                lines = [f"状态：{report['status']} · 作业 {report['job']} · {report['run_id']}", report.get('summary', '')]
+                lines += ['- ' + _json.dumps(item, ensure_ascii=False) for item in report.get('items', [])]
+                result = {'id': identifier, 'body': '\n'.join(lines), 'interpretation': False, 'source_ids': [],
+                          'scope_key': row['scope_key']}
+        elif kind == 'affect':
             from .affect import AffectLedger
             from .render import model_and_policy
             import json as _json
@@ -167,6 +188,18 @@ class NativeMemory:
                           'source_ids': row.get('source_event_ids', row.get('source_ids', [])),
                           **{k: row[k] for k in ('epistemic_type', 'scope_key', 'speaker', 'generated_at',
                               'source_window', 'participants', 'corrected_by', 'revision') if k in row}}
+                window = row.get('source_window') if isinstance(row.get('source_window'), dict) else None
+                if window and window.get('file_sha256'):
+                    # Read back the exact lines from the snapshot taken at import (MEMORY §6.3).
+                    result['levels'] = {'source_window': window, 'origin': row.get('origin'), 'invented': row.get('invented')}
+                    snapshot = self.store.db.artifacts.find_one({'sha256': window['file_sha256'], 'kind': 'source_snapshot',
+                                                                 'scope_key': row['scope_key']})
+                    if snapshot:
+                        from .blobs import BlobStore
+                        lines = BlobStore(self.store).get(snapshot['_id'], row['scope_key'], operator=True).decode('utf-8').splitlines()
+                        excerpt = '\n'.join(lines[max(0, window.get('line_from', 1) - 1):window.get('line_to', 1)])
+                        result['body'] += ('\n\n——回读（' + str(window.get('path')) + ' 第 ' + str(window.get('line_from'))
+                                           + '–' + str(window.get('line_to')) + ' 行，导入时快照）——\n' + excerpt)
         elif kind == 'source':
             row = self.store.db.messages.find_one({**self.message_query, '_id': key},
                 {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1})

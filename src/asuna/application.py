@@ -25,6 +25,13 @@ class Application:
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
             self.broker=ToolBroker(self.service,serve_http=self.broker_http);self.stack.callback(self.broker.close)
+            def persona_jobs(task,args):
+                from .persona_jobs import JobRunner
+                result=JobRunner(self.store,self.config['chat']['persona'],retrieval=self.retrieval).run(
+                    args['job'],dry_run=bool(args.get('dry_run',True)),args=args.get('args') or {})
+                from .persona_jobs import tool_result
+                return tool_result(result)          # status, counts and artifact ids only (§7.4)
+            self.broker.persona_jobs=persona_jobs
             if self.development_factory:
                 self.broker.development=self.development_factory(self.config,self.store)
             # P1-b: the trusted read-only history entry reuses this store and retrieval;

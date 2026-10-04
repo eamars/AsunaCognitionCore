@@ -337,8 +337,8 @@ class Coordinator:
                                 ep.get('episode_kind')=='task_feedback' and bool(
                                     (self.store.db.tasks.find_one({'_id':ep.get('task_id')}) or {}).get('development_grant')))
                             if development:
-                                from .development import DEVELOPMENT_TOOLS
-                                capabilities=[*capabilities,*DEVELOPMENT_TOOLS]
+                                from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
+                                capabilities=[*capabilities,*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
                             from .integration import event_granted, INTEGRATION_TOOLS
                             integration = event_granted(self.store.config, source.get('event', {}))
                             if integration: capabilities = [*capabilities, *INTEGRATION_TOOLS]

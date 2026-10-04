@@ -119,6 +119,7 @@ export class CognitionCore {
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
       this.efforts = await this.stageEfforts();
+      this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
       const schedule = await this.attachSchedule();
       this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);

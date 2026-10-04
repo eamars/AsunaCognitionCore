@@ -12,15 +12,13 @@ import uuid
 
 from .config import ROOT, redact_text
 from .evidence import canonical, sha
-from .sandbox import Sandbox
 from .state import Denied
 from .queue import RuntimeLease
 from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
 INTEGRATION_TOOLS = [
-    {'name': 'integration_dev', 'description': 'Owner integration grant only. Execute argv for development in a persistent /task directory, with no network. Use python3 to read/write code and SKILL.md. RUNTIME_API.md describes the actual host contract. This is separate from the ordinary workspace.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
-    {'name': 'integration_test', 'description': 'Run argv against a frozen copy of integration development files at /app, up to 60 seconds. Only configured endpoints are reachable. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
-    {'name': 'integration_start', 'description': 'Enable argv as a managed service from a new frozen /app snapshot. Keeps running after the tool returns and restores on host restart. /data persists. Does not auto-deploy later edits. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
+    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
+    {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen /app copy of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
 ]
@@ -201,26 +199,31 @@ class IntegrationRunner:
             self.restoration_error = 'PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START'
             return
         try:
-            if not re.fullmatch(r'[0-9a-f]{32}', saved['snapshot']):
-                raise ValueError('INVALID_ENABLED_SNAPSHOT')
-            snapshot = self.root/'snapshots'/saved['snapshot']
-            if snapshot.parent != self.root/'snapshots' or not snapshot.is_dir():
-                raise ValueError('ENABLED_SNAPSHOT_MISSING')
-            if applying and self.config.get('_native_integration_release'):
-                # Applying plugin settings uses the installed persona release,
-                # never unpublished files in the writable development tree.
-                snapshot = self._snapshot(Path(self.config['_native_integration_release']))
+            # The published adapter as of this start, never unpublished files in the development tree.
+            snapshot = self._snapshot(self.release())
             self.active = self._launch(snapshot, saved['argv'], 'service')
-            if applying:
-                if self.active.snapshot()['state'] != 'RUNNING':
-                    raise RuntimeError('INTEGRATION_SETTINGS_START_FAILED')
-                updated = {**saved, 'snapshot': snapshot.name, 'profile': self.fingerprint}
-                temporary = self.enabled_path.with_suffix('.tmp')
-                temporary.write_text(json.dumps(updated), encoding='utf-8'); temporary.replace(self.enabled_path)
+            if applying and self.active.snapshot()['state'] != 'RUNNING':
+                raise RuntimeError('INTEGRATION_SETTINGS_START_FAILED')
+            self._enable(saved['argv'], snapshot, previous=saved.get('snapshot'))
         except Exception as exc:
             self.restoration_error = str(exc)
             if applying:
                 raise
+
+    def release(self):
+        """The published adapter: the only code a managed service runs (ADR-011 §5.2, one publish path)."""
+        value = self.config.get('_native_integration_release')
+        if not value or not Path(value).is_dir():
+            raise Denied('INTEGRATION_RELEASE_UNAVAILABLE: publish the channel project first')
+        return Path(value)
+
+    def _enable(self, argv, snapshot, previous=None):
+        saved = {'enabled': True, 'snapshot': snapshot.name, 'argv': argv, 'profile': self.fingerprint}
+        temporary = self.enabled_path.with_suffix('.tmp')
+        temporary.write_text(json.dumps(saved), encoding='utf-8'); temporary.replace(self.enabled_path)
+        self.restoration_error = None
+        if previous and previous != snapshot.name and re.fullmatch(r'[0-9a-f]{32}', previous):
+            shutil.rmtree(self.root/'snapshots'/previous, ignore_errors=True)
 
     def _snapshot(self, source_root=None):
         source_root = source_root or self.dev
@@ -263,8 +266,6 @@ class IntegrationRunner:
     def call(self, tool, args):
         with self.lock:
             if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
-            if tool == 'integration_dev':
-                return Sandbox(self.dev, allowed_root=self.dev).run(valid_argv(args['argv']))
             if tool == 'integration_test':
                 timeout = args.get('timeout', 30)
                 if type(timeout) is not int or not 1 <= timeout <= 60:
@@ -276,14 +277,12 @@ class IntegrationRunner:
             if tool == 'integration_start':
                 if self.active and not self.active.finished.is_set():
                     raise Denied('INTEGRATION_ALREADY_RUNNING_STOP_BEFORE_REPLACE')
-                snapshot = self._snapshot()
+                snapshot = self._snapshot(self.release())
                 self.active = self._launch(snapshot, args['argv'], 'service')
                 value = self.active.snapshot()
                 if value['state'] == 'RUNNING':
-                    saved = {'enabled': True, 'snapshot': snapshot.name, 'argv': args['argv'], 'profile': self.fingerprint}
-                    temporary = self.enabled_path.with_suffix('.tmp')
-                    temporary.write_text(json.dumps(saved), encoding='utf-8'); temporary.replace(self.enabled_path)
-                    self.restoration_error = None
+                    previous = json.loads(self.enabled_path.read_text(encoding='utf-8')) if self.enabled_path.exists() else {}
+                    self._enable(args['argv'], snapshot, previous=previous.get('snapshot'))
                 return value
             if tool == 'integration_stop':
                 self.enabled_path.write_text('{"enabled":false}', encoding='utf-8')

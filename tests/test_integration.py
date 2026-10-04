@@ -32,7 +32,7 @@ def logs(value):
 
 
 def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
-    runner.call('integration_dev', {'argv': ['python3', '-c', "from pathlib import Path; Path('version.txt').write_text('original')"]})
+    (runner.dev/'version.txt').write_text('original')     # the development candidate's adapter (development_write)
     code = "from pathlib import Path; import json,os; print(Path('/app/version.txt').read_text()); print(os.getuid()); Path('/app/version.txt').write_text('changed')"
     value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
     assert value['exit_code'] != 0 and 'Read-only file system' in logs(value) and 'Traceback' in logs(value)
@@ -41,7 +41,26 @@ def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
     assert value['timed_out'] and value['state'] == 'STOPPED'
 
 
-def test_changed_network_profile_does_not_autorestore(runner):
+def test_start_runs_only_the_published_adapter(runner, tmp_path):
+    # ADR-011 §5.2: unpublished edits never run as the managed service; there is no editing tool here.
+    with pytest.raises(Denied, match='INTEGRATION_RELEASE_UNAVAILABLE'):
+        runner.call('integration_start', {'argv': ['python3', '-c', 'print(1)']})
+    with pytest.raises(ValueError, match='UNKNOWN_INTEGRATION_TOOL'):
+        runner.call('integration_dev', {'argv': ['true']})
+    release = tmp_path/'release'; release.mkdir(); (release/'version.txt').write_text('published')
+    (runner.dev/'version.txt').write_text('unpublished')
+    runner.config['_native_integration_release'] = str(release)
+    value = runner.call('integration_start', {'argv': ['python3', '-c', "print(open('/app/version.txt').read()); import time; time.sleep(20)"]})
+    assert value['state'] == 'RUNNING'
+    import time
+    deadline = time.monotonic() + 5
+    while 'published' not in logs(runner.status()) and time.monotonic() < deadline:
+        time.sleep(.1)
+    assert 'unpublished' not in logs(runner.status()) and 'published' in logs(runner.status())
+
+
+def test_changed_network_profile_does_not_autorestore(runner, tmp_path):
+    runner.config['_native_integration_release'] = str(tmp_path)
     runner.call('integration_start', {'argv': ['python3', '-c', 'import time; time.sleep(20)']})
     runner.close()
     changed = profile(); changed['integration']['adapter_config'] = {'token': 'new-authority'}

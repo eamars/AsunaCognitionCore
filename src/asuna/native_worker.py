@@ -24,7 +24,7 @@ from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
 from .people import People
-from .skills import skills_directory, skill_directories
+from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
 from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
@@ -128,7 +128,6 @@ class NativeLane:
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
                 'system_sha256': sha(system.encode()),
-                'skills_dir': str(skills_directory(self.store.config, ep['scene_id'], ep['person_id']) or ''),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'])],
             })
             scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
@@ -217,7 +216,7 @@ class BusinessWorker:
             sys.stdout.write(json.dumps(value, ensure_ascii=False, default=str) + '\n')
             sys.stdout.flush()
 
-    def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, skill_workspace=None, native_sessions=None,
+    def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
                    schedule=True, channels=None):
         # Worker initialization is managed by the native Host.
@@ -252,7 +251,6 @@ class BusinessWorker:
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
         if releases:
             config['_native_integration_release'] = releases[0]
-        config['_skill_workspace'] = skill_workspace
         evidence = Evidence(ROOT / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
@@ -737,6 +735,10 @@ class BusinessWorker:
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':
             self.app.config['_skill_directories'] = args['skill_directories']
+            # A published adapter is what the next integration_start (or restoration) runs.
+            releases = [entry['integration_release'] for entry in args.get('channels') or () if entry.get('integration_release')]
+            if releases:
+                self.app.config['_native_integration_release'] = releases[0]
             return {'accepted': True, 'applies': 'new action scopes; existing self heads preserved'}
         if method == 'publication.activated':
             for publication in args['publications']:

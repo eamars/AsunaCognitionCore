@@ -114,10 +114,6 @@ export class PublicationFloor {
     return directory;
   }
 
-  async skillWorkspace() {
-    return path.join((await this.ensure()).candidate, 'skills');
-  }
-
   async ensure(id = this.config.defaultProject) {
     const project = this.projects.get(id);
     if (!project || !/^[a-z][a-z0-9-]{0,50}$/.test(id)) throw new Error('DEVELOPMENT_PROJECT_NOT_AUTHORIZED');

@@ -489,7 +489,7 @@ class ContextBuilder:
         if development and (scene['_id'],event['person_id']) == (
                 self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
             context['action_capabilities_from_program']['development'] = {
-                'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
+                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。'}
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
@@ -507,10 +507,7 @@ class ContextBuilder:
         from .integration import event_granted
         if event_granted(self.store.config, event):
             context['action_capabilities_from_program']['integration'] = {
-                'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
-        from .skills import skills_directory
-        if skills_directory(self.store.config,scene['_id'],event['person_id']):
-            context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
+                'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

@@ -27,8 +27,9 @@ class Application:
             self.broker=ToolBroker(self.service,serve_http=self.broker_http);self.stack.callback(self.broker.close)
             def persona_jobs(task,args):
                 from .persona_jobs import JobRunner
+                # Always a dry run: the action brain reads and analyses; identity writes are the character's.
                 result=JobRunner(self.store,self.config['chat']['persona'],retrieval=self.retrieval).run(
-                    args['job'],dry_run=bool(args.get('dry_run',True)),args=args.get('args') or {})
+                    args['job'],dry_run=True,args=args.get('args') or {})
                 from .persona_jobs import tool_result
                 return tool_result(result)          # status, counts and artifact ids only (§7.4)
             self.broker.persona_jobs=persona_jobs

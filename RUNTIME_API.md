@@ -233,7 +233,7 @@ Asuna reuses an installed DSH Schedule service. When the Host has none, it mount
 
 ## Managed integration and self-development
 
-The managed integration runner is available only to the configured local owner profile. It uses a separate persistent development directory. `integration_test` runs a frozen, read-only `/app` snapshot with separate writable `/data`; `integration_start` enables a new frozen snapshot as a managed process; later development edits are not deployed automatically. `integration_status` reports process state and bounded logs, not platform connectivity or delivery. `integration_stop` stops the managed process and disables host restart restoration.
+The managed integration runner is available only to the configured local owner profile. The adapter's code lives in its channel package and changes only through the development tools. `integration_test` runs a frozen, read-only `/app` copy of the development candidate's adapter with separate writable `/data`; `integration_start` enables a frozen copy of the published adapter as a managed process, and host restart restores the then-published adapter. Unpublished edits never run as the managed service. `integration_status` reports process state and bounded logs, not platform connectivity or delivery. `integration_stop` stops the managed process and disables host restart restoration.
 
 Integration processes run in the configured isolated environment and can reach only explicitly configured local or LAN TCP endpoints. Their commands are argument arrays, not host-shell strings. Connection credentials are supplied through the local integration profile and are not copied into ordinary task files.
 

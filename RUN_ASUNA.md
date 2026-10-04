@@ -61,7 +61,7 @@ The **记忆** right tab reads bounded pages for the current native scene bindin
 
 ## Self-development and recovery
 
-`development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the existing authorized cognition source project. `/skills` is the writable persona candidate; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.
+`development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the existing authorized cognition source project. Skills live in the candidate too and change only through these tools; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.
 
 `BOOT_FAILED` / `PACK_FAILED` preserve the failed candidate and diagnostics. `APPLIED` means selected, not yet confirmed running. `ACTIVE` means the relevant worker/resources loaded successfully. `HOST_RESTART_REQUIRED` means restart this Host to install the selected JS/composition/dependency artifact. The launcher retains installation failures and still opens the installed repair floor. There is no automatic rollback.
 

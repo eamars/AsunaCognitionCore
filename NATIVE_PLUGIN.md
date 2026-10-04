@@ -70,7 +70,7 @@ Save validates model catalog references, business bindings and the existing data
 
 ## Develop and publish forward
 
-The persistent writable candidate is the selected persona package by default. Use `project="core"` for the authorized cognition source. Native skills discovery reads published resources; `/skills` mounts the authorized writable persona candidate. Ordinary QQ identities do not acquire the local owner's source or credential access.
+The persistent writable candidate is the selected persona package by default. Use `project="core"` for the authorized cognition source. Native skills discovery reads published resources. Skills, adapters and code change only through the development tools and take effect only through `development_publish`; no sandbox mounts them writable, and `integration_start` runs only the published adapter. Ordinary QQ identities do not acquire the local owner's source or credential access.
 
 `development_files` is paged. Read/write/run act on the selected project; commands retain the configured isolated workspace execution boundary. Publication freezes a candidate, checks source revisions, performs minimum structural/import checks, packs an immutable artifact and keeps lineage and actual failure evidence. The current source is never imported halfway through an edit.
 

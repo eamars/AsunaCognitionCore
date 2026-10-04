@@ -233,9 +233,9 @@ Mongo 里的任务行、栅栏、授权、修订语义都保留，工具只是�
 | 找她 | `ask_character`（原 `consult_character`）、`report_progress`（新） | 进协作线程 |
 | 记想法 | `note_idea`（新，与角色脑同一个本子） | 任何任务都有：做事时（包括网页搜索时）看到值得改进的地方就记下，不当场去改 |
 | 技能 | `skill` | 不变 |
-| 适配器（owner） | `integration_test/start/stop/status`、`import_integration_artifact` | `integration_dev` 不再能改适配器代码：改代码只走开发工具，集成工具只负责跑、测、启停 |
+| 适配器（owner） | `integration_test/start/stop/status`、`import_integration_artifact` | `integration_dev` 删除：改代码只走开发工具，集成工具只负责跑、测、启停。`integration_test` 试跑开发候选；`integration_start` 和宿主重启后的恢复只运行已发布的适配器 |
 | 改能力 | `development_files/read/write/run/publish`、`development_database_read` | 授权放宽（§6），发布只有 `development_publish` 这一条路 |
-| 人格任务 | `persona_job_run` | 去掉对她的文档、参数、记忆的写权限，只留读和分析：身份数据只由角色脑写 |
+| 人格任务 | `persona_job_run` | 去掉对她的文档、参数、记忆的写权限，只留读和分析（从行动脑运行时一律是 dry run）：身份数据只由角色脑写 |
 
 另外两处：
 - 行动脑的系统提示也调用 `suppressRuntimeContext`，不再漏进 DSH 自身的身份和开发环境信息。

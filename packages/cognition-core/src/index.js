@@ -133,7 +133,7 @@ export class CognitionCore {
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
-        skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), native_sessions: nativeSessions,
+        native_sessions: nativeSessions,
         deployment: this.config.deployment, secrets: this.config.secrets, admission: this.config.channelAdmission,
         channels, apply_integrations: !!this.applying, schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
@@ -299,11 +299,13 @@ export class CognitionCore {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
           : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
           : (() => { throw new Error('Unknown Host request'); })();
-        if (event.method === 'development' && value.project === this.ctx.asunaFloor.config.defaultProject
-            && value.state === 'APPLIED') {
+        if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
+          // A persona or channel publication that needs no restart: new action scopes discover its
+          // skills, and the next integration_start runs its adapter. A core one restarts the worker.
           const persona = this.personas.get(this.config.persona);
+          const channels = await this.channelPlugins(this.config.deployment);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
-            skill_directories: await this.skillDirectories(persona, await this.channelPlugins(this.config.deployment)) });
+            skill_directories: await this.skillDirectories(persona, channels), channels });
           [value] = await this.ctx.asunaFloor.workerReady(value.project);
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
@@ -596,11 +598,11 @@ export class CognitionCore {
     if (allowed.has('todo_write')) await scope.plugin(todoTool, { allowParallelInProgress: true });
     if (allowed.has('web_search') || allowed.has('web_fetch'))
       await scope.plugin(webTool, { search: allowed.has('web_search'), fetch: allowed.has('web_fetch') });
-    if (allowed.has('skill') && (binding.skill_directories?.length || binding.skills_dir)) {
+    if (allowed.has('skill') && binding.skill_directories?.length) {
       const skills = scope.isolate('skills');
       await skills.plugin(SkillService, {});
       await skills.plugin(skillFilesystem, { includeDefaultRoots: false,
-        customSkillDirs: binding.skill_directories ?? [binding.skills_dir], watchFollowSymlinks: false });
+        customSkillDirs: binding.skill_directories, watchFollowSymlinks: false });
       await skills.plugin(skillTool, {});
     }
     for (const spec of this.specs.filter(spec => allowed.has(spec.name))) {

@@ -11,6 +11,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
+import re
 import sys
 import threading
 import uuid
@@ -57,6 +58,8 @@ class NativeLane:
             if not self.worker.navigation_ready.wait(self.store.config['workflow_timeout_seconds']):
                 raise RuntimeError('NATIVE_NAVIGATION_NOT_READY')
             task = None
+            # A repair (answers.py) is the same stage asked again in the same session: parse its base operation.
+            base = re.sub(r':fix-\d+$', '', operation)
             if self.lane == 'summary':
                 scene = self.store.db.scenes.find_one({'scope_key': kwargs['scope_key'],
                                                        'policy_epoch': kwargs['policy_epoch']})
@@ -64,27 +67,27 @@ class NativeLane:
                     raise Denied('SUMMARY_SCENE_STALE')
                 person = scene['members'][0]
                 self.store.authorize(scene['_id'], person)
-                ep = {'_id': operation, 'scene_id': scene['_id'], 'person_id': person,
+                ep = {'_id': base, 'scene_id': scene['_id'], 'person_id': person,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                       'character_context': scene.get('character_context'),
                       'persona': self.store.config['chat']['persona']}
                 ep['native_session_id'] = self.worker.resolve_role_session(ep)
             elif self.lane == 'executor' or phase == 'CONSULT':
-                task_id = operation.split(':execute:', 1)[0].split(':consult:', 1)[0]
+                task_id = base.split(':execute:', 1)[0].split(':consult:', 1)[0]
                 task = self.store.db.tasks.find_one({'_id': task_id})
                 if not task:
                     raise Denied('STALE_TASK_FENCE')
                 if self.lane == 'executor':
-                    if operation.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
+                    if base.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
                         raise Denied('STALE_TASK_FENCE')
                 else:
-                    artifact = self.store.db.artifacts.find_one({'_id':operation.split(':consult:',1)[1],
+                    artifact = self.store.db.artifacts.find_one({'_id':base.split(':consult:',1)[1],
                         'task_id':task_id,'intent_revision':task['intent_revision']})
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
                 ep = self.store.db.episodes.find_one({'_id': task['episode_id']})
             else:
-                ep = self.store.db.episodes.find_one({'_id': operation.split(':', 1)[0]})
+                ep = self.store.db.episodes.find_one({'_id': base.split(':', 1)[0]})
             if not ep:
                 raise ValueError('NATIVE_EPISODE_BINDING_REQUIRED')
             role_id = ep.get('native_session_id')
@@ -94,7 +97,7 @@ class NativeLane:
             if self.lane == 'executor':
                 native_id = self.worker.action_session_id(binding, role_id, ep, task)
             elif self.lane == 'summary':
-                native_id = 'asuna-summary-' + sha((binding + ':' + operation).encode())[:32]
+                native_id = 'asuna-summary-' + sha((binding + ':' + base).encode())[:32]
             elif self.lane == 'appraiser':
                 native_id = 'asuna-appraiser-' + ep['persona']
             elif self.lane == 'attend':

@@ -180,9 +180,21 @@ class DialogueSummarizer:
                 attempt += 1
                 operation = key + ':retry-' + str(attempt)
                 receipt = self.store.db.lane_receipts.find_one({'_id': operation})
-            result = self.lane.generate('dialogue-summary:' + scene_id + ':' + str(scene['policy_epoch']),
-                                        operation, 'dialogue-summary', prompt, self.SYSTEM,
-                                        scope_key=scene['scope_key'], policy_epoch=scene['policy_epoch'])
+            from . import answers
+
+            def generate(attempt, note):
+                return self.lane.generate('dialogue-summary:' + scene_id + ':' + str(scene['policy_epoch']),
+                                          operation if not attempt else operation + ':fix-' + str(attempt),
+                                          'dialogue-summary', note or prompt, self.SYSTEM,
+                                          scope_key=scene['scope_key'], policy_epoch=scene['policy_epoch'])
+
+            def rejected(attempt, issue, value):
+                self.evidence.record('summary.rejected', {'scene_id': scene_id, 'summary_id': key,
+                                     'attempt': attempt, 'problem': issue, 'request_refs': value.request_refs})
+            try:
+                result, _ = answers.ask(generate, '这段对话的摘要正文（格式见上面的说明）', rejected=rejected)
+            except answers.Rejected as exc:
+                raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + exc.problem) from None
             if result.finish_reason != 'stop' or not result.content.strip():
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)
             saved = self.store.put('memory_units', {

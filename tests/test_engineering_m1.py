@@ -51,8 +51,10 @@ def test_E05_delivered_projection_only(store):
 
 @pytest.mark.parametrize('bad',[LaneResult('',reasoning='thinking'),LaneResult(''),LaneResult('cut',finish_reason='length'),LaneResult('x',tool_calls=[{'id':'bad'}])])
 def test_E07_invalid_stage_fails_closed(store,bad):
-    lane=FakeLane(store,[bad]);ep=Coordinator(store,lane).ingest(event())
+    # Two repairs (answers.py), each telling her what was wrong; then the stage fails closed.
+    lane=FakeLane(store,[bad]*3);ep=Coordinator(store,lane).ingest(event())
     assert ep['state']=='FAILED_PROTOCOL' and store.db.sink_receipts.count_documents({})==0
+    assert len(lane.calls)==3 and all(call['messages'][-1]['content'].startswith('程序检查：') for call in lane.calls[1:])
 
 
 def test_E09_identity_and_E10_scope(store):

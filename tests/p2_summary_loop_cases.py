@@ -639,7 +639,8 @@ class FakeLane:
         self.calls.append({'session': session, 'operation': operation, 'phase': phase,
                            'text': text, 'system': system, 'scope_key': scope_key,
                            'policy_epoch': policy_epoch})
-        return SimpleNamespace(content=self.content, finish_reason='stop', request_refs=['fake-ref'])
+        from asuna.lanes import LaneResult
+        return LaneResult(self.content, request_refs=['fake-ref'])
 
 
 def summarizer(store, evidence, lane, scenes=(GROUP,), moment=None):

@@ -121,6 +121,18 @@ def instruction(config):
     return prompt_path(config, 'stage_attend.md').read_text(encoding='utf-8')
 
 
+NEED = '只有一行：以「接话」或「不理」开头，后面用一句短话说为什么'
+
+
+def check(text):
+    """The verdict of an answer whose first line starts with 接话 or 不理; anything else is a mistake the
+    gate tells back to her (answers.py)."""
+    first = next((line.strip() for line in str(text or '').splitlines() if line.strip()), '')
+    if not any(first.startswith(word) for word in CHOICES):
+        raise ValueError('上一条第一行是「%s」，没有以「接话」或「不理」开头。' % excerpt(first, REASON_LIMIT))
+    return parse(text)
+
+
 def parse(text):
     """{'choice': 'join'|'quiet', 'reason': words}; anything she did not answer as 接话 counts as 不理."""
     first = next((line.strip() for line in str(text or '').splitlines() if line.strip()), '')

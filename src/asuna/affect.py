@@ -537,14 +537,28 @@ class Appraiser:
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
                    'speech': ep.get('speech'), 'ref_index': ep['context'].get('ref_index', []),
                    'how_to_record': recording_guide(ledger.model)}
+        from . import answers
+        question = (prompt_path(self.store.config, 'stage_appraise.md').read_text(encoding='utf-8')
+                    + '\n' + json.dumps(payload, ensure_ascii=False))
+        system = prompt_path(self.store.config, 'common.md').read_text(encoding='utf-8')
+        operation = episode_id + ':APPRAISE:0'
+
+        def generate(attempt, note):
+            return self.lane.generate('appraiser:' + ep['persona'],
+                                      operation if not attempt else operation + ':fix-' + str(attempt),
+                                      'APPRAISE', note or question, system)
+
+        def rejected(attempt, issue, value):
+            self.store.audit(episode_id, 'phase.rejected', {'operation': operation, 'phase': 'APPRAISE',
+                             'attempt': attempt, 'problem': issue}, ep['scope_key'])
         try:
-            result = self.lane.generate('appraiser:' + ep['persona'], episode_id + ':APPRAISE:0', 'APPRAISE',
-                                        prompt_path(self.store.config, 'stage_appraise.md').read_text(encoding='utf-8')
-                                        + '\n' + json.dumps(payload, ensure_ascii=False),
-                                        prompt_path(self.store.config, 'common.md').read_text(encoding='utf-8'))
-            items = json.loads(result.content) if result.finish_reason == 'stop' else None
-            if not isinstance(items, list):
-                raise ValueError('APPRAISAL_NOT_A_LIST')
+            result, items = answers.ask(generate, '一个 JSON 数组（格式见上面的说明，没有值得提的就写 []）',
+                                        answers.json_list, rejected=rejected)
+            if items is None:
+                raise ValueError('APPRAISAL_NOT_FINISHED: ' + result.finish_reason)
+        except answers.Rejected as exc:
+            self.store.audit(episode_id, 'affect.appraisal_failed', {'error': 'Rejected: ' + exc.problem}, ep['scope_key'])
+            return []
         except Exception as exc:
             self.store.audit(episode_id, 'affect.appraisal_failed', {'error': type(exc).__name__ + ': ' + str(exc)[:300]},
                              ep['scope_key'])

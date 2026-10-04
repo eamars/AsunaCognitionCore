@@ -10,7 +10,7 @@ from contextlib import contextmanager,nullcontext
 import jsonschema
 from .config import ROOT,prompt_path,redact_text,excerpt
 from .render import action_values
-from . import visibility
+from . import answers, visibility
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .skills import skills_directory
@@ -417,9 +417,20 @@ class Executor:
             text+='\n持久技能目录 /skills 已授权，独立于 /task；通过 sandbox_run 读写和执行。可按目标自主创建或改进技能，先实际试用。DSH 原生发现格式：/skills/<kebab-case-name>/SKILL.md，YAML frontmatter 至少含 name 和 description；正文写用途、入口、权限、版本和试用记录，脚本同目录保存。原生 skill 工具提供的 Windows resourceBase 对应这里的 /skills/<name>，执行时用 Linux 路径。只在任务需要时复用，不扩大授权。'
             if self.service.store.config.get('_skill_workspace'):
                 text+='\n当前 /skills 是角色插件的可写候选；原生 skill 发现读取已发布的不可变产物。候选文件可先试用，development_publish 默认发布角色插件；发布成功后新行动才发现新版本。修改认知核需显式 project="core"。'
-        value=self.lane.generate(binding,task['_id']+':execute:'+str(task['intent_revision']),'execution',text,system)
-        healthy()
-        self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason},task['scope_key'])
+        operation=task['_id']+':execute:'+str(task['intent_revision'])
+        def generate(attempt,note):
+            value=self.lane.generate(binding,operation if not attempt else operation+':fix-'+str(attempt),'execution',note or text,system)
+            healthy()
+            self.service.store.audit(task['_id'],'execution.output',{'request_refs':value.request_refs,'content':value.content,'reasoning':value.reasoning,'finish_reason':value.finish_reason,'attempt':attempt},task['scope_key'])
+            return value
+        def rejected(attempt,issue,value):
+            self.service.store.audit(task['_id'],'execution.rejected',{'attempt':attempt,'problem':issue,'request_refs':value.request_refs},task['scope_key'])
+        # The report is what the character hears; an empty or unfinished one goes back to the action brain (answers.py).
+        unusable=None
+        try:
+            value,_=answers.ask(generate,'给角色的行动报告：做了什么、结果怎样、还有什么没确定，写在正文里',tools=True,rejected=rejected)
+        except answers.Rejected as exc:
+            value,unusable=exc.value,exc.problem
         artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
         observations=artifacts
         # The model reports in natural language; identities and actual receipts
@@ -428,8 +439,10 @@ class Executor:
                 'finish_reason':value.finish_reason,'artifact_refs':[a['_id'] for a in observations],
                 'diagnostic':value.diagnostic,
                 'facts':[{'text':value.content,'evidence_refs':[a['_id'] for a in observations]}],
-                'uncertainties':[] if value.finish_reason=='stop' else ['原生回合未正常结束；保留已产生的工具事实，不宣称目标完成。']}
+                'uncertainties':(['行动脑没有给出可用的报告（'+unusable+'）；保留已产生的工具事实，不宣称目标完成。'] if unusable
+                    else [] if value.finish_reason=='stop' else ['原生回合未正常结束；保留已产生的工具事实，不宣称目标完成。'])}
+        returned=value.finish_reason=='stop' and not unusable
         with self.service.lock:
             current=self.service.valid(task)
-            return self.service.store.put('tasks',{**current,'state':'RETURNED' if value.finish_reason=='stop' else 'BLOCKED',
+            return self.service.store.put('tasks',{**current,'state':'RETURNED' if returned else 'BLOCKED',
                 'result':result,'finished_at':now(),'feedback_state':'READY'},expected=current['revision'],stream=task['_id'])

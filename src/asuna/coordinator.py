@@ -12,7 +12,7 @@ from .lanes import Lane
 from .publish import PublishService
 from . import schedule_rules
 from .render import episode_system
-from . import decide_delta, visibility
+from . import answers, decide_delta, visibility
 from .state import Store, Conflict, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
@@ -50,6 +50,12 @@ WORKSPACE_DECISION_SCHEMA['allOf'].append({'if':{'required':['cancel_task_id']},
 
 class ProtocolFailure(RuntimeError):
     pass
+
+
+# What each role stage needs, in words for her when a check fails (answers.py).
+STAGE_NEEDS={'MONOLOGUE':'1–4 句第一人称独白，写在正文里','DECIDE':'一个符合上面 DECIDE 说明的 JSON 决策对象，写在正文里',
+    'SELF':'一个 JSON 对象，只有 target 和 body 两个字段，写在正文里','REFLECT':'你对这个人的理解，写在正文里',
+    'SPEAK':'要说出口的话，写在正文里','CONSULT':'给行动脑的回答，写在正文里','WRITE':'要写进文档的正文'}
 
 
 class Coordinator:
@@ -173,31 +179,59 @@ class Coordinator:
             'timezone':plan.get('timezone'),'rule':plan.get('rule'),
             'plan_version':plan.get('plan_version',1)}})
 
-    def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None):
-        require_current_feedback(self.store, ep)
+    def _stage(self, ep, phase, round_id=0, extra='', *, instruction=None, operation=None, shape=None, label=None):
+        """One role stage. Its answer must pass answers.py's checks (and `shape`, when given); a failed check
+        goes back to her in the same session and the stage asks again. Returns the text, or `shape`'s result."""
         operation=operation or f"{ep['_id']}:{phase}:{round_id}"
         if ep.get('resume_generation'):
             operation+=':resume:'+str(ep['resume_generation'])
-        if instruction is None:
-            instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
-            # Program facts referenced by prompts come from their single source.
-            instruction=instruction.replace('{{min_interval_seconds}}',str(schedule_rules.MIN_INTERVAL_SECONDS))
-        feedback_continuation=(ep.get('episode_kind')=='task_feedback'
-            and ep.get('feedback_resume_phase')==phase)
-        carries_context=(phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation
-        instruction += '\n'+extra
-        if feedback_continuation:
-            # The original feedback input, result and incomplete output are
-            # already durable in this role's native session. Continue its
-            # stage there without injecting the large context a second time.
-            instruction=('原行动反馈的这个角色阶段尚未完成。沿同一会话接续，不重跑行动或重新登记输入。'
-                '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
-        elif ep.get('resume_diagnostic'):
-            instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
+        label=label or ('INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT')
+        def generate(attempt, note):
+            if not attempt:
+                return self._generate(ep,phase,operation,instruction,extra)
+            return self._generate(ep,phase,operation+':fix-'+str(attempt),note,repair=True)
+        def rejected(attempt, issue, value):
+            self.store.audit(ep['_id'],'phase.rejected',{'operation':operation,'phase':phase,'attempt':attempt,
+                'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
+        try:
+            value,shaped=answers.ask(generate,STAGE_NEEDS.get(phase,'这一阶段要交的内容，写在正文里'),shape,rejected=rejected)
+        except answers.Rejected as exc:
+            raise ProtocolFailure(label+': '+json.dumps({'problem':exc.problem,'finish_reason':exc.value.finish_reason,
+                'request_refs':exc.value.request_refs},ensure_ascii=False))
+        if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
+            # Not the model's mistake (a transport error after DSH's retries, an interrupted turn).
+            raise ProtocolFailure(label+': '+json.dumps({
+                'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
+                'content':value.content,'request_refs':value.request_refs},ensure_ascii=False))
+        return shaped if shape else value.content
+
+    def _generate(self, ep, phase, operation, instruction=None, extra='', repair=False):
+        """One delivery of a stage to her role session. A repair carries only the program's note."""
+        require_current_feedback(self.store, ep)
+        carries_context=False
+        if repair:
+            text=instruction
+        else:
+            if instruction is None:
+                instruction=prompt_path(self.store.config,f'stage_{phase.lower()}.md').read_text(encoding='utf-8')
+                # Program facts referenced by prompts come from their single source.
+                instruction=instruction.replace('{{min_interval_seconds}}',str(schedule_rules.MIN_INTERVAL_SECONDS))
+            feedback_continuation=(ep.get('episode_kind')=='task_feedback'
+                and ep.get('feedback_resume_phase')==phase)
+            carries_context=(phase=='MONOLOGUE' or (not self.monologue_enabled and phase=='DECIDE')) and not feedback_continuation
+            instruction += '\n'+extra
+            if feedback_continuation:
+                # The original feedback input, result and incomplete output are
+                # already durable in this role's native session. Continue its
+                # stage there without injecting the large context a second time.
+                instruction=('原行动反馈的这个角色阶段尚未完成。沿同一会话接续，不重跑行动或重新登记输入。'
+                    '上次真实错误：'+ep.get('failure','')[:1200]+'\n'+instruction)
+            elif ep.get('resume_diagnostic'):
+                instruction+='\n宿主上次中断/协议诊断（并非新的用户指令；继续原目标）：'+ep['resume_diagnostic']
+            context=json.dumps(ep['context'],ensure_ascii=False,default=str) if carries_context else None
+            text=context+'\n'+instruction if carries_context else instruction
         binding=self._binding(ep)
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':phase},ep['scope_key'])
-        context=json.dumps(ep['context'],ensure_ascii=False,default=str) if carries_context else None
-        text=context+'\n'+instruction if carries_context else instruction
         # A native role session composes the notice itself: what it still shows verbatim is not repeated.
         delivery=({'context':json.loads(context),'tail':instruction,'episode_id':ep['_id']}
                   if carries_context and getattr(self.character,'composes_context',False) else {})
@@ -209,12 +243,7 @@ class Coordinator:
             'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
             'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
         require_current_feedback(self.store, ep)
-        if value.finish_reason!='stop' or not value.content.strip() or value.tool_calls:
-            label='INVALID_CONSULT_OUTPUT' if phase=='CONSULT' else 'INVALID_STAGE_OUTPUT'
-            raise ProtocolFailure(label+': '+json.dumps({
-                'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
-                'content':value.content,'request_refs':value.request_refs},ensure_ascii=False))
-        return value.content
+        return value
 
     def _attend(self, ep):
         """Ask the gate (attend.py) in her per-group session; 不理 ends the episode before any recall."""
@@ -227,14 +256,25 @@ class Coordinator:
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
         try:
             material=attend.material(self.store,scene,event,row,ep['persona'])
-            value=self.attend.generate(self._binding(ep),operation,'ATTEND',
-                attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False),
-                attend.system(self.store,ep['persona']))
-            self.store.audit(ep['_id'],'phase.output',{'operation':operation,'phase':'ATTEND',**content_ref(value.content),
-                'finish_reason':value.finish_reason,'request_refs':value.request_refs},ep['scope_key'])
-            verdict=attend.parse(value.content if value.finish_reason=='stop' else '')
+            question=attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False)
+            system=attend.system(self.store,ep['persona'])
+            def generate(attempt, note):
+                current=operation if not attempt else operation+':fix-'+str(attempt)
+                value=self.attend.generate(self._binding(ep),current,'ATTEND',note or question,system)
+                self.store.audit(ep['_id'],'phase.output',{'operation':current,'phase':'ATTEND',**content_ref(value.content),
+                    'finish_reason':value.finish_reason,'request_refs':value.request_refs},ep['scope_key'])
+                return value
+            def rejected(attempt, issue, value):
+                self.store.audit(ep['_id'],'phase.rejected',{'operation':operation,'phase':'ATTEND','attempt':attempt,
+                    'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
+            value,verdict=answers.ask(generate,attend.NEED,attend.check,rejected=rejected)
+            if verdict is None:          # not the model's mistake: the gate could not answer
+                verdict={'choice':'quiet','reason':'没能判断：'+value.finish_reason}
         except (Denied,ProtocolFailure):
             raise
+        except answers.Rejected as exc:
+            verdict={'choice':'quiet','reason':'没能判断：没有按 接话／不理 回答'}
+            self.store.audit(ep['_id'],'attend.failed',{'problem':exc.problem},ep['scope_key'])
         except Exception as exc:
             # A gate that cannot answer lets the message pass quietly; it never fails the turn.
             verdict={'choice':'quiet','reason':'没能判断：'+type(exc).__name__}
@@ -308,33 +348,30 @@ class Coordinator:
                         self.store.put('memory_units',{'_id':memory_id,'character_id':character_id(self.store.config),'kind':'monologue','scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'body_markdown':text,'epistemic_type':'character_interpretation','source_event_ids':[ep['source_event_id']],'depends_on':[ep['source_event_id']],'episode_id':ep_id,'status':'active','embedding_status':'PENDING'},stream=ep_id)
                     ep=self._update(ep,state='MONOLOGUE_ACCEPTED',monologue_refs=[memory_id],feedback_resume_phase=None)
                 if ep['state']=='MONOLOGUE_ACCEPTED':
-                    decision_error=''
-                    for attempt in range(2):
-                        text=self._stage(ep,'DECIDE',ep.get('recall_rounds',0)*2+attempt,extra='上一条决策未被程序接受：'+decision_error+'。请修复必要控制字段或JSON格式，不改变意图。' if attempt else '')
+                    def decision_shape(text):
+                        decision=answers.json_object(text,'JSON 决策对象')
+                        # ADR-009 optional fields are validated item by item later; never fail the turn here.
+                        decision,delta=decide_delta.split(decision)
                         try:
-                            decision=json.loads(text)
-                            if not isinstance(decision,dict):raise ValueError('DECISION_NOT_AN_OBJECT')
-                            # ADR-009 optional fields are validated item by item later; never fail the turn here.
-                            decision,delta=decide_delta.split(decision)
                             jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA)
-                            if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
-                                raise ValueError('SELF_STATE_ONLY_IN_INTERNAL_OPPORTUNITY')
-                            break
-                        except (ValueError,jsonschema.ValidationError) as exc:
-                            decision_error=str(exc) if isinstance(exc,ValueError) else f'{list(exc.absolute_path)}: {exc.message}'
-                            if attempt==1:
-                                raise ProtocolFailure('BAD_DECISION_JSON: '+decision_error)
+                        except jsonschema.ValidationError as exc:
+                            where='.'.join(str(part) for part in exc.absolute_path) or '最外层'
+                            raise ValueError('决策不符合格式：'+where+'：'+exc.message+'。') from None
+                        if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
+                            raise ValueError('reflect_self 只能在内部的自我发展机会里用，这一次不能用。')
+                        return decision,delta
+                    decision,delta=self._stage(ep,'DECIDE',ep.get('recall_rounds',0),shape=decision_shape,label='BAD_DECISION_JSON')
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,decision_delta=delta,feedback_resume_phase=None)
                 if ep['state']=='DECISION_ACCEPTED':
                     ep=decide_delta.apply(self,ep)
                     if ep['decision'].get('reflect_self') and not ep.get('self_state_update'):
                         from .self_state import SelfState
-                        try:
-                            update=json.loads(self._stage(ep,'SELF'))
-                        except ValueError as exc:
-                            raise ProtocolFailure('INVALID_SELF_STATE_JSON') from exc
-                        if not isinstance(update,dict) or set(update)!={'target','body'}:
-                            raise ProtocolFailure('INVALID_SELF_STATE_STAGE')
+                        def self_shape(text):
+                            update=answers.json_object(text)
+                            if set(update)!={'target','body'}:
+                                raise ValueError('上一条的字段是 '+('、'.join(sorted(update)) or '空')+'，这一步只能有 target 和 body。')
+                            return update
+                        update=self._stage(ep,'SELF',shape=self_shape,label='INVALID_SELF_STATE_STAGE')
                         committed=({'target':'none','committed':False} if update['target']=='none'
                                    else SelfState(self.store).commit(ep,update['target'],update['body']))
                         ep=self._update(ep,self_state_update=committed)

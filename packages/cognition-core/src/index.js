@@ -15,7 +15,7 @@ import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
-import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
+import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { ActionRecords } from './action-records.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
@@ -336,6 +336,8 @@ export class CognitionCore {
         return;
       }
       if (state.current) { state.queue.push(event); return; }
+      if (event.channel_input && await lineBeforeTurn(this, agent, event.channel_input))
+        this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
       state.current = event;
       state.system = event.system;
       agent.followup(this.message(event, agent.session, agent.inbox.nextStep));

@@ -22,7 +22,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import Subagents from '@deepseek-ai/dsh-subagent';
 import Persistence from '../src/persistence.js';
 import { CognitionCore } from '../src/index.js';
-import { PENDING_LINES, organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
+import { PENDING_LINES, lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
 
 test('native continuation preserves history and task children retain their actual execution directory', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-navigation-'));
@@ -164,6 +164,24 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
   assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);
+  // A line the record missed is queued again on the agent before its stage's turn, so a new conversation's
+  // first turn still reads head, line, notice (not head, notice, monologue, line).
+  const lost = { _id: 'qq-lost', cwd: qq, scene_id: 'qq:bot:group:three', native_title: '群聊 · three' };
+  await organizeNativeWorkspaces(core, { first: false, archive_ids: [], workspaces: { QQ: qq, Local: local },
+    entries: [{ session_id: lost._id, workspace: 'QQ', binding: lost }] });
+  const opened = await ctx.agents.resume({ resumeSessionId: lost._id, agentOptions: route });
+  const missed = { session_id: lost._id, binding: lost,
+    input: { id: 'missed', sender: '10003', text: 'the line this turn answers', received_at: '2026-10-05' } };
+  assert.equal(await lineBeforeTurn(core, opened.agent, missed), true);
+  assert.equal(await lineBeforeTurn(core, opened.agent, missed), false, 'queued once');
+  opened.agent.followup(createUserMessage({ source: { kind: 'asuna', form: 'notice' }, content: [{ type: 'text', text: 'stage' }] }));
+  await opened.agent.whenIdle();
+  const order = opened.agent.session.surface.nodes.map(seq => opened.agent.session.eventAt(seq));
+  assert.equal(order[0].type, 'system/message');
+  assert.deepEqual(order.filter(event => event.type === 'user/message').map(event => event.data.source.receipt ?? 'notice'),
+    ['missed', 'notice']);
+  assert.equal(await lineBeforeTurn(core, opened.agent, missed), false, 'present after the turn');
+  await opened.dispose();
   await core.handles.get(role._id).dispose();
   await ctx.fiber.dispose();
   const reopened = new Context();

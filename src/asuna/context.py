@@ -22,6 +22,11 @@ try:                                  # 跨场景只读联动（A2）：联动�
 except Exception:
     scene_links = None                # 拿不到就整体不联动，与改动前逐字一致
 
+try:                                  # 出站图片附件：本轮可引用清单 + 历史里的附件位
+    from . import outbound_media
+except Exception:                     # 拿不到就整体不带附件位，行形状与改动前逐字一致
+    outbound_media = None
+
 # 主动机会给角色看的说明：只说清这是什么、她能选什么，不暗示她该说。
 PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的闸门（安静时段、群里现在的语速、'
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
@@ -50,7 +55,7 @@ BLOCKS = {
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'schedule_control_from_program',
                     'scheduled_plan_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program',),
-    'media': ('media_from_program',),
+    'media': ('media_from_program', 'image_artifacts_from_program'),
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
 }
@@ -216,7 +221,8 @@ class ContextBuilder:
             # Newly accepted/future queued inputs must not enter an earlier turn.
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
-            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1}
+            'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
+            'attachment':1,'attachment_skipped':1}   # 附件位：只多带这两个小字段，字节仍在 BlobStore
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -244,6 +250,11 @@ class ContextBuilder:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             if row.get('direction')!='outbound':
                 row.pop('episode_id',None)
+            if outbound_media is not None:
+                # 已送达的图在她历史里显示成「我发过这张图」；没跟着出去的、回执对不上的都另说，不含混。
+                slot=outbound_media.history_slot(row,self.store)
+                if slot:row['attachment']=slot
+                else:row.pop('attachment',None)
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -379,6 +390,10 @@ class ContextBuilder:
             from .vision import media_note
             media=media_note(source,self.store.config)
             if media:context['media_from_program']=media
+        if outbound_media is not None:
+            # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
+            offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'])
+            if offer:context['image_artifacts_from_program']=offer
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],

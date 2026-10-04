@@ -29,7 +29,11 @@ IMPORT_TOOL = {
                     'Existing files are kept unless overwrite=true; max_bytes defaults to 1 MiB and is capped at '
                     '4 MiB. Returns the relative path, absolute path, byte count and SHA-256 actually written, or '
                     'the real failure: unknown endpoint, URL rejected, path outside the workspace, target exists, '
-                    'over limit, HTTP status or transport error.'),
+                    'over limit, HTTP status or transport error. When the bytes are actually a PNG/JPEG/WebP/GIF '
+                    'image (file signature, not the name), the host additionally registers them as an image '
+                    'artifact in this task\'s own scene scope and the result carries `artifact` metadata with the '
+                    'host-recomputed sha256 and artifact_id, so a later turn can send that picture out; other '
+                    'bytes are unaffected and the result is unchanged.'),
     'parameters': {'endpoint': {'type': 'string', 'required': True},
                    'artifact_path': {'type': 'string', 'required': True},
                    'target_relative_path': {'type': 'string', 'required': True},
@@ -144,8 +148,15 @@ def classify_fetch(result, limit, *, endpoint, artifact_path):
     return None
 
 
-def import_artifact(args, *, endpoints, workspace, fetch, protected=()):
-    """One artifact, configured endpoint only, written by the platform into the task workspace."""
+def import_artifact(args, *, endpoints, workspace, fetch, protected=(), register=None):
+    """One artifact, configured endpoint only, written by the platform into the task workspace.
+
+    ``register(data, meta)`` is an optional host-side hook called after a successful write, with the
+    bytes actually written. It decides whether they are worth registering (an image, in practice) and
+    returns a dict to report under ``artifact``, or ``None`` when there is nothing to report — a
+    non-image import then returns exactly what it returned before this hook existed. A raising or
+    failing hook never turns a completed import into a failure: the reason is reported honestly.
+    """
     if not isinstance(args, dict):
         return _error('INVALID_IMPORT_ARGUMENTS')
     endpoint, failure = resolve_endpoint(endpoints, args.get('endpoint'))
@@ -188,8 +199,18 @@ def import_artifact(args, *, endpoints, workspace, fetch, protected=()):
     except OSError as exc:
         return _error('TARGET_WRITE_FAILED', target_relative_path=relative,
                       detail=(type(exc).__name__ + ': ' + str(exc))[:300])
-    return {'imported': True, 'endpoint': endpoint.get('name'), 'artifact_path': path,
-            'target_relative_path': relative, 'target_path': str(target), 'bytes': len(body),
-            'sha256': hashlib.sha256(body).hexdigest(), 'http_status': result.get('status'),
-            'content_type': result.get('content_type'), 'max_bytes': limit,
-            'overwritten': bool(existed and overwrite)}
+    value = {'imported': True, 'endpoint': endpoint.get('name'), 'artifact_path': path,
+             'target_relative_path': relative, 'target_path': str(target), 'bytes': len(body),
+             'sha256': hashlib.sha256(body).hexdigest(), 'http_status': result.get('status'),
+             'content_type': result.get('content_type'), 'max_bytes': limit,
+             'overwritten': bool(existed and overwrite)}
+    if register is not None:
+        # 登记只看真写进工作区的字节；它失败不能把一次成功的导入判成失败，原因如实带在 artifact 里。
+        try:
+            outcome = register(body, {'endpoint': endpoint.get('name'), 'artifact_path': path,
+                                      'target_relative_path': relative})
+        except Exception as exc:
+            outcome = {'registered': False, 'reason': (type(exc).__name__ + ': ' + str(exc))[:120]}
+        if isinstance(outcome, dict) and outcome:
+            value['artifact'] = outcome
+    return value

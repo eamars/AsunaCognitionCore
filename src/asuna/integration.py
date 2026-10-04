@@ -292,13 +292,17 @@ class IntegrationRunner:
                 return self.status()
             raise ValueError('UNKNOWN_INTEGRATION_TOOL')
 
-    def import_artifact(self, args, *, workspace, protected=()):
-        """Read one artifact from a configured endpoint; the platform writes it into the task workspace."""
+    def import_artifact(self, args, *, workspace, protected=(), register=None):
+        """Read one artifact from a configured endpoint; the platform writes it into the task workspace.
+
+        ``register`` is the host-side image registration hook (see integration_import); the task's
+        scope is bound by the caller, never by tool arguments.
+        """
         from .integration_import import import_artifact
         with self.lock:
             if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
             return import_artifact(args, endpoints=self.endpoints, workspace=workspace,
-                                   fetch=self._fetch_artifact, protected=protected)
+                                   fetch=self._fetch_artifact, protected=protected, register=register)
 
     def _fetch_artifact(self, endpoint, path, limit, timeout=20):
         """One managed-namespace GET: only that endpoint's configured relay is reachable, never a URL."""

@@ -127,6 +127,14 @@ DEFAULT_WINDOW_DAYS = 7
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
+try:                                  # 出站图片附件：已送达历史里的附件位（拿不到就不带，行形状不变）
+    from . import outbound_media
+except Exception:
+    try:
+        import outbound_media
+    except Exception:
+        outbound_media = None
+
 try:                                  # 宿主内：联动场景与 canonical person 都现算自配置
     from . import scene_links
 except Exception:                     # 同目录平铺加载（离线自检）也认
@@ -555,6 +563,11 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
             "side": SIDE_OUTBOUND if _text(doc.get(DIRECTION_FIELD), 16) == OUTBOUND else SIDE_INBOUND,
             "speaker": author,          # 发言者只认记录里的 author，不拿身份块自称顶替
             "text": full, "chars": len(full), "verbatim": bool(full)}
+    if outbound_media is not None:
+        # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
+        slot = outbound_media.history_slot(doc)
+        if slot:
+            base["attachment"] = slot
     labeler = (parts or {}).get("labeler")
     if labeler:
         # Who wrote it, by fixed label (people.py): names can repeat or be copied, labels can't.
@@ -931,9 +944,11 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET):
         stamp = hit["at"][:16].replace("T", " ") if hit["at"] else "无时间戳"
         if hit.get("time_source") == TIME_SOURCE_SINK:
             stamp += "⟨本机送达回执⟩"          # 不是平台 ack，行首就说清
-        lines.append("- %s %s#%s｜%s｜%s：%s%s" % (
+        note = hit.get("attachment")
+        lines.append("- %s %s#%s｜%s｜%s：%s%s%s" % (
             stamp, hit["scene_id"], hit.get("scene_seq"), hit.get("side") or hit["direction"],
-            hit["who"], body, "" if hit["verbatim"] else "〔原文没回读到〕"))
+            hit["who"], body, "" if hit["verbatim"] else "〔原文没回读到〕",
+            "〔%s〕" % note["note"] if isinstance(note, dict) and note.get("note") else ""))
     if result.get("next_cursor"):
         lines.append("（还有更多，续页 cursor=%s）" % result["next_cursor"])
     return "\n".join(lines)

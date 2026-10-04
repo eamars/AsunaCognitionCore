@@ -2,13 +2,15 @@
 import uuid
 from gridfs import GridFSBucket
 from .evidence import sha
-from .state import Denied
+from .state import Denied, now
 
 
 class BlobStore:
     def __init__(self,store):self.store=store;self.bucket=GridFSBucket(store.db,bucket_name='artifact_blobs')
 
-    def put(self,data:bytes,scope:str,kind:str,*,source_ids=()):
+    def put(self,data:bytes,scope:str,kind:str,*,source_ids=(),media_type=None):
+        # created_at / media_type 只是给「本轮可引用」那份清单用的说明（新的在前、格式看得见）；
+        # 真要以字节为准时仍然现读现认魔数，不拿这两个字段当依据。
         # owner-private:<persona> holds source snapshots and job reports (ADR-009 §2.2); reads stay operator-only.
         if scope not in ('operator','global-safe') and not scope.startswith('owner-private:') and not self.store.db.scenes.find_one({'scope_key':scope}):raise Denied('ARTIFACT_SCOPE_UNKNOWN')
         key='blob-'+uuid.uuid4().hex;digest=sha(data)
@@ -18,7 +20,9 @@ class BlobStore:
             # Read the stored stream before permitting any dependent operation.
             observed=self.bucket.open_download_stream(blob_id).read()
             if len(observed)!=len(data) or sha(observed)!=digest:raise ValueError('ARTIFACT_STORED_BYTES_MISMATCH')
-            self.store.put('artifacts',{'_id':key,'scope_key':scope,'state':'DONE','kind':kind,'storage':'gridfs','gridfs_id':str(blob_id),'sha256':digest,'size':len(data),'source_ids':list(source_ids)},stream=key)
+            doc={'_id':key,'scope_key':scope,'state':'DONE','kind':kind,'storage':'gridfs','gridfs_id':str(blob_id),'sha256':digest,'size':len(data),'source_ids':list(source_ids),'created_at':now()}
+            if media_type:doc['media_type']=str(media_type)[:40]
+            self.store.put('artifacts',doc,stream=key)
         except BaseException:
             self.bucket.delete(blob_id);raise
         return {'artifact_id':key,'sha256':digest,'size':len(data),'storage':'gridfs'}

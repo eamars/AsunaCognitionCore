@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "asuna:decision-delta:adr009",
   "title": "ADR-009 additions to the DECIDE schema",
-  "description": "These optional properties are merged into the existing WORKSPACE decision schema. Each item is validated and committed independently; a rejected item is recorded in episode.rejections and never fails the turn. Only whole-JSON parse failure or a missing required base field keeps the existing BAD_DECISION_JSON behaviour. Timestamps are never supplied by the model.",
+  "description": "These optional properties are merged into the existing WORKSPACE decision schema. Each item is validated and committed independently; a rejected item is recorded in episode.rejections and never fails the turn. Only whole-JSON parse failure or a missing required base field keeps the existing BAD_DECISION_JSON behaviour. Timestamps are never supplied by the model. Outbound image attachments (attach) reference a program-listed image artifact for this turn; bytes stay in the blob store and only metadata is written on the message row.",
   "type": "object",
   "definitions": {
     "affect_event": {
@@ -386,6 +386,28 @@
           }
         }
       }
+    },
+    "attach": {
+      "description": "随这一条要说的话一起发出去的图片（至多 1 条）。artifact_id 只能照抄上下文 image_artifacts_from_program.items 里给出的值——它不是文件路径也不是文件名。第一版只允许 session_class=owner_private 且该场景路由 target.type=dm 的回合，群方向确定性拒绝；不接受的条目只进 rejections，不影响这一轮。",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "why": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
     }
   },
   "examples": [
@@ -443,6 +465,19 @@
             "injectable"
           ],
           "reason": "值得记下的具体时刻"
+        }
+      ]
+    },
+    {
+      "next": "speak",
+      "goal": "把刚画好的那张图给主人看",
+      "constraints": [],
+      "recall_query": "",
+      "speak_before_action": false,
+      "attach": [
+        {
+          "artifact_id": "blob-0f3c1e9a7b2d4c8f9a0b1c2d3e4f5061",
+          "why": "他要看的就是这张图"
         }
       ]
     }

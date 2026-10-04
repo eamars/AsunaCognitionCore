@@ -345,7 +345,8 @@ def read_image_for_task(store, blobs, task, config, args):
     data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
     digest = sha(data)
     # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
-    blob = blobs.put(data, task['scope_key'], 'image', source_ids=[entry['source_message_id']]) if blobs else None
+    blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
+                      source_ids=[entry['source_message_id']]) if blobs else None)
     payload = {'ref': ref, 'scene_id': task['scene_id'],
                'image_scene_id': _clean(entry.get('scene_id'), 90) or task['scene_id'],
                'linked_scene': bool(entry.get('linked_scene')),

@@ -15,11 +15,12 @@ import jsonschema
 
 from .config import prompt_path, schema
 from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
-from . import visibility
+from . import visibility, outbound_media
 
 DELTA = schema('decision-delta.schema.json')
 DELTA_KEYS = tuple(DELTA['properties'])
-ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote', 'group_action')
+ORDER = ('affect_ops', 'affect_adopt', 'affect', 'policy_set', 'pin', 'write_docs', 'promote', 'group_action',
+         'attach')
 # Fields whose engines arrive in later phases are refused explicitly, not silently dropped.
 NOT_YET = {}
 
@@ -110,8 +111,46 @@ def apply(coordinator, ep):
                     results.setdefault('group_action', []).append(group_admin.queue(store, ep, index, item))
                 except Exception as exc:  # each item is independent; a refusal is said, never acted on
                     rejected.append(rejection(field, index, code_of(exc), exc))
+            elif field == 'attach':
+                _attach(coordinator, ep, cls, index, item, results, rejected)
     return coordinator._update(ep, rejections=[*(ep.get('rejections') or []), *rejected],
                                delta_results=results, delta_applied=True)
+
+
+def _attach(coordinator, ep, cls, index, item, results, rejected):
+    """随这条消息发出去的一张图：只接受程序本轮列出的 image artifact，逐条判定。
+
+    方向（owner_private + 该场景路由 target.type=dm）、可引用清单、字节格式与大小都在这里判；
+    任何一条不成立只进 rejections，不影响这一轮。字节留在 BlobStore，行上只写元数据（claim 时给领取方）。
+    能引用哪些场景里登记的图由 ``outbound_media.image_scopes`` 现算（本场景 + 同一主人的另一个
+    owner_private 场景），不接受模型或参数指定 scope。
+    """
+    store = coordinator.store
+    scene = store.db.scenes.find_one({'_id': ep['scene_id']},
+                                     {'_id': 1, 'channel_id': 1, 'kind': 1, 'scope_key': 1, 'members': 1})
+    allowed, reason = outbound_media.target_allowed(store.config, scene, cls)
+    if not allowed:
+        rejected.append(rejection('attach', index, 'ATTACH_TARGET_NOT_ALLOWED', reason))
+        return
+    if (ep.get('decision') or {}).get('next') == 'silent':
+        rejected.append(rejection('attach', index, 'ATTACH_NOT_WHEN_SILENT', '这一轮不出声，图也没有跟着走'))
+        return
+    offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
+    listed = {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}
+    if item['artifact_id'] not in listed:
+        rejected.append(rejection('attach', index, 'ATTACH_ARTIFACT_NOT_IN_CONTEXT',
+                                  '%s：只能引用 image_artifacts_from_program 里列出的 artifact_id'
+                                  % item['artifact_id']))
+        return
+    try:
+        from .blobs import BlobStore
+        meta = outbound_media.accept_artifact(
+            store, BlobStore(store), item['artifact_id'],
+            outbound_media.image_scopes(store, store.config, scene, cls, ep.get('person_id')))
+    except Exception as exc:
+        rejected.append(rejection('attach', index, code_of(exc), exc))
+        return
+    results.setdefault('attach', []).append(dict(meta, index=index))
 
 
 def _policy_set(store, ep, cls, index, item, results, rejected, scheduler=None):

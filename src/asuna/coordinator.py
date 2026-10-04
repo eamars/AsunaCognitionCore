@@ -13,7 +13,7 @@ from .lanes import Lane
 from .publish import PublishService
 from . import schedule_rules
 from .render import episode_system
-from . import answers, decide_delta, visibility
+from . import answers, decide_delta, visibility, outbound_media
 from .state import Store, Conflict, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
@@ -542,12 +542,16 @@ class Coordinator:
                     times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
                                  effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
                     keys=[]
+                    # 这一轮被程序接受的那张图（没有就 None）：只挂在第一段上，字节仍在 BlobStore，行上只写元数据。
+                    attach_meta=outbound_media.attachment_for_speak(ep)
                     for index,segment in enumerate(segments):
                         key=ep_id+':speak:'+str(index)
                         keys.append(key)
                         if not self.store.db.messages.find_one({'_id':key}):
                             sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
                             row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+                            if index==0 and attach_meta:
+                                row['attachment']=dict(attach_meta)
                             if len(segments)>1:
                                 row.update(segment_index=index,segment_count=len(segments))
                                 if scene.get('channel_id'):

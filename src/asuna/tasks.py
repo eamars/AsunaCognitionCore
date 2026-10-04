@@ -18,6 +18,7 @@ from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, owner_profile
 from .integration_import import IMPORT_TOOL_NAME, integration_gated
+from . import outbound_media   # 导入图片时顺手登记成这一轮可引用的 image artifact（B7）
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
@@ -332,8 +333,10 @@ class ToolBroker:
             elif integration_gated(tool):
                 # 导入产物：端点白名单、工作区边界、默认不覆盖与大小上限都在
                 # integration_import 里算；字节由本宿主进程写进这次绑定的工作区，不经过模型。
+                # 登记用的 scope 取自任务绑定（task['scope_key']），不是参数：工具参数面没有 scope 这一项。
                 result=(self.integration.import_artifact(args, workspace=sandbox.task_dir,
-                            protected=sandbox.protected_paths) if tool==IMPORT_TOOL_NAME
+                            protected=sandbox.protected_paths,
+                            register=outbound_media.import_register(self.store, task)) if tool==IMPORT_TOOL_NAME
                         else self.integration.call(tool,args))
             elif tool in ('list_files','read_file','write_file'):
                 code="""import pathlib,json,sys

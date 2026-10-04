@@ -119,8 +119,12 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store):
     assert 'import_integration_artifact' not in store.db.tasks.find_one({'_id':ordinary['task_id']})['allowed_capabilities']
     seen={}
     class Runner:
-        def import_artifact(self, args, *, workspace, protected):
+        def import_artifact(self, args, *, workspace, protected, register=None):
             seen['args']=args; seen['workspace']=workspace; seen['protected']=[str(p) for p in protected]
+            seen['register']=register
+            # 宿主传进来的登记回调：非图片字节什么都不登记、什么都不报，结果与改动前逐字一致
+            seen['registered']=register(b'not an image', {'endpoint':args['endpoint'],
+                                                          'artifact_path':args['artifact_path']}) if register else 'none'
             return {'imported':True,'target_relative_path':args['target_relative_path'],'bytes':3}
     service.crash=lambda point:None
     broker=ToolBroker(service); broker.integration=Runner()
@@ -133,6 +137,8 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store):
         result=broker.call('granted','import-1','import_integration_artifact',args)
         assert result['imported'] is True and result['evidence_ref'], result
         assert seen['args']==args and str(seen['workspace'])==str(work.resolve()), seen
+        assert callable(seen.get('register')), '宿主没把图片登记回调传给导入工具'
+        assert seen['registered'] is None, seen['registered']   # 不是图：不写 artifact，也不报未登记
         # 字节由宿主写，路径由这次绑定的工作区决定；换 call_id 才是一次新的取用。
         assert broker.call('granted','import-2','import_integration_artifact',
                            {**args,'target_relative_path':'imports/second.txt'})['imported'] is True

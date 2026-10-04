@@ -15,7 +15,7 @@ import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
-import { organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
+import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { ActionRecords } from './action-records.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
@@ -288,7 +288,12 @@ export class CognitionCore {
       try { await writing; } finally { if (this.channelWrites.get(id) === writing) this.channelWrites.delete(id); }
       if (event.kind === 'channel_input') return;
     }
-    if (event.kind === 'restart_requested') { await this.restart(); return; }
+    if (event.kind === 'restart_requested') {
+      // A request from the worker a restart is still bringing up would otherwise be lost, leaving that
+      // worker holding its queues for a restart that never comes. Honor it once the current one settles.
+      if (this.restarting) { this.restartAgain = true; this.ctx.logger.warn('Asuna: restart requested during a restart; queued'); return; }
+      await this.restart(); return;
+    }
     if (event.kind === 'host_request') {
       try {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
@@ -336,6 +341,8 @@ export class CognitionCore {
         return;
       }
       if (state.current) { state.queue.push(event); return; }
+      if (event.channel_input && await lineBeforeTurn(this, agent, event.channel_input))
+        this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
       state.current = event;
       state.system = event.system;
       agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
@@ -426,6 +433,7 @@ export class CognitionCore {
       await this.ready();
     })();
     try { await this.restarting; } finally { this.restarting = null; }
+    if (this.restartAgain) { this.restartAgain = false; await this.restart(); }
   }
 
   attachPreset(scope, lane) {

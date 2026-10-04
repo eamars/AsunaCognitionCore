@@ -335,11 +335,18 @@ class AffectLedger:
             if item.get(field) is not None and float(item[field]) < 0:
                 raise AffectError('HALF_LIFE_MUST_BE_POSITIVE', field)
 
-    def commit(self, ep, index, item, cls, *, refs=None, proposal_id=None):
-        """A character-committed event: host timestamp, origin asuna, source scope from the session class."""
+    def commit(self, ep, index, item, cls, *, refs=None, proposal_id=None, key=None):
+        """A character-committed event: host timestamp, origin asuna, source scope from the session class.
+
+        ``key`` names which effect this event is (DECIDE dedups optional items by it). The row id
+        derives from the key when given: a later DECIDE round that records a new feeling at the same
+        position no longer collides with the earlier one, and replaying the same item hits the same
+        row instead of raising EVENT_IMMUTABLE.
+        """
         self.check(item, refs if refs is not None else ep['context'].get('ref_index', []))
         source_scope = visibility.owner_private_scope(self.persona) if cls == visibility.OWNER_PRIVATE else ep['scope_key']
-        doc = {'_id': sha(canonical([ep['_id'], 'affect', index, proposal_id])), 'persona': self.persona,
+        doc = {'_id': sha(canonical([ep['_id'], 'affect', key if key is not None else index, proposal_id])),
+               'persona': self.persona,
                'origin': 'asuna', 'ts': now(), 'ref_kind': 'episode', 'source_scope': source_scope,
                'episode_id': ep['_id'], 'created_at': now(),
                **{k: item[k] for k in EVENT_FIELDS if k in item}}
@@ -348,13 +355,19 @@ class AffectLedger:
             doc['proposal_id'] = proposal_id
         return self._insert('affect_events', doc, 'affect:' + ep['_id'])[0]
 
-    def record(self, ep, index, item, cls):
+    def record(self, ep, index, item, cls, *, key=None):
         """A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates."""
         if not self.enabled:
             raise AffectError('AFFECT_DISABLED')
-        return self.commit(ep, index, from_words(self.model, item), cls)
+        return self.commit(ep, index, from_words(self.model, item), cls, key=key)
 
-    def amend(self, ep, index, item, cls):
+    def amend(self, ep, index, item, cls, *, key=None):
+        """One amendment of an existing event; ``key`` names which effect it is (DECIDE dedups by it).
+
+        The row id derives from the key when given, so a later DECIDE round that amends another
+        event at the same position does not collide with this one, and replaying the same item
+        returns the amendment already made instead of reporting it as a second, impossible change.
+        """
         target = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona})
         if not target:
             raise AffectError('AFFECT_EVENT_UNKNOWN', item['event_id'])
@@ -362,13 +375,17 @@ class AffectLedger:
             raise AffectError('AFFECT_EVENT_NOT_READABLE', item['event_id'])
         if item['op'] == 'void' and not str(item.get('why') or '').strip():
             raise AffectError('VOID_REQUIRES_WHY')
+        key = [ep['_id'], 'affect_ops', key if key is not None else index]
+        made = self.store.db.affect_amendments.find_one({'_id': sha(canonical(['amendment', self.persona, *key]))})
+        if made:
+            return made          # 这一处修订已经记过了：同一轮重复、回想那一轮之前记过、崩溃重放
         if item['op'] == 'close':
             if not target.get('open'):
                 raise AffectError('CLOSE_REQUIRES_OPEN')
             if self.store.db.affect_amendments.find_one({'target': target['_id'], 'op': 'close'}):
                 raise AffectError('ALREADY_CLOSED')
         return self.amendment(target['_id'], item['op'], why=item.get('why', ''), by='character',
-                              key=[ep['_id'], 'affect_ops', index], scope=target.get('source_scope'))
+                              key=key, scope=target.get('source_scope'))
 
     def amendment(self, target, op, *, why, by, key, value=None, origin='asuna', source_identity=None, at=None, scope=None):
         if op in ('fix_ts', 'fix_kind') and value is None:
@@ -426,18 +443,25 @@ class AffectLedger:
                             **{k: row[k] for k in ('ref', 'why', 'cost', 'open') if k in row}})
         return out
 
-    def adopt(self, ep, index, item, cls):
+    def adopt(self, ep, index, item, cls, *, key=None):
         proposal = self.store.db.affect_proposals.find_one({'_id': item['proposal_id'], 'persona': self.persona,
                                                             'kind_row': 'proposal'})
         if not proposal or not self.readable(proposal['source_scope'], ep['scope_key'], cls):
             raise AffectError('AFFECT_PROPOSAL_UNKNOWN', item['proposal_id'])
+        word = 'accepted_edited' if item['decision'] == 'edit' else item['decision']
+        decided = self.store.db.affect_proposals.find_one({'_id': 'decision:' + proposal['_id']})
+        if decided and decided.get('episode_id') == ep['_id'] and decided.get('decision') == word:
+            # 这一轮已经这样决定过这条提案（同一轮重复、回想那一轮之前决定过、崩溃重放）：
+            # 不再插一条决定，也不把它当成「已经不是待定」而退回。
+            return self.store.db.affect_events.find_one({'_id': decided['event_id']}) if decided.get('event_id') else None
         if self.proposal_state(proposal) != 'pending':
             raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', self.proposal_state(proposal))
         event = None
         if item['decision'] in ('accept', 'edit'):
             fields = (from_words(self.model, item['edit']) if item['decision'] == 'edit'
                       else {k: proposal[k] for k in EVENT_FIELDS if k in proposal})
-            event = self.commit(ep, index, fields, cls, refs=proposal['ref_index'], proposal_id=proposal['_id'])
+            event = self.commit(ep, index, fields, cls, refs=proposal['ref_index'], proposal_id=proposal['_id'],
+                                key=key)
         self._insert('affect_proposals', {'_id': 'decision:' + proposal['_id'], 'persona': self.persona,
                      'kind_row': 'decision', 'proposal_id': proposal['_id'], 'decision': item['decision'] if item['decision'] != 'edit' else 'accepted_edited',
                      'why': item['why'], 'event_id': event['_id'] if event else None, 'episode_id': ep['_id'],

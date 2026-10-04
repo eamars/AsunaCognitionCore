@@ -132,3 +132,22 @@ test('one visible brain identity survives multiple phases and a partial native T
   assert.deepEqual(snapshot(engine).nodes.map(node => [node.key, node.anchorSeq, node.data]),
     full.nodes.map(node => [node.key, node.anchorSeq, node.data]), 'loading earlier records relocates one identity, without a copy');
 });
+
+test('a Turn whose cut-off stage was retried and finished records that its last stage finished', () => {
+  const result = (seq, step, finish) => entry(seq, 'asuna/stage-result', { turn: 1, step, lane: 'character',
+    phase: 'DECIDE', operation: 'decide', finish_reason: finish });
+  const events = [entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),
+    entry(2, 'asuna/stage', { turn: 1, step: 1, lane: 'character', phase: 'DECIDE' }),
+    entry(3, 'assistant/message', { turn: 1, step: 1 }), entry(4, 'step/end', { turn: 1, step: 1 }),
+    result(5, 1, 'length'), entry(6, 'step/start', { turn: 1, step: 2 }),
+    entry(7, 'asuna/stage', { turn: 1, step: 2, lane: 'character', phase: 'DECIDE' }),
+    entry(8, 'assistant/message', { turn: 1, step: 2 }), entry(9, 'step/end', { turn: 1, step: 2 })];
+  const engine = assembler();
+  engine.replaceWindow(events, false);
+  assert.equal(snapshot(engine).timeline.turns.get(1).data.get('asuna-stage-finish'), 'length',
+    'until the retry finishes the Turn really is cut off');
+  engine.append(result(10, 2, 'stop'));
+  engine.append(entry(11, 'turn/end', { turn: 1, reason: { kind: 'max-tokens' } }));
+  assert.equal(snapshot(engine).timeline.turns.get(1).data.get('asuna-stage-finish'), 'stop',
+    'DSH still ends the Turn at max-tokens; the retried stage finished');
+});

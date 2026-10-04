@@ -3,6 +3,11 @@
 
   python3 /app/adapter.py --selftest   read-only checks, no send, no fake inbound
   python3 /app/adapter.py --service    long running: inbound + outbox + receipts
+
+--selftest runs on the built-in placeholder fixtures (qqadapter/fixtures.py), so
+it needs no config file and sends nothing.  Pass --config to *also* cross-check
+that deployment config for shape and bounds; add --offline to skip every check
+that would contact the platform or claim from the real outbox.
 """
 import json
 import os
@@ -20,13 +25,15 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(description="Asuna QQ adapter (NapCat forward WebSocket)")
     parser.add_argument("--service", action="store_true", help="run the long-lived adapter")
-    parser.add_argument("--selftest", action="store_true", help="run checks and exit")
+    parser.add_argument("--selftest", action="store_true",
+                        help="run the checks on built-in placeholder fixtures and exit (pass --config to also cross-check a real config)")
     parser.add_argument("--config", default=None, help="config path (default $ASUNA_INTEGRATION_CONFIG or /integration/config.json)")
     parser.add_argument("--data-dir", default=os.environ.get("ASUNA_INTEGRATION_DATA", "/data"))
     parser.add_argument("--claim-wait", type=int, default=20, help="outbox long-poll seconds (<=25)")
     parser.add_argument("--ack-timeout", type=float, default=15.0, help="seconds to wait for a platform response")
     parser.add_argument("--offline", action="store_true",
-                        help="with --selftest: skip the live checks that claim from the real outbox")
+                        help="with --selftest: contact no platform and do not claim from the real "
+                             "outbox (skips the websocket, identity and outbox checks)")
     parser.add_argument("--no-verify", action="store_true",
                         help="with --service: skip the post-send get_msg read-back (observation only)")
     parser.add_argument("--verify-delay", type=float, default=0.8,
@@ -56,16 +63,29 @@ def main(argv=None):
         return 0
     try:
         cfg = config_mod.load(args.config)
+        live_config = True
     except config_mod.ConfigError as exc:
-        print("CONFIG_ERROR %s" % exc, flush=True)
-        return 2
+        if not args.selftest or args.config:
+            # A config named on the command line must load: falling back would
+            # hide a broken deployment behind a green self test.
+            print("CONFIG_ERROR %s" % exc, flush=True)
+            return 2
+        # No config at the default path: the self checks carry their own
+        # placeholder deployment (qqadapter/fixtures.py), so a clean checkout
+        # still runs every behaviour check.  The real-config cross-check is then
+        # skipped rather than guessed at -- a missing file is not a failure.
+        from qqadapter import fixtures
+        cfg = fixtures.load_config()
+        live_config = False
+        print("CONFIG_FALLBACK %s -- selftest runs on built-in placeholder fixtures; "
+              "live config cross-check skipped" % exc, flush=True)
     if args.media_mode:
         cfg.media_mode = args.media_mode
 
     claim_wait = max(1, min(int(args.claim_wait), 25))
     if args.selftest:
         from qqadapter import selftest as selftest_mod
-        return selftest_mod.run(cfg, args.data_dir, live=not args.offline)
+        return selftest_mod.run(cfg, args.data_dir, live=not args.offline, live_config=live_config)
     if args.service:
         from qqadapter.service import Adapter
         return Adapter(cfg, args.data_dir, claim_wait=claim_wait, ack_timeout=args.ack_timeout,

@@ -23,7 +23,8 @@ Exclusions:
     that file may only list non-personal constants;
   - account_id only: a digit run touching a decimal point that touches another digit (fraction or integer part of
     a decimal); a digit run inside a contiguous hex token of >=32 chars (hashes and hash placeholders; no account
-    id is that long); a digit run inside a UUID (8-4-4-4-12 hex);
+    id is that long); a digit run inside a UUID (8-4-4-4-12 hex); a run in the fixtures' placeholder block
+    900000xxx (a 7-9 digit run starting 900000: the ids, or a range written 9000001xx);
   - content of files containing NUL bytes or not decodable as UTF-8 (binary) is skipped; the name is still checked;
   - content of lockfiles package-lock.json and uv.lock is skipped (integrity blobs); the name is still checked;
   - paths under node_modules/, .venv/ and vendored third-party code packages/*/integration/vendor/ are skipped.
@@ -88,6 +89,8 @@ OK_MARK='personal-scan: '+'ok'
 DIGITS=re.compile(r'(?<![0-9])[0-9]{7,}(?![0-9])')
 HEX=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{32,}(?![0-9A-Fa-f])')
 UUID=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])')
+# Channel fixtures draw synthetic accounts, groups and members from one block, never a real account.
+PLACEHOLDER=re.compile(r'900000[0-9]{1,3}')
 O=r'(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
 PRIVATE=re.compile(rf'(?<![\w.])(?:10\.{O}\.{O}\.{O}|172\.(?:1[6-9]|2[0-9]|3[01])\.{O}\.{O}|192\.168\.{O}\.{O})(?!\w|\.[0-9])')
 TZ=re.compile(r'\b(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)/[A-Z][A-Za-z_]+(?:/[A-Z][A-Za-z_]+)?\b')
@@ -116,7 +119,7 @@ def account_id(line,allow):
         s,e=m.span()
         if s>=2 and line[s-1]=='.' and line[s-2].isdigit():continue
         if line[e:e+1]=='.' and line[e+1:e+2].isdigit():continue
-        if any(a<=s and e<=b for a,b in spans) or m.group() in allow:continue
+        if any(a<=s and e<=b for a,b in spans) or m.group() in allow or PLACEHOLDER.fullmatch(m.group()):continue
         return True
     return False
 

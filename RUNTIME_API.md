@@ -106,12 +106,27 @@ Adapters that normalize media may provide bounded metadata under `raw.asuna_medi
 ### Claim public output
 
 ```http
-GET /v1/channels/{channel_id}/outbox?wait_seconds=25
+GET /v1/channels/{channel_id}/outbox?wait_seconds=25&supports=image
 ```
 
 `wait_seconds` is capped at 25. The host atomically claims a queued public `SPEAK` message and returns its frozen target, text, publication ID, attempt ID, and optional platform reply target. Internal monologue, reasoning, traces, and tool output are never placed in the outbox.
 
-The adapter sends only the returned text to the returned target. Starting an adapter or claiming a message is not a platform receipt.
+`supports` is an optional comma-separated list of what the adapter can handle today (`supports=image`). An adapter that does not declare a capability receives text only. When a message carries an accepted image and the adapter declared `image`, the item also carries `attachment` metadata — `{artifact_id, media_type, sha256, size}`, never base64; the bytes come from the endpoint below. When the adapter did not declare it, the text still goes out and the message row records that the picture did not (`attachment_skipped`), so delivered history cannot later claim an image arrived that never left the host.
+
+The adapter sends only the returned text — plus the declared attachment, when the item carries one — to the returned target. Starting an adapter or claiming a message is not a platform receipt.
+
+### Fetch attachment bytes
+
+```http
+GET /v1/channels/{channel_id}/outbox/{publication_id}/attachment?attempt_id=…&artifact_id=…
+Authorization: Bearer <channel token>
+```
+
+The same channel token authorizes this request. It returns the bytes of the one artifact that this publication's own claim declared, with `Content-Type` taken from the file signature. Only a publication currently in `SENDING` whose `attempt_id` matches the request may read it. The artifact must belong to that message's own scope, and the stored bytes are re-verified against the row's `sha256` before anything is written to the socket. `artifact_id` is optional and only ever narrows the request: a different artifact is refused, never substituted.
+
+A row that records `attachment_skipped` is treated as never having declared the picture: its metadata stays on the row so delivered history can say the message was meant to carry one, and the byte endpoint refuses it with `ATTACHMENT_NOT_DECLARED` rather than handing out bytes for an image that never went out. A later claim that does carry the image clears that marker, so the flag always describes the current attempt.
+
+Refusals are `403` with a code — `PUBLICATION_NOT_FOUND`, `PUBLICATION_ATTEMPT_MISMATCH`, `ATTACHMENT_NOT_DECLARED`, `ATTACHMENT_ARTIFACT_DENIED`, `ATTACHMENT_SCOPE_DENIED`, `ATTACHMENT_SHA_MISMATCH`, `ATTACHMENT_HASH_MISMATCH`, `ATTACHMENT_NOT_AN_IMAGE`, `ATTACHMENT_OVER_LIMIT`, `ATTACHMENT_MEDIA_TYPE_MISMATCH` — and carry no partial body. The adapter re-checks the digest and the file signature on its side. Neither side treats a successful claim as proof the image arrived: only a platform receipt says that.
 
 ### Record a platform receipt
 
@@ -144,7 +159,7 @@ If the send result cannot be determined, the adapter records `unknown`. A host r
 
 Action tool visibility is bound to the persisted task grant and route configuration. The action lane receives the DSH-native `skill`, `todo_write`, `web_search`, and `web_fetch` capabilities, plus Asuna tools allowed for that task.
 
-Asuna tools include scoped workspace operations, history search, structured discussion digest, optional `consult_character`, and `read_image` when the action route declares image input. Owner grants can add managed integration tools or self-development tools. A tool being registered does not grant it to every task.
+Asuna tools include scoped workspace operations, history search, structured discussion digest, optional `consult_character`, and `read_image` when the action route declares image input. Owner grants can add managed integration tools or self-development tools. A tool being registered does not grant it to every task. `import_integration_artifact` belongs to the managed integration group, not to the ordinary workspace group: a QQ task's grant never carries it.
 
 `consult_character` is optional internal advice in the task's authorized character context. It does not create a public reply, a new task goal, or additional authority. The action session resumes with the returned advice or error.
 
@@ -202,6 +217,14 @@ The action brain can call `read_image({"ref": "…", "max_bytes": 4194304})` whe
 
 The default byte limit equals the 8 MiB hard limit: QQ photos are routinely 4-6 MiB and DSH re-encodes request images toward a 1 MiB target, so blocking at pull time would be an Asuna fence, not a route capability. Host allowlists, timeout, local directories, and insecure HTTP policy are configured under `vision`; the allowlist defaults to the multimedia host this deployment has actually received. Unsupported routes, disallowed sources, and fetch failures return real error codes, and a non-2xx response carries the server's bounded reason with any temporary `rkey` redacted; placeholders are not reported as viewed images. Download URLs are re-read from the stored message at pull time and are never embedded in the listing or truncated. Durable image references enter the native attachment pipeline; request image limits and pricing belong to the selected DSH provider. There is no Asuna token proxy.
 
+### Sending an image with her words
+
+A turn may also carry an image out. When the scene is the owner's own private conversation (`session_class=owner_private`) and its channel route targets a `dm`, the context gains `image_artifacts_from_program`: the image artifacts this turn may reference, each with `artifact_id`, `sha256` and `size`, plus a note that these are program-held artifacts and not file paths. She may answer with `attach: [{"artifact_id": "…", "why": "…"}]` — at most one item, and only an `artifact_id` from that list. Each item is validated on its own: a direction this version does not open, an artifact that was not offered this turn, bytes that are not an image by file signature, a size over 8 MiB, or a silent turn is refused as a rejection with a code and a reason, and the turn continues. Group turns and non-owner sessions are refused deterministically in this first version instead of silently degrading into text whose receipt reports a picture as delivered.
+
+Two things put images on that list: bytes this scene already stored (`read_image`, and `import_integration_artifact` when the imported bytes turn out to be an image), and images registered in **one other scene belonging to the same person**. That exception exists because generation and import only run in the local owner task while the turn that speaks the picture is usually the QQ private chat, and both entries are the owner's own private space. `outbound_media.image_scopes` computes the readable set from configuration at read time: this turn must be `owner_private`, the peer scene must be a `dm` whose canonical person is the same owner, and the two scenes must be joined by a `context_links` / route `read_scenes` edge. Between two owner-private scenes of one person the edge counts in either direction — neither end can downgrade owner-private data into a public session, which is what `visibility.without_link_downgrades` exists to refuse. Groups, another person's scenes, unlinked scenes and public turns never extend the list, and offered items that came from the peer scene say so (`from_linked_scene`, plus its `scene_id`). The attachment endpoint recomputes the same list from the publication row itself (scene, the person on its route, session class): a caller cannot pass a scope, and deleting the configured edge returns the fence to own-scene-only without any code change.
+
+An accepted attachment writes metadata only, on the first `SPEAK` row (`attachment`); bytes stay in the scoped blob store and travel over the attachment endpoint above. Delivered history then shows the picture as something she sent, with its media type and size, and says so differently when the adapter never declared image support, when the platform receipt's attachment evidence does not match the stored digest, or when the row was never delivered. Text-only messages keep their previous shape exactly: no attachment slot, no extra wording, in her context and in history search results.
+
 ## Schedules
 
 The host uses DSH's native scheduler; it does not run a second host timer wheel. Scheduling, updating, or cancelling a plan is a character decision in the authorized scene. A due plan re-enters that scene and asks the character to decide what to do. A due event is not new authorization and does not mean its requested work has completed. Plan status and policy epoch are checked before dispatch.
@@ -213,5 +236,7 @@ Asuna reuses an installed DSH Schedule service. When the Host has none, it mount
 The managed integration runner is available only to the configured local owner profile. It uses a separate persistent development directory. `integration_test` runs a frozen, read-only `/app` snapshot with separate writable `/data`; `integration_start` enables a new frozen snapshot as a managed process; later development edits are not deployed automatically. `integration_status` reports process state and bounded logs, not platform connectivity or delivery. `integration_stop` stops the managed process and disables host restart restoration.
 
 Integration processes run in the configured isolated environment and can reach only explicitly configured local or LAN TCP endpoints. Their commands are argument arrays, not host-shell strings. Connection credentials are supplied through the local integration profile and are not copied into ordinary task files.
+
+`import_integration_artifact` reads one artifact over one of those configured endpoint aliases: the model supplies the alias and a path, never a URL, host or port, and the fetch performs a single HTTP/1.1 GET without following redirects. The host writes the bytes into the task workspace bound to this action at a relative path — existing files are kept unless `overwrite=true`, protected inputs are never written through, and the size cap is 4 MiB (1 MiB by default). The result reports the relative path, absolute path, byte count and SHA-256 actually written, or the real failure: unknown endpoint, URL rejected, path outside the workspace, target exists, over limit, HTTP status or transport error. When the bytes actually written are a PNG/JPEG/WebP/GIF by file signature (not by file name or `Content-Type`), the host additionally registers them as an `image` artifact in the scope this task is bound to — never a scope the model names: `kind=image`, `storage=gridfs`, `state=DONE`, media type from the bytes, and a SHA-256 the host recomputes and re-reads itself, with the result then carrying an `artifact` block (`artifact_id`, digest, size) so a later turn can send that picture out. Bytes that are not an image change nothing: the result keeps exactly its previous field set and no artifact row is written. A registration that cannot happen (a scope the store does not know, bytes over the 8 MiB outbound cap, a storage error) never turns a completed import into a failure — the reason is reported honestly under `artifact`. Offline: `python3 tools/integration_import_offline_check.py` and `python3 tools/outbound_image_offline_check.py`.
 
 Self-development uses persistent project candidates separate from ordinary task workspaces. The default target is the selected persona package; `project="core"` selects the authorized cognition source. Tools inspect bounded file pages, edit/run candidate files, read bounded records from the existing database, and publish frozen artifacts after a non-consuming boot probe. Persona resources activate without restarting DSH. Python code replaces the worker at an idle boundary; JS/composition/dependency changes return `HOST_RESTART_REQUIRED`. Failed candidates remain for forward correction through the independent native recovery preset. Existing grants still control every ordinary action; QQ scenes do not inherit local owner development permissions.

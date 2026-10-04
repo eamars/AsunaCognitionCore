@@ -103,3 +103,19 @@ def test_an_appraisal_that_is_not_a_json_array_is_told_so_and_asked_again(store)
     assert Appraiser(store, lane).run(ep['_id']) == []
     assert lane.calls[1]['messages'][-1]['content'].startswith('程序检查：上一条的最外层不是 JSON 数组。')
     assert not store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'affect.appraisal_failed'})
+
+
+def test_a_mistyped_task_id_is_told_with_the_real_one(store):
+    # Regression: a garbled continue_task_id passed DECIDE, the continuation was refused, and she only said
+    # she would start another task; the turn ended without one.
+    first = Coordinator(store, FakeLane(store, [LaneResult('想。'), decision(), LaneResult('好。')])).ingest(event('first'))
+    real = 'task-' + first['_id']
+    store.db.tasks.insert_one({'_id': real, 'scene_id': 'dm-a', 'requester_id': 'A', 'policy_epoch': first['policy_epoch'],
+                               'scope_key': first['scope_key'], 'state': 'RETURNED', 'intent_revision': 1, 'schema_version': 1})
+    garbled = real[:16] + 'f0f0f0f0'
+    wrong = json.loads(decision().content) | {'continue_task_id': garbled}
+    lane = FakeLane(store, [LaneResult('想继续。'), LaneResult(json.dumps(wrong)), decision(), LaneResult('好。')])
+    ep = Coordinator(store, lane).ingest(event('second', text='继续'))
+    assert ep['state'] == 'COMMITTED'
+    repair = lane.calls[2]['messages'][-1]['content']
+    assert repair.startswith('程序检查：continue_task_id「' + garbled + '」不是这个对话里的任务；可能是：' + real)

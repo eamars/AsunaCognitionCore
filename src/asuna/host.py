@@ -116,8 +116,14 @@ def prepare_channels(store, *, dry_run=False):
 class RuntimeHost:
     def __init__(self, config, evidence, database=None, *,
                  lane_factory=None, broker_http=False, schedule_lane=None,
-                 configure_controller=None, development_factory=None):
+                 configure_controller=None, development_factory=None, awaits_activation=False):
         self.config, self.evidence, self.database = config, evidence, database
+        # Under the native Host, a new worker learns which publications it actually loaded only after
+        # initialization (publication.activated). Until then a publication it is about to activate still
+        # reads APPLIED and must not request yet another restart.
+        self.activation_settled = threading.Event()
+        if not awaits_activation:
+            self.activation_settled.set()
         self.lane_factory, self.broker_http = lane_factory, broker_http
         self.schedule_lane, self.configure_controller = schedule_lane, configure_controller
         self.development_factory = development_factory
@@ -216,6 +222,8 @@ class RuntimeHost:
 
     def _maybe_restart_after_publish(self):
         """Switch code only after the original action/feedback turn has settled."""
+        if not self.activation_settled.is_set():
+            return
         applied=self.app.store.db.sink_receipts.find_one({
             'kind':'self_development_publish','state':'APPLIED'})
         if applied:

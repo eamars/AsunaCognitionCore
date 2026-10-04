@@ -59,8 +59,14 @@ def place(people, scene):
     return out
 
 
-def queue(store, ep, index, item):
-    """Check one group_action and put it in the outbox; returns the result she reads. Raises Denied."""
+def queue(store, ep, index, item, key=None):
+    """Check one group_action and put it in the outbox; returns the result she reads. Raises Denied.
+
+    ``key`` names which action this is (DECIDE dedups optional items by it). The queued row's id
+    derives from the key rather than from the item's position in the round, so restating the same
+    action in a later DECIDE does not queue a second one, and a new action that happens to sit at
+    the same index in the later round is still its own row.
+    """
     from .people import People
     scene = store.authorize(ep['scene_id'], ep['person_id'])
     if scene.get('kind') != 'group':
@@ -96,16 +102,18 @@ def queue(store, ep, index, item):
                 raise Denied('GROUP_ACTION_DURATION_REQUIRED')
             admin['seconds'] = DURATIONS[item['duration']]
     route = _route(store.config, scene)
-    key = 'ga-' + sha(canonical([ep['_id'], index]))[:24]
-    if not store.db.artifacts.find_one({'_id': key}):
-        store.put('artifacts', {'_id': key, 'kind': 'group_action', 'channel_id': scene.get('channel_id'),
+    row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key if key is not None else index]))[:24]
+    made = store.db.artifacts.find_one({'_id': row_id})
+    if not made:
+        store.put('artifacts', {'_id': row_id, 'kind': 'group_action', 'channel_id': scene.get('channel_id'),
                                 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
                                 'policy_epoch': scene['policy_epoch'], 'episode_id': ep['_id'],
                                 'target': route['target'], 'admin': admin, 'who': people.label(doc),
                                 'reason': item.get('reason', ''), 'state': 'QUEUED', 'created_at': now()},
-                  stream=key)
-    return {'index': index, 'action': KIND_WORDS[kind], 'who': people.label(doc),
-            **({'duration': item['duration']} if kind == 'mute' else {}), 'state': STATE_WORDS['QUEUED']}
+                  stream=row_id)
+    return {'index': index, 'action': KIND_WORDS[kind], 'who': (made or {}).get('who') or people.label(doc),
+            **({'duration': item['duration']} if kind == 'mute' else {}),
+            'state': STATE_WORDS.get((made or {}).get('state'), STATE_WORDS['QUEUED'])}
 
 
 def _message_to_recall(store, scene, ep, people, doc, which):

@@ -760,7 +760,7 @@ def load_coordinator():
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
     # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', 'answers.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
@@ -771,9 +771,20 @@ def load_coordinator():
                                  'integration.py': STUB_INTEGRATION, 'dsh_lane.py': STUB_LANE})
     for name, body in bodies.items():
         open(os.path.join(package, name), 'w', encoding='utf-8').write(body)
+    try:
+        import pymongo.errors          # noqa: F401  the operator's isolated host has the real one
+    except ImportError:                # the offline sandbox has none; affect.py only needs DuplicateKeyError
+        import types
+        errors = types.ModuleType('pymongo.errors')
+        errors.DuplicateKeyError = type('DuplicateKeyError', (Exception,), {})
+        stub = types.ModuleType('pymongo')
+        stub.errors = errors
+        sys.modules.setdefault('pymongo', stub)
+        sys.modules.setdefault('pymongo.errors', errors)
     sys.path.insert(0, root)
     for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
-                 'p3coord.vision', 'p3coord.scene_links', 'p3coord.render', 'p3coord.visibility'):
+                 'p3coord.vision', 'p3coord.scene_links', 'p3coord.render', 'p3coord.visibility',
+                 'p3coord.outbound_media'):
         sys.modules.pop(name, None)
     module = __import__('p3coord.coordinator', fromlist=['WORKSPACE_DECISION_SCHEMA'])
     _PACKAGES['p3coord'] = (module, json)

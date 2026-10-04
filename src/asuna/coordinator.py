@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 import copy
 from pathlib import Path
 import threading
@@ -12,7 +13,7 @@ from .lanes import Lane
 from .publish import PublishService
 from . import schedule_rules
 from .render import episode_system
-from . import answers, decide_delta, visibility
+from . import answers, decide_delta, visibility, outbound_media
 from .state import Store, Conflict, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
@@ -359,6 +360,17 @@ class Coordinator:
                             raise ValueError('决策不符合格式：'+where+'：'+exc.message+'。') from None
                         if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
                             raise ValueError('reflect_self 只能在内部的自我发展机会里用，这一次不能用。')
+                        # A mistyped id names no task at all: tell her here, with the ids she can use, instead of
+                        # letting the turn end in a refused continuation she then only talks about.
+                        cited=decision.get('continue_task_id')
+                        if cited and not self.store.db.tasks.find_one({'_id':cited,'scene_id':ep['scene_id'],
+                                'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch']},{'_id':1}):
+                            close=[row['_id'] for row in self.store.db.tasks.find({'scene_id':ep['scene_id'],
+                                'requester_id':ep['person_id'],'policy_epoch':ep['policy_epoch'],
+                                '_id':{'$regex':'^'+re.escape(str(cited)[:16])}},{'_id':1}).limit(3)]
+                            raise ValueError('continue_task_id「'+str(cited)+'」不是这个对话里的任务'
+                                             +('；可能是：'+'、'.join(close) if close else '')
+                                             +'。要续接就照 task_state_from_program 原样抄 _id，不续接就去掉这个字段。')
                         return decision,delta
                     decision,delta=self._stage(ep,'DECIDE',ep.get('recall_rounds',0),shape=decision_shape,label='BAD_DECISION_JSON')
                     ep=self._update(ep,state='DECISION_ACCEPTED',decision=decision,decision_delta=delta,feedback_resume_phase=None)
@@ -427,6 +439,9 @@ class Coordinator:
                         event={'event_id':ep['source_event_id'],'scene_id':ep['scene_id'],'person_id':ep['person_id'],'text':ep['decision']['recall_query']}
                         _, recalled,manifest=self.context.prepare(event,ep['persona'],recall=True)
                         context={**ep['context'],'recall':{'query':ep['decision']['recall_query'],'memories':recalled['memories']}}
+                        # read 这一轮只在这里验一遍：DECIDE 那侧的 apply 在 recall 会处理它时跳过校验
+                        # （decide_delta._recall_will_read 与本分支的 rounds<2 同一条判断）。两边都验过一遍，
+                        # 同一条拒收就会被记两次。
                         reads=[(i,item) for i,item in enumerate((ep.get('decision_delta') or {}).get('read') or [])]
                         if reads:
                             valid,bad=decide_delta.validate_items({'read':[item for _,item in reads]})
@@ -530,12 +545,16 @@ class Coordinator:
                     times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
                                  effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
                     keys=[]
+                    # 这一轮被程序接受的那张图（没有就 None）：只挂在第一段上，字节仍在 BlobStore，行上只写元数据。
+                    attach_meta=outbound_media.attachment_for_speak(ep)
                     for index,segment in enumerate(segments):
                         key=ep_id+':speak:'+str(index)
                         keys.append(key)
                         if not self.store.db.messages.find_one({'_id':key}):
                             sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
                             row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+                            if index==0 and attach_meta:
+                                row['attachment']=dict(attach_meta)
                             if len(segments)>1:
                                 row.update(segment_index=index,segment_count=len(segments))
                                 if scene.get('channel_id'):

@@ -61,10 +61,7 @@ export async function recordChannelInput(core, receipt) {
     first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: core.config.deployment.chat.workspace },
     entries: [{ session_id: id, workspace: channel.title, binding }] });
   await ctx.workspaceRegistry.unarchiveSession(id);
-  const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
-  const message = createUserMessage({ source: { kind: 'user', channel: channel.kind, receipt: input.id,
-    sender: input.sender, received_at: input.received_at },
-    content: [{ type: 'text', text: input.text }] });
+  const message = await channelMessage(core, receipt);
   const headed = events => events.some(event => event.type === 'system/message');
   const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id)
     || pendingOf(events).some(line => line.source.receipt === input.id);
@@ -95,6 +92,31 @@ export async function recordChannelInput(core, receipt) {
   const catalog = await ctx.sessionController.list({}, new AbortController().signal);
   const summary = catalog.items.find(row => row.sessionId === id);
   if (summary) ctx.emit('api-session/added', summary);
+}
+
+/** A received platform line as her conversation records it. */
+async function channelMessage(core, { binding, input }) {
+  const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
+  return createUserMessage({ source: { kind: 'user', channel: core.channelOf(binding.scene_id).kind, receipt: input.id,
+    sender: input.sender, received_at: input.received_at },
+    content: [{ type: 'text', text: input.text }] });
+}
+
+/** The line a stage answers is in the conversation, or waiting in this agent's inbox, before that stage's turn
+ * begins. On a conversation's first turn the record can miss: a line written to a loaded session that had no
+ * agent yet was not in the log the agent then opened, so the turn began without it and the line only arrived
+ * with the next stage, after her monologue. Queue it again on the agent itself; its first step claims it right
+ * after the head, before the stage notice. Returns whether the line had to be placed. */
+export async function lineBeforeTurn(core, agent, receipt) {
+  const events = agent.session.snapshotEvents(), id = receipt.input.id;
+  if (events.some(event => event.type === 'user/message' && event.data.source?.receipt === id)
+    || agent.inbox.nextStep.some(line => line.source?.receipt === id)) return false;
+  const message = await channelMessage(core, receipt);
+  if (events.some(event => event.type === 'system/message')) agent.session.append('user/message', message, { surfaceOp: 'append' });
+  else for (const splice of queueing(agent.inbox.nextStep, message))
+    agent.inbox.splice('next-step', splice.start, splice.removedCount ?? 0, splice.inserted);
+  await core.ctx.sessions.flush(agent.session);
+  return true;
 }
 
 /** Native workspace/session migration. No client layout or alternate chat store. */

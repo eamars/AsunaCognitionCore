@@ -5,7 +5,10 @@ The persona is a document (``doc:<persona>:persona``); legacy ``persona:<id>`` h
 
 
 def persona_rows(body, persona='P1', revision_id='rev-persona-0'):
-    from asuna.documents import PREAMBLE, SCOPE, _section
+    try:
+        from asuna.documents import PREAMBLE, SCOPE, _section
+    except ImportError:         # the offline runner's sandbox has no pymongo: use the copy its package carries
+        from p3coord.documents import PREAMBLE, SCOPE, _section
     key = f'doc:{persona}:persona|{SCOPE}'
     head = {'_id': key, 'scope_key': SCOPE, 'revision_id': revision_id, 'revision': 1}
     revision = {'_id': revision_id, 'entity_key': key, 'scope_key': SCOPE, 'mutation_id': 'seed:' + revision_id,

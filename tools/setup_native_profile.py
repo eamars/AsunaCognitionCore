@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -22,6 +23,27 @@ def profile_base(profile):
     """The owner's original profile keeps its existing location; others are isolated."""
     base = ROOT / '.runtime/adr008'
     return base if profile == 'asuna-native' else base / 'profiles' / profile
+
+
+def with_pnpm(env):
+    """DSH installs plugins with `pnpm` from PATH; without one, use the pnpm Node ships through corepack.
+
+    tools/asuna-launch.mjs gives the Web host the same shim, so a restart can activate a published candidate.
+    """
+    if shutil.which('pnpm', path=env.get('PATH')):
+        return env
+    node = shutil.which('node', path=env.get('PATH'))
+    corepack = node and Path(node).with_name('corepack.cmd' if os.name == 'nt' else 'corepack')
+    if not corepack or not corepack.exists():
+        return env
+    shim = ROOT / '.runtime/bin'
+    shim.mkdir(parents=True, exist_ok=True)
+    if os.name == 'nt':
+        (shim / 'pnpm.cmd').write_text(f'@"{corepack}" pnpm %*\r\n', encoding='utf-8', newline='')
+    else:
+        (shim / 'pnpm').write_text(f'#!/bin/sh\nexec "{corepack}" pnpm "$@"\n', encoding='utf-8')
+        (shim / 'pnpm').chmod(0o755)
+    return {**env, 'PATH': str(shim) + os.pathsep + env.get('PATH', ''), 'COREPACK_ENABLE_DOWNLOAD_PROMPT': '0'}
 
 
 def persona_package(directory):
@@ -110,7 +132,7 @@ def main():
     state_dir = None if args.profile == 'asuna-native' else base.relative_to(ROOT).as_posix()
     home = base / 'home'
     home.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, 'DSH_HOME': str(home), 'DSH_TELEMETRY_DISABLED': '1'}
+    env = with_pnpm({**os.environ, 'DSH_HOME': str(home), 'DSH_TELEMETRY_DISABLED': '1'})
     dsh = str(ROOT / 'node_modules/.bin/dsh.cmd')
     if not (home / 'profiles' / args.profile / 'package.json').exists():
         subprocess.run([dsh, '--profile', args.profile, '--from-default-profile', 'web', '--help'],

@@ -52,10 +52,17 @@ def iso(ts=None):
 
 
 def epoch(text):
+    """Seconds since the epoch for an `iso()` string -- which is UTC.
+
+    `time.mktime` reads a bare struct_time as *local* time, so the round trip
+    was only correct on a UTC machine: west of UTC a fresh lookup looked like
+    it belonged to the future (a rename no longer forced a re-check), east of
+    UTC it looked already stale.  Parse it as what it is instead.
+    """
     if not isinstance(text, str):
         return None
     try:
-        return int(time.mktime(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ")))
+        return int(datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
     except (ValueError, TypeError, OverflowError):
         return None
 

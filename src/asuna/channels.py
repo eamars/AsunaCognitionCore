@@ -15,6 +15,11 @@ from .queue import database_effects_lock
 from .state import Denied, now
 from .people import People
 
+try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
+    from . import outbound_media
+except Exception:                     # 同目录平铺加载（离线自检）也认
+    import outbound_media
+
 
 def route_for_scene(config, channel_id, scene_id):
     channel = config.get('channels', {}).get(channel_id)
@@ -193,7 +198,9 @@ class Channels:
             if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
 
-    def claim(self, channel_id, wait_seconds=0):
+    def claim(self, channel_id, wait_seconds=0, supports=None):
+        # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
+        # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
         from . import group_admin
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
@@ -221,18 +228,55 @@ class Channels:
                         PublishService(self.store).cancel_after(failed)
                         continue
                     attempt = uuid.uuid4().hex
-                    self.store.put('messages', {**row, 'delivery_state': 'SENDING',
-                                   'attempt_id': attempt, 'claimed_at': now()}, expected=row['revision'], stream=row['episode_id'])
+                    declared = outbound_media.descriptor(row)
+                    carries = bool(declared) and outbound_media.supports_image(supports)
+                    changes = {**row, 'delivery_state': 'SENDING', 'attempt_id': attempt, 'claimed_at': now()}
+                    if declared and not carries:
+                        changes[outbound_media.SKIPPED_KEY] = outbound_media.NO_CAPABILITY
+                    elif carries:
+                        # 这次真把图带出去：上一次留下的「没带出去」不能接着算（重投的行会带着旧标记回来）
+                        changes.pop(outbound_media.SKIPPED_KEY, None)
+                    self.store.put('messages', changes, expected=row['revision'], stream=row['episode_id'])
                     # Her @[label] becomes the adapter's @qq:<account> here, at the edge (people.py).
                     scene = self.store.db.scenes.find_one({'_id': row['scene_id']})
                     text = People(self.store).outbound(scene, row['text']) if scene else row['text']
-                    return {'items': [{'publication_id': row['_id'], 'attempt_id': attempt,
-                                       'target': row['target'], 'text': text,
-                                       'reply_to': row['platform_reply_to']}]}
+                    item = {'publication_id': row['_id'], 'attempt_id': attempt,
+                            'target': row['target'], 'text': text,
+                            'reply_to': row['platform_reply_to']}
+                    if carries:
+                        item[outbound_media.ATTACHMENT_KEY] = declared      # 只有元数据，不带 base64；字节走下面的 GET
+                    return {'items': [item]}
             if time.monotonic() >= deadline:
                 break
             self.controller.stopping.wait(min(.2, max(0, deadline - time.monotonic())))
         return {'items': []}
+
+    def attachment(self, channel_id, publication_id, query=None):
+        """字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
+
+        同一个 Bearer token（HTTP 层已经验过）。只允许这条 publication 自己声明的那份 artifact；
+        attempt_id 必须属于这条且它正在 SENDING；字节从 BlobStore 读，按行内 sha 复核
+        （围栏都在 outbound_media.serve）。行上记着 ``attachment_skipped``（那次领取没声明能收图）
+        也算「没声明」：元数据还留在行上只为历史，字节一律 403 ATTACHMENT_NOT_DECLARED。
+        返回 ``(data, media_type)``。
+        """
+        query = query or {}
+        attempt_id = (query.get('attempt_id') or [''])[0]
+        wanted = (query.get('artifact_id') or [''])[0]
+        with database_effects_lock(self.store.name):
+            row = self.store.db.messages.find_one({'_id': publication_id})
+            if not row or row.get('channel_id') != channel_id:
+                raise Denied('PUBLICATION_NOT_FOUND')
+            if row.get('delivery_state') != 'SENDING' or not row.get('attempt_id') \
+                    or row['attempt_id'] != attempt_id:
+                raise Denied('PUBLICATION_ATTEMPT_MISMATCH')
+            declared = outbound_media.declared(row)      # 元数据在 ≠ 声明了：skipped 的行一律拒
+            if not declared:
+                raise Denied('ATTACHMENT_NOT_DECLARED')
+            if wanted and wanted != declared['artifact_id']:
+                raise Denied('ATTACHMENT_ARTIFACT_DENIED')       # 只发这条自己声明的那张，别人给不了
+            from .blobs import BlobStore
+            return outbound_media.serve(self.store, BlobStore(self.store), row, declared)
 
     def receipt(self, channel_id, publication_id, body):
         if set(body) - {'attempt_id', 'status', 'platform_message_id', 'response'}:
@@ -287,6 +331,7 @@ class ChannelServer:
 
             def handle_request(self):
                 status = 200
+                raw = None                      # (bytes, content_type)：只有附件端点走这一条
                 try:
                     url = urlsplit(self.path)
                     parts = [unquote(part) for part in url.path.strip('/').split('/')]
@@ -305,7 +350,13 @@ class ChannelServer:
                     if self.command == 'POST' and parts[3:] == ['events']:
                         value = channels.receive(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
-                        value = channels.claim(channel_id, int(parse_qs(url.query).get('wait_seconds', ['0'])[0]))
+                        query = parse_qs(url.query)
+                        value = channels.claim(channel_id, int(query.get('wait_seconds', ['0'])[0]),
+                                               supports=outbound_media.parse_supports(query))
+                    elif self.command == 'GET' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'attachment':
+                        payload = channels.attachment(channel_id, parts[4], parse_qs(url.query))
+                        raw = payload if isinstance(payload, tuple) else None
+                        value = {} if raw is not None else payload
                     elif self.command == 'POST' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'receipt':
                         value = channels.receipt(channel_id, parts[4], body)
                     else:
@@ -320,6 +371,14 @@ class ChannelServer:
                     channels.controller.app.evidence.record('host.channel_error', {'traceback': error})
                     channels.controller.emit('[系统] 通道接口未完成：\n' + error)
                     status, value = 503, {'error': 'HOST_TEMPORARILY_UNAVAILABLE'}
+                if raw is not None and status == 200:
+                    data, media_type = raw
+                    self.send_response(200)
+                    self.send_header('Content-Type', media_type)
+                    self.send_header('Content-Length', str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 data = json.dumps(value, ensure_ascii=False).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')

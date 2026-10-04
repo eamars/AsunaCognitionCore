@@ -126,9 +126,14 @@ def _load_preview(rep):
     except Exception as exc:
         rep.check("preview_readable", False, "%s %s" % (type(exc).__name__, exc))
         return None
-    rep.check("preview_readable", sorted(preview.get("allowed_group_ids") or []) ==
-              sorted(["300003", "301623", "301718", "301996"]),
-              str(preview.get("allowed_group_ids")))
+    # Consistency, not fixed IDs: the deployment owns its group IDs. Every allowed group
+    # has a group route in the same preview, and every group route is allowed.
+    allowed = sorted(str(g) for g in (preview.get("allowed_group_ids") or []))
+    routed = sorted(str((route.get("target") or {}).get("id"))
+                    for route in (preview.get("routes") or {}).values()
+                    if (route.get("target") or {}).get("type") == "group")
+    rep.check("preview_readable", bool(allowed) and allowed == sorted(set(routed)),
+              "allowed=%s routed=%s" % (allowed, sorted(set(routed))))
     return preview
 
 

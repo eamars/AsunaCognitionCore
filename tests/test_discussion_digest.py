@@ -16,7 +16,7 @@ import pytest
 from asuna.config import ROOT, load
 from conftest import isolated_database, drop_database
 from asuna.state import Store, Denied
-from asuna.tasks import TaskService, ToolBroker, TOOLS, WORKSPACE_TOOLS
+from asuna.tasks import TaskService, ToolBroker, WORKSPACE_TOOLS
 from asuna.history_query import HISTORY_TOOL_NAME, HistoryQueryService
 from asuna.discussion_digest import DIGEST_TOOL_NAME, DiscussionDigestService
 
@@ -85,7 +85,6 @@ def test_offline_cases_all_pass():
 
 def test_tool_registered_for_action_brain_and_native_plugin(broker_env):
     store, service, broker, work = broker_env
-    assert [t['name'] for t in TOOLS].count(DIGEST_TOOL_NAME) == 1
     assert [t['name'] for t in WORKSPACE_TOOLS].count(DIGEST_TOOL_NAME) == 1
     assert DIGEST_TOOL_NAME in [t['name'] for t in broker.specs]
     spec = next(t for t in WORKSPACE_TOOLS if t['name'] == DIGEST_TOOL_NAME)

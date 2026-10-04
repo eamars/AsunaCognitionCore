@@ -211,8 +211,6 @@ sys.stdout.write(json.dumps({"kind":"report","status":"ok","summary":json.dumps(
 
 def test_T4_7_export_paths_and_content(store, tmp_path):
     owner(store)
-    from asuna.documents import DocumentStore
-    DocumentStore(store, 'P1').convert_legacy_persona()
     with pytest.raises(DataError, match='EXPORT_PATH_TRACKED'):
         check_export_path(ROOT / 'docs' / 'export-here', ROOT)
     assert check_export_path(ROOT / 'reports' / 'export-ok', ROOT)                  # ignored path
@@ -237,7 +235,11 @@ def test_T4_9_persona_job_run_only_for_development_tasks(store):
     from asuna.development import PERSONA_JOB_TOOLS
     job_config(store)
     plan = json.dumps({'next': 'delegate', 'goal': '整理', 'constraints': [], 'recall_query': '', 'speak_before_action': False})
-    group = Coordinator(store, FakeLane(store, [LaneResult('交给行动脑。'), LaneResult(plan)])).ingest(event('job-g', scene='dm-b', person='B'))
+    try:                                     # dm-b has no workspace grant: delegation is refused outright
+        group = Coordinator(store, FakeLane(store, [LaneResult('交给行动脑。'), LaneResult(plan)])).ingest(event('job-g', scene='dm-b', person='B'))
+    except Denied as refused:
+        assert str(refused) == 'WORKSPACE_NOT_AUTHORIZED'
+        group = {}
     task = store.db.tasks.find_one({'_id': group['task_id']}) if group.get('task_id') else None
     assert task is None or 'persona_job_run' not in task['allowed_capabilities']
     assert PERSONA_JOB_TOOLS[0]['name'] == 'persona_job_run'
@@ -280,7 +282,6 @@ def test_T4_12_consult_from_a_public_task_sees_no_owner_private_material(store):
     owner(store)
     from asuna.documents import DocumentStore
     docs = DocumentStore(store, 'P1')
-    docs.convert_legacy_persona()
     docs.apply('persona', {'op': 'append_section', 'heading': '私密', 'visibility': 'owner_private', 'reason': 't'},
                'OWNER_PRIVATE_PERSONA_CANARY', base_revision_id=docs.read('persona')[0], author='operator', mutation_id='t412')
     calls = []

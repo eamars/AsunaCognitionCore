@@ -51,23 +51,16 @@ class Router:
                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
                 and self.store.config.get('self_development',{}).get('enabled')):
             trusted['development_profile']='owner'
-        self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':'cli-fixture'},scene['scope_key'])
+        self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':event.get('adapter_id') or ('channel' if event.get('channel') else 'local')},scene['scope_key'])
         if event.get('supersedes_task_id'):
             if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')
             self.tasks.revise(event['supersedes_task_id'],trusted)
         wake = event.get('group_context', {}).get('wake_reason') if event.get('channel') else (event.get('mentioned') or event.get('scene_tick'))
         if scene['kind']=='group' and not wake and event.get('episode_kind') != 'task_feedback':
-            if event.get('channel'):
-                from .ingress import persist_input
-                row, _ = persist_input(self.store, event, managed=True)
-                self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
-                return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
-            key='quiet-'+sha(canonical([scene['_id'],event['event_id']]))
-            previous=self.store.db.messages.find_one({'_id':key})
-            if previous:return {'state':'RECEIVED_NO_WAKE','message_id':key}
-            sequence=self.store.db.scenes.find_one_and_update({'_id':scene['_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-            self.store.put('messages',{'_id':key,'scope_key':scene['scope_key'],'scene_id':scene['_id'],'scene_seq':sequence,'adapter_id':'fixture','platform_event_id':event['event_id'],'text':event['text'],'author':event['person_id'],'direction':'inbound','delivery_state':'RECEIVED','occurred_at':event.get('occurred_at',now()),'received_at':now()},stream='router')
-            return {'state':'RECEIVED_NO_WAKE','message_id':key}
+            from .ingress import persist_input
+            row, _ = persist_input(self.store, event, managed=True)
+            self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
+            return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
         ep=self.coordinator.ingest(trusted,persona=persona)
         while ep['state']=='WAITING_TASK' and workspace is not None and self.executor:
             task=self.executor.run(ep['task_id'],workspace)
@@ -75,10 +68,3 @@ class Router:
             if feedback is None:break
             ep=feedback
         return ep
-
-    def batch(self,events,**kwargs):
-        queue=FairQueue()
-        for event in events:queue.put(event['scene_id'],event)
-        results=[]
-        while (event:=queue.pop()) is not None:results.append(self.receive(event,**kwargs))
-        return results

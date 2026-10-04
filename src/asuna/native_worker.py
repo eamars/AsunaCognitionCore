@@ -159,12 +159,11 @@ class BusinessWorker:
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
-        config = {**load(self.config_path), 'task_mode': 'workspace'}
+        config = load(self.config_path)
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')
-        config['chat'] = {**config['chat'], 'persona_file': persona['persona_file'],
-                          'display_name': persona['display_name']}
+        config['chat'] = {**config['chat'], 'display_name': persona['display_name']}
         config['character_id'] = persona['character_id']
         config['persona_contribution'] = persona
         # The persona model is validated here (jsonschema); an invalid model keeps Core inert.
@@ -354,7 +353,6 @@ class BusinessWorker:
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':
             self.app.config['_skill_directories'] = args['skill_directories']
-            self.app.config['chat']['persona_file'] = args['persona']['persona_file']
             return {'accepted': True, 'applies': 'new action scopes; existing self heads preserved'}
         if method == 'publication.activated':
             for publication in args['publications']:
@@ -430,16 +428,21 @@ class NativeDevelopmentBridge:
         return result
 
 
-def main():
-    for stream in (sys.stdin, sys.stdout, sys.stderr):
-        stream.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', required=True)
-    args = parser.parse_args()
-    worker = BusinessWorker(args.config)
-    pool = ThreadPoolExecutor(max_workers=8)
+# Host replies only complete a waiting Future: handled on the reader thread, never queued behind
+# their own waiters. Calls that may wait for a host reply (a CONSULT stage, a development host
+# call) or run long (persona jobs) get their own thread. So no dispatch-pool thread ever waits on
+# Future.result(), and a pool of any size cannot deadlock (ADR-009 D-8, T7.2).
+REPLIES = frozenset({'result', 'host_result'})
+DETACHED = frozenset({'tool', 'persona.job_run'})
 
-    def respond(request):
+
+class Dispatcher:
+    def __init__(self, worker, threads=8):
+        self.worker = worker
+        self.pool = ThreadPoolExecutor(max_workers=threads, thread_name_prefix='asuna-dispatch')
+
+    def respond(self, request):
+        worker = self.worker
         try:
             value = worker.dispatch(request['method'], request.get('args', {}))
             worker.emit({'id': request['id'], 'value': value})
@@ -449,13 +452,34 @@ def main():
                 message = redact_text(message, worker.app.config)
             worker.emit({'id': request['id'], 'error': type(exc).__name__ + ': ' + message})
 
+    def handle(self, request):
+        method = request.get('method')
+        if method in REPLIES:
+            self.respond(request)
+        elif method in DETACHED:
+            threading.Thread(target=self.respond, args=(request,), name='asuna-call-' + method,
+                             daemon=True).start()
+        else:
+            self.pool.submit(self.respond, request)
+
+    def close(self):
+        self.pool.shutdown(wait=True, cancel_futures=True)
+
+
+def main():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        stream.reconfigure(encoding='utf-8')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', required=True)
+    args = parser.parse_args()
+    worker = BusinessWorker(args.config)
+    dispatcher = Dispatcher(worker)
     try:
         for line in sys.stdin:
-            request = json.loads(line)
-            pool.submit(respond, request)
+            dispatcher.handle(json.loads(line))
     finally:
         worker.close()
-        pool.shutdown(wait=True, cancel_futures=True)
+        dispatcher.close()
 
 
 if __name__ == '__main__':

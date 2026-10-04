@@ -83,17 +83,9 @@ def budget_limit(store, persona):
     return min(limits) if limits else None
 
 
-def ensure_persona_document(store, persona):
-    """Conversion before seeding: a legacy ``persona:<id>`` head becomes ``doc:<id>:persona``."""
-    docs = DocumentStore(store, persona)
-    if not docs.head('persona'):
-        docs.convert_legacy_persona()
-    return docs
-
-
 def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE):
     """Render the current role system prompt for a session class; returns (text, system_ref)."""
-    docs = ensure_persona_document(store, persona)
+    docs = DocumentStore(store, persona)
     persona_rev, persona_doc = docs.read('persona')
     if persona_doc is None:
         raise ValueError('REQUIRED_PERSONA_MISSING')
@@ -174,9 +166,7 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
 
 
 def episode_system(store, ep: dict) -> str:
-    """Stage system prompt: legacy in-flight episodes still carry the full text."""
-    if ep.get('system') is not None:
-        return ep['system']
+    """Stage system prompt, re-rendered from the episode's system_ref (drift is audited)."""
     return system_for(store, ep['system_ref'], stream=ep.get('_id'), scope=ep.get('scope_key', 'operator'))
 
 

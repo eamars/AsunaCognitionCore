@@ -11,7 +11,7 @@ from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,LaneResult
 from asuna.publish import PublishService
 from asuna.state import Store,Conflict,Denied
-from asuna.audit import verify,replay,projection,render_html
+from asuna.audit import verify,replay,projection,render_html,trace_contents
 from asuna.evidence import sha
 
 def event(key='e',scene='dm-a',person='A',text='我回来了。'):
@@ -43,7 +43,8 @@ def test_E02_actual_fake_request_and_missing_persona(store):
     assert not any('"'+k+'":' in json.dumps(lane.calls) for k in ('gold','expected','oracle'))
     head,rev=store.head('doc:P1:persona','global-safe')
     for body in ('','# title only'):
-        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.sections.0.body':body}})
+        # The seeded document can have several sections; leave one with an empty or heading-only body.
+        store.db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content.sections':[{**rev['content']['sections'][0],'body':body}]}})
         before=len(lane.calls)
         with pytest.raises(ValueError):coordinator.ingest(event(body or 'empty'))
         assert len(lane.calls)==before
@@ -90,8 +91,8 @@ def test_E09_identity_and_E10_scope(store):
         _,context,_=ContextBuilder(store).prepare(event(scene=scene,person=person))
         if scene!='dm-a':assert 'PRIVATE_A_CANARY' not in json.dumps(context)
     with pytest.raises(Denied):store.get('memory_units','M09','scene:g1')
-    head,_=store.head('persona:P1','global-safe')
-    with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
+    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
+    with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
 
 def test_E14_100_duplicates(store):
     coordinator,lane=normal(store)
@@ -121,23 +122,23 @@ def test_E15_nonidempotent_unknown(store):
     assert msg['delivery_state']=='UNKNOWN' and store.db.sink_receipts.count_documents({})==1
 
 def test_E17_twenty_cas_proposals(store):
-    head,_=store.head('persona:P1','global-safe')
+    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
     # M07 is global-safe in the immutable world fixture.
     source=store.db.memory_units.find_one({'scope_key':'global-safe'})['_id']
     def mutate(i):
         try:
-            return store.mutate('persona:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
+            return store.mutate('overlay:P1','global-safe',head['revision_id'],{'body':'revision '+str(i)},[source],'global-safe','cas-'+str(i))
         except Conflict:return None
     with concurrent.futures.ThreadPoolExecutor(20) as pool:result=list(pool.map(mutate,range(20)))
     winners=[x for x in result if x]
     assert len(winners)==1
-    assert store.head('persona:P1','global-safe')[0]['revision_id']==winners[0]['_id']
+    assert store.head('overlay:P1','global-safe')[0]['revision_id']==winners[0]['_id']
 
 def test_E19_scope_inheritance_and_policy_denial(store):
-    head,_=store.head('persona:P1','global-safe')
-    with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
+    head=store.init_head('overlay:P1','global-safe',{'body':'fixture overlay'},[])
+    with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{'body':'匿名经验'},['M09'],'scene:dm-a','private-wash')
     for field in ('ACL','audit','model_route','threshold','tools'):
-        with pytest.raises(Denied):store.mutate('persona:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
+        with pytest.raises(Denied):store.mutate('overlay:P1','global-safe',head['revision_id'],{field:'changed'},['M09'],'global-safe',field)
     scoped=store.init_head('overlay:P1','scene:dm-a',{'body':'私域'},['M09'])
     result=store.mutate('overlay:P1','scene:dm-a',scoped['revision_id'],{'body':'保留我的私域看法'},['M09'],'scene:dm-a','allowed-overlay')
     assert result['scope_key']=='scene:dm-a'
@@ -152,7 +153,7 @@ def test_E23_state_replay_and_tamper(store,tmp_path):
     events=list(store.db.audit_events.find({}))
     verify(events)
     target=Store(load(),store.name+'_replay');store.derived_databases=[target.name]
-    assert replay(events,target)['sha256']==projection(store)['sha256']
+    assert replay(events,target,trace_contents(events,store))['sha256']==projection(store)['sha256']
     modified=copy.deepcopy(events);modified[0]['payload']['changed']=True
     with pytest.raises(ValueError):verify(modified)
     render_html(events,tmp_path/'trace.html')

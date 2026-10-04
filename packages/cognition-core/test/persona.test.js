@@ -31,7 +31,7 @@ test('T1.1 the synthetic and the installed persona package both register; no per
   const demo = withDemo.personas.get('demo');
   assert.equal(demo.model, 'persona-model.json');
   assert.deepEqual(demo.seeds.map(seed => seed.kind), ['persona', 'voice', 'ledger']);
-  assert.equal(demo.persona_file, 'seeds/persona.md');
+  assert.equal(demo.seeds.find(seed => seed.kind === 'persona').path, 'seeds/persona.md');
   const withInstalled = core('other');
   const manifest = await install(withInstalled, packages.installed);
   assert.equal(withInstalled.personas.size, 1);
@@ -89,7 +89,7 @@ test('T1.6 model, seeds, jobs and skills resolve against the published artifact,
     assert.equal(JSON.parse(await fs.readFile(resolved.model, 'utf8')).persona.display_name, 'published');
     assert.equal(await fs.readFile(resolved.seeds[0].path, 'utf8'), '# published\n');
     assert.equal(await fs.readFile(resolved.jobs[0].entry, 'utf8'), '# published\n');
-    assert.equal(resolved.persona_file, path.join(published, 'seeds/persona.md'));
+    assert.equal(resolved.seeds.find(seed => seed.kind === 'persona').path, path.join(published, 'seeds/persona.md'));
     assert.deepEqual(await floor.skillPaths(value.personas.get('demo')), [path.join(published, 'skills')]);
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 });

@@ -29,6 +29,8 @@ def test_E14_five_actual_process_crash_points(store,point):
 
 def test_E12_read_only_source_and_allowed_code_write(store):
     service,task,broker,work=task_setup(store)
+    store.config['channels']['fixture']['routes']['dm-a']['read_only_paths']=['a.txt']   # the grant protects the source
+    broker.bind('s-test',task,work)
     try:
         result=broker.call('s-test','immutable','sandbox_run',{'argv':['python3','-c',"from pathlib import Path;Path('a.txt').write_text('tamper')"]})
         assert result['exit_code']!=0 and (work/'a.txt').read_text()=='controlled original'

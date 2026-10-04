@@ -193,8 +193,11 @@ class Store:
                 if name=='memory_units':
                     row.update(character_id=character_id(self.config),embedding_status='PENDING',depends_on=row['source_event_ids'])
                 self.put(name,row,stream='seed')
+        from .documents import DocumentStore
         for persona,path in world['personas'].items():
-            self.init_head('persona:'+persona,'global-safe',{'body':(fixture.parent/path).read_text(encoding='utf-8')},[])
+            docs=DocumentStore(self,persona)
+            if not docs.head('persona'):
+                docs.seed('persona','persona',(fixture.parent/path).read_text(encoding='utf-8'),path=Path(path).name)
         for rel in world['relationships']:
             self.init_head('relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
 
@@ -222,13 +225,12 @@ class Store:
         # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
         linked = {item for item in (linked_scopes or ()) if isinstance(item, str) and item}
         readable_scopes = {'global-safe', scope} | linked
-        if actor!='character' or not entity.startswith(('persona:','overlay:','relationship:','scene_affect:')) or not set(content).issubset(allowed):
+        # The persona is a document (ADR-009 §5); state heads hold only overlays, relationships and scene affect.
+        if actor!='character' or not entity.startswith(('overlay:','relationship:','scene_affect:')) or not set(content).issubset(allowed):
             raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
         if scope != request_scope and not (request_scope in linked
                                            and entity.startswith(('relationship:', 'overlay:',
                                                                   'scene_affect:'))):
-            raise Denied('SCOPE_PROMOTION_DENIED')
-        if entity.startswith('persona:') and scope != 'global-safe':
             raise Denied('SCOPE_PROMOTION_DENIED')
         if not sources:
             raise Denied('MUTATION_REQUIRES_SOURCES')

@@ -146,7 +146,7 @@ class RuntimeHost:
             from .visibility import without_link_downgrades
             self.config, rejected_links = without_link_downgrades(self.config)
             self.app = self.stack.enter_context(Application(
-                {**self.config, 'task_mode': 'workspace'}, self.evidence, self.database,
+                self.config, self.evidence, self.database,
                 lane_factory=self.lane_factory, broker_http=self.broker_http,
                 development_factory=self.development_factory))
             for rejected in rejected_links:

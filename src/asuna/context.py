@@ -391,48 +391,47 @@ class ContextBuilder:
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else None,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if history_delta:
             manifest['history_delta']=history_delta
-        if self.store.config.get('task_mode')=='workspace':
-            if relation:
-                context['understanding_update_from_program']={
-                    'available':True,'target':target_note,
-                    'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
-            from .grants import workspace_grant
-            grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
-            context['action_capabilities_from_program']={
-                'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
-                'cancellation_available':True,
-                'network':'行动脑可以按需搜索公共网页并读取页面。',
-                'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-            development = (event.get('episode_kind') == 'self_development' or
-                event.get('development_profile') == 'owner' or
-                event.get('episode_kind') == 'task_feedback' and bool(
-                    (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
-            if development and (scene['_id'],event['person_id']) == (
-                    self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
-                context['action_capabilities_from_program']['development'] = {
-                    'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
-            context['action_capabilities_from_program']['history_query']=(
-                '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
-                '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
-            from .vision import vision_capability
-            if vision_capability(self.store.config)['supported']:
-                context['action_capabilities_from_program']['read_image']=(
-                    '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
-                    '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
-            context['action_capabilities_from_program']['group_discussion']=(
-                '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
-                '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
-                '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
-                '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
-                '判断，不自动总结、不自动发言。')
-            from .integration import event_granted
-            if event_granted(self.store.config, event):
-                context['action_capabilities_from_program']['integration'] = {
-                    'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
-            from .skills import skills_directory
-            if skills_directory(self.store.config,scene['_id'],event['person_id']):
-                context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
-            manifest['context_sha256']=sha(canonical(context))
+        if relation:
+            context['understanding_update_from_program']={
+                'available':True,'target':target_note,
+                'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 participants 覆盖当前说话人的摘要会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+        from .grants import workspace_grant
+        grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
+        context['action_capabilities_from_program']={
+            'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
+            'cancellation_available':True,
+            'network':'行动脑可以按需搜索公共网页并读取页面。',
+            'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
+        development = (event.get('episode_kind') == 'self_development' or
+            event.get('development_profile') == 'owner' or
+            event.get('episode_kind') == 'task_feedback' and bool(
+                (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
+        if development and (scene['_id'],event['person_id']) == (
+                self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
+            context['action_capabilities_from_program']['development'] = {
+                'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
+        context['action_capabilities_from_program']['history_query']=(
+            '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
+            '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
+        from .vision import vision_capability
+        if vision_capability(self.store.config)['supported']:
+            context['action_capabilities_from_program']['read_image']=(
+                '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
+                '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
+        context['action_capabilities_from_program']['group_discussion']=(
+            '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
+            '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
+            '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
+            '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
+            '判断，不自动总结、不自动发言。')
+        from .integration import event_granted
+        if event_granted(self.store.config, event):
+            context['action_capabilities_from_program']['integration'] = {
+                'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
+        from .skills import skills_directory
+        if skills_directory(self.store.config,scene['_id'],event['person_id']):
+            context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
+        manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)
         if ledger.enabled:

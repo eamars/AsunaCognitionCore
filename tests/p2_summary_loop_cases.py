@@ -256,11 +256,8 @@ def rows(**overrides):
                'scope_key': SCOPE, 'mutation_id': 'seed:rev-rel-0', 'revision': 1,
                'content': {'body': '刚认识，还在试口径。', 'familiarity': 1},
                'source_ids': [], 'parent_revision_id': None}
-    persona_head = {'_id': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-                    'revision_id': 'rev-persona-0', 'revision': 1}
-    persona_rev = {'_id': 'rev-persona-0', 'entity_key': 'persona:P1|global-safe',
-                   'scope_key': 'global-safe', 'mutation_id': 'seed:rev-persona-0', 'revision': 1,
-                   'content': {'body': PERSONA_BODY}, 'source_ids': [], 'parent_revision_id': None}
+    from persona_rows import persona_rows
+    persona_head, persona_rev = persona_rows(PERSONA_BODY)
     data = {'scenes': [scene], 'messages': [inbound, outbound], 'memory_units': [summary, monologue],
             'state_heads': [rel_head, persona_head], 'state_revisions': [rel_rev, persona_rev]}
     data.update(overrides)
@@ -542,11 +539,9 @@ def _heads(scope, persons):
 
 
 def _persona():
-    return ([{'_id': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-              'revision_id': 'rev-persona-0', 'revision': 1}],
-            [{'_id': 'rev-persona-0', 'entity_key': 'persona:P1|global-safe',
-              'scope_key': 'global-safe', 'mutation_id': 'seed:rev-persona-0', 'revision': 1,
-              'content': {'body': PERSONA_BODY}, 'source_ids': [], 'parent_revision_id': None}])
+    from persona_rows import persona_rows
+    head, revision = persona_rows(PERSONA_BODY)
+    return [head], [revision]
 
 
 def _scaffold(scene_id, kind, persons, messages, start_seq, sequence):

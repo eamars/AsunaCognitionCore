@@ -108,7 +108,7 @@ class MemoryService:
     def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):
         """Append an audited revision; do not erase history or reapply events."""
         if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
-        if not entity.startswith(('persona:','overlay:','relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
+        if not entity.startswith(('overlay:','relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
         with database_effects_lock(self.store.name):
             pair=self.store.head(entity,scope)
             if not pair:raise Denied('UNKNOWN_STATE_ENTITY')

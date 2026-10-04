@@ -259,7 +259,7 @@ class Coordinator:
                             if not isinstance(decision,dict):raise ValueError('DECISION_NOT_AN_OBJECT')
                             # ADR-009 optional fields are validated item by item later; never fail the turn here.
                             decision,delta=decide_delta.split(decision)
-                            jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA if self.store.config.get('task_mode')=='workspace' else DECISION_SCHEMA)
+                            jsonschema.validate(decision,WORKSPACE_DECISION_SCHEMA)
                             if decision.get('reflect_self') and ep.get('episode_kind')!='self_development':
                                 raise ValueError('SELF_STATE_ONLY_IN_INTERNAL_OPPORTUNITY')
                             break
@@ -345,9 +345,8 @@ class Coordinator:
                         ep=self._update(ep,state='PREPARED',recall_rounds=rounds+1,context=context)
                         return self._advance(ep_id)
                     if next_step=='delegate':
-                        if self.store.config.get('task_mode')=='workspace':
-                            from .grants import workspace_grant
-                            workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
+                        from .grants import workspace_grant
+                        workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
                         task_id=ep.get('supersedes_task_id') or 'task-'+ep_id
                         intent_revision=1
                         if ep.get('supersedes_task_id'):
@@ -355,9 +354,9 @@ class Coordinator:
                             revised=TaskService(self.store).activate_revision(ep)
                             intent_revision=revised['intent_revision']
                         if not self.store.db.tasks.find_one({'_id':task_id}):
-                            from .tasks import WORKSPACE_TOOLS,TOOLS,ACTION_DSH_CAPABILITIES
+                            from .tasks import WORKSPACE_TOOLS,ACTION_DSH_CAPABILITIES
                             from .vision import route_filtered_tool_names
-                            capabilities=WORKSPACE_TOOLS if self.store.config.get('task_mode')=='workspace' else TOOLS
+                            capabilities=WORKSPACE_TOOLS
                             source = self.store.db.messages.find_one({'_id': 'in-'+ep_id})
                             development=(ep.get('episode_kind')=='self_development' or
                                 ((source or {}).get('event',{}).get('development_profile')=='owner'

@@ -10,6 +10,7 @@ from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
 from asuna.lanes import FakeLane, LaneResult
 from asuna.state import content_ref
+from fixture_grant import returned
 from asuna.router import Router
 
 
@@ -178,11 +179,9 @@ def test_chat_continues_while_action_waits_and_result_returns_once(store, tmp_pa
             assert release.wait(20)
             # Explicit action double: the test targets scheduling and publication.
             ref = 'test-action-observation'
-            store.put('artifacts', {'_id': ref, 'task_id': task_id, 'intent_revision': 1,
-                                   'scope_key': task['scope_key'], 'state': 'DONE'}, stream=task_id)
-            return service.finish(task, {'task_id': task_id, 'intent_revision': 1, 'status': 'done',
-                'facts': [{'text': '执行侧报告', 'evidence_refs': [ref]}], 'artifact_refs': [ref],
-                'effect_receipts': [], 'uncertainties': [], 'unmet_items': [], 'needs_decision': None})
+            store.put('artifacts', {'_id': ref, 'task_id': task_id, 'intent_revision': 1, 'tool': 'read_file',
+                                   'result': {'text': 'observed'}, 'scope_key': task['scope_key'], 'state': 'DONE'}, stream=task_id)
+            return returned(store, task, '执行侧报告', [ref])
 
     chat.app.executor = WaitingAction()
     chat.app.executor_lane = SimpleNamespace(sdk=SimpleNamespace(close=release.set))

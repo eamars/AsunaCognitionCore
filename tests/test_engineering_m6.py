@@ -39,9 +39,12 @@ def test_E09_E16_owner_cancellation_and_expired_lease(store):
 def test_E06_duplicate_result_one_character_feedback(store):
     service,task,broker,work=task_setup(store)
     try:
-        ref=broker.call('s-test','inspect','fixture_lookup',{})['evidence_ref']
-        value={'task_id':task['_id'],'intent_revision':1,'status':'done','facts':[{'text':'文件已查阅','evidence_refs':[ref]}],'artifact_refs':[ref],'effect_receipts':[],'uncertainties':[],'unmet_items':[],'needs_decision':None}
-        done=service.finish(task,value)
+        ref=broker.call('s-test','inspect','list_files',{})['evidence_ref']
+        # The executor's natural-language report with program-attached receipts (tasks.Executor).
+        current=store.db.tasks.find_one({'_id':task['_id']})
+        done=store.put('tasks',{**current,'state':'RETURNED','feedback_state':'READY','result':{'task_id':task['_id'],
+            'intent_revision':1,'text':'文件已查阅','facts':[{'text':'文件已查阅','evidence_refs':[ref]}],'artifact_refs':[ref]}},
+            expected=current['revision'])
         lane=FakeLane(store,[LaneResult('这是工具结果，我来说明。'),decision(),LaneResult('文件已经查过了。')])
         c=Coordinator(store,lane)
         assert service.feedback(done,c)['state']=='COMMITTED'

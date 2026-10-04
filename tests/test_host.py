@@ -17,6 +17,7 @@ from asuna.lanes import FakeLane, LaneResult
 from asuna.grants import workspace_grant
 from asuna.router import Router
 from asuna.state import Denied
+from fixture_grant import returned
 
 
 def event(key='one', text='input'):
@@ -239,8 +240,9 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     from asuna.channels import Channels
     from asuna.tasks import TaskService
     target = {'type': 'dm', 'id': 'peer'}
+    work = store.config['channels']['fixture']['routes']['dm-a']['workspace']
     store.config['channels'] = {'replay': {'token': 'x' * 32, 'account_id': 'bot', 'routes': {
-        'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': target}}}}
+        'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': target, 'workspace': work}}}}
     scene = store.db.scenes.find_one({'_id': 'dm-a'})
     store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
     decision = {'next': 'delegate', 'goal': 'check', 'constraints': [], 'recall_query': '', 'speak_before_action': False}
@@ -251,12 +253,9 @@ def test_feedback_recovers_receipt_and_keeps_original_platform_reply_target(stor
     episode = coordinator.ingest(incoming)
     service = TaskService(store)
     task = service.claim(episode['task_id'])
-    store.put('artifacts', {'_id': 'observation', 'task_id': task['_id'], 'intent_revision': 1,
-                           'scope_key': task['scope_key'], 'state': 'DONE'})
-    task = service.finish(task, {'task_id': task['_id'], 'intent_revision': 1, 'status': 'done',
-            'facts': [{'text': 'controlled replay result', 'evidence_refs': ['observation']}],
-            'artifact_refs': ['observation'], 'effect_receipts': [], 'uncertainties': [],
-            'unmet_items': [], 'needs_decision': None})
+    store.put('artifacts', {'_id': 'observation', 'task_id': task['_id'], 'intent_revision': 1, 'tool': 'read_file',
+                           'result': {'text': 'observed'}, 'scope_key': task['scope_key'], 'state': 'DONE'})
+    task = returned(store, task, 'controlled replay result', ['observation'])
     def crash(point):
         if point == 'after_lane_delivery':
             raise RuntimeError('feedback interrupted')
@@ -288,12 +287,9 @@ def test_returned_task_feedback_queue_continues_failed_role_stage_without_new_ep
     episode=coordinator.ingest(event('feedback-source'))
     service=TaskService(store)
     task=service.claim(episode['task_id'])
-    store.put('artifacts',{'_id':'feedback-observation','task_id':task['_id'],
+    store.put('artifacts',{'_id':'feedback-observation','task_id':task['_id'],'tool':'read_file','result':{'text':'observed'},
         'intent_revision':1,'scope_key':task['scope_key'],'state':'DONE'})
-    task=service.finish(task,{'task_id':task['_id'],'intent_revision':1,'status':'done',
-        'facts':[{'text':'verified','evidence_refs':['feedback-observation']}],
-        'artifact_refs':['feedback-observation'],'effect_receipts':[],
-        'uncertainties':[],'unmet_items':[],'needs_decision':None})
+    task=returned(store,task,'verified',['feedback-observation'])
     chat=controller(store,tmp_path,coordinator)
     chat.app.service=service
     chat.app.coordinator=coordinator

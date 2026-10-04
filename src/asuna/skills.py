@@ -5,7 +5,7 @@ from .config import ROOT
 
 def skills_directory(config, scene_id, person_id):
     chat = config.get('chat', {})
-    if config.get('task_mode') != 'workspace' or not chat.get('skills_dir'):
+    if not chat.get('skills_dir'):
         return None
     if (scene_id, person_id) != (chat.get('scene_id'), chat.get('person_id')):
         return None

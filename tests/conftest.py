@@ -43,7 +43,10 @@ def drop_database(config,name):
 @pytest.fixture
 def store(request):
     config=load();config['character_id']='demo'  # Synthetic persona of the fixture world.
-    db=Store(config,isolated_database('asuna_v2_test_M1'))
+    name=isolated_database('asuna_v2_test_M1')
+    from fixture_grant import fixture_grant
+    fixture_grant(config,name)
+    db=Store(config,name)
     db.migrate();db.seed(WORLD)
     yield db
     root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')

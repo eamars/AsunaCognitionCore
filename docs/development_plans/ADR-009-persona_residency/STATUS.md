@@ -245,6 +245,23 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 下一步：owner 决定 D-8 的时机；生产库迁移（转换 persona 头、清理在途旧回合）之后删除 system 兼容与 persona 头读取
 ```
 
+## P7 报告（第二部分，owner 裁决后）
+
+```text
+阶段：P7（第二部分）
+依据：owner 裁决（2026-10-04 傍晚）——碍事的测试先删；不做数据迁移，旧兼容可直接删；人格包自检可以修
+完成：
+  夹具模式删除：task_mode 不再存在（工作区模式是唯一模式）；删除 tasks 的夹具 TOOLS/fixture_* 工具、RESULT_SCHEMA 与 TaskService.finish、task_status、inject_read_failures、非工作区执行分支；coordinator 的 DECISION_SCHEMA 回退；router 的 cli-fixture 标签、非渠道群的夹具安静路径与 Router.batch；task_result.schema.json
+  旧兼容删除：episodes.system 读取兼容（阶段系统提示只从 system_ref 重渲）；persona:<id> 头的转换与 state 中 persona: 实体的变更/回滚入口（人格只是文档）；registerPersona.persona_file（契约 v2 必须有 kind=persona 的 seed，携带 persona_file 时明确拒绝）
+  privacy：删除旧 lane 的 runtime.lock 租约；原生会话行没有 dsh_home，过去会在 delete_memory 处 KeyError——现在原生会话被置为 INVALIDATED（纪元提升已经使其失效），结果 limitations 写明原生 DSH 转录未从 DSH home 物理删除
+  人格包 QQ 适配器自检 preview_readable：不再写死群号，改为检查预览里 allowed_group_ids 与群路由一一对应（WSL 下用合成预览验证：一致 → 通过，不一致或为空 → 失败）
+  测试：夹具世界改由 tests/fixture_grant.py 给 dm-a/A 一条带工作区的渠道路由授权（场景仍为 public），并替换本机配置可能带入的真实路由；崩溃矩阵 after_tool_commit 改用 write_file；m 系列 CAS/作用域用例改以 overlay 头为目标；删除只验证已退役功能的用例（夹具执行器结果 JSON、旧 lane 租约、旧人格头转换）
+  T7.3 PASS [离线] CLEANUP §10 六项检查全部为 0（--personal --all 只剩只报告范围）
+  全套 Python 209 passed / 0 failed，JS 18/18，adr009 离线 37/37，case runner P2/P3/P5 全过，看图自检全过
+  D-8 / T7.2 PASS [离线] native_worker 的分派改为 Dispatcher：宿主回复（result / host_result）在读取线程上直接完成等待中的 Future，可能等待宿主回复或长时间运行的调用（tool、persona.job_run）各用独立线程；分派池线程从不等待 Future.result()。线程池设为 1、两个场景的阶段请求交替到达时都能完成；反证：同一用例改回旧的全部入池路由会超时（死锁）
+偏离：D7-4、D7-5（见下）
+```
+
 ## 决定与偏离
 
 | 编号 | 决定 | 理由 |
@@ -291,12 +308,13 @@ test_consultation ×2（`task_status` 能力、`ToolBroker.server`）、test_eng
 | D6-3 | `scenes.sequence` 与 `memory_units.salience` 是 `$inc` 计数器，不进入文档摘要（COUNTER_FIELDS）；隐私删除对审计的既有改写不在篡改检测范围内 | 这些字段本来就不产生修订；否则任何一次发言都会被判为篡改 |
 | D6-4 | FakeLane（测试替身）的回执仍保存全文；配置项名为 `mountSchedule`（JS 配置的驼峰命名），即 ADR 中的 `mount_schedule` | 测试替身没有原生转录可回读；命名与同一对象的其他配置项一致 |
 | D7-1 | D-8（advance 拆分为事件驱动续接）本次不做 | 计划自述「风险高」；它改变每个阶段的线程模型，门槛是崩溃矩阵（本次刚修复成绿）。在 owner 不在场时推送这种改动收益小于风险；建议在 owner 可以同步做人工 Web 检查的时段进行 |
-| D7-2 | `episodes.system` 兼容与 `persona:<id>` 头转换不删 | 只读核查生产库：仍有 2 个未转换的 `persona:` 头、52 个带 `system` 全文的非终态回合（WAITING_TASK/INTERRUPTED）。ADR 的删除条件「确认没有在途旧回合后」尚不满足；现在删除会让正式迁移前的真实部署无法启动或续接 |
-| D7-3 | 夹具模式本次不删，`privacy.py` 的 DSH home `runtime.lock` 租约保留 | 夹具模式仍被大量 m 系列用例当作驱动（D0-2）；删除要逐个改写为工作区模式，适合与 D-8 同批。租约是隐私删除时防止并发写 DSH home 的守卫，CLEANUP 所指的旧 lane 锁（native_worker）已不存在 |
+| D7-2 | （已由 owner 裁决撤销，见 P7 第二部分）`episodes.system` 兼容与 `persona:<id>` 头转换不删 | 只读核查生产库：仍有 2 个未转换的 `persona:` 头、52 个带 `system` 全文的非终态回合（WAITING_TASK/INTERRUPTED）。ADR 的删除条件「确认没有在途旧回合后」尚不满足；现在删除会让正式迁移前的真实部署无法启动或续接 |
+| D7-3 | （已在 P7 第二部分完成删除）夹具模式本次不删，`privacy.py` 的 DSH home `runtime.lock` 租约保留 | 夹具模式仍被大量 m 系列用例当作驱动（D0-2）；删除要逐个改写为工作区模式，适合与 D-8 同批。租约是隐私删除时防止并发写 DSH home 的守卫，CLEANUP 所指的旧 lane 锁（native_worker）已不存在 |
+| D7-4 | 隐私删除对原生会话只作废、不物理删除其 DSH 转录 | 原生转录由 DSH 会话持久化管理，位置与格式属于固定版；纪元提升已使会话不可再用（NATIVE_SESSION_EPOCH_CHANGED）。物理删除需要走 DSH 的会话删除接口，列为后续 |
+| D7-5 | D-8 不把 `Coordinator.advance` 改写为续接式，而是修正分派路由 | 实际风险是宿主回复与等待它的调用共用有界分派池（池满即死锁，T7.2 的情形）；角色与行动阶段本来就在各自专用线程（asuna-chat / asuna-actions）上顺序等待，按场景次序推进正是它们的职责。续接式改写会触动全部阶段语义与崩溃点而不带来功能收益；路由修正消除了死锁类别，崩溃矩阵与阶段语义不变 |
 
 ## 给 owner 的待决事项
 
-1. 人格包 QQ 适配器自检 `preview_readable` 现在期望占位群号；对着真实部署的预览文件会失败，需要改成从预览/配置读取期望值（属于人格包行为改动，未擅改）。
-2. 公开前是否清理 git 历史与历史设计文档中的个人标识（扫描器对 `docs/development_plans/**` 其他 ADR 报告 78 处，只报告不改）。
-3. D-8 的时机（D7-1），以及之后夹具模式的删除（D7-3）。
-4. 生产库正式迁移：首次启动新运行时会把 `persona:` 头转换为人格文档；在途旧回合（52 个）需要收尾或作废，之后才能删除 `system` 兼容（D7-2）。
+已裁决（2026-10-04 傍晚）：1 自检已修（改为一致性检查）；2 git 历史不清理（软性指引）；4 不迁移，旧兼容已删；3 D-8 在 owner 可以一起看 Web 界面时进行。
+
+剩余：原生会话转录的物理删除（D7-4）。

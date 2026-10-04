@@ -709,7 +709,7 @@ def outage_acts_once_and_arms_the_future(env):
 # ── DECIDE 形状与控制字段：连 coordinator.py 的真 schema 一起验 ────────
 STUB_EXTRA = {
     'config.py': 'import json, os\nfrom pathlib import Path\n'
-                 'RESOURCES=Path(os.environ["ASUNA_P3_RESOURCES"])\n'
+                 'RESOURCES=Path(os.environ["ASUNA_P3_RESOURCES"])\nROOT=RESOURCES.parents[2]\n'
                  'def character_id(config):\n    return config.get("character_id", "demo")\n'
                  'def prompt_path(config, name):\n    return RESOURCES/"prompts"/name\n'
                  'def schema(name):\n    return json.loads((RESOURCES/"schemas"/name).read_text(encoding="utf-8"))\n'
@@ -739,7 +739,7 @@ def load_coordinator():
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
     # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py')
     for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
         if name in optional and not os.path.exists(os.path.join(SRC, name)):
@@ -871,13 +871,10 @@ def context_projection_runs_end_to_end(env):
     module, _ = load_coordinator()
     store = Store(config_with({'timezone': ZONE}))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
-    store.db.state_revisions.rows['rev-persona'] = {
-        '_id': 'rev-persona', 'entity_key': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-        'revision': 1, 'content': {'body': '演示角色，24 岁。' + '说话清淡直接。' * 12},
-        'source_ids': [], 'parent_revision_id': None}
-    store.db.state_heads.rows['persona:P1|global-safe'] = {
-        '_id': 'persona:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'rev-persona',
-        'revision': 1}
+    from persona_rows import persona_rows
+    head, revision = persona_rows('演示角色，24 岁。' + '说话清淡直接。' * 12, revision_id='rev-persona')
+    store.db.state_revisions.rows['rev-persona'] = revision
+    store.db.state_heads.rows[head['_id']] = head
     store.db.plans.rows['plan-7'] = {'_id': 'plan-7', 'scene_id': SCENE_ID, 'person_id': PERSON,
                                      'scope_key': 'scene:' + SCENE_ID, 'policy_epoch': 7,
                                      'intent': '每天提醒我喝水', 'rule': {'clock': {'time': '09:00'}},
@@ -906,13 +903,10 @@ def media_placeholder_reaches_the_character_scene(env):
     store = Store(config_with(top={'executor': {'input_modalities': ['text', 'image']},
                                    'vision': {'image_hosts': ['multimedia.nt.qq.com.cn']}}))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
-    store.db.state_revisions.rows['rev-persona'] = {
-        '_id': 'rev-persona', 'entity_key': 'persona:P1|global-safe', 'scope_key': 'global-safe',
-        'revision': 1, 'content': {'body': '演示角色，24 岁。' + '说话清淡直接。' * 12},
-        'source_ids': [], 'parent_revision_id': None}
-    store.db.state_heads.rows['persona:P1|global-safe'] = {
-        '_id': 'persona:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'rev-persona',
-        'revision': 1}
+    from persona_rows import persona_rows
+    head, revision = persona_rows('演示角色，24 岁。' + '说话清淡直接。' * 12, revision_id='rev-persona')
+    store.db.state_revisions.rows['rev-persona'] = revision
+    store.db.state_heads.rows[head['_id']] = head
     store.db.messages.rows['in-ep-evt-1'] = {
         '_id': 'in-ep-evt-1', 'scene_id': SCENE_ID, 'policy_epoch': 7, 'scene_seq': 12,
         'direction': 'inbound', 'author': PERSON, 'text': '[图片（未解析）]',

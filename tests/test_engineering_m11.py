@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import json,uuid,subprocess,sys
 from unittest.mock import patch
 import pytest
@@ -26,7 +27,7 @@ def test_E16_old_worker_exception_does_not_poison_replacement(store):
     first=router.receive({'event_id':'v1','scene_id':'dm-a','person_id':'A','text':'核实第一版'})
     event={'event_id':'v2','scene_id':'dm-a','person_id':'A','text':'改成第二版','supersedes_task_id':first['task_id']}
     with pytest.raises(Denied):service.revise(first['task_id'],{**event,'person_id':'B'})
-    work=ROOT/'.runtime/work'/('revision-test-'+uuid.uuid4().hex);work.mkdir()
+    work=Path(store.config['channels']['fixture']['routes']['dm-a']['workspace'])
     broker=ToolBroker(service)
     class InterruptedLane:
         def generate(self,*args,**kwargs):

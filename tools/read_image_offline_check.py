@@ -194,7 +194,7 @@ def main() -> int:
 
     def config(*, hosts=('127.0.0.1', 'multimedia.nt.qq.com.cn'), modalities=('text', 'image'),
                insecure=True, image_dirs=(), max_bytes=4 * 1024 * 1024):
-        return {'task_mode': 'workspace', 'executor': {'input_modalities': list(modalities)},
+        return {'executor': {'input_modalities': list(modalities)},
                 'vision': {'image_hosts': list(hosts), 'allow_insecure_http': insecure,
                            'image_dirs': list(image_dirs), 'max_bytes': max_bytes, 'timeout_seconds': 5}}
 

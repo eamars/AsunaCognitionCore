@@ -7,7 +7,7 @@ import pytest
 
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
-from asuna.documents import DocumentError, DocumentStore, PREAMBLE, render_markdown
+from asuna.documents import DocumentError, DocumentStore, PREAMBLE
 from asuna.lanes import FakeLane, LaneResult
 from asuna.render import action_values, compose, common_text, render_system, budget_gate
 from asuna.state import Conflict
@@ -54,7 +54,6 @@ def test_T2_3_budget_refuses_growth_but_never_truncates(store):
     owner(store)
     store.config['character'] = {**store.config['character'], 'context_window': 4000}  # × 0.25 = 1000-token limit
     docs = DocumentStore(store, 'P1')
-    docs.convert_legacy_persona()
     base = docs.read('persona')[0]
     gate = budget_gate(store, 'P1')
     with pytest.raises(DocumentError, match='PERSONA_RENDER_OVER_BUDGET') as refused:
@@ -69,7 +68,8 @@ def test_T2_3_budget_refuses_growth_but_never_truncates(store):
     lane = FakeLane(store, [LaneResult('想。'), decide(), LaneResult('好。')])
     assert Coordinator(store, lane).ingest(event('over-budget'))['state'] == 'COMMITTED'
     # A change that shrinks the render is always accepted.
-    shrunk = docs.apply('persona', {'op': 'replace_section', 'sid': PREAMBLE, 'reason': '精简'},
+    largest = max(docs.read('persona')[1]['sections'], key=lambda section: len(section['body']))['sid']
+    shrunk = docs.apply('persona', {'op': 'replace_section', 'sid': largest, 'reason': '精简'},
                         '# 示例角色\n我是示例角色，一个只用于测试的虚构数字角色，没有现实身体。' * 3,
                         base_revision_id=docs.read('persona')[0], author='character', mutation_id='t23-shrink', budget=gate)
     assert shrunk['_id'] == docs.read('persona')[0]
@@ -157,20 +157,6 @@ def test_T2_7_read_on_recall_follows_visibility(store):
     assert any(r['code'] == 'DOC_READ_DENIED' for r in ep['rejections'])
 
 
-def test_T2_8_legacy_head_is_converted_not_seeded(store):
-    legacy = store.head('persona:P1', 'global-safe')[1]['content']['body']
-    store.config['persona_contribution'] = {'seeds': [{'slug': 'persona', 'kind': 'persona',
-                                                       'path': str(FIXTURES / 'personas/demo/seeds/persona.md')}]}
-    from asuna.chat import seed_documents
-    seed_documents(store, {'persona': 'P1', 'persona_file': None})
-    content = DocumentStore(store, 'P1').read('persona')[1]
-    assert content['source']['origin'] == 'legacy-head' and render_markdown(content['sections']) == legacy
-    lane = FakeLane(store, [LaneResult('想。'), decide(), LaneResult('好。')])
-    ep = Coordinator(store, lane).ingest(event('after-convert'))
-    assert ep['manifest']['persona_revision'] == DocumentStore(store, 'P1').read('persona')[0]
-    assert ep['system_ref']['render_sha256'] and lane.calls[0]['messages'][0]['content'].endswith(legacy)
-
-
 def test_T2_9_seeds_fill_missing_heads_only_and_adopt_by_sid(store):
     docs = DocumentStore(store, 'demo')
     assert docs.seed('persona', 'persona', SEED)
@@ -192,7 +178,6 @@ def test_T2_9_seeds_fill_missing_heads_only_and_adopt_by_sid(store):
 def test_T2_10_action_brain_gets_public_values_only(store):
     owner(store)
     docs = DocumentStore(store, 'P1')
-    docs.convert_legacy_persona()
     for i, (vis, tags) in enumerate([('public', ['values']), ('owner_private', ['values']), ('public', [])]):
         docs.apply('persona', {'op': 'append_section', 'heading': f'节{i}', 'visibility': vis, 'tags': tags,
                                'reason': '测试'}, f'SECTION_BODY_{i}', base_revision_id=docs.read('persona')[0],

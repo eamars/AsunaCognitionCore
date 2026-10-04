@@ -30,7 +30,7 @@ class SceneQueue(Queue):
 
 def local_settings(config):
     settings = config['chat']
-    for key in ('scene_id', 'person_id', 'persona', 'display_name', 'persona_file'):
+    for key in ('scene_id', 'person_id', 'persona', 'display_name'):
         if not settings.get(key):
             raise ValueError(f'CHAT_CONFIG_REQUIRED: {key}')
     return settings
@@ -43,19 +43,14 @@ except Exception:
 
 
 def seed_documents(store, settings):
-    """Conversion before seeding; seeds only fill missing document heads (ADR-009 §5.4)."""
+    """Seeds only fill missing document heads (ADR-009 §5.4)."""
     from .documents import DocumentStore
     docs = DocumentStore(store, settings['persona'])
-    docs.convert_legacy_persona()
     seeds = (store.config.get('persona_contribution') or {}).get('seeds') or []
     for seed in seeds:
         if not docs.head(seed['slug']):
             docs.seed(seed['slug'], seed['kind'], Path(seed['path']).read_text(encoding='utf-8'),
                       path=Path(seed['path']).name, title=seed.get('title'))
-    if not docs.head('persona') and settings.get('persona_file'):
-        # A v1 contribution without seeds: its persona file is the persona seed.
-        source = Path(settings['persona_file'])
-        docs.seed('persona', 'persona', source.read_text(encoding='utf-8'), path=source.name)
 
 
 def prepare_local_scene(store, settings):

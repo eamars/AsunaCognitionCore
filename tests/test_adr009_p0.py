@@ -17,7 +17,8 @@ from test_engineering_m1 import event, decision
 def test_T0_4_episode_keeps_system_ref_not_system_text(store):
     body = '# 合成大人格\n' + ''.join('第%05d句：这是只用于测试的合成人格正文，用来把渲染撑到七十千字节。\n' % i for i in range(1100))
     assert len(body.encode()) >= 70 * 1024
-    store.init_head('persona:P70', 'global-safe', {'body': body}, [])
+    from asuna.documents import DocumentStore
+    DocumentStore(store, 'P70').seed('persona', 'persona', body, path='persona.md')
     lane = FakeLane(store, [LaneResult('想一想。'), decision(), LaneResult('回来了。')])
     ep = Coordinator(store, lane).ingest(event('big-persona'), persona='P70')
     assert ep['state'] == 'COMMITTED'
@@ -29,16 +30,6 @@ def test_T0_4_episode_keeps_system_ref_not_system_text(store):
     assert len(BSON.encode(doc)) <= 64 * 1024
     rendered, _ = render_system(store, 'P70')
     assert [call['messages'][0]['content'] for call in lane.calls] == [rendered] * 3
-    # An episode prepared before the upgrade still carries its full system text and resumes with it.
-    legacy = {k: v for k, v in doc.items() if k not in ('system_ref', 'decision', 'speech', 'revision', '_last_op',
-                                                         'schema_version', 'native_session_id')}
-    legacy.update(_id='ep-legacy-' + uuid.uuid4().hex[:8], source_event_id='legacy-in-flight', state='PREPARED',
-                  monologue_refs=[], system='LEGACY_SYSTEM_TEXT_FROM_BEFORE_THE_UPGRADE')
-    store.put('episodes', legacy, stream=legacy['_id'])
-    old = FakeLane(store, [LaneResult('接着想。'), decision(), LaneResult('接着说。')])
-    resumed = Coordinator(store, old).advance(legacy['_id'])
-    assert resumed['state'] == 'COMMITTED'
-    assert {call['messages'][0]['content'] for call in old.calls} == {'LEGACY_SYSTEM_TEXT_FROM_BEFORE_THE_UPGRADE'}
 
 
 def test_T0_6_group_action_prompt_has_no_persona_sentence(store):

@@ -169,24 +169,6 @@ class DocumentStore:
                                 mutation_id=f'seed:{self.persona}:{slug}', extra={'seed_unknown_sids': unknown} if unknown else None)
         return revision
 
-    def convert_legacy_persona(self):
-        """``persona:<id>`` head → ``doc:<id>:persona`` (one public/always preamble), before any seed.
-
-        Never blocked by the render budget; the legacy head stays readable until P7.
-        """
-        if self.head('persona'):
-            return None
-        legacy = self.store.head('persona:' + self.persona, SCOPE)
-        if not legacy:
-            return None
-        body = legacy[1]['content']['body']
-        content = {'kind': 'persona', 'title': 'persona',
-                   'sections': [_section(PREAMBLE, '', body, visibility='public', inject='always')],
-                   'source': {'origin': 'legacy-head', 'revision_id': legacy[0]['revision_id'], 'sha256': sha(body.encode())}}
-        return self._commit('persona', content, base_revision_id=None, reason='convert legacy persona head',
-                            author='operator', mutation_id=f'convert:{self.persona}:persona',
-                            sources=[legacy[0]['revision_id']])
-
     def apply(self, slug, intent, body=None, *, base_revision_id, author, mutation_id, budget=None):
         """One write intent. ``budget(slug, new_content)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET)."""
         op = intent.get('op')

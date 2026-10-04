@@ -8,7 +8,7 @@ This is the current business contract for the two native DSH plugins. See [NATIV
 
 Inbound work is persisted before retrieval or model calls. Character turns and action tasks use separate queues. The host binds each turn and task to a scene, person, policy epoch, and capability set. A new context changes the DSH conversation context while retaining persisted scene memory.
 
-The character brain decides whether to answer, reflect, manage a plan, or delegate an action. The action brain uses the DSH loop and the tools granted to its task. `RETURNED` means the action turn returned; it does not establish that the requested goal was completed. The action brain may return a natural-language result; it is not required to call `task_status`.
+The character brain decides whether to answer, reflect, manage a plan, or delegate an action. The action brain uses the DSH loop and the tools granted to its task. `RETURNED` means the action turn returned; it does not establish that the requested goal was completed. The action brain returns a natural-language report; the program attaches the actual tool receipts. Delegation requires a workspace grant for the scene (the owner's local scene, or a channel route that names a workspace).
 
 Ordinary tool errors are returned to the active DSH action loop so it can inspect the error and continue. A task revision, cancellation, changed policy epoch, or expired lease fences further calls. The host records tool inputs and results as artifacts; result claims are checked against those records and any required effect receipts.
 

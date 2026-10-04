@@ -47,11 +47,9 @@ export function normalizePersona(persona) {
   });
   value.skill_directories = (persona.skill_directories ?? []).map((directory, index) =>
     relative(root, directory, 'skill_directories[' + index + ']'));
-  // Deprecated v1 field: read-compatible until P7; a persona seed supersedes it.
-  const personaSeed = value.seeds.find(seed => seed.kind === 'persona');
-  if (persona.persona_file !== undefined) value.persona_file = relative(root, persona.persona_file, 'persona_file');
-  else if (personaSeed) value.persona_file = personaSeed.path;
-  if (!value.persona_file) throw new Error('PERSONA_CONTRACT_INVALID: a seed of kind persona is required');
+  if (persona.persona_file !== undefined) throw new Error('PERSONA_CONTRACT_INVALID: persona_file is retired; use a seed of kind persona');
+  if (!value.seeds.some(seed => seed.kind === 'persona'))
+    throw new Error('PERSONA_CONTRACT_INVALID: a seed of kind persona is required');
   return Object.freeze(value);
 }
 
@@ -64,6 +62,5 @@ export function resolvePersona(persona, root = persona.resource_root) {
     seeds: persona.seeds.map(seed => ({ ...seed, path: at(seed.path) })),
     jobs: persona.jobs.map(job => ({ ...job, entry: at(job.entry) })),
     skill_directories: persona.skill_directories.map(at),
-    persona_file: at(persona.persona_file),
   };
 }

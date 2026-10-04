@@ -18,7 +18,7 @@ import pytest
 
 from asuna.config import ROOT, load
 from asuna.state import Store, Denied
-from asuna.tasks import TaskService, ToolBroker, TOOLS, WORKSPACE_TOOLS
+from asuna.tasks import TaskService, ToolBroker, WORKSPACE_TOOLS
 from asuna.history_query import (HISTORY_TOOL_NAME, HistoryQueryService, identity_status,
                                  query_history, TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT,
                                  TIME_SOURCE_SINK)
@@ -156,7 +156,6 @@ def test_p1a_identity_module_is_reused_not_replaced():
 
 def test_tool_registered_for_action_brain_and_native_plugin(broker_env):
     store, service, broker, work = broker_env
-    assert [t['name'] for t in TOOLS].count(HISTORY_TOOL_NAME) == 1
     assert [t['name'] for t in WORKSPACE_TOOLS].count(HISTORY_TOOL_NAME) == 1
     assert HISTORY_TOOL_NAME in [t['name'] for t in broker.specs]
     spec = next(t for t in WORKSPACE_TOOLS if t['name'] == HISTORY_TOOL_NAME)

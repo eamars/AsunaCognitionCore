@@ -29,8 +29,10 @@ export function visibleCarried(session, windowTokens = REUSE_WINDOW_TOKENS) {
     if (!event) continue;
     used += Math.ceil(JSON.stringify(session.deriveEventMessage(event)?.content ?? '').length / 4);
     if (used > windowTokens) break;
-    const carried = event.type === 'user/message' && event.data?.source?.kind === 'asuna'
-      ? event.data.source.carried : undefined;
+    const source = event.type === 'user/message' ? event.data?.source : undefined;
+    // A platform line projected into the conversation as it arrived (navigation.js) is its own row.
+    if (source?.kind === 'user' && source.channel && source.receipt) { visible.rows.add(source.receipt); continue; }
+    const carried = source?.kind === 'asuna' ? source.carried : undefined;
     if (!carried) continue;
     for (const [key, value] of Object.entries(carried.blocks ?? {})) visible.blocks.add(key + ':' + value);
     for (const id of carried.rows ?? []) visible.rows.add(id);

@@ -38,3 +38,14 @@ test('a role notice repeats only what the visible session no longer shows', () =
   assert.deepEqual(third.context.self_state_from_program, { core: '同一份自我' });
   assert.equal(third.context.delivered_history.length, 1);
 });
+
+test('group lines already projected into the conversation are not listed again as history', () => {
+  const line = (id, text) => ({ type: 'user/message', data: { content: [{ type: 'text', text }],
+    source: { kind: 'user', channel: 'qq', receipt: id } } });
+  const events = [line('in-7', '[名字 #1]\n  第一句'), line('in-8', '[名字 #2]\n  第二句')];
+  const composed = composeContext(context([{ _id: 'in-6', direction: 'inbound', text: '更早的话' },
+    { _id: 'in-7', direction: 'inbound', text: '第一句' }, { _id: 'in-8', direction: 'inbound', text: '第二句' }]),
+    visibleCarried(surface(events)));
+  assert.deepEqual(composed.context.delivered_history.map(row => row._id), ['in-6']);
+  assert.equal(composed.omitted.history_rows, 2);
+});

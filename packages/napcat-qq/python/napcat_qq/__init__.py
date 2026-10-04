@@ -7,7 +7,6 @@ import re
 
 KIND = 'qq'                       # scene ids qq:<bot>:<dm|group>:<target>; person ids qq:<account>
 TITLE = 'QQ'                      # the sidebar workspace its conversations live in
-READ_ONLY_NOTE = 'QQ 会话仅供查看，请在 QQ 中回复。'
 # Only the media host this deployment has actually received QQ images from (stored inbound metadata).
 IMAGE_HOSTS = ('multimedia.nt.qq.com.cn',)
 

@@ -1,10 +1,9 @@
 """The relevance gate (attend.py): a group turn nobody addressed to her asks 接话 or 不理 before any recall."""
-import json
 
 from asuna import attend
 from asuna.channels import called_by_name
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from test_people import BOT, GROUP, SCENE, row, setup as people_setup
 
 
@@ -64,13 +63,15 @@ def test_quiet_ends_the_turn_before_any_recall(store):
 
 def test_join_runs_the_full_turn_with_her_reason(store):
     setup(store)
-    decision = {'next': 'silent', 'goal': '想了想还是不说', 'constraints': [], 'recall_query': '', 'speak_before_action': False}
-    character = FakeLane(store, [LaneResult('想说一句'), LaneResult(json.dumps(decision))])
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我，想了想还是不说。'}),
+                                           ('stay_silent', {'reason': '想了想还是不说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [LaneResult('接话：有人提到我')])
     ep = coordinator.ingest(gated_event(20002, '演示 你怎么看', 'name_called'), persona='P1')
-    assert [call['phase'] for call in character.calls] == ['MONOLOGUE', 'DECIDE']
+    assert [call['phase'] for call in character.calls] == ['TURN']
+    assert ep['state'] == 'COMMITTED' and ep['silent_reason'] == '想了想还是不说'
     assert ep['attend']['choice'] == 'join' and ep['context']['attend_from_program'].endswith('有人提到我')
+    assert '有人提到我' in character.calls[0]['messages'][-1]['content']
     assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_JOIN'
 
 
@@ -85,12 +86,13 @@ def test_a_gate_that_cannot_answer_lets_the_message_pass(store):
 
 def test_addressed_messages_skip_the_gate(store):
     setup(store)
-    decision = {'next': 'silent', 'goal': '不用说', 'constraints': [], 'recall_query': '', 'speak_before_action': False}
-    character = FakeLane(store, [LaneResult('看到了'), LaneResult(json.dumps(decision))])
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人 @ 我，看到了，不用说。'}),
+                                           ('stay_silent', {'reason': '不用说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [])
     ep = coordinator.ingest(gated_event(20004, '@演示 在吗', 'mentioned_account'), persona='P1')
-    assert [call['phase'] for call in character.calls] == ['MONOLOGUE', 'DECIDE'] and 'attend' not in ep
+    assert [call['phase'] for call in character.calls] == ['TURN'] and 'attend' not in ep
+    assert ep['state'] == 'COMMITTED' and coordinator.attend.calls == []
 
 
 def test_catch_up_reaches_back_to_her_last_words_within_an_hour(store):

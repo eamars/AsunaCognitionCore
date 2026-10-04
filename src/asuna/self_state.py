@@ -20,21 +20,19 @@ class SelfState:
             result[name] = {'body': head[1]['content']['body'], 'revision_id': head[0]['revision_id']} if head else None
         return result
 
-    def commit(self, episode, target, body):
+    def commit(self, episode, target, body, mutation=None):
+        """Her own update_self call (ADR-011 §6.1): in an owner-private turn, like her documents."""
+        from . import visibility
         if target not in ('character_core', 'current_self') or not isinstance(body, str) or not body.strip():
             raise ValueError('INVALID_SELF_STATE_UPDATE')
-        if episode['state'] != 'DECISION_ACCEPTED' or not episode.get('decision', {}).get('reflect_self'):
-            raise Denied('SELF_STATE_REQUIRES_ROLE_DECISION')
-        if (episode.get('episode_kind') != 'self_development' or
-                (episode['scene_id'],episode['person_id']) !=
-                (self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])):
-            raise Denied('SELF_STATE_REQUIRES_OWNER_INTERNAL_CONTEXT')
+        if (episode.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE:
+            raise Denied('SELF_STATE_REQUIRES_OWNER_PRIVATE')
         if len(body) > 12000:
             raise ValueError('SELF_STATE_TOO_LARGE')
         scope = 'global-safe'
         entity = target + ':' + episode['persona']
         key = entity + '|' + scope
-        mutation = 'self-state:' + episode['_id']
+        mutation = mutation or 'self-state:' + episode['_id']
         old = self.store.db.state_revisions.find_one({'mutation_id': mutation})
         if old:
             if old['entity_key'] != key or old['content'] != {'body': body}:

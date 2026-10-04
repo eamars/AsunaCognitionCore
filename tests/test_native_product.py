@@ -54,7 +54,7 @@ def test_receipt_is_visible_before_processing_and_replayed_until_native_ack(prod
     assert p.store.db.episodes.count_documents({}) == 0
     receipt = p.events[0]
     assert receipt['binding']['main_conversation']
-    assert receipt['binding']['native_title'] == '群聊 · 22220000'
+    assert receipt['binding']['native_title'] == '22220000'
     assert receipt['binding']['scope_key'] == 'scene:qq:99990000:group:22220000'
     assert receipt['input']['id'] == 'in-' + result['episode_id']
     p.worker.dispatch('navigation.ready', {})

@@ -22,7 +22,8 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, actionDefinitions, subscribeInputPolicies } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, threadOf, subscribeInputPolicies, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
+const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
 
 test('cold composer stays blocked until QQ policy resolves, and stale queries cannot block Local', async () => {
   let state, listener;
@@ -33,14 +34,15 @@ test('cold composer stays blocked until QQ policy resolves, and stale queries ca
   const select = (...ids) => { state = { byId: Object.fromEntries(ids.map(id => [id, { retainedBy: { mainView: 1 } }])) }; listener?.(); };
   const rpc = (_method, args, signal) => new Promise((resolve, reject) => requests.push({ args, signal, resolve, reject }));
   select('qq');
-  const dispose = subscribeInputPolicies(ctx, rpc);
+  const dispose = subscribeInputPolicies(ctx, rpc, words);
   assert.ok(blocks.has('qq'), 'loading cannot expose an editable QQ composer');
-  requests[0].resolve({ qq: 'view-only' }); await Promise.resolve();
-  assert.equal(blocks.get('qq').reason, 'view-only');
+  assert.equal(blocks.get('qq').reason, words('input.checking'), 'its reason follows the viewer language');
+  requests[0].resolve({ qq: { key: 'read_only', platform: 'QQ' } }); await Promise.resolve();
+  assert.equal(blocks.get('qq').reason, 'QQ conversations are read-only here; reply in QQ.');
   select('local'); assert.ok(blocks.has('local'));
   select('qq'); assert.equal(requests[1].signal.aborted, true);
-  requests[1].resolve({ local: 'late wrong policy' });
-  requests[2].resolve({ qq: 'view-only' }); await Promise.resolve();
+  requests[1].resolve({ local: { key: 'internal' } });
+  requests[2].resolve({ qq: { key: 'read_only', platform: 'QQ' } }); await Promise.resolve();
   assert.equal(blocks.has('local'), false);
   select('local'); requests[3].resolve({}); await Promise.resolve();
   assert.equal(blocks.has('local'), false, 'ordinary native input resumes after policy resolution');
@@ -70,26 +72,32 @@ function assembler(definitions = stageDefinitions()) {
 }
 const snapshot = engine => { engine.flush(); return engine.get('chat'); };
 
-test('native action ranges retain their source and placement through consultation, reload and prepend', () => {
-  const engine = assembler(actionDefinitions());
+test('a task thread is one node anchored at its first entry, through reload and prepend; replays add nothing', () => {
+  const engine = assembler(collabDefinitions());
+  const at = '2026-10-05T10:00:00Z';
   const events = [
-    entry(1, 'asuna/action-linked', { segment_id: 'first', session_id: 'action', parent_session_id: 'role', after_seq: -1 }),
-    entry(2, 'asuna/action-range', { segment_id: 'first', session_id: 'action', through_seq: 12, state: 'paused' }),
-    entry(3, 'turn/start', { turn: 1 }), entry(4, 'step/start', { turn: 1, step: 1 }),
-    entry(5, 'assistant/message', { turn: 1, step: 1 }),
-    entry(6, 'asuna/action-linked', { segment_id: 'second', session_id: 'action', parent_session_id: 'role', after_seq: 12 }),
-    entry(7, 'asuna/action-range', { segment_id: 'second', session_id: 'action', through_seq: 24, state: 'completed' }),
+    entry(1, 'asuna/collab', { id: 'brief:t1', thread: 't1', task_id: 't1', kind: 'message', from: 'character', text: 'check the weather', title: 'weather', at }),
+    entry(2, 'turn/start', { turn: 1 }),
+    entry(3, 'asuna/collab', { id: 'open:t1', thread: 't1', task_id: 't1', kind: 'open', child_session_id: 'action', parent_session_id: 'role', at }),
+    entry(4, 'asuna/collab', { id: 'q:1', thread: 't1', task_id: 't1', kind: 'question', from: 'action', text: 'which city?', at }),
+    entry(5, 'asuna/collab', { id: 'brief:t2', thread: 't2', task_id: 't2', kind: 'message', from: 'character', text: 'another', at }),
+    entry(6, 'asuna/collab', { id: 'q:1', thread: 't1', task_id: 't1', kind: 'question', from: 'action', text: 'which city?', at }),
   ];
-  engine.replaceWindow(events.slice(1), true);
-  assert.ok(snapshot(engine).nodes.every(node => node.id !== 'first'), 'a range without its link is not a fabricated source');
-  engine.prepend(events.slice(0, 1), false);
+  engine.replaceWindow(events.slice(2), true);
+  const partial = snapshot(engine).nodes.find(node => node.id === 't1');
+  assert.equal(partial.anchorSeq, 3, 'a partially loaded thread starts at its first loaded entry');
+  engine.prepend(events.slice(0, 2), false);
   const rows = snapshot(engine).nodes.toSorted((left, right) => left.anchorSeq - right.anchorSeq);
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows.map(row => [row.id, row.anchorSeq, row.data.after_seq, row.data.through_seq]),
-    [['first', 1, -1, 12], ['second', 6, 12, 24]]);
-  assert.ok(rows.every(row => row.location.kind === 'session' && row.data.session_id === 'action'));
-  engine.replaceWindow(events, false);
-  assert.deepEqual(snapshot(engine).nodes.toSorted((left, right) => left.anchorSeq - right.anchorSeq).map(row => row.data), rows.map(row => row.data));
+  assert.deepEqual(rows.map(row => [row.id, row.anchorSeq, row.location.kind]), [['t1', 1, 'session'], ['t2', 5, 'session']]);
+  assert.deepEqual(rows[0].data.entries.map(entry => entry.kind), ['message', 'open', 'question'], 'a replayed entry is not shown twice');
+  assert.equal(threadOf(rows[0].data.entries).state, 'waiting', 'an unanswered question waits for her');
+  assert.equal(threadOf(rows[0].data.entries).title, 'weather');
+  assert.equal(threadOf(rows[1].data.entries).state, 'queued');
+  const done = [...rows[0].data.entries, { id: 'a:1', kind: 'answer', from: 'character', text: 'here', at },
+    { id: 'status:t1:finished', kind: 'status', state: 'done', at }];
+  assert.equal(threadOf(done).state, 'done');
+  assert.equal(threadOf([...done, { id: 'brief:t1b', kind: 'message', from: 'character', text: 'and tomorrow?', at }]).state, 'queued',
+    'her follow-up to a finished task queues it again');
 });
 
 test('explicit lane attribution exists before tokens and survives native stream settlement', () => {

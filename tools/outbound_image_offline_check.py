@@ -3,8 +3,9 @@
 
 用法：python3 tools/outbound_image_offline_check.py
 跑的是 tests/outbound_image_cases.py 同一套用例：通道字节端点的围栏（真在 127.0.0.1 起服务、
-真发 HTTP 请求）、claim 的 supports 与附件元数据、DECIDE 的 attach 逐条判定（含群方向确定性拒绝）、
-SPEAK 行上的元数据、历史投影的附件位、BlobStore 的 sha 复核与 scope 判定。
+真发 HTTP 请求）、claim 的 supports 与附件元数据、她的 attach_image 工具逐次判定（含群方向确定性拒绝）、
+整回合（think → attach_image → 正文或 stay_silent）写出的 SPEAK 行上的元数据、历史投影的附件位、
+BlobStore 的 sha 复核与 scope 判定。
 真 Mongo 的 CAS、真 GridFS、真 NapCat 渲染仍由宿主侧 tests/test_*.py 与适配器 selftest 复测，
 两者不互相代替。
 """

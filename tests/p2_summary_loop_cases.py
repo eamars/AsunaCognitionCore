@@ -636,10 +636,11 @@ class FakeLane:
         self.content = content
         self.calls = []
 
-    def generate(self, session, operation, phase, text, system, *, scope_key=None, policy_epoch=None):
+    def generate(self, session, operation, phase, text, system, *, scope_key=None, policy_epoch=None, **extra):
+        # 与真 lane 同一个调用口：角色回合与行动脑会另带 tools／handler／trigger 等关键字，摘要不带也照收。
         self.calls.append({'session': session, 'operation': operation, 'phase': phase,
                            'text': text, 'system': system, 'scope_key': scope_key,
-                           'policy_epoch': policy_epoch})
+                           'policy_epoch': policy_epoch, **({'extra': extra} if extra else {})})
         from asuna.lanes import LaneResult
         return LaneResult(self.content, request_refs=['fake-ref'])
 

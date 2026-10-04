@@ -41,8 +41,9 @@ class CognitionView:
         return None
 
     def usage(self, identifier, content=None, revision=None):
+        """A key of the client's memory.usage words: whether the latest turn used this record."""
         if not self.snapshot:
-            return '这个对话还没有可核对的一轮'
+            return 'none'
         context = self.snapshot['context']
         manifest = self.snapshot['manifest']
         kind, key = identifier.split(':', 1)
@@ -57,26 +58,26 @@ class CognitionView:
             else:
                 selected = None
             if selected:
-                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
+                return 'used' if selected == revision else 'older'
         elif kind == 'doc':
             # The persona is a document (ADR-009); the manifest names the revision this turn rendered.
             selected = manifest.get('persona_revision') if key == 'persona' else manifest.get('documents', {}).get(key)
             if selected:
-                return '最近一轮（{time}）用到了这一版' if selected == revision else '最近一轮（{time}）用的还是旧版本'
+                return 'used' if selected == revision else 'older'
         elif kind == 'unit':
             if key in manifest.get('selected', []):
-                return '最近一轮（{time}）用到了这一版'
+                return 'used'
             if key in self.snapshot.get('monologue_refs', []):
-                return '最近一轮形成的理解，保存在该轮原生会话中'
+                return 'formed'
         elif kind == 'source':
             rows = list(context.get('delivered_history', []))
             group = context.get('group_continuity_from_program', {})
             rows += group.get('related_messages', []) + group.get('current_speaker_tail', [])
             if any(row.get('_id') == key for row in rows):
-                return '最近一轮（{time}）用到了这一版'
+                return 'used'
             if key == 'in-' + self.snapshot['_id']:
-                return '是最近一轮（{time}）的输入'
-        return '最近一轮（{time}）没有用到'
+                return 'input'
+        return 'unused'
 
     def peer(self):
         query = {'$and': [self.memory.message_query, {
@@ -93,15 +94,13 @@ class CognitionView:
         profile_at = peer.get('profile_at')
         body = text
         display = safe_name(peer.get('card')) or safe_name(peer.get('nickname'))
-        return {'id': 'cognition:peer', 'kind': 'relation', 'title': '对方身份资料',
-                'body': body, 'excerpt': body, 'category_label': '对人的认识', 'subject_name': display,
+        return {'id': 'cognition:peer', 'kind': 'relation', 'title': {'key': 'memory.title.peer', 'params': {}},
+                'body': body, 'excerpt': body, 'category': 'relation', 'subject_name': display,
                 'scene_id': self.binding['scene_id'], 'updated_at': profile_at or message.get('occurred_at'),
                 'occurred_at': profile_at or message.get('occurred_at'),
-                'status_label': '已记录', 'source_ids': [message['_id']],
-                'usage': ('最近一轮（{time}）用到了这一版' if self.snapshot and
-                          self.snapshot['context'].get('sender_identity') == text else
-                          '最近一轮（{time}）没有用到' if self.snapshot else
-                          '这个对话还没有可核对的一轮')}
+                'status': 'recorded', 'source_ids': [message['_id']],
+                'usage': ('used' if self.snapshot and self.snapshot['context'].get('sender_identity') == text else
+                          'unused' if self.snapshot else 'none')}
 
     def supplements(self, kind):
         """The platform identity saved with this person's latest message, when there is one."""

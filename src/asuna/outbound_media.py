@@ -1,4 +1,4 @@
-"""出站图片附件：DECIDE 的 attach → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+"""出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 
 字节只在 BlobStore（GridFS）里。messages 行只带 ``{artifact_id, media_type, sha256, size}``，
 不带 base64：普通 BSON 行 1 MiB 上限，而一张 QQ 照片常有 4–6 MiB。领取方（napcat-qq 0.5.0）
@@ -54,7 +54,7 @@ IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要�
                  'image_artifacts_from_program 里引用；同一主人的另一个私聊入口也能引用它。')
 
 OFFER_NOTE = ('这些是程序已经存好、这一轮可以随你要说的那条消息一起发出去的图片。'
-              '想发就在 DECIDE 里给 attach:[{"artifact_id":"…","why":"…"}]（至多 1 条），'
+              '想发就调用 attach_image（artifact_id、why；一回合至多一张，再调用就换成新的那张），'
               'artifact_id 只能照抄下面列出的值——它不是文件路径也不是文件名。'
               '正文里不要写文件路径、文件名或「见图」之类的话，图是随这条消息一起到的。'
               '没列出的图片不能发；一轮最多带一张。')
@@ -133,13 +133,11 @@ def declared(row):
 def attachment_for_speak(ep):
     """这一轮被程序接受的那张图 → SPEAK 第一行要写的元数据（没有就 None）。
 
-    图只跟最后一次 DECIDE 走：``decide_delta.apply`` 每一轮都把 ``delta_results['attach']`` 重写成
-    本轮接受的那一张 —— 本轮没给、或给的那张被退回，就没有这一项，也就没有图（前一轮那张不会跟着走）。
-    schema 一轮至多一条，所以这里只看那一条，形状不对就当没有。
+    这一回合最后一次被接受的 attach_image（role_tools）记在 ``ep['attachment']``；没有、或被退回
+    就没有图。形状不对就当没有。
     """
-    items = ((ep or {}).get('delta_results') or {}).get('attach') or []
-    item = items[0] if items and isinstance(items[0], dict) else None
-    return descriptor({ATTACHMENT_KEY: item}) if item else None
+    item = (ep or {}).get('attachment')
+    return descriptor({ATTACHMENT_KEY: item}) if isinstance(item, dict) else None
 
 
 def target_allowed(config, scene, session_class):

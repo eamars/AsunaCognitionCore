@@ -11,13 +11,13 @@ from asuna.config import ROOT
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
 from asuna.persona_data import DataError, PersonaDataAPI, check_export_path, export_documents
 from asuna.persona_jobs import DirectLauncher, JobRunner, SandboxLauncher
 from asuna.retrieval import Retrieval
-from asuna.state import Denied
+from asuna.role_tools import Refused
 from conftest import FIXTURES
-from test_adr009_p2 import owner, decide
+from test_adr009_p2 import owner, THINK
 from test_engineering_m1 import event
 
 HOME = FIXTURES / 'personas/demo-home'
@@ -150,14 +150,23 @@ def test_T4_7_export_paths_and_content(store, tmp_path):
 def test_T4_9_persona_job_run_only_for_development_tasks(store):
     from asuna.development import PERSONA_JOB_TOOLS
     job_config(store)
-    plan = json.dumps({'next': 'delegate', 'goal': '整理', 'constraints': [], 'recall_query': '', 'speak_before_action': False})
-    try:                                     # dm-b has no workspace grant: delegation is refused outright
-        group = Coordinator(store, FakeLane(store, [LaneResult('交给行动脑。'), LaneResult(plan)])).ingest(event('job-g', scene='dm-b', person='B'))
-    except Denied as refused:
-        assert str(refused) == 'WORKSPACE_NOT_AUTHORIZED'
-        group = {}
-    task = store.db.tasks.find_one({'_id': group['task_id']}) if group.get('task_id') else None
-    assert task is None or 'persona_job_run' not in task['allowed_capabilities']
+    # dm-b has no workspace grant: the turn has no delegate tool, and the tool itself refuses the grant.
+    lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})], '这里做不了。')])
+    coordinator = Coordinator(store, lane)
+    ep = coordinator.ingest(event('job-g', scene='dm-b', person='B'))
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'delegate' not in lane.calls[0]['tools'] and lane.tool_results[1][4:] == ('NOT_EXPOSED', False)
+    row = store.db.episodes.find_one({'_id': ep['_id']})
+    store.put('episodes', {**row, 'state': 'TURN', 'turn_tools': [*row['turn_tools'], 'delegate']},
+              expected=row['revision'], stream=ep['_id'])
+    with pytest.raises(Refused, match='WORKSPACE_NOT_AUTHORIZED'):
+        coordinator.tools.call(ep['_id'], 'forced-delegate', 'delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})
+    assert not store.db.tasks.find_one({'scene_id': 'dm-b'})
+    # The owner's local scene without a development profile delegates, but its task has no persona jobs.
+    lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})], '交给行动脑了。')])
+    ep = Coordinator(store, lane).ingest(event('job-a'))
+    task = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
+    assert task['development_grant'] is False and 'persona_job_run' not in task['allowed_capabilities']
     assert PERSONA_JOB_TOOLS[0]['name'] == 'persona_job_run'
     from asuna.persona_jobs import tool_result
     run = JobRunner(store, 'P1', launcher=DirectLauncher()).run('migrate', dry_run=False,
@@ -175,7 +184,8 @@ def test_T4_11_owner_private_derived_data_stays_out_of_linked_public_scenes(stor
     store.config['context_links'] = {'g1': ['dm-a']}
     cleaned, rejected = without_link_downgrades(store.config)
     assert rejected and cleaned['context_links']['g1'] == []
-    Coordinator(store, FakeLane(store, [LaneResult('OWNER_MONOLOGUE_CANARY'), decide(), LaneResult('好。')])).ingest(event('own-1'))
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': 'OWNER_MONOLOGUE_CANARY'})], '好。')])).ingest(event('own-1'))
+    assert store.db.memory_units.find_one({'_id': ep['monologue_refs'][0]})['body_markdown'] == 'OWNER_MONOLOGUE_CANARY'
     store.config.update(cleaned)
     _, context, _ = ContextBuilder(store).prepare(event('pub-1', scene='g1'), 'P1')
     assert 'OWNER_MONOLOGUE_CANARY' not in json.dumps(context, ensure_ascii=False)
@@ -187,20 +197,18 @@ def test_T4_12_consult_from_a_public_task_sees_no_owner_private_material(store):
     docs = DocumentStore(store, 'P1')
     docs.apply('persona', {'op': 'append_section', 'heading': '私密', 'visibility': 'owner_private', 'reason': 't'},
                'OWNER_PRIVATE_PERSONA_CANARY', base_revision_id=docs.read('persona')[0], author='operator', mutation_id='t412')
-    calls = []
-
-    class Role:
-        def generate(self, binding, operation, phase, text, system):
-            calls.append(text + system)
-            return LaneResult('建议先确认清单。')
-
-    plan = json.dumps({'next': 'delegate', 'goal': '整理公开清单', 'constraints': [], 'recall_query': '', 'speak_before_action': False})
     work = ROOT / '.runtime/work' / ('t412-' + uuid.uuid4().hex[:8]); work.mkdir(parents=True)
-    store.config['channels'] = {'f': {'routes': {'g': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'x'},
-                                'members': {'s': {'person_id': 'A', 'workspace': str(work), 'read_only_paths': []}}}}}}
-    ep = Coordinator(store, FakeLane(store, [LaneResult('委托。'), LaneResult(plan)])).ingest(event('consult-g', scene='g1'))
-    from asuna.tasks import TaskService
-    task = TaskService(store).claim(ep['task_id'])
-    Coordinator(store, Role()).consult(task, 'c1', {'question': '怎么排？'})
-    assert calls and 'OWNER_PRIVATE_PERSONA_CANARY' not in calls[0]
-    shutil.rmtree(work, ignore_errors=True)
+    try:
+        store.config['channels'] = {'f': {'routes': {'g': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'x'},
+                                    'members': {'s': {'person_id': 'A', 'workspace': str(work), 'read_only_paths': []}}}}}}
+        delegate = ('delegate', {'title': '整理公开清单', 'brief': '把群里提到的公开清单整理一下。'})
+        ep = Coordinator(store, FakeLane(store, [FakeTurn([THINK, delegate], '我交给行动脑了。')])).ingest(event('consult-g', scene='g1'))
+        assert ep['manifest']['session_class'] == 'public' and ep['task_ids'], (ep['manifest'], ep.get('failure'))
+        from asuna.tasks import TaskService
+        task = TaskService(store).claim(ep['task_ids'][0])
+        role = FakeLane(store, [FakeTurn([THINK, ('answer_action', {'answer': '建议先确认清单。'})])])
+        answer = Coordinator(store, role).consult(task, 'c1', {'question': '怎么排？'})
+        assert answer['answer'] == '建议先确认清单。' and role.calls
+        assert 'OWNER_PRIVATE_PERSONA_CANARY' not in json.dumps([role.calls, role.tool_results], ensure_ascii=False)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)

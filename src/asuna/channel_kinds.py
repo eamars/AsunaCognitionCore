@@ -2,7 +2,7 @@
 
 A kind module knows one platform's id formats and adapter conventions:
 
-  KIND, TITLE, READ_ONLY_NOTE, IMAGE_HOSTS     its id prefix, workspace title, note for read-only views, media hosts
+  KIND, TITLE, IMAGE_HOSTS                     its id prefix, workspace and platform title, media hosts
   ACCOUNT, INBOUND_MENTION                     an account id; how the adapter writes a real @ in inbound text
   person_id(account), account_of(person)       qq:<account> and back
   scene_id(bot, kind, target), scene_parts(id) a scene id and back

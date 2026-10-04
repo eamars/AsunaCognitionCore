@@ -38,7 +38,6 @@ export class NativeChildren {
         const actual = stored.find(event => event.seq === receipt.data.assistant_seq
           && event.type === 'assistant/message' && !event.data.interrupted);
         if (!actual) throw new Error('Saved Asuna receipt has no native assistant event');
-        await core.actionRecords.link(stage, { completed: true });
         await core.worker.call('result', { token: stage.token,
           result: core.result(stage, stage.session_id, actual, receipt.data.finish_reason) });
         return;
@@ -54,7 +53,7 @@ export class NativeChildren {
     const prompt = [{ type: 'text', text: stage.text }];
     this.pending.set(prompt, stage);
     const request = { parent, prompt,
-      label: stage.title ?? (stage.lane === 'executor' ? '行动脑 · ' + stage.binding.task_id : '交流摘要 · ' + stage.binding.scene_id),
+      label: stage.title ?? stage.task?.title ?? stage.binding.task_id ?? stage.binding.scene_id,
       signal: new AbortController().signal, agentOptions: nativeRoute(core.config.routes.action) };
     const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data;
     // Resume the owned native source for a crash recovery or a successor task
@@ -86,7 +85,7 @@ export class NativeChildren {
     request.signal.addEventListener('abort', cancel, { once: true });
     const state = core.state(agent.id);
     state.current = stage; state.system = stage.system;
-    await core.linkAction(stage);
+    await core.collab.start(stage);
     agent.followup(core.message(stage));
     const result = agent.whenIdle().then(() => {
       const events = agent.session.snapshotEvents();
@@ -96,7 +95,7 @@ export class NativeChildren {
         end?.data.reason.kind === 'completed' ? 'completed' : end?.data.reason.kind === 'aborted' ? 'aborted' : 'error' };
     });
     // Freeze the visible range only after the native Turn end is durable.
-    const settled = result.then(async value => { await core.actionRecords.finish(stage); return value; });
+    const settled = result.then(async value => { await core.collab.finish(stage); return value; });
     let disposed = false;
     return { id: agent.id, localAgent: agent, result: settled, dispose: async () => {
       if (disposed) return; disposed = true;

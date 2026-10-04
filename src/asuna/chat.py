@@ -93,8 +93,8 @@ class Chat:
         self.on_input_received = None
         self.restart_pending = threading.Event()
 
-    def _schedule(self, episode):
-        task = self.app.store.db.tasks.find_one({'_id': episode['task_id']})
+    def _schedule(self, task_id):
+        task = self.app.store.db.tasks.find_one({'_id': task_id})
         self.latest_task = task['_id']
         key = (task['_id'], task['intent_revision'])
         if key not in self.scheduled_tasks:
@@ -382,7 +382,8 @@ class Chat:
                         input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
                         continue
                     previous = self.app.store.db.episodes.find_one({'_id': episode})
-                    if previous and previous['state'] in ('ATTENDING', 'PREPARED', 'MONOLOGUE_ACCEPTED', 'DECISION_ACCEPTED', 'SPEAK_ACCEPTED', 'INTERRUPTED'):
+                    from .coordinator import RESUMABLE
+                    if previous and previous['state'] in RESUMABLE:
                         # Native lane receipts govern recovery; never invent a new operation ID.
                         result = self.app.router.coordinator.advance(episode)
                     else:
@@ -396,11 +397,13 @@ class Chat:
                 }).sort('scene_seq', 1))
                 for message in messages:
                     self.emit(f"{self.settings['display_name']}：{message['text']}")
-                if result.get('task_id') and self.app.store.db.tasks.find_one({'_id':result['task_id'],'state':'READY'}):
-                    self._schedule(result)
-                elif result.get('silent_reason'):
+                ready = [task_id for task_id in result.get('task_ids') or ()
+                         if self.app.store.db.tasks.find_one({'_id': task_id, 'state': 'READY'})]
+                for task_id in ready:
+                    self._schedule(task_id)
+                if not ready and result.get('silent_reason'):
                     self.emit('[系统] 角色明确选择本轮不发言；请查看本轮执行详情中的原因。')
-                elif not messages:
+                elif not ready and not messages:
                     self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
                 self.app.evidence.record('chat.completed', {'episode_id': episode, 'state': result['state']})
             except Exception:

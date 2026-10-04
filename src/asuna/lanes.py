@@ -21,21 +21,54 @@ class Lane(Protocol):
     def generate(self, session: str, operation: str, phase: str, text: str, system: str, *, scope_key=None,policy_epoch=None) -> LaneResult: ...
 
 
+@dataclass
+class FakeTurn:
+    """A scripted character turn for FakeLane: tool calls in order, then the final text."""
+    calls: list = field(default_factory=list)      # [(tool name, args)]
+    content: str = ''
+    finish_reason: str = 'stop'
+
+
 class FakeLane:
     """Deterministic engineering test double only; never selected for live runs."""
-    def __init__(self, store: Store, outputs: list[LaneResult]):
+    def __init__(self, store: Store, outputs: list):
         self.store,self.outputs,self.calls,self.histories = store,iter(outputs),[],{}
+        self.tool_results=[]          # (operation, call_id, tool, args, result | refusal text, ok)
 
-    def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None):
+    def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None,
+                 tools=None, handler=None, **_delivery):
         existing=self.store.db.lane_receipts.find_one({'_id':operation})
         if existing:
             return LaneResult(**existing['result'])
         history=self.histories.setdefault(session,[])
-        request={'messages':[{'role':'system','content':system},*history,{'role':'user','content':text}],'tools':[],'mode':'fake','phase':phase}
+        request={'messages':[{'role':'system','content':system},*history,{'role':'user','content':text}],
+                 'tools':list(tools or []),'mode':'fake','phase':phase}
         self.calls.append(request)
         self.store.audit(operation,'fake.request',request)
         value=next(self.outputs)
+        if isinstance(value,FakeTurn):
+            value=self._run_turn(operation,value,tools,handler)
         value.receipt=operation
         self.store.put('lane_receipts',{'_id':operation,'result':vars(value),'request':request,'scope_key':'operator'},stream=operation)
         history.extend([{'role':'user','content':text},{'role':'assistant','content':value.content}])
         return value
+
+    def _run_turn(self, operation, turn, tools, handler):
+        """Each scripted call reaches the coordinator's handler, as a native turn's calls do."""
+        from .role_tools import Refused
+        made=[]
+        for index,(name,args) in enumerate(turn.calls):
+            call_id=operation+'#'+str(index)
+            made.append({'type':'tool-call','name':name,'id':call_id})
+            if name not in (tools or ()):
+                self.tool_results.append((operation,call_id,name,args,'NOT_EXPOSED',False))
+                continue
+            try:
+                result,conclude=handler(call_id,name,args)
+            except Refused as exc:
+                self.tool_results.append((operation,call_id,name,args,str(exc),False))
+                continue
+            self.tool_results.append((operation,call_id,name,args,result,True))
+            if conclude:
+                return LaneResult(content='',finish_reason=turn.finish_reason,tool_calls=made)
+        return LaneResult(content=turn.content,finish_reason=turn.finish_reason)

@@ -7,7 +7,7 @@ import pytest
 from asuna.config import ROOT,load,validate_database
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane,LaneResult
+from asuna.lanes import FakeLane,FakeTurn,LaneResult
 from asuna.publish import PublishService
 from asuna.state import Store,Conflict,Denied
 from asuna.audit import verify,replay,projection,render_html,trace_contents
@@ -15,11 +15,11 @@ from asuna.audit import verify,replay,projection,render_html,trace_contents
 def event(key='e',scene='dm-a',person='A',text='我回来了。'):
     return {'event_id':key,'scene_id':scene,'person_id':person,'text':text}
 
-def decision(next='speak'):
-    return LaneResult(json.dumps({'next':next,'goal':'回应','constraints':[],'recall_query':'记忆' if next=='recall' else '', 'speak_before_action':False}))
+THINK=('think',{'thought':'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})
 
 def normal(store):
-    lane=FakeLane(store,[LaneResult('PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'),decision(),LaneResult('回来了。')])
+    """One character turn: a private thought (think), then the public speech."""
+    lane=FakeLane(store,[FakeTurn([THINK],'回来了。')])
     return Coordinator(store,lane),lane
 
 def test_E01_namespace_guard(store):
@@ -32,13 +32,14 @@ def test_E03_stops_advance_and_E04_private_public_split(store):
     coordinator,lane=normal(store)
     ep=coordinator.ingest(event())
     assert ep['state']=='COMMITTED'
-    assert [c['phase'] for c in lane.calls]==['MONOLOGUE','DECIDE','SPEAK']
+    assert [c['phase'] for c in lane.calls]==['TURN']
     public=store.public_messages('dm-a','A')
     assert len(public)==1 and 'PRIVATE_INTERNAL' not in json.dumps(public)
     mono=ep['monologue_refs'][0]
     with pytest.raises(Denied):store.get('memory_units',mono,'scene:dm-a')
     assert store.get('memory_units',mono,'scene:dm-a',operator=True)['body_markdown'].startswith('PRIVATE_INTERNAL')
-    audit=store.db.audit_events.find_one({'stream_id':ep['_id'],'type':'phase.output','payload.phase':'MONOLOGUE'})
+    audit=store.db.audit_events.find_one({'stream_id':ep['_id'],'type':'role_tool','payload.tool':'think'})
+    assert audit['payload']['args']['thought'].startswith('PRIVATE_INTERNAL')
     store.put('artifacts',{'_id':'private-artifact','scope_key':'scene:dm-a','state':'DONE','text':'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})
     for collection,key in (('audit_events',audit['_id']),('artifacts','private-artifact'),('episodes',ep['_id'])):
         with pytest.raises(Denied):store.get(collection,key,'scene:dm-a')
@@ -49,12 +50,18 @@ def test_E05_delivered_projection_only(store):
     system,context,manifest=ContextBuilder(store).prepare(event())
     assert [x['text'] for x in context['delivered_history']]==['marker_DELIVERED']
 
-@pytest.mark.parametrize('bad',[LaneResult('',reasoning='thinking'),LaneResult(''),LaneResult('cut',finish_reason='length'),LaneResult('x',tool_calls=[{'id':'bad'}])])
-def test_E07_invalid_stage_fails_closed(store,bad):
-    # Two repairs (answers.py), each telling her what was wrong; then the stage fails closed.
+@pytest.mark.parametrize('bad,problem',[(FakeTurn([THINK],''),'没有写要说的话'),
+                                         (FakeTurn([THINK],'cut',finish_reason='length'),'长度上限'),
+                                         (FakeTurn([THINK],json.dumps({'next':'speak'})),'JSON 对象'),
+                                         (FakeTurn([THINK],'我先 stay_silent 一下'),'程序的事'),
+                                         (LaneResult('没想就说',reasoning='thinking'),'还没写心里话')])
+def test_E07_invalid_turn_end_fails_closed(store,bad,problem):
+    # Two repairs in the same turn (answers.py), each telling her what was wrong; then the turn fails closed.
     lane=FakeLane(store,[bad]*3);ep=Coordinator(store,lane).ingest(event())
     assert ep['state']=='FAILED_PROTOCOL' and store.db.sink_receipts.count_documents({})==0
-    assert len(lane.calls)==3 and all(call['messages'][-1]['content'].startswith('程序检查：') for call in lane.calls[1:])
+    assert [call['phase'] for call in lane.calls]==['TURN','REPAIR','REPAIR']
+    assert all(call['messages'][-1]['content'].startswith('程序检查：') and problem in call['messages'][-1]['content']
+               for call in lane.calls[1:])
 
 
 def test_E09_identity_and_E10_scope(store):
@@ -72,7 +79,7 @@ def test_E14_100_duplicates(store):
     coordinator,lane=normal(store)
     ep=coordinator.ingest(event())
     for _ in range(100):coordinator.ingest(event())
-    assert len(lane.calls)==3 and store.db.sink_receipts.count_documents({})==1
+    assert len(lane.calls)==1 and store.db.sink_receipts.count_documents({})==1
 
 def test_E14_real_process_crash_after_receive(store):
     result=subprocess.run([sys.executable,str(ROOT/'tests/crash_worker.py'),store.name],cwd=ROOT,capture_output=True)

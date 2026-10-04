@@ -91,3 +91,41 @@ def json_list(text):
     if not isinstance(value, list):
         raise ValueError('上一条的最外层不是 JSON 数组。')
     return value
+
+
+# ── the end of a character turn (ADR-011 §3.5) ─────────────────────
+# Her last text without a tool call is sent as it is. Program words in it are a sign she is talking
+# about the turn instead of to the person: tool names (all of hers have an underscore) and the
+# context's program blocks.
+import re as _re
+PROGRAM_TALK = _re.compile(r'\b[a-z]+_(?:action|silent|image|document|self|person|policy|memory|idea)\b'
+                           r'|_from_program\b|\btool_calls?\b|工具调用|调用工具')
+
+
+def speech_problem(value, *, thought, consult=False):
+    """What is wrong with the end of a turn, in words for her; None when it can be said."""
+    text = (value.content or '').strip()
+    if value.finish_reason == 'length':
+        return '上一段到了长度上限还没写完。'
+    if consult:
+        return '你还没回答行动脑：用 answer_action 写下回答；这里写的正文不会发给任何人。'
+    if not thought:
+        return '这回合还没写心里话：先调用 think，再把要说的话写出来。'
+    if not text:
+        return '这回合没有写要说的话：写出要对对方说的话，或者用 stay_silent 结束。'
+    if text.startswith('{') and text.endswith('}'):
+        import json
+        try:
+            json.loads(text)
+            return '你最后写的是一个 JSON 对象，这段会原样发给对方：写成要说的话，或者用 stay_silent 结束。'
+        except ValueError:
+            pass
+    found = PROGRAM_TALK.search(text)
+    if found:
+        return '你最后写的这段会原样发给对方，里面提到了程序的事（「%s」）：只写要对对方说的话。' % found.group(0)
+    return None
+
+
+def turn_note(issue):
+    """The program's words back to her, in the same turn."""
+    return '程序检查：' + issue + '请在这一回合里改正，只修这个问题，不改变你的意思。'

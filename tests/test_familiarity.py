@@ -1,10 +1,8 @@
 """How well she knows someone (familiarity.py): from records, in words, never from what a message claims."""
-import json
-
 from asuna import familiarity
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
 
 
 def lines(store, author, count, text='随便聊聊'):
@@ -16,7 +14,7 @@ def lines(store, author, count, text='随便聊聊'):
 def replies(store, person, count):
     for n in range(count):
         store.db.episodes.insert_one({'_id': '%s-ep-%d' % (person, n), 'person_id': person, 'state': 'COMMITTED',
-                                      'decision': {'next': 'speak'}, 'scene_id': 'dm-b',
+                                      'speech': '嗯。', 'scene_id': 'dm-b',
                                       'source_event_id': '%s-event-%d' % (person, n), 'schema_version': 1})
 
 
@@ -51,11 +49,8 @@ def test_words_use_the_persona_stance_and_core_labels(store):
 def test_first_understanding_needs_no_placeholder_record(store):
     """Nobody starts with a relationship record: her context says so, and her first understanding creates it."""
     store.db.state_heads.delete_many({'_id': {'$regex': '^relationship:A\\|'}})
-    decision = {'next': 'speak', 'goal': '回应', 'constraints': [], 'recall_query': '', 'speak_before_action': False,
-                'reflect_understanding': True}
     text = 'A 说话直接，喜欢先听结论。'
-    lane = FakeLane(store, [LaneResult('第一次认真聊。'), LaneResult(json.dumps(decision)), LaneResult(text),
-                            LaneResult('好。')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '第一次认真聊。'}), ('understand_person', {'body': text})], '好。')])
     event = {'event_id': 'first-understanding', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '结论先说。'}
     _, before, manifest = ContextBuilder(store).prepare(event)
     assert before['relationship']['understanding'] == familiarity.NO_UNDERSTANDING

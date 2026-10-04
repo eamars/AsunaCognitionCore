@@ -56,7 +56,7 @@ def test_usage_never_borrows_another_context(view, changes):
     snapshot(store, binding, **changes)
     memory = NativeMemory(worker, 'role')
     assert memory.cognition.snapshot is None
-    assert '还没有可核对的一轮' in memory.detail('doc:persona')['usage']
+    assert memory.detail('doc:persona')['usage'] == 'none'
 
 
 def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):
@@ -102,4 +102,4 @@ def test_revision_sources_keep_interpretations_distinct_and_private_sources_hidd
     store.db.state_revisions.update_one({'_id': revision['_id']},
         {'$set': {'source_ids': ['visible', 'private']}})
     detail = NativeMemory(worker, 'role').detail('head:relationship:qq:11|scene:one')
-    assert [(s['_id'], s['category_label']) for s in detail['sources']] == [('visible', '当时的理解')]
+    assert [(s['_id'], s['category']) for s in detail['sources']] == [('visible', 'character_interpretation')]

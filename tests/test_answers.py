@@ -1,13 +1,17 @@
 """Deterministic answer checks with honest repair (answers.py), wherever the program needs an answer to go on."""
-import json
 
 import pytest
 
 from asuna import answers
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from test_attend import gated_event, setup as group_setup
-from test_engineering_m1 import decision, event
+
+THINK = ('think', {'thought': '他问我心情，我挺好的。'})
+
+
+def event(key='e', scene='dm-a', person='A', text='你心情怎么样？'):
+    return {'event_id': key, 'scene_id': scene, 'person_id': person, 'text': text}
 
 
 def test_thinking_alone_or_a_cut_answer_is_not_an_answer():
@@ -51,27 +55,32 @@ def test_a_failure_that_is_not_the_models_is_not_repaired():
     assert calls == [0] and value.finish_reason == 'error' and shaped is None
 
 
-def test_a_monologue_written_only_as_thinking_is_asked_again_in_her_session(store):
-    lane = FakeLane(store, [LaneResult('', reasoning='他问我心情，我挺好的'), LaneResult('他问我心情，我挺好的。'),
-                            decision(), LaneResult('挺好的呀。')])
+def test_a_thought_left_only_in_native_thinking_is_asked_again_in_the_same_turn(store):
+    # Her monologue is the think tool; a turn that only "thought" in native reasoning is told so in the same turn.
+    lane = FakeLane(store, [LaneResult('', reasoning='他问我心情，我挺好的'), FakeTurn([THINK], '挺好的呀。')])
     ep = Coordinator(store, lane).ingest(event())
     assert ep['state'] == 'COMMITTED' and ep['speech'] == '挺好的呀。'
-    assert [call['phase'] for call in lane.calls] == ['MONOLOGUE', 'MONOLOGUE', 'DECIDE', 'SPEAK']
+    assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
     repair = lane.calls[1]['messages'][-1]['content']
-    assert repair == ('程序检查：上一条只有思考，没有写出正文。这一步要的是：1–4 句第一人称独白，写在正文里。'
-                      '请重新给出，只修这个问题，不改变你的意思。')
-    rejected = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'phase.rejected'})
-    assert rejected['payload']['phase'] == 'MONOLOGUE' and rejected['payload']['attempt'] == 0
+    assert repair == ('程序检查：这回合还没写心里话：先调用 think，再把要说的话写出来。'
+                      '请在这一回合里改正，只修这个问题，不改变你的意思。')
+    rejected = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'turn.rejected'})
+    assert rejected['payload']['attempt'] == 0 and rejected['payload']['problem'].startswith('这回合还没写心里话')
+    thought = store.db.memory_units.find_one({'_id': ep['monologue_refs'][0]})
+    assert thought['body_markdown'] == THINK[1]['thought']
 
 
-def test_a_decision_that_is_not_valid_json_is_told_where(store):
-    good = json.loads(decision().content)
-    lane = FakeLane(store, [LaneResult('想说一句'), LaneResult(json.dumps(good)[:-1]), LaneResult(json.dumps(good)),
-                            LaneResult('回来了。')])
-    ep = Coordinator(store, lane).ingest(event())
-    assert ep['state'] == 'COMMITTED' and ep['decision']['next'] == 'speak'
-    repair = lane.calls[2]['messages'][-1]['content']
-    assert repair.startswith('程序检查：上一条不是有效的 JSON：') and 'DECIDE' in repair
+def test_a_call_with_a_missing_field_is_told_which_and_fixed_in_the_same_turn(store):
+    # The old DECIDE JSON check told her where the JSON broke; a tool call's refusal names the field instead.
+    lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '查天气'}),
+                                      ('delegate', {'title': '查天气', 'brief': '查明天本地的天气，告诉我要不要带伞。'})],
+                                     '我让行动脑去查了。')])
+    ep = Coordinator(store, lane).ingest(event(text='明天要带伞吗'))
+    refused, fixed = lane.tool_results[1], lane.tool_results[2]
+    assert not refused[5] and refused[4] == 'brief 要写内容。'
+    assert fixed[5] and ep['task_ids'] == [fixed[4]['task']]
+    assert store.db.tasks.count_documents({'episode_id': ep['_id']}) == 1
+    assert ep['state'] == 'WAITING_TASK' and ep['speech'] == '我让行动脑去查了。'
 
 
 def test_a_gate_answer_in_the_wrong_shape_is_asked_again(store):
@@ -98,7 +107,8 @@ def test_an_appraisal_that_is_not_a_json_array_is_told_so_and_asked_again(store)
     from asuna.affect import Appraiser
     from test_adr009_p3 import setup as affect_setup
     affect_setup(store)
-    ep = Coordinator(store, FakeLane(store, [LaneResult('想。'), decision(), LaneResult('嗯。')])).ingest(event('appraise-1'))
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '嗯。')])).ingest(event('appraise-1'))
+    assert ep['state'] == 'COMMITTED'
     lane = FakeLane(store, [LaneResult('{"kind": "joy"}'), LaneResult('[]')])
     assert Appraiser(store, lane).run(ep['_id']) == []
     assert lane.calls[1]['messages'][-1]['content'].startswith('程序检查：上一条的最外层不是 JSON 数组。')
@@ -106,16 +116,22 @@ def test_an_appraisal_that_is_not_a_json_array_is_told_so_and_asked_again(store)
 
 
 def test_a_mistyped_task_id_is_told_with_the_real_one(store):
-    # Regression: a garbled continue_task_id passed DECIDE, the continuation was refused, and she only said
-    # she would start another task; the turn ended without one.
-    first = Coordinator(store, FakeLane(store, [LaneResult('想。'), decision(), LaneResult('好。')])).ingest(event('first'))
-    real = 'task-' + first['_id']
-    store.db.tasks.insert_one({'_id': real, 'scene_id': 'dm-a', 'requester_id': 'A', 'policy_epoch': first['policy_epoch'],
-                               'scope_key': first['scope_key'], 'state': 'RETURNED', 'intent_revision': 1, 'schema_version': 1})
+    # Regression: a garbled task id was refused, and she only said she would start another task; the turn
+    # ended without one. Now the refusal names the real id and she continues it in the same turn.
+    first = Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})],
+                                                         '去查了。')])).ingest(event('first'))
+    real = first['task_ids'][0]
+    task = store.db.tasks.find_one({'_id': real})
+    store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'DELIVERED', 'result': {'text': '明天有雨'}},
+              expected=task['revision'], stream=real)
     garbled = real[:16] + 'f0f0f0f0'
-    wrong = json.loads(decision().content) | {'continue_task_id': garbled}
-    lane = FakeLane(store, [LaneResult('想继续。'), LaneResult(json.dumps(wrong)), decision(), LaneResult('好。')])
-    ep = Coordinator(store, lane).ingest(event('second', text='继续'))
-    assert ep['state'] == 'COMMITTED'
-    repair = lane.calls[2]['messages'][-1]['content']
-    assert repair.startswith('程序检查：continue_task_id「' + garbled + '」不是这个对话里的任务；可能是：' + real)
+    lane = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': garbled, 'message': '再看看后天'}),
+                                      ('message_action', {'task': real, 'message': '再看看后天'})], '好，接着看后天。')])
+    ep = Coordinator(store, lane).ingest(event('second', text='那后天呢'))
+    refused, fixed = lane.tool_results[1], lane.tool_results[2]
+    assert not refused[5]
+    assert refused[4].startswith('「' + garbled + '」不是这个对话里的任务；可能是：' + real)
+    assert fixed[5] and fixed[4]['continues'] == real
+    continued = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
+    assert ep['task_ids'] == [fixed[4]['task']] and continued['continues_task_id'] == real
+    assert ep['state'] == 'WAITING_TASK'

@@ -1,4 +1,4 @@
-"""ADR-009 P2 MongoDB tests: documents, render budget, WRITE stage, dossier, read, conversion, seeds."""
+"""ADR-009 P2 MongoDB tests: documents, render budget, write_document, dossier, recall sections, seeds."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
@@ -7,7 +7,7 @@ import threading
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.documents import DocumentStore, PREAMBLE
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
 from asuna.render import action_values
 from asuna.state import Conflict
 from conftest import FIXTURES
@@ -21,11 +21,6 @@ def owner(store, scene='dm-a', person='A'):
     store.config['chat'] = {**store.config.get('chat', {}), 'scene_id': scene, 'person_id': person,
                             'persona': 'P1', 'display_name': '示例角色'}
     return store
-
-
-def decide(**extra):
-    return LaneResult(json.dumps({'next': 'speak', 'goal': '回应', 'constraints': [], 'recall_query': '',
-                                  'speak_before_action': False, **extra}, ensure_ascii=False))
 
 
 def test_T2_1_concurrent_writes_on_one_base(store):
@@ -78,45 +73,56 @@ def test_T2_4_dossier_injection_by_session_class(store):
     assert 'ENTRY_BODY' not in action_values(store, 'P1')
 
 
-def test_T2_6_write_stage_commits_and_failures_do_not_stop_the_turn(store):
+THINK = ('think', {'thought': '他说了一件小事，值得记下来。'})
+
+
+def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_turn(store):
     owner(store)
     store.config['persona_contribution'] = {'seeds': []}
-    writes = [{'doc': 'dossier:A', 'op': 'append_section', 'heading': '今天', 'entry_date': '2026-01-02',
-               'tags': ['entry', 'injectable'], 'reason': '值得记下'},
-              {'doc': 'persona', 'op': 'set_tags', 'sid': PREAMBLE, 'tags': ['values'], 'reason': '标注'}]
-    lane = FakeLane(store, [LaneResult('想记下。'), decide(write_docs=writes, policy_set=[{'key': 'nope', 'value': 1, 'reason': 'x'}],
-                                                           affect=[{'intensity': '轻微', 'direction': '好', 'ref': 'e', 'why': 'w'}]),
-                            LaneResult('今天他提到了一件小事。'), LaneResult('记下了。')])
+    entry = {'doc': 'dossier:A', 'op': 'append_section', 'heading': '今天', 'entry_date': '2026-01-02',
+             'tags': ['entry', 'injectable'], 'reason': '值得记下', 'body': '今天他提到了一件小事。'}
+    tags = {'doc': 'persona', 'op': 'set_tags', 'sid': PREAMBLE, 'tags': ['values'], 'reason': '标注'}
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', entry), ('write_document', tags),
+                                      ('set_policy', {'key': 'nope', 'value': 1, 'reason': 'x'})], '记下了。')])
     ep = Coordinator(store, lane).ingest(event('write-1'))
     assert ep['state'] == 'COMMITTED', ep.get('failure')
-    assert ep['manifest']['session_class'] == 'owner_private', (ep['manifest']['session_class'], ep.get('rejections'))
-    assert [c['phase'] for c in lane.calls] == ['MONOLOGUE', 'DECIDE', 'WRITE', 'SPEAK'], ep.get('rejections')   # set_tags has no WRITE
-    entry = DocumentStore(store, 'P1').read('dossier:A')[1]['sections'][-1]
-    assert entry['body'] == '今天他提到了一件小事。' and entry['visibility'] == 'owner_private'
+    assert ep['manifest']['session_class'] == 'owner_private', ep['manifest']['session_class']
+    assert [c['phase'] for c in lane.calls] == ['TURN']             # the body is in the call: no WRITE stage
+    assert 'feel' not in lane.calls[0]['tools']                     # no affect ledger: no feel tool this turn
+    entry_row = DocumentStore(store, 'P1').read('dossier:A')[1]['sections'][-1]
+    assert entry_row['body'] == '今天他提到了一件小事。' and entry_row['visibility'] == 'owner_private'
     assert DocumentStore(store, 'P1').read('persona')[1]['sections'][0]['tags'] == ['values']
-    codes = {(r['field'], r['code']) for r in ep['rejections']}
-    assert ('policy_set', 'POLICY_KEY_UNDECLARED') in codes and ('affect', 'AFFECT_DISABLED') in codes
-    speak = lane.calls[-1]['messages'][-1]['content']
-    assert '"write_docs"' in speak and 'POLICY_KEY_UNDECLARED' in speak
-    # A group (public) turn may not write any document.
-    group = FakeLane(store, [LaneResult('想。'), decide(write_docs=writes[:1]), LaneResult('好。')])
+    _, wrote, tagged, policy = lane.tool_results
+    assert wrote[5] and tagged[5], (wrote, tagged)
+    # A refused call goes back to her in words, in the same turn; the turn still speaks.
+    assert not policy[5] and 'POLICY_KEY_UNDECLARED' in policy[4]
+    assert 'POLICY_KEY_UNDECLARED' in ep['tool_calls'][policy[1]]['refused']
+    assert [r['text'] for r in store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'})] == ['记下了。']
+    # A group (public) turn may not write any document of hers.
+    before = DocumentStore(store, 'P1').read('dossier:A')[0]
+    group = FakeLane(store, [FakeTurn([THINK, ('write_document', {**entry, 'heading': '群里'})], '好。')])
     ep = Coordinator(store, group).ingest(event('write-group', scene='g1'))
-    assert ep['state'] == 'COMMITTED' and [c['phase'] for c in group.calls] == ['MONOLOGUE', 'DECIDE', 'SPEAK']
-    assert ep['rejections'][0]['code'] == 'DOC_WRITE_REQUIRES_OWNER_PRIVATE'
+    assert ep['state'] == 'COMMITTED' and [c['phase'] for c in group.calls] == ['TURN']
+    refusal = group.tool_results[1]
+    assert not refusal[5] and 'DOC_WRITE_REQUIRES_OWNER_PRIVATE' in refusal[4] and 'owner 私聊' in refusal[4]
+    assert DocumentStore(store, 'P1').read('dossier:A')[0] == before
 
 
-def test_T2_7_read_on_recall_follows_visibility(store):
+def test_T2_7_recall_reads_sections_by_visibility(store):
     owner(store)
     docs = DocumentStore(store, 'P1')
     docs.seed('notes', 'working', '<!-- asuna-seed {"visibility": "owner_private"} -->\n## 私密\nPRIVATE_NOTE_BODY\n')
-    recall = decide(next='recall', recall_query='笔记', read=[{'doc': 'notes', 'sid': '私密'}])
-    lane = FakeLane(store, [LaneResult('想看笔记。'), recall, LaneResult('看到了。'), decide(), LaneResult('好。')])
+    read = ('recall', {'query': '笔记', 'sections': [{'doc': 'notes', 'sid': '私密'}]})
+    lane = FakeLane(store, [FakeTurn([THINK, read], '看到了。')])
     Coordinator(store, lane).ingest(event('read-private'))
-    assert 'PRIVATE_NOTE_BODY' in lane.calls[2]['messages'][-1]['content']
-    group = FakeLane(store, [LaneResult('想看。'), recall, LaneResult('没看到。'), decide(), LaneResult('好。')])
+    result = lane.tool_results[1]
+    assert result[5] and 'PRIVATE_NOTE_BODY' in result[4]['documents'][0]['body']
+    group = FakeLane(store, [FakeTurn([THINK, read], '没看到。')])
     ep = Coordinator(store, group).ingest(event('read-group', scene='g1'))
-    assert 'PRIVATE_NOTE_BODY' not in json.dumps(group.calls, ensure_ascii=False)
-    assert any(r['code'] == 'DOC_READ_DENIED' for r in ep['rejections'])
+    result = group.tool_results[1]
+    assert ep['state'] == 'COMMITTED' and result[5] and 'documents' not in result[4]
+    assert result[4]['not_read'] == ['notes#私密：这里读不到']
+    assert 'PRIVATE_NOTE_BODY' not in json.dumps([group.calls, group.tool_results], ensure_ascii=False)
 
 
 def test_T2_9_seeds_fill_missing_heads_only_and_adopt_by_sid(store):

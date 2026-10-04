@@ -7,10 +7,10 @@ import pytest
 
 from asuna.audit import projection, replay, trace_contents, verify, verify_documents
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
 from asuna.native_worker import NativeLane
 from asuna.state import Store, content_digest, content_ref
-from test_adr009_p2 import decide, owner
+from test_adr009_p2 import THINK, owner
 
 
 def big_message(store, text):
@@ -48,12 +48,18 @@ def test_T6_2_large_documents_are_audited_by_reference(store):
 def test_T6_2_phase_output_keeps_hashes_and_native_receipts_are_final(store, tmp_path):
     owner(store)
     store.config['chat']['workspace'] = str(tmp_path)
-    lane = FakeLane(store, [LaneResult('私下想的长内容' * 50), decide(), LaneResult('好')])
+    speech = '想了很久才写下的长回答' * 30
+    lane = FakeLane(store, [FakeTurn([THINK], speech)])
     ep = Coordinator(store, lane).ingest({'event_id': 'e1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
-    outputs = list(store.db.audit_events.find({'stream_id': ep['_id'], 'type': 'phase.output'}))
-    assert outputs and all('content' not in e['payload'] for e in outputs)
-    assert '私下想的长内容' not in json.dumps([e['payload'] for e in outputs], ensure_ascii=False)
-    assert outputs[0]['payload']['content_sha256'] == content_ref('私下想的长内容' * 50)['content_sha256']
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    started = list(store.db.audit_events.find({'stream_id': ep['_id'], 'type': 'turn.started'}))
+    assert [e['payload']['operation'] for e in started] == [ep['_id'] + ':TURN'] and 'think' in started[0]['payload']['tools']
+    outputs = list(store.db.audit_events.find({'stream_id': ep['_id'], 'type': 'turn.output'}))
+    assert [e['payload']['operation'] for e in outputs] == [ep['_id'] + ':TURN']
+    assert all('content' not in e['payload'] for e in outputs)
+    assert '想了很久才写下的长回答' not in json.dumps([e['payload'] for e in outputs], ensure_ascii=False)
+    assert outputs[0]['payload']['content_sha256'] == content_ref(speech)['content_sha256']
+    assert outputs[0]['payload']['reasoning'] == content_ref(None)                   # native reasoning: a reference only
     store.put('episodes', {**store.db.episodes.find_one({'_id': ep['_id']}), 'native_session_id': 'role-1'},
               expected=store.db.episodes.find_one({'_id': ep['_id']})['revision'], stream=ep['_id'])
     generated = []
@@ -96,11 +102,11 @@ def test_a_platform_turn_binds_its_role_session(store):
     worker = types.SimpleNamespace(navigation_ready=threading.Event(), role_session_id=BusinessWorker.role_session_id,
                                    app=types.SimpleNamespace(store=store, config={'workflow_timeout_seconds': 1}))
     worker.navigation_ready.set()
-    coordinator = Coordinator(store, FakeLane(store, [LaneResult('想一想'), decide(), LaneResult('好')]))
+    coordinator = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '好')]))
     coordinator.native_session_resolver = lambda ep: BusinessWorker.resolve_role_session(worker, ep)
     ep = coordinator.ingest({'event_id': 'e-channel', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
     episode = store.db.episodes.find_one({'_id': ep['_id']})
-    assert episode['native_session_id'].startswith('asuna-role-') and episode['state'] != 'FAILED_RUNTIME'
+    assert episode['native_session_id'].startswith('asuna-role-') and episode['state'] == 'COMMITTED', episode.get('failure')
     bound = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'native.context.bound'})
     assert bound and bound['scope_key'] == store.db.scenes.find_one({'_id': 'dm-a'})['scope_key']
 
@@ -111,7 +117,7 @@ def test_a_stage_that_times_out_stops_its_native_run(store, tmp_path):
     owner(store)
     store.config['chat']['workspace'] = str(tmp_path)
     store.config['workflow_timeout_seconds'] = 0.2
-    ep = Coordinator(store, FakeLane(store, [LaneResult('想一想'), decide(), LaneResult('好')])).ingest(
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '好')])).ingest(
         {'event_id': 'e-timeout', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
     store.put('episodes', {**store.db.episodes.find_one({'_id': ep['_id']}), 'native_session_id': 'role-1'},
               expected=store.db.episodes.find_one({'_id': ep['_id']})['revision'], stream=ep['_id'])

@@ -11,9 +11,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
+from queue import Queue, Empty
 import re
 import sys
 import threading
+import time
 import uuid
 
 from . import channel_kinds
@@ -41,15 +43,18 @@ class NativeLane:
         self.lock = threading.RLock()
 
     def child_title(self, task, role_id, ep):
-        """What a person sees for a child session: the task's goal, or which conversation is summarized."""
+        """A child session's title: content only (her task's title, or the conversation it serves), since DSH
+        shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8)."""
         if self.lane == 'executor' and task:
-            return '行动脑 · ' + ' '.join(str(task.get('goal') or task['_id']).split())[:48]
+            return ' '.join(str(task.get('title') or task.get('goal') or task['_id']).split())[:48]
         if self.lane in ('summary', 'attend'):
             role = self.store.db.sessions.find_one({'_id': role_id}, {'native_title': 1}) or {}
-            return {'summary': '交流摘要', 'attend': '接话判断'}[self.lane] + ' · ' + (role.get('native_title') or ep['scene_id'])
+            return role.get('native_title') or ep['scene_id']
         return None
 
-    def generate(self, binding, operation, phase, text, system, **kwargs):
+    def generate(self, binding, operation, phase, text, system, tools=None, handler=None, **kwargs):
+        """One stage of a native turn. A character turn exposes `tools`: each call she makes reaches
+        `handler` on this thread (role_tools.py) while the turn waits for its result."""
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
             if prior and prior.get('native_host'):
@@ -134,7 +139,13 @@ class NativeLane:
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
+                       **({'tools': list(tools)} if tools is not None else {}),
+                       **({'trigger': kwargs['trigger']} if kwargs.get('trigger') else {}),
                        **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {})}
+            if self.lane == 'executor' and task:
+                request['task'] = {'_id': task['_id'], 'thread': task.get('thread') or task['_id'],
+                                   'title': task.get('title') or task.get('goal'),
+                                   'parent_session_id': record['parent_session_id']}
             if self.lane == 'character':
                 source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
                 if source and source.get('event', {}).get('channel'):
@@ -142,6 +153,9 @@ class NativeLane:
             future = Future()
             future.asuna_lane = self.lane
             future.asuna_task = task
+            future.asuna_calls = Queue()
+            future.asuna_handler = handler
+            future.add_done_callback(lambda _: future.asuna_calls.put(None))
             future.asuna_session_id = native_id
             future.asuna_binding = record
             future.asuna_broker_session = record['broker_session'] + ':' + sha(operation.encode())[:16]
@@ -155,7 +169,7 @@ class NativeLane:
             try:
                 self.worker.emit(request)
                 try:
-                    value = future.result(timeout=self.store.config['workflow_timeout_seconds'])
+                    value = self.wait(future, self.store.config['workflow_timeout_seconds'])
                 except TimeoutError:
                     # Stop the native run this stage waited for: nothing reads its result any more, its tools
                     # are already refused, and a continuation of the same task would meet it still running.
@@ -174,6 +188,42 @@ class NativeLane:
                     self.worker.pending.pop(operation, None)
                 if self.lane == 'executor':
                     self.worker.app.broker.bindings.pop(future.asuna_broker_session, None)
+
+    def turn_done(self, ep):
+        """Her turn has no further stage (coordinator._turn): the plugin ends the native turn."""
+        if self.lane == 'character' and ep.get('native_session_id'):
+            self.worker.emit({'kind': 'turn_done', 'session_id': self.worker.continued_session(ep['native_session_id']),
+                              'episode_id': ep['_id']})
+
+    @staticmethod
+    def wait(future, timeout):
+        """The stage's result; her tool calls in the meantime run here, one at a time, in call order."""
+        deadline = time.monotonic() + timeout
+        while not future.done():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('NATIVE_STAGE_TIMEOUT')
+            try:
+                item = future.asuna_calls.get(timeout=min(remaining, 1))
+            except Empty:
+                continue
+            if item is None:
+                continue
+            call, reply = item
+            try:
+                if not future.asuna_handler:
+                    raise Denied('ROLE_TOOLS_NOT_EXPOSED')
+                reply.set_result(future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}))
+            except BaseException as exc:
+                reply.set_exception(exc)
+        while True:                      # calls that arrived as the turn ended get a plain answer
+            try:
+                item = future.asuna_calls.get_nowait()
+            except Empty:
+                break
+            if item is not None:
+                item[1].set_exception(Denied('NATIVE_TURN_ENDED'))
+        return future.result()
 
     def close(self):
         pass
@@ -262,7 +312,10 @@ class BusinessWorker:
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
             self.app.coordinator.native_session_resolver = self.resolve_role_session
+            self.app.coordinator.on_collab = self.collab
+            self.app.coordinator.on_action_message = self.action_message
             self.app.service.on_fenced = self.task_fenced
+            self.app.service.on_collab = self.collab
         self.host = self.stack.enter_context(RuntimeHost(
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
             schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
@@ -279,7 +332,7 @@ class BusinessWorker:
         local = config['chat']
         Path(local['workspace']).mkdir(parents=True, exist_ok=True)
         name = local.get('display_name') or local['persona']          # from the persona package, never hard-coded
-        scenes = [(local['scene_id'], local['person_id'], 'Local', name + ' · 本地私聊')]
+        scenes = [(local['scene_id'], local['person_id'], 'Local', name)]
         for channel in config.get('channels', {}).values():
             for route in channel.get('routes', {}).values():
                 if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
@@ -444,7 +497,7 @@ class BusinessWorker:
 
     @staticmethod
     def read_only_note(platform):
-        return platform.READ_ONLY_NOTE if platform else '这个会话仅供查看。'
+        return {'key': 'read_only', **({'platform': platform.TITLE} if platform else {})}
 
     def bind_session(self, session_id, values):
         prior = self.app.store.db.sessions.find_one({'_id': session_id})
@@ -484,6 +537,26 @@ class BusinessWorker:
             self.emit({'kind':'task_fenced','token':token,'session_id':future.asuna_session_id,
                 'task_id':task['_id'],'intent_revision':task['intent_revision'],'reason':reason})
 
+    def parent_session(self, task):
+        """Her role session the task belongs to: where its collaboration thread is drawn."""
+        if task.get('native_session_id'):
+            return self.continued_session(task['native_session_id'])
+        original = self.app.store.db.episodes.find_one({'_id': task['episode_id']}, {'native_session_id': 1}) or {}
+        return self.continued_session(original['native_session_id']) if original.get('native_session_id') else None
+
+    def collab(self, task, entry):
+        """One entry of the two brains' thread (ADR-011 §7.1); the plugin appends it to her conversation."""
+        session_id = self.parent_session(task)
+        if session_id:
+            self.emit({'kind': 'collab', 'session_id': session_id, 'task_id': task['_id'],
+                       'thread': task.get('thread') or task['_id'], 'title': task.get('title') or task.get('goal'),
+                       'entry': entry})
+
+    def action_message(self, task, message):
+        """Her words for a running action session: steered in at its next step (ADR-011 §4)."""
+        self.emit({'kind': 'action_message', 'task_id': task['_id'], 'thread': task.get('thread') or task['_id'],
+                   'message': message})
+
     def episode_finished(self, event, result, error):
         if event.get('channel'):
             from .ingress import episode_id
@@ -504,8 +577,8 @@ class BusinessWorker:
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
 
     def channel_title(self, route):
-        """Conversation title a person can read: the configured name, else the group name or peer
-        name the platform last sent with a message in that scene, else the number."""
+        """Conversation title a person can read (content only): the configured name, else the group name or
+        peer name the platform last sent with a message in that scene, else the number."""
         group = route['target']['type'] == 'group'
         name = route.get('display_name')
         if not name:
@@ -515,7 +588,7 @@ class BusinessWorker:
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
         name = ' '.join(str(name or '').split())[:40] or route['target']['id']
-        return ('群聊' if group else '私聊') + ' · ' + name
+        return name
 
     def channel_input(self, row):
         """A real processed platform receipt, including quiet/error outcomes; never a model turn."""
@@ -626,8 +699,9 @@ class BusinessWorker:
         if method == 'input_policies':
             local = self.app.config['chat']
             ids = [row['id'] for row in args['sessions']]
+            # Keys of the client's input words (ADR-011 §2.8): a platform's read-only view, or an internal session.
             policies = {row['_id']: (self.read_only_note(channel_kinds.of(row['scene_id'])) if row['scene_id'] != local['scene_id']
-                else '这是内部工作会话，请回到本地私聊。')
+                else {'key': 'internal'})
                 for row in self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True})
                 if row['scene_id'] != local['scene_id'] or row['lane'] != 'character'
                 or row.get('successor_id') or row.get('retired')}
@@ -695,6 +769,36 @@ class BusinessWorker:
             return self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
             return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        if method == 'action_message.delivered':
+            # The action session read her message at a step (index.js): no extra round needed for it.
+            row = self.app.store.db.task_messages.find_one({'_id': args['message_id'], 'from': 'character'})
+            if row and not row.get('delivered'):
+                self.app.store.put('task_messages', {**row, 'delivered': True, 'delivered_at': now()},
+                                   expected=row['revision'], stream=row['task_id'])
+            return {'recorded': True}
+        if method == 'role_tool_specs':
+            from .role_tools import all_specs
+            return all_specs()
+        if method == 'role_tool':
+            # Her call in a character turn (ADR-011 §3): answered by the coordinator's own thread, which is
+            # waiting on this very turn (NativeLane.wait). A refusal is her own to correct, not an error.
+            from .role_tools import Refused
+            record = self.session(args['session_id'])
+            if record['lane'] != 'character':
+                raise Denied('ROLE_SESSION_REQUIRED')
+            with self.pending_lock:
+                future = self.pending.get(args.get('operation'))
+                if not future or future.done():
+                    raise Denied('NATIVE_OPERATION_NOT_ACTIVE')
+                if future.asuna_lane != 'character' or future.asuna_session_id != args['session_id']:
+                    raise Denied('NATIVE_OPERATION_SESSION_MISMATCH')
+            reply = Future()
+            future.asuna_calls.put(({'call_id': args['call_id'], 'tool': args['tool'], 'args': args.get('args')}, reply))
+            try:
+                value, conclude = reply.result(timeout=self.app.config['workflow_timeout_seconds'])
+            except Refused as exc:
+                return {'refused': str(exc)}
+            return {'value': value, 'conclude': bool(conclude)}
         if method == 'persona.sources':
             # Settings card: source roots (path masked to its last segment), states, jobs and recent runs.
             from .persona_data import persona_sources, persona_runtime
@@ -820,7 +924,7 @@ class NativeDevelopmentBridge:
 # call) or run long (persona jobs) get their own thread. So no dispatch-pool thread ever waits on
 # Future.result(), and a pool of any size cannot deadlock (ADR-009 D-8, T7.2).
 REPLIES = frozenset({'result', 'host_result'})
-DETACHED = frozenset({'tool', 'persona.job_run'})
+DETACHED = frozenset({'tool', 'role_tool', 'persona.job_run'})
 
 
 class Dispatcher:

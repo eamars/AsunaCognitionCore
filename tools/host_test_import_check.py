@@ -103,20 +103,3 @@ import test_integration                                          # noqa: E402
 assert hasattr(test_integration, 'test_import_artifact_is_written_into_the_bound_task_workspace')
 print('IMPORT_OK tests/test_integration.py')
 
-# 多轮 DECIDE 去重那组宿主用例：本机跑不了断言（要真 Mongo 与真夹具世界），先保证收集阶段成立
-import test_decide_delta_rounds as rounds                         # noqa: E402
-names = sorted(name for name in dir(rounds) if name.startswith('test_'))
-print('IMPORT_OK tests/test_decide_delta_rounds.py:', len(names), '个 test')
-for name in names:
-    print('  -', name)
-for attribute in ('semantic_key', 'KEY_FIELDS', 'LAST_ROUND_WINS', 'READ_FIELD', 'validate_items', 'apply',
-                  'read_sections', '_promote', '_recall_will_read'):
-    assert hasattr(rounds.decide_delta, attribute), attribute
-for attribute in ('queue', 'place', 'STATE_WORDS', 'KIND_WORDS'):
-    assert hasattr(rounds.group_admin, attribute), attribute
-assert hasattr(rounds.outbound_media, 'attachment_for_speak'), 'attach 的取法被改没了'
-for attribute in ('Coordinator', 'DocumentStore', 'FakeLane', 'LaneResult', 'persist_input', 'decide', 'owner',
-                  'event', 'import_bytes', 'channel_scene', 'link', 'speak_rows', 'attach_rejections',
-                  'PNG', 'JPEG', 'LOCAL', 'LOCAL_SCOPE'):
-    assert getattr(rounds, attribute, None) is not None, attribute
-print('SYMBOLS_OK tests/test_decide_delta_rounds.py')

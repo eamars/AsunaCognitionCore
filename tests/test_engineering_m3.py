@@ -1,10 +1,9 @@
 import getpass
-import json
 from pathlib import Path
 from urllib.parse import urlsplit
 import pytest
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane,LaneResult
+from asuna.lanes import FakeLane,FakeTurn
 from asuna.state import Denied
 from asuna.tasks import TaskService,ToolBroker
 
@@ -26,10 +25,13 @@ def granted_workspace(store):
 
 
 def task_setup(store):
-    decision={'next':'delegate','goal':'copy fixture','constraints':[],'recall_query':'','speak_before_action':False}
-    lane=FakeLane(store,[LaneResult('先核实。'),LaneResult(json.dumps(decision))])
+    # She hands the copy to the action brain and says nothing until the result is back.
+    lane=FakeLane(store,[FakeTurn([('think',{'thought':'先核实。'}),
+                                   ('delegate',{'title':'copy fixture','brief':'复制受控文件，保留原件。'}),
+                                   ('stay_silent',{'reason':'等结果'})])])
     ep=Coordinator(store,lane).ingest({'event_id':'copy','scene_id':'dm-a','person_id':'A','text':'复制受控文件，保留原件。'})
-    service=TaskService(store);task=service.claim(ep['task_id'])
+    assert ep['state']=='WAITING_TASK' and len(ep['task_ids'])==1
+    service=TaskService(store);task=service.claim(ep['task_ids'][0])
     work=granted_workspace(store)
     (work/'a.txt').write_text('controlled original',encoding='utf-8')
     broker=ToolBroker(service);broker.bind('s-test',task,work)

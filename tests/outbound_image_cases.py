@@ -3,14 +3,16 @@
 本机跑：``python3 tools/outbound_image_offline_check.py`` —— 不需要 Mongo、不需要 pytest、
 不联网、不发 QQ。装真的跑的是仓库里那份代码：``outbound_media`` 的全部围栏、
 ``channels`` 的 claim / attachment / HTTP 层（真在 127.0.0.1 上起服务、真发请求）、
-``decide_delta`` 的 attach 逐条判定、``history_query`` 的命中投影与渲染、``BlobStore`` 的
-sha 复核与 GridFS 读。假掉的只有存储（内存集合 + 内存 GridFS，**无论环境装没装 pymongo／gridfs
-都用替身**：真 GridFSBucket 不接受假 DB）与模型（这里根本不调模型）。这套是独立跑的离线套件，
-不要在用真 Mongo 的 pytest 会话里 import 它——它会把自己的存储替身装进 sys.modules。
+她的 ``attach_image`` 工具（``role_tools``，逐次判定、退回给她的话）、整回合（真 ``Coordinator``
+跑 think → attach_image → 正文或 stay_silent → SPEAK 行）、``history_query`` 的命中投影与渲染、
+``BlobStore`` 的 sha 复核与 GridFS 读。假掉的只有存储（内存集合 + 内存 GridFS，**无论环境装没装
+pymongo／gridfs 都用替身**：真 GridFSBucket 不接受假 DB）与模型（``FakeLane`` 按剧本给工具调用，
+不调真模型）。这套是独立跑的离线套件，不要在用真 Mongo 的 pytest 会话里 import 它——它会把自己的
+存储替身装进 sys.modules。
 
 覆盖：端点围栏（token / 只发这条声明的 artifact / attempt 必须属于这条且正在 SENDING /
 scope / sha 复核 / 不是图就拒）、claim 元数据（声明 supports=image 才给，不带 base64）、
-DECIDE attach 校验（清单外、群方向、非 owner_private、非图片、超限、silent）、
+attach_image 校验（清单外、群方向、非 owner_private、非图片、超限、参数逐次退回、沉默的回合不发图）、
 历史投影（我发过这张图 / 回执对不上 / 没带图的行逐字不变）。
 
 假集合的匹配语义按 Mongo 的字面查询实现（等值、$in/$ne/$lt/$lte/$gt/$gte/$exists/$or、
@@ -131,9 +133,11 @@ def _install_stubs():
 STUBBED = _install_stubs()
 DUPLICATE_ID = sys.modules['pymongo'].errors.DuplicateKeyError
 
-from asuna import decide_delta, history_query, integration_import, outbound_media   # noqa: E402
+from asuna import history_query, integration_import, outbound_media, role_tools   # noqa: E402
 from asuna.blobs import BlobStore                                     # noqa: E402
 from asuna.channels import ChannelServer, Channels                    # noqa: E402
+from asuna.coordinator import Coordinator                             # noqa: E402
+from asuna.lanes import FakeLane, FakeTurn                            # noqa: E402
 from asuna.state import Conflict, Denied                              # noqa: E402
 
 # ── 假世界 ────────────────────────────────────────────────────────────────────
@@ -298,6 +302,20 @@ class Collection:
 
     def count_documents(self, query=None):
         return len([row for row in self.docs.values() if _match(row, query or {})])
+
+    def find_one_and_update(self, query, update, return_document=None):
+        '''只实现 coordinator 写 SPEAK 行取场景序号用到的 $inc／$set，返回改后的那份（AFTER）。'''
+        for row in self.docs.values():
+            if _match(row, query):
+                for field, step in (update.get('$inc') or {}).items():
+                    row[field] = (row.get(field) or 0) + step
+                for field, value in (update.get('$set') or {}).items():
+                    row[field] = value
+                unknown = set(update) - {'$inc', '$set'}
+                if unknown:
+                    raise AssertionError('假集合没实现的更新操作符：%s' % sorted(unknown))
+                return copy.deepcopy(row)
+        return None
 
     def distinct(self, field, query=None):
         return sorted({row.get(field) for row in self.docs.values()
@@ -768,98 +786,156 @@ def claim_of_text_only_publication_is_unchanged():
     return True, '没带图的消息：item 与行都和改动前逐字一致'
 
 
-# 3) DECIDE 的 attach 校验
+# 3) 她的 attach_image 工具（ADR-011：原来 DECIDE 的 attach）
+# 单次调用走 RoleTools.call（原生回合里每次工具调用都走它）；整回合走真 Coordinator + FakeLane/FakeTurn。
+THINK = ('think', {'thought': '他想看那张图，我配上发给他。'})
+
+
 class FakeCoordinator:
+    '''RoleTools 只用到协调器的 store 与 _update：_update 与真 Coordinator 一样按 revision 写回。'''
+
     def __init__(self, store):
-        self.store = store
+        self.store, self.scheduler = store, None
 
     def _update(self, ep, **changes):
-        return dict(ep, **changes)
+        return self.store.put('episodes', {**ep, **changes}, expected=ep['revision'], stream=ep['_id'])
 
 
-def decide_ep(store, kind='dm', session='owner_private', next_stage='speak', context=None):
+class FakePublisher:
+    '''发布那一层只记下发了哪几行：通道与字节端点在上面两组用例里真跑。'''
+
+    def __init__(self, store):
+        self.store, self.published = store, []
+
+    def publish(self, key):
+        self.published.append(key)
+        return dict(self.store.db.messages.find_one({'_id': key}), delivery_state='QUEUED_EXTERNAL')
+
+    def cancel_after(self, row):
+        raise AssertionError('离线回合不该走到撤销')
+
+
+def turn_ep(store, kind='dm', session='owner_private', context=None, ep_id='ep-turn'):
+    '''一个准备好、还没开始的回合（PREPARED）：上下文与图片清单都是程序给的。'''
     scene = scene_row(kind)
-    return {'_id': 'ep-1', 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
-            'persona': 'xiaoman', 'manifest': {'session_class': session},
-            'decision': {'next': next_stage}, 'decision_delta': None, 'context': context or {},
-            'rejections': [], 'delta_results': {}}
+    return store.put('episodes', {
+        '_id': ep_id, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': 1,
+        'persona': 'xiaoman', 'person_id': 'owner-p', 'episode_kind': 'external', 'state': 'PREPARED',
+        'source_event_id': 'evt-' + ep_id, 'monologue_refs': [], 'context': context or {},
+        'manifest': {'session_class': session},
+        'system_ref': {'render_sha256': 'offline', 'common_sha256': 'offline', 'session_class': session}},
+        stream=ep_id)
 
 
-def apply_attach(store, ep, artifact_id):
-    ep = dict(ep, decision_delta={'attach': [{'artifact_id': artifact_id, 'why': '给他看这张'}]})
-    return decide_delta.apply(FakeCoordinator(store), ep)
+def offered_ep(store, kind='dm', session='owner_private'):
+    return turn_ep(store, kind, session, {'image_artifacts_from_program': outbound_media.offer(
+        store, store.config, scene_row(kind), session, 'owner-p')})
+
+
+def call_tool(store, ep, args, tools=None, name='attach_image'):
+    '''这一回合（已 think）里调用一次工具：成功 ('ok', 结果, 回合)，退回 ('refused', 给她看的话, 回合)。'''
+    current = store.db.episodes.find_one({'_id': ep['_id']})
+    names = tools if tools is not None else role_tools.exposed(store, current)
+    current = store.put('episodes', dict(current, state='TURN', turn_tools=names, turn_thought=True,
+                                         tool_calls=current.get('tool_calls') or {}),
+                        expected=current['revision'], stream=ep['_id'])
+    call_id = '%s:TURN#%d' % (ep['_id'], len(current['tool_calls']))
+    try:
+        result, _conclude = role_tools.RoleTools(FakeCoordinator(store)).call(ep['_id'], call_id, name, args)
+        outcome = ('ok', result)
+    except role_tools.Refused as exc:
+        outcome = ('refused', str(exc))
+    return outcome + (store.db.episodes.find_one({'_id': ep['_id']}),)
+
+
+def attach(store, ep, artifact_id, tools=None):
+    return call_tool(store, ep, {'artifact_id': artifact_id, 'why': '给他看这张'}, tools)
+
+
+def run_turn(store, ep, *turns):
+    '''真 Coordinator 跑完这一回合（think → 工具 → 正文或 stay_silent → SPEAK 行）。'''
+    lane, publisher = FakeLane(store, list(turns)), FakePublisher(store)
+    coordinator = Coordinator(store, lane, context=object(), publisher=publisher, task_service=object())
+    return coordinator.advance(ep['_id']), lane, publisher
+
+
+def speak_rows(store, ep):
+    return list(store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'}).sort('scene_seq', 1))
+
+
+def meta_of(stored, media_type='image/png'):
+    return {'artifact_id': stored['artifact_id'], 'media_type': media_type,
+            'sha256': stored['sha256'], 'size': stored['size']}
 
 
 @case
-def decide_attach_accepts_a_listed_artifact_and_yields_metadata():
+def attach_image_accepts_a_listed_artifact_and_yields_metadata():
     store, stored = world()
-    ep = decide_ep(store)
-    ep['context'] = {'image_artifacts_from_program': outbound_media.offer(store, CONFIG, scene_row(),
-                                                                          'owner_private')}
-    out = apply_attach(store, ep, stored['artifact_id'])
-    assert not out['rejections'], out['rejections']
-    accepted = out['delta_results']['attach'][0]
-    assert accepted['artifact_id'] == stored['artifact_id'] and accepted['media_type'] == 'image/png'
-    assert accepted['sha256'] == stored['sha256'] and accepted['size'] == len(PNG)
-    meta = outbound_media.attachment_for_speak(out)
-    assert meta == {'artifact_id': stored['artifact_id'], 'media_type': 'image/png',
-                    'sha256': stored['sha256'], 'size': len(PNG)}, meta
+    ep = offered_ep(store)
+    assert 'attach_image' in role_tools.exposed(store, ep), role_tools.exposed(store, ep)
+    outcome, result, after = attach(store, ep, stored['artifact_id'])
+    assert outcome == 'ok' and result['attached'] == stored['artifact_id'], result
+    assert after['attachment']['size'] == len(PNG), after['attachment']
+    meta = outbound_media.attachment_for_speak(after)
+    assert meta == meta_of(stored), meta
     assert json.dumps(meta).count('base64') == 0
-    return True, '接受清单里的图 → 行上元数据 %s（无 base64）' % sorted(meta)
+    recorded = list(after['tool_calls'].values())
+    assert [row['tool'] for row in recorded] == ['attach_image'] and 'result' in recorded[0], recorded
+    return True, '接受清单里的图 → 回合上记下元数据 %s（无 base64）' % sorted(meta)
 
 
 @case
-def decide_attach_rejects_artifact_not_offered_this_turn():
+def attach_image_refuses_artifact_not_offered_this_turn():
     store, _stored = world()
     elsewhere = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg')
-    ep = decide_ep(store)
     offered = outbound_media.offer(store, CONFIG, scene_row(), 'owner_private')
     offered['items'] = [item for item in offered['items'] if item['artifact_id'] != elsewhere['artifact_id']]
-    ep['context'] = {'image_artifacts_from_program': offered}
-    out = apply_attach(store, ep, elsewhere['artifact_id'])
-    codes = [item['code'] for item in out['rejections']]
-    assert codes == ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'], out['rejections']
-    assert 'attach' not in out['delta_results']
-    return True, '清单外的 artifact 只进 rejections：%s' % codes[0]
+    ep = turn_ep(store, context={'image_artifacts_from_program': offered})
+    outcome, said, after = attach(store, ep, elsewhere['artifact_id'])
+    assert outcome == 'refused' and 'ATTACH_ARTIFACT_NOT_IN_CONTEXT' in said, said
+    assert 'image_artifacts_from_program' in said, '退回的话没告诉她该从哪里抄 artifact_id'
+    assert 'attachment' not in after and outbound_media.attachment_for_speak(after) is None
+    assert [row.get('refused') for row in after['tool_calls'].values()] == [said]
+    return True, '清单外的 artifact 退回给她：%s' % said
 
 
 @case
-def decide_attach_refuses_group_and_non_owner_private_deterministically():
+def attach_image_refuses_group_and_non_owner_private_deterministically():
     store, stored = world(kind='group')
-    group_ep = decide_ep(store, kind='group')
-    group_ep['scene_id'] = GROUP_SCENE
-    offered = outbound_media.offer(store, CONFIG, scene_row('group'), 'owner_private')
-    group_ep['context'] = {'image_artifacts_from_program': offered or {'items': [], 'note': ''}}
-    out = apply_attach(store, group_ep, stored['artifact_id'])
-    group_codes = [item['code'] for item in out['rejections']]
-    details = [item['detail'] for item in out['rejections']]
-    assert group_codes == ['ATTACH_TARGET_NOT_ALLOWED'], out['rejections']
-    assert 'target_not_dm' in ' '.join(details), details
+    # 群场景里 offer 本身就不出现：她没有可引用的清单，这回合也就没有 attach_image
+    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'owner_private') is None
+    group_ep = turn_ep(store, kind='group')
+    assert 'attach_image' not in role_tools.exposed(store, group_ep)
+    outcome, said, _after = attach(store, group_ep, stored['artifact_id'])
+    assert outcome == 'refused' and '没有 attach_image' in said, said
+    # 就算这回合带着工具、上下文里冒出一份清单，程序照样按方向拒
+    forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']}], 'note': ''}}
+    group_ep2 = turn_ep(store, kind='group', context=forged, ep_id='ep-turn-2')
+    outcome, said, after = attach(store, group_ep2, stored['artifact_id'], tools=['think', 'attach_image'])
+    assert outcome == 'refused' and 'ATTACH_TARGET_NOT_ALLOWED' in said and 'target_not_dm' in said, said
+    assert 'attachment' not in after
 
     store2, stored2 = world()
-    public_ep = decide_ep(store2, session='public')
-    public_ep['context'] = {'image_artifacts_from_program': outbound_media.offer(
-        store2, CONFIG, scene_row(), 'public') or {'items': [], 'note': ''}}
-    out2 = apply_attach(store2, public_ep, stored2['artifact_id'])
-    codes2 = [item['code'] for item in out2['rejections']]
-    details2 = [item['detail'] for item in out2['rejections']]
-    assert codes2 == ['ATTACH_TARGET_NOT_ALLOWED'], out2['rejections']
-    assert 'session_class_not_owner_private' in ' '.join(details2), details2
-    # 群场景里 offer 本身就不出现：她没有可引用的清单，不会被暗示「这里能发图」
-    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'owner_private') is None
-    return True, '群 → target_not_dm；非 owner_private → session_class_not_owner_private；群里不给清单'
+    assert outbound_media.offer(store2, CONFIG, scene_row(), 'public') is None
+    public_ep = turn_ep(store2, session='public')
+    assert 'attach_image' not in role_tools.exposed(store2, public_ep)
+    public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
+        'image_artifacts_from_program': {'items': [{'artifact_id': stored2['artifact_id']}], 'note': ''}})
+    outcome2, said2, after2 = attach(store2, public_ep2, stored2['artifact_id'], tools=['think', 'attach_image'])
+    assert outcome2 == 'refused' and 'ATTACH_TARGET_NOT_ALLOWED' in said2, said2
+    assert 'session_class_not_owner_private' in said2 and 'attachment' not in after2, said2
+    return True, '群／非 owner_private：这回合没有 attach_image；硬调也按 target_not_dm／session_class_not_owner_private 退回'
 
 
 @case
-def decide_attach_refuses_non_image_and_oversize_bytes():
+def attach_image_refuses_non_image_and_oversize_bytes():
     store, _stored = world()
     texty = BlobStore(store).put(NOT_IMAGE, DM_SCOPE, 'image')
-    offered = outbound_media.offer(store, CONFIG, scene_row(), 'owner_private')
-    assert texty['artifact_id'] in [item['artifact_id'] for item in offered['items']], offered
-    ep = decide_ep(store)
-    ep['context'] = {'image_artifacts_from_program': offered}
-    out = apply_attach(store, ep, texty['artifact_id'])
-    assert [item['code'] for item in out['rejections']] == ['ATTACHMENT_NOT_AN_IMAGE'], out['rejections']
+    ep = offered_ep(store)
+    assert texty['artifact_id'] in [item['artifact_id'] for item in
+                                    ep['context']['image_artifacts_from_program']['items']], ep['context']
+    outcome, said, after = attach(store, ep, texty['artifact_id'])
+    assert outcome == 'refused' and 'ATTACHMENT_NOT_AN_IMAGE' in said and 'attachment' not in after, said
 
     big = {'_id': 'blob-big', 'scope_key': DM_SCOPE, 'state': 'DONE', 'kind': 'image',
            'storage': 'gridfs', 'gridfs_id': '0' * 24, 'sha256': '1' * 64,
@@ -870,52 +946,85 @@ def decide_attach_refuses_non_image_and_oversize_bytes():
         raise AssertionError('超过上限的图被接受了')
     except Denied as exc:
         assert 'ATTACHMENT_OVER_LIMIT' in str(exc), exc
-    return True, '魔数不是图 → ATTACHMENT_NOT_AN_IMAGE；超过 8 MiB → ATTACHMENT_OVER_LIMIT'
+    return True, '魔数不是图 → ATTACHMENT_NOT_AN_IMAGE 退回给她；超过 8 MiB → ATTACHMENT_OVER_LIMIT'
 
 
 @case
-def decide_attach_rejected_when_the_turn_stays_silent():
+def attach_image_arguments_are_checked_one_call_at_a_time():
     store, stored = world()
-    ep = decide_ep(store, next_stage='silent')
-    ep['context'] = {'image_artifacts_from_program': outbound_media.offer(store, CONFIG, scene_row(),
-                                                                          'owner_private')}
-    out = apply_attach(store, ep, stored['artifact_id'])
-    assert [item['code'] for item in out['rejections']] == ['ATTACH_NOT_WHEN_SILENT'], out['rejections']
-    return True, 'next=silent 时图没有跟着走，条目被退回并说明原因'
+    other = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg')
+    ep = offered_ep(store)
+    missing = call_tool(store, ep, {'why': '没给 artifact_id'})
+    empty = call_tool(store, ep, {'artifact_id': '', 'why': '空的'})
+    no_why = call_tool(store, ep, {'artifact_id': stored['artifact_id']})
+    for outcome, said, _after in (missing, empty, no_why):
+        assert outcome == 'refused' and '要写内容' in said, said
+    # 自己加一个文件路径也带不进去：行上只认清单里那张的四项元数据
+    pathy = call_tool(store, ep, {'artifact_id': stored['artifact_id'], 'why': '给他看', 'file': '/tmp/a.png'})
+    assert pathy[0] == 'ok' and pathy[2]['attachment'] == meta_of(stored), pathy
+    assert '/tmp/a.png' not in json.dumps(pathy[2]['attachment'])
+    # 一回合至多一张：再调用就换成新的那张
+    swapped = call_tool(store, ep, {'artifact_id': other['artifact_id'], 'why': '换这张'})
+    assert swapped[0] == 'ok' and outbound_media.attachment_for_speak(swapped[2]) == \
+        meta_of(other, 'image/jpeg'), swapped[2].get('attachment')
+    recorded = sorted(swapped[2]['tool_calls'].values(), key=lambda row: row['seq'])
+    assert [('refused' in row) for row in recorded] == [True, True, True, False, False], recorded
+    return True, '缺 artifact_id／空值／缺 why 逐次退回（不整轮失败）；路径进不了元数据；第二张换掉第一张'
 
 
 @case
-def attach_schema_shape_is_checked_item_by_item():
-    good = {'attach': [{'artifact_id': 'blob-x', 'why': '给他看'}]}
-    valid, rejected = decide_delta.validate_items(good)
-    assert not rejected and len(valid['attach']) == 1, (valid, rejected)
-    for bad in ({'attach': [{'artifact_id': 'blob-x', 'file': '/tmp/a.png'}]},      # 不许自己加字段
-                {'attach': [{'artifact_id': 'blob-x'}, {'artifact_id': 'blob-y'}]},  # 一轮最多一张
-                {'attach': [{'why': '没给 artifact_id'}]},
-                {'attach': [{'artifact_id': ''}]}):
-        _valid, rejected = decide_delta.validate_items(bad)
-        assert rejected and rejected[0]['code'] in ('ITEM_INVALID', 'TOO_MANY_ITEMS'), (bad, rejected)
-    assert 'attach' in decide_delta.DELTA_KEYS and 'attach' in decide_delta.ORDER
-    return True, '多余字段／两张／缺 artifact_id／空值都只进 rejections（逐条，不整轮失败）'
+def a_speaking_turn_carries_the_picture_on_its_speak_row():
+    store, stored = world()
+    ep = offered_ep(store)
+    done, lane, publisher = run_turn(store, ep, FakeTurn(
+        [THINK, ('attach_image', {'artifact_id': stored['artifact_id'], 'why': '他想看'})], '画好了，给你看'))
+    assert done['state'] == 'COMMITTED', (done['state'], done.get('failure'))
+    assert [call['phase'] for call in lane.calls] == ['TURN'] and 'attach_image' in lane.calls[0]['tools']
+    rows = speak_rows(store, ep)
+    assert [row['text'] for row in rows] == ['画好了，给你看'] and publisher.published == [rows[0]['_id']]
+    assert rows[0]['phase'] == 'SPEAK' and rows[0]['attachment'] == meta_of(stored), rows[0].get('attachment')
+    assert 'base64' not in json.dumps(rows[0], default=str)
+
+    # 退回的那一次不带图，话照样说出去
+    store2, _stored2 = world()
+    ep2 = offered_ep(store2)
+    done2, lane2, _p2 = run_turn(store2, ep2, FakeTurn(
+        [THINK, ('attach_image', {'artifact_id': 'blob-not-offered', 'why': '他想看'})], '这张我找不到了'))
+    rows2 = speak_rows(store2, ep2)
+    assert done2['state'] == 'COMMITTED' and [row['text'] for row in rows2] == ['这张我找不到了'], done2['state']
+    assert 'attachment' not in rows2[0], rows2[0]
+    assert lane2.tool_results[1][5] is False and 'ATTACH_ARTIFACT_NOT_IN_CONTEXT' in lane2.tool_results[1][4]
+    return True, 'think → attach_image → 正文：SPEAK 行带元数据；被退回时只发文字，行上没有 attachment'
+
+
+@case
+def a_silent_turn_sends_no_picture():
+    store, stored = world()
+    ep = offered_ep(store)
+    done, lane, publisher = run_turn(store, ep, FakeTurn(
+        [THINK, ('attach_image', {'artifact_id': stored['artifact_id'], 'why': '想给他看'}),
+         ('stay_silent', {'reason': '他在忙，先不打扰'})], '不该发出去'))
+    assert done['state'] == 'COMMITTED' and done['silent_reason'] == '他在忙，先不打扰', done['state']
+    assert speak_rows(store, ep) == [] and publisher.published == [], '沉默的回合还是发出了东西'
+    assert [result[2] for result in lane.tool_results] == ['think', 'attach_image', 'stay_silent']
+    return True, 'stay_silent 结束的回合不写 SPEAK 行：接受过的图也不会跟着出去'
 
 
 @case
 def speak_row_writes_metadata_on_the_first_segment_only():
     '''coordinator 写 SPEAK 行那一段的守卫：只挂第一段，行上只有元数据。'''
     source = io.open(os.path.join(SRC, 'asuna', 'coordinator.py'), encoding='utf-8').read()
-    assert "attach_meta=outbound_media.attachment_for_speak(ep)" in source, 'SPEAK 阶段没接上 attach 结果'
+    assert "attach_meta=outbound_media.attachment_for_speak(ep)" in source, 'SPEAK 那一步没接上 attach_image 结果'
     assert "if index==0 and attach_meta:" in source and "row['attachment']=dict(attach_meta)" in source, \
         '附件元数据不是只挂第一段'
     assert source.index("attach_meta=outbound_media.attachment_for_speak(ep)") < \
         source.index("if index==0 and attach_meta:"), '元数据要在写行之前算好'
-    ep = {'delta_results': {'attach': [{'index': 0, 'artifact_id': 'blob-x', 'media_type': 'image/png',
-                                        'sha256': '1' * 64, 'size': 10}]}}
+    ep = {'attachment': {'artifact_id': 'blob-x', 'media_type': 'image/png', 'sha256': '1' * 64, 'size': 10}}
     assert outbound_media.attachment_for_speak(ep) == {'artifact_id': 'blob-x', 'media_type': 'image/png',
                                                        'sha256': '1' * 64, 'size': 10}
-    assert outbound_media.attachment_for_speak({'delta_results': {}}) is None
-    assert outbound_media.attachment_for_speak(
-        {'delta_results': {'attach': [{'index': 0, 'code': 'ATTACH_TARGET_NOT_ALLOWED'}]}}) is None
-    return True, '第一段挂元数据；被退回时行上没有 attachment'
+    assert outbound_media.attachment_for_speak({}) is None
+    assert outbound_media.attachment_for_speak({'attachment': 'blob-x'}) is None     # 形状不对就当没有
+    return True, '第一段挂元数据；没有被接受的图时行上没有 attachment'
 
 
 # 4) 历史投影
@@ -1070,14 +1179,14 @@ def blobstore_get_predicate_not_loosened():
 
 @case
 def prompts_say_no_file_paths_and_only_listed_artifacts():
-    decide = io.open(os.path.join(SRC, 'asuna', 'resources', 'prompts', 'stage_decide.md'),
-                     encoding='utf-8').read()
-    speak = io.open(os.path.join(SRC, 'asuna', 'resources', 'prompts', 'stage_speak.md'),
-                    encoding='utf-8').read()
-    assert 'attach' in decide and 'image_artifacts_from_program' in decide
-    assert '不是文件路径' in decide and '群聊' in decide
-    assert '文件路径' in speak and '见图' in speak
-    return True, 'DECIDE 说明 attach 只能引用程序给出的 artifact；SPEAK 说明正文不写文件路径'
+    turn = io.open(os.path.join(SRC, 'asuna', 'resources', 'prompts', 'turn.md'), encoding='utf-8').read()
+    tool = role_tools.TOOLS['attach_image']['description']
+    assert 'artifact_id' in tool and 'image_artifacts_from_program' in tool, tool
+    assert '文件名' in tool and '路径' in tool and '见图' in tool, tool
+    assert '不是文件路径' in outbound_media.OFFER_NOTE and 'attach_image' in outbound_media.OFFER_NOTE
+    assert '私聊' in role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED'], role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED']
+    assert '文件路径' in turn and '见图' in turn
+    return True, 'attach_image 说明只能引用程序给出的 artifact、正文不写路径／见图；群里退回时说明只有私聊能带'
 
 
 # ── B7：导入时顺手登记 + 同一主人的两个 owner_private 入口 ─────────────────
@@ -1164,13 +1273,11 @@ def local_image_is_offered_and_attachable_in_the_qq_dm_turn():
     item = listed[art['artifact_id']]
     assert item['from_linked_scene'] is True and item['scene_id'] == LOCAL_SCENE, item
     assert '另一个' in offer['note'], offer['note']
-    # DECIDE 接受它：可引用 scope 由程序算，行上只写元数据
-    ep = decide_ep(store)
-    ep['person_id'] = 'owner-p'
-    ep['context'] = {'image_artifacts_from_program': offer}
-    out = apply_attach(store, ep, art['artifact_id'])
-    assert not out['rejections'], out['rejections']
-    meta = outbound_media.attachment_for_speak(out)
+    # attach_image 接受它：可引用 scope 由程序算，回合上只记元数据
+    ep = turn_ep(store, context={'image_artifacts_from_program': offer})
+    outcome, result, after = attach(store, ep, art['artifact_id'])
+    assert outcome == 'ok', result
+    meta = outbound_media.attachment_for_speak(after)
     assert meta == {'artifact_id': art['artifact_id'], 'media_type': 'image/png',
                     'sha256': art['sha256'], 'size': len(PNG)}, meta
     # 字节端点：QQ 那条 publication 能取到本机 scope 里的那份字节
@@ -1182,7 +1289,7 @@ def local_image_is_offered_and_attachable_in_the_qq_dm_turn():
     finally:
         server.close()
     assert code == 200 and ctype == 'image/png' and body == PNG, (code, ctype, body[:80])
-    return True, '本机导入 → QQ 私聊清单里标着 from_linked_scene → DECIDE 接受 → 字节端点 200'
+    return True, '本机导入 → QQ 私聊清单里标着 from_linked_scene → attach_image 接受 → 字节端点 200'
 
 
 @case
@@ -1213,16 +1320,14 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
     # public 会话与群方向：连本场景之外都不多开
     assert scopes(two_scene_world(links=linked), cls='public') == [DM_SCOPE]
     assert scopes(two_scene_world(links=linked), scene=scene_row('group')) == [GROUP_SCOPE]
-    # 没联动时 QQ 清单里没有那张图，DECIDE 与字节端点都按 scope 拒
+    # 没联动时 QQ 清单里没有那张图；就算清单里冒出它，attach_image 也按 scope 退回
     store = two_scene_world()
     art = import_bytes(store, LOCAL_SCOPE, PNG)[0]['artifact']
     assert qq_offer(store) is None, '没联动的场景之间也列出图了'
-    ep = decide_ep(store)
-    ep['person_id'] = 'owner-p'
-    ep['context'] = {'image_artifacts_from_program': {'items': [{'artifact_id': art['artifact_id']}],
-                                                      'note': ''}}
-    out = apply_attach(store, ep, art['artifact_id'])
-    assert [item['code'] for item in out['rejections']] == ['ATTACHMENT_SCOPE_DENIED'], out['rejections']
+    ep = turn_ep(store, context={'image_artifacts_from_program': {
+        'items': [{'artifact_id': art['artifact_id']}], 'note': ''}})
+    outcome, said, after = attach(store, ep, art['artifact_id'])
+    assert outcome == 'refused' and 'ATTACHMENT_SCOPE_DENIED' in said and 'attachment' not in after, said
     return True, '只有同一 canonical person 的另一个 owner_private dm 场景可引用；群／别人／没联动都拒绝'
 
 

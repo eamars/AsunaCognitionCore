@@ -283,7 +283,7 @@ class ScheduleService:
         self.store.put('plans', {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
 
-    def create(self, ep, spec):
+    def create(self, ep, spec, plan_id=None):
         intent = spec.get('intent') if isinstance(spec, dict) else None
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
             raise ValueError('INVALID_SCHEDULE_SPEC')
@@ -293,7 +293,8 @@ class ScheduleService:
             raise Denied('SCHEDULE_SOURCE_STALE')
         zone = self.zone_of(scene)
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())   # 已过/本地不存在都明确抛回
-        plan_id = 'plan-' + ep['_id'][3:]
+        # One turn may make several plans: each of her plan calls names its own (role_tools).
+        plan_id = plan_id or 'plan-' + ep['_id'][3:]
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if not plan:
             source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
@@ -340,8 +341,9 @@ class ScheduleService:
             raise Denied('SCHEDULE_SOURCE_STALE')
         zone = self.zone_of(scene, plan)
         timing = spec.get('schedule') if isinstance(spec.get('schedule'), dict) else \
-            {key: value for key, value in spec.items() if key != 'plan_id'}
-        rule = schedule_rules.normalize_rule(timing)
+            {key: value for key, value in spec.items() if key not in ('plan_id', 'intent')}
+        # Only new wording: the plan keeps its timing (her plan tool, op=update with an intent alone).
+        rule = schedule_rules.normalize_rule(timing) if timing else plan['rule']
         intent = (spec.get('intent') or plan['intent']).strip()
         if not 1 <= len(intent) <= 1000:
             raise ValueError('INVALID_SCHEDULE_SPEC')

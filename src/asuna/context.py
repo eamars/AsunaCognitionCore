@@ -278,12 +278,11 @@ class ContextBuilder:
         schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
         plans=[schedule_rules.project(row,schedule_rules.scene_timezone(self.store.config,scene,row),
                                       moment) for row in plan_rows]
-        if 'coverage' in retrieval_manifest:
-            coverage_block={k:retrieval_manifest[k] for k in ('coverage','coverage_score','coverage_basis')}
-            if retrieval_manifest['coverage']=='insufficient':
-                coverage_block['note']='证据不足，只能当灵感，不能当事实说。'
-        else:
-            coverage_block=None
+        # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
+        coverage_block=None
+        if retrieval_manifest.get('coverage')=='insufficient':
+            coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
+                            else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  'relationship':relation[1]['content'] if relation else None,
                  'self_state_from_program':self_state,

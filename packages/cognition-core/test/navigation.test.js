@@ -98,6 +98,14 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(quietEvents.filter(event => event.type === 'turn/start').length, prefix.filter(event => event.type === 'turn/start').length);
   assert.equal(requests, 1, 'quiet reception never starts a model turn');
   assert.ok(!ctx.workspaceRegistry.archivedSessionIds.includes(role._id), 'new platform activity reopens the same native conversation');
+  // A brand-new conversation has no system head until its agent's first step; a line placed before it would
+  // make DSH refuse to reload the log after that first turn, so it waits in the business history instead.
+  const fresh = { _id: 'qq-fresh', cwd: qq, scene_id: 'qq:bot:group:two', native_title: '群聊 · two' };
+  await recordChannelInput(core, { session_id: fresh._id, binding: fresh,
+    input: { id: 'before-any-turn', sender: '10002', text: 'a line before her first turn here', received_at: '2026-10-03' } });
+  const readFresh = await ctx.sessionPersistence.open(fresh._id, 'read');
+  const freshEvents = (await readFresh.read()).events; await readFresh.close();
+  assert.equal(freshEvents.filter(event => event.type === 'user/message').length, 0);
   let complete;
   const completed = new Promise(resolve => { complete = resolve; });
   const child = { _id: 'action', lane: 'executor', cwd: execution, scene_id: role.scene_id,

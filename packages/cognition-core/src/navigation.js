@@ -37,14 +37,18 @@ export async function recordChannelInput(core, receipt) {
     content: [{ type: 'text', text: input.text }] });
   const hot = ctx.sessions.get(id);
   const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id);
+  // DSH requires a conversation's first visible event to be the system head its agent writes on the first
+  // step; a line placed before that makes the log unloadable after her first turn. Until she has had a turn
+  // here the line stays in the business history only, and that turn's catch-up history brings it to her.
+  const headed = events => events.some(event => event.type === 'system/message');
   if (hot) {
-    if (!contains(hot.snapshotEvents())) hot.append('user/message', message, { surfaceOp: 'append' });
+    if (headed(hot.snapshotEvents()) && !contains(hot.snapshotEvents())) hot.append('user/message', message, { surfaceOp: 'append' });
     await ctx.sessions.flush(hot);
   } else {
     const handle = await ctx.sessionPersistence.open(id, 'write');
     try {
       const { events } = await handle.read();
-      if (!contains(events)) {
+      if (headed(events) && !contains(events)) {
         const event = { type: 'user/message', data: message, surfaceOp: 'append', seq: events.length, time: Date.now() };
         await handle.append([event]); events.push(event);
       }

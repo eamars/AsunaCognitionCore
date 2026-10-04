@@ -2,7 +2,11 @@
 """asuna-image-generation-and-display 的零依赖离线自检。
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
-服务路径 / 关键步骤 / 边界语句在不在、示例图路径是不是相对的、同目录脚本能不能编译。
+服务路径 / 关键步骤 / 边界语句在不在、QQ 私聊 attach 那条路的清单字段与失败码在不在、
+「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、同目录脚本能不能编译。
+
+归属与「过期说法」两类红只看散文：反引号里的字面量（错误码、被改坏的副本内容、反证记录里
+引用的旧句子）按引用处理，不算数——和占位标记同一套口径。
 
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
@@ -58,6 +62,61 @@ BOUNDARIES = [
     ("small_display_copy", "SaveAnimatedWEBP"),
 ]
 
+# QQ 私聊 attach 发图：前提、来源、写法、失败码，一条都不能漏
+ATTACH = [
+    # 前提
+    ("attach_field", "attach"),
+    ("attach_context_offer", "image_artifacts_from_program"),
+    ("attach_owner_private", "owner_private"),
+    ("attach_dm_route", "target.type=dm"),
+    ("attach_offer_bounded", "最多 6 条"),
+    ("attach_offer_absence", "清单缺席"),
+    # 只对主人私聊
+    ("attach_group_refused", "确定性拒绝"),
+    # 图从哪来
+    ("attach_source_blobstore", "BlobStore"),
+    ("attach_source_registered_flag", "registered: false"),
+    ("attach_from_linked_scene", "from_linked_scene"),
+    ("attach_canonical_person", "canonical person"),
+    ("attach_local_scope_example", "scene:local-dm"),
+    ("attach_qq_scene_example", "（主人的 QQ 私聊场景，场景 id 以配置为准）"),
+    # 怎么写
+    ("attach_max_one_item", "maxItems: 1"),
+    ("attach_id_not_a_path", "不是文件路径也不是文件名"),
+    ("attach_speak_no_see_image", "见图"),
+    ("attach_metadata_first_row", "第一行"),
+    ("attach_adapter_capability", "supports=image"),
+    # DECIDE 侧失败码
+    ("attach_rejections_field", "episode.rejections"),
+    ("attach_err_target_not_allowed", "ATTACH_TARGET_NOT_ALLOWED"),
+    ("attach_err_not_when_silent", "ATTACH_NOT_WHEN_SILENT"),
+    ("attach_err_not_in_context", "ATTACH_ARTIFACT_NOT_IN_CONTEXT"),
+    ("attach_err_artifact_unavailable", "ATTACHMENT_ARTIFACT_UNAVAILABLE"),
+    ("attach_err_scope_denied", "ATTACHMENT_SCOPE_DENIED"),
+    ("attach_err_not_an_image", "ATTACHMENT_NOT_AN_IMAGE"),
+    ("attach_err_over_limit", "ATTACHMENT_OVER_LIMIT"),
+    ("attach_err_hash_mismatch", "ATTACHMENT_HASH_MISMATCH"),
+    ("attach_outbound_size_cap", "8 MiB"),
+    # 字节端点侧失败码
+    ("attach_endpoint_attempt_mismatch", "PUBLICATION_ATTEMPT_MISMATCH"),
+    ("attach_endpoint_not_declared", "ATTACHMENT_NOT_DECLARED"),
+    ("attach_endpoint_artifact_denied", "ATTACHMENT_ARTIFACT_DENIED"),
+    ("attach_endpoint_sha_mismatch", "ATTACHMENT_SHA_MISMATCH"),
+    ("attach_endpoint_media_type_mismatch", "ATTACHMENT_MEDIA_TYPE_MISMATCH"),
+    # 适配器侧读法与历史读法
+    ("attach_adapter_group_not_enabled", "attachment_target_not_enabled"),
+    ("attach_adapter_over_limit", "attachment_over_limit"),
+    ("attach_adapter_fetch_unavailable", "attachment_fetch_unavailable"),
+    ("attach_adapter_not_an_image", "attachment_not_an_image"),
+    ("attach_adapter_sends_nothing", "整条不发"),
+    ("attach_skipped_marker", "attachment_skipped"),
+    ("attach_skipped_reason", "channel_does_not_declare_image"),
+    ("attach_history_attested", "attested"),
+    ("attach_history_evidence_mismatch", "attachment_evidence_mismatch"),
+    # 还没实测的那一条，别被写成「已经能看到图了」
+    ("attach_base64_uri_caveat", "base64://"),
+]
+
 SECTIONS = [
     "## 用途",
     "## 前提与授权",
@@ -74,9 +133,21 @@ SECTIONS = [
     "## 已知坑",
     "## 版本",
     "## 试用记录",
+    "## 步骤 8",          # 追加在末尾：老检查名（section_0..section_14）不跟着移位
 ]
 
-# 占位标记只在散文里算问题：反引号里的字面量（示例、错误码、被改坏的副本内容）是引用，不是没写完。
+# 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
+CLAUDE_PAGE_CHECK = re.compile(r"Claude[^\n]{0,60}在本机页面核过")
+OWNER_PAGE_CHECK = re.compile(r"主人[^\n]{0,20}在本机页面核过|主人在页面核验|主人页面渲染")
+
+# 已经过期的说法：出站图片能力上线后不能再这么写（只看散文）
+STALE_CLAIMS = [
+    "QQ 私聊现在收不到图",
+    "宿主 outbox 只交",
+    '私聊段白名单是 ("text",)',
+]
+
+# 反引号里的字面量是引用（示例、错误码、反证记录里被改坏的旧句子），只在散文里判红。
 PROSE = re.compile(r'`[^`]*`', re.S)
 
 # 展示口径：报告里必须是相对路径的 Markdown 图片
@@ -117,6 +188,7 @@ def main():
             text = handle.read()
 
     fields, body = read_frontmatter(text)
+    prose = PROSE.sub(" ", body)
     check("frontmatter_parses", fields is not None)
     check("frontmatter_name_present", bool(fields and fields.get("name")))
     check("name_matches_directory",
@@ -124,18 +196,29 @@ def main():
           "name=%s dir=%s" % ((fields or {}).get("name"), EXPECTED_NAME))
     desc = (fields or {}).get("description", "")
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
+    check("description_mentions_attach", "attach" in desc, "frontmatter description 没提 attach 这条路")
 
-    for name, section in [(("section_" + str(i)), s) for i, s in enumerate(SECTIONS)]:
+    for name, section in [("section_" + str(i), s) for i, s in enumerate(SECTIONS)]:
         check(name, ("\n" + section) in ("\n" + body), section)
 
-    for name, token in TOOLS + SERVICE + BOUNDARIES:
+    for name, token in TOOLS + SERVICE + BOUNDARIES + ATTACH:
         check(name, token in body, token)
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
     check("selfcheck_documented", "check_skill.py" in body)
-    check("no_placeholder_markers", not PLACEHOLDER.search(PROSE.sub(' ', body)))
+    check("no_placeholder_markers", not PLACEHOLDER.search(prose))
     check("skill_body_not_thin", len(body) >= 4000, "body_chars=%d" % len(body))
+
+    # 归属更正：页面核验是 Claude 做的，主人还在睡；散文里写回「主人核过」就是假事实
+    check("attribution_page_check_by_claude",
+          bool(CLAUDE_PAGE_CHECK.search(prose)) and not OWNER_PAGE_CHECK.search(prose),
+          "散文里缺 Claude 核过的说法，或还留着「主人核过 / 主人在页面核验」")
+    check("attribution_owner_asleep", "主人还在睡" in body, "没写明这一轮主人还在睡、没有主人侧新核验")
+
+    # 过期说法：出站图片上线后不能再这么写（反引号里的引用不算）
+    stale = [item for item in STALE_CLAIMS if item in prose]
+    check("no_stale_text_only_claim", not stale, ",".join(stale))
 
     # 同目录脚本：必须存在且只用标准库能编译（编译产物写到临时目录，不脏技能目录）
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
@@ -165,7 +248,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：技能文件、工具名与关键步骤都在。" % (total, total))
+    print("%d/%d 通过：技能文件、工具名、attach 那条路的清单与失败码、归属都在。" % (total, total))
     return 0
 
 

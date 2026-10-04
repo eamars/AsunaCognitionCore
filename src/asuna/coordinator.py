@@ -94,7 +94,7 @@ class Coordinator:
         """The native role session this turn runs in; same rule as native binding."""
         if event.get('native_session_id'):
             return event['native_session_id']
-        proto={'_id':ep_id,'scene_id':scene['_id'],'person_id':event['person_id'],'persona':persona,
+        proto={'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'person_id':event['person_id'],'persona':persona,
                'policy_epoch':scene['policy_epoch'],**({'character_context':scene['character_context']} if scene.get('character_context') else {}),
                **{k:event[k] for k in ('task_id',) if k in event}}
         return self.native_session_resolver(proto)

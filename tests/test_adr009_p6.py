@@ -86,3 +86,20 @@ def test_T6_2_phase_output_keeps_hashes_and_native_receipts_are_final(store, tmp
     assert commit is not None
     again = native.generate('b', ep['_id'] + ':EXTRA:0', 'EXTRA', 'text', 'system')
     assert again.content == '原生回答' and generated == [ep['_id'] + ':EXTRA:0'], 'a completed stage is never reopened'
+
+
+def test_a_platform_turn_binds_its_role_session(store):
+    """A channel turn carries no native session id: the real resolver binds one from the scene.
+    Regression: the binding lacked scope_key and every QQ turn failed before any stage ran."""
+    from asuna.native_worker import BusinessWorker
+    owner(store)
+    worker = types.SimpleNamespace(navigation_ready=threading.Event(), role_session_id=BusinessWorker.role_session_id,
+                                   app=types.SimpleNamespace(store=store, config={'workflow_timeout_seconds': 1}))
+    worker.navigation_ready.set()
+    coordinator = Coordinator(store, FakeLane(store, [LaneResult('想一想'), decide(), LaneResult('好')]))
+    coordinator.native_session_resolver = lambda ep: BusinessWorker.resolve_role_session(worker, ep)
+    ep = coordinator.ingest({'event_id': 'e-channel', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
+    episode = store.db.episodes.find_one({'_id': ep['_id']})
+    assert episode['native_session_id'].startswith('asuna-role-') and episode['state'] != 'FAILED_RUNTIME'
+    bound = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'native.context.bound'})
+    assert bound and bound['scope_key'] == store.db.scenes.find_one({'_id': 'dm-a'})['scope_key']

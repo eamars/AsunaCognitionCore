@@ -45,7 +45,7 @@ def outbound(store, ep_id):
 
 
 def channels(store):
-    return Channels(SimpleNamespace(app=SimpleNamespace(store=store), stopping=threading.Event()))
+    return Channels(SimpleNamespace(app=SimpleNamespace(store=store), stopping=threading.Event(), reconfiguring=False))
 
 
 def release(store, rows):

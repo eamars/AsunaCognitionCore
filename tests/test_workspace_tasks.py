@@ -37,7 +37,12 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         result = broker.call('workspace', 'new', 'write_file', {'path': '普通便条.txt', 'text': '这不是 stats.py'})
         assert result['written']
         assert (work / '普通便条.txt').read_text(encoding='utf-8') == '这不是 stats.py'
+        # ADR-008 closes actions through the native turn result. A retired
+        # business status tool cannot grant authority or terminate the task.
+        with pytest.raises(Denied, match='CAPABILITY_DENIED'):
+            broker.call('workspace', 'end', 'task_status', {'status': 'done'})
         current=store.db.tasks.find_one({'_id':task['_id']})
+        assert current['state'] == 'RUNNING'
         store.put('tasks',{**current,'tool_steps':64},expected=current['revision'])
         broker.call('workspace', 'after-status', 'write_file', {'path': 'late.txt', 'text': 'continued'})
         assert (work / 'late.txt').read_text() == 'continued'
@@ -59,7 +64,8 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
 
     try:
         done = Executor(service, ActionLane(), broker).run(ep['task_id'], work)
-        assert done['state'] == 'RETURNED' and done['result'].get('declared_status') is None
+        assert done['state'] == 'RETURNED' and done['result']['finish_reason'] == 'stop'
+        assert 'declared_status' not in done['result']
         fact = done['result']['facts'][0]
         assert fact['text'] == narrative
         for ref in fact['evidence_refs']:
@@ -120,16 +126,17 @@ def test_only_explicit_current_scene_decision_can_cancel_task(store):
         broker.close()
 
 
-def test_refused_concurrent_continuation_reaches_character_without_stopping_original(store):
+def test_concurrent_continuation_with_new_diagnostic_redirects_original_revision(store):
     work,ep,service,broker=setup_workspace(store)
     try:
         task=service.claim(ep['task_id'])
         decision={'next':'delegate','goal':'传递诊断','constraints':[],'recall_query':'','speak_before_action':False,'continue_task_id':task['_id']}
         lane=FakeLane(store,[LaneResult('收到诊断'),LaneResult(json.dumps(decision)),LaneResult('原任务仍在执行；诊断已记录。')])
         result=Coordinator(store,lane).ingest({'event_id':'active-continuation','scene_id':'dm-a','person_id':'A','text':'补充当前任务的诊断'})
-        assert result['state']=='COMMITTED' and result['control_result']['accepted'] is False
-        assert 'TASK_CONTINUATION_NOT_AUTHORIZED' in lane.calls[-1]['messages'][-1]['content']
-        assert store.db.tasks.find_one({'_id':task['_id']})['state']=='RUNNING'
+        assert result['state']=='WAITING_TASK' and result['control_result']['accepted'] is True
+        current=store.db.tasks.find_one({'_id':task['_id']})
+        assert result['task_id']==task['_id'] and current['intent_revision']==2 and current['state']=='READY'
+        with pytest.raises(Denied,match='STALE_TASK_FENCE'):service.valid(task)
         assert not store.db.tasks.find_one({'_id':'task-'+result['_id']})
     finally:broker.close()
 
@@ -149,4 +156,78 @@ def test_explicit_resume_distinguishes_host_shutdown_from_user_cancellation(stor
             assert continuation['execution_binding']==f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         else:
             assert result['state']=='COMMITTED' and result['control_result']['accepted'] is False
+    finally:broker.close()
+
+
+@pytest.mark.parametrize('internal', [False, True])
+def test_restart_paused_task_can_only_continue_from_new_local_request(store, internal):
+    work, ep, service, broker = setup_workspace(store)
+    try:
+        task = service.claim(ep['task_id'])
+        paused = service.pause_for_restart(task['_id'])
+        decision = {'next': 'delegate', 'goal': '继续原目标', 'constraints': [], 'recall_query': '',
+                    'speak_before_action': False, 'continue_task_id': task['_id']}
+        lane = FakeLane(store, [LaneResult('核实暂停记录'), LaneResult(json.dumps(decision)),
+                               LaneResult('旧行动仍暂停。')])
+        incoming = {'event_id': 'paused-continue', 'scene_id': 'dm-a', 'person_id': 'A',
+                    'text': '继续之前暂停的工作'}
+        if internal:
+            incoming.update(episode_kind='self_development', adapter_id='self-development')
+        result = Coordinator(store, lane).ingest(incoming)
+        assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'PAUSED'
+        assert 'PAUSED 是重启后等待操作者决定' in lane.calls[0]['messages'][-1]['content']
+        if internal:
+            assert result['state'] == 'COMMITTED' and result['control_result']['accepted'] is False
+            assert store.db.tasks.count_documents({}) == 1
+        else:
+            continuation = store.db.tasks.find_one({'_id': result['task_id']})
+            assert continuation['continues_task_id'] == task['_id']
+            assert continuation['execution_binding'] == paused['execution_binding']
+            assert continuation['state'] == 'READY'
+    finally:
+        broker.close()
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_character_redirects_live_task_in_place_and_fences_prior_revision(store, running):
+    work, first, service, broker = setup_workspace(store)
+    try:
+        task = service.claim(first['task_id']) if running else store.db.tasks.find_one({'_id': first['task_id']})
+        notices = []
+        service.on_fenced = lambda row, reason: notices.append((row['_id'], row['intent_revision'], reason))
+        decision = {'next':'delegate','goal':'保留原文，先核对另一份','constraints':['只读'],
+                    'recall_query':'','speak_before_action':False,'continue_task_id':task['_id']}
+        role = Coordinator(store, FakeLane(store, [LaneResult('按新要求继续原行动。'), LaneResult(json.dumps(decision))]), task_service=service)
+        event = {'event_id':'redirect-live','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作，优先核对另一份。'}
+        revised = role.ingest(event)
+        current = store.db.tasks.find_one({'_id':task['_id']})
+        assert revised['state']=='WAITING_TASK' and revised['task_id']==task['_id']
+        assert current['state']=='READY' and current['intent_revision']==2 and current['goal']==decision['goal']
+        assert current['execution_binding']==f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:1"
+        assert store.db.tasks.count_documents({})==1 and notices==[(task['_id'],2,'task_revised')]
+        with pytest.raises(Denied,match='STALE_TASK_FENCE'):service.valid(task)
+        role.ingest(event)
+        assert store.db.tasks.find_one({'_id':task['_id']})['intent_revision']==2 and len(notices)==1
+    finally:
+        broker.close()
+
+
+def test_context_keeps_recent_task_visible_instead_of_old_high_write_tasks(store):
+    from asuna.context import ContextBuilder
+    work, first, service, broker=setup_workspace(store)
+    try:
+        task=store.db.tasks.find_one({'_id':first['task_id']})
+        store.db.tasks.update_one({'_id':task['_id']},{'$set':{'state':'RETURNED'}})
+        store.put('messages',{'_id':'old-task-input','received_at':'2000-01-01T00:00:00Z',
+            'scope_key':task['scope_key']},stream='context-test')
+        for index in range(9):
+            store.put('tasks',{**task,'_id':f'old-task-{index}','request_key':f'old-task-{index}',
+                'state':'RUNNING' if index==0 else 'RETURNED',
+                'raw_input_refs':['old-task-input']},stream='context-test')
+            store.db.tasks.update_one({'_id':f'old-task-{index}'},{'$set':{'revision':1000+index}})
+        _,context,_=ContextBuilder(store).prepare({'event_id':'context-order','scene_id':'dm-a',
+            'person_id':'A','text':'继续最近的工作'},'P1')
+        rows=context['task_state_from_program']
+        assert len(rows)==8 and rows[0]['_id']=='old-task-0' and rows[1]['_id']==task['_id']
+        assert all(not any(key.startswith('_input') for key in row) for row in rows)
     finally:broker.close()

@@ -463,7 +463,9 @@ def _classify_group(event, cfg, seen):
         return None, "bad_shape"
     if user_id == cfg.napcat["account_id"]:
         return None, "self_echo"
-    if not route.accepts_sender(user_id):
+    if (user_id in cfg.blocked_senders or not user_id.isascii() or not user_id.isdigit()
+            or not 4 <= len(user_id) <= 20
+            or cfg.admission != 'automatic' and not route.accepts_sender(user_id)):
         # not in this group's authorized member snapshot (being a member of
         # another authorized group does not count)
         return None, "unauthorized_group_member"

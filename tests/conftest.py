@@ -5,6 +5,7 @@ from pymongo import MongoClient
 from asuna.config import ROOT,load
 from asuna.state import Store
 from asuna.evidence import write_json,sha
+from asuna.testing import dispose_test_store
 
 @pytest.fixture(autouse=True)
 def preserve_temporary_evidence(request):
@@ -47,22 +48,25 @@ def store(request):
     from fixture_grant import fixture_grant
     fixture_grant(config,name)
     db=Store(config,name)
-    db.migrate();db.seed(WORLD)
-    yield db
-    root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
-    if root:
-        path=Path(root).resolve()
-        assert path.is_relative_to((ROOT/'reports').resolve())
-        path=path/sha(request.node.nodeid.encode())[:16];path.mkdir(parents=True,exist_ok=False)
-        # A fault case deliberately closes its application client. Inspect the
-        # retained isolated DB through a separate observer connection.
-        observer=Store(load(),db.name)
+    try:
+        db.migrate();db.seed(WORLD)
+        yield db
+    finally:
         try:
-            trace=list(observer.db.audit_events.find({}));write_json(path/'trace.json',trace)
-            write_json(path/'fixture.json',{'node_id':request.node.nodeid,'database':db.name,'lane':'fake unless the named test explicitly creates a real native lane','trace_sha256':sha((path/'trace.json').read_bytes()),'task_states':list(observer.db.tasks.find({})),'received_messages':list(observer.db.sink_receipts.find({}))})
-        finally:observer.client.close()
-        request.node.user_properties.append(('evidence_path',path.relative_to(ROOT).as_posix()))
-    db.client.close()
-    # Evidence (when requested) is already on disk; the database itself is dropped.
-    for name in [db.name,*getattr(db,'derived_databases',[])]:
-        drop_database(config,name)
+            root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
+            if root:
+                path=Path(root).resolve()
+                assert path.is_relative_to((ROOT/'reports').resolve())
+                path=path/sha(request.node.nodeid.encode())[:16];path.mkdir(parents=True,exist_ok=False)
+                # Export through a fresh observer even when the fault case
+                # closed the application's client; the database is then dropped.
+                observer=Store(load(),db.name)
+                try:
+                    trace=list(observer.db.audit_events.find({}));write_json(path/'trace.json',trace)
+                    write_json(path/'fixture.json',{'node_id':request.node.nodeid,'database':db.name,'lane':'fake unless the named test explicitly creates a real native lane','trace_sha256':sha((path/'trace.json').read_bytes()),'task_states':list(observer.db.tasks.find({})),'received_messages':list(observer.db.sink_receipts.find({}))})
+                finally:observer.client.close()
+                request.node.user_properties.append(('evidence_path',path.relative_to(ROOT).as_posix()))
+        finally:
+            dispose_test_store(db)
+            for derived in getattr(db,'derived_databases',[]):   # replay targets etc.
+                drop_database(config,derived)

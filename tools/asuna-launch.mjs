@@ -39,9 +39,11 @@ export async function resolveLaunch(argv, env = process.env) {
   const config = path.resolve(root, options.config ?? launch.config ?? 'config/local.json');
   if (launch.config && path.resolve(launch.config) !== config)
     throw new Error('Profile ' + options.profile + ' was installed for a different local configuration');
-  const local = await read(config);
+  // Native settings own the credentials once imported; the local file is then only a migration source.
+  const local = await read(config, launch.native_credentials ? {} : undefined);
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
-    port: options.port, dryRun: options.dryRun, sharedActionModel: Boolean(launch.shared_action_model), local };
+    port: options.port, dryRun: options.dryRun, sharedActionModel: Boolean(launch.shared_action_model),
+    nativeCredentials: Boolean(launch.native_credentials), local };
 }
 
 async function main() {
@@ -52,9 +54,9 @@ async function main() {
   }
   const models = await read(launch.config.replace(/\.json$/, '.models.local.json'), {});
   const env = { ...process.env, DSH_HOME: launch.home, DSH_TELEMETRY_DISABLED: '1' };
-  for (const [lane, source] of [['character', launch.sharedActionModel ? 'executor' : 'character'], ['action', 'executor']]) {
-    env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || launch.local[source]).api_key || 'local-no-auth';
-  }
+  if (!launch.nativeCredentials)
+    for (const [lane, source] of [['character', launch.sharedActionModel ? 'executor' : 'character'], ['action', 'executor']])
+      env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || launch.local[source]).api_key || 'local-no-auth';
   const dsh = path.join(root, 'node_modules/@deepseek-ai/dsh/lib/bin.js');
   const run = args => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [dsh, ...args], { cwd: root, env, windowsHide: true, stdio: 'inherit' });

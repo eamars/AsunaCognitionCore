@@ -58,7 +58,7 @@ def bundle_python():
     mappings = [[f'src/asuna/{name}.py', f'python/asuna/{name}.py'] for name in modules]
     mappings += prepare_resources(destination)
     (ROOT / 'packages/cognition-core/runtime-manifest.json').write_text(
-        json.dumps({'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS}, indent=2), encoding='utf-8')
+        json.dumps({'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS}, indent=2), encoding='utf-8', newline='\n')
     (destination.parent / 'pyproject.toml').write_text('''[build-system]
 requires = ["hatchling==1.30.1"]
 build-backend = "hatchling.build"
@@ -82,8 +82,14 @@ def main():
                         help='persona package directory to pack alongside the core (repeatable)')
     args = parser.parse_args()
     DESTINATION.mkdir(parents=True, exist_ok=True)
+    # The native inline extension (tools/dsh-inline) is built separately; pack only a current build.
+    native = json.loads((DESTINATION / 'native-inline-manifest.json').read_text(encoding='utf-8'))
+    patch_digest = hashlib.sha256((ROOT / 'tools/dsh-inline/rc2-inline.patch').read_bytes()).hexdigest()
+    for artifact in native:
+        if artifact['patchSha256'] != patch_digest or hashlib.sha256(Path(artifact['path']).read_bytes()).hexdigest() != artifact['sha256']:
+            raise ValueError('Rebuild the current native inline extension before packing plugins')
     bundle_python()
-    artifacts = []
+    artifacts = list(native)
     for directory in [ROOT / 'packages/cognition-core', *[p.resolve() for p in args.persona]]:
         result = subprocess.run(['npm.cmd', 'pack', '--json', '--pack-destination', str(DESTINATION)],
                                 cwd=directory, capture_output=True, text=True, check=True)

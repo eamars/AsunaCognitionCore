@@ -63,7 +63,7 @@ class Application:
             self.evidence.record('lane.summary.start', {})
             self.summary_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'summary'))
             self.evidence.record('lane.summary.ready', {})
-            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval))
+            self.coordinator=Coordinator(self.store,self.character,context=ContextBuilder(self.store,self.retrieval),task_service=self.service)
             if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
                 # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).
                 from .affect import Appraiser

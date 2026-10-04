@@ -134,10 +134,24 @@ class Collection:
     def find(self, spec=None, projection=None):
         return Cursor([dict(row) for row in self.rows.values() if _match(row, spec)])
 
+    def aggregate(self, pipeline):
+        """Enough of a pipeline for the context's task-state query: $match, $limit, $project."""
+        rows = [dict(row) for row in self.rows.values()]
+        for stage in pipeline:
+            if '$match' in stage:
+                rows = [row for row in rows if _match(row, stage['$match'])]
+            elif '$limit' in stage:
+                rows = rows[:stage['$limit']]
+            elif '$project' in stage:
+                keep = [k for k, v in stage['$project'].items() if v]
+                rows = [{k: row[k] for k in keep if k in row} for row in rows]
+        return iter(rows)
+
 
 class Store:
     def __init__(self, config):
         self.config = config
+        self.name = 'p3-fake-store'
         self.audits = []
         self.db = types.SimpleNamespace(plans=Collection(), scenes=Collection(),
                                         messages=Collection(), audit_events=Collection(),
@@ -720,6 +734,9 @@ STUB_EXTRA = {
     'publish.py': 'class PublishService:\n    def __init__(self, *a, **k):\n        pass\n',
     'peer_context.py': 'def apply_peer_context(context, source):\n    return context\n',
     'ingress.py': 'def episode_id(event):\n    return \"ep-\" + str(event[\"event_id\"])\n',
+    'tasks.py': 'import threading\nclass FeedbackStale(Exception):\n    pass\ndef require_current_feedback(store, ep):\n    return None\n'
+                'class TaskService:\n    def __init__(self, store, *a, **k):\n        self.store, self.lock = store, threading.RLock()\n',
+    'queue.py': 'from contextlib import contextmanager\n@contextmanager\ndef database_effects_lock(name):\n    yield\n',
 }
 
 

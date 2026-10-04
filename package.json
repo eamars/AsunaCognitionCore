@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pack:plugins": ".venv\\Scripts\\python.exe tools/pack_plugins.py",
+    "pack:plugins": ".venv\\Scripts\\python.exe tools/pack_plugins.py --persona packages/xiaoman",
     "test:native": "node --test packages/cognition-core/test/*.test.js"
   },
   "dependencies": {

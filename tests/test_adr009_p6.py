@@ -1,6 +1,7 @@
 """ADR-009 P6 MongoDB tests: T6.1 history delta, T6.2 audit and receipt dedupe."""
 import json
 import threading
+import types
 
 import pytest
 
@@ -91,7 +92,7 @@ def test_T6_2_large_documents_are_audited_by_reference(store):
     assert small['revision'] == 1
 
 
-def test_T6_2_phase_output_and_native_receipt_keep_hashes(store, tmp_path):
+def test_T6_2_phase_output_keeps_hashes_and_native_receipts_are_final(store, tmp_path):
     owner(store)
     store.config['chat']['workspace'] = str(tmp_path)
     lane = FakeLane(store, [LaneResult('私下想的长内容' * 50), decide(), LaneResult('好')])
@@ -107,6 +108,13 @@ def test_T6_2_phase_output_and_native_receipt_keep_hashes(store, tmp_path):
     class Worker:
         pending_lock = threading.Lock()
         pending = {}
+        navigation_ready = threading.Event()
+        navigation_ready.set()
+
+        controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+
+        def continued_session(self, session_id):
+            return session_id
 
         def bind_session(self, session_id, values):
             return {'_id': session_id, **values}
@@ -119,9 +127,9 @@ def test_T6_2_phase_output_and_native_receipt_keep_hashes(store, tmp_path):
     native = NativeLane(Worker(), {'character': {'model': 'native-host'}}, store, None)
     first = native.generate('b', ep['_id'] + ':EXTRA:0', 'EXTRA', 'text', 'system')
     receipt = store.db.lane_receipts.find_one({'_id': ep['_id'] + ':EXTRA:0'})
-    assert first.content == '原生回答' and 'content' not in receipt['result']
-    assert receipt['result']['content_sha256'] == content_ref('原生回答')['content_sha256']
-    assert receipt['result']['native_ref'] == 'role-1:7'
+    assert first.content == '原生回答' and receipt['result']['content'] == '原生回答'
+    commit = store.db.audit_events.find_one({'type': 'state.commit', 'payload.collection': 'lane_receipts',
+                                             'stream_id': ep['_id'] + ':EXTRA:0'})
+    assert commit is not None
     again = native.generate('b', ep['_id'] + ':EXTRA:0', 'EXTRA', 'text', 'system')
-    assert again.content == '原生回答' and store.db.lane_receipts.count_documents({'_id': ep['_id'] + ':EXTRA:0'}) == 1
-    assert generated == [ep['_id'] + ':EXTRA:0'] * 2, 'the repeat is answered by the host from its saved result'
+    assert again.content == '原生回答' and generated == [ep['_id'] + ':EXTRA:0'], 'a completed stage is never reopened'

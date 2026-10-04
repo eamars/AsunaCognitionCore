@@ -142,7 +142,7 @@ def test_broker_integration_can_call_host_outbox_and_cancel_stays_fenced(store):
     persist_input(store,event,managed=True)
     ep=Coordinator(store,FakeLane(store,[LaneResult('read'),LaneResult(json.dumps(decision))])).ingest(event)
     service=TaskService(store);broker=ToolBroker(service)
-    controller=SimpleNamespace(app=SimpleNamespace(store=store),stopping=threading.Event())
+    controller=SimpleNamespace(app=SimpleNamespace(store=store),stopping=threading.Event(),reconfiguring=False)
     server=ChannelServer(Channels(controller))
     task=service.claim(ep['task_id']);broker.bind('callback',task,work)
     class CallbackRunner:

@@ -1,0 +1,152 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { Context } from '@deepseek-ai/cordis';
+import SessionStore from '@deepseek-ai/dsh-session';
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection';
+import SessionProjectionCache from '@deepseek-ai/dsh-session-projection-cache';
+import { titleProjectionDefinition } from '@deepseek-ai/dsh-session-title';
+import Storage from '@deepseek-ai/dsh-storage';
+import * as JsonStorage from '@deepseek-ai/dsh-storage-json';
+import * as Domain from '@deepseek-ai/dsh-storage-domain';
+import Workspace from '@deepseek-ai/dsh-workspace';
+import LlmRuntime, { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm';
+import AgentRegistry from '@deepseek-ai/dsh-agent';
+import AgentLoop from '@deepseek-ai/dsh-agent-loop';
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
+import Tools from '@deepseek-ai/dsh-tools';
+import Loader from '@deepseek-ai/cordis-plugin-loader';
+import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
+import Subagents from '@deepseek-ai/dsh-subagent';
+import Persistence from '../src/persistence.js';
+import { CognitionCore } from '../src/index.js';
+import { organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
+
+test('native continuation preserves history and task children retain their actual execution directory', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-navigation-'));
+  const ctx = new Context();
+  t.after(() => ctx.fiber.dispose());
+  new SessionStore(ctx); new SessionProjectionRegistry(ctx); new Storage(ctx);
+  ctx.sessionProjections.register(titleProjectionDefinition);
+  new LlmRuntime(ctx); new AgentRegistry(ctx); new SystemPrompt(ctx, {}); new Tools(ctx);
+  new AgentLoop(ctx, { agents: [], maxParallelToolCalls: 4 });
+  new Loader(ctx, { baseUrl: import.meta.url });
+  new AgentPresetRegistry(ctx, { default: 'ordinary', selectedDefault: { get: () => undefined } });
+  new Subagents(ctx, { maxActiveSubagents: { get: () => 8 }, maxDepth: { get: () => 1 } });
+  await ctx.plugin(JsonStorage, { root: path.join(root, 'state') });
+  await ctx.plugin(Domain, { backend: 'json' });
+  await ctx.plugin(Persistence, { root: path.join(root, 'sessions') });
+  await ctx.plugin(SessionProjectionCache, { writeEveryEvents: 100, writeIntervalMs: 1000 });
+  await ctx.plugin(Workspace);
+  await new Promise(resolve => ctx.inject(['workspaceRegistry', 'sessionProjectionCache'], () => resolve()));
+  const local = path.join(root, 'Local'), qq = path.join(root, 'QQ'), execution = path.join(root, 'sender');
+  for (const directory of [local, qq, execution]) await fs.mkdir(directory);
+  let requests = 0;
+  class Adapter extends LlmAdapter {
+    async *stream() {
+      requests++;
+      yield { type: 'text-delta', index: 0, text: 'native response' };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    }
+  }
+  ctx.llm.registerAdapter(['fixture'], new Adapter());
+  const route = { provider: 'fixture', model: 'single-model' };
+  const core = new CognitionCore(ctx, { persona: 'demo', deployment: { chat: { workspace: local } }, routes: { character: route, action: route } });
+  core.ready = async () => {}; core.specs = []; core.personas.set('demo', { preset: 'ordinary' });
+  ctx.provide('asuna', core);
+  ctx.provide('attachments', {});
+  ctx.provide('sessionController', { list: async () => ({ items: [] }), rename: async ({ sessionId, title }) => {
+    ctx.agents.get(sessionId).session.append('session/title', { title, source: { kind: 'user' }, messageSeqs: [] });
+  } });
+  await ctx.agentPresets.register({ id: 'ordinary', plugins: [] });
+  await ctx.agentPresets.register({ id: 'asuna-action', plugins: [{ name: new URL('../src/action.js', import.meta.url).href }] });
+  const original = await ctx.agents.create({ sessionId: 'original', meta: { cwd: local }, agentOptions: route });
+  original.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'existing conversation' }] }));
+  await original.agent.whenIdle();
+  const prefix = original.agent.session.snapshotEvents();
+  await original.dispose();
+  const role = { _id: 'qq-main', cwd: qq, scene_id: 'qq:bot:group:one', native_title: '群聊 · one', source_session_id: 'original' };
+  const plan = { first: true, workspaces: { QQ: qq, Local: local }, archive_ids: ['original'],
+    entries: [{ session_id: role._id, workspace: 'QQ', binding: role }] };
+  await organizeNativeWorkspaces(core, plan);
+  const header = (await ctx.sessionPersistence.stat(role._id)).header;
+  assert.equal(ctx.sessionProjectionCache.cachedSnapshot(header).values.title, '群聊 · one');
+  role.previous_native_title = role.native_title;
+  role.native_title = '群聊 · renamed';
+  await organizeNativeWorkspaces(core, { ...plan, first: false });
+  await organizeNativeWorkspaces(core, { ...plan, first: false });
+  assert.equal(ctx.sessionProjectionCache.cachedSnapshot(header).values.title, role.native_title);
+  assert.equal(requests, 1, 'cold migration and title repair must not activate an Agent');
+  const continued = await ctx.sessionPersistence.open(role._id, 'read');
+  const { events } = await continued.read(); await continued.close();
+  assert.deepEqual(events.slice(0, prefix.length), prefix);
+  assert.equal(continued.header.parentSession, 'original');
+  assert.deepEqual(ctx.workspaceRegistry.archivedSessionIds, ['original']);
+  await ctx.workspaceRegistry.archiveSession(role._id);
+  await organizeNativeWorkspaces(core, { ...plan, first: false });
+  assert.ok(ctx.workspaceRegistry.archivedSessionIds.includes(role._id), 'a restart preserves a deliberate archive');
+  const receipt = { session_id: role._id, binding: role,
+    input: { id: 'quiet-qq-message', sender: '10001', text: 'a real quiet group message', received_at: '2026-10-03' } };
+  await recordChannelInput(core, receipt);
+  await recordChannelInput(core, receipt);
+  const readQuiet = await ctx.sessionPersistence.open(role._id, 'read');
+  const quietEvents = (await readQuiet.read()).events; await readQuiet.close();
+  assert.equal(quietEvents.filter(event => event.type === 'user/message' && event.data.source.receipt === receipt.input.id).length, 1);
+  assert.equal(quietEvents.filter(event => event.type === 'turn/start').length, prefix.filter(event => event.type === 'turn/start').length);
+  assert.equal(requests, 1, 'quiet reception never starts a model turn');
+  assert.ok(!ctx.workspaceRegistry.archivedSessionIds.includes(role._id), 'new platform activity reopens the same native conversation');
+  let complete;
+  const completed = new Promise(resolve => { complete = resolve; });
+  const child = { _id: 'action', lane: 'executor', cwd: execution, scene_id: role.scene_id,
+    parent_session_id: role._id, role_session_id: role._id, task_id: 'task-one', allowed_capabilities: [] };
+  core.worker = { async call(method, args) {
+    if (method === 'stage.valid') return { valid: true };
+    if (method === 'session') return args.session_id === role._id ? role : child;
+    if (method === 'result') { assert.ok(args.result, args.error); complete(args.result); }
+  } };
+  const stage = { session_id: 'action', lane: 'executor', phase: 'EXECUTE',
+    token: 'task-one:execute:0', text: 'execute assigned task', system: 'action role', binding: child };
+  await core.children.start(stage);
+  const result = await completed;
+  assert.equal(result.content, 'native response');
+  await core.children.dispose();
+  const saved = await ctx.sessionPersistence.stat('action');
+  assert.equal(saved.header.cwd, execution);
+  assert.equal(saved.header.origin, 'subagent');
+  assert.equal(saved.header.parentSession, role._id);
+  const childLog = await ctx.sessionPersistence.open('action', 'read');
+  const childEvents = (await childLog.read()).events; await childLog.close();
+  assert.equal(childEvents.find(event => event.type === 'session/title').data.title, '行动脑 · task-one');
+  assert.equal(childEvents.find(event => event.type === 'asuna/stage').data.lane, 'executor');
+  const parent = ctx.agents.get(role._id);
+  parent.session.append('session/title', { title: 'My QQ name', source: { kind: 'user' }, messageSeqs: [] });
+  await organizeNativeWorkspaces(core, { ...plan, first: false });
+  assert.equal(ctx.sessionProjectionCache.cachedSnapshot(parent.session.header).values.title, 'My QQ name',
+    'native user renaming must survive organization and startup');
+  assert.ok(parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog' && event.data.childId === 'action'));
+  const link = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-linked' && event.data.session_id === 'action');
+  assert.equal(link.data.parent_session_id, role._id);
+  assert.equal(link.data.after_seq, -1);
+  const range = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-range' && event.data.segment_id === link.data.segment_id);
+  assert.equal(range.data.state, 'completed');
+  assert.ok(range.data.through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
+  await core.children.start(stage);
+  assert.equal(requests, 2, 'a durable stage receipt must not rerun inference or tools');
+  assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
+  assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
+  assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);
+  await core.handles.get(role._id).dispose();
+  await ctx.fiber.dispose();
+  const reopened = new Context();
+  t.after(() => reopened.fiber.dispose());
+  new SessionStore(reopened); new SessionProjectionRegistry(reopened); new Storage(reopened);
+  reopened.sessionProjections.register(titleProjectionDefinition);
+  await reopened.plugin(JsonStorage, { root: path.join(root, 'state') });
+  await reopened.plugin(Domain, { backend: 'json' });
+  await reopened.plugin(SessionProjectionCache, { writeEveryEvents: 100, writeIntervalMs: 1000 });
+  await new Promise(resolve => reopened.inject(['sessionProjectionCache'], () => resolve()));
+  assert.equal(reopened.sessionProjectionCache.cachedSnapshot(header).values.title, 'My QQ name',
+    'the cold sidebar must retain its native title after host restart');
+});

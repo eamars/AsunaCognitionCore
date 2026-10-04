@@ -24,6 +24,27 @@ from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as re
 
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
 
+
+class FeedbackStale(Denied):
+    """The action result no longer authorizes a pending role continuation."""
+
+
+def require_current_feedback(store, episode):
+    if episode.get('episode_kind') != 'task_feedback':
+        return
+    # episode.task_id changes when feedback delegates another action. The
+    # durable input remains the identity of the result being considered.
+    source = store.db.messages.find_one({'_id': 'in-' + episode['_id']})
+    event = (source or {}).get('event', {})
+    task = store.db.tasks.find_one({'_id': event.get('task_id')})
+    scene = store.db.scenes.find_one({'_id': episode['scene_id']})
+    if (not task or not scene or task['state'] in ('CANCELLED', 'STALE', 'PAUSED')
+            or task['intent_revision'] != event.get('intent_revision')
+            or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
+               (episode['scene_id'], episode['person_id'], episode['scope_key'], episode['policy_epoch'])
+            or scene['policy_epoch'] != episode['policy_epoch']):
+        raise FeedbackStale('FEEDBACK_TASK_STALE')
+
 CONSULT_TOOL = {'name':'consult_character',
     'description':'Optionally ask the character in this task’s authorized role context for an internal judgment, then continue your current goal. Not a public reply, new task, or permission grant. No task/session ID is needed. Missing information and errors return here.',
     'parameters':{'question':{'type':'string','required':True}, 'context':{'type':'string'}}}
@@ -55,6 +76,12 @@ class TaskService:
     def __init__(self,store:Store,crash=lambda point:None):
         self.store,self.crash=store,crash
         self.lock=database_effects_lock(store.name)
+        self.on_fenced=None
+
+    def _notify_fenced(self, task, reason):
+        if self.on_fenced:
+            self.on_fenced(task, reason)
+        return task
 
     def claim(self,task_id):
         with self.lock:
@@ -77,7 +104,21 @@ class TaskService:
             if not task or not(operator or person_id==task['requester_id']):raise Denied('TASK_CANCEL_NOT_AUTHORIZED')
             if not task.get('execution_binding'):
                 task={**task,'execution_binding':f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"}
-            return self.store.put('tasks',{**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason},expected=task['revision'],stream=task_id)
+            cancelled=self.store.put('tasks',{**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason,'feedback_state':'SUPPRESSED'},expected=task['revision'],stream=task_id)
+        return self._notify_fenced(cancelled, 'task_cancelled')
+
+    def pause_for_restart(self, task_id):
+        """Preserve old work and receipts; only a new local request can resume."""
+        with self.lock:
+            task = self.store.db.tasks.find_one({'_id': task_id})
+            if not task or task['state'] in ('CANCELLED', 'STALE', 'PAUSED'):
+                return task
+            return self.store.put('tasks', {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
+                'paused_at': now(), 'paused_state': task['state'], 'paused_feedback_state': task.get('feedback_state'),
+                'feedback_state': 'PAUSED', 'fencing_token': task['fencing_token'] + 1,
+                'execution_binding': task.get('execution_binding') or
+                    f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"},
+                expected=task['revision'], stream=task_id)
 
     def revise(self,task_id,event):
         """Fence the old intention before the character considers a new one."""
@@ -91,10 +132,13 @@ class TaskService:
                 return task
             if task['state'] not in ('READY','RUNNING','CANCELLED','STALE'):
                 raise Conflict('TASK_REVISION_NOT_ACTIVE')
-            return self.store.put('tasks',{**task,'state':'STALE','intent_revision':task['intent_revision']+1,
+            revised=self.store.put('tasks',{**task,'state':'STALE','intent_revision':task['intent_revision']+1,
                 'fencing_token':task['fencing_token']+1,'revision_event_id':event['event_id'],
-                'revision_input_hash':identity,'feedback_state':'SUPPRESSED','revision_requested_at':now()},
+                'revision_input_hash':identity,'feedback_state':'SUPPRESSED','revision_requested_at':now(),
+                'execution_binding':task.get('execution_binding') or
+                    f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"},
                 expected=task['revision'],stream=task_id)
+        return self._notify_fenced(revised, 'task_revised')
 
     def activate_revision(self,episode):
         """Only a persisted character DECIDE can set the revised task goal."""
@@ -174,7 +218,12 @@ class TaskService:
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','MONOLOGUE_ACCEPTED','DECISION_ACCEPTED','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
-        self.store.put('tasks',{**current,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=current['revision'],stream=current['_id'])
+        with self.lock:
+            latest = self.store.db.tasks.find_one({'_id': task['_id']})
+            if (latest['state'] in ('CANCELLED', 'STALE', 'PAUSED')
+                    or latest['intent_revision'] != task['intent_revision']):
+                return ep  # Never overwrite a cancellation/revision while inference was in flight.
+            self.store.put('tasks',{**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep

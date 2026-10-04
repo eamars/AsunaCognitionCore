@@ -15,7 +15,7 @@ After installing the local profile as described in [RUN_ASUNA.md](RUN_ASUNA.md):
 .\start-asuna.cmd
 ```
 
-`start-asuna-ui.cmd` is an alias; `asuna ui` opens the same native profile. Open the authenticated localhost address printed by DSH (default port **8780**), select the owner workspace and the persona's preset, and use the native composer. Delegated tasks have real **Asuna Action** sessions, linked from their initiating role turn.
+`start-asuna-ui.cmd` is an alias; `asuna ui` opens the same native profile. Open the authenticated localhost address printed by DSH (default port **8780**), select **Local** or **QQ**, and use the native composer. Delegated tasks keep real native action sessions; their original records appear in the main conversation, with blue **行动脑** and purple **角色脑** labels. Native reasoning and tool disclosures expand to show details. QQ conversations remain view-only.
 
 The right sidebar offers **记忆** for authorized state and source records. **Plugins → @asuna/cognition-core** contains the Asuna settings card. Save and apply are separate operations; providers and credentials stay in native/local configuration.
 

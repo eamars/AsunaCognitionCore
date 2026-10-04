@@ -98,6 +98,7 @@ class Chat:
         self.reconfiguring = False
         self.on_turn_finished = None
         self.on_episode_finished = None
+        self.on_input_received = None
         self.restart_pending = threading.Event()
 
     def _schedule(self, episode):
@@ -215,6 +216,14 @@ class Chat:
             if self.reconfiguring:
                 raise RuntimeError('HOST_RECONFIGURING')
             row, created = persist_input(self.app.store, event, managed=True)
+            if self.on_input_received:
+                try:
+                    self.on_input_received(row)
+                except Exception:
+                    # The input is already durable. Its UI projection can be
+                    # retried without asking the adapter to invent a new input.
+                    self.app.evidence.record('host.input_projection_error', {
+                        'input_id': row['_id'], 'traceback': redact(traceback.format_exc(), self.app.config)})
             episode = row['episode_id']
             if row['ingress_state'] == 'ACCEPTED' and episode not in self.enqueued:
                 self.enqueued.add(episode)

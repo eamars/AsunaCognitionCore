@@ -194,6 +194,19 @@ class FakeCollection:
             return row
         return None
 
+    def aggregate(self, pipeline):
+        """Enough of a pipeline for the context's task-state query: $match, $limit, $project."""
+        rows = [dict(row) for row in self.rows.values()]
+        for stage in pipeline:
+            if '$match' in stage:
+                rows = [row for row in rows if _match(row, stage['$match'])]
+            elif '$limit' in stage:
+                rows = rows[:stage['$limit']]
+            elif '$project' in stage:
+                keep = [k for k, v in stage['$project'].items() if v]
+                rows = [{k: row[k] for k in keep if k in row} for row in rows]
+        return iter(rows)
+
     def insert_one(self, doc):
         if doc['_id'] in self.rows:
             raise sys.modules['pymongo.errors'].DuplicateKeyError(str(doc['_id']))

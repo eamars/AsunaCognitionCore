@@ -2,9 +2,13 @@
 synthetic events only pass through the local filter, never into the host, and
 platform sends go to a recorded stub (never to QQ).
 
-Group coverage is config-driven: the four authorized groups come from
-GROUP_ROUTES_PREVIEW.json, which is loaded through the same Config parser the
-live config will use once the host switches it into adapter.routes.
+Group coverage comes from the built-in placeholder fixtures in `fixtures.py`
+(9000000xx ids, no real account, group or member), so a clean checkout runs
+every check with no config file present and the same code gives the same answer
+on every machine.  A real deployment config is optional: when one is supplied it
+is cross-checked for shape and bounds only (`_check_live_config`) and is never
+the subject of a behaviour assertion.  With `live=False` no platform is
+contacted and the real outbox is not claimed.
 """
 import base64
 import hashlib
@@ -17,7 +21,9 @@ import time
 
 from . import hostapi as hostapi_mod
 from . import inbound as inbound_mod
+from . import fixtures
 from . import outbound as outbound_mod
+from . import peers as peers_mod
 from .peers import PEER_KEY, PeerDirectory
 from .config import Config, ConfigError
 from .hostapi import Result
@@ -28,8 +34,13 @@ from .service import Adapter
 ALLOWED_ENVELOPE_KEYS = inbound_mod.PRIVATE_ENVELOPE_KEYS
 ALLOWED_GROUP_ENVELOPE_KEYS = inbound_mod.GROUP_ENVELOPE_KEYS
 HERE = os.path.dirname(os.path.abspath(__file__))
-PREVIEW_PATH = os.path.join(os.path.dirname(HERE), "GROUP_ROUTES_PREVIEW.json")
-OWNER = "101748"
+# Every identity below is a fixture placeholder: the checks never read a real
+# account, group or member off the machine under test.
+OWNER = fixtures.OWNER_DM                    # the peer the DM route binds
+OUTSIDER = fixtures.OUTSIDER                 # on no member snapshot
+UNKNOWN_SENDER = fixtures.UNKNOWN_SENDER     # a DM peer with no route
+UNKNOWN_GROUP = fixtures.UNKNOWN_GROUP       # neither allowlisted nor routed
+LOOSE_GROUP = fixtures.UNROUTED_GROUP        # allowlisted, route removed by _loose_cfg
 HELPER_LOCK_CHILD = (
     "import fcntl,os,sys,time\n"
     "fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o644)\n"
@@ -43,6 +54,13 @@ class Report:
     def __init__(self):
         self.passed = 0
         self.failed = 0
+        self.skipped = 0
+
+    def skip(self, name, detail=""):
+        """A check that needs something this run was not given (a real config,
+        a live platform): reported as SKIP, never counted as a pass."""
+        self.skipped += 1
+        print("SELFTEST %-34s SKIP %s" % (name, detail), flush=True)
 
     def check(self, name, ok, detail=""):
         if ok:
@@ -106,10 +124,10 @@ def _msg_event(cfg, **over):
         "message_type": "private",
         "sub_type": "friend",
         "message_id": 654321,
-        "user_id": int(cfg.allowed_private[0]),
+        "user_id": int(OWNER),
         "message": [{"type": "text", "data": {"text": "测试正文"}}],
         "raw_message": "测试正文",
-        "sender": {"user_id": int(cfg.allowed_private[0]), "nickname": "x"},
+        "sender": {"user_id": int(OWNER), "nickname": "x"},
     }
     event.update(over)
     return event
@@ -137,77 +155,63 @@ def _text(t):
     return [{"type": "text", "data": {"text": t}}]
 
 
-def _load_preview(rep):
-    try:
-        with open(PREVIEW_PATH, "r", encoding="utf-8") as handle:
-            preview = json.load(handle)
-    except Exception as exc:
-        rep.check("preview_readable", False, "%s %s" % (type(exc).__name__, exc))
-        return None
-    # Consistency, not fixed IDs: the deployment owns its group IDs. Every allowed group
-    # has a group route in the same preview, and every group route is allowed.
-    allowed = sorted(str(g) for g in (preview.get("allowed_group_ids") or []))
-    routed = sorted(str((route.get("target") or {}).get("id"))
-                    for route in (preview.get("routes") or {}).values()
-                    if (route.get("target") or {}).get("type") == "group")
-    rep.check("preview_readable", bool(allowed) and allowed == sorted(set(routed)),
+def _fixture_deployment(rep):
+    """The placeholder deployment every behaviour check runs against.
+
+    Built through the real `Config` parser, so the fixtures are validated
+    exactly like a deployment config.  Nothing here reads a file off the
+    machine under test: that is the point of the check below.
+    """
+    me = sys.modules[__name__]
+    rep.check("no_private_route_dump_dependency",
+              not hasattr(me, "PREVIEW_PATH") and getattr(me, "fixtures", None) is fixtures,
+              "group coverage comes from fixtures.py, not a machine-local route dump")
+    preview = fixtures.preview()
+    allowed = sorted(str(g) for g in preview["allowed_group_ids"])
+    routed = sorted(str((route.get("target") or {}).get("id")) for route in preview["routes"].values())
+    rep.check("fixture_preview_shape", bool(allowed) and allowed == sorted(set(routed)),
               "allowed=%s routed=%s" % (allowed, sorted(set(routed))))
-    return preview
-
-
-def _group_cfg(cfg, preview, rep):
-    """The live config plus the preview group routes, through the real parser."""
-    if preview is None:
-        return None
-    raw = json.loads(json.dumps(cfg.raw))
-    want = sorted(set(cfg.allowed_groups) | set(preview["allowed_group_ids"]))
-    raw["adapter"]["allowed_group_ids"] = want
-    routes = raw["adapter"]["routes"]
-    added = [route_id for route_id in sorted(preview["routes"])
-             if route_id not in routes]
-    for route_id in added:
-        routes[route_id] = json.loads(json.dumps(preview["routes"][route_id]))
     try:
-        merged = Config(raw, "live+GROUP_ROUTES_PREVIEW")
+        gcfg = fixtures.load_config()
     except ConfigError as exc:
-        rep.check("preview_config_loads", False, str(exc))
+        rep.check("fixture_config_loads", False, str(exc))
         return None
-    rep.check("preview_config_loads", True, "routes=%s preview_only=%s" %
-              (",".join(sorted(merged.routes)), ",".join(added) or "-"))
-    rep.check("preview_groups_bound", sorted(merged.allowed_groups) == want, str(sorted(merged.allowed_groups)))
-    rep.check("preview_groups_authorized_live",
-              all(gid in set(cfg.allowed_groups) for gid in preview["allowed_group_ids"]),
-              "preview=%s live=%s" % (sorted(preview["allowed_group_ids"]), sorted(cfg.allowed_groups)))
-    counts = {r.target_id: r.member_count for r in merged.routes.values() if r.message_type == "group"}
-    expect = {}
-    for gid in want:
-        blob = cfg.raw["adapter"]["routes"].get("group-%s" % gid) or preview["routes"].get("group-%s" % gid)
-        if blob:
-            expect[gid] = len(blob.get("allowed_sender_ids") or [])
-    rep.check("preview_member_snapshots", counts == expect, "got=%s want=%s" % (counts, expect))
-    rep.check("group_routes_available", len(counts) >= 1, "group_routes=%d" % len(counts))
-    return merged
+    rep.check("fixture_config_loads", True, gcfg.describe())
+    rep.check("fixture_ids_are_placeholders",
+              all(str(g).startswith("9000000") for g in gcfg.allowed_groups)
+              and gcfg.napcat["account_id"] == fixtures.ACCOUNT
+              and gcfg.allowed_private == [fixtures.OWNER_DM], fixtures.describe())
+    rep.check("fixture_groups_bound", sorted(gcfg.allowed_groups) == sorted(fixtures.GROUPS),
+              str(sorted(gcfg.allowed_groups)))
+    counts = {r.target_id: r.member_count for r in gcfg.routes.values() if r.message_type == "group"}
+    expect = {gid: len(fixtures.MEMBERS[gid]) for gid in fixtures.GROUPS}
+    rep.check("fixture_member_snapshots", counts == expect, "got=%s want=%s" % (counts, expect))
+    rep.check("group_routes_available", len(counts) >= 4, "group_routes=%d" % len(counts))
+    rep.check("fixture_dm_route_bound",
+              gcfg.route_for_sender(fixtures.OWNER_DM) is not None
+              and gcfg.route_for_sender(UNKNOWN_SENDER) is None, "")
+    return gcfg
 
 
-def _check_config(rep, cfg, gcfg):
-    described = cfg.describe()
-    leak = cfg.host["token"] in described or cfg.napcat["token"] in described
+def _check_config_policy(rep, gcfg):
+    """What the parser must refuse or accept, checked on the placeholder
+    deployment so the answer does not move with this machine's real groups."""
+    described = gcfg.describe()
+    leak = gcfg.host["token"] in described or gcfg.napcat["token"] in described
     rep.check("config_describe_no_secrets", not leak, described)
-    live_routes = sorted(cfg.raw["adapter"]["routes"])
-    rep.check("config_routes_match_file", sorted(cfg.routes) == live_routes, ",".join(sorted(cfg.routes)))
+    live_routes = sorted(gcfg.raw["adapter"]["routes"])
+    rep.check("config_routes_match_file", sorted(gcfg.routes) == live_routes, ",".join(sorted(gcfg.routes)))
     rep.check("config_group_ids_match_file",
-              sorted(cfg.allowed_groups) == sorted(cfg.raw["adapter"].get("allowed_group_ids") or []),
-              str(cfg.allowed_groups))
-    bad = [r.route_id for r in cfg.routes.values()
-           if r.message_type == "group" and r.target_id not in cfg.allowed_groups]
+              sorted(gcfg.allowed_groups) == sorted(gcfg.raw["adapter"].get("allowed_group_ids") or []),
+              str(gcfg.allowed_groups))
+    bad = [r.route_id for r in gcfg.routes.values()
+           if r.message_type == "group" and r.target_id not in gcfg.allowed_groups]
     rep.check("config_group_routes_bounded", not bad, ",".join(bad))
-    if gcfg is None:
-        rep.check("cfg_group_policy_cases", False, "no preview config available")
-        return
+    g0 = "group-%s" % fixtures.GROUPS[0]
     cases = []
 
     def mutate(fn, want_tag):
-        raw = json.loads(json.dumps(gcfg.raw))
+        raw = fixtures.raw_of(gcfg)
         fn(raw)
         try:
             Config(raw, "mutant")
@@ -218,36 +222,69 @@ def _check_config(rep, cfg, gcfg):
         else:
             cases.append((want_tag, False, "accepted"))
 
-    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
-        target={"type": "group", "id": "700001"}), "cfg_group_outside_allowlist")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(allowed_sender_ids=[]),
+    mutate(lambda raw: raw["adapter"]["routes"][g0].update(
+        target={"type": "group", "id": UNKNOWN_GROUP}), "cfg_group_outside_allowlist")
+    mutate(lambda raw: raw["adapter"]["routes"][g0].update(allowed_sender_ids=[]),
            "cfg_group_empty_members")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
+    mutate(lambda raw: raw["adapter"]["routes"][g0].update(
         allowed_sender_ids=[OWNER, "nick"]), "cfg_group_non_digit_member")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(
-        target={"type": "dm", "id": "301623"}), "cfg_group_wrong_target_type")
-    mutate(lambda raw: raw["adapter"]["routes"]["group-301623"].update(sender_id=OWNER),
+    mutate(lambda raw: raw["adapter"]["routes"][g0].update(
+        target={"type": "dm", "id": fixtures.GROUPS[0]}), "cfg_group_wrong_target_type")
+    mutate(lambda raw: raw["adapter"]["routes"][g0].update(sender_id=OWNER),
            "cfg_group_pinned_sender")
     mutate(lambda raw: raw["adapter"]["routes"].update(
-        {"group-dup": {"message_type": "group", "target": {"type": "group", "id": "301623"},
+        {"group-dup": {"message_type": "group", "target": {"type": "group", "id": fixtures.GROUPS[0]},
                        "allowed_sender_ids": [OWNER]}}), "cfg_group_duplicate_binding")
-    mutate(lambda raw: raw["adapter"]["routes"]["owner-dm"].update(allowed_sender_ids=[OWNER]),
+    mutate(lambda raw: raw["adapter"]["routes"][fixtures.DM_ROUTE].update(allowed_sender_ids=[OWNER]),
            "cfg_private_extra_keys")
-    mutate(lambda raw: raw["adapter"].update(allowed_group_ids=["301623"]), "cfg_group_route_without_allowlist")
+    mutate(lambda raw: raw["adapter"].update(allowed_group_ids=[fixtures.GROUPS[0]]),
+           "cfg_group_route_without_allowlist")
     ok_all = True
     for tag, ok, detail in cases:
         rep.check(tag, ok, detail)
         ok_all = ok_all and ok
-    raw = json.loads(json.dumps(gcfg.raw))
-    del raw["adapter"]["routes"]["group-301718"]
+    raw = fixtures.raw_of(gcfg)
+    del raw["adapter"]["routes"]["group-%s" % LOOSE_GROUP]
     try:
         loose = Config(raw, "loose")
         rep.check("cfg_group_allowed_without_route_loads",
-                  "301718" in loose.allowed_groups and loose.route_for_group("301718") is None,
+                  LOOSE_GROUP in loose.allowed_groups and loose.route_for_group(LOOSE_GROUP) is None,
                   "an allowlisted group without a route stays closed")
     except ConfigError as exc:
         rep.check("cfg_group_allowed_without_route_loads", False, str(exc))
     rep.check("cfg_group_policy_cases", ok_all, "%d cases" % len(cases))
+
+
+def _check_live_config(rep, cfg):
+    """Optional cross-check of the deployment config actually in hand.
+
+    Shape and bounds only -- parsing, allowlist consistency, member snapshots,
+    no secret in `describe()`.  It never decides a behaviour answer, and the
+    whole section is skipped when this run was given no config file, so the
+    self test result cannot drift with whatever the machine is authorized for.
+    """
+    rep.check("live_config_parses", isinstance(cfg, Config), str(getattr(cfg, "path", None)))
+    rep.check("live_config_describe_no_secrets",
+              cfg.host["token"] not in cfg.describe() and cfg.napcat["token"] not in cfg.describe(),
+              cfg.describe()[:140])
+    rep.check("live_config_routes_match_file",
+              sorted(cfg.routes) == sorted(cfg.raw["adapter"].get("routes") or {}),
+              ",".join(sorted(cfg.routes)))
+    rep.check("live_config_group_ids_match_file",
+              sorted(cfg.allowed_groups) == sorted(cfg.raw["adapter"].get("allowed_group_ids") or []),
+              str(sorted(cfg.allowed_groups)))
+    bad_group = [r.route_id for r in cfg.routes.values()
+                 if r.message_type == "group" and r.target_id not in cfg.allowed_groups]
+    rep.check("live_config_group_routes_bounded", not bad_group, ",".join(bad_group))
+    bad_private = [r.route_id for r in cfg.routes.values() if r.message_type == "private"
+                   and (r.sender_id not in cfg.allowed_private or r.target_id not in cfg.allowed_private)]
+    rep.check("live_config_dm_routes_bounded", not bad_private, ",".join(bad_private))
+    empty = [r.route_id for r in cfg.routes.values()
+             if r.message_type == "group" and r.member_count < 1]
+    rep.check("live_config_member_snapshots_present", not empty, ",".join(empty))
+    rep.check("live_config_admission_known", cfg.admission in ("explicit", "automatic"), str(cfg.admission))
+    rep.check("live_config_account_id_shape", cfg.napcat["account_id"].isdigit(), cfg.napcat["account_id"])
+    print("SELFTEST live_config_summary         INFO %s" % cfg.describe(), flush=True)
 
 
 def _check_private(rep, cfg):
@@ -264,7 +301,8 @@ def _check_private(rep, cfg):
     rep.check("envelope_raw_kept", isinstance(envelope.get("raw"), dict) and
               envelope["raw"].get("message_id") == good["message_id"], "")
     cases = [
-        ("filter_other_sender", _msg_event(cfg, user_id=909101, message_id=2), "unauthorized_sender"),
+        ("filter_other_sender", _msg_event(cfg, user_id=int(UNKNOWN_SENDER), message_id=2),
+         "unauthorized_sender"),
         ("filter_self_echo", _msg_event(cfg, user_id=int(cfg.napcat["account_id"]), message_id=3), "self_echo"),
         ("filter_notice", {"post_type": "notice", "self_id": int(cfg.napcat["account_id"]), "notice_type": "notify"}, "nonmessage"),
         ("filter_heartbeat", {"post_type": "meta_event", "self_id": int(cfg.napcat["account_id"]), "meta_event_type": "heartbeat"}, "nonmessage"),
@@ -300,14 +338,15 @@ def _check_private(rep, cfg):
 
 
 def _loose_cfg(gcfg):
-    """301718 stays on the allowlist but loses its route: must stay closed."""
-    raw = json.loads(json.dumps(gcfg.raw))
-    del raw["adapter"]["routes"]["group-301718"]
+    """One allowlisted fixture group keeps its id but loses its route: it must
+    stay closed under explicit admission."""
+    raw = fixtures.raw_of(gcfg)
+    del raw["adapter"]["routes"]["group-%s" % LOOSE_GROUP]
     return Config(raw, "loose")
 
 
-def _check_group_inbound(rep, gcfg, preview):
-    if gcfg is None or preview is None:
+def _check_group_inbound(rep, gcfg):
+    if gcfg is None:
         rep.check("group_inbound_ran", False, "no group config")
         return
     seen = inbound_mod.SeenLRU(256)
@@ -317,14 +356,14 @@ def _check_group_inbound(rep, gcfg, preview):
         rep.check("group_inbound_ran", False, "no group route in the effective config")
         return
     members = {gid: set(routes[gid].allowed_senders) for gid in groups}
-    preview_groups = sorted(preview["allowed_group_ids"])
-    rep.check("group_inbound_covers_preview", all(gid in groups for gid in preview_groups),
-              "effective=%s preview=%s" % (groups, preview_groups))
+    want_groups = sorted(fixtures.GROUPS)
+    rep.check("group_inbound_covers_fixtures", groups == want_groups,
+              "effective=%s fixtures=%s" % (groups, want_groups))
     only_a = sorted(members[groups[0]] - members[groups[min(1, len(groups) - 1)]]) or sorted(members[groups[0]])
     only_a = only_a[0]
-    outsider = "199001"
-    while any(outsider in members[g] for g in groups):
-        outsider = str(int(outsider) + 1)
+    outsider = OUTSIDER
+    rep.check("fixture_outsider_on_no_snapshot", not any(outsider in members[g] for g in groups),
+              "%s is on none of the member snapshots" % outsider)
 
     accepted, shape_ok = [], True
     for index, gid in enumerate(groups):
@@ -363,15 +402,15 @@ def _check_group_inbound(rep, gcfg, preview):
               meta.get("non_text_segments") == 1 and "555" not in env.get("text"),
               "%r non_text=%s" % (env.get("text"), meta.get("non_text_segments")))
 
-    # the reported real case: at 小满 + "你刚刚回复 " + at 101030 + "了么？"
+    # the shape that started this: at 本账号 + "你刚刚回复 " + at 别人 + "了么？"
     pointed = [{"type": "at", "data": {"qq": gcfg.napcat["account_id"]}},
                {"type": "text", "data": {"text": "你刚刚回复 "}},
-               {"type": "at", "data": {"qq": "101030"}},
+               {"type": "at", "data": {"qq": "900000103"}},
                {"type": "text", "data": {"text": "了么？"}}]
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4112, message=pointed), gcfg, seen)
     rep.check("group_at_position_preserved", reason == "accepted" and
-              res[0]["text"] == "@%s你刚刚回复 @101030了么？" % gcfg.napcat["account_id"] and
-              res[0]["mentioned_account_ids"] == [gcfg.napcat["account_id"], "101030"],
+              res[0]["text"] == "@%s你刚刚回复 @900000103了么？" % gcfg.napcat["account_id"] and
+              res[0]["mentioned_account_ids"] == [gcfg.napcat["account_id"], "900000103"],
               repr(res[0].get("text")) if reason == "accepted" else reason)
     rep.check("group_at_all_counted_not_id", meta.get("at_all_segments") == 1 and
               "all" not in env.get("mentioned_account_ids", []) and meta.get("has_reply") is True,
@@ -393,10 +432,13 @@ def _check_group_inbound(rep, gcfg, preview):
                   "%s (member of %s only)" % (reason, groups[0]))
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], outsider, 4104), gcfg, seen)
     rep.check("group_non_member_denied", reason == "unauthorized_group_member", reason)
-    res, reason = inbound_mod.classify(_group_event(gcfg, "700001", OWNER, 4105), gcfg, seen)
-    rep.check("group_not_on_allowlist", reason == "group_not_allowed", reason)
+    res, reason = inbound_mod.classify(_group_event(gcfg, UNKNOWN_GROUP, OWNER, 4105), gcfg, seen)
+    # explicit admission only: `automatic` admits this group, checked in
+    # _check_admission rather than by flipping this expectation
+    rep.check("group_not_on_allowlist", reason == "group_not_allowed",
+              "%s (admission=%s)" % (reason, gcfg.admission))
     loose = _loose_cfg(gcfg)
-    res, reason = inbound_mod.classify(_group_event(loose, "301718", OWNER, 4106), loose, seen)
+    res, reason = inbound_mod.classify(_group_event(loose, LOOSE_GROUP, OWNER, 4106), loose, seen)
     rep.check("group_allowed_without_route", reason == "group_route_missing", reason)
     rep.check("group_loose_config_built", loose is not None, "")
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], gcfg.napcat["account_id"], 4107), gcfg, seen)
@@ -432,11 +474,15 @@ def _check_group_inbound(rep, gcfg, preview):
     rep.check("group_over_host_limit_flagged", reason == "accepted" and res[1]["over_host_limit"] is True and
               len(res[0]["text"]) == len(long_text), reason)
 
+    # one member of both groups: the same platform message id in two scenes is
+    # two events, and the same id twice in one scene is one event
+    both = sorted(members[groups[0]] & members[groups[min(1, len(groups) - 1)]]) or sorted(members[groups[0]])
+    both = both[0]
     shared = 424242
     _r, r1 = inbound_mod.classify(_msg_event(gcfg, message_id=shared), gcfg, seen)
-    _r, r2 = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, shared), gcfg, seen)
-    _r, r3 = inbound_mod.classify(_group_event(gcfg, groups[min(1, len(groups) - 1)], OWNER, shared), gcfg, seen)
-    _r, r4 = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, shared), gcfg, seen)
+    _r, r2 = inbound_mod.classify(_group_event(gcfg, groups[0], both, shared), gcfg, seen)
+    _r, r3 = inbound_mod.classify(_group_event(gcfg, groups[min(1, len(groups) - 1)], both, shared), gcfg, seen)
+    _r, r4 = inbound_mod.classify(_group_event(gcfg, groups[0], both, shared), gcfg, seen)
     rep.check("dedup_scoped_by_scene", (r1, r2, r3, r4) == ("accepted", "accepted", "accepted", "duplicate_local"),
               "message_id %s: dm=%s g1=%s g2=%s repeat=%s" % (shared, r1, r2, r3, r4))
     rep.check("group_inbound_ran", True, "groups=%d outsider=%s cross=%s" % (len(groups), outsider, only_a))
@@ -524,12 +570,12 @@ def _check_outbound_params(rep, gcfg, root):
 
     GRP = {"type": "group", "id": groups[0]}
     DM = {"type": "dm", "id": OWNER}
-    got = wire("at1", GRP, "收到 @qq:101030 的建议", reply_to="987654")
+    got = wire("at1", GRP, "收到 @qq:900000103 的建议", reply_to="987654")
     rep.check("ob_group_at_marker_promoted",
-              got == [RP("987654"), T("收到 "), A("101030"), T(" 的建议")],
+              got == [RP("987654"), T("收到 "), A("900000103"), T(" 的建议")],
               json.dumps(got, ensure_ascii=False))
-    got = wire("at2", GRP, "@qq:101748")
-    rep.check("ob_group_marker_only_message", got == [A("101748")], json.dumps(got, ensure_ascii=False))
+    got = wire("at2", GRP, "@qq:900000010")
+    rep.check("ob_group_marker_only_message", got == [A("900000010")], json.dumps(got, ensure_ascii=False))
     got = wire("at3", GRP, "@qq:10001 和 @qq:10002 都到了")
     rep.check("ob_group_two_markers_in_order",
               got == [A("10001"), T(" 和 "), A("10002"), T(" 都到了")], json.dumps(got, ensure_ascii=False))
@@ -548,14 +594,14 @@ def _check_outbound_params(rep, gcfg, root):
     got = wire("at8", GRP, "尾@qq:10003")
     rep.check("ob_group_marker_at_end_no_empty_text", got == [T("尾"), A("10003")],
               json.dumps(got, ensure_ascii=False))
-    got = wire("at9", DM, "@qq:101030 收到 @全体", reply_to="123")
-    rep.check("ob_dm_marker_never_promoted", got == [T("@qq:101030 收到 @全体")],
+    got = wire("at9", DM, "@qq:900000103 收到 @全体", reply_to="123")
+    rep.check("ob_dm_marker_never_promoted", got == [T("@qq:900000103 收到 @全体")],
               json.dumps(got, ensure_ascii=False))
 
     all_segs = []
-    for name, out_item in [("x1", item("x1", DM, text="@qq:101030 @全体")),
+    for name, out_item in [("x1", item("x1", DM, text="@qq:900000103 @全体")),
                            ("x2", item("x2", {"type": "group", "id": groups[3]}, reply_to="7")),
-                           ("x3", item("x3", GRP, text="@全体 @qq:101030"))]:
+                           ("x3", item("x3", GRP, text="@全体 @qq:900000103"))]:
         stub, _h, _c = run_case(name, gcfg, out_item)
         for call in stub.calls:
             all_segs.extend(call["params"]["message"])
@@ -568,12 +614,14 @@ def _check_outbound_params(rep, gcfg, root):
     rep.check("ob_at_all_never_becomes_a_segment",
               not any(s.get("data", {}).get("qq") == "all" for s in ats), json.dumps(ats))
 
-    stub, host, _c = run_case("deny", gcfg, item("deny", {"type": "group", "id": "700001"}))
+    stub, host, _c = run_case("deny", gcfg, item("deny", {"type": "group", "id": UNKNOWN_GROUP}))
+    # explicit admission only; the automatic counterpart is
+    # admission_automatic_outbound_unknown_group_sends in _check_admission
     rep.check("ob_group_outside_allowlist_no_send", stub.calls == [] and
               host.last().get("payload", {}).get("status") == "failed" and
               host.last().get("payload", {}).get("response", {}).get("reason") == "target_not_authorized",
               json.dumps(host.last().get("payload", {}).get("response"), ensure_ascii=False))
-    stub, host, _c = run_case("loose", _loose_cfg(gcfg), item("loose", {"type": "group", "id": "301718"}))
+    stub, host, _c = run_case("loose", _loose_cfg(gcfg), item("loose", {"type": "group", "id": LOOSE_GROUP}))
     rep.check("ob_allowed_group_without_route_no_send",
               stub.calls == [] and host.last().get("payload", {}).get("status") == "failed", json.dumps(host.last()))
     stub, host, _c = run_case("chan", gcfg, item("chan", {"type": "channel", "id": OWNER}))
@@ -685,13 +733,13 @@ def _check_outbound_verify(rep, gcfg, root):
 
     GRP = {"type": "group", "id": grp}
     DM = {"type": "dm", "id": OWNER}
-    sent_segs = [RP("987654"), T("收到 "), A("101030"), T(" 的建议")]
+    sent_segs = [RP("987654"), T("收到 "), A("900000103"), T(" 的建议")]
     sent_types = ["reply", "text", "at", "text"]
 
     def actions(stub):
         return [c["action"] for c in stub.calls]
 
-    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:101030 的建议", reply_to="987654"),
+    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:900000103 的建议", reply_to="987654"),
                                     verify_responses=[_stored_msg(sent_segs, group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -759,7 +807,7 @@ def _check_outbound_verify(rep, gcfg, root):
               ver.get("target_ok") is False and ver.get("stored_target_id") == str(other_grp),
               json.dumps(ver, ensure_ascii=False))
 
-    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:101030 的建议", reply_to="987654"),
+    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:900000103 的建议", reply_to="987654"),
                               verify_responses=[_stored_msg([T("正文")], group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -775,8 +823,8 @@ def _check_outbound_verify(rep, gcfg, root):
               host.last().get("payload", {}).get("status") == "platform_accepted",
               json.dumps(ver, ensure_ascii=False))
 
-    # real shape (2026-09-24T23:47:00Z, dm:101748): the read-back of our own
-    # private send carries user_id = our own account, not the peer
+    # the shape the platform actually returned for a private send: the
+    # read-back carries user_id = our own account, not the peer
     stub, host, _c, _ob = run("dm", item("dm", DM, "正文"),
                               verify_responses=[_stored_msg([T("正文")], user_id=account, account=account)])
     ver = (host.last().get("payload", {}).get("response") or {}).get("verification") or {}
@@ -881,12 +929,12 @@ def _check_outbound_attachments(rep, cfg, root):
     QQ, nothing is claimed, and no host file path is opened -- the bytes only
     ever arrive through the stubbed channel API call.
     """
-    if not cfg.allowed_private:
-        rep.check("attachment_checks_ran", False, "no private route in config")
+    if OWNER not in (cfg.allowed_private or []):
+        rep.check("attachment_checks_ran", False, "the fixture DM peer is not authorized in this config")
         return
-    owner, account = cfg.allowed_private[0], cfg.napcat["account_id"]
+    owner, account = OWNER, cfg.napcat["account_id"]
     DM = {"type": "dm", "id": owner}
-    GRP = {"type": "group", "id": (cfg.allowed_groups or ["900000001"])[0]}
+    GRP = {"type": "group", "id": fixtures.GROUPS[0]}
     actions = set()
 
     def item(name, target, text="这张给你", attachment=ABSENT, reply_to=None):
@@ -1151,31 +1199,166 @@ def _check_live_outbox(rep, adapter):
     else:
         rep.check("host_outbox_readable", False, repr(res))
 
-def run(cfg, data_dir, live=True):
+def _check_admission(rep, root):
+    """Explicit enrollment and automatic admission, measured separately.
+
+    `explicit` means the configured allowlists are the whole authorization
+    surface.  `automatic` means previously unknown DMs, groups and members are
+    admitted under the owner's policy and the adapter derives `auto-dm-<id>` /
+    `auto-group-<id>` route ids for them, while configured targets keep their
+    routes.  A denial proved in one mode says nothing about the other, so each
+    case is stated twice instead of sharing one expectation.
+    """
+    explicit = fixtures.load_config(admission="explicit")
+    auto = fixtures.load_config(admission="automatic")
+    grp = fixtures.GROUPS[0]
+    member = fixtures.first_member(grp)
+
+    # ---- explicit: the configured allowlists are everything ----------------
+    seen = inbound_mod.SeenLRU(64)
+    _r, why = inbound_mod.classify(_msg_event(explicit, user_id=int(UNKNOWN_SENDER), message_id=6001),
+                                   explicit, seen)
+    rep.check("admission_explicit_unknown_dm_denied", why == "unauthorized_sender",
+              "%s (admission=explicit)" % why)
+    _r, why = inbound_mod.classify(_group_event(explicit, UNKNOWN_GROUP, member, 6002), explicit, seen)
+    rep.check("admission_explicit_unknown_group_denied", why == "group_not_allowed",
+              "%s (admission=explicit)" % why)
+    _r, why = inbound_mod.classify(_group_event(explicit, grp, OUTSIDER, 6003), explicit, seen)
+    rep.check("admission_explicit_member_snapshot_required", why == "unauthorized_group_member", why)
+    rep.check("admission_explicit_derives_no_routes",
+              explicit.route_for_sender(UNKNOWN_SENDER) is None
+              and explicit.route_for_group(UNKNOWN_GROUP) is None,
+              "explicit admission never invents a route")
+    rep.check("admission_explicit_keeps_configured_route",
+              explicit.route_for_group(grp).route_id == "group-%s" % grp,
+              explicit.route_for_group(grp).route_id)
+
+    # ---- automatic: unknown targets are admitted with derived route ids ----
+    seen = inbound_mod.SeenLRU(64)
+    res, why = inbound_mod.classify(_msg_event(auto, user_id=int(UNKNOWN_SENDER), message_id=6011), auto, seen)
+    env = res[0] if why == "accepted" else {}
+    rep.check("admission_automatic_unknown_dm_admitted",
+              why == "accepted" and env.get("route_id") == "auto-dm-%s" % UNKNOWN_SENDER
+              and env.get("sender_id") == UNKNOWN_SENDER,
+              "%s route=%s" % (why, env.get("route_id")))
+    res, why = inbound_mod.classify(_group_event(auto, UNKNOWN_GROUP, OUTSIDER, 6012), auto, seen)
+    env = res[0] if why == "accepted" else {}
+    rep.check("admission_automatic_unknown_group_admitted",
+              why == "accepted" and env.get("route_id") == "auto-group-%s" % UNKNOWN_GROUP
+              and env.get("group_id") == UNKNOWN_GROUP and env.get("sender_id") == OUTSIDER,
+              "%s route=%s" % (why, env.get("route_id")))
+    _r, why = inbound_mod.classify(_group_event(auto, grp, OUTSIDER, 6013), auto, seen)
+    rep.check("admission_automatic_member_snapshot_not_required", why == "accepted", why)
+    res, why = inbound_mod.classify(_group_event(auto, grp, member, 6014), auto, seen)
+    rep.check("admission_automatic_keeps_configured_route",
+              why == "accepted" and res[0]["route_id"] == "group-%s" % grp,
+              res[0].get("route_id") if why == "accepted" else why)
+    try:
+        rep.check("admission_automatic_loads_without_routes",
+                  fixtures.load_config(admission="automatic", routes="none").routes == {},
+                  "an automatic-admission adapter may start with no configured route")
+    except ConfigError as exc:
+        rep.check("admission_automatic_loads_without_routes", False, str(exc))
+    bad = fixtures.raw_config(admission="sometimes")
+    try:
+        Config(bad, "bad-admission")
+        rep.check("admission_bad_value_rejected", False, "loaded anyway")
+    except ConfigError as exc:
+        rep.check("admission_bad_value_rejected", "admission" in str(exc), str(exc))
+
+    # ---- blocking is honored in both modes, before admission ---------------
+    for mode in ("explicit", "automatic"):
+        blocked = fixtures.load_config(admission=mode,
+                                       blocked_senders=[fixtures.BLOCKED_SENDER, OWNER],
+                                       blocked_groups=[fixtures.BLOCKED_GROUP])
+        seen = inbound_mod.SeenLRU(16)
+        _r, why = inbound_mod.classify(_group_event(blocked, grp, fixtures.BLOCKED_SENDER, 6031), blocked, seen)
+        rep.check("admission_%s_blocked_sender_denied" % mode, why == "unauthorized_group_member", why)
+        _r, why = inbound_mod.classify(_group_event(blocked, fixtures.BLOCKED_GROUP,
+                                                    fixtures.first_member(fixtures.BLOCKED_GROUP), 6032),
+                                       blocked, seen)
+        # the blocked group is on the allowlist, so the closed answer here is
+        # "no route for it"; either way nothing about it reaches the host
+        rep.check("admission_%s_blocked_group_denied" % mode,
+                  why in ("group_route_missing", "group_not_allowed"), why)
+        _r, why = inbound_mod.classify(_msg_event(blocked, user_id=int(OWNER), message_id=6033), blocked, seen)
+        rep.check("admission_%s_blocked_dm_denied" % mode, why == "unauthorized_sender", why)
+
+    # ---- outbound: the same split decides who may be sent to ---------------
+    def send_to(cfg, name, target):
+        stub, host = StubOneBot(), StubHost()
+        outbound_mod.Outbound(cfg, host, stub, Journal(os.path.join(root, "adm_" + name)), Counters(),
+                              log=lambda _m: None, ack_timeout=5.0, verify=False).handle_item(
+            {"publication_id": "adm-%s" % name, "attempt_id": "a-%s" % name,
+             "target": target, "text": "正文", "reply_to": None})
+        return stub, host
+
+    stub, host = send_to(explicit, "ex_grp", {"type": "group", "id": UNKNOWN_GROUP})
+    rep.check("admission_explicit_outbound_unknown_group_denied",
+              stub.calls == [] and host.last().get("payload", {}).get("status") == "failed"
+              and ((host.last().get("payload") or {}).get("response") or {}).get("reason") == "target_not_authorized",
+              json.dumps([c["action"] for c in stub.calls] + [host.last().get("payload", {}).get("status")]))
+    stub, host = send_to(explicit, "ex_dm", {"type": "dm", "id": UNKNOWN_SENDER})
+    rep.check("admission_explicit_outbound_unknown_dm_denied",
+              stub.calls == [] and host.last().get("payload", {}).get("status") == "failed",
+              json.dumps([c["action"] for c in stub.calls] + [host.last().get("payload", {}).get("status")]))
+    stub, host = send_to(auto, "au_grp", {"type": "group", "id": UNKNOWN_GROUP})
+    rep.check("admission_automatic_outbound_unknown_group_sends",
+              [c["action"] for c in stub.calls] == ["send_group_msg"]
+              and stub.calls[0]["params"]["group_id"] == int(UNKNOWN_GROUP)
+              and host.last().get("payload", {}).get("status") == "platform_accepted",
+              json.dumps([c["action"] for c in stub.calls] + [host.last().get("payload", {}).get("status")]))
+    stub, host = send_to(auto, "au_dm", {"type": "dm", "id": UNKNOWN_SENDER})
+    rep.check("admission_automatic_outbound_unknown_dm_sends",
+              [c["action"] for c in stub.calls] == ["send_private_msg"]
+              and stub.calls[0]["params"]["user_id"] == int(UNKNOWN_SENDER),
+              json.dumps([c["action"] for c in stub.calls]))
+    blocked_auto = fixtures.load_config(admission="automatic", blocked_groups=[fixtures.BLOCKED_GROUP])
+    stub, host = send_to(blocked_auto, "au_blocked", {"type": "group", "id": fixtures.BLOCKED_GROUP})
+    rep.check("admission_automatic_outbound_blocked_group_denied",
+              stub.calls == [] and host.last().get("payload", {}).get("status") == "failed",
+              json.dumps([c["action"] for c in stub.calls] + [host.last().get("payload", {}).get("status")]))
+    rep.check("admission_checks_ran", True, "explicit and automatic measured separately")
+
+
+def run(cfg, data_dir, live=True, live_config=True):
+    """`cfg` is the config actually in hand; `live_config` says whether it came
+    from a real file (then it is cross-checked) or from the built-in fixtures
+    (then that section is skipped).  `live` is the only switch that lets a
+    platform be contacted or the real outbox be claimed.
+    """
     rep = Report()
     root = os.path.join(data_dir, "selftest")
     os.makedirs(root, exist_ok=True)
-    adapter = Adapter(cfg, root)
-    preview = _load_preview(rep)
-    gcfg = _group_cfg(cfg, preview, rep)
-    _check_config(rep, cfg, gcfg)
-    _check_private(rep, cfg)
-    _check_group_inbound(rep, gcfg, preview)
-    _check_media(rep, gcfg or cfg, root)
+    gcfg = _fixture_deployment(rep)
+    _check_config_policy(rep, gcfg)
+    if live_config:
+        _check_live_config(rep, cfg)
+    else:
+        rep.skip("live_config_cross_check",
+                 "no deployment config was given: behaviour ran on built-in fixtures, nothing to cross-check")
+    _check_private(rep, gcfg)
+    _check_admission(rep, root)
+    _check_group_inbound(rep, gcfg)
+    _check_media(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
-    _check_outbound_attachments(rep, cfg, root)
-    _check_attachment_http(rep, cfg)
-    _check_peers(rep, gcfg or cfg, root)
-    _check_lock_and_spool(rep, gcfg or cfg, root)
-    _check_live(rep, adapter)
+    _check_outbound_attachments(rep, gcfg, root)
+    _check_attachment_http(rep, gcfg)
+    _check_peer_timekeeping(rep, gcfg, root)
+    _check_peers(rep, gcfg, root)
+    _check_lock_and_spool(rep, gcfg, root)
     if live:
+        adapter = Adapter(cfg, root)
+        _check_live(rep, adapter)
         _check_live_outbox(rep, adapter)
     else:
-        print("SELFTEST outbox_checks_skipped       SKIP real outbox untouched", flush=True)
-    adapter.journal.write_health(adapter.health_snapshot())
-    print("SELFTEST_SUMMARY pass=%d fail=%d" % (rep.passed, rep.failed), flush=True)
+        rep.skip("live_platform_checks", "--offline: no websocket, no identity call, no platform lookup")
+        rep.skip("outbox_checks", "--offline: the real outbox was not claimed")
+    observer = Adapter(gcfg, os.path.join(root, "health"))
+    observer.journal.write_health(observer.health_snapshot())
+    print("SELFTEST_SUMMARY pass=%d fail=%d skip=%d" % (rep.passed, rep.failed, rep.skipped), flush=True)
     return 0 if rep.failed == 0 else 1
 
 
@@ -1230,8 +1413,8 @@ def _check_lock_and_spool(rep, cfg, root):
     groups = sorted(cfg.allowed_groups)
     shared = 515151
     sk.on_event(_msg_event(cfg, message_id=shared))
-    sk.on_event(_group_event(cfg, groups[0], OWNER, shared))
-    sk.on_event(_group_event(cfg, groups[1], OWNER, shared))
+    sk.on_event(_group_event(cfg, groups[0], fixtures.first_member(groups[0]), shared))
+    sk.on_event(_group_event(cfg, groups[1], fixtures.first_member(groups[1]), shared))
     paths = sk.journal.spool_list("inbound")
     names = [os.path.basename(p) for p in paths]
     routes = []
@@ -1309,6 +1492,101 @@ def _peer_env(cfg, account, group_id=None, sender=None, mid=1, text="正文", su
         env["group_id"] = str(group_id)
         env["mentioned_account_ids"] = []
     return env
+
+
+def _force_tz(zone):
+    """Point this process at another zone; return the offset that actually took
+    hold (seconds west of UTC), or None when this machine cannot provide it."""
+    if not hasattr(time, "tzset"):
+        return None
+    os.environ["TZ"] = zone
+    time.tzset()
+    return time.timezone
+
+
+def _restore_tz(previous):
+    if previous is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = previous
+    time.tzset()
+
+
+def _rename_needs_fresh_lookup(cfg, store):
+    """Watch a person in their group, then the same person under a new nickname,
+    and report whether the second lookup asked the platform to skip its cache.
+    This is the path the stored UTC stamp decides, and the one that silently
+    degraded on a machine that was not on UTC.
+    """
+    grp = sorted(cfg.allowed_groups)[0]
+    member = sorted(cfg.route_for_group(grp).allowed_senders)[0]
+    os.makedirs(store, exist_ok=True)
+    pdir = PeerDirectory(store, counters=Counters(), min_refresh=0.0)
+    blob = {"group_id": int(grp), "user_id": int(member), "card": "名片", "role": "member", "title": ""}
+    sender = dict(blob, nickname="旧名")
+    pdir.observe(_peer_env(cfg, member, grp, sender=sender, mid=9001),
+                 StubIdentityApi({grp: dict(blob, nickname="旧名")}))
+    api = StubIdentityApi({grp: dict(blob, nickname="新名")})
+    prof = pdir.observe(_peer_env(cfg, member, grp, sender=dict(sender, nickname="新名"), mid=9002), api)
+    params = api.calls[0]["params"] if api.calls else {}
+    return params.get("no_cache") is True, params, prof.get("changed")
+
+
+def _check_peer_timekeeping(rep, cfg, root):
+    """`iso()` writes UTC, so `epoch()` has to read it back as UTC.
+
+    That stored instant decides whether a rename is worth a fresh platform
+    lookup.  Reading it through local time shifts the answer by this machine's
+    offset -- west of UTC a fresh lookup lands in the future and the rename
+    stops forcing a re-check, east of UTC it lands in the past -- and a UTC
+    machine sees nothing at all.  So the check forces zones on both sides
+    (`Etc/GMT-9` is UTC+9, `Etc/GMT+4` is UTC-4; the `Etc/GMT-*` form avoids
+    borrowing any city's rules) and reports SKIP when a zone is not installed
+    here rather than passing quietly.
+    """
+    # The value below is a fixed instant (2023-11-14T22:13:20Z), a timestamp, not anyone's QQ
+    # number.  One fixed instant: no clock, no drift.
+    fixed = 1700000000  # personal-scan: ok
+    stamp = peers_mod.iso(fixed)
+    rep.check("peer_iso_is_utc", stamp == "2023-11-14T22:13:20Z", stamp)
+    rep.check("peer_epoch_roundtrip_utc", peers_mod.epoch(stamp) == fixed,
+              "%s -> %s" % (stamp, peers_mod.epoch(stamp)))
+    rep.check("peer_epoch_rejects_junk",
+              peers_mod.epoch("") is None and peers_mod.epoch("nope") is None
+              and peers_mod.epoch(None) is None, "empty and unparsable stay None")
+    baseline, previous = time.timezone, os.environ.get("TZ")
+    try:
+        for zone, want, tag in (("Etc/GMT-9", -9 * 3600, "east9"), ("Etc/GMT+4", 4 * 3600, "west4")):
+            offset = _force_tz(zone)
+            if offset is None:
+                rep.skip("peer_epoch_utc_" + tag, "no time.tzset here: cannot force %s" % zone)
+                continue
+            if offset != want:
+                rep.skip("peer_epoch_utc_" + tag,
+                         "%s is not installed here (localtime offset stayed %s)" % (zone, offset))
+                continue
+            back = peers_mod.epoch(peers_mod.iso(fixed))
+            rep.check("peer_epoch_utc_" + tag, back == fixed,
+                      "%s (localtime offset %s): %s -> %s, want %s"
+                      % (zone, offset, peers_mod.iso(fixed), back, fixed))
+            # and the decision that value feeds: 10 seconds ago is fresh, ten
+            # days ago is not, in whichever zone this machine happens to run in
+            fresh = peers_mod.epoch(peers_mod.iso(time.time() - 10))
+            aged = peers_mod.epoch(peers_mod.iso(time.time() - 10 * 86400))
+            rep.check("peer_cache_window_" + tag,
+                      abs((time.time() - fresh) - 10) <= 2 and 9 * 86400 < time.time() - aged < 11 * 86400,
+                      "a 10s-old lookup reads as %.0fs old, a 10-day-old one as %.0fs old"
+                      % (time.time() - fresh, time.time() - aged))
+            # the decision itself, end to end, in that zone: a renamed person is
+            # worth a cache-skipping lookup wherever this happens to run
+            ok, params, changed = _rename_needs_fresh_lookup(cfg, os.path.join(root, "peers_tz_" + tag))
+            rep.check("peer_rename_forces_lookup_" + tag, ok and changed == ["nickname"],
+                      "%s (localtime offset %s): no_cache=%s params=%s changed=%s"
+                      % (zone, offset, params.get("no_cache"), json.dumps(params, sort_keys=True), changed))
+    finally:
+        _restore_tz(previous)
+    rep.check("peer_tz_restored", time.timezone == baseline,
+              "localtime offset before=%s after=%s" % (baseline, time.timezone))
 
 
 def _check_peers(rep, cfg, root):
@@ -1580,10 +1858,10 @@ def _check_media(rep, gcfg, root):
     rep.check("media_at_all_alone_still_dropped", reason == "no_text", reason)
 
     # an unauthorized member's picture is still never looked at
-    res, reason = inbound_mod.classify(_group_event(gcfg, grp, "199001", 5107, message=[dict(IMG_SEG)]),
+    res, reason = inbound_mod.classify(_group_event(gcfg, grp, OUTSIDER, 5107, message=[dict(IMG_SEG)]),
                                        gcfg, seen)
     rep.check("media_unauthorized_member_still_denied", reason == "unauthorized_group_member", reason)
-    res, reason = inbound_mod.classify(_group_event(gcfg, "700001", member, 5108, message=[dict(IMG_SEG)]),
+    res, reason = inbound_mod.classify(_group_event(gcfg, UNKNOWN_GROUP, member, 5108, message=[dict(IMG_SEG)]),
                                        gcfg, seen)
     rep.check("media_unauthorized_group_still_denied", reason == "group_not_allowed", reason)
 
@@ -1677,7 +1955,7 @@ def _check_media(rep, gcfg, root):
     svc = Adapter(gcfg, os.path.join(root, "mediasvc"), peer_mode="off")
     svc.host = DenyOnceHost(key=inbound_mod.MEDIA_KEY)
     env = {"route_id": "owner-dm", "account_id": gcfg.napcat["account_id"],
-           "sender_id": gcfg.allowed_private[0], "event_id": "5121", "text": "[图片（未解析）]",
+           "sender_id": OWNER, "event_id": "5121", "text": "[图片（未解析）]",
            "raw": {"message_id": 5121, inbound_mod.MEDIA_KEY: {"count": 1, "items": []}}}
     res = svc._submit_event(env)
     rep.check("media_field_denied_reposts_without_losing_event",

@@ -24,6 +24,8 @@
 | `SEND_RESULT ... target=dm\|group status=platform_accepted retcode=0 platform_message_id=...` | 平台真的收了；`delivery_basis=platform_ack`，不等于已读 |
 | `SEND_RESULT ... status=failed retcode=14xx` | 平台明确失败，正文留在宿主 |
 | `SEND_RESULT ... status=unknown` | 结果不明（超时/写失败），**不会重发** |
+| `ATTACHMENT pub=... attempt=... fetched=<sha 前缀> bytes=N sha256=...` / `reject=<原因>` / `fail=<原因> detail=...` | 私聊出站的图：字节从宿主端点取（不读宿主文件路径）；reject/fail 都发生在**发送之前**，一条也没发出去，回执 `failed`。常见原因：`attachment_target_not_enabled`（群）、`attachment_fetch_sha256_mismatch`、`attachment_fetch_over_limit`、`attachment_not_an_image`、`attachment_fetch_unavailable` |
+| `ADMIN_CLAIMED pub=... target=group:群号 kind=mute|unmute|kick|recall` / `ADMIN_RESULT pub=... action=set_group_ban status=... retcode=...` | 宿主排队的群管理动作；只有这三个 action，平台 retcode 就是回执（0 算 platform_accepted），流水在 `journal/admin.jsonl` |
 | `RECEIPT_OK / _SPOOLED / _REPLAYED / _REJECT` | 回执上报结果；spool 里的会在下一轮重放 |
 | `LATE_ACK pub=...` | 超时后平台响应才到，按同 attempt 补报 |
 | `PEERS {"people": N, "scenes": M, "changes": K, "store_reset": null}` | 启动时身份目录快照；`store_reset` 非空表示上次的 `peers.json` 读坏了（已改名成 `peers.json.bad`，身份从头攒起） |
@@ -52,6 +54,8 @@
 
 ## 自检
 
-`python3 /app/adapter.py --selftest --data-dir /data/selftest`：加 `--offline` 跳过领取真实 outbox 那段（0.4.0 实测 `--offline` 213 pass / 0 fail：0.3.0 的 170 条全保留，新增 43 条 `media_*`，含真实图片段形状、三种 media_mode、上限与截断、去块重投、spool 存活）。0.3 起 `--offline` 只跳过 outbox 领取，WS 连接、身份匹配和真实身份读取照旧会跑。含 live 的总数上一次实测是 94（0.2.0），加了 at 位置用例后未复测 live，别照抄数字。覆盖配置脱敏与路由/群越界、私聊闸门回归、四群入站规范化（at/reply/文本污染/跨群成员/重复）、出站参数（action、群号、reply 段、allowlist 外不发、retcode≠0、超时 unknown 不重发）、spool 重启存活与场景化 key、单实例锁的跨 namespace 语义，最后是两条 WS、身份匹配、宿主鉴权与 outbox 可读。
+`python3 /app/adapter.py --selftest --offline --data-dir /data/selftest` 是日常那条：**不需要配置文件**，行为断言全跑内置占位夹具（`qqadapter/fixtures.py`，账号/群/成员/端点都是 `9000000xx` 占位号），所以任何一台机器、任何一份授权下跑出来的数字应当一样。0.5.1 实测（含强制时区那组之后）：干净候选无配置文件 `--offline` **279 pass / 0 fail / 3 skip**（exit 0）；加 `--config <现网配置>` 再多 9 条 `live_config_*` 交叉核对 → **288 pass / 0 fail / 2 skip**。同一候选在 `TZ=UTC`、`TZ=Etc/GMT-9`（UTC+9）、`TZ=Etc/GMT+4`（UTC-4）下数字一样——身份时间戳的读法以前会随机器时区变（`peers.epoch()` 把 UTC 串当本地时间读），现在有 `peer_epoch_utc_*` / `peer_cache_window_*` / `peer_rename_forces_lookup_*` 在强制时区下钉住，换机器跑不该再出现「这边绿那边红」。`--config` 只是**可选**的现网配置形状与越界核对（不参与行为断言）；没给就一条 `live_config_cross_check SKIP`；命令行点名的配置读不出来直接 `CONFIG_ERROR` + 退出 2。`--offline` 现在把两条 WS、身份匹配、真实身份读取和领取真实 outbox 一起跳过（各一条 SKIP）——0.4 及之前它只跳过 outbox 领取，那句「照旧会跑 WS」已经过期。不加 `--offline` 的 live 段在没有平台的沙箱里会如实报 FAIL，别拿它的数字当回归基线。
+
+覆盖：配置脱敏与路由/群越界、夹具自身形状（`fixture_*`）、私聊闸门回归、explicit 与 automatic 准入分开（`admission_*` 23 条：名单外的人/群、成员快照、派生路由 `auto-dm-`/`auto-group-`、黑名单在两种模式下都拒、出站该发/不该发）、四群入站规范化（at/reply/文本污染/跨群成员/重复）、媒体段三种 media_mode 与上限、出站参数（action、群号、reply 段、allowlist 外不发、retcode≠0、超时 unknown 不重发）、出站读回核实、附件取字节与失败即不发、身份目录、spool 重启存活与场景化 key、单实例锁的跨 namespace 语义；live 段才是两条 WS、身份匹配、宿主鉴权与 outbox 可读。
 
 合成事件只走本地过滤函数，不提交宿主；平台与宿主在参数测试里是替身（`StubOneBot` / `StubHost`），所以自检既不真发 QQ，也不伪造真实入站。唯一会碰真实状态的是 live 段那一次 `wait_seconds=0` 领取：真有待发项时按 `unknown` 如实回报、不重发，所以群里正聊到一半时用 `--offline`。锁的检查是隔离的（自建临时目录 + 一个子进程持锁），不碰服务数据目录。

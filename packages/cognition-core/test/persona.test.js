@@ -10,7 +10,9 @@ import { CognitionCore } from '../src/index.js';
 import { PublicationFloor } from '../src/floor.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
-const packages = { demo: path.join(repo, 'tests/fixtures/personas/demo'), installed: path.join(repo, 'packages/xiaoman') };
+// The installed persona package is whichever other package sits beside the core.
+const installed = (await fs.readdir(path.join(repo, 'packages'))).find(name => name !== 'cognition-core');
+const packages = { demo: path.join(repo, 'tests/fixtures/personas/demo'), installed: path.join(repo, 'packages', installed) };
 
 function core(persona = 'demo') {
   return new CognitionCore(new Context(), { persona });

@@ -926,8 +926,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     /** The action brain's work still going on: its native records after the last work row, as they come. */
     function LiveWorkRow(props) {
       const { live, t } = props;
-      const [open, setOpen] = React.useState(false), [now, setNow] = React.useState(Date.now());
-      React.useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
+      const [open, setOpen] = React.useState(false), now = Date.now();      // the thread re-renders while running
       return h(DisclosureRow, { icon: h(IconChevronDownOutlineRegular), previewChevron: false,
         title: t('collab.working', { duration: duration(t, Math.max(0, now - (Number.isFinite(live.since) ? live.since : now))) }),
         collapsedContent: h('span', { style: { marginLeft: 8, ...small } }, t('collab.watch')),
@@ -937,6 +936,13 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     function CollabThread(props) {
       const t = props.t, { entries } = props.node.data;
       const thread = threadOf(entries);
+      // While the thread goes on, its clock and the live work row's tick together.
+      const [, tick] = React.useState(0);
+      React.useEffect(() => {
+        if (!['running', 'queued', 'waiting'].includes(thread.state)) return undefined;
+        const timer = setInterval(() => tick(count => count + 1), 15000);
+        return () => clearInterval(timer);
+      }, [thread.state]);
       const parent = thread.open?.parent_session_id ?? props.sessionId;
       const child = thread.child;
       const openAside = child && parent ? () => ctx.sidebarRight.openResource('dsh-resource://subagentchat/session/'

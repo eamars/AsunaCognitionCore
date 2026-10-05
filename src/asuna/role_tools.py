@@ -559,11 +559,20 @@ class RoleTools:
                               reason=reason, author='character', mutation_id=f"{ep['_id']}:policy_set:{call_id}",
                               sources=[ep['source_event_id']])
         scheduler = self.coordinator.scheduler
+        result = {'key': key, 'value': args['value'], 'revision_id': revision['_id']}
         if scheduler and hasattr(scheduler, 'ensure_presence') and key.startswith(('heartbeat.', 'rhythm.')):
             # A new rhythm takes effect through schedule_update, never delete + create.
             scheduler.ensure_presence()
             scheduler.ensure_settlement()
-        return {'key': key, 'value': args['value'], 'revision_id': revision['_id']}, False
+            if key == 'heartbeat.pause_min':
+                from . import schedule_rules
+                from .persona_model import timezone as persona_timezone
+                until = scheduler.pause_presence(args['value'])
+                zone, _ = persona_timezone(model, policy.params(), self.store.config)
+                zone = zone if schedule_rules.is_iana(zone) else 'UTC'
+                result['note'] = ('心跳会安静到 %s，然后自己恢复。' % schedule_rules.local_moment(zone, until).strftime('%H:%M')
+                                  if until else '心跳已经恢复。')
+        return result, False
 
     def tool_pin_memory(self, ep, call_id, args):
         if self._cls(ep) != visibility.OWNER_PRIVATE:

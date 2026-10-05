@@ -13,6 +13,10 @@ from .config import ROOT
 from .memory_indexer import MemoryIndexer
 from .state import Denied, now
 
+# How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
+# lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
+RHYTHM_WATCH_SECONDS = 300
+
 try:                                  # 跨场景只读联动（A2）
     from . import scene_links
 except Exception:
@@ -165,7 +169,7 @@ class RuntimeHost:
                 self.app.broker.integration = self.integration
                 self.stack.callback(self.integration.close)
             self.controller = Chat(self.app, self.settings, emit=lambda text: self.evidence.record('host.notice', {'text': text}))
-            self.controller.on_turn_finished = self._maybe_restart_after_publish
+            self.controller.on_turn_finished = self._after_turn
             self.controller.restart_pending = self.restart_pending
             if self.configure_controller:
                 self.configure_controller(self)
@@ -220,6 +224,12 @@ class RuntimeHost:
             self.stack.close()
             raise
 
+    def _after_turn(self):
+        self._maybe_restart_after_publish()
+        schedule = getattr(self, 'schedule', None)
+        if schedule:
+            schedule.watch_rhythm()
+
     def _maybe_restart_after_publish(self):
         """Switch code only after the original action/feedback turn has settled."""
         if not self.activation_settled.is_set():
@@ -251,9 +261,13 @@ class RuntimeHost:
     def _watch_published_restart(self):
         # APPLIED may occur inside a still-running action. Mark the lifecycle
         # pending before that action returns, so the queues stop taking work.
+        checked = time.monotonic()
         while not self._restart_watch_stop.wait(.5) and not self.shutdown_requested.is_set():
             if self.controller.active or self.controller.active_task:
                 self._maybe_restart_after_publish()
+            if self.schedule and time.monotonic() - checked >= RHYTHM_WATCH_SECONDS:
+                checked = time.monotonic()
+                self.schedule.watch_rhythm()
 
     def _complete_activations(self):
         """A successfully constructed live host supplies the actual boot result."""

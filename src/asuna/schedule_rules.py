@@ -239,6 +239,11 @@ def local_moment(zone_name, moment=None):
     return _aware(moment or now_utc()).astimezone(ZoneInfo(zone_name))
 
 
+def minutes_later(minutes, moment=None):
+    """An ISO moment some minutes after now (her heartbeat pause)."""
+    return (_aware(moment or now_utc()) + timedelta(minutes=int(minutes))).isoformat(timespec='seconds')
+
+
 def is_iana(zone_name) -> bool:
     """An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept."""
     if not isinstance(zone_name, str) or not (zone_name == 'UTC' or '/' in zone_name) or ZoneInfo is None:

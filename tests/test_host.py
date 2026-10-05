@@ -73,6 +73,16 @@ def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it
     host._maybe_restart_after_publish()
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
 
+def test_after_every_turn_the_host_also_checks_her_heartbeat():
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: None))
+    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
+        sink_receipts=SimpleNamespace(find_one=lambda query: None))))
+    watched = []
+    host.schedule = SimpleNamespace(watch_rhythm=lambda: watched.append('checked'))
+    host._after_turn()
+    assert watched == ['checked']
+
+
 def think(thought='private'):
     return ('think', {'thought': thought})
 

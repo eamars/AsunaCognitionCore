@@ -25,7 +25,17 @@ PRIVATE_KEYS = {
 # Core-writable keys: a package may default them without declaring them.
 CORE_WRITABLE_KEYS = {
     'render.budget_tokens': {'type': 'integer', 'min': 256, 'max': 200000, 'what': '人格渲染的绝对 token 预算'},
+    # Her heartbeat's pace is hers; the heartbeat itself belongs to the program (ADR-012 §4.3).
+    'heartbeat.every_min': {'type': 'integer', 'min': 15, 'max': 240, 'what': '心跳间隔（分钟）'},
+    'heartbeat.min_gap_min': {'type': 'integer', 'min': 0, 'max': 720,
+                              'what': '没有找你的新事时，两次心跳回合之间至少隔多久（分钟）'},
+    'heartbeat.skip_in_sleep': {'type': 'boolean', 'what': '睡眠窗里是否跳过心跳'},
+    'heartbeat.pause_min': {'type': 'integer', 'min': 0, 'max': 720,
+                            'what': '让心跳安静一阵（分钟，0 = 马上恢复）；到时自动恢复'},
 }
+# Only the owner turns her heartbeat on or off: a package may default it, never offer it to her as a policy key.
+OWNER_KEYS = {'heartbeat.enabled'}
+HEARTBEAT_EVERY_MIN = (15, 240)
 CORE_DEFAULTS = {
     'render': {'budget_tokens': None, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'values'},
     'recall_protocol': {'order': None},
@@ -34,7 +44,7 @@ CORE_DEFAULTS = {
                'kinds': {}, 'bands': [], 'policy': []},
     'dossier': {'inject_last': 0, 'index_size': 30},
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
-    'heartbeat': {'enabled': False, 'every_min': None, 'min_gap_min': 0, 'skip_in_sleep': False},
+    'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'skip_in_sleep': False, 'pause_min': 0},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
     'speak': {'max_messages': 1, 'split_marker': '---split---', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
@@ -61,7 +71,7 @@ def validate(model: dict, persona_id: str) -> dict:
     if model['persona']['id'] != persona_id:
         raise PersonaModelError(f"PERSONA_ID_MISMATCH: model {model['persona']['id']!r} != registered {persona_id!r}")
     declared = set(model.get('policy_keys', {}))
-    reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS))
+    reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS) | OWNER_KEYS)
     if reserved:
         raise PersonaModelError('PERSONA_MODEL_INVALID: policy_keys may not declare core keys: ' + ', '.join(sorted(reserved)))
     for key in PRIVATE_KEYS:
@@ -100,6 +110,8 @@ def lookup(tree, key: str):
 
 def key_spec(model: dict, key: str):
     """Type/range declaration for a writable key, or None when the key is not writable."""
+    if key in OWNER_KEYS:
+        return None
     return PRIVATE_KEYS.get(key) or CORE_WRITABLE_KEYS.get(key) or (model.get('policy_keys') or {}).get(key)
 
 

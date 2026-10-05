@@ -98,6 +98,8 @@ def _match(row, spec):
         if isinstance(want, dict):
             if '$in' in want and have not in want['$in']:
                 return False
+            if '$nin' in want and have in want['$nin']:
+                return False
             if '$ne' in want and have == want['$ne']:
                 return False
         elif have != want:
@@ -1009,6 +1011,10 @@ def context_projection_runs_end_to_end(env):
                                      'status': 'ACTIVE', 'timezone': ZONE,
                                      'tz_source': 'route', 'plan_version': 1, 'revision': 1,
                                      'created_at': '2026-09-24T04:00:00+00:00'}
+    # Her rhythms belong to the program (ADR-012 §4.3): never in her list, so her plan tool cannot cancel them.
+    for kind in ('presence', 'settlement', 'self_development'):
+        store.db.plans.rows['plan-rhythm-' + kind] = {**store.db.plans.rows['plan-7'], '_id': 'plan-rhythm-' + kind,
+                                                      'kind': kind, 'intent': kind, 'rule': {'every_seconds': 3600}}
     _system, context, _manifest = module.ContextBuilder(store, retrieval=None).prepare(
         {'event_id': 'evt-1', 'scene_id': SCENE_ID, 'person_id': PERSON, 'text': '我有哪些安排'})
     rows = context['plans_from_program']

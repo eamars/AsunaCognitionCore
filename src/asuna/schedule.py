@@ -19,11 +19,19 @@ try:                                  # 宿主按包加载
 except Exception:                     # 同目录平铺加载（离线自检）也认
     import schedule_rules
 
+# Her rhythm plans belong to the program (ADR-012 §4.3): she never sees them in her plan list, so she cannot
+# cancel or retime them there; she sets the heartbeat's pace through her policy keys.
+RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
+PRESENCE_PLAN = 'plan-asuna-presence'
+HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local day
+HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and this long is rebuilt
+
 
 class ScheduleService:
     def __init__(self, app, controller, *, lane=None):
         self.app, self.controller, self.store = app, controller, app.store
         self.deliver_lock = threading.RLock()
+        self.rhythm_lock = threading.RLock()
         self.server = self.thread = None
         self.lane = lane
         if lane is None:
@@ -215,16 +223,67 @@ class ScheduleService:
     def ensure_presence(self):
         """Heartbeat needs the persona model (heartbeat.enabled) and the owner's local target scene."""
         from .persona_data import persona_runtime
-        from .persona_model import effective
+        from .persona_model import HEARTBEAT_EVERY_MIN, effective
         persona, model, policy = self._persona()
         target = persona_runtime(self.app.config, persona).get('heartbeat_target')
         if not (effective(model, 'heartbeat.enabled', policy) and target):
             self._retire('plan-asuna-presence', 'heartbeat disabled or no heartbeat_target')
             return None
         scene, person = self._owner_private_target(target, 'PRESENCE')
-        every = max(schedule_rules.MIN_INTERVAL_SECONDS, int(effective(model, 'heartbeat.every_min', policy) or 30) * 60)
-        return self._rhythm_plan('plan-asuna-presence', 'presence', scene, person, {'every_seconds': every},
-                                 {'every_seconds': every})
+        low, high = HEARTBEAT_EVERY_MIN
+        every = min(high, max(low, int(effective(model, 'heartbeat.every_min', policy) or 60))) * 60
+        with self.rhythm_lock:
+            return self._rhythm_plan(PRESENCE_PLAN, 'presence', scene, person, {'every_seconds': every},
+                                     {'every_seconds': every})
+
+    def pause_presence(self, minutes):
+        """Her heartbeat.pause_min: beats keep ticking but skip until then, and resume by themselves."""
+        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        if not plan or plan['status'] != 'ACTIVE':
+            return None
+        until = schedule_rules.minutes_later(minutes, now()) if minutes else None
+        self.store.put('plans', {**plan, 'paused_until': until}, expected=plan['revision'], stream=plan['_id'])
+        self.store.audit(plan['_id'], 'rhythm.paused' if until else 'rhythm.resumed', {'until': until}, plan['scope_key'])
+        return until
+
+    def watch_rhythm(self):
+        """Watchdog (ADR-012 §4.3): a heartbeat that went quiet for two beats is rebuilt, and she is told.
+        Called after every turn, at every other rhythm dispatch and from the host's existing watch thread;
+        it never raises into its caller."""
+        try:
+            with self.rhythm_lock:
+                return self._watch_presence()
+        except Exception as exc:
+            self.store.audit('rhythm-plans', 'rhythm.watch_failed', {'error': str(exc)[:300]})
+            return None
+
+    def _watch_presence(self):
+        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        if not plan or plan.get('status') != 'ACTIVE' or not plan.get('schedule_id'):
+            return None
+        every = int((plan.get('rule') or {}).get('every_seconds') or 0)
+        since = plan.get('last_occurrence_at') or plan.get('scheduled_at')
+        if not every or not since:
+            return None
+        moment = schedule_rules._aware(now())
+        limit = 2 * every + HEARTBEAT_GRACE_SECONDS
+        if (moment - schedule_rules._aware(since)).total_seconds() <= limit:
+            return None
+        if plan.get('missed_at') and (moment - schedule_rules._aware(plan['missed_at'])).total_seconds() <= limit:
+            return None                       # already rebuilt for this silence; try again after another two beats
+        self.store.audit(plan['_id'], 'rhythm.heartbeat_missed', {'since': since, 'every_seconds': every,
+            'native_schedule_id': plan['schedule_id']}, plan['scope_key'])
+        try:                                  # the record may look alive and still not fire: replace it
+            self.lane.schedule('/schedule/delete', {'id': plan['schedule_id']})
+        except Exception:
+            pass
+        rebuilt = self.ensure_presence()
+        current = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        self.store.put('plans', {**current, 'missed_at': now(), 'reconnected_at': now()},
+                       expected=current['revision'], stream=PRESENCE_PLAN)
+        self.store.audit(PRESENCE_PLAN, 'rhythm.heartbeat_rebuilt',
+                         {'native_schedule_id': (rebuilt or {}).get('schedule_id')}, plan['scope_key'])
+        return 'REBUILT'
 
     def ensure_settlement(self):
         """Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date."""
@@ -242,33 +301,66 @@ class ScheduleService:
         return self._rhythm_plan('plan-asuna-settlement', 'settlement', scene, person, rule,
                                  {'daily': {'time': settle_at + ':00', 'time_zone': zone}}, {'timezone': zone})
 
+    def _last_home_beat(self, plan):
+        """Her last internal turn at home: a heartbeat, or a settlement or self-improvement turn."""
+        times = [plan.get('last_presence_at')]
+        times += [row.get('last_occurrence_at') for row in self.store.db.plans.find(
+            {'kind': {'$in': ['settlement', 'self_development']}, 'scene_id': plan['scene_id'], 'last_outcome': 'ENQUEUED'},
+            {'last_occurrence_at': 1})]
+        times = [moment for moment in times if moment]
+        return max(times, key=schedule_rules._aware) if times else None
+
+    def _news_since(self, home, since):
+        """Something for her since then: anyone who reached her (home, a DM, or a group that woke her),
+        or one of her tasks that finished. Group talk that did not wake her is not news; P5 has that."""
+        scenes = {home}
+        for channel in self.app.config.get('channels', {}).values():
+            scenes.update(route['scene_id'] for route in channel.get('routes', {}).values())
+        reached = self.store.db.messages.find_one({'scene_id': {'$in': sorted(scenes)}, 'direction': 'inbound',
+            'received_at': {'$gt': since}, 'processing_outcome': {'$ne': 'RECORDED_NO_WAKE'}}, {'_id': 1})
+        return bool(reached or self.store.db.tasks.find_one({'finished_at': {'$gt': since}}, {'_id': 1}))
+
     def _presence(self, plan, occurrence):
         """Deterministic pre-gates; a skip calls no model and leaves one counting audit."""
-        from .persona_model import effective
-        from .rhythm import heartbeat_rest_gate
+        from .config import ago
+        from .persona_model import effective, timezone as persona_timezone
+        from .rhythm import HEARTBEAT_RECONNECTED, HEARTBEAT_TEXT, heartbeat_rest_gate
         persona, model, policy = self._persona()
+        moment = schedule_rules._aware(now())
+        zone, _ = persona_timezone(model, policy, self.app.config)
+        today = schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment).date().isoformat()
+        beats = plan['beats'] if (plan.get('beats') or {}).get('date') == today else {'date': today, 'count': 0}
         reason = None
         with self.controller.pending.mutex:
             queued = bool(self.controller.pending.queue.queues.get(plan['scene_id']))
-        if queued or self.controller.active is not None or self.controller.active_task is not None:
+        # A role turn running or waiting at home makes her busy; the action brain working on a task does not.
+        if queued or self.controller.active is not None:
             reason = 'BUSY'
-        last = plan.get('last_presence_at')
+        if not reason and plan.get('paused_until') and schedule_rules._aware(plan['paused_until']) > moment:
+            reason = 'PAUSED'
+        last = self._last_home_beat(plan)
         if not reason and last:
-            gap = (schedule_rules._aware(now()) - schedule_rules._aware(last)).total_seconds() / 60
-            newer = self.store.db.messages.find_one({'scene_id': plan['scene_id'], 'direction': 'inbound',
-                                                     'received_at': {'$gt': last}})
-            if gap < float(effective(model, 'heartbeat.min_gap_min', policy) or 0) and not newer:
+            gap = (moment - schedule_rules._aware(last)).total_seconds() / 60
+            if gap < float(effective(model, 'heartbeat.min_gap_min', policy) or 0) \
+                    and not self._news_since(plan['scene_id'], last):
                 reason = 'MIN_GAP'
         if not reason and heartbeat_rest_gate(model, policy, self.app.config):
             reason = 'REST_WINDOW'
+        if not reason and beats['count'] >= HEARTBEAT_BEATS_PER_DAY:
+            reason = 'DAILY_BUDGET'
         if reason:
             self.store.audit(plan['_id'], 'presence.skipped', {'reason': reason, 'occurrence': occurrence}, plan['scope_key'])
             return 'SKIPPED:' + reason
-        self.controller.offer_internal('presence', 'presence:' + occurrence, plan['scene_id'], plan['person_id'],
-            '这是一次内部在场机会（心跳），不是用户消息或新授权。看看此刻的节律、心情、活账和最近发生的事，'
-            '自己决定是否想说一句、做点什么、写下点什么，或者安静待着。大多数时候什么都不做也完全正常。')
+        text = HEARTBEAT_TEXT
+        reconnected = plan.get('reconnected_at')
+        if reconnected and reconnected != plan.get('reconnect_told_at'):
+            hours = max(0.0, (moment - schedule_rules._aware(reconnected)).total_seconds() / 3600)
+            text += HEARTBEAT_RECONNECTED % ago(hours)
+        self.controller.offer_internal('presence', 'presence:' + occurrence, plan['scene_id'], plan['person_id'], text)
         current = self.store.db.plans.find_one({'_id': plan['_id']})
-        self.store.put('plans', {**current, 'last_presence_at': now()}, expected=current['revision'], stream=plan['_id'])
+        self.store.put('plans', {**current, 'last_presence_at': now(), 'beats': {**beats, 'count': beats['count'] + 1},
+                                 **({'reconnect_told_at': reconnected} if reconnected else {})},
+                       expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
 
     def _settlement(self, plan, occurrence):
@@ -507,6 +599,8 @@ class ScheduleService:
         # never hold this lock across DSH, model, or tool execution.
         with self.deliver_lock:
             action = self._deliver_locked(seq, schedule_id, creates)
+        if action and action.get('kind') in ('settlement', 'self_development'):
+            self.watch_rhythm()               # her other rhythms look after the heartbeat too
         if action and action.get('rearm'):
             # 锁外挂下一次：不在原生调用上持锁。floor=刚到期那一次，回调早到也不原地重挂。
             self._rearm(action['plan_id'], action.get('fired_at'))
@@ -587,5 +681,5 @@ class ScheduleService:
             'next_fire_at': next_fire_at, 'status': status, **extra}, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.dispatched', {'occurrence': occurrence,
             'native_schedule_id': schedule_id, 'outcome': outcome, 'rearm': repeating}, plan['scope_key'])
-        return {'plan_id': plan_id, 'rearm': repeating and status == 'ACTIVE',
+        return {'plan_id': plan_id, 'kind': plan.get('kind'), 'rearm': repeating and status == 'ACTIVE',
             'fired_at': native.get('scheduledAt')}

@@ -343,7 +343,8 @@ class ContextBuilder:
                 task['progress_from_action']=[excerpt(row['text'],HISTORY_ROW_CHARS) for row in reversed(notes)]
         plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
             'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
-            'kind':{'$ne':'self_development'},
+            # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
+            'kind':{'$nin':['self_development','presence','settlement']},
             'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
             {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
              'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,

@@ -146,6 +146,19 @@ test('the program sending her final text back shows between the draft and the re
   assert.equal(snapshot(engine).nodes.length, 1, 'a reload draws it once');
 });
 
+const said = text => ({ role: 'assistant', content: [{ type: 'text', text }] });
+const called = name => ({ role: 'assistant', content: [{ type: 'tool-call', id: name, name, arguments: '{}' }] });
+
+test('a Turn that ends in a tool shows no brain label: its folded process stands alone', () => {
+  const engine = assembler();
+  engine.replaceWindow([entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),
+    entry(2, 'asuna/stage', { turn: 1, step: 1, lane: 'character', phase: 'CONSULT' }),
+    entry(3, 'assistant/message', { turn: 1, step: 1, message: called('think') }),
+    entry(4, 'assistant/message', { turn: 1, step: 2, message: called('answer_action') }),
+    entry(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })], false);
+  assert.equal(snapshot(engine).nodes.length, 0, 'her answer to the action brain shows in the thread, not as an empty label');
+});
+
 test('explicit lane attribution exists before tokens and survives native stream settlement', () => {
   const engine = assembler();
   for (const event of [entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),
@@ -153,10 +166,13 @@ test('explicit lane attribution exists before tokens and survives native stream 
   assert.equal(snapshot(engine).timeline.turns.get(1).steps[0].data.get('asuna-stage').lane, 'executor');
   engine.append(entry(2.1, 'assistant/live-chunk', { turn: 1, step: 1, attemptId: 'attempt',
     chunk: { type: 'reasoning-delta', index: 0, text: 'native private analysis' } }));
+  assert.equal(snapshot(engine).nodes.length, 0, 'thinking alone shows no brain label yet');
+  engine.append(entry(2.2, 'assistant/live-chunk', { turn: 1, step: 1, attemptId: 'attempt',
+    chunk: { type: 'text-delta', index: 1, text: 'report' } }));
   const streamed = snapshot(engine).nodes[0];
   assert.equal(streamed.location.kind, 'session');
   assert.doesNotMatch(JSON.stringify(streamed.data), /private analysis/);
-  engine.settleAssistant('attempt', entry(3, 'assistant/message', { turn: 1, step: 1 }));
+  engine.settleAssistant('attempt', entry(3, 'assistant/message', { turn: 1, step: 1, message: said('report') }));
   const settled = snapshot(engine).nodes;
   assert.equal(settled.length, 1);
   assert.equal(settled[0].key, streamed.key, 'settlement does not duplicate the business marker');
@@ -170,7 +186,7 @@ test('one visible brain identity survives multiple phases and a partial native T
     entry(4, 'assistant/message', { turn: 1, step: 1 }), entry(5, 'step/end', { turn: 1, step: 1 }),
     entry(6, 'step/start', { turn: 1, step: 2 }),
     entry(7, 'asuna/stage', { turn: 1, step: 2, lane: 'character', phase: 'DECIDE' }),
-    entry(8, 'assistant/message', { turn: 1, step: 2 }), entry(9, 'step/end', { turn: 1, step: 2 }),
+    entry(8, 'assistant/message', { turn: 1, step: 2, message: said('hello') }), entry(9, 'step/end', { turn: 1, step: 2 }),
     entry(10, 'turn/end', { turn: 1, reason: { kind: 'completed' } })];
   const engine = assembler();
   engine.replaceWindow(events, false);

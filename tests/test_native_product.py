@@ -148,3 +148,15 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert resolved['character']['model'] == resolved['executor']['model']
     assert 'character' not in exported['deployment']
     assert not (p.root / '.runtime/dsh').exists()
+
+
+def test_session_kinds_mark_her_platform_groups_and_dms_but_not_the_local_chat(product):
+    p = product
+    group = p.channel.receive('qq', envelope(group='22220000', mid='g1'))
+    dm = p.channel.receive('qq', envelope(sender='11110000', mid='d1'))
+    sessions = {event['binding']['scene_id']: event['session_id'] for event in p.events if 'binding' in event}
+    local = p.store.db.sessions.find_one({'scene_id': 'local', 'lane': 'character'})
+    asked = [*sessions.values(), *([local['_id']] if local else []), 'not-a-session']
+    kinds = p.worker.dispatch('session_kinds', {'session_ids': asked})
+    assert sorted(kinds.values()) == ['dm', 'group'] and set(kinds) == set(sessions.values())
+    assert group['status'] != 'duplicate' and dm['status'] != 'duplicate'

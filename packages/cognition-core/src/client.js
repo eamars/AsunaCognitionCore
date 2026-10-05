@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
       'collab.state.done': '已完成', 'collab.state.failed': '没做成', 'collab.state.stopped': '已叫停',
       'collab.state.paused': '已暂停', 'collab.paused': '宿主重启时暂停了；要接着做，在本机私聊里请她继续。',
+      'workspace.local': '本机', 'session.group': '群聊', 'session.dm': '私聊',
       'collab.state.continued': '下面接着', 'collab.working': '正在做 {duration}', 'collab.watch': '展开看实时过程',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
       'collab.work': '工作了 {duration}', 'collab.call': '{n} 次工具调用', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
@@ -134,6 +135,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
       'collab.state.done': 'Done', 'collab.state.failed': 'Not finished', 'collab.state.stopped': 'Stopped',
       'collab.state.paused': 'Paused', 'collab.paused': 'Paused when the Host restarted; ask her in the local chat to continue.',
+      'workspace.local': 'Local', 'session.group': 'Group chat', 'session.dm': 'Direct message',
       'collab.state.continued': 'Continued below', 'collab.working': 'Working {duration}', 'collab.watch': 'Expand to watch it live',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
       'collab.work': 'Worked {duration}', 'collab.call': '{n} tool call', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
@@ -379,11 +381,16 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         turn: event.data.turn, step: event.data.step, anchor: event.seq,
         sourceSeq: prior?.turn === event.data.turn ? prior.seq : undefined };
     };
+    // Words a reader sees, not only thinking or tool calls: a Turn that ends in a tool (her answer to the
+    // action brain, stay_silent) shows only its folded process, so the brain label waits for text.
+    const hasText = event => event.type === 'assistant/message'
+      ? (event.data.message?.content ?? []).some(block => block.type === 'text' && block.text?.trim())
+      : event.type === 'assistant/live-chunk' && event.data.chunk?.type === 'text-delta' && !!event.data.chunk.text?.trim();
     const markerState = (match, reader) => {
       const state = stageState(match, reader);
       const responseSeen = match.event.type.startsWith('assistant/');
-      return { ...state, responseSeen, anchor: responseSeen ? state.sourceSeq ?? state.anchor - 0.2 : state.anchor,
-        markerLocation: { kind: 'session' } };
+      return { ...state, responseSeen, textSeen: hasText(match.event),
+        anchor: responseSeen ? state.sourceSeq ?? state.anchor - 0.2 : state.anchor, markerLocation: { kind: 'session' } };
     };
     return [{ kind: 'asuna-stage-source',
       match: event => event.type === 'user/message' && event.data.source?.kind === 'asuna'
@@ -413,9 +420,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         // The explicit notice precedes native input materialization. Place
         // identity immediately before the first response/process control,
         // after user input, rather than anchoring it to that early notice.
+        const textSeen = state.textSeen || hasText(match.event);
         if (!state.responseSeen && match.event.type.startsWith('assistant/')) return { ...state,
-          stage, responseSeen: true, anchor: match.event.seq - 0.2 };
-        return stage === state.stage ? state : { ...state, stage };
+          stage, textSeen, responseSeen: true, anchor: match.event.seq - 0.2 };
+        return stage === state.stage && textSeen === state.textSeen ? state : { ...state, stage, textSeen };
       },
       publication: match => match.event.type === 'assistant/live-chunk' ? 'animation-frame' : 'immediate',
       buildViewNode: context => {
@@ -424,7 +432,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         // label for tool followups. A cold partial Turn can use its first
         // loaded explicit notice without guessing unloaded attribution.
         const nativeStep = context.matches.some(match => match.location.kind === 'step');
-        if (!['character', 'executor'].includes(context.state?.stage?.lane) || !nativeStep || !context.state.responseSeen) return null;
+        if (!['character', 'executor'].includes(context.state?.stage?.lane) || !nativeStep || !context.state.responseSeen
+            || !context.state.textSeen) return null;
         const location = context.state.markerLocation;
         const previous = context.current.get('chat');
         if (previous?.data === context.state.stage && previous.location === location
@@ -1016,6 +1025,39 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-repair', locale: NS }, RepairNote));
+
+    // ── where a conversation is: the local workspace's name, a group or a DM ──
+    // DSH stores workspace titles as plain text: the client gives the words it shows, again on a switch.
+    let titledIn;
+    const titleWorkspaces = () => {
+      const active = ctx.locale.getSnapshot().active;
+      if (active === titledIn) return;
+      titledIn = active;
+      rpc('workspaceTitles', { titles: { Local: t('workspace.local') } }).catch(() => { titledIn = undefined; });
+    };
+    ctx.effect(() => ctx.locale.subscribe(titleWorkspaces)); titleWorkspaces();
+    // A small mark before each of her platform conversations in the sidebar (DSH's leading row slot).
+    const sceneKinds = { value: {}, listeners: new Set(), asked: new Set() };
+    const subscribeKinds = listener => { sceneKinds.listeners.add(listener); return () => sceneKinds.listeners.delete(listener); };
+    const askKinds = () => {
+      const ids = Object.keys(ctx.sessions.list.getSnapshot().byId).filter(id => !sceneKinds.asked.has(id)).slice(0, 500);
+      if (!ids.length) return;
+      for (const id of ids) sceneKinds.asked.add(id);
+      rpc('sessionKinds', { sessionIds: ids }).then(kinds => {
+        sceneKinds.value = { ...sceneKinds.value, ...kinds }; for (const listener of sceneKinds.listeners) listener();
+      }).catch(() => { for (const id of ids) sceneKinds.asked.delete(id); });
+    };
+    ctx.effect(() => ctx.sessions.list.subscribe(askKinds)); askKinds();
+    function SceneKindMark({ sessionId, t }) {
+      const kind = React.useSyncExternalStore(subscribeKinds, () => sceneKinds.value)[sessionId];
+      if (kind !== 'group' && kind !== 'dm') return null;
+      const Icon = kind === 'group' ? primitives.IconUsersOutlineRegular : primitives.IconUserOutlineRegular;
+      const label = t(kind === 'group' ? 'session.group' : 'session.dm');
+      return h('span', { title: label, 'aria-label': label, role: 'img',
+        style: { display: 'inline-flex', color: 'var(--dsw-alias-label-tertiary)' } }, Icon ? h(Icon, { size: 12 }) : null);
+    }
+    ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
+      name: 'sidebar.session.row.leading', id: 'asuna-scene-kind', order: 0, locale: NS }, SceneKindMark));
 
     // ── DSH's permission picker, only where it does something ─────────
     // It sets DSH's shell sandbox and approval policy; her two brains use neither (api.js brainPresets).

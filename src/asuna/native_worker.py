@@ -712,6 +712,14 @@ class BusinessWorker:
                     if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work' / platform.KIND).resolve():
                         policies[row['id']] = self.read_only_note(platform)
             return policies
+        if method == 'session_kinds':
+            # Her conversations on a platform among these sessions: a group or a DM (the sidebar mark).
+            local = self.app.config['chat']['scene_id']
+            rows = list(self.app.store.db.sessions.find({'_id': {'$in': list(args['session_ids'])[:500]},
+                'native_host': True, 'lane': 'character', 'scene_id': {'$ne': local}}, {'scene_id': 1}))
+            kinds = {scene['_id']: scene.get('kind') for scene in self.app.store.db.scenes.find(
+                {'_id': {'$in': [row['scene_id'] for row in rows]}}, {'kind': 1})}
+            return {row['_id']: kinds[row['scene_id']] for row in rows if kinds.get(row['scene_id']) in ('group', 'dm')}
         if method == 'input':
             session_id = args['session_id']
             existing = self.app.store.db.sessions.find_one({'_id': session_id})

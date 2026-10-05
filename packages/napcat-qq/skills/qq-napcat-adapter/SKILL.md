@@ -15,7 +15,7 @@ description: 用 NapCat / OneBot v11 正向 WebSocket 接通宿主 QQ 通道（�
 
 ## 代码在哪
 
-权威副本在集成开发目录（integration_dev 的 `/task`，运行时冻结为只读 `/app`）：
+权威副本在 **napcat-qq 通道包候选的 `integration/` 目录**：代码、技能、文档都只用 `development_*`（带 `project: "napcat-qq"`）修改，经 `development_publish` 生效——`integration_test` 把候选的 `integration/` 冻结成只读 `/app` 试跑（实测：cwd 是 `/app`，往 `/app` 写报 `OSError` 只读文件系统；`/data` 是可写区，与启用服务的数据分开），`integration_start` 只运行**已发布**的版本，未发布的候选不会当管理服务跑起来。目录布局（相对 `integration/`）：
 
 ```
 adapter.py                     入口：--service | --selftest
@@ -31,7 +31,7 @@ qqadapter/service.py           线程装配、身份校验、STATUS/health、入
 qqadapter/peers.py             对方身份目录：昵称/群名片/群身份 + 改名换名片仍是同一人（ADR-005 一阶段）
 qqadapter/selftest.py          离线 + 在线自检（行为断言全跑内置占位夹具，发送用替身；给了 --config 才交叉核对现网配置）
 qqadapter/fixtures.py          自检用的内置占位夹具：本号/群/成员/端点全是 9000000xx 占位号，过同一套 Config 校验
-vendor/websocket/              websocket-client 1.9.2（随开发目录，sys.path 注入）
+vendor/websocket/              websocket-client 1.9.2（随通道包 `integration/` 发布，sys.path 注入）
 ```
 
 本技能目录只放说明和离线小工具（`decode_log.py`、`USAGE.md`）。集成沙箱不挂载技能库，代码不在这里跑。
@@ -110,7 +110,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 
 ## 重新部署
 
-`integration_start` 用的是启动那一刻的冻结副本，改了开发目录不会自动上线：先 `integration_stop`，再 `integration_start python3 /app/adapter.py --service`。宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
+适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：`development_publish` → `integration_stop` → `integration_start ["python3","/app/adapter.py","--service"]`。宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
 
 ## 版本
 
@@ -197,3 +197,11 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 现网配置交叉核对 9 条全过：现网 `adapter.admission` 是 **automatic**（不是显式），5 个群的成员快照都在，群/私聊没有越界，`describe()` 不吐令牌。真身份查询走的是生产代码不是替身：群里那位 `role=owner`、私聊那位 `relation=friend`，`peer_live_no_stranger_blob` 说明落盘里没有 `address` 这类原始 blob。`host_reachable_auth_enforced` 拿到真实 403；`host_outbox_empty` —— 队列当时是空的，自检没领走任何待发项，所以确实一条消息都没发。
 - 仍未核实：群管理动作（mute/unmute/kick/recall）在自检里仍然一条用例都没有；`base64://` 图片在真实客户端是否渲染、`supports=image` 在真实宿主上的往返、附件失败时宿主侧正文保留。
 
+
+### 2026-10-05 文档对齐：`integration_dev` 退役、发布/启动口径（只改技能文档与 `integration/RUNTIME_API.md`，未发布、未重启适配器、未发 QQ）
+
+- `integration_dev` 不再是任何工具：探测与一次性脚本现在的做法是写进本候选 `integration/`，用 `integration_test ["python3","/app/<脚本名>.py"]` 试跑。实测（探针跑完即删）：`CWD /app`、`/app/adapter.py` 在、往 `/app` 写报 `OSError` 只读文件系统、`/integration/config.json` 可读、`ENDPOINT_KEYS ['host', 'image', 'napcat']`。
+- 「代码在哪」「重新部署」与 USAGE.md 的启动/常见情况改成：改动只经 `development_publish` 生效；`integration_start` 只运行已发布版本，不运行未发布候选；宿主重启恢复当时已发布版本。试用记录里历史提到的「开发目录」按当时的叫法读，就是今天通道包候选的 `integration/`，不回头改写。
+- `integration/RUNTIME_API.md` 与认知核根目录 `RUNTIME_API.md` 当时逐字节一致（两份各自 `sha256sum` 同前缀 `4fcca79c`，完整哈希见行动报告）；认知核文件本身没动。<!-- personal-scan: ok (哈希前缀，不是号码) -->
+- 发布前再对齐：认知核根目录 `RUNTIME_API.md` 的发图一节已改成 `attach_image` 口径（DECIDE 时代的旧句去掉），通道包副本随之重抄，两份 `sha256sum` 现同前缀 `84b2a65c`（完整哈希见行动报告）。<!-- personal-scan: ok (哈希前缀，不是号码) -->
+- 占位号口径不变：本文出现的账号/群号仍是 `900000xxx` 夹具占位号；本轮没有新增真实号、地址或端口。

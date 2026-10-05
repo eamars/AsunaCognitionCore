@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | **提议**，待 owner 审阅；未实施 |
+| 状态 | **已批准**（owner 2026-10-05，§6 五项已定）；未实施 |
 | 日期 | 2026-10-05 |
 | 基线 | main `78a10fc4`（ADR-009 合并）；运行时固定 `@deepseek-ai/dsh` **0.2.0-rc.2** |
 | 继承 | ADR-007（自开发地板）、ADR-008（单 Host 原生插件）、ADR-009（人格是插件、个人数据留本地） |
@@ -10,7 +10,7 @@
 
 ## 一句话决定（提议）
 
-**Asuna 以三类普通 DSH bundle 分发——核心 `@asuna/cognition-core`、通道包（如 `@asuna/napcat-qq`）、人格包——装进任意 DSH Web profile 后，只靠 DSH 自己的「添加插件」和设置页就能跑起来；仓库只是开发源，不再是运行前提。** DSH 0.2 没有 market，「上架」就是发布到 npm registry（公开或私有）并满足 DSH 的 bundle 元数据。
+**Asuna 以三类普通 DSH bundle 分发——核心 `@asuna/cognition-core`、通道包（如 `@asuna/napcat-qq`）、人格包——装进任意 DSH Web profile 后，只靠 DSH 自己的「添加插件」和设置页就能跑起来；仓库只是开发源，不再是运行前提。** DSH 0.2 没有 market；按 owner 的决定（§6），不发 npm registry，核心与通道包的 `.tgz` 作为本仓库（owner 账号下的公开 GitHub 仓库）的 Release 资产发布，知道链接的人用 `dsh plugin add <.tgz 的 https 地址>` 安装。
 
 ## 1. 事实：DSH 0.2 的「市场」是什么
 
@@ -61,6 +61,8 @@
 ### D1 包的划分与元数据
 保持现在的三类包。核心与人格无关（ADR-009 R-5）；通道包带平台代码（ADR-009 D8-8）；人格包只放人格资源。三类都补上 `icon`、`locale/zh.json` 与 `locale/en.json` 里的 `meta.title`/`meta.description`，以及准确的 `description`。
 
+**许可证（owner 定）：** 核心与通道包用 **GPLv3**（`"license": "GPL-3.0-only"`，仓库根放 `LICENSE`）。已核对兼容：DSH、cordis 与 JS 依赖是 MIT；内嵌的 websocket-client 与 pymongo 是 Apache-2.0；其余 Python 依赖是 BSD/MIT/MPL-2.0，均可并入 GPLv3 作品。人格包不随发布，不加许可证。
+
 ### D2 Python worker 怎么交付（B2）
 - **A（推荐）**：Python 源码已经在包的 `python/` 里。再带上 `uv.lock`；插件第一次启动时，在 Asuna 数据目录里用 `uv sync --frozen` 建 venv。不靠 postinstall，正好绕开 DSH 拦安装脚本。前提是本机有 `uv`（或 Python 3.12+ 和 pip），设置页的状态行检查并说清楚缺什么。
 - B：按平台发可选依赖包，带独立 Python（python-build-standalone，每个约 30–60 MB）。不需要任何前提，但包大、构建矩阵复杂。适合以后面向非开发者时再做。
@@ -83,6 +85,7 @@
 - **A（推荐）**：把补丁里的 Session 级 Chat 片段工厂（ADR-008 2026-10-03 修订）整理成提给 DSH 上游的 PR。
 - B：分发版先不带内联渲染，行动脑记录走 DSH 原生子会话（今天已经有：标题栏的 subagents 菜单和子会话页）。插件启动时检测 Chat 有没有这个工厂，没有就不挂片段。主会话里看不到行动脑的过程，但不会出错。
 - 推荐**先 B 后 A**：分发不被上游节奏卡住，上游合并后自动恢复内联。
+- **owner 定（2026-10-05）：补丁留在本地，由安装插件的 agent 打。** 发布物附一份写给安装 agent 的说明（`INSTALL.md`）：可选地取 DSH rc.2 源码、用 `tools/build_dsh_inline.mjs` 构建两个补丁 UI 包并装进 profile。插件照 B 做特性检测：有工厂就内联，没有就走原生子会话，不出错。
 
 ### D8 DSH 版本兼容（B7）
 对等依赖从精确 `0.2.0-rc.2` 改成范围 `>=0.2.0-rc.2 <0.3.0`，前提是 CI 在每个已发布的 0.2.x 上都跑过安装探针（`tools/probe_plugin_install.mjs`）和 JS 测试。在那之前保留精确版本，并在 README 里写明。
@@ -95,8 +98,8 @@
 
 ### D10 发布工程
 - 版本：semver；人格契约版本（`contract`）单独声明，核心声明支持哪些契约版本。
-- 发布：CI 依次打包、跑测试、跑个人数据扫描（`check_staged_secrets.py --personal --all` 必须为 0）、安装探针，然后 `npm publish --provenance`。
-- 公开还是私有由 owner 定（见第 6 节）。人格包默认只发私有源，或只给本地 `.tgz`。
+- 发布：依次打包、跑测试、跑个人数据扫描（`check_staged_secrets.py --personal --all` 必须为 0）、安装探针，然后把核心与通道包的 `.tgz` 挂到本仓库的 GitHub Release（按版本打 tag）。不发 npm。
+- 人格包不作为发布资产；它在仓库里的现状照旧（owner 2026-10-05：仓库与历史保持公开现状）。
 
 ### D11 隐私
 公开包里只能有占位符与合成夹具（ADR-009 R-6、R-7）。发布前的扫描结果是硬门槛。示例配置只用文档保留地址与号段。
@@ -110,17 +113,17 @@
 | M2 | D2-A：首启用 uv 建 venv | 没有仓库也没有 `.venv` 的机器上，首次启动自动建好环境，状态行说清进度和缺什么 |
 | M3 | D5 沙箱抽象（先 `wsl-bwrap` 和 `none`） | `none` 时相关能力关闭并如实说明；`wsl-bwrap` 行为与现在一致 |
 | M4 | D7-B 内联渲染特性检测；向 DSH 上游提 D7-A 的 PR | 没有补丁 UI 包时页面正常，行动脑走原生子会话 |
-| M5 | D10 发布流水线；按 owner 的选择发到私有或公共 registry | 在干净机器上照 README 安装成功 |
+| M5 | D10 发布流水线：GitHub Release 挂核心与通道 `.tgz`；`INSTALL.md` 给安装 agent | 在干净机器上用 Release 链接安装成功 |
 
 每个阶段都在**隔离的合成 profile** 上验收（AGENTS.md），owner 的真实 profile 最后切换。
 
-## 6. 需要 owner 决定的事
+## 6. owner 的决定（2026-10-05）
 
-1. 核心和通道包发到**公共 npm**，还是**私有 registry**？（人格包默认私有。）
-2. Python 交付先用 **D2-A（要求本机有 uv）**，还是直接做 **D2-B（自带解释器）**？
-3. v1 继续**要求 MongoDB**（推荐），还是现在就评估内嵌存储？
-4. 内联渲染走 **先 B 后 A**（推荐），还是只等上游？
-5. 开源许可证。
+1. **分发：** 不发 npm（公共或私有 registry 都不发）；用本仓库、owner 的账号发布——核心与通道 `.tgz` 挂 GitHub Release，知道链接的人可以装。仓库本身是公开的，owner 选择保持现状（人格包和历史都不动）。
+2. **Python：** D2-A，首启用 `uv sync --frozen` 在数据目录里建 venv。
+3. **状态存储：** v1 继续要求 MongoDB。
+4. **内联渲染：** 补丁留在本地，由安装插件的 agent 打（D7）；插件做特性检测，没有补丁就走原生子会话。
+5. **许可证：** GPLv3（兼容性已核对，见 D1）。
 
 ## 7. 风险
 
@@ -130,5 +133,7 @@
 - 上游可能不接受 Chat 片段工厂；D7-B 保证没有它也能用。
 
 ## 8. 相关但独立的提议（不在本 ADR 范围内）
+
+（已被 ADR-011 取代：委托如今就是角色脑的工具调用。下面保留原文。）
 
 角色脑决定「不说话」（委托且不先说，或沉默）时，那一轮的最后一步是 DECIDE 的 JSON，DSH 会把它当成这一轮的回答显示出来。DSH 原生的做法是把委托做成**工具调用**：参数由 schema 校验，失败作为工具错误回给模型，这也就是 answers.py 想做的那种如实回告。这样角色脑与行动脑就是 DSH 原生的父 agent 与子 agent 关系，渲染自然一致。这是阶段协议的设计变更，方案见 [PROPOSAL-DECISION-DISPLAY.md](PROPOSAL-DECISION-DISPLAY.md)，等 owner 决定。

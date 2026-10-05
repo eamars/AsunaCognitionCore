@@ -74,6 +74,9 @@ def prepare_channels(store, *, dry_run=False):
                 all_people.add(person)
                 if not blocked and sender not in channel.get('blocked_senders', []):
                     people.append(person)
+                # A relative path would mean whatever folder the worker happens to run in.
+                if not Path(grant['workspace']).is_absolute():
+                    raise Denied('CHANNEL_WORKSPACE_NOT_ABSOLUTE')
                 workspace = Path(grant['workspace']).resolve()
                 if not workspace.is_relative_to(DATA / 'channels'):
                     raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')

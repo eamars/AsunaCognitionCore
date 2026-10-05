@@ -1,0 +1,28 @@
+{
+  "name": "@asuna/dsh-peer",
+  "version": "0.2.0",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "description": "Another DeepSeek Harness agent as an Asuna channel: one peer session, bridged in this Host",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": [
+    "src",
+    "python",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "locale"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x"
+  }
+}

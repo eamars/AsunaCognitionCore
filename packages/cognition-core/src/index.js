@@ -125,6 +125,19 @@ export class CognitionCore {
     return () => this.channels.delete(channel.kind);
   }
 
+  /** A channel plugin that is its own adapter (it runs in this Host, not in the integration sandbox) reaches the
+   *  channel API like any adapter: HTTP on this machine with its channel's token (RUNTIME_API.md). Null when the
+   *  channel is not configured. */
+  async channelEndpoint(kind) {
+    const deployment = this.config.deployment ?? {};
+    const channel = deployment.channels?.[kind];
+    if (!channel) return null;
+    const token = typeof channel.token === 'string' ? channel.token
+      : (await this.credentialValues({ token: channel.token }))[channel.token?.$secret];
+    return { url: 'http://127.0.0.1:' + (deployment.channel_port ?? 8766), channelId: kind,
+             accountId: channel.account_id, token: token ?? null };
+  }
+
   channelOf(sceneId) {
     const [kind, ...rest] = String(sceneId ?? '').split(':');
     return rest.length ? this.channels.get(kind) ?? null : null;

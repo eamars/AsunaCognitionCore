@@ -161,3 +161,10 @@
 - `sandbox_backend.py`：每个 worker 选一次后端，`sandbox_run`、受管集成进程、人格作业都经它取命令前缀与路径映射（原来三处各自写死 `wsl -d Ubuntu`）。设置 `deployment.sandbox`：`backend` 为 `auto`（默认）／`wsl-bwrap`／`none`，`wsl_distro` 默认 `Ubuntu`。`auto` 在 WSL 发行版里能找到 bubblewrap、python3、prlimit 时取 `wsl-bwrap`，否则取 `none` 并记下原因；明确写 `wsl-bwrap` 而探测不通时直接报 `SANDBOX_UNAVAILABLE`。
 - `none` 时：`sandbox_run` 不进行动脑的能力清单，集成授权与自开发授权都不给，宿主不起受管集成进程，人格作业返回「没有沙箱」；她的能力清单里写明这些交不出去（只说能力，不说机器怎么配）。设置卡片状态行显示后端或没有的原因。
 - Linux 的 `bwrap` 后端留到下一步（同一组命令去掉 `wsl` 前缀、路径不映射）。
+
+### M4（2026-10-05，`fdeb2de6`）
+- 客户端在渲染时查 slot 注册表里有没有 `factory:conversation.chat.content`（本地补丁 UI 包提供的 Chat 片段工厂）：有就在主会话里内联行动脑的记录；没有就让工作行打开 DSH 自己的子会话视图（「在侧栏打开完整过程」），不报错。
+- 仓库根新增 `INSTALL.md`，写给安装 agent：前提、用 `dsh plugin add` 装 Release 的 tgz、在设置卡片上配置、可选地本地构建内联视图的两个补丁包。
+- **验收**：全新 profile 用 DSH 自带 UI（没有补丁包），真实的演示人格委托一件 `sandbox_run` 的事，结果 1024 回来；工作行展开是「在侧栏打开完整过程」，点开是 DSH 原生子会话，页面无错误。合成库与临时 home 事后删除。
+- 这次验收顺带发现：首启建的环境里没有 `tzdata`，Windows 上 zoneinfo 没有时区库，她的第一轮失败。worker 现在声明并锁定 `tzdata`。
+- D7-A（向 DSH 上游提片段工厂的 PR）不在本仓库的权限内，留给 owner 决定何时提。

@@ -31,7 +31,7 @@ def _probe_wsl(distro):
         try:
             probe = subprocess.run(['wsl', '-d', distro, '--exec', 'sh', '-c',
                                     'command -v bwrap && command -v python3 && command -v prlimit'],
-                                   capture_output=True, timeout=60)
+                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=60)   # never the worker's pipe
             result = (True, None) if probe.returncode == 0 else (
                 False, 'WSL distro %s lacks bubblewrap, python3 or prlimit (exit %d)' % (distro, probe.returncode))
         except (OSError, subprocess.TimeoutExpired) as exc:

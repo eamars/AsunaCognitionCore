@@ -10,6 +10,7 @@ import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
 import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
+import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
@@ -337,10 +338,10 @@ export class CognitionCore {
       await this.validateSettings(next);
       if (this.lifecycle.state === 'ready') await this.worker.call('settings.quiesce');
       this.config = next;
-      try { await this.restart(); }
+      try { await this.restart('settings applied'); }
       catch (error) {
         this.config = previous;
-        try { await this.restart(); }
+        try { await this.restart('settings restored after a failed apply'); }
         catch (recovery) { throw new Error('SETTINGS_ACTIVATION_AND_RECOVERY_FAILED: ' + String(error) + '; ' + String(recovery)); }
         throw new Error('SETTINGS_NOT_APPLIED_PREVIOUS_CONFIGURATION_RESTORED: ' + String(error));
       }
@@ -410,7 +411,7 @@ export class CognitionCore {
       // A request from the worker a restart is still bringing up would otherwise be lost, leaving that
       // worker holding its queues for a restart that never comes. Honor it once the current one settles.
       if (this.restarting) { this.restartAgain = true; this.ctx.logger.warn('Asuna: restart requested during a restart; queued'); return; }
-      await this.restart(); return;
+      await this.restart('worker asked: ' + (event.reason ?? 'unspecified')); return;
     }
     if (event.kind === 'host_request') {
       try {
@@ -534,13 +535,21 @@ export class CognitionCore {
       state.current = null; state.admitted = null; state.claimed = []; state.queue = [];
     }
     if (!this.disposed && !this.restarting && this.lifecycle.restarts < 3) {
-      this.restartTimer = setTimeout(() => this.restart().catch(e => this.ctx.logger.warn(String(e))), 1000);
+      this.restartTimer = setTimeout(() => this.restart('worker failed: ' + String(error))
+        .catch(e => this.ctx.logger.warn(String(e))), 1000);
       this.restartTimer.unref();
     }
   }
 
-  async restart() {
+  /** Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's
+   * data, since the Host's own log is not kept. */
+  async restart(reason = 'unspecified') {
     if (this.restarting) return this.restarting;
+    const entry = { at: new Date().toISOString(), reason: String(reason).slice(0, 500) };
+    this.lifecycle.history = [...(this.lifecycle.history ?? []), entry].slice(-10);
+    this.ctx.logger.warn('Asuna worker restart: ' + entry.reason);
+    await appendFile(path.join(this.ctx.asunaFloor.dataRoot, 'worker-restarts.jsonl'), JSON.stringify(entry) + '\n')
+      .catch(error => this.ctx.logger.warn('Asuna: restart not logged: ' + String(error)));
     this.restarting = (async () => {
       this.lifecycle.state = 'restarting'; this.lifecycle.restarts++;
       for (const [id, state] of this.states) {
@@ -553,7 +562,7 @@ export class CognitionCore {
       await this.ready();
     })();
     try { await this.restarting; } finally { this.restarting = null; }
-    if (this.restartAgain) { this.restartAgain = false; await this.restart(); }
+    if (this.restartAgain) { this.restartAgain = false; await this.restart('a restart requested during the last one'); }
   }
 
   /** The tools a stage exposes: her turn's (role_tools.exposed) or the action task's grant. */
@@ -801,7 +810,7 @@ export function apply(ctx, config = {}) {
     const status = core.lifecycle.state === 'ready' ? await core.worker.call('status') : null;
     if (status?.active_role || status?.active_task || status?.queued_inputs || status?.queued_tasks)
       return { ...value, activation_note: 'Business work is active; apply saved settings when idle to load the selected artifact.' };
-    await core.restart();
+    await core.restart('recovery activated ' + value.project);
     return (await ctx.asunaFloor.selected()).projects[value.project];
   };
   ctx.asunaFloor.activateRecovery = activateRecovery;

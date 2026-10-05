@@ -316,7 +316,7 @@ def check_export_path(target, root):
     if not target.is_relative_to(root):
         return target
     relative = target.relative_to(root).as_posix() + '/probe.md'
-    ignored = subprocess.run(['git', 'check-ignore', '-q', relative], cwd=root).returncode == 0
+    ignored = subprocess.run(['git', 'check-ignore', '-q', relative], cwd=root, stdin=subprocess.DEVNULL).returncode == 0
     if not ignored:
         raise DataError('EXPORT_PATH_TRACKED', 'export_dir must be outside the worktree or git-ignored')
     return target

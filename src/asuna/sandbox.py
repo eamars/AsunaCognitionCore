@@ -60,7 +60,10 @@ print(json.dumps({'exit_code':p.returncode,'stdout':buffers[0].decode('utf-8','r
                  '--bind',mount,'/task',*protected,'--chdir','/task','--clearenv','--setenv','PATH','/usr/bin:/bin',
                  '/usr/bin/prlimit','--cpu=20','--as=1073741824','--fsize=8388608','--nofile=128','--',
                  'python3','-c',wrapper,json.dumps(argv),str(timeout)]
-        result=subprocess.run(command, capture_output=True, timeout=timeout+5, encoding='utf-8', errors='replace')
+        # stdin is the worker's request pipe from the Host: wsl relays its stdin into Linux, so an inherited stdin
+        # swallows Host requests while the command runs (a cut request ends the worker's read loop).
+        result=subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout+5,
+                              encoding='utf-8', errors='replace')
         if result.returncode:raise RuntimeError(f'SANDBOX_LAUNCH_FAILED (exit {result.returncode})\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
         value=json.loads(result.stdout)
         if value['output_limit']:raise RuntimeError('TOOL_OUTPUT_LIMIT')

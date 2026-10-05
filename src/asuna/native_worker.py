@@ -1000,15 +1000,37 @@ class Dispatcher:
         self.pool.shutdown(wait=True, cancel_futures=True)
 
 
+def serve(stream, dispatcher, record):
+    """The Host's requests, one JSON line each. A line that is not a request is recorded and skipped: one bad line
+    must not end the worker, and with it every running turn and task. Returns when the Host closes the pipe."""
+    for line in stream:
+        try:
+            request = json.loads(line)
+            if not isinstance(request, dict):
+                raise ValueError('NOT_A_REQUEST')
+        except ValueError as exc:
+            # Never the line itself: it may carry her words or a credential.
+            record('host.input_rejected', {'error': type(exc).__name__ + ': ' + str(exc)[:200], 'chars': len(line)})
+            continue
+        dispatcher.handle(request)
+    record('host.input_closed', {})
+
+
 def main():
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         stream.reconfigure(encoding='utf-8')
     argparse.ArgumentParser(description=__doc__).parse_args()
     worker = BusinessWorker()
     dispatcher = Dispatcher(worker)
+
+    def record(kind, payload):
+        evidence = getattr(worker.app, 'evidence', None) if worker.app else None
+        if evidence:
+            evidence.record(kind, payload)
+        else:
+            print(kind, json.dumps(payload), file=sys.stderr, flush=True)
     try:
-        for line in sys.stdin:
-            dispatcher.handle(json.loads(line))
+        serve(sys.stdin, dispatcher, record)
     finally:
         worker.close()
         dispatcher.close()

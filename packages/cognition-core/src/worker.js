@@ -28,11 +28,22 @@ export class BusinessWorker {
           if (message.error) pending.reject(new Error(message.error));
           else pending.resolve(message.value);
         } else Promise.resolve(onEvent(message)).catch(error => logger.warn(String(error)));
-      } catch (error) { this.fail(error); }
+      } catch (error) {
+        this.fail(new Error(`Asuna business worker wrote a line that is not JSON (${line.length} chars): ${error.message ?? error}`));
+      }
     });
-    this.process.stderr.on('data', chunk => logger.warn(chunk.toString()));
+    // The last line it wrote to stderr travels with an unexpected exit (usually its traceback's last line).
+    this.stderrTail = '';
+    this.process.stderr.on('data', chunk => {
+      const text = chunk.toString();
+      logger.warn(text);
+      this.stderrTail = (this.stderrTail + text).slice(-2000);
+    });
     this.process.on('error', error => this.fail(error));
-    this.process.on('exit', code => this.fail(new Error(`Asuna business worker exited (${code})`)));
+    this.process.on('exit', code => {
+      const last = this.stderrTail.trim().split(/\r?\n/).pop()?.slice(0, 300);
+      this.fail(new Error(`Asuna business worker exited (${code})` + (last ? ': ' + last : '')));
+    });
   }
 
   fail(error) {

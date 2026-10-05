@@ -74,6 +74,14 @@ export class AsunaApi extends TypertRemoteService {
     return (header && ctx.sessionProjectionCache.cachedSnapshot(header, keys)?.values) ?? null;
   }
 
+  /** The presets her two brains run in: her persona's and the action brain's. DSH's permission presets set
+   * its own shell sandbox and approvals, which neither uses (her character has no DSH tools; the action
+   * brain's run in Asuna's sandbox under her grants), so the client does not show that picker there. */
+  async brainPresets() {
+    return [...new Set([...this.core.personas.values()].map(persona => persona.preset)
+      .filter(preset => typeof preset === 'string' && preset)), 'asuna-action'];
+  }
+
   async personaSources() {
     await this.core.ready();
     return this.core.worker.call('persona.sources', {});
@@ -112,7 +120,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

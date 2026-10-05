@@ -1017,6 +1017,29 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-repair', locale: NS }, RepairNote));
 
+    // ── DSH's permission picker, only where it does something ─────────
+    // It sets DSH's shell sandbox and approval policy; her two brains use neither (api.js brainPresets).
+    // In their sessions it is not shown; every other session renders DSH's own picker, given the same
+    // injection and locale DSH gives it, so nothing about it changes there.
+    const brainPresets = { value: new Set(), listeners: new Set() };
+    rpc('brainPresets').then(list => {
+      brainPresets.value = new Set(list); for (const listener of brainPresets.listeners) listener();
+    }).catch(error => ctx.logger?.warn?.(String(error)));
+    const subscribePresets = listener => { brainPresets.listeners.add(listener); return () => brainPresets.listeners.delete(listener); };
+    const shippedPermission = () => ctx.slots.entries('conversation.input.permission')
+      .find(entry => entry.component !== PermissionPicker);
+    function PermissionPicker(props) {
+      const presets = React.useSyncExternalStore(subscribePresets, () => brainPresets.value);
+      const preset = props.useSessions(state => state.byId[props.sessionId]?.projectionValues?.agentPreset);
+      if (typeof preset === 'string' && presets.has(preset)) return null;
+      const shipped = shippedPermission();
+      return shipped ? h(shipped.component, props) : null;
+    }
+    ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
+      name: 'conversation.input.permission', priority: -1, locale: 'permission.access',
+      inject: sessionId => shippedPermission()?.options.inject?.(sessionId) ?? {},
+    }, PermissionPicker));
+
     // ── a turn's trigger, titled in the viewer's language ─────────────
     // DSH titles a turn started by a notice "execution requested"; an Asuna notice says what started it.
     function AsunaTrigger(props) {

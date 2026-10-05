@@ -3,8 +3,11 @@
   "version": "0.2.0",
   "type": "module",
   "description": "Xiaoman's persona resources and native Asuna preset",
+  "icon": "icon.svg",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
   },
   "files": [
     "src",
@@ -13,7 +16,9 @@
     "cordis.patch.yml",
     "README.md",
     "seeds",
-    "persona-model.json"
+    "persona-model.json",
+    "icon.svg",
+    "locale"
   ],
   "dsh": {
     "bundle": {

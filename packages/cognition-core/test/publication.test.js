@@ -30,6 +30,26 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
   console.log('Publication artifact evidence:', result.artifact);
 });
 
+test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async () => {
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/stale-probe-'));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module' }));
+  for (const name of ['a.md', 'b.md', 'c.md']) await fs.writeFile(path.join(source, name), 'v1 ' + name);
+  const floor = new PublicationFloor({ workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await floor.call('development_write', { path: 'a.md', text: 'her edit', overwrite: true });   // source will move
+  await floor.call('development_write', { path: 'b.md', text: 'her edit', overwrite: true });   // source stays
+  await fs.writeFile(path.join(source, 'a.md'), 'v2 a.md');
+  await fs.writeFile(path.join(source, 'c.md'), 'v2 c.md');                                    // untouched by her
+  const listing = await floor.call('development_files', {});
+  const byPath = Object.fromEntries(listing.files.map(row => [row.path, row]));
+  assert.equal(byPath['a.md'].stale, true);
+  assert.equal(byPath['b.md'].stale, undefined);
+  assert.equal(byPath['c.md'].changed, false, 'an untouched file simply follows the source');
+  assert.match(listing.stale_note, /publish refuses/);
+  await assert.rejects(floor.call('development_publish', { reason: 'stale' }).then(r => { throw new Error(r.state); }),
+    /EFFECTIVE_PROJECT_CHANGED: a\.md/);
+});
+
 test('native spilled output stays readable only by its own action, in bounded pages', async () => {
   const root = await fs.mkdtemp(path.resolve('.runtime/adr008/spill-probe-'));
   const ctx = new Context(); const store = new LocalSpillStore(ctx, { root, cleanupPeriodDays: 0 });

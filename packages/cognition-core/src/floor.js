@@ -193,11 +193,24 @@ export class PublicationFloor {
         if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || typeof prefix !== 'string')
           throw new Error('DEVELOPMENT_PAGE_INVALID');
         const rows = [...current].filter(([name]) => name.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b));
+        // A file she changed whose source also moved after her baseline: publishing it would be refused
+        // (EFFECTIVE_PROJECT_CHANGED), so say so before she builds on it (ADR-010 D9).
+        const moved = async name => {
+          const source = path.join(project.source, name);
+          return (await exists(source) ? hash(await fs.readFile(source)) : undefined) !== project.baseline[name];
+        };
+        const listed = await Promise.all(rows.slice(offset, offset + limit).map(async ([name, file]) => {
+          const digest = hash(await fs.readFile(file)), changed = digest !== project.baseline[name];
+          return { path: name, sha256: digest, changed, ...(changed && await moved(name) ? { stale: true } : {}) };
+        }));
+        const deleted = Object.keys(project.baseline).filter(name => !current.has(name));
+        const staleDeleted = (await Promise.all(deleted.map(async name => await moved(name) ? name : null))).filter(Boolean);
         return { project: project.id, candidate: project.candidate, projects: [...this.projects.keys()],
           total: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null,
-          files: await Promise.all(rows.slice(offset, offset + limit).map(async ([name, file]) => {
-            const digest = hash(await fs.readFile(file)); return { path: name, sha256: digest, changed: digest !== project.baseline[name] };
-          })), deleted: Object.keys(project.baseline).filter(name => !current.has(name)), selected: await this.selected() };
+          files: listed, deleted, ...(staleDeleted.length ? { stale_deleted: staleDeleted } : {}),
+          ...(listed.some(row => row.stale) || staleDeleted.length ? { stale_note: 'stale: the source changed after your '
+            + 'baseline for this file; read the source version and merge before relying on it — publish refuses it as is.' } : {}),
+          selected: await this.selected() };
       }
       if (tool === 'development_read') {
         const file = await safePath(args.path);

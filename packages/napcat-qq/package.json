@@ -3,8 +3,11 @@
   "version": "0.2.0",
   "type": "module",
   "description": "QQ through NapCat as an Asuna channel: id formats, the adapter, and its skill",
+  "icon": "icon.svg",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
   },
   "files": [
     "src",
@@ -13,7 +16,9 @@
     "skills",
     "resources-provenance.json",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "icon.svg",
+    "locale"
   ],
   "dsh": {
     "bundle": {

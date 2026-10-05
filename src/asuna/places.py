@@ -25,6 +25,8 @@ OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，�
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
             'pending': '还在那儿', 'failed': '没去成'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
+# Intents that open a conversation: these wait until the group has been quiet for heartbeat.quiet_min.
+STARTING = ('start_topic', 'share_picture')
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
 WAKE_REASON = 'visit'
@@ -111,12 +113,19 @@ def room(store, scene, moment):
             'called': bool(called)}
 
 
+def episode_key(visit):
+    from .ingress import episode_id
+    return episode_id({'scene_id': visit['scene_id'], 'event_id': visit['event_id'], 'episode_kind': 'visit'})
+
+
 def outcome(store, visit):
     """What happened on one visit, read from its turn and the room afterwards."""
-    from .ingress import episode_id
-    ep_id = episode_id({'scene_id': visit['scene_id'], 'event_id': visit['event_id'], 'episode_kind': 'visit'})
+    ep_id = episode_key(visit)
     ep = store.db.episodes.find_one({'_id': ep_id}, {'state': 1, 'tool_calls': 1})
-    if not ep or ep.get('state') not in FINISHED + FAILED:
+    if not ep:
+        source = store.db.messages.find_one({'_id': 'in-' + ep_id}, {'ingress_state': 1})
+        return 'failed' if (source or {}).get('ingress_state') == 'FAILED' else 'pending'
+    if ep.get('state') not in FINISHED + FAILED:
         return 'pending'
     if ep['state'] in FAILED:
         return 'failed'
@@ -142,23 +151,26 @@ def local_date(config, model, policy, moment):
     return schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment).date().isoformat()
 
 
-def today(plan, date):
-    day = (plan or {}).get('visits_day') or {}
-    return day.get('count', 0) if day.get('date') == date else 0
+def today(store, plan, date):
+    """Visits made on her local date; one that never got there does not count."""
+    return sum(1 for visit in (plan or {}).get('visits') or []
+               if visit.get('date') == date and outcome(store, visit) != 'failed')
 
 
-def last_visit(plan, scene_id):
-    return next((visit for visit in reversed((plan or {}).get('visits') or []) if visit['scene_id'] == scene_id), None)
+def last_visit(store, plan, scene_id):
+    return next((visit for visit in reversed((plan or {}).get('visits') or [])
+                 if visit['scene_id'] == scene_id and outcome(store, visit) != 'failed'), None)
 
 
-def eligibility(store, scene, plan, settings, moment, date, here=None):
-    """(can go, words). Deterministic; the view and the visit tool use the same answer."""
+def eligibility(store, scene, plan, settings, moment, date, here=None, intent=None):
+    """(can go, words). Deterministic; the view and the visit tool use the same answer. While people are
+    talking she may still go and look or take notes; starting a topic or sharing a picture waits for quiet."""
     here = here or room(store, scene, moment)
-    if today(plan, date) >= settings['per_day']:
+    if today(store, plan, date) >= settings['per_day']:
         return False, '今天出门的次数用完了'
     if night_there(store.config, scene, moment):
         return False, '那边这会儿是夜里，别去吵'
-    visit = last_visit(plan, scene['_id'])
+    visit = last_visit(store, plan, scene['_id'])
     gap = timedelta(minutes=settings['after_own_min'])
     if visit and outcome(store, visit) == 'unanswered':
         gap *= 2                         # she spoke and nobody answered: wait twice as long (as P5 does)
@@ -166,7 +178,9 @@ def eligibility(store, scene, plan, settings, moment, date, here=None):
     if recent and moment - max(recent) < gap:
         return False, '你%s来过这里（说过话或来看过），过一阵再来' % _ago(moment, max(recent))
     if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
-        return False, '这会儿有人在聊；有人叫你时你会知道，等安静下来再来起话头'
+        if intent in STARTING:
+            return False, '这会儿有人在聊；起话头或发图等安静下来，只去看看、写笔记可以'
+        return True, '正有人在聊：可以去看看、写笔记；起话头或发图等安静下来'
     return True, '可以去'
 
 
@@ -194,7 +208,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
         can, why = eligibility(store, scene, plan, rule, moment, date, here)
         notes = [section.get('heading') for section in (docs.read(notes_slug(scene_id))[1] or {}).get('sections', [])
                  if section.get('heading')][:NOTE_HEADINGS]
-        visit = last_visit(plan, scene_id)
+        visit = last_visit(store, plan, scene_id)
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
                'now': _tier(ACTIVITY, here['lines']) + ('，上一句是%s' % _ago(moment, here['last_line_at'])
                                                         if here['last_line_at'] else '，还没见过有人说话'),
@@ -210,7 +224,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
     if not items:
         return None
     return {'items': [row for _, row in sorted(items, key=lambda item: item[0])],
-            'left_today': max(0, rule['per_day'] - today(plan, date)),
+            'left_today': max(0, rule['per_day'] - today(store, plan, date)),
             'note': ('你在的群，只有概况，没有原话（新鲜的内容要去了才看得到）。想去哪个看看，就用 visit：'
                      '程序会在那个群里给你开一个回合，你在那儿再决定说不说、说什么。不去也完全正常。'
                      'left_today 是今天还能出门几次。')}
@@ -258,7 +272,7 @@ def visit_block(store, scene, visit, moment):
 
 
 def record(plan, scene_id, event_id, intent, moment, date):
-    """The plan fields after one visit: the ledger (newest last, bounded) and today's count."""
+    """The plan's ledger after one visit (newest last, bounded); today's count is read from it."""
     visits = [*((plan or {}).get('visits') or []), {'scene_id': scene_id, 'event_id': event_id, 'intent': intent,
-                                                    'at': moment.isoformat()}][-VISITS_KEPT:]
-    return {'visits': visits, 'visits_day': {'date': date, 'count': today(plan, date) + 1}}
+                                                    'at': moment.isoformat(), 'date': date}][-VISITS_KEPT:]
+    return {'visits': visits}

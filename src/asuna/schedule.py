@@ -378,10 +378,13 @@ class ScheduleService:
         if not scene:
             raise ValueError('VISIT_PLACE_UNKNOWN: ' + place)
         _, route, channel = found
+        if not scene.get('channel_id'):
+            raise ValueError('VISIT_PLACE_UNKNOWN: ' + place)
         moment = schedule_rules._aware(now())
         date = places.local_date(self.app.config, model, policy, moment)
         plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
-        can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
+        can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
+                                      intent=intent)
         if not can:
             raise ValueError('VISIT_NOT_NOW: ' + why)
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
@@ -390,9 +393,10 @@ class ScheduleService:
         if not person:
             raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权')
         event_id = 'visit:%s:%s' % (scene['_id'], ep['source_event_id'])
+        # Her own moment in the group, not a platform input: no channel envelope (that would be shown in the
+        # group's session as a member's message). It wakes as a scene tick; publishing targets the group's route.
         self.controller.offer_internal('visit', event_id, scene['_id'], person, places.visit_text(intent, topic),
-            channel={'id': scene['channel_id'], 'account_id': scene['channel_account_id'], 'target': route['target'],
-                     'sender_id': 'visit', 'platform_event_id': None},
+            scene_tick=True,
             group_context={'wake_reason': places.WAKE_REASON, 'topic_id': event_id, 'reply_to': None,
                            'reply_message_id': None, 'mentioned_account_ids': []},
             visit={'intent': intent, 'topic': topic, 'artifact_id': artifact_id, 'from': ep['_id']})

@@ -60,7 +60,11 @@ def test_her_places_read_in_words_and_each_says_whether_she_can_go(store):
     assert 'GROUP_LINE_NEVER_SHOWN_AT_HOME' not in json.dumps(block, ensure_ascii=False)
     line(store, 'g1', 'm-now', '在吗', minutes_ago=1, wake='mentioned_account')
     [row] = view(store, service)['items']
-    assert '有人在聊' in row['can_visit'] and row['called_you'] and '零星有人说话' in row['now']
+    assert row['can_visit'].startswith('正有人在聊：可以去看看') and row['called_you'] and '零星有人说话' in row['now']
+    beat = {'_id': 'ep-home', 'source_event_id': 'presence:s-p5:1'}
+    with pytest.raises(ValueError, match='起话头或发图等安静下来'):
+        service.visit(beat, PLACE, 'start_topic', None, None)        # talking: no new topic over them
+    assert service.visit(beat, PLACE, 'write_notes', None, None)['going_to']   # but she may go and look
     service = group_world(store, quiet_hours=[('00:00', '23:59')])
     assert '夜里' in view(store, service)['items'][0]['can_visit']
     PolicyStore(store, 'P1', store.config['persona_model']).set([{'key': 'heartbeat.visits', 'value': False, 'what': 'x'}],
@@ -88,10 +92,11 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     kind, event_id, scene_id, person = service.controller.offers[-1]
     envelope = service.controller.envelopes[-1]
     assert (kind, scene_id) == ('visit', 'g1') and event_id == 'visit:g1:presence:s-p5:9'
-    assert envelope['group_context']['wake_reason'] == 'visit' and envelope['channel']['target'] == {'type': 'group', 'id': 'G1'}
+    # Her own moment there, not a platform input: no channel envelope, so no member is shown saying it.
+    assert envelope['group_context']['wake_reason'] == 'visit' and envelope['scene_tick'] is True and 'channel' not in envelope
     assert envelope['visit'] == {'intent': 'start_topic', 'topic': '周末去哪儿玩', 'artifact_id': None, 'from': ep['_id']}
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
-    assert plan['visits'][-1]['scene_id'] == 'g1' and plan['visits_day']['count'] == 1
+    assert plan['visits'][-1]['scene_id'] == 'g1' and places.today(store, plan, plan['visits'][-1]['date']) == 1
     # The visit itself: a public turn in g1 that sees the room and her topic, and nothing from home.
     visit_event = {'event_id': event_id, 'scene_id': 'g1', 'person_id': person, 'adapter_id': 'visit',
                    'episode_kind': 'visit', 'text': service.controller.texts[-1], **envelope}
@@ -139,11 +144,19 @@ def test_visit_refusals_name_what_to_do(store):
         service.visit(beat, 'gnowhere', 'check_in', None, None)
     with pytest.raises(ValueError, match='VISIT_PICTURE_NOT_HERS'):
         service.visit(beat, PLACE, 'share_picture', None, 'artifact-from-someone-else')
-    plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
-    store.db.plans.update_one({'_id': plan['_id']}, {'$set': {'visits_day': {
-        'date': places.local_date(store.config, store.config['persona_model'], {}, datetime.now(timezone.utc)), 'count': 4}}})
+    date = places.local_date(store.config, store.config['persona_model'], {}, datetime.now(timezone.utc))
+    old = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    made = [{'scene_id': 'g-other', 'event_id': 'visit:g-other:%d' % n, 'intent': 'check_in', 'at': old, 'date': date}
+            for n in range(4)]
+    store.db.plans.update_one({'_id': 'plan-asuna-presence'}, {'$set': {'visits': made}})
     with pytest.raises(ValueError, match='次数用完'):
         service.visit(beat, PLACE, 'check_in', None, None)
+    # A visit whose input failed never got there: it comes home as such and spends nothing.
+    for visit in made:
+        store.db.messages.insert_one({'_id': 'in-' + places.episode_key(visit), 'schema_version': 1,
+                                      'ingress_state': 'FAILED'})
+    assert places.outcome(store, made[0]) == 'failed'
+    assert service.visit(beat, PLACE, 'check_in', None, None)['going_to']
 
 
 def test_the_owner_can_give_a_heartbeat_now_and_see_when_the_next_is_due(store):

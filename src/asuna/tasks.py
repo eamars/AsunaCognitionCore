@@ -8,7 +8,7 @@ import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
-from .config import ROOT,prompt_path,redact_text,excerpt
+from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
 from . import answers, visibility
 from .evidence import canonical,sha
@@ -371,7 +371,7 @@ class Executor:
         # Two task workers must not share a mutable project concurrently.
         # Take the lease before claiming: a busy workspace leaves the task READY.
         key=sha(str(Path(workspace).resolve()).casefold().encode())
-        with RuntimeLease(ROOT/'.runtime/locks'/('workspace-'+key+'.lock')):
+        with RuntimeLease(DATA/'locks'/('workspace-'+key+'.lock')):
             return self._run_owned(task_id,workspace)
 
     def _run_owned(self,task_id,workspace):

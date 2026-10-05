@@ -25,6 +25,13 @@ def profile_base(profile):
     return base if profile == 'asuna-native' else base / 'profiles' / profile
 
 
+def data_folder(profile):
+    """(dataRoot, stateDir) of a profile set up from this checkout (ADR-010 D3). The owner's profile keeps its
+    folders where they are: data in the checkout's .runtime, floor state in its adr008. Another profile's data
+    folder is its own base, with the floor state at the top."""
+    return (ROOT / '.runtime', 'adr008') if profile == 'asuna-native' else (profile_base(profile), None)
+
+
 def with_pnpm(env):
     """DSH installs plugins with `pnpm` from PATH; without one, use the pnpm Node ships through corepack.
 
@@ -75,7 +82,7 @@ def channel_package(directory):
             'python': directory / 'python', 'module': modules[0]}
 
 
-def profile_patch(config, config_path, persona, shared_action_model=False, state_dir=None, channels=()):
+def profile_patch(config, config_path, persona, shared_action_model=False, profile='asuna-native', channels=()):
     providers, routes = {}, {}
     for lane, source in (('character', 'executor' if shared_action_model else 'character'), ('action', 'executor')):
         model = config[source]
@@ -91,6 +98,7 @@ def profile_patch(config, config_path, persona, shared_action_model=False, state
         }
         routes[lane] = {'provider': provider, 'model': model['model'],
                         'reasoningEffort': model['reasoning_effort'], 'maxTokens': model['max_tokens']}
+    data_root, state_dir = data_folder(profile)
     return [
         {'id': 'llm-pi-ai', 'config': {'providers': providers}},
         {'id': 'agent-default-model', 'config': {key: routes['character'][key]
@@ -98,15 +106,14 @@ def profile_patch(config, config_path, persona, shared_action_model=False, state
         {'id': 'session-title-llm', 'disabled': True},
         {'id': 'agent-preset-registry', 'config': {'default': persona['preset']}},
         {'id': 'asuna-publication-floor', 'config': {
-            'workspace': str(ROOT), 'python': sys.executable, 'configPath': str(config_path.resolve()),
+            'dataRoot': str(data_root), 'python': sys.executable, 'configPath': str(config_path.resolve()),
             'defaultProject': persona['project'], 'route': routes['action'],
             **({'stateDir': state_dir} if state_dir else {}),
             'projects': [{'id': persona['project'], 'root': str(persona['root']), 'format': 'package'},
                          *({'id': c['project'], 'root': str(c['root']), 'format': 'package'} for c in channels),
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
-            'python': sys.executable, 'workspace': str(ROOT),
-            'configPath': str(config_path.resolve()), 'persona': config['chat']['persona'], 'routes': routes,
+            'python': sys.executable, 'configPath': str(config_path.resolve()), 'persona': config['chat']['persona'], 'routes': routes,
             **export_settings(config)}},
     ]
 
@@ -129,7 +136,6 @@ def main():
     # Exported settings drop what a channel's kind derives, so its module must be importable here.
     channel_kinds.load([{'python': c['python'], 'module': c['module']} for c in channels])
     base = profile_base(args.profile)
-    state_dir = None if args.profile == 'asuna-native' else base.relative_to(ROOT).as_posix()
     home = base / 'home'
     home.mkdir(parents=True, exist_ok=True)
     env = with_pnpm({**os.environ, 'DSH_HOME': str(home), 'DSH_TELEMETRY_DISABLED': '1'})
@@ -157,7 +163,7 @@ def main():
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
     prior = yaml.safe_load(editable.read_text(encoding='utf-8')) if editable.exists() else []
-    defaults = profile_patch(config, args.config, persona, args.shared_action_model, state_dir, channels)
+    defaults = profile_patch(config, args.config, persona, args.shared_action_model, args.profile, channels)
     def merge(base, override):
         if isinstance(base, dict) and isinstance(override, dict):
             return {**base, **{key: merge(base.get(key), val) for key, val in override.items()}}
@@ -173,6 +179,9 @@ def main():
     for row in merged:
         if row.get('id') == 'agent-default-model':
             row.get('config', {}).pop('maxTokens', None)
+        # ADR-010 D3: the data folder replaced the checkout as the place a profile writes to.
+        if row.get('id') in ('asuna-publication-floor', 'asuna-cognition-core'):
+            row.get('config', {}).pop('workspace', None)
     # Which packages are development projects is composition, not a saved setting:
     # an installed channel package must become a project even on an existing profile.
     floor = next(row for row in defaults if row['id'] == 'asuna-publication-floor')['config']

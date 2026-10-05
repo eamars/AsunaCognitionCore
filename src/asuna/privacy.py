@@ -2,7 +2,7 @@
 import copy
 from pathlib import Path
 import uuid
-from .config import ROOT
+from .config import DATA, ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
 
@@ -46,7 +46,7 @@ class PrivacyService:
                 native_sessions.add(session['_id'])
                 continue
             home=Path(session['dsh_home']).resolve()
-            if not home.is_relative_to((ROOT/'.runtime').resolve()):raise Denied('ERASURE_HOME_OUTSIDE_REPOSITORY')
+            if not home.is_relative_to(DATA):raise Denied('ERASURE_HOME_OUTSIDE_REPOSITORY')
             for directory in (home/'sessions').glob('**/'+session['_id']):
                 directory=directory.resolve()
                 if not directory.is_relative_to(home) or directory.name!=session['_id']:raise Denied('ERASURE_PATH_DENIED')
@@ -101,7 +101,9 @@ class PrivacyService:
         for root in roots:
             if not root:continue
             path=Path(root).resolve()
-            if not path.is_relative_to((ROOT/'reports').resolve()) or path==ROOT/'reports':raise Denied('ERASURE_EVIDENCE_ROOT_DENIED')
+            # Evidence lives in the data folder's reports; a development checkout's older runs are in its reports.
+            if not any(path.is_relative_to(base) and path!=base for base in ((DATA/'reports').resolve(),(ROOT/'reports').resolve())):
+                raise Denied('ERASURE_EVIDENCE_ROOT_DENIED')
             for item in path.rglob('*'):
                 if item.is_file():item.unlink();removed_files+=1
             write_json(path/'erasure.json',{'deletion_id':deletion,'scope_key':scope,'reason':'conservative removal of the affected run evidence containing raw requests','previous_audit_roots':previous_roots})

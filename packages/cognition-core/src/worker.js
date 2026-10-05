@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -8,10 +9,12 @@ export class BusinessWorker {
     this.pending = new Map();
     this.serial = 0;
     this.closed = false;
+    // The worker runs in, and writes only to, this profile's data folder (paths.js).
+    mkdirSync(config.dataRoot, { recursive: true });
     this.process = spawn(config.python, ['-u', '-m', 'asuna.native_worker', '--config', config.configPath], {
-      cwd: config.workspace, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: config.dataRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
-        ASUNA_DATA_ROOT: config.workspace,
+        ASUNA_DATA_ROOT: config.dataRoot,
         PYTHONPATH: config.pythonPath ?? fileURLToPath(new URL('../python', import.meta.url)) },
     });
     this.lines = createInterface({ input: this.process.stdout });

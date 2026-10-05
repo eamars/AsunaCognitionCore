@@ -2,8 +2,7 @@ from __future__ import annotations
 import argparse,json,sys,uuid
 from datetime import datetime,timezone
 from pathlib import Path
-import os
-ROOT=Path(os.environ.get('ASUNA_DATA_ROOT', Path(__file__).resolve().parents[2])).resolve()
+ROOT=Path(__file__).resolve().parents[2]   # the development checkout (this CLI is not shipped)
 
 
 def main():

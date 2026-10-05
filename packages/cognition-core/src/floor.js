@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolvePersona } from './persona.js';
 import { resolveChannel } from './channel.js';
+import { dataRoot, floorState } from './paths.js';
 
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -15,7 +16,7 @@ const hash = data => createHash('sha256').update(data).digest('hex');
 const excluded = new Set(['.runtime', '.venv', '.git', 'node_modules', '__pycache__', '.pytest_cache', 'reports']);
 // The floor and everything it imports (ADR-011 §6.4): persona.js and channel.js for floor.js,
 // settings.js for recovery.js. A publication can never replace what keeps the Host bootable.
-const FLOOR_FILES = ['floor.js', 'recovery.js', 'persistence.js', 'persona.js', 'channel.js', 'settings.js'];
+const FLOOR_FILES = ['floor.js', 'recovery.js', 'persistence.js', 'persona.js', 'channel.js', 'settings.js', 'paths.js'];
 const protectedPaths = new Set(['start-asuna.cmd', 'tools/asuna-launch.mjs',
   ...FLOOR_FILES.map(name => 'packages/cognition-core/src/' + name), 'packages/cognition-core/runtime-manifest.json',
   ...FLOOR_FILES.map(name => 'src/' + name), 'runtime-manifest.json']);
@@ -86,12 +87,14 @@ async function run(command, args, options = {}) {
 }
 
 export class PublicationFloor {
-  constructor(config) {
+  constructor(config, root = dataRoot(null, config)) {
     this.config = config;
-    // A non-default profile (e.g. the demo) keeps its own activation, baselines
-    // and candidates so it can never select or publish the owner's artifacts.
-    this.base = path.join(config.workspace ?? packageRoot, config.stateDir ?? '.runtime/adr008');
-    this.workRoot = config.stateDir ? path.join(this.base, 'work') : path.join(config.workspace ?? packageRoot, '.runtime/work');
+    this.dataRoot = root;
+    // Each profile has its own data folder, so it can never select or publish another profile's artifacts.
+    // Candidates (work/) and their baselines (state) are always in the same folder: a candidate found without
+    // its baseline would read as every file deleted, and publishing that would delete them from the source.
+    this.base = floorState(root, config);
+    this.workRoot = path.join(root, 'work');
     this.activationFile = path.join(this.base, 'activation.json');
     this.projects = new Map((config.projects ?? []).map(project => [project.id, project]));
     this.serial = Promise.resolve();
@@ -353,11 +356,11 @@ export class PublicationFloor {
     }
     if (workerPath) probe = await run(this.config.python, ['-c',
       'import asuna.native_worker; from asuna.config import load; from asuna.state import Store; s=Store(load(__import__("sys").argv[1])); s.db.command("ping"); s.authorize(s.config["chat"]["scene_id"],s.config["chat"]["person_id"]); s.client.close(); print("Worker imports and existing database authorization passed; no live consumers started.")',
-      this.config.configPath], { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.config.workspace, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
+      this.config.configPath], { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
     return { packageRoot: target, workerPath, boot_probe: probe };
   }
 }
 
 export function apply(ctx, config = {}) {
-  ctx.provide('asunaFloor', new PublicationFloor(config));
+  ctx.provide('asunaFloor', new PublicationFloor(config, dataRoot(ctx, config)));
 }

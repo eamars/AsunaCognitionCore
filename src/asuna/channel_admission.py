@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from . import channel_kinds
-from .config import ROOT
+from .config import DATA
 from .evidence import canonical, sha
 from .state import Denied
 
@@ -60,7 +60,7 @@ def admit(controller, channel_id, body):
     identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})
     # One id form for every person on a platform, configured or admitted (qq:<account>).
     person = identity['person_id'] if identity else platform.person_id(sender)
-    grant = {'person_id': person, 'workspace': str(ROOT / '.runtime' / 'channels' /
+    grant = {'person_id': person, 'workspace': str(DATA / 'channels' /
         ('auto-' + sha(canonical([channel_id, channel['account_id'], kind, target, sender]))[:32])),
         'read_only_paths': []}
     if group:

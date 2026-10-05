@@ -10,7 +10,7 @@ import subprocess
 import threading
 import uuid
 
-from .config import ROOT, redact_text
+from .config import DATA, ROOT, redact_text
 from .evidence import canonical, sha
 from .state import Denied
 from .queue import RuntimeLease
@@ -165,12 +165,12 @@ class IntegrationRunner:
         self.config = config
         self.profile = validate_profile(config)
         self.endpoints = self.profile.get('endpoints', [])
-        self.root = Path(root).resolve() if root else ROOT/'.runtime/integration/owner'
-        if not self.root.is_relative_to((ROOT/'.runtime/integration').resolve()):
+        self.root = Path(root).resolve() if root else DATA/'integration/owner'
+        if not self.root.is_relative_to(DATA/'integration'):
             raise Denied('INTEGRATION_ROOT_DENIED')
         selected = config.get('_integration_project')
         self.dev = Path(selected).resolve() if selected else self.root/'development'
-        if selected and not self.dev.is_relative_to((ROOT/'.runtime/work/self-development').resolve()):
+        if selected and not self.dev.is_relative_to(DATA/'work/self-development'):
             raise Denied('INTEGRATION_PROJECT_NOT_AUTHORIZED')
         self.dev.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()

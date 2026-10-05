@@ -3,7 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from . import channel_kinds
-from .config import ROOT, validate_database, validate_endpoint
+from .config import DATA, validate_database, validate_endpoint
 
 SECRET_NAMES = {'mongo_uri', 'api_key', 'token', 'password', 'secret', 'access_token'}
 
@@ -71,7 +71,7 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
             raise ValueError('INVALID_TIMEOUT: ' + key)
     for key in ('dsh_home', 'workdir'):
         directory = Path(value[key]).resolve()
-        if not directory.is_relative_to(ROOT / '.runtime'):
+        if not directory.is_relative_to(DATA):
             raise ValueError('RUNTIME_DIRECTORY_OUTSIDE_WORKSPACE: ' + key)
         if create_dirs:
             directory.mkdir(parents=True, exist_ok=True)

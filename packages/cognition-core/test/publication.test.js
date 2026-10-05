@@ -14,7 +14,7 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
   await fs.writeFile(path.join(source, 'README.md'), 'Before publication');
   await fs.mkdir(path.join(source, 'src'));
   await fs.writeFile(path.join(source, 'src/floor.js'), '// Stable floor can be inspected.');
-  const floor = new PublicationFloor({ workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
   await floor.call('development_write', { path: 'README.md', text: 'Published resource', overwrite: true });
   const result = await floor.call('development_publish', { reason: 'native packaging probe' });
   assert.equal(result.state, 'APPLIED', JSON.stringify(result));
@@ -35,7 +35,7 @@ test('ADR-010 D9: a file she changed whose source moved after her baseline is ma
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module' }));
   for (const name of ['a.md', 'b.md', 'c.md']) await fs.writeFile(path.join(source, name), 'v1 ' + name);
-  const floor = new PublicationFloor({ workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
   await floor.call('development_write', { path: 'a.md', text: 'her edit', overwrite: true });   // source will move
   await floor.call('development_write', { path: 'b.md', text: 'her edit', overwrite: true });   // source stays
   await fs.writeFile(path.join(source, 'a.md'), 'v2 a.md');
@@ -70,7 +70,7 @@ test('ADR-011 §6.4: publication imports the plugin entry and reads its structur
   await fs.writeFile(path.join(source, 'src/index.js'), "import { fileURLToPath } from 'node:url';\nexport const name = 'probe';\nexport function apply() { return fileURLToPath(import.meta.url); }\n");
   await fs.writeFile(path.join(source, 'persona-model.json'), JSON.stringify({ persona: { id: 'probe-persona' } }));
   await fs.writeFile(path.join(source, 'cordis.patch.yml'), '- id: probe\n  name: probe\n');
-  const floor = new PublicationFloor({ workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
   // An entry that resolves a Host package (from this Host's own installation) and exports apply starts.
   await floor.call('development_write', { path: 'src/index.js', overwrite: true,
     text: "import { defineTool } from '@deepseek-ai/dsh-tools';\nexport const name = 'probe';\nexport function apply() { return defineTool; }\n" });

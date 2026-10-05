@@ -5,7 +5,12 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
-ROOT = Path(os.environ.get('ASUNA_DATA_ROOT', Path(__file__).resolve().parents[2])).resolve()
+# The source tree: a development checkout, or the installed package's root. Development tools, tests and
+# git checks use it; a profile's state never goes here.
+ROOT = Path(__file__).resolve().parents[2]
+# This profile's data folder (ADR-010 D3): its working folders, locks, channel grants and evidence. The plugin
+# sets it from its dataRoot setting; a development checkout without it uses the checkout's own .runtime.
+DATA = Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT / '.runtime').resolve()
 # Behavior files (core prompts, runtime schemas) ship inside the package and are
 # published with it; the workspace never supplies or overrides them.
 RESOURCES = Path(__file__).with_name('resources')
@@ -82,8 +87,8 @@ def load(path: str | Path = 'config/local.json') -> dict:
     value.setdefault('workflow_timeout_seconds',1800)
     for key in ('dsh_home',):
         p = Path(value[key]).resolve()
-        if not p.is_relative_to((ROOT / '.runtime').resolve()):
-            raise ValueError(f'{key} must be isolated inside this repository .runtime')
+        if not p.is_relative_to(DATA):
+            raise ValueError(f"{key} must be isolated inside this profile's data folder")
         p.mkdir(parents=True, exist_ok=True)
     return value
 

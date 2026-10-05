@@ -4,13 +4,13 @@ import msvcrt
 import time
 import threading
 from urllib.parse import urlsplit
-from .config import ROOT
+from .config import DATA
 
 
 class EndpointLock:
     def __init__(self,url,timeout=900):
         host=urlsplit(url).netloc
-        self.path=ROOT/'.runtime/locks'/(hashlib.sha256(host.encode()).hexdigest()+'.lock')
+        self.path=DATA/'locks'/(hashlib.sha256(host.encode()).hexdigest()+'.lock')
         self.timeout=timeout
     def __enter__(self):
         self.path.parent.mkdir(parents=True,exist_ok=True)
@@ -32,7 +32,7 @@ class EndpointLock:
 class RuntimeLease(EndpointLock):
     def __init__(self,path,timeout=2):
         self.path=path.resolve();self.timeout=timeout
-        if not self.path.is_relative_to((ROOT/'.runtime').resolve()):raise PermissionError('RUNTIME_LEASE_PATH_DENIED')
+        if not self.path.is_relative_to(DATA):raise PermissionError('RUNTIME_LEASE_PATH_DENIED')
 
 
 class _DatabaseEffectsLock:
@@ -44,7 +44,7 @@ class _DatabaseEffectsLock:
     """
     def __init__(self,name):
         self.thread=threading.RLock();self.depth=0
-        self.path=ROOT/'.runtime/locks'/('effects-'+hashlib.sha256(name.encode()).hexdigest()+'.lock')
+        self.path=DATA/'locks'/('effects-'+hashlib.sha256(name.encode()).hexdigest()+'.lock')
     def __enter__(self):
         self.thread.acquire()
         try:

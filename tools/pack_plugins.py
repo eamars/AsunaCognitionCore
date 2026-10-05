@@ -72,7 +72,7 @@ packages = ["asuna"]
 ''', encoding='utf-8')
     subprocess.run([sys.executable, '-c',
         "import sys; import asuna.native_worker; assert 'asuna.cli' not in sys.modules"],
-        cwd=destination.parent, env={**os.environ, 'ASUNA_DATA_ROOT': str(ROOT),
+        cwd=destination.parent, env={**os.environ, 'ASUNA_DATA_ROOT': str(ROOT / '.runtime'),
             'PYTHONPATH': str(destination.parent), 'PYTHONDONTWRITEBYTECODE': '1'}, check=True, capture_output=True)
 
 

@@ -11,7 +11,7 @@ export class NativeSchedules {
     const saved = await this.ctx.sessionPersistence.stat(sessionId);
     const handle = saved
       ? await this.ctx.agents.resume({ resumeSessionId: sessionId, setup })
-      : await this.ctx.agents.create({ sessionId, meta: { cwd: this.core.config.workspace,
+      : await this.ctx.agents.create({ sessionId, meta: { cwd: this.ctx.asunaFloor.dataRoot,
         agentPreset: 'asuna-scheduler' }, setup });
     this.core.handles.set(sessionId, handle);
     if (!saved) await this.ctx.sessionController.rename({ sessionId, title: 'Asuna schedules' });

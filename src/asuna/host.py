@@ -9,7 +9,7 @@ import time
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
 from .chat import Chat, local_settings, prepare_local_scene
-from .config import ROOT
+from .config import DATA
 from .memory_indexer import MemoryIndexer
 from .state import Denied, now
 
@@ -75,7 +75,7 @@ def prepare_channels(store, *, dry_run=False):
                 if not blocked and sender not in channel.get('blocked_senders', []):
                     people.append(person)
                 workspace = Path(grant['workspace']).resolve()
-                if not workspace.is_relative_to((ROOT / '.runtime' / 'channels').resolve()):
+                if not workspace.is_relative_to(DATA / 'channels'):
                     raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')
                 if _workspace_overlaps(workspace, ordered_workspaces, known_workspaces):
                     raise Denied('CHANNEL_WORKSPACE_OVERLAP')

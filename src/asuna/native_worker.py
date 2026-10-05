@@ -22,7 +22,7 @@ import uuid
 from . import channel_kinds
 from .application import Application
 from .host import RuntimeHost
-from .config import ROOT, load, redact_text
+from .config import DATA, ROOT, load, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
@@ -303,7 +303,7 @@ class BusinessWorker:
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
         if releases:
             config['_native_integration_release'] = releases[0]
-        evidence = Evidence(ROOT / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
+        evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
             self.navigation = self.prepare_navigation(native_sessions or [])
@@ -408,8 +408,8 @@ class BusinessWorker:
 
     @staticmethod
     def channel_workspace(platform):
-        """The shared native workspace of one platform's conversations (.runtime/work/<kind>)."""
-        directory = (ROOT / '.runtime' / 'work' / platform.KIND).resolve()
+        """The shared native workspace of one platform's conversations (<data>/work/<kind>)."""
+        directory = (DATA / 'work' / platform.KIND).resolve()
         directory.mkdir(parents=True, exist_ok=True)
         return str(directory)
 
@@ -710,7 +710,7 @@ class BusinessWorker:
                 or row.get('successor_id') or row.get('retired')}
             for row in args['sessions']:
                 for platform in channel_kinds.kinds():
-                    if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work' / platform.KIND).resolve():
+                    if row.get('cwd') and Path(row['cwd']).resolve() == (DATA / 'work' / platform.KIND).resolve():
                         policies[row['id']] = self.read_only_note(platform)
             return policies
         if method == 'heartbeat_now':

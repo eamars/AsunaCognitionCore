@@ -17,7 +17,7 @@ from asuna.state import Store, Denied
 @pytest.fixture
 def product(tmp_path, monkeypatch):
     for module in (host, channel_admission, native_worker, native_settings):
-        monkeypatch.setattr(module, 'ROOT', tmp_path)
+        monkeypatch.setattr(module, 'DATA', tmp_path / '.runtime')
     config = {'chat': {'scene_id': 'local', 'person_id': 'owner', 'persona': 'xiaoman',
                       'workspace': str(tmp_path / 'local')}, 'workflow_timeout_seconds': 1,
               'channels': {'qq': {'account_id': '99990000', 'token': 'fixture-' * 8,

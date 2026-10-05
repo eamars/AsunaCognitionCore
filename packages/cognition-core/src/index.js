@@ -29,7 +29,7 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
   'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
-export const Config = z.object({ python: z.string().volatile(), workspace: z.string().volatile(),
+export const Config = z.object({ python: z.string().volatile(),
   configPath: z.string().volatile(), persona: z.string().volatile(),
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
@@ -109,7 +109,7 @@ export class CognitionCore {
       throw error;
     }
     this.personas.set(persona.id, normalized);
-    if (persona.id === this.config.persona && this.config.python && this.config.configPath && this.config.workspace)
+    if (persona.id === this.config.persona && this.config.python && this.config.configPath)
       this.ready().catch(error => {
         this.ctx.logger.warn(String(error));
         process.stderr.write('Asuna worker could not start: ' + String(error) + '\n');
@@ -155,14 +155,15 @@ export class CognitionCore {
     if (!this.initializing) this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
       if (!persona) throw new Error('Select an installed Asuna persona');
-      if (!this.config.python || !this.config.configPath || !this.config.workspace)
-        throw new Error('Configure the Asuna Python worker, workspace, and local configuration');
+      if (!this.config.python || !this.config.configPath)
+        throw new Error('Configure the Asuna Python worker and local configuration');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
       this.efforts = await this.stageEfforts();
       this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
       const schedule = await this.attachSchedule();
-      this.worker = new BusinessWorker({ ...this.config, pythonPath: await this.ctx.asunaFloor.workerPath() },
+      this.worker = new BusinessWorker({ ...this.config, dataRoot: this.ctx.asunaFloor.dataRoot,
+        pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
@@ -255,7 +256,8 @@ export class CognitionCore {
     assertSecretReferences(next.deployment);
     // This process imports and validates the proposed business configuration.
     // It does not initialize a RuntimeHost, consume queues, or call any model.
-    const probe = new BusinessWorker({ ...next, pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
+    const probe = new BusinessWorker({ ...next, dataRoot: this.ctx.asunaFloor.dataRoot,
+      pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
       await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
         models, persona: next.persona, admission: next.channelAdmission ?? 'explicit',

@@ -2,14 +2,14 @@
 from pathlib import Path
 import json
 import subprocess
-from .config import ROOT
+from .config import DATA
 
 
 class Sandbox:
     def __init__(self, task_dir: Path, protected_paths=(), *, allowed_root=None):
         self.task_dir = task_dir.resolve()
-        root = Path(allowed_root).resolve() if allowed_root else (ROOT/'.runtime/work').resolve()
-        if not any(root.is_relative_to((ROOT/'.runtime'/name).resolve()) for name in ('work','channels','integration')):
+        root = Path(allowed_root).resolve() if allowed_root else DATA/'work'
+        if not any(root.is_relative_to(DATA/name) for name in ('work','channels','integration')):
             raise PermissionError('SANDBOX_ROOT_OUTSIDE_RUNTIME')
         if not self.task_dir.is_relative_to(root):
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')

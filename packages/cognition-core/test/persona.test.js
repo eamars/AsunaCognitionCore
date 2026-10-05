@@ -56,7 +56,7 @@ test('a channel package registers its kind; its paths stay inside the package an
     assert.equal(value.channelOf('local-dm'), null);
     await fs.access(path.join(directory, channel.python, channel.module, '__init__.py'));
     if (channel.integration_directory) await fs.access(path.join(directory, channel.integration_directory));
-    const floor = new PublicationFloor({ workspace: os.tmpdir(), stateDir: 'x', defaultProject: 'demo', projects: [] });
+    const floor = new PublicationFloor({ dataRoot: os.tmpdir(), stateDir: 'x', defaultProject: 'demo', projects: [] });
     floor.effective = async () => ({ packageRoot: '/published' });
     const resolved = await floor.channel(channel);
     assert.equal(resolved.python, path.join('/published', channel.python));
@@ -82,7 +82,7 @@ test('T1.6 model, seeds, jobs and skills resolve against the published artifact,
       model: 'model.json', seeds: [{ slug: 'persona', kind: 'persona', path: 'seeds/persona.md' }],
       jobs: [{ id: 'migrate', entry: 'jobs/migrate/main.py', runtime: 'python', grants: ['probe'], sources: [], timeout_s: 60 }],
       skill_directories: ['skills'], preset: 'x' });
-    const floor = new PublicationFloor({ workspace: tmp, stateDir: 'state', defaultProject: 'demo', projects: [] });
+    const floor = new PublicationFloor({ dataRoot: tmp, stateDir: 'state', defaultProject: 'demo', projects: [] });
     const unpublished = await floor.persona(value.personas.get('demo'));
     assert.equal(unpublished.model, path.join(candidate, 'model.json'));
     await fs.mkdir(path.join(tmp, 'state'), { recursive: true });

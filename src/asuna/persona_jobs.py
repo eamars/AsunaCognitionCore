@@ -23,7 +23,7 @@ import time
 import uuid
 import zipfile
 
-from .config import ROOT
+from .config import DATA
 from .persona_data import DataError, PersonaDataAPI, persona_sources
 from . import visibility
 
@@ -100,7 +100,7 @@ class JobRunner:
         if missing:
             raise DataError('SOURCE_NOT_AUTHORIZED', ','.join(missing))
         run_id = 'job-' + uuid.uuid4().hex[:16]
-        out = (ROOT / '.runtime/persona-jobs' / run_id / 'out').resolve()
+        out = (DATA / 'persona-jobs' / run_id / 'out').resolve()
         out.mkdir(parents=True)
         api = PersonaDataAPI(self.store, self.persona, run_id=run_id, job_id=job_id, grants=job['grants'],
                              sources={root: configured[root]['state'] for root in job['sources']}, retrieval=self.retrieval)

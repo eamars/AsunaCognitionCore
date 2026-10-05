@@ -120,7 +120,6 @@
           "uniqueItems": true,
           "items": {
             "enum": [
-              "dossier",
               "affect",
               "affect_proposals",
               "self_state",
@@ -341,22 +340,6 @@
           "arl_half_h",
           "clamp"
         ]
-      }
-    },
-    "dossier": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "inject_last": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 20
-        },
-        "index_size": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 200
-        }
       }
     },
     "rhythm": {

@@ -1,6 +1,6 @@
 """Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 
-Persona, voice, dossier, ledger and working documents are whole revisable texts
+Persona, voice, ledger and working documents are whole revisable texts
 stored by section on the existing state_heads/state_revisions ledger (scope
 ``global-safe``; visibility lives on each section). Package markdown only
 seeds a missing head. There is no delete: only operator erasure writes a
@@ -64,8 +64,8 @@ def parse_markdown(text: str, kind: str):
     if match:
         front = json.loads(match.group(1))
         text = text[match.end():]
-    # Package seeds are public by default; a person's dossier defaults to owner-private (§2.2).
-    default_visibility = front.get('visibility', 'owner_private' if kind == 'dossier' else 'public')
+    # Package seeds are public by default (§2.2).
+    default_visibility = front.get('visibility', 'public')
     default_inject = front.get('inject', 'always' if kind in ALWAYS_KINDS else 'on_demand')
     default_tags = front.get('tags', [])
     parts = re.split(r'(?m)^## +(.*)$', text)
@@ -186,10 +186,10 @@ class DocumentStore:
         if content is None:
             if op != 'append_section':
                 raise DocumentError('DOC_NOT_FOUND', slug)
-            kind = 'dossier' if slug.startswith('dossier:') else 'working'
-            content = {'kind': kind, 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
-            if kind == 'dossier':
-                content['subject'] = slug.split(':', 1)[1]
+            if slug.startswith('dossier:'):
+                # Person files are retired: what she knows about someone lives with that person (understand_person).
+                raise DocumentError('DOC_OP_NOT_ALLOWED', 'person files are retired; use understand_person')
+            content = {'kind': 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
         content = copy.deepcopy(content)
         kind, sections = content['kind'], content['sections']
         if kind == 'contract':
@@ -201,16 +201,14 @@ class DocumentStore:
             target = by_sid.get(intent.get('sid'))
             if not target:
                 raise DocumentError('DOC_SECTION_NOT_FOUND', str(intent.get('sid')))
-            if kind == 'dossier' and 'preamble' not in target['tags'] and target['sid'] != PREAMBLE:
-                raise DocumentError('DOC_OP_NOT_ALLOWED', 'dossier entries are append-only; use correction')
             if intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
                 raise Conflict('BASE_REVISION_STALE')
             target.update(body=body, body_sha256=sha(body.encode()))
         elif op in ('append_section', 'correction'):
             heading = intent.get('heading') or ''
             if op == 'correction':
-                if kind not in ('dossier', 'ledger'):
-                    raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction applies to dossier entries and ledgers')
+                if kind != 'ledger':
+                    raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction applies to ledgers')
                 original = by_sid.get(intent.get('sid'))
                 if not original:
                     raise DocumentError('DOC_SECTION_NOT_FOUND', str(intent.get('sid')))
@@ -218,11 +216,6 @@ class DocumentStore:
             if not heading.strip():
                 raise DocumentError('DOC_HEADING_REQUIRED')
             tags = list(intent.get('tags') or [])
-            if kind == 'dossier' and op == 'append_section' and 'preamble' not in tags:
-                if not intent.get('entry_date'):
-                    raise DocumentError('DOC_ENTRY_DATE_REQUIRED')
-                if 'entry' not in tags:
-                    tags.append('entry')
             if op == 'correction':
                 tags = [*dict.fromkeys([*tags, 'correction'])]
             visibility = intent.get('visibility') or 'owner_private'

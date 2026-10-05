@@ -49,7 +49,6 @@ RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scen
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
     'self_state': ('self_state_from_program', 'recent_thoughts_from_program'),
-    'dossier': ('dossier_from_program',),
     'affect': ('affect_from_program',),
     'affect_proposals': ('affect_proposals_from_program',),
     'relationship': ('relationship', 'relationship_shared_from_program'),
@@ -101,31 +100,6 @@ def order_context(context, order=None):
 
 def _section_view(section):
     return {k: section[k] for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
-
-
-def dossier_block(docs, model, policy, person, cls):
-    """§7: preamble always-sections + last N injectable entries + a title index (owner-private);
-    public sessions see only public always-sections; the action brain sees none."""
-    slug = 'dossier:' + person
-    revision, content = docs.read(slug)
-    if not content:
-        return None
-    sections = content['sections']
-    if cls == visibility.OWNER_PRIVATE:
-        preamble = [s for s in sections if (s['sid'] == '_preamble' or 'preamble' in s['tags']) and s['inject'] == 'always']
-        entries = [s for s in sections if 'entry' in s['tags'] and 'injectable' in s['tags']]
-        last = effective(model, 'dossier.inject_last', policy) or 0
-        index_size = effective(model, 'dossier.index_size', policy) or 0
-        chosen = preamble + (entries[-last:] if last else [])
-        index = [{'sid': s['sid'], 'heading': s['heading'], 'entry_date': s.get('entry_date')} for s in entries[-index_size:]] if index_size else []
-    else:
-        chosen = [s for s in sections if s['visibility'] == 'public' and s['inject'] == 'always']
-        index = []
-    if not chosen and not index:
-        return None
-    return {'doc': slug, 'revision': revision, 'subject': content.get('subject'),
-            'sections': [_section_view(s) for s in chosen], 'index': index,
-            'note': '人物档案：只追加的积累式正文；需要别的条目原文时用 next=recall 加 read。'}
 
 
 def ledger_block(docs, cls):
@@ -523,10 +497,6 @@ class ContextBuilder:
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
-        dossier=dossier_block(docs,model,policy,target.get('canonical') or event['person_id'],session_class)
-        if dossier:
-            context['dossier_from_program']=dossier
-            documents[dossier['doc']]=dossier['revision']
         ledgers=ledger_block(docs,session_class)
         if ledgers:
             context['ledgers_from_program']=ledgers
@@ -542,7 +512,7 @@ class ContextBuilder:
         from .ingress import episode_id as _episode_id
         context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),*[m['_id'] for m in memories],
             *[t['_id'] for t in task_states],
-            *['doc:%s#%s'%(item['doc'],section['sid']) for item in [*([dossier] if dossier else []),*ledgers] for section in item['sections']],
+            *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         # Available with or without a record: her first understanding of someone creates it.
@@ -584,7 +554,7 @@ class ContextBuilder:
             # event only authorizes the turn, so no block speaks of a current speaker.
             from . import places
             context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
-            for key in ('relationship','dossier_from_program','sender_identity','understanding_update_from_program'):
+            for key in ('relationship','sender_identity','understanding_update_from_program'):
                 context.pop(key,None)
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger

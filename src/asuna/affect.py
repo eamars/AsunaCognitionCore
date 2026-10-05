@@ -398,10 +398,6 @@ class AffectLedger:
                **({'source_identity': source_identity} if source_identity else {})}
         return self._insert('affect_amendments', doc, 'affect-amend:' + target)[0]
 
-    def operator_erase(self, event_id, why):
-        """Privacy erasure: a void amendment by the operator, reason required (no delete API exists)."""
-        return self.amendment(event_id, 'void', why=why, by='operator', key=['operator', event_id])
-
     # ── proposals (appraiser route) ─────────────────────────────────
     def propose(self, ep, index, item, cls):
         source_scope = visibility.owner_private_scope(self.persona) if cls == visibility.OWNER_PRIVATE else ep['scope_key']

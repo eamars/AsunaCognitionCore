@@ -108,7 +108,7 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     assert context['visit_from_program']['topic'] == '周末去哪儿玩' and '起个话头' in context['visit_from_program']['why']
     assert context['visit_from_program']['basis'].startswith('没人叫你')
     for home_only in ('rhythm_from_program', 'recent_experience_from_program', 'places_from_program',
-                      'last_visits_from_program', 'relationship', 'dossier_from_program',
+                      'last_visits_from_program', 'relationship',
                       'understanding_update_from_program', 'sender_identity'):
         assert home_only not in context, home_only
     seen = json.dumps([context, group.calls], ensure_ascii=False)

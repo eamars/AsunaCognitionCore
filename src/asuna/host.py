@@ -119,7 +119,7 @@ def prepare_channels(store, *, dry_run=False):
 
 class RuntimeHost:
     def __init__(self, config, evidence, database=None, *,
-                 lane_factory=None, broker_http=False, schedule_lane=None,
+                 lane_factory=None, schedule_lane=None,
                  configure_controller=None, development_factory=None, awaits_activation=False):
         self.config, self.evidence, self.database = config, evidence, database
         # Under the native Host, a new worker learns which publications it actually loaded only after
@@ -128,7 +128,7 @@ class RuntimeHost:
         self.activation_settled = threading.Event()
         if not awaits_activation:
             self.activation_settled.set()
-        self.lane_factory, self.broker_http = lane_factory, broker_http
+        self.lane_factory = lane_factory
         self.schedule_lane, self.configure_controller = schedule_lane, configure_controller
         self.development_factory = development_factory
         self.stack = ExitStack()
@@ -144,7 +144,7 @@ class RuntimeHost:
             self.config, rejected_links = without_link_downgrades(self.config)
             self.app = self.stack.enter_context(Application(
                 self.config, self.evidence, self.database,
-                lane_factory=self.lane_factory, broker_http=self.broker_http,
+                lane_factory=self.lane_factory,
                 development_factory=self.development_factory))
             for rejected in rejected_links:
                 # A public scene may never read an owner-private scene (ADR-009 §2.3).

@@ -47,7 +47,6 @@ CORE_DEFAULTS = {
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
                'kinds': {}, 'bands': [], 'policy': []},
-    'dossier': {'inject_last': 0, 'index_size': 30},
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
     'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'skip_in_sleep': False, 'pause_min': 0,
                   'visits': False, 'quiet_min': 30, 'after_own_min': 360, 'visits_per_day': 4},

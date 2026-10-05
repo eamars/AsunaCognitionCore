@@ -11,12 +11,11 @@ from .router import Router
 
 class Application:
     """Core services owned by RuntimeHost; also used by explicit debug diagnostics."""
-    def __init__(self,config,evidence,database=None,*,lane_factory=None,broker_http=False,development_factory=None):
+    def __init__(self,config,evidence,database=None,*,lane_factory=None,development_factory=None):
         self.config,self.evidence=config,evidence
         if lane_factory is None:
             raise ValueError('NATIVE_HOST_LANE_REQUIRED: start Asuna through the DSH Web profile')
         self.lane_factory=lane_factory
-        self.broker_http=broker_http
         self.development_factory=development_factory
         self.store=Store(config,database);self.stack=ExitStack()
     def __enter__(self):
@@ -24,7 +23,7 @@ class Application:
             self.store.migrate();self.stack.callback(self.store.client.close)
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
-            self.broker=ToolBroker(self.service,serve_http=self.broker_http);self.stack.callback(self.broker.close)
+            self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)
             def persona_jobs(task,args):
                 from .persona_jobs import JobRunner
                 # Always a dry run: the action brain reads and analyses; identity writes are the character's.

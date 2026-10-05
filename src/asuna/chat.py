@@ -380,12 +380,6 @@ class Chat:
                         from .channels import route_for_scene, route_members
                         route = route_for_scene(self.app.config, event['channel']['id'], event['scene_id'])
                         member = route_members(route).get(event['channel'].get('sender_id', route.get('sender_id')), {})
-                        if event.get('episode_kind')=='owner_group_prompt' and route.get('operator_sender_id')!=event['channel'].get('sender_id'):
-                            raise PermissionError('GROUP_PROMPT_OWNER_REVOKED')
-                        if (event.get('episode_kind') == 'owner_dm_prompt' and
-                                (route['target']['type'] != 'dm' or
-                                 route.get('sender_id') != event['channel'].get('sender_id'))):
-                            raise PermissionError('DM_PROMPT_OWNER_REVOKED')
                         if (member.get('person_id') != event['person_id'] or route['target'] != event['channel']['target']
                                 or event['channel']['account_id'] != self.app.config['channels'][event['channel']['id']]['account_id']):
                             raise PermissionError('INPUT_ROUTE_STALE')

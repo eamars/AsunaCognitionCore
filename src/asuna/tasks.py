@@ -229,9 +229,8 @@ class TaskService:
 
 class ToolBroker:
     """Trusted host process; no DB/publication credentials enter model or child tools."""
-    def __init__(self, service:TaskService, *, serve_http=False):
-        if serve_http:
-            raise ValueError('Native Host tools use the private worker connection')
+    def __init__(self, service:TaskService):
+        # Native Host tools use the private worker connection; there is no HTTP broker.
         self.service,self.store=service,service.store
         self.bindings={}
 

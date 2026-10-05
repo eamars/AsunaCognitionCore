@@ -1,4 +1,4 @@
-"""ADR-009 P2 MongoDB tests: documents, render budget, write_document, dossier, recall sections, seeds."""
+"""ADR-009 P2 MongoDB tests: documents, render budget, write_document, recall sections, seeds."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
@@ -44,43 +44,14 @@ def test_T2_1_concurrent_writes_on_one_base(store):
     assert len(sections) == 2 and sections[0]['body'] == '暂无。'
 
 
-def dossier(store):
-    docs = DocumentStore(store, 'P1')
-    docs.seed('dossier:A', 'dossier', '## 写法规矩\n记具体的事。\n', subject='A')
-    for i, (tags, vis) in enumerate([(['entry', 'injectable'], 'owner_private'), (['entry'], 'owner_private'),
-                                     (['entry', 'injectable'], 'public'), (['entry', 'injectable'], 'owner_private')]):
-        docs.apply('dossier:A', {'op': 'append_section', 'heading': f'条目{i}', 'entry_date': f'2026-01-0{i + 1}',
-                                 'tags': tags, 'visibility': vis, 'reason': '记录'}, f'ENTRY_BODY_{i}',
-                   base_revision_id=docs.read('dossier:A')[0], author='character', mutation_id=f'dossier-{i}')
-    return docs
-
-
-def test_T2_4_dossier_injection_by_session_class(store):
-    owner(store)
-    store.config['persona_model'] = {'model_version': 1, 'persona': {'id': 'P1', 'display_name': 'x'},
-                                     'dossier': {'inject_last': 2, 'index_size': 30}}
-    docs = dossier(store)
-    docs.apply('dossier:A', {'op': 'set_tags', 'sid': '写法规矩', 'tags': ['preamble'], 'inject': 'always', 'reason': '前言'},
-               base_revision_id=docs.read('dossier:A')[0], author='character', mutation_id='dossier-pre')
-    _, private, _ = ContextBuilder(store).prepare(event('dossier-private'), 'P1')
-    block = private['dossier_from_program']
-    bodies = [s['body'] for s in block['sections']]
-    assert bodies == ['记具体的事。', 'ENTRY_BODY_2', 'ENTRY_BODY_3'], bodies          # preamble + last 2 injectable
-    assert [i['heading'] for i in block['index']] == ['条目0', '条目2', '条目3']          # injectable titles only
-    assert 'ENTRY_BODY_1' not in json.dumps(private, ensure_ascii=False)               # never auto-injected
-    _, public, _ = ContextBuilder(store).prepare(event('dossier-group', scene='g1'), 'P1')
-    assert 'dossier_from_program' not in public                                       # no public+always section
-    assert 'ENTRY_BODY' not in action_values(store, 'P1')
-
-
 THINK = ('think', {'thought': '他说了一件小事，值得记下来。'})
 
 
 def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_turn(store):
     owner(store)
     store.config['persona_contribution'] = {'seeds': []}
-    entry = {'doc': 'dossier:A', 'op': 'append_section', 'heading': '今天', 'entry_date': '2026-01-02',
-             'tags': ['entry', 'injectable'], 'reason': '值得记下', 'body': '今天他提到了一件小事。'}
+    entry = {'doc': 'diary', 'op': 'append_section', 'heading': '今天', 'reason': '值得记下',
+             'body': '今天他提到了一件小事。'}
     tags = {'doc': 'persona', 'op': 'set_tags', 'sid': PREAMBLE, 'tags': ['values'], 'reason': '标注'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', entry), ('write_document', tags),
                                       ('set_policy', {'key': 'nope', 'value': 1, 'reason': 'x'})], '记下了。')])
@@ -89,7 +60,7 @@ def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_tur
     assert ep['manifest']['session_class'] == 'owner_private', ep['manifest']['session_class']
     assert [c['phase'] for c in lane.calls] == ['TURN']             # the body is in the call: no WRITE stage
     assert 'feel' not in lane.calls[0]['tools']                     # no affect ledger: no feel tool this turn
-    entry_row = DocumentStore(store, 'P1').read('dossier:A')[1]['sections'][-1]
+    entry_row = DocumentStore(store, 'P1').read('diary')[1]['sections'][-1]
     assert entry_row['body'] == '今天他提到了一件小事。' and entry_row['visibility'] == 'owner_private'
     assert DocumentStore(store, 'P1').read('persona')[1]['sections'][0]['tags'] == ['values']
     _, wrote, tagged, policy = lane.tool_results
@@ -99,13 +70,24 @@ def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_tur
     assert 'POLICY_KEY_UNDECLARED' in ep['tool_calls'][policy[1]]['refused']
     assert [r['text'] for r in store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'})] == ['记下了。']
     # A group (public) turn may not write any document of hers.
-    before = DocumentStore(store, 'P1').read('dossier:A')[0]
+    before = DocumentStore(store, 'P1').read('diary')[0]
     group = FakeLane(store, [FakeTurn([THINK, ('write_document', {**entry, 'heading': '群里'})], '好。')])
     ep = Coordinator(store, group).ingest(event('write-group', scene='g1'))
     assert ep['state'] == 'COMMITTED' and [c['phase'] for c in group.calls] == ['TURN']
     refusal = group.tool_results[1]
     assert not refusal[5] and 'DOC_WRITE_REQUIRES_OWNER_PRIVATE' in refusal[4] and 'owner 私聊' in refusal[4]
-    assert DocumentStore(store, 'P1').read('dossier:A')[0] == before
+    assert DocumentStore(store, 'P1').read('diary')[0] == before
+
+
+def test_person_files_are_retired(store):
+    owner(store)
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'dossier:A', 'op': 'append_section',
+                                     'heading': '今天', 'reason': '记一笔', 'body': '他提到了一件小事。'})], '好。')])
+    ep = Coordinator(store, lane).ingest(event('dossier-retired'))
+    refusal = lane.tool_results[1]
+    assert ep['state'] == 'COMMITTED' and not refusal[5] and 'understand_person' in refusal[4]
+    assert DocumentStore(store, 'P1').read('dossier:A') == (None, None)
+    assert 'dossier' not in json.dumps(lane.calls[0]['tools'], ensure_ascii=False)
 
 
 def test_T2_7_recall_reads_sections_by_visibility(store):

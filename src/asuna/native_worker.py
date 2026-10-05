@@ -319,7 +319,7 @@ class BusinessWorker:
             self.app.service.on_fenced = self.task_fenced
             self.app.service.on_collab = self.collab
         self.host = self.stack.enter_context(RuntimeHost(
-            config, evidence, lane_factory=lambda *a: NativeLane(self, *a), broker_http=False,
+            config, evidence, lane_factory=lambda *a: NativeLane(self, *a),
             schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)

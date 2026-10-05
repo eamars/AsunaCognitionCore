@@ -38,4 +38,4 @@ def development_granted(store, scene, event, session_class=None):
     cls = session_class or visibility.session_class(store.config, store.db, scene, event['person_id'])
     if cls != visibility.OWNER_PRIVATE:
         return False
-    return kind in ('self_development', 'external', 'owner_dm_prompt')
+    return kind in ('self_development', 'external')

@@ -65,7 +65,7 @@ TOOLS = {
         'parameters': {'query': _s('想找什么，用一句话说', required=True),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
-                                        'doc': _s('文档，如 persona、dossier:<人物>', required=True),
+                                        'doc': _s('文档，如 persona、voice', required=True),
                                         'sid': _s('节的 sid', required=True)}}}},
     },
     'delegate': {
@@ -100,19 +100,17 @@ TOOLS = {
         'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s('为什么发这张', required=True)},
     },
     'write_document': {
-        'description': ('写你自己的文档（人格、口吻、人物档案、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
+        'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
                         'set_tags 只改 visibility/inject/tags；adopt_seed 接收人格包里更新的种子。'
-                        '人物档案用 dossier:<人物>，只追加、必须带 entry_date，修正旧条目用 correction；'
                         '没写 visibility 的新节按 owner_private 保存。不写对用户的台词，不把没发生的事写成发生过。'),
         'parameters': {
-            'doc': _s('文档，如 persona、voice、dossier:<人物>、group_notes', required=True),
+            'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
             'reason': _s('为什么改', required=True),
             'sid': _s('目标节的 sid（replace_section、correction、set_tags 用）'),
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
-            'entry_date': _s('人物档案条目的日期 YYYY-MM-DD'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
             'visibility': _s('谁能读到', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
@@ -283,7 +281,6 @@ WORDS = {
     'DOC_SECTION_NOT_FOUND': '没有这一节；先用 recall 看清 sid。',
     'DOC_BODY_REQUIRED': '这个操作要在 body 里写正文。',
     'DOC_HEADING_REQUIRED': '新的一节要有 heading。',
-    'DOC_ENTRY_DATE_REQUIRED': '人物档案条目要带 entry_date（YYYY-MM-DD）。',
     'DOC_REASON_REQUIRED': '要写 reason：为什么改。',
     'DOC_OP_NOT_ALLOWED': '这份文档不能这样改。',
     'DOC_NOT_FOUND': '没有这份文档；新文档只能用 append_section 开始。',

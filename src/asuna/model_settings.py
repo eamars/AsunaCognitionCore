@@ -1,15 +1,9 @@
 """Two independent model routes; DSH compatibility options belong to models."""
 from copy import deepcopy
-import hashlib
-import json
 import math
-import os
 from pathlib import Path
-import uuid
 
 from .config import validate_endpoint
-
-LANES = ('character', 'executor')
 
 
 def normalize(model):
@@ -61,54 +55,3 @@ def validate(model):
 def settings_path(config_path):
     path = Path(config_path).resolve()
     return path.with_name(path.stem + '.models.local.json')
-
-
-def revision(config):
-    return hashlib.sha256(json.dumps({k: config[k] for k in LANES}, sort_keys=True).encode()).hexdigest()
-
-
-def public_models(config):
-    result = {}
-    for lane in LANES:
-        model = normalize(config[lane])
-        model['api_key_set'] = bool(model.pop('api_key', ''))
-        result[lane] = model
-    return result
-
-
-def edited_models(config, body):
-    if body.get('revision') != revision(config):
-        raise ValueError('模型配置已变化，请重新打开设置后保存')
-    if set(body.get('models', {})) != set(LANES):
-        raise ValueError('必须提交两条独立模型路由')
-    result = deepcopy(config)
-    allowed = {'base_url', 'model', 'api', 'max_tokens', 'context_window', 'token_counter',
-               'reasoning_effort', 'reasoning_efforts', 'compat', 'sampling', 'api_key', 'clear_api_key'}
-    for lane in LANES:
-        draft = body['models'][lane]
-        if not isinstance(draft, dict) or set(draft) - allowed:
-            raise ValueError('不支持的模型设置字段')
-        value = normalize(config[lane])
-        value.update({k: v for k, v in draft.items() if k not in ('api_key', 'clear_api_key')})
-        if draft.get('clear_api_key'):
-            value.pop('api_key', None)
-        elif draft.get('api_key'):
-            value['api_key'] = draft['api_key']
-        # Never forward one server's saved credential to a newly entered endpoint.
-        elif value['base_url'].rstrip('/') != config[lane]['base_url'].rstrip('/'):
-            value.pop('api_key', None)
-        result[lane] = validate(value)
-    return result
-
-
-def persist(config, path):
-    target = Path(path)
-    temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
-    try:
-        with temporary.open('x', encoding='utf-8') as stream:
-            json.dump({lane: config[lane] for lane in LANES}, stream, ensure_ascii=False, indent=2, allow_nan=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)

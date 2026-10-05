@@ -153,9 +153,6 @@ def main():
             for entry in archive.getmembers():
                 if entry.isfile() and (installed / entry.name.removeprefix('package/')).read_bytes() != archive.extractfile(entry).read():
                     raise ValueError('Installed artifact does not match: ' + entry.name)
-    patch = base / 'native.patch.yml'
-    patch.write_text(yaml.safe_dump(profile_patch(config, args.config, persona, args.shared_action_model, state_dir, channels),
-                                   allow_unicode=True, sort_keys=False), encoding='utf-8')
     # Initial composition belongs in the editable profile layer. A command-line
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'

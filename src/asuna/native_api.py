@@ -17,7 +17,7 @@ from .ingress import NOT_CORE_NOTICE
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
 
-DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'dossier', 'working')
+DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 
 
 def label(key, **params):
@@ -282,8 +282,7 @@ class NativeMemory:
             raise ValueError('INVALID_MEMORY_SEARCH')
         search = search.strip()
         # ADR-009 operator rows (documents, affect, job reports) come first; search applies to their titles.
-        extra = (self.document_rows() if kind in ('all', 'documents') else
-                 [row for row in self.document_rows() if row['id'] == 'doc:dossier:' + self.subject] if kind == 'relation' else []) + (
+        extra = (self.document_rows() if kind in ('all', 'documents') else []) + (
             self.affect_rows() if kind in ('all', 'affect') else []) + (
             self.job_rows() if kind in ('all', 'jobs') else []) + (
             self.idea_rows() if kind in ('all', 'ideas') else [])

@@ -11,7 +11,6 @@
   },
   "recall_protocol": {
     "order": [
-      "dossier",
       "affect",
       "self_state",
       "ledgers",
@@ -195,10 +194,6 @@
       }
     ]
   },
-  "dossier": {
-    "inject_last": 3,
-    "index_size": 30
-  },
   "rhythm": {
     "settle_at": "04:30"
   },
@@ -236,12 +231,6 @@
     "every_min": 1440
   },
   "policy_keys": {
-    "dossier.inject_last": {
-      "type": "integer",
-      "min": 0,
-      "max": 20,
-      "what": "档案注入最近几条可注入条目"
-    },
     "memory.coverage_floor": {
       "type": "number",
       "min": 0,

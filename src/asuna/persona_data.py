@@ -144,7 +144,7 @@ class PersonaDataAPI:
         return {**result, 'action': action, 'revision_id': revision['_id'], 'sections': len(sections)}
 
     def documents_append(self, args):
-        """Append-only union by origin + source_identity (dossier entries, logs)."""
+        """Append-only union by origin + source_identity (logs, imported notes)."""
         slug, origin, item = args['slug'], args['origin'], args['section']
         revision_id, current = self.docs.read(slug)
         defaulted = []
@@ -154,14 +154,11 @@ class PersonaDataAPI:
             if same['body_sha256'] == sha(item['body'].encode()):
                 return {'action': 'unchanged', 'slug': slug, 'revision_id': revision_id}
             return {'action': 'conflict', 'slug': slug, 'revision_id': revision_id, 'differs': [same['sid']]}
+        if not current and slug.startswith('dossier:'):
+            raise DataError('DOC_OP_NOT_ALLOWED')        # person files are retired (documents.py)
         content = copy.deepcopy(current) if current else {
-            'kind': 'dossier' if slug.startswith('dossier:') else 'working', 'title': slug, 'sections': [],
-            'source': {'origin': origin}, **({'subject': slug.split(':', 1)[1]} if slug.startswith('dossier:') else {})}
-        if content['kind'] == 'dossier' and not item.get('entry_date') and 'preamble' not in (item.get('tags') or []):
-            raise DataError('DOC_ENTRY_DATE_REQUIRED')
+            'kind': 'working', 'title': slug, 'sections': [], 'source': {'origin': origin}}
         tags = list(item.get('tags') or [])
-        if content['kind'] == 'dossier' and 'preamble' not in tags and 'entry' not in tags:
-            tags.append('entry')
         section = _section(unique_sid(slugify(item.get('heading') or args['source_identity']), {s['sid'] for s in content['sections']}),
                            item.get('heading') or '', item['body'],
                            visibility=self._visibility(item.get('visibility'), defaulted, args['source_identity']),

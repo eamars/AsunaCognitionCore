@@ -234,11 +234,14 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
                                 'owner_private', 'A') is None
     assert refused_turn(key='nolink') == {'ATTACH_ARTIFACT_NOT_IN_CONTEXT': art['artifact_id']}
 
-    # 群：群永远不是 owner_private，先撞 session_class 闸门，不静默降级成「只发文字却报平台已送达」
+    # 群：她自己做出来的图（从她的生成端点导入的）可以随话发进她在的群，她自己挑（owner 2026-10-05）
     channel_scene(store, GROUP, person='A', target='group')
-    link(store, GROUP, LOCAL)
-    assert refused_turn(scene=GROUP, key='group', target='group') == {
-        'ATTACH_TARGET_NOT_ALLOWED': 'session_class_not_owner_private'}
+    coordinator, ep = turn(store, scene=GROUP, key='group', target='group', attach=attach)
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'attach_image' in coordinator.character.calls[0]['tools']
+    assert [ok for _said, ok in attach_calls(coordinator)] == [True]
+    rows = speak_rows(store, ep['_id'])
+    assert rows[0]['attachment']['artifact_id'] == art['artifact_id']
 
     # 别人的私聊：不是同一个人的私人空间
     channel_scene(store, OTHER, person='B')

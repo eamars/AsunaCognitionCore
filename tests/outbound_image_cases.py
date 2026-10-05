@@ -900,20 +900,39 @@ def attach_image_refuses_artifact_not_offered_this_turn():
 
 
 @case
-def attach_image_refuses_group_and_non_owner_private_deterministically():
+def attach_image_in_a_group_sends_only_pictures_she_made():
+    """Owner, 2026-10-05: her pictures may go to any group she is in, she picks; never a picture someone sent her."""
     store, stored = world(kind='group')
-    # 群场景里 offer 本身就不出现：她没有可引用的清单，这回合也就没有 attach_image
-    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'owner_private') is None
-    group_ep = turn_ep(store, kind='group')
+    # 群里存的别人的图不进清单；她还没做过图，这回合也就没有 attach_image
+    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'public') is None
+    group_ep = turn_ep(store, kind='group', session='public')
     assert 'attach_image' not in role_tools.exposed(store, group_ep)
-    outcome, said, _after = attach(store, group_ep, stored['artifact_id'])
-    assert outcome == 'refused' and '没有 attach_image' in said, said
-    # 就算这回合带着工具、上下文里冒出一份清单，程序照样按方向拒
     forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']}], 'note': ''}}
-    group_ep2 = turn_ep(store, kind='group', context=forged, ep_id='ep-turn-2')
+    group_ep2 = turn_ep(store, kind='group', session='public', context=forged, ep_id='ep-turn-2')
     outcome, said, after = attach(store, group_ep2, stored['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome == 'refused' and 'ATTACH_TARGET_NOT_ALLOWED' in said and 'target_not_dm' in said, said
-    assert 'attachment' not in after
+    assert outcome == 'refused' and 'ATTACHMENT_NOT_HER_OWN' in said and 'attachment' not in after, said
+    # 她自己做出来的图（从她的生成端点导入、登记在她私聊那边）可以随话发到群里
+    store.db.scenes.insert_one(scene_row('dm'))
+    made = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
+                                source_ids=['integration:image:/made.jpg'])
+    offered = outbound_media.offer(store, CONFIG, scene_row('group'), 'public')
+    assert [item['artifact_id'] for item in offered['items']] == [made['artifact_id']], offered
+    assert '全年龄' in offered['note'] and 'from_linked_scene' not in offered['items'][0]
+    group_ep3 = turn_ep(store, kind='group', session='public', context={'image_artifacts_from_program': offered},
+                        ep_id='ep-turn-3')
+    assert 'attach_image' in role_tools.exposed(store, group_ep3)
+    outcome, said, after = attach(store, group_ep3, made['artifact_id'])
+    assert outcome == 'ok' and after['attachment']['artifact_id'] == made['artifact_id'], said
+    # 字节端点按行自己算：发往群的那条只给她做的图
+    row = sending_row(store, made, _id='pub-group', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
+    data, media_type = outbound_media.serve(store, BlobStore(store), row, row['attachment'])
+    assert data == JPEG and media_type == 'image/jpeg'
+    theirs = sending_row(store, stored, _id='pub-group-2', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
+    try:
+        outbound_media.serve(store, BlobStore(store), theirs, theirs['attachment'])
+        raise AssertionError('别人发的图被发进了群')
+    except Denied as exc:
+        assert 'ATTACHMENT_NOT_HER_OWN' in str(exc), exc
 
     store2, stored2 = world()
     assert outbound_media.offer(store2, CONFIG, scene_row(), 'public') is None
@@ -924,7 +943,7 @@ def attach_image_refuses_group_and_non_owner_private_deterministically():
     outcome2, said2, after2 = attach(store2, public_ep2, stored2['artifact_id'], tools=['think', 'attach_image'])
     assert outcome2 == 'refused' and 'ATTACH_TARGET_NOT_ALLOWED' in said2, said2
     assert 'session_class_not_owner_private' in said2 and 'attachment' not in after2, said2
-    return True, '群／非 owner_private：这回合没有 attach_image；硬调也按 target_not_dm／session_class_not_owner_private 退回'
+    return True, '群：只列、只收、只发她自己做的图（别人发的图 ATTACHMENT_NOT_HER_OWN）；非主人的私聊照旧退回'
 
 
 @case

@@ -474,8 +474,10 @@ class RoleTools:
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + artifact)
+        group = outbound_media.group_scene(self.store.config, scene)
         meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
-            outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')))
+            [] if group else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
+            produced_only=group)
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
         return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
 

@@ -373,11 +373,15 @@ def pull_bytes(entry, config, *, max_bytes=None):
     return data, media_type, entry.get('pull_via'), {'host': final_host, 'content_type': _clean(content_type, 80)}
 
 
-def read_image_for_task(store, blobs, task, config, args, *, route='executor'):
+ARTIFACT_REF = re.compile(r'blob-[0-9a-f]{16,64}')
+
+
+def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=()):
     """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 
     两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
-    scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。"""
+    scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。
+    ref 也可以是一张已存好的图的 artifact_id（她画的、本场景存的、这一轮可发的 ``offered``），用来回看。"""
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
@@ -392,6 +396,8 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor'):
     capability = vision_capability(config, route)
     if not capability['supported']:
         raise ValueError('VISION_ROUTE_UNSUPPORTED:' + ';'.join(capability['unsupported_because']))
+    if ARTIFACT_REF.fullmatch(ref):
+        return stored_image(store, blobs, task, config, ref, max_bytes, offered)
     listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if not entry:
@@ -428,6 +434,30 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor'):
         payload['scene_note'] = ('这张图来自本场景按配置只读联动的另一个场景（同一个人在那边的入口）。'
                                  '放宽的只有读：字节按本任务的 scope 存，写与出站不因此放宽。')
     return payload
+
+
+def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offered=()):
+    """Look again at a picture already stored as an image artifact: one in this scene's own scope, one she
+    made herself (her own generator, any scene), or one this turn was offered to send. Anything else answers
+    exactly like an unknown id, so the tool cannot be used to probe other people's pictures."""
+    from .outbound_media import produced
+    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
+    if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
+                                     or artifact_id in (offered or ()))):
+        raise ValueError('IMAGE_ARTIFACT_NOT_READABLE')
+    data = blobs.get(artifact_id, row['scope_key'], operator=True)
+    cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
+    if len(data) > cap:
+        raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+    media_type = sniff_media_type(data)
+    if media_type is None:
+        raise ValueError('IMAGE_TYPE_UNSUPPORTED:只支持 png/jpeg/webp/gif（按魔数判定）')
+    return {'ref': artifact_id, 'artifact_id': artifact_id, 'scene_id': task['scene_id'],
+            'media_type': media_type, 'bytes': len(data), 'sha256': sha(data), 'pulled_via': 'artifact',
+            'produced': produced(row),
+            'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
+            'visual': 'awaiting_attachment',
+            'note': '这是存好的那张图本身；看完再判断它是不是要的样子。'}
 
 
 def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
@@ -536,6 +566,8 @@ READ_IMAGE_TOOL = {
                     '入站只带元数据与占位符，没调用就等于没看过）。ref 照抄附件清单（attachments、media_from_program）'
                     '或对话里图片旁标出的 ref；只认这个对话最近的几张图。'
                     '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
+                    'ref 也可以是一张已存好的图的 artifact_id（blob-…）：自己画的图（generate_image 回执里的 '
+                    'artifact.artifact_id）、本场景存过的图、这一轮可发的图——画完或发之前用它亲眼看一遍。'
                     '路由不支持图片、主机不在白名单、超限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
     'parameters': {'ref': {'type': 'string', 'required': True}, 'max_bytes': {'type': 'integer'}}}
 

@@ -292,12 +292,20 @@ def exposed(store, ep):
     return names
 
 
+def offered_pictures(ep):
+    """The artifact ids her turn may send (image_artifacts_from_program): she may also look at them."""
+    items = ((ep.get('context') or {}).get('image_artifacts_from_program') or {}).get('items') or ()
+    return tuple(item['artifact_id'] for item in items if isinstance(item, dict) and item.get('artifact_id'))
+
+
 def her_pictures(store, ep):
     """Whether she can look at a picture this turn: her own route takes images and the conversation's recent
     pictures (the same window read_image reads) include one that can be pulled."""
     from .vision import scene_attachments, vision_capability
     if not vision_capability(store.config, 'character')['supported']:
         return False
+    if offered_pictures(ep):
+        return True                       # she can look before she sends
     try:
         listing = scene_attachments(store, ep, store.config)
     except Denied:
@@ -521,7 +529,7 @@ class RoleTools:
         from .vision import read_image_for_task
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         return read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
-                                   route='character'), False
+                                   route='character', offered=offered_pictures(ep)), False
 
     def tool_attach_image(self, ep, call_id, args):
         from . import outbound_media

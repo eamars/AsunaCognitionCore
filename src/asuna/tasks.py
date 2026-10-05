@@ -423,7 +423,7 @@ class Executor:
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结为只读 /app 来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
         if 'generate_image' in task.get('allowed_capabilities',()):
-            text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
+            text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。先用 workflows=true 看有哪些路线、各要什么样的提示词；画完用 read_image 传 artifact_id 亲眼看，不对就改了再画。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
         if task.get('development_grant'):
             text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。技能也在候选里（角色包 skills/<kebab-case-name>/SKILL.md），同样只用 development_* 修改、经 development_publish 生效；原生 skill 工具读取的是已发布的版本。修改认知核需显式 project="core"。发布与否由你判断。'
         # Her words that arrived before this run started belong to its first message.

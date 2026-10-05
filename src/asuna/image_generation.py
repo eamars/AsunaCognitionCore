@@ -24,15 +24,20 @@ OPTION_RULES = {'steps': ('int', 1, 100), 'cfg': ('number', 0, 30),
 
 GENERATE_IMAGE_TOOL = {
     'name': GENERATE_IMAGE_TOOL_NAME,
-    'description': ('Draw one picture with the local image service and put it in this task workspace. Give the '
-                    'prompt in the dialect the chosen workflow expects; optionally a workflow id (a ready '
-                    'text-to-image one; otherwise the service picks for style), negative_prompt, width/height '
+    'description': ('Draw one picture with the local image service and put it in this task workspace. '
+                    'workflows=true lists the ready text-to-image workflows (what each is for, not for, and how '
+                    'it wants to be prompted) without drawing; pick one and write the prompt in its style and '
+                    'language (most want English). Then give the prompt and optionally that workflow id (otherwise '
+                    'the service picks a generic anime one, optionally for a style), negative_prompt, width/height '
                     '(64-2048, multiples of 8), seed, and options (steps, cfg, sampler_name, scheduler) that the '
                     'workflow declares. Waits up to timeout seconds (default 180, max 300); a job still running '
                     'is reported with its prompt_id: call again with job=<prompt_id> to collect it instead of '
-                    'drawing again. The picture is registered as her own image (artifact.artifact_id), so a later '
-                    'turn can send it with a message; show it in a report as a relative Markdown image. Returns '
-                    'the workflow, seed, size, bytes and SHA-256 actually written, or the service\'s real refusal.'),
+                    'drawing again. Nobody has seen the picture until you look: read_image with '
+                    'artifact.artifact_id, compare it with what was asked, and draw again (better prompt or another '
+                    'workflow) when it is wrong. The picture is registered as her own image, so a later turn can '
+                    'send it with a message; show it in a report as a relative Markdown image. Returns the '
+                    'workflow and its prompting guidance, seed, size, bytes and SHA-256 actually written, or the '
+                    'service\'s real refusal.'),
     'parameters': {'prompt': {'type': 'string'},
                    'negative_prompt': {'type': 'string'},
                    'workflow': {'type': 'string'},
@@ -45,6 +50,7 @@ GENERATE_IMAGE_TOOL = {
                                               'sampler_name': {'type': 'string'},
                                               'scheduler': {'type': 'string'}}},
                    'job': {'type': 'string'},
+                   'workflows': {'type': 'boolean'},
                    'target_relative_path': {'type': 'string'},
                    'timeout': {'type': 'integer'}}}
 
@@ -77,6 +83,11 @@ def validate(args):
     if not _int(timeout, MIN_TIMEOUT, MAX_TIMEOUT):
         return None, _error('INVALID_TIMEOUT', allowed=[MIN_TIMEOUT, MAX_TIMEOUT])
     request['timeout'] = timeout
+    if args.get('workflows') is not None:
+        if args['workflows'] is not True:
+            return None, _error('INVALID_WORKFLOWS', note='workflows=true 列出能用的文生图路线，不画图。')
+        request['list'] = True
+        return request, None
     job = args.get('job')
     if job is not None:
         if not isinstance(job, str) or not re.fullmatch(r'[0-9A-Za-z-]{8,64}', job):
@@ -154,6 +165,11 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None):
     report = result.get('report') or {}
     if result.get('transport_error'):
         return _error('IMAGE_TRANSPORT_FAILED', detail=str(result['transport_error'])[:400])
+    if request.get('list'):
+        if not report.get('listed'):
+            return {k: v for k, v in report.items() if v is not None} or _error('IMAGE_LIST_FAILED')
+        return {'workflows': report.get('workflows') or [],
+                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上。'}
     if not report.get('generated'):
         return {k: v for k, v in report.items() if v is not None} or _error('IMAGE_GENERATION_FAILED')
     body = result.get('body') or b''
@@ -180,6 +196,8 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None):
              'sha256': hashlib.sha256(body).hexdigest(), 'media_type': 'image/' + ('jpeg' if kind == 'jpg' else kind)}
     if report.get('warnings'):
         value['warnings'] = report['warnings']
+    if report.get('guidance'):
+        value['guidance'] = report['guidance']
     if register is not None:
         try:
             outcome = register(body, {'endpoint': IMAGE_ENDPOINT, 'artifact_path': report.get('view_path'),
@@ -188,6 +206,6 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None):
             outcome = {'registered': False, 'reason': (type(exc).__name__ + ': ' + str(exc))[:120]}
         if isinstance(outcome, dict) and outcome:
             value['artifact'] = outcome
-    value['note'] = ('图在工作区里；报告里用相对路径的 Markdown 图片展示。artifact.artifact_id 是可以随消息发出去的那张，'
-                     '画面内容没人看过，除非另行复核。')
+    value['note'] = ('画面还没人看过：先用 read_image 传 artifact.artifact_id 亲眼看一遍，对照要求；不对就按 guidance '
+                     '改提示词或换 workflow 再画。报告里用相对路径的 Markdown 图片展示；artifact_id 是可以随消息发出去的那张。')
     return {k: v for k, v in value.items() if v is not None}

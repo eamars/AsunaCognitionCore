@@ -83,6 +83,40 @@ class Service:
         return value
 
 
+def clip(value, chars=300, items=8):
+    if isinstance(value, str):
+        return value[:chars]
+    if isinstance(value, list):
+        return [clip(item, chars, items) for item in value[:items]]
+    return value
+
+
+def guidance(workflow):
+    """How this workflow wants to be prompted and what it is for, in the service's own words."""
+    prompting = workflow.get('prompting') or {}
+    selection = workflow.get('selection') or {}
+    hints = workflow.get('agent_hints') or {}
+    recommended = prompting.get('recommended') or {}
+    examples = [e.get('prompt') for e in prompting.get('examples') or () if isinstance(e, dict) and e.get('prompt')]
+    value = {'style': prompting.get('style'), 'structure': prompting.get('structure'),
+             'quality_prefix': prompting.get('quality_prefix'), 'prompt_scope': hints.get('prompt_scope'),
+             'best_for': selection.get('best_for'), 'not_for': selection.get('not_for'),
+             'size': ([recommended['width'], recommended['height']]
+                      if 'width' in recommended and 'height' in recommended else None),
+             'example': examples[0] if examples else None}
+    return {key: clip(item) for key, item in value.items() if item}
+
+
+def list_workflows(service):
+    listing = service.json('GET', '/project/workflows')
+    out = []
+    for workflow in listing.get('workflows') or ():
+        if isinstance(workflow, dict) and workflow.get('ready') and text_to_image(workflow):
+            out.append({'workflow': workflow.get('id'), 'description': clip(workflow.get('description') or '', 200),
+                        **guidance(workflow)})
+    return out
+
+
 def text_to_image(workflow):
     modes = (workflow.get('capabilities') or {}).get('input_modes') or ()
     return TEXT_TO_IMAGE in modes
@@ -141,6 +175,8 @@ def first_view(job):
 def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
     deadline = clock() + request['timeout']
     report = {}
+    if request.get('list'):
+        return {'workflows': list_workflows(service)}
     if request.get('job'):
         report['prompt_id'] = request['job']
     else:
@@ -152,7 +188,8 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
                        'seed': effective.get('seed'), 'width': effective.get('width'),
                        'height': effective.get('height'),
                        'warnings': [w.get('message', w) if isinstance(w, dict) else w
-                                    for w in queued.get('warnings') or ()][:5]})
+                                    for w in queued.get('warnings') or ()][:5],
+                       'guidance': guidance(workflow)})
         if not report['prompt_id']:
             raise Failure('IMAGE_SERVICE_BAD_RESPONSE', step='POST /project/generate')
     from urllib.parse import quote
@@ -195,7 +232,8 @@ def main(argv):
         if not isinstance(entry, dict) or type(entry.get('port')) is not int:
             raise Failure('ENDPOINT_NOT_CONFIGURED', endpoint=str(endpoint)[:80])
         service = Service(entry.get('host') or '127.0.0.1', entry['port'], 30)
-        print(json.dumps({'generated': True, **run(request, service)}, ensure_ascii=False))
+        value = run(request, service)
+        print(json.dumps({('listed' if 'workflows' in value else 'generated'): True, **value}, ensure_ascii=False))
     except Failure as failure:
         print(json.dumps({'generated': False, **failure.report}, ensure_ascii=False))
     except Exception as exc:                       # 任何意外都如实报成失败，不冒充成功

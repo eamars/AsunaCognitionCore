@@ -8,6 +8,9 @@ from asuna import integration_image as script
 
 PNG = b'\x89PNG\r\n\x1a\n' + b'\x00' * 64
 T2I = {'id': 'demo-t2i', 'ready': True, 'capabilities': {'input_modes': ['text-to-image']},
+       'prompting': {'style': 'natural-language English', 'quality_prefix': 'best quality',
+                     'examples': [{'prompt': 'a lamp on a windowsill'}]},
+       'selection': {'best_for': ['still life'], 'not_for': ['portraits']},
        'parameter_schema': {'properties': {k: {} for k in ('prompt', 'negative_prompt', 'width', 'height', 'seed',
                                                             'steps', 'cfg', 'batch_size')}}}
 EDIT = {'id': 'demo-edit', 'ready': True, 'capabilities': {'input_modes': ['image-to-image']},
@@ -25,6 +28,8 @@ class FakeService:
         self.calls.append((method, path.split('?')[0], body))
         if path == '/project/resolve':
             return {'selected_workflow': 'demo-t2i', 'matches': [{'workflow_id': 'demo-t2i', 'ready': True}]}
+        if path == '/project/workflows':
+            return {'workflows': list(self.workflows.values())}
         if path.startswith('/project/workflows/'):
             name = path.rsplit('/', 1)[1]
             if name not in self.workflows:
@@ -196,3 +201,32 @@ def test_every_object_parameter_says_whether_it_takes_more_keys():
                 walk(value, where + '.' + str(key))
     for spec in ToolBroker.specs.fget(None):
         walk(spec.get('parameters'), spec['name'])
+
+
+def test_the_workflows_are_listed_with_their_guidance_and_nothing_is_drawn(monkeypatch, tmp_path):
+    service = FakeService()
+    value, error = gen.validate({'workflows': True})
+    assert error is None and value['list']
+    report = run(service, value, monkeypatch, tmp_path)
+    assert [w['workflow'] for w in report['workflows']] == ['demo-t2i'], 'only ready text-to-image ones'
+    listed = report['workflows'][0]
+    assert listed['style'] == 'natural-language English' and listed['best_for'] == ['still life']
+    assert listed['example'] == 'a lamp on a windowsill'
+    assert not any(path == '/project/generate' for _m, path, _b in service.calls)
+
+
+def test_a_drawn_picture_comes_back_with_the_guidance_of_its_workflow(monkeypatch, tmp_path):
+    report = run(FakeService(), request(), monkeypatch, tmp_path)
+    assert report['guidance']['not_for'] == ['portraits'] and report['guidance']['quality_prefix'] == 'best quality'
+
+
+def test_the_host_returns_the_listing_and_says_how_to_use_it(tmp_path):
+    listed = {'report': {'listed': True, 'workflows': [{'workflow': 'demo-t2i'}]}, 'body': b''}
+    value = gen.generate({'workflows': True}, runner=FakeRunner(listed), workspace=tmp_path)
+    assert value['workflows'] == [{'workflow': 'demo-t2i'}] and 'workflow' in value['note']
+    assert not list(tmp_path.iterdir())
+
+
+def test_the_result_says_to_look_before_reporting(tmp_path):
+    value = gen.generate({'prompt': 'x'}, runner=FakeRunner(GOOD), workspace=tmp_path)
+    assert 'read_image' in value['note'] and 'read_image' in gen.GENERATE_IMAGE_TOOL['description']

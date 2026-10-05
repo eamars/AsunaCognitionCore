@@ -68,3 +68,49 @@ def test_a_platform_line_names_its_readable_pictures(store, tmp_path):
     refs = line_refs(row, store.config)
     assert refs.startswith('（图 ref：att-') and refs.count('att-') == 1, 'only the picture that can be pulled'
     assert line_refs({'_id': 'in-2', 'event': {}}, store.config) == ''
+
+
+# ── looking again at a stored picture (artifact_id) ────────────────────────
+def stored(store, scope, source):
+    from asuna.blobs import BlobStore
+    return BlobStore(store).put(PNG, scope, 'image', media_type='image/png', source_ids=[source])['artifact_id']
+
+
+def look(store, scope, ref, offered=()):
+    from asuna.blobs import BlobStore
+    from asuna.vision import read_image_for_task
+    store.config.update(executor={**store.config.get('executor', {}), 'input_modalities': ['text', 'image']})
+    task = {'scene_id': scope[len('scene:'):], 'scope_key': scope, 'policy_epoch': 1}
+    return read_image_for_task(store, BlobStore(store), task, store.config, {'ref': ref}, offered=offered)
+
+
+def test_a_picture_she_drew_can_be_looked_at_from_any_scene(store, tmp_path):
+    world(store, tmp_path)
+    mine = stored(store, 'scene:dm-b', 'integration:image:/view?filename=a.png')
+    result = look(store, 'scene:dm-a', mine)
+    assert base64.b64decode(result['image']['data']) == PNG and result['pulled_via'] == 'artifact' and result['produced']
+
+
+def test_a_picture_in_the_scene_itself_can_be_looked_at_again(store, tmp_path):
+    world(store, tmp_path)
+    here = stored(store, 'scene:dm-a', 'in-someone')
+    assert look(store, 'scene:dm-a', here)['artifact_id'] == here
+
+
+def test_someone_elses_picture_answers_like_an_unknown_one(store, tmp_path):
+    world(store, tmp_path)
+    theirs = stored(store, 'scene:dm-b', 'in-someone-else')
+    with pytest.raises(ValueError, match='IMAGE_ARTIFACT_NOT_READABLE'):
+        look(store, 'scene:dm-a', theirs)
+    with pytest.raises(ValueError, match='IMAGE_ARTIFACT_NOT_READABLE'):
+        look(store, 'scene:dm-a', 'blob-' + '0' * 32)
+    assert look(store, 'scene:dm-a', theirs, offered=(theirs,))['artifact_id'] == theirs, 'offered to send: may look'
+
+
+def test_her_turn_offers_read_image_when_she_has_a_picture_to_send(store, tmp_path):
+    from asuna.role_tools import her_pictures, offered_pictures
+    world(store, tmp_path)
+    sees(store)
+    ep = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1,
+          'context': {'image_artifacts_from_program': {'items': [{'artifact_id': 'blob-' + 'a' * 32}]}}}
+    assert offered_pictures(ep) == ('blob-' + 'a' * 32,) and her_pictures(store, ep)

@@ -29,9 +29,10 @@
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
-                  # Compact at 85% of the window (ADR-011 §8): the ratio binds once the headroom
-                  # beyond the request's own output reservation is small.
-                  thresholdRatio: 0.85
+                  # Compact at 75% of the window (ADR-011 §8): the ratio binds once the headroom
+                  # beyond the request's own output reservation is small, and leaves room for one
+                  # large step plus the summary request, which replays the prefix.
+                  thresholdRatio: 0.75
                   headroomTokens: 6144
                   maxTokens: 8192
                   retainRatio: 0.32
@@ -122,9 +123,10 @@
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
-                  # Compact at 85% of the window (ADR-011 §8): the ratio binds once the headroom
-                  # beyond the request's own output reservation is small.
-                  thresholdRatio: 0.85
+                  # Compact at 75% of the window (ADR-011 §8): the ratio binds once the headroom
+                  # beyond the request's own output reservation is small, and leaves room for one
+                  # large step plus the summary request, which replays the prefix.
+                  thresholdRatio: 0.75
                   headroomTokens: 6144
                   maxTokens: 8192
                   retainRatio: 0.32

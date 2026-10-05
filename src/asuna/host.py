@@ -224,8 +224,10 @@ class RuntimeHost:
         """Switch code only after the original action/feedback turn has settled."""
         if not self.activation_settled.is_set():
             return
+        # Only a core publication replaces this worker. Persona and channel ones apply in place, and one
+        # still APPLIED would otherwise ask for a restart after every turn, forever.
         applied=self.app.store.db.sink_receipts.find_one({
-            'kind':'self_development_publish','state':'APPLIED'})
+            'kind':'self_development_publish','state':'APPLIED','project':'core'})
         if applied:
             with self.controller.state_lock:
                 if not self.restart_pending.is_set():

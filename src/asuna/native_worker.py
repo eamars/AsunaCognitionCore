@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timezone
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
@@ -917,6 +918,14 @@ class NativeDevelopmentBridge:
                 **result, '_id':result['receipt_id'], 'kind':'self_development_publish',
                 'scope_key':task['scope_key'], 'task_id':task['_id'],
                 'intent_revision':task['intent_revision']}, stream=task['_id'])
+            # The Host selects only a project's newest publication: an earlier one still waiting to start
+            # never will. Left APPLIED, it would keep asking for a worker restart that never activates it.
+            for older in self.store.db.sink_receipts.find({'kind':'self_development_publish',
+                    'project':result.get('project'), 'state':{'$in':['APPLIED','HOST_RESTART_REQUIRED']},
+                    '_id':{'$ne':result['receipt_id']}}):
+                self.store.put('sink_receipts', {**older, 'state':'SUPERSEDED', 'superseded_by':result['receipt_id'],
+                    'superseded_at':datetime.now(timezone.utc).isoformat()},
+                    expected=older['revision'], stream=older.get('task_id', older['_id']))
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()
         return result

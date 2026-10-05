@@ -81,7 +81,7 @@ The persistent writable candidate is the selected persona package by default. Us
 - `ACTIVE`: the corresponding resources or worker loaded successfully.
 - `HOST_RESTART_REQUIRED`: JS, composition or dependency changes need an explicit Host restart to install the selected package. The launcher records installer failure while keeping the installed native repair entry available.
 
-Persona resources apply without restarting the Host. Python updates replace only the worker at an idle boundary. A selection that never confirms running after more than two starts returns to the previous ACTIVE selection at the next start (the launcher reinstalls that artifact); sources are never rolled back. Publication feedback retains its original task/goal association.
+Persona resources apply without restarting the Host. Python updates replace only the worker at an idle boundary; only a core publication ever asks for that, and a newer publication of the same project supersedes one still waiting to start (`SUPERSEDED`). A selection that never confirms running after more than two starts returns to the previous ACTIVE selection at the next start (the launcher reinstalls that artifact); sources are never rolled back. Publication feedback retains its original task/goal association.
 
 **Asuna recovery** is a native preset with project tools backed by the stable publication floor, independent of the mutable worker. It can inspect a failed candidate and publish a forward correction when Python cannot import. It does not grant database mutation or platform messages. The launcher, publication floor, recovery component and persistence boundary are protected from these project writes. Native Web and ordinary sessions remain available during worker failure.
 

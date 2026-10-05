@@ -117,3 +117,36 @@ def test_the_owner_can_ask_her_to_review_her_ideas_in_private(store):
     lane = FakeLane(store, [FakeTurn([THINK, ('read_ideas', {})], '嗯。')])
     Coordinator(store, lane).ingest(event('pub-read', scene='dm-b', person='B', text='你的想法本里有什么'))
     assert lane.tool_results[1][4] == 'NOT_EXPOSED', 'a public chat never reads the notebook'
+
+
+def test_a_newer_publication_supersedes_one_still_waiting_and_only_core_restarts_the_worker(store):
+    """Regression (live 2026-10-05): an adapter publication replaced four minutes later stayed APPLIED, and the
+    worker asked for a restart after every turn to activate it, about once per group message, for hours."""
+    import threading
+    from queue import Queue
+    from types import SimpleNamespace
+    from asuna.host import RuntimeHost
+    from asuna.native_worker import NativeDevelopmentBridge
+    owner(store)
+    results = iter([{'receipt_id': 'self-publish-a', 'project': 'channel', 'state': 'APPLIED', 'candidate': 'a'},
+                    {'receipt_id': 'self-publish-b', 'project': 'channel', 'state': 'APPLIED', 'candidate': 'b'},
+                    {'receipt_id': 'self-publish-c', 'project': 'core', 'state': 'APPLIED', 'candidate': 'c'}])
+    worker = SimpleNamespace(host_call=lambda method, args: next(results))
+    bridge = NativeDevelopmentBridge(worker, store.config, store)
+    task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
+            'scope_key': 'scene:dm-a', 'intent_revision': 1}
+    recorded = []
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append(kind)))
+    host.app = SimpleNamespace(store=store)
+    host.controller = SimpleNamespace(active=None, active_task=None, pending=Queue(), task_queue=Queue(),
+                                      state_lock=threading.Lock(), restart_pending=host.restart_pending)
+    bridge.call(task, 'development_publish', {})
+    bridge.call(task, 'development_publish', {})
+    older = store.db.sink_receipts.find_one({'_id': 'self-publish-a'})
+    assert older['state'] == 'SUPERSEDED' and older['superseded_by'] == 'self-publish-b'
+    host._maybe_restart_after_publish()
+    assert not host.restart_requested.is_set() and recorded == [], 'a channel publication applies in place'
+    bridge.call(task, 'development_publish', {})
+    assert store.db.sink_receipts.find_one({'_id': 'self-publish-b'})['state'] == 'APPLIED', 'another project is not superseded'
+    host._maybe_restart_after_publish()
+    assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']

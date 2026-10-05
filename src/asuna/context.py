@@ -59,7 +59,7 @@ BLOCKS = {
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
                     'schedule_control_from_program', 'scheduled_plan_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
-    'media': ('media_from_program', 'image_artifacts_from_program'),
+    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program'),
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
 }
@@ -462,6 +462,12 @@ class ContextBuilder:
             # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
             offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'])
             if offer:context['image_artifacts_from_program']=offer
+            elif session_class==visibility.OWNER_PRIVATE:
+                # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
+                # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
+                from .vision import vision_capability as _vision
+                mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
+                if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],

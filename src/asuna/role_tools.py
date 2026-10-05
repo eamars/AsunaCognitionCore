@@ -307,8 +307,8 @@ def her_pictures(store, ep):
     from .vision import scene_attachments, vision_capability
     if not vision_capability(store.config, 'character')['supported']:
         return False
-    if offered_pictures(ep):
-        return True                       # she can look before she sends
+    if offered_pictures(ep) or ((ep.get('context') or {}).get('your_pictures_from_program') or {}).get('items'):
+        return True                       # she can look before she sends, and at her own pictures at home
     try:
         listing = scene_attachments(store, ep, store.config)
     except Denied:

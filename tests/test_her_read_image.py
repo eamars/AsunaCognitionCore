@@ -114,3 +114,17 @@ def test_her_turn_offers_read_image_when_she_has_a_picture_to_send(store, tmp_pa
     ep = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1,
           'context': {'image_artifacts_from_program': {'items': [{'artifact_id': 'blob-' + 'a' * 32}]}}}
     assert offered_pictures(ep) == ('blob-' + 'a' * 32,) and her_pictures(store, ep)
+
+
+def test_at_home_where_nothing_can_be_sent_she_still_sees_and_looks_at_her_own_pictures(store, tmp_path):
+    from test_engineering_m1 import event
+    world(store, tmp_path)
+    sees(store)
+    mine = stored(store, 'scene:dm-b', 'integration:image:/view?filename=me.png')
+    lane = FakeLane(store, [FakeTurn([THINK, ('read_image', {'ref': mine})], '原来我长这样')])
+    ep = Coordinator(store, lane).ingest(event('look-1'))
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    listed = ep['context']['your_pictures_from_program']
+    assert [item['artifact_id'] for item in listed['items']] == [mine] and 'read_image' in listed['note']
+    assert 'image_artifacts_from_program' not in ep['context']                # nothing here can be sent
+    assert 'read_image' in lane.calls[0]['tools'] and lane.tool_results[1][5], lane.tool_results

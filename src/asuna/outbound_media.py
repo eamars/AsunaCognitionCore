@@ -202,6 +202,25 @@ def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
     return [item for item in items if item['artifact_id'] in mine][:count]
 
 
+OWN_PICTURES_NOTE = ('这些是你自己画的图（新的在前）。这里发不出去，只是给你看：想看哪张，就用 read_image 传它的 '
+                     'artifact_id。没调用就是没看过。')
+
+
+def own_pictures(store, moment, *, limit=5):
+    """Her own newest pictures, to look at where none can be sent (her local chat): ids and when, in words."""
+    from datetime import datetime
+    from .config import ago
+    out = []
+    for item in produced_images(store, limit=limit):
+        row = {'artifact_id': item['artifact_id']}
+        try:
+            row['when'] = ago((moment - datetime.fromisoformat(item['created_at'])).total_seconds() / 3600)
+        except (TypeError, ValueError):
+            pass
+        out.append(row)
+    return out
+
+
 def _route_person(config, scene, channel_id=None):
     """这个场景是谁的私人空间：dm 路由上写的 person_id，没有就看场景唯一的成员。"""
     scene_id = (scene or {}).get('_id')

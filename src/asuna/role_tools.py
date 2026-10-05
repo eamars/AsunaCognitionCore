@@ -187,6 +187,14 @@ TOOLS = {
                        'topic': _s('想聊的话头，80 字以内，可省略'),
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
+    'peer_line': {
+        'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
+                        '不叫醒你，以后也不补发；你自己的话照常发得出去。关多久由你选：an_hour 一小时，'
+                        'until_morning 到早上八点，until_reopened 一直关到你自己打开。想开就 op=open。'),
+        'parameters': {'line': _s('哪条线：照抄 lines_from_program 里的 line', required=True),
+                       'op': _s('开还是关', required=True, enum=['open', 'close']),
+                       'close_for': _s('op=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
+    },
     'note_idea': {
         'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
                         '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
@@ -276,6 +284,8 @@ def exposed(store, ep):
         names.append('group_action')
     if kind == 'settlement':
         names.append('promote_memory')
+    if (context.get('lines_from_program') or {}).get('items'):
+        names.append('peer_line')
     # ADR-012 §4.2: from a heartbeat at home she may go and see one of her groups.
     if kind == 'presence' and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
         names.append('visit')
@@ -738,6 +748,26 @@ class RoleTools:
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，出不了门。')
         return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
+
+    # ── her own peer lines (ADR-013 §6) ─────────────────────────────
+    def tool_peer_line(self, ep, call_id, args):
+        from . import lines
+        from .persona_model import timezone as persona_zone
+        from .render import model_and_policy
+        wanted = self._text(args, 'line', 80)
+        line = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
+        if not line:
+            raise Refused('没有这条线；照抄 lines_from_program 里的 line。')
+        op = args.get('op')
+        if op not in ('open', 'close'):
+            raise Refused('op 是 open 或 close。')
+        if op == 'close' and args.get('close_for') not in lines.CLOSE_FOR:
+            raise Refused('关的时候要选 close_for：%s。' % '、'.join(lines.CLOSE_FOR))
+        model, policy = model_and_policy(self.store, ep['persona'])
+        zone = persona_zone(model, policy, self.store.config)[0]
+        lines.set_line(self.store, line['scene_id'], closed=op == 'close', choice=args.get('close_for'), zone=zone,
+                       by='character:' + ep['_id'])
+        return {'line': line['label'], 'state': lines.describe(lines.closed_until(self.store, line['scene_id']), zone)}, False
 
     # ── her improvement ideas (ADR-011 §6.2) ────────────────────────
     def tool_note_idea(self, ep, call_id, args):

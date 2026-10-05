@@ -172,6 +172,9 @@ class Channels:
             event['group_context'] = group_context(self.store, route, body, event_id)
         if 'occurred_at' in body:
             event['occurred_at'] = body['occurred_at']
+        from . import lines
+        if lines.is_closed(self.store, route['scene_id']):
+            return {'status': 'line_closed'}           # she closed this peer line: passed over, never replayed
         return self.controller.receive(event)
 
     def _valid_publication(self, message, channel_id):

@@ -427,6 +427,15 @@ class ContextBuilder:
             visits=places.last_visits_block(self.store,persona,plan,moment)
             if visits:
                 context['last_visits_from_program']=visits
+        # ADR-013 §6: her peer lines and whether she has them open, at home and in the line's own conversation.
+        from . import lines as _lines
+        peer_lines=_lines.peer_lines(self.store)
+        if peer_lines and (session_class==visibility.OWNER_PRIVATE
+                           or event['scene_id'] in {line['scene_id'] for line in peer_lines}):
+            from .persona_model import timezone as _line_zone
+            from .render import model_and_policy as _line_model
+            _lm,_lp=_line_model(self.store,persona)
+            context['lines_from_program']=_lines.view(self.store,peer_lines,_line_zone(_lm,_lp,self.store.config)[0],moment)
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.

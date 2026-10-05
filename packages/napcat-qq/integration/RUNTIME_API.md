@@ -99,7 +99,7 @@ The host persists accepted input before any retrieval or model call and returns:
 {"status":"accepted","episode_id":"ep-…","received_at":"…"}
 ```
 
-An identical event for the same channel, account, route scene, and platform event ID returns `duplicate` without a second queue entry. Reusing an event ID with conflicting identity or content is rejected. `accepted` confirms durable host receipt, not a reply or publication.
+An identical event for the same channel, account, route scene, and platform event ID returns `duplicate` without a second queue entry. On a peer line she has closed herself (a direct-message route of a channel kind that declares `PEER_LINE`, ADR-013 §6), the host returns `{"status":"line_closed"}` and keeps nothing: the message is passed over, not queued for later. Reusing an event ID with conflicting identity or content is rejected. `accepted` confirms durable host receipt, not a reply or publication.
 
 Adapters that normalize media may provide bounded metadata under `raw.asuna_media`. The host does not interpret arbitrary platform payloads. Media metadata and an image placeholder do not mean the character brain has seen the image; image reading is described below.
 

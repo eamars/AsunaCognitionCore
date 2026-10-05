@@ -9,6 +9,7 @@ import re
 KIND = 'dsh'                      # scene ids dsh:<home>:dm:<peer>; person ids dsh:<peer>
 TITLE = 'DSH'                     # the sidebar workspace its conversations live in
 IMAGE_HOSTS = ()                  # the bridge carries text only
+PEER_LINE = True                  # she can open/close this line herself (asuna/lines.py)
 
 ACCOUNT = re.compile(r'[a-z][a-z0-9-]{0,39}')
 INBOUND_MENTION = re.compile(r'(?!)')        # a peer conversation has no @ mentions

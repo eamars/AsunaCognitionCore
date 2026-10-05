@@ -35,6 +35,8 @@ Then configure this plugin's row in the profile's editable patch:
     label: '[from …]'              # who is speaking, first line of her messages there
     ownerNote: '(not a reply to you)'
     insecureTls: true              # a LAN service behind its own local CA
+    closedUntil: '2026-01-01T09:00:00+13:00'   # optional: line closed until then, reopens by itself
 ```
 
-Without `url`, `sessionId`, `routeId` and `senderId` the bridge stays idle.
+Without `url`, `sessionId`, `routeId` and `senderId` the bridge stays idle. While `closedUntil` lies ahead, the peer's
+replies are passed over (not delivered later) and her words wait in the outbox; the line reopens by itself.

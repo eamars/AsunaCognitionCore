@@ -152,3 +152,18 @@ test('a refused prompt is a failed receipt, and pings are answered', async () =>
     assert.match(host.receipts[0].response.error, /session\/busy/);
   } finally { done(); }
 });
+
+test('while the line is closed nothing crosses: replies are passed over and her words wait', async () => {
+  const { peer, host, bridge, done } = await setup();
+  try {
+    bridge.peer.closedUntil = new Date(Date.now() + 60000).toISOString();
+    host.outbox.push({ publication_id: 'pub-3', attempt_id: 'att-3', text: 'still awake?', target: {} });
+    for (const event of turn(11, 7, { kind: 'user' }, 'night bell')) peer.send({ type: 'event', event });
+    await until(() => bridge.state.lastSeq === 14);
+    await new Promise(r => setTimeout(r, 200));
+    assert.equal(host.events.length, 0);
+    assert.equal(bridge.state.pending.length, 0);
+    assert.equal(host.outbox.length, 1);                       // not claimed while closed
+    assert.equal(peer.prompts.length, 0);
+  } finally { done(); }
+});

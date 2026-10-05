@@ -106,7 +106,9 @@ const textOf = content => (content ?? []).filter(block => block?.type === 'text'
 
 export class PeerBridge {
   /**
-   * @param peer {url, sessionId, routeId, senderId, label, ownerNote, insecureTls}
+   * @param peer {url, sessionId, routeId, senderId, label, ownerNote, insecureTls, closedUntil}
+   *   closedUntil: until this time (ISO) the line is closed: the peer's replies are passed over, not delivered,
+   *   and her words wait in the outbox. It reopens by itself.
    * @param endpoint async () => {url, channelId, accountId, token} | null — the channel API (core.channelEndpoint)
    */
   constructor({ peer, endpoint, statePath, log = () => {}, retryMs = 5000 }) {
@@ -115,6 +117,7 @@ export class PeerBridge {
     this.turns = new Map();          // turn -> {source, texts}
     this.lastSource = null;
     this.stopped = false;
+    this.sleepers = new Set();
     this.socket = null;
     this.status = 'starting';
   }
@@ -126,7 +129,22 @@ export class PeerBridge {
     this.flushLoop();
   }
 
-  stop() { this.stopped = true; this.socket?.close(); }
+  stop() { this.stopped = true; this.socket?.close(); for (const wake of [...this.sleepers]) wake(); }
+
+  /** A wait that stop() ends at once. */
+  sleep(ms) {
+    return new Promise(resolve => {
+      const done = () => { clearTimeout(timer); this.sleepers.delete(done); resolve(); };
+      const timer = setTimeout(done, ms);
+      this.sleepers.add(done);
+    });
+  }
+
+  /** Milliseconds the line stays closed (0 when open). */
+  closedFor() {
+    const until = Date.parse(this.peer.closedUntil ?? '');
+    return Number.isFinite(until) ? Math.max(0, until - Date.now()) : 0;
+  }
 
   async save() {
     await fs.mkdir(path.dirname(this.statePath), { recursive: true });
@@ -192,7 +210,8 @@ export class PeerBridge {
       const turn = this.turns.get(data.turn);
       this.turns.delete(data.turn);
       const said = turn?.texts.at(-1);
-      if (said && data.reason?.kind === 'completed') {
+      if (said && data.reason?.kind === 'completed' && this.closedFor()) this.log('line closed: a reply was passed over');
+      else if (said && data.reason?.kind === 'completed') {
         const ours = turn.source?.kind === 'user-rpc' && this.state.sent.includes(turn.source.rpcId);
         const text = ((ours || !this.peer.ownerNote) ? '' : this.peer.ownerNote + '\n') + said;
         this.state.pending.push({ event_id: this.peer.sessionId + ':turn:' + data.turn + ':' + event.seq,
@@ -227,7 +246,7 @@ export class PeerBridge {
 
   async flushLoop() {
     while (!this.stopped) {
-      await new Promise(resolve => setTimeout(resolve, this.retryMs));
+      await this.sleep(this.retryMs);
       await this.flush();
     }
   }
@@ -236,17 +255,19 @@ export class PeerBridge {
   async outboundLoop() {
     while (!this.stopped) {
       try {
+        const closed = this.closedFor();
+        if (closed) { await this.sleep(Math.min(closed, 60000)); continue; }
         const host = await this.endpoint();
-        if (!host?.token) { await new Promise(resolve => setTimeout(resolve, this.retryMs)); continue; }
+        if (!host?.token) { await this.sleep(this.retryMs); continue; }
         const res = await request(`${host.url}/v1/channels/${host.channelId}/outbox?wait_seconds=25`,
           { headers: { authorization: 'Bearer ' + host.token }, timeoutMs: 45000 });
         if (res.status !== 200 || !Array.isArray(res.json?.items)) {
-          await new Promise(resolve => setTimeout(resolve, this.retryMs)); continue;
+          await this.sleep(this.retryMs); continue;
         }
         for (const item of res.json.items) await this.deliver(host, item);
       } catch (error) {
         this.log('outbound: ' + error.message);
-        await new Promise(resolve => setTimeout(resolve, this.retryMs));
+        await this.sleep(this.retryMs);
       }
     }
   }

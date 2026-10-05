@@ -12,6 +12,8 @@ function harness() {
   const calls = [];
   const ctx = { sessions: { flush: async () => {} }, schedule: {
     catalog: async () => [record],
+    list: async ({ sessionId }) => [record].filter(row => row.sessionId === sessionId)
+      .map(({ sessionId: _s, status: _st, lastDelivery: _l, ...stored }) => stored),
     update: async request => { calls.push(request);
       record = { ...record, ...(request.change ?? {}), ...(request.change ? { kind: request.change.kind } : {}),
         ...(request.title ? { title: request.title } : {}) };
@@ -29,6 +31,8 @@ test('T5.8 schedule_update changes timing in place and reconciliation keeps one 
     payload: { id: 'n1', change: { kind: 'daily', daily: { time: '10:15:00', time_zone: 'UTC' } } } });
   assert.equal(result.id, 'n1');
   assert.equal(h.calls[0].expected.id, 'n1');
+  // The record as stored, never a catalog entry (Schedule refuses one as an invalid record).
+  assert.equal('status' in h.calls[0].expected || 'sessionId' in h.calls[0].expected, false);
   await h.schedules.refresh(h.agent);
   const ops = h.events.filter(e => e.type === 'asuna/schedule').map(e => e.data.operation);
   assert.deepEqual(ops, ['create', 'update']);

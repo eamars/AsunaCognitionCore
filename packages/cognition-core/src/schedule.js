@@ -106,7 +106,9 @@ export class NativeSchedules {
       if (path === '/schedule/update') {
         // ADR-009 D-5: change timing in place (native schedule_update), logged like create/delete
         // so reconciliation never mistakes it for a delete followed by a create.
-        const expected = (await this.ctx.schedule.catalog()).find(row => row.id === payload.id && row.sessionId === sessionId);
+        // `expected` is the record exactly as stored (Schedule's `list`, as its own schedule_update tool reads
+        // it). A catalog entry also carries sessionId, status and lastDelivery, and is refused as invalid.
+        const expected = (await this.ctx.schedule.list({ sessionId })).find(row => row.id === payload.id);
         if (!expected) return { id: payload.id, updated: false, code: 'schedule_not_found' };
         const request = { sessionId, id: payload.id, expected };
         if (payload.change) request.change = payload.change;

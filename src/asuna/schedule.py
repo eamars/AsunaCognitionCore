@@ -228,7 +228,11 @@ class ScheduleService:
         title = RHYTHM_TITLES[kind]
         if live and plan['rule'] == rule and _matches(native, timing):
             if native.get('title') != title:
-                native = self.lane.schedule('/schedule/update', {'id': plan['schedule_id'], 'title': title}) or native
+                named = self.lane.schedule('/schedule/update', {'id': plan['schedule_id'], 'title': title})
+                if isinstance(named, dict) and named.get('id') == plan['schedule_id'] and named.get('scheduledAt'):
+                    native = named
+                else:                         # a refused rename is said, not taken for done
+                    self.store.audit(plan_id, 'rhythm.rename_refused', {'result': named}, plan['scope_key'])
             if native.get('scheduledAt') and native['scheduledAt'] != plan.get('next_fire_at'):
                 current = self.store.db.plans.find_one({'_id': plan_id})
                 plan = self.store.put('plans', {**current, 'next_fire_at': native['scheduledAt']},
@@ -668,9 +672,11 @@ class ScheduleService:
             if (native.get('title') or '').startswith(LEGACY_TITLE) and native['id'] == plan.get('schedule_id') \
                     and native['id'] not in deleted and plan['status'] == 'ACTIVE':
                 try:                          # the task page names it by what it is (ADR-012 §8)
-                    self.lane.schedule('/schedule/update', {'id': native['id'], 'title': plan_title(plan)})
-                except Exception:
-                    pass
+                    named = self.lane.schedule('/schedule/update', {'id': native['id'], 'title': plan_title(plan)})
+                    if not (isinstance(named, dict) and named.get('id') == native['id'] and named.get('scheduledAt')):
+                        self.store.audit(plan_id, 'schedule.rename_refused', {'result': named}, plan['scope_key'])
+                except Exception as exc:
+                    self.store.audit(plan_id, 'schedule.rename_refused', {'error': str(exc)[:300]}, plan['scope_key'])
             if not plan.get('schedule_id'):
                 self.store.put('plans', {**plan, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
                     'scheduled_at': native['scheduledAt'], 'status': plan['status']

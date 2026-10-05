@@ -7,8 +7,9 @@ import re
 
 KIND = 'qq'                       # scene ids qq:<bot>:<dm|group>:<target>; person ids qq:<account>
 TITLE = 'QQ'                      # the sidebar workspace its conversations live in
-# Only the media host this deployment has actually received QQ images from (stored inbound metadata).
-IMAGE_HOSTS = ('multimedia.nt.qq.com.cn',)
+# Only the media hosts this deployment has actually received QQ images from (stored inbound metadata):
+# the NT media host, and the group-picture CDN that older clients' pictures still come from.
+IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn')
 
 ACCOUNT = re.compile(r'[0-9]{4,20}')
 # The adapter writes a real @ in inbound text as @<account>; her outbound @ reaches it as @qq:<account>.

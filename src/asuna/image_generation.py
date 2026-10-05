@@ -40,7 +40,10 @@ GENERATE_IMAGE_TOOL = {
                    'width': {'type': 'integer'},
                    'height': {'type': 'integer'},
                    'seed': {'type': 'integer'},
-                   'options': {'type': 'object'},
+                   'options': {'type': 'object', 'additionalProperties': False,
+                               'properties': {'steps': {'type': 'integer'}, 'cfg': {'type': 'number'},
+                                              'sampler_name': {'type': 'string'},
+                                              'scheduler': {'type': 'string'}}},
                    'job': {'type': 'string'},
                    'target_relative_path': {'type': 'string'},
                    'timeout': {'type': 'integer'}}}

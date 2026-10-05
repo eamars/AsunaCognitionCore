@@ -183,3 +183,16 @@ def test_the_plugin_learns_the_tool_from_the_broker_list():
     assert gen.GENERATE_IMAGE_TOOL_NAME in names and 'import_integration_artifact' in names
     source = open(__import__('asuna.native_worker', fromlist=['x']).__file__, encoding='utf-8').read()
     assert "return self.app.broker.specs" in source
+
+
+def test_every_object_parameter_says_whether_it_takes_more_keys():
+    """DSH refuses a tool schema whose object has no explicit additionalProperties (the whole action run fails)."""
+    from asuna.tasks import ToolBroker
+    def walk(schema, where):
+        if isinstance(schema, dict):
+            if schema.get('type') == 'object':
+                assert isinstance(schema.get('additionalProperties'), bool), where
+            for key, value in schema.items():
+                walk(value, where + '.' + str(key))
+    for spec in ToolBroker.specs.fget(None):
+        walk(spec.get('parameters'), spec['name'])

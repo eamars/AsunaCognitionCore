@@ -5,6 +5,8 @@ export function nativeRoute(route) {
   if (!route) return route;
   const value = { ...route };
   if (!value.reasoningEffort) delete value.reasoningEffort;
+  // An empty output limit is the model's own (resolveRoutes); it never overrides a request's limit with nothing.
+  if (value.maxTokens === undefined) delete value.maxTokens;
   return value;
 }
 

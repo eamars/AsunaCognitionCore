@@ -153,9 +153,11 @@ export class CognitionCore {
   ready() {
     if (!this.initializing) this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
-      if (!persona) throw new Error('Select an installed Asuna persona');
+      // A profile not yet set up (a fresh install) is waiting for its settings, not failed.
+      const unconfigured = message => Object.assign(new Error(message), { unconfigured: true });
+      if (!persona) throw unconfigured('Select an installed Asuna persona');
       if (!this.config.python || !this.config.deployment)
-        throw new Error('Configure the Asuna Python worker and deployment settings');
+        throw unconfigured('Configure the Asuna Python worker and deployment settings');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
       this.efforts = await this.stageEfforts();
@@ -195,6 +197,10 @@ export class CognitionCore {
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
     })().catch(async error => {
+      if (error.unconfigured) {
+        this.lifecycle.state = 'unconfigured'; this.lifecycle.error = error.message; this.initializing = null;
+        throw error;
+      }
       this.lifecycle.state = 'failed'; this.lifecycle.error = String(error);
       if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
       throw error;
@@ -223,6 +229,8 @@ export class CognitionCore {
       if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
         throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
+      // An empty output limit uses what the model service declares for the model.
+      route.maxTokens ??= model.defaultMaxTokens;
       if (!Number.isInteger(route.maxTokens) || route.maxTokens < 1
           || model.context && route.maxTokens >= model.context.contextWindow)
         throw new Error('INVALID_OUTPUT_LIMIT: ' + lane);
@@ -272,19 +280,12 @@ export class CognitionCore {
     return values;
   }
 
-  /** Whether each credential reference has a value (for the settings page; never the value). */
-  async credentialStates(deployment) {
-    const store = this.credentialStore();
-    return Object.fromEntries(await Promise.all(secretReferences(deployment).map(async ref =>
-      [ref, store ? (await store.describe(credentialRef(ref))).configured === true : false])));
-  }
-
   publicConfig() { return redactSecrets(Config, this.config).value; }
 
   async validateSettings(next, pythonPath) {
     if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
     const models = await this.resolveRoutes(next.routes);
-    if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: import the existing deployment with setup_native_profile.py');
+    if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: fill in the deployment settings');
     assertSecretReferences(next.deployment);
     // This process imports and validates the proposed business configuration.
     // It does not initialize a RuntimeHost, consume queues, or call any model.

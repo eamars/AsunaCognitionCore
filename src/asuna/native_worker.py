@@ -279,7 +279,7 @@ class BusinessWorker:
         # The profile's settings are the only source (ADR-010 D3): no local configuration file is read.
         if not deployment:
             raise ValueError('NATIVE_DEPLOYMENT_REQUIRED')
-        config = runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True)
+        config = runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True, persona=persona['id'])
         # One Host per database: two Hosts may never run the same business queue
         # or publish the same scene concurrently.
         self.stack.enter_context(RuntimeLease(database_lock(config)))
@@ -626,7 +626,8 @@ class BusinessWorker:
         if method == 'validate_settings':
             from .native_settings import runtime_settings
             channel_kinds.load(args.get('channels'))
-            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['admission'])
+            config = runtime_settings(args['deployment'], args.get('secrets', {}), args['models'], args['admission'],
+                                      persona=args['persona'])
             if config['chat']['persona'] != args['persona']:
                 raise ValueError('PERSONA_STATE_ID_MISMATCH')
             from .state import Store

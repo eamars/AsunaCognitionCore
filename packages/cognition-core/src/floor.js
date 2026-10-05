@@ -148,7 +148,8 @@ export class PublicationFloor {
 
   /** The writable development copy of a channel plugin's adapter: her integration_* tools work there. */
   async integrationProject(channel) {
-    if (!channel?.integration_directory) return null;
+    // A profile that has not made the channel a development project (a fresh install) has no integration copy.
+    if (!channel?.integration_directory || !this.projects.has(channel.project)) return null;
     const project = await this.ensure(channel.project);
     const directory = path.resolve(project.candidate, channel.integration_directory);
     if (!inside(project.candidate, directory)) throw new Error('CHANNEL_INTEGRATION_PATH_INVALID');

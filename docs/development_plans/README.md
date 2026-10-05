@@ -19,6 +19,6 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 007 | Autonomous self-development foundation | Implemented (foundation report 2026-09-25). |
 | 008 | DSH native plugin | Implemented. |
 | 009 | Persona residency | Implemented, merged 2026-10-05; person files retired the same day. |
-| 010 | DSH distributable plugin | Approved 2026-10-05 (GitHub Release .tgz, uv, MongoDB, local inline patch, GPLv3); not implemented. |
+| 010 | DSH distributable plugin | Approved 2026-10-05 (GitHub Release .tgz, uv, MongoDB, local inline patch, GPLv3). M0–M1 done (plugin cards; data folder, credentials in DSH's store, a fresh profile starts from the settings page); M2–M5 open. |
 | 011 | Her two brains on native tools | Implemented; live acceptance completed 2026-10-05. |
 | 012 | Heartbeat and places | Implemented 2026-10-05. |

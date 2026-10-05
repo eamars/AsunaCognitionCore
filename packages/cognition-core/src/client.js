@@ -678,6 +678,15 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
     function SettingsEditor({ initial, t }) {
       const [status, setStatus] = React.useState(null);
+      // Whether each credential the card shows has a value: asked of DSH's credential store, never the value.
+      const [credentialState, setCredentialState] = React.useState({});
+      const describeCredentials = async refs => {
+        if (!refs.length) return {};
+        const response = await ctx.remote.credentials.describe(refs);
+        const states = response?.ok ? Object.fromEntries(refs.map(ref => [ref, response.value[ref]?.configured === true])) : {};
+        setCredentialState(previous => ({ ...previous, ...states }));
+        return states;
+      };
       const [notice, setNotice] = React.useState(''), [busy, setBusy] = React.useState(false);
       const [persona, setPersona] = React.useState(null);
       const loadPersona = () => rpc('personaSources').then(setPersona).catch(() => setPersona(null));
@@ -703,7 +712,16 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         // retain their JSON type; no second schema editor or settings store.
         for (const [key, value] of Object.entries(initial.deployment ?? {}))
           add(['deployment', key], key, typeof value === 'string' ? 'text' : 'json');
-        const secretNames = new Set();
+        // A new profile has no deployment yet: its required sections appear with a starting value staged
+        // (the Mongo URI already pointing at a credential), so the page alone can configure it (ADR-010 M1).
+        const starters = [];
+        for (const [key, type, text] of [['database', 'text', ''], ['mongo_uri', 'json', '{"$secret":"ASUNA_MONGO_URI"}'],
+          ['embedding', 'json', '{"base_url":"","model":""}']]) {
+          if (initial.deployment?.[key] !== undefined) continue;
+          add(['deployment', key], key, type);
+          if (text) starters.push([JSON.stringify(['deployment', key]), text]);
+        }
+        const secretNames = new Set(initial.deployment?.mongo_uri === undefined ? ['ASUNA_MONGO_URI'] : []);
         const collect = value => { if (!value || typeof value !== 'object') return;
           if (typeof value.$secret === 'string') secretNames.add(value.$secret);
           else Object.values(value).forEach(collect); };
@@ -738,8 +756,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             const response = await ctx.remote.credentials.set(ref, value);
             if (response && response.ok === false) throw new Error(response.error?.message ?? 'CREDENTIAL_NOT_STORED');
           }
-          const current = await rpc('status'); setStatus(current);
-          return Object.keys(values).every(ref => current.credentials?.[ref]);
+          const states = await describeCredentials(Object.keys(values));
+          return Object.keys(values).every(ref => states[ref]);
         };
         const secrets = fields.filter(field => field.type.startsWith('secret')).map(field => ({ field: field.field,
           write: async text => { try {
@@ -761,7 +779,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             if (field.type === 'number' && (!Number.isSafeInteger(value) || value < 1)) return undefined;
             return { kind: 'set', value };
           } catch { return undefined; } } })), secrets);
-        return { fields, model, actions: model.actions(), store: model.bind(() => ({ shell: model.shell(),
+        return { fields, model, starters, actions: model.actions(), store: model.bind(() => ({ shell: model.shell(),
           fields: Object.fromEntries(fields.map(field => [field.field, model.field(field.field)])) })) };
       });
       const state = React.useSyncExternalStore(editor.store.subscribe, editor.store.getSnapshot);
@@ -790,6 +808,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           editor.actions.edit(JSON.stringify(['routes', lane, 'reasoningEffort']), '');
       };
       React.useEffect(() => () => editor.model.dispose(), [editor]);
+      React.useEffect(() => {
+        const refs = editor.fields.filter(field => field.type === 'secret').map(field => field.path[1]);
+        describeCredentials(refs).catch(error => setNotice(error.message));
+        return ctx.remote.$on('credentials/reference-updated', ref => {
+          if (refs.includes(ref)) describeCredentials([ref]).catch(() => {});
+        });
+      }, [editor]);
+      React.useEffect(() => { for (const [field, text] of editor.starters) editor.actions.edit(field, text); }, [editor]);
       React.useEffect(() => { const controller = new AbortController();
         rpc('status', {}, controller.signal).then(setStatus).catch(error => { if (!controller.signal.aborted) setNotice(error.message); });
         return () => controller.abort(); }, []);
@@ -816,9 +842,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             if (field.type === 'choice') return h(Select, { ...props, t, value: props.text, options: choices(field),
               onChange: value => choose(field, value),
               hint: field.path[0] === 'routes' ? t('settings.routeHint') : undefined });
-            return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: status?.credentials?.[field.path[1]] ?? false,
+            return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: credentialState[field.path[1]] ?? false,
               hint: field.type === 'secret-map' ? t('settings.secretMapHint') : t('settings.secretHint'),
-              stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : status?.credentials?.[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })
+              stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : credentialState[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })
               : h(SettingsValueField, { ...props, numeric: field.type === 'number',
                 hint: field.type === 'json' ? t('settings.jsonHint') : undefined });
           })),

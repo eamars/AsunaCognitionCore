@@ -23,10 +23,8 @@ test('settings carry credential references only; Core resolves their values from
   assert.throws(() => editSettings(original, [{ op: 'set', path: ['__proto__', 'polluted'], value: 1 }]), /INVALID_SETTINGS_EDIT/);
   const stored = { ASUNA_MONGO_URI: 'private-database-credential' };
   const core = new CognitionCore({ get: name => name === 'credentials' ? {
-    resolve: async ref => stored[ref] ? { value: stored[ref], source: 'file' } : undefined,
-    describe: async ref => ({ configured: ref in stored, writable: true }) } : undefined }, original);
+    resolve: async ref => stored[ref] ? { value: stored[ref], source: 'file' } : undefined } : undefined }, original);
   assert.deepEqual(await core.credentialValues(original.deployment), stored, 'a reference with no value is left for the worker to name');
-  assert.deepEqual(await core.credentialStates(original.deployment), { ASUNA_MONGO_URI: true, ASUNA_CHANNELS_QQ_TOKEN: false });
   assert.doesNotMatch(JSON.stringify(redactSecrets(Config, original).value), /private-/);
 });
 

@@ -42,7 +42,7 @@ test('T1.1 the synthetic and the installed persona package both register; no per
   assert.equal(manifest.peerDependencies['@asuna/cognition-core'], '0.2.x');
   const empty = core('demo');
   await assert.rejects(empty.ready(), /Select an installed Asuna persona/);
-  assert.equal(empty.lifecycle.state, 'failed');
+  assert.equal(empty.lifecycle.state, 'unconfigured', 'waiting for its settings, not failed');
 });
 
 test('a channel package registers its kind; its paths stay inside the package and resolve to the published artifact', async () => {

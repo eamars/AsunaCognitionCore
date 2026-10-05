@@ -137,3 +137,17 @@
 （已被 ADR-011 取代：委托如今就是角色脑的工具调用。下面保留原文。）
 
 角色脑决定「不说话」（委托且不先说，或沉默）时，那一轮的最后一步是 DECIDE 的 JSON，DSH 会把它当成这一轮的回答显示出来。DSH 原生的做法是把委托做成**工具调用**：参数由 schema 校验，失败作为工具错误回给模型，这也就是 answers.py 想做的那种如实回告。这样角色脑与行动脑就是 DSH 原生的父 agent 与子 agent 关系，渲染自然一致。这是阶段协议的设计变更，方案见 [PROPOSAL-DECISION-DISPLAY.md](PROPOSAL-DECISION-DISPLAY.md)，等 owner 决定。
+
+## 9. 实施记录
+
+### M0（2026-10-05，`b9f19c27`、`f3bb6c25`）
+插件卡片带标题、说明和图标（`package.json` 的 `icon`、`locale/<lang>.json`）；开发候选里源已移动的文件标为 stale（D9）。
+
+### M1（2026-10-05，`01d6e3e1` 起）
+- **数据目录（D3）**：地板的 `dataRoot`（默认 `$DSH_HOME/asuna/<profile>/`）是一个 profile 写东西的唯一地方：activation、候选与基线、工作目录、通道授权、证据；worker 在其中运行，`ASUNA_DATA_ROOT` 指向它。候选（`work/`）与基线永远在同一个数据目录里，避免「候选找不到基线 → 发布把文件当删除」。D9 写的 `dataRoot/self-development` 实际落在 `dataRoot/work/self-development`，与 worker 的通道工作目录同在 `work/` 下。owner 的 profile 按 owner 选择设为 `<checkout>/.runtime`、地板状态在 `adr008`，什么都没搬，Mongo 里存的绝对路径照样有效。
+- **删掉的设置**：`workspace`、`configPath`、部署里的 `dsh_home`、`workdir`、`chat.workspace`（本地聊天固定在 `<data>/work/local-user`）。worker 只读 profile 的设置，不再读 `config/local.json`；核心候选发布前的 boot probe 改为由运行中的 Core 用 `validate_settings` 对现有库校验。
+- **锁**：守一个数据库或一个端点的锁放在每用户一处（`ASUNA_LOCK_ROOT`，默认 `<temp>/asuna-locks`），宿主锁按库的地址与库名取键，两个 profile 指同一个库仍然互斥；文件锁在 POSIX 上也能用。
+- **凭据（D6）**：设置里只存引用 `{"$secret":"ASUNA_…"}`（环境变量式名字），值只在 DSH 凭据库。键名含 `mongo_uri`、`api_key`、`token`、`password`、`secret` 的都必须是引用（JS 与 Python 同一条子串规则）。Core 启动或校验时解析，交给 worker 用一次；设置页用 DSH 自带的只写控件直接写凭据库，只显示「已配置／未配置」。setup 工具把旧的明文 `secrets` 与按路径命名的引用一次性搬过去；空值视为没有凭据，不建引用。
+- **全新 profile**：没有设置时状态是「unconfigured」而不是失败；地板没有开发项目时不给集成目录（不再在启动时报 `DEVELOPMENT_PROJECT_NOT_AUTHORIZED`）；设置页为缺的必填部分预填起始值；本地聊天的 scene/person/persona 有默认值；输出上限留空时用模型自己的默认。
+- **验收**：`tools/probe_fresh_profile.mjs` 建一个空的 DSH home，`dsh plugin add` 核心、合成人格与 QQ 通道三个 tgz，只准备 DSH 自己的东西（不会被调用的合成模型服务、凭据库里的库地址）；之后只经设置页配置，Apply 后显示「Business worker: ready · Mongo: connected」，数据全部落在 `$DSH_HOME/asuna/fresh/`。合成库与临时 home 事后删除。owner 的现网 profile 每一步都用真实消息验证过。
+- **遗留**：Python 解释器仍是一个路径设置（M2 换成 uv）；嵌入端点仍要求本机/内网地址。

@@ -61,17 +61,29 @@ def resolve_secrets(value, secrets):
     return value
 
 
-def runtime_settings(deployment, secrets, models, admission='explicit', *, create_dirs=False):
+def runtime_settings(deployment, secrets, models, admission='explicit', *, create_dirs=False, persona=None):
     value = resolve_secrets(deepcopy(deployment), secrets)
+    value.setdefault('chat', {})          # every local-chat key has a default below
     for key in ('chat', 'embedding'):
         if not isinstance(value.get(key), dict):
             raise ValueError('INVALID_CONFIGURATION_SECTION: ' + key)
+    # A new profile's local chat: one owner in one local scene, talking with the selected persona.
+    for key, default in (('scene_id', 'local'), ('person_id', 'owner'), ('persona', persona)):
+        if default:
+            value['chat'].setdefault(key, default)
+    if isinstance(value.get('database'), str):
+        value.setdefault('allowed_databases', [value['database']])
     for key in ('scene_id', 'person_id', 'persona'):
         if not isinstance(value['chat'].get(key), str) or not value['chat'][key]:
             raise ValueError('INVALID_LOCAL_CONFIGURATION: ' + key)
     # Where the profile writes is its data folder's business (ADR-010 D3), not a setting.
     value['chat']['workspace'] = str(local_workspace())
+    for key in ('database', 'mongo_uri'):
+        if not isinstance(value.get(key), str) or not value[key]:
+            raise ValueError('DEPLOYMENT_SETTING_REQUIRED: ' + key)
     validate_database(value, value['database'])
+    if not isinstance(value['embedding'].get('base_url'), str) or not value['embedding']['base_url']:
+        raise ValueError('DEPLOYMENT_SETTING_REQUIRED: embedding.base_url')
     validate_endpoint(value['embedding']['base_url'])
     if not isinstance(value['embedding'].get('model'), str) or not value['embedding']['model']:
         raise ValueError('EMBEDDING_MODEL_REQUIRED')

@@ -126,7 +126,7 @@ test('each block of a thread is its own node where it happened; an earlier one r
   assert.equal(words('collab.state.continued'), 'Continued below');
 });
 
-test('the program sending her final text back shows between the draft and the rewrite, inside her Turn', () => {
+test('the program sending her final text back shows between the draft and the rewrite, never folded away', () => {
   const note = { source: { kind: 'asuna', operation: 'ep:TURN:fix-1', lane: 'character', phase: 'REPAIR' },
     content: [{ type: 'text', text: 'what you wrote last is sent as is; it mentioned the program' }] };
   const events = [entry(0, 'turn/start', { turn: 1 }), entry(1, 'user/message', source('TURN', 'character')),
@@ -140,7 +140,7 @@ test('the program sending her final text back shows between the draft and the re
   assert.equal(rows.length, 1, 'only the note that sends a draft back is drawn, not the turn notice');
   assert.equal(rows[0].kind, 'asuna-repair');
   assert.equal(rows[0].anchorSeq, 5, 'between the rejected draft (3) and the rewrite (7)');
-  assert.notEqual(rows[0].location.kind, 'session', 'it belongs to her Turn, so it folds with its process');
+  assert.equal(rows[0].location.kind, 'session', 'DSH would group a Turn row into the next reasoning and hide it');
   assert.equal(rows[0].data.text, 'what you wrote last is sent as is; it mentioned the program');
   engine.replaceWindow(events, false);
   assert.equal(snapshot(engine).nodes.length, 1, 'a reload draws it once');

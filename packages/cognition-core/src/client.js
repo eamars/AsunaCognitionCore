@@ -34,7 +34,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数', 'tool.pin_memory': '置顶记忆',
       'tool.feel': '心情', 'tool.plan': '安排', 'tool.group_action': '群管理', 'tool.promote_memory': '沉淀记忆',
       'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
-      'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '退回重写',
+      'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '草稿退回重写',
       'input.checking': '正在确认会话输入权限…', 'input.internal': '这是内部工作会话，请回到本地私聊。',
       'input.readOnly': '{platform} 会话仅供查看，请在 {platform} 中回复。', 'input.readOnlyLocal': '这个会话仅供查看。',
       'markdown.copy': '复制', 'markdown.copied': '已复制', 'markdown.footnotes': '来源',
@@ -146,7 +146,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.pin_memory': 'Pin a memory', 'tool.feel': 'Feeling', 'tool.plan': 'Plan', 'tool.group_action': 'Group action',
       'tool.promote_memory': 'Keep a memory', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
       'tool.report_progress': 'Report progress', 'tool.refused': 'Refused', 'tool.preparing': 'Writing…',
-      'repair.title': 'Sent back',
+      'repair.title': 'Draft sent back',
       'input.checking': 'Checking who may write here…', 'input.internal': 'This is an internal work conversation; go back to the local chat.',
       'input.readOnly': '{platform} conversations are read-only here; reply in {platform}.', 'input.readOnlyLocal': 'This conversation is read-only.',
       'markdown.copy': 'Copy', 'markdown.copied': 'Copied', 'markdown.footnotes': 'Sources',
@@ -450,16 +450,18 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   /** The program's note that sends her final text back to be rewritten in the same Turn (ADR-011 §3.5).
    * DSH draws a mid-Turn message only when a person sent it, so without this row the rejected draft and
-   * the rewrite read as two answers. It sits where the note was given: between the two, in the process. */
+   * the rewrite read as two answers. It sits where the note was given, between the two. Like the brain
+   * label it is placed in the session, not the Turn: DSH folds a Turn's unknown process rows into the next
+   * reasoning group, which would hide it a level deeper; so it also shows above the answer when folded. */
   function repairDefinitions() {
     return [{ kind: 'asuna-repair', target: 'chat',
       match: event => event.type === 'user/message' && event.data.source?.kind === 'asuna' && event.data.source.phase === 'REPAIR'
         ? { id: String(event.seq), role: 'start' } : null,
-      start: (_context, match) => ({ seq: match.event.seq, location: match.location,
+      start: (_context, match) => ({ seq: match.event.seq,
         text: (match.event.data.content ?? []).filter(part => part.type === 'text').map(part => part.text).join('\n').trim() }),
       update: context => context.state,
       buildViewNode: context => !context.state ? null : ({ key: context.key, kind: 'asuna-repair', id: context.id,
-        target: 'chat', anchorSeq: context.state.seq, location: context.state.location, visibility: 'visible',
+        target: 'chat', anchorSeq: context.state.seq, location: { kind: 'session' }, visibility: 'visible',
         data: { text: context.state.text } }),
     }];
   }

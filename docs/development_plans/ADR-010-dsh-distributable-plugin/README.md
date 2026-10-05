@@ -151,3 +151,8 @@
 - **全新 profile**：没有设置时状态是「unconfigured」而不是失败；地板没有开发项目时不给集成目录（不再在启动时报 `DEVELOPMENT_PROJECT_NOT_AUTHORIZED`）；设置页为缺的必填部分预填起始值；本地聊天的 scene/person/persona 有默认值；输出上限留空时用模型自己的默认。
 - **验收**：`tools/probe_fresh_profile.mjs` 建一个空的 DSH home，`dsh plugin add` 核心、合成人格与 QQ 通道三个 tgz，只准备 DSH 自己的东西（不会被调用的合成模型服务、凭据库里的库地址）；之后只经设置页配置，Apply 后显示「Business worker: ready · Mongo: connected」，数据全部落在 `$DSH_HOME/asuna/fresh/`。合成库与临时 home 事后删除。owner 的现网 profile 每一步都用真实消息验证过。
 - **遗留**：Python 解释器仍是一个路径设置（M2 换成 uv）；嵌入端点仍要求本机/内网地址。
+
+### M2（2026-10-05，`3d46450c`）
+- 包里带 `python/requirements.lock`：worker 依赖闭包的精确版本，由 `tools/pack_plugins.py` 从测过的环境冻结（保留平台标记）。D2-A 原写 `uv.lock`；改成锁定的 requirements 文件，uv 与 pip 都能用，打包的机器也不必装 uv。
+- `python` 设置留空时，Core 首次启动在 `<data>/python` 里按锁文件建 venv：PATH 上有 uv 就用 uv（uv 还能自己取 Python），否则找 Python 3.12+ 用 pip；锁不变就复用。状态行显示「preparing · Building the Python environment with …」，找不到解释器时报 `PYTHON_NOT_FOUND`。地板检查候选也用同一个解释器。`python` 设置仍然优先（开发用的 checkout）。
+- **验收**：全新 profile、Python 留空，保存时建好环境（这台机器没有 uv，走 `py -3.12` + pip），Apply 后「Business worker: ready · Mongo: connected」，worker 进程跑在数据目录的环境里。合成库与临时 home 事后删除。

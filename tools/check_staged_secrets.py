@@ -36,7 +36,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent.parent
 # Model parameter names describe token accounting, not authentication material.
-NON_SECRET_KEYS={'token_counter','maxTokensField'}
+NON_SECRET_KEYS={'token_counter','maxTokensField','thinkingTokenBudgetField'}
 
 def staged_blobs(root):
     paths=subprocess.check_output(['git','diff','--cached','--name-only','--diff-filter=ACM','-z'],cwd=root).decode().split('\0')

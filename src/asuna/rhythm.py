@@ -107,15 +107,31 @@ def promotion_candidates(store, model, policy, *, limit=20):
             for m, e in sorted(picked, key=lambda item: (-len(item[1]), item[0])) if m in rows][:limit]
 
 
-def split_speech(text, marker='---split---', max_messages=1):
-    """SPEAK → ≤ max_messages segments on lines equal to the marker; extra pieces stay in the last one.
+SPLIT_MARKER = '[分条]'
 
-    With max_messages == 1 the text is returned untouched (behaviour before ADR-009).
+
+def split_speech(text, marker=SPLIT_MARKER, max_messages=1):
+    """SPEAK → ≤ max_messages messages, broken wherever she wrote the marker; extra pieces stay in the last one.
+
+    A marker inside a ``` code block is text, so a block always leaves whole. With max_messages == 1 the
+    text is returned untouched (behaviour before ADR-009).
     """
-    if int(max_messages or 1) <= 1:
+    if int(max_messages or 1) <= 1 or not marker or marker not in text:
         return [text]
-    pieces = [part.strip('\n') for part in re.split(r'(?m)^\s*' + re.escape(marker) + r'\s*$', text)]
-    pieces = [part for part in pieces if part.strip()]
+    pieces, current, fenced = [], [], False
+    for line in text.split('\n'):
+        if line.lstrip().startswith('```'):
+            fenced = not fenced
+        if fenced or marker not in line:
+            current.append(line)
+            continue
+        parts = line.split(marker)
+        current.append(parts[0])
+        for part in parts[1:]:
+            pieces.append('\n'.join(current))
+            current = [part]
+    pieces.append('\n'.join(current))
+    pieces = [part.strip() for part in pieces if part.strip()]
     if not pieces:
         return [text]
     head, tail = pieces[:int(max_messages) - 1], pieces[int(max_messages) - 1:]

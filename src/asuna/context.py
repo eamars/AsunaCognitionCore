@@ -59,7 +59,7 @@ BLOCKS = {
     'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'schedule_control_from_program',
                     'scheduled_plan_from_program'),
-    'recent_phrasing': ('recent_phrasing_from_program',),
+    'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
     'media': ('media_from_program', 'image_artifacts_from_program'),
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
@@ -611,6 +611,13 @@ class ContextBuilder:
         if phrasing:
             context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
+        messages=int(effective(model,'speak.max_messages',policy) or 1)
+        if scene.get('channel_id') and messages>1:
+            # On a platform her words may leave as a few messages, broken where she marks them (ADR-009 §11.1).
+            from .rhythm import SPLIT_MARKER
+            marker=effective(model,'speak.split_marker',policy) or SPLIT_MARKER
+            context['speak_from_program']={'note':f'这里说的话默认是一条消息。想像聊天那样分几条发，就在要断开的地方写 {marker}，'
+                f'最多 {messages} 条，多出来的并进最后一条；代码块里的 {marker} 不算，代码块总是整块发出。不用为了分条而分条。'}
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label

@@ -253,11 +253,11 @@ class Coordinator:
         """ADR-009 §11.1: up to speak.max_messages segments, published in order (default 1)."""
         from .persona_model import effective
         from .render import model_and_policy
-        from .rhythm import split_speech, pacing
+        from .rhythm import split_speech, pacing, SPLIT_MARKER
         from datetime import datetime as _dt, timezone as _tz
         ep_id=ep['_id']
         model,policy=model_and_policy(self.store,ep['persona'])
-        segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or '---split---',
+        segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or SPLIT_MARKER,
                               effective(model,'speak.max_messages',policy) or 1)
         scene=self.store.db.scenes.find_one({'_id':ep['scene_id']})
         times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,

@@ -131,3 +131,24 @@ def test_T5_9_sending_segment_becomes_unknown_and_cancels_the_rest(store):
     bridge.recover_sending()
     states = [r['delivery_state'] for r in outbound(store, ep['_id'])]
     assert states == ['UNKNOWN', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
+
+
+def test_she_marks_where_a_message_ends_and_code_leaves_whole():
+    from asuna.rhythm import SPLIT_MARKER, split_speech
+    assert SPLIT_MARKER == '[分条]'
+    assert split_speech('哈哈哈这个我懂 [分条] 不过说真的', SPLIT_MARKER, 3) == ['哈哈哈这个我懂', '不过说真的']
+    code = '先看日志：\n```\ngrep x [分条] app.log\n```'
+    assert split_speech('好 [分条]\n' + code, SPLIT_MARKER, 3) == ['好', code]          # a marker in code is text
+    assert split_speech('一[分条]二[分条]三[分条]四', SPLIT_MARKER, 3) == ['一', '二', '三\n四']
+    assert split_speech('一段话\n\n又一段', SPLIT_MARKER, 3) == ['一段话\n\n又一段']      # blank lines never split
+    assert split_speech('一[分条]二', SPLIT_MARKER, 1) == ['一[分条]二']                # one message: untouched
+
+
+def test_only_a_platform_turn_is_told_how_to_split(store):
+    store.config['persona_model'] = model(3)
+    _, local = turn(store, key='local', speech='好', channel=False)
+    assert 'speak_from_program' not in local['context']
+    channel_scene(store)
+    _, qq = turn(store, key='qq', speech='好')
+    note = qq['context']['speak_from_program']['note']
+    assert '---split---' in note and '最多 3 条' in note and '代码块' in note

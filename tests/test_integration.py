@@ -56,6 +56,7 @@ def test_the_run_has_a_user_entry_and_a_home(runner):
     code = "import os, pwd; print(pwd.getpwuid(os.getuid()).pw_name, os.environ['HOME'], os.access('/tmp', os.W_OK))"
     value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
     assert value['exit_code'] == 0 and 'integration /tmp True' in logs(value)
+    assert list((runner.root/'snapshots').iterdir()) == []          # its copy of the adapter went with it
 
 
 def test_start_runs_only_the_published_adapter(runner, tmp_path):
@@ -74,6 +75,9 @@ def test_start_runs_only_the_published_adapter(runner, tmp_path):
     while 'published' not in logs(runner.status()) and time.monotonic() < deadline:
         time.sleep(.1)
     assert 'unpublished' not in logs(runner.status()) and 'published' in logs(runner.status())
+    # A test run's copy of the adapter is removed when it ends; the service's own copy stays.
+    runner.call('integration_test', {'argv': ['python3', '-c', 'print(2)']})
+    assert [entry.name for entry in (runner.root/'snapshots').iterdir()] == [runner.active_snapshot]
 
 
 def test_changed_network_profile_does_not_autorestore(runner, tmp_path):

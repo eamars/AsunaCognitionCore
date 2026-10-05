@@ -8,13 +8,14 @@ from asuna import integration_worker as worker
 from asuna.integration import HELD_BY_RELAY, guard_test_run
 
 TOKEN = 'placeholder-napcat-token'
+HOST_TOKEN = 'placeholder-host-token-abcdefghijklmnop'
 GUARD = {'field': 'action', 'allow': ['get_*', 'can_*'], 'deny': ['get_cookies'], 'correlate': 'echo',
          'refusal': {'status': 'failed', 'retcode': 1403}, 'credential': TOKEN}
 
 
 def adapter():
     return {'napcat': {'transport': 'websocket_forward', 'url': 'ws://127.0.0.1:9001', 'token': TOKEN},
-            'host': {'base_url': 'http://127.0.0.1:9002', 'token': 'placeholder-host-token-abcdefghijklmnop'}}
+            'host': {'base_url': 'http://127.0.0.1:9002', 'token': HOST_TOKEN}}
 
 
 def endpoints():
@@ -25,14 +26,15 @@ def endpoints():
 
 def test_test_runs_carry_a_placeholder_and_every_platform_alias_is_guarded():
     config, guarded = guard_test_run(adapter(), endpoints())
-    assert config['napcat']['token'] == HELD_BY_RELAY
-    assert config['host']['token'] != HELD_BY_RELAY
+    assert config['napcat']['token'] == HELD_BY_RELAY and config['host']['token'] == HELD_BY_RELAY
     by_name = {e['name']: e for e in guarded}
     for name in ('napcat', 'napcat-again'):
         guard = by_name[name]['guard']
-        assert guard['credential'] == TOKEN and guard['field'] == 'action'
+        assert guard['credential'] == TOKEN and guard['field'] == 'action' and guard['protocol'] == 'websocket'
         assert 'get_*' in guard['allow'] and 'get_cookies' in guard['deny']
-    assert 'guard' not in by_name['host']
+    host = by_name['host']['guard']
+    assert host['protocol'] == 'http' and host['credential'] == HOST_TOKEN
+    assert host['allow'] == ['GET /v1/channels/*/outbox/*/attachment']
     assert all('guard' not in e for e in endpoints())       # the profile's own list is not changed
 
 
@@ -159,3 +161,54 @@ def test_a_device_may_serve_on_a_low_port_but_the_relay_binds_high():
     for port, target in ((22, 22), (9022, 0), (9022, 70000)):
         with pytest.raises(ValueError, match='INVALID_INTEGRATION_PORT'):
             validate_profile(profile(port, target))
+
+
+HTTP_GUARD = {'protocol': 'http', 'allow': ['GET /v1/channels/*/outbox/*/attachment'], 'credential': HOST_TOKEN,
+              'refusal': {'error': 'INTEGRATION_TEST_READ_ONLY'}}
+
+
+def http_session(raw):
+    client, relay_client = socket.socketpair()
+    relay_server, server = socket.socketpair()
+    received, log = [], []
+
+    def service():
+        reader = worker.Reader(server)
+        try:
+            head = reader.head()
+            length = int(([l.split(':', 1)[1] for l in head.split('\r\n') if l.lower().startswith('content-length:')] or ['0'])[0])
+            received.append((head, reader.exact(length)))
+            server.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok')
+        except (EOFError, OSError):
+            pass
+        finally:
+            server.close()
+    worker_thread = threading.Thread(target=worker.guarded_http, args=(relay_client, relay_server, HTTP_GUARD, log.append), daemon=True)
+    threading.Thread(target=service, daemon=True).start()
+    worker_thread.start()
+    client.settimeout(5)
+    client.sendall(raw)
+    data = b''
+    while piece := client.recv(65536):
+        data += piece
+    worker_thread.join(5)
+    return data.decode('latin-1'), received, log
+
+
+def test_the_channel_api_reads_an_attachment_with_the_relays_token():
+    data, received, log = http_session(b'GET /v1/channels/qq/outbox/pub-1/attachment?attempt_id=a HTTP/1.1\r\n'
+                                       b'Host: x\r\nAuthorization: Bearer from-the-adapter\r\nConnection: keep-alive\r\n\r\n')
+    assert data.startswith('HTTP/1.1 200') and data.endswith('ok')
+    head = received[0][0]
+    assert 'Authorization: Bearer ' + HOST_TOKEN in head and 'from-the-adapter' not in head
+    assert 'Connection: close' in head and 'keep-alive' not in head and log == []
+
+
+def test_the_channel_api_refuses_events_claims_receipts_and_chunked_bodies():
+    for raw, what in ((b'POST /v1/channels/qq/events HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}', 'POST /v1/channels/qq/events'),
+                      (b'GET /v1/channels/qq/outbox?wait_seconds=0 HTTP/1.1\r\n\r\n', 'GET /v1/channels/qq/outbox'),
+                      (b'POST /v1/channels/qq/outbox/p/receipt HTTP/1.1\r\nContent-Length: 0\r\n\r\n', 'receipt'),
+                      (b'GET /v1/channels/qq/outbox/p/attachment HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n', 'malformed')):
+        data, received, log = http_session(raw)
+        assert data.startswith('HTTP/1.1 403') and 'INTEGRATION_TEST_READ_ONLY' in data
+        assert received == [] and what in log[0]

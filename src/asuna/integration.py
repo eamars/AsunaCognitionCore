@@ -18,7 +18,7 @@ from .queue import RuntimeLease
 from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
 INTEGRATION_TOOLS = [
-    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable, and a platform only read-only: its relay holds the platform credential and refuses sending, changing and secret requests (the refusal is in the relay log of the result); messages leave through the outbox and the published adapter. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
+    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable, and a platform only read-only: its relay holds the platform credential and refuses sending, changing and secret requests (the refusal is in the relay log of the result); the channel API likewise passes only attachment reads. Messages leave through the outbox and the published adapter. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
     {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen /app copy of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
@@ -49,6 +49,9 @@ def event_granted(config, event):
 
 
 HELD_BY_RELAY = 'held-by-the-integration-relay'
+# The core's channel API (RUNTIME_API.md) in a test run: claiming the outbox is a GET that takes items, so the only
+# read is an attachment of an already claimed attempt. Posting events and receipts is refused as well.
+HOST_TEST_READS = ('GET /v1/channels/*/outbox/*/attachment',)
 
 
 def guard_test_run(adapter, endpoints, config=None):
@@ -57,25 +60,36 @@ def guard_test_run(adapter, endpoints, config=None):
     Each installed kind may name, from its own adapter settings, the relay port that carries its platform, the
     request field and the read-only patterns (channel_kinds `test_guards`). Every alias of that platform then
     gets the guard: the relay holds the credential and refuses the rest, and the run's own config carries a
-    placeholder instead. Sending stays with the outbox and the published adapter (`integration_start`).
+    placeholder instead. The core guards its own channel API the same way (HOST_TEST_READS). Sending stays with
+    the outbox and the published adapter (`integration_start`).
     """
     from . import channel_kinds
+    from urllib.parse import urlsplit
     endpoints = [dict(e) for e in endpoints]
-    for kind in channel_kinds.kinds():
-        for guard in getattr(kind, 'test_guards', lambda _adapter: [])(adapter):
-            *parents, name = guard['credential']
-            node = adapter
-            for key in parents:
-                node = node.get(key) if isinstance(node, dict) else None
-            credential = node.get(name) if isinstance(node, dict) else None
-            if isinstance(node, dict) and name in node:
-                node[name] = HELD_BY_RELAY
-            platform = {(e['host'], e['target_port']) for e in endpoints if e['port'] == guard['port']}
-            for e in endpoints:
-                if (e['host'], e['target_port']) in platform:
-                    e['guard'] = {'field': guard['field'], 'allow': list(guard['allow']), 'deny': list(guard.get('deny', ())),
-                                  'correlate': guard.get('correlate'), 'refusal': guard.get('refusal'),
-                                  'credential': credential if isinstance(credential, str) else None}
+    guards = [guard for kind in channel_kinds.kinds() for guard in getattr(kind, 'test_guards', lambda _adapter: [])(adapter)]
+    try:
+        host_port = urlsplit((adapter.get('host') or {}).get('base_url') or '').port
+    except ValueError:
+        host_port = None
+    if host_port:
+        guards.append({'protocol': 'http', 'port': host_port, 'allow': HOST_TEST_READS, 'credential': ('host', 'token'),
+                       'refusal': {'error': 'INTEGRATION_TEST_READ_ONLY',
+                                   'detail': 'test runs may not post events, claim the outbox or post receipts'}})
+    for guard in guards:
+        *parents, name = guard['credential']
+        node = adapter
+        for key in parents:
+            node = node.get(key) if isinstance(node, dict) else None
+        credential = node.get(name) if isinstance(node, dict) else None
+        if isinstance(node, dict) and name in node:
+            node[name] = HELD_BY_RELAY
+        platform = {(e['host'], e['target_port']) for e in endpoints if e['port'] == guard['port']}
+        for e in endpoints:
+            if (e['host'], e['target_port']) in platform:
+                e['guard'] = {'protocol': guard.get('protocol', 'websocket'), 'field': guard.get('field'),
+                              'allow': list(guard['allow']), 'deny': list(guard.get('deny', ())),
+                              'correlate': guard.get('correlate'), 'refusal': guard.get('refusal'),
+                              'credential': credential if isinstance(credential, str) else None}
     return adapter, endpoints
 
 
@@ -213,12 +227,13 @@ class IntegrationRunner:
             raise Denied('INTEGRATION_PROJECT_NOT_AUTHORIZED')
         self.dev.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
-        self.active = None
+        self.active, self.active_snapshot = None, None
         self.enabled_path = self.root/'enabled.json'
         self.fingerprint = sha(canonical(self.profile))
         self.restoration_error = None
         self.lease = RuntimeLease(self.root/'owner.lock')
         self.lease.__enter__()
+        self._sweep_snapshots()
         try:
             from .config import RESOURCES
             manual = RESOURCES/'RUNTIME_API.md' if (RESOURCES/'RUNTIME_API.md').is_file() else ROOT/'RUNTIME_API.md'
@@ -226,6 +241,17 @@ class IntegrationRunner:
         except BaseException:
             self.lease.__exit__(None, None, None); self.lease = None
             raise
+
+    def _sweep_snapshots(self):
+        """Remove finished copies: keep only the one the service runs from and the one enabled for restart."""
+        keep = {self.active_snapshot}
+        try:
+            keep.add(json.loads(self.enabled_path.read_text(encoding='utf-8')).get('snapshot'))
+        except (OSError, ValueError):
+            pass
+        for entry in (self.root/'snapshots').glob('*'):
+            if entry.name not in keep and re.fullmatch(r'[0-9a-f]{32}', entry.name):
+                shutil.rmtree(entry, ignore_errors=True)
 
     def restore(self):
         if not self.enabled_path.exists():
@@ -240,7 +266,7 @@ class IntegrationRunner:
         try:
             # The published adapter as of this start, never unpublished files in the development tree.
             snapshot = self._snapshot(self.release())
-            self.active = self._launch(snapshot, saved['argv'], 'service')
+            self.active, self.active_snapshot = self._launch(snapshot, saved['argv'], 'service'), snapshot.name
             if applying and self.active.snapshot()['state'] != 'RUNNING':
                 raise RuntimeError('INTEGRATION_SETTINGS_START_FAILED')
             self._enable(saved['argv'], snapshot, previous=saved.get('snapshot'))
@@ -248,6 +274,8 @@ class IntegrationRunner:
             self.restoration_error = str(exc)
             if applying:
                 raise
+        finally:
+            self._sweep_snapshots()
 
     def release(self):
         """The published adapter: the only code a managed service runs (ADR-011 §5.2, one publish path)."""
@@ -312,19 +340,23 @@ class IntegrationRunner:
                 timeout = args.get('timeout', 30)
                 if type(timeout) is not int or not 1 <= timeout <= 60:
                     raise ValueError('INTEGRATION_TEST_TIMEOUT_RANGE_1_60')
-                process = self._launch(self._snapshot(), args['argv'], 'test')
-                expired = not process.finished.wait(timeout)
-                value = process.stop() if expired else process.snapshot()
-                return {**value, 'timed_out': expired}
+                try:
+                    process = self._launch(self._snapshot(), args['argv'], 'test')
+                    expired = not process.finished.wait(timeout)
+                    value = process.stop() if expired else process.snapshot()
+                    return {**value, 'timed_out': expired}
+                finally:
+                    self._sweep_snapshots()
             if tool == 'integration_start':
                 if self.active and not self.active.finished.is_set():
                     raise Denied('INTEGRATION_ALREADY_RUNNING_STOP_BEFORE_REPLACE')
                 snapshot = self._snapshot(self.release())
-                self.active = self._launch(snapshot, args['argv'], 'service')
+                self.active, self.active_snapshot = self._launch(snapshot, args['argv'], 'service'), snapshot.name
                 value = self.active.snapshot()
                 if value['state'] == 'RUNNING':
                     previous = json.loads(self.enabled_path.read_text(encoding='utf-8')) if self.enabled_path.exists() else {}
                     self._enable(args['argv'], snapshot, previous=previous.get('snapshot'))
+                self._sweep_snapshots()
                 return value
             if tool == 'integration_stop':
                 self.enabled_path.write_text('{"enabled":false}', encoding='utf-8')

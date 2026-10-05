@@ -237,10 +237,47 @@ def guarded_session(client, server, guard, log):
             pass
 
 
+def guarded_http(client, server, guard, log):
+    """One HTTP request per connection: forwarded only when "METHOD path" matches the guard, with its credential."""
+    server.settimeout(None)
+    with client, server:
+        inbound = Reader(client)
+        try:
+            head = inbound.head()
+            lines = head.split('\r\n')
+            parts = lines[0].split(' ')
+            headers = [line for line in lines[1:] if ':' in line]
+            named = {line.split(':', 1)[0].strip().lower(): line.split(':', 1)[1].strip() for line in headers}
+            length = int(named.get('content-length') or 0)
+            if len(parts) != 3 or 'transfer-encoding' in named or 'upgrade' in named or not 0 <= length <= MESSAGE_LIMIT:
+                request = None
+            else:
+                request = '%s %s' % (parts[0], parts[1].partition('?')[0])
+            body = inbound.exact(length) if request else b''
+        except (EOFError, ValueError, OSError):
+            return
+        if not request or not any(fnmatch.fnmatchcase(request, p) for p in guard['allow']):
+            log('INTEGRATION_TEST_REFUSED %s: this test run reaches the service read-only\n' % (request or 'a malformed request')[:120])
+            refusal = json.dumps(guard.get('refusal') or {'error': 'INTEGRATION_TEST_READ_ONLY'}).encode('utf-8')
+            client.sendall(b'HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: %d\r\n'
+                           b'Connection: close\r\n\r\n' % len(refusal) + refusal)
+            return
+        kept = [line for line in headers if line.split(':', 1)[0].strip().lower() not in DROPPED_HEADERS | {'connection'}]
+        if guard.get('credential'):
+            kept.append('Authorization: Bearer ' + guard['credential'])
+        try:
+            server.sendall(('\r\n'.join([lines[0], *kept, 'Connection: close']) + '\r\n\r\n').encode('latin-1') + body)
+            while data := server.recv(65536):
+                client.sendall(data)
+        except OSError:
+            pass
+
+
 def guarded_handler(connect, guard, log):
+    session = guarded_http if guard.get('protocol') == 'http' else guarded_session
     class Handler(socketserver.BaseRequestHandler):
         def handle(self):
-            guarded_session(self.request, connect(), guard, log)
+            session(self.request, connect(), guard, log)
     return Handler
 
 

@@ -24,7 +24,7 @@
 | `SEND_RESULT ... target=dm\|group status=platform_accepted retcode=0 platform_message_id=...` | 平台真的收了；`delivery_basis=platform_ack`，不等于已读 |
 | `SEND_RESULT ... status=failed retcode=14xx` | 平台明确失败，正文留在宿主 |
 | `SEND_RESULT ... status=unknown` | 结果不明（超时/写失败），**不会重发** |
-| `ATTACHMENT pub=... attempt=... fetched=<sha 前缀> bytes=N sha256=...` / `reject=<原因>` / `fail=<原因> detail=...` | 私聊出站的图：字节从宿主端点取（不读宿主文件路径）；reject/fail 都发生在**发送之前**，一条也没发出去，回执 `failed`。常见原因：`attachment_target_not_enabled`（群）、`attachment_fetch_sha256_mismatch`、`attachment_fetch_over_limit`、`attachment_not_an_image`、`attachment_fetch_unavailable` |
+| `ATTACHMENT pub=... attempt=... fetched=<sha 前缀> bytes=N sha256=...` / `reject=<原因>` / `fail=<原因> detail=...` | 出站的图（私聊和群）：字节从宿主端点取（不读宿主文件路径）；reject/fail 都发生在**发送之前**，一条也没发出去，回执 `failed`。常见原因：`attachment_target_not_enabled`（不认识的目标类型）、`attachment_fetch_sha256_mismatch`、`attachment_fetch_over_limit`、`attachment_not_an_image`、`attachment_fetch_unavailable` |
 | `ADMIN_CLAIMED pub=... target=group:群号 kind=mute|unmute|kick|recall` / `ADMIN_RESULT pub=... action=set_group_ban status=... retcode=...` | 宿主排队的群管理动作；只有这三个 action，平台 retcode 就是回执（0 算 platform_accepted），流水在 `journal/admin.jsonl` |
 | `RECEIPT_OK / _SPOOLED / _REPLAYED / _REJECT` | 回执上报结果；spool 里的会在下一轮重放 |
 | `LATE_ACK pub=...` | 超时后平台响应才到，按同 attempt 补报 |

@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，要发图就在那一轮调用 attach_image 工具（artifact_id 照抄、一回合至多一张、再调用换成新的那张、正文不写路径/文件名/见图），只对 owner_private + dm 路由开放、群确定性不发。含大小上限与服务端小副本做法、attach_image 拒绝码（工具错误、同回合可改）与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核的真实边界（只认场景附件 ref，工作区文件实测 IMAGE_ATTACHMENT_NOT_IN_SCENE）、硬边界（不发群、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，要发图就在那一轮调用 attach_image 工具（artifact_id 照抄、一回合至多一张、再调用换成新的那张、正文不写路径/文件名/见图），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（工具错误、同回合可改）与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核的真实边界（只认场景附件 ref，工作区文件实测 IMAGE_ATTACHMENT_NOT_IN_SCENE）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-image-generation-and-display
@@ -163,9 +163,13 @@ import_integration_artifact(
    （现在就是主人的 QQ 私聊 （主人的 QQ 私聊场景，场景 id 以配置为准））。两个条件都过时，程序在那轮上下文里放
    `image_artifacts_from_program`：`items[]` 每条给 `artifact_id / sha256 / size / media_type / created_at`，
    新的在前、最多 6 条，外加一句 note 说明这些是程序存的、不是文件路径。
+   另一种是她在的一个群（群场景、群路由；把私聊路由成群的不算）：清单里只有**她自己做的图**——
+   从她自己的生成端点导入时登记的（来源 `integration:`），不分是在哪个场景做的；别人发来的图不在里面。
+   心跳出门、`share_picture` 的那个群回合就是这条路。
    **`attach_image` 也只在这个清单出现时才进那一轮的工具列表**——方向不对或没图可引用时，
    清单块和工具都不出现；别拿它的缺席当「清单为空」推。
-2. **只对主人私聊可发**：群聊、别人的场景、public 会话一律不发。第一版是**确定性拒绝**，
+2. **主人私聊，或她在的群**：别人的私聊、public 私聊会话一律不发；群里只发她自己做的图，一律全年龄，
+   发不发、发到哪个群由她挑（owner 2026-10-05）。不在这个范围就是**确定性拒绝**，
    不静默降级成「只发文字却报平台已送达」——那种回执会声称对方收到一张从没到达的图。
 3. **图从哪来**（两条，都由程序登记，我不动 scope）：
    - 本场景自己存的：`read_image` 拉过的入站图，以及 `import_integration_artifact` 导入时字节是图 →
@@ -204,7 +208,8 @@ import_integration_artifact(
 
 | code | 意思 / 我该怎么办 |
 | --- | --- |
-| `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`session_class_not_owner_private` / `scene_has_no_channel_route` / `channel_route_not_authorized` / `target_not_dm`。在群里想发图就是这条 |
+| `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`session_class_not_owner_private` / `scene_has_no_channel_route` / `channel_route_not_authorized` / `target_not_dm` |
+| `ATTACHMENT_NOT_HER_OWN` | 在群里引了一张不是她自己做的图（比如别人发来的）。群里只发她自己生成并导入的图 |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在**本轮**清单里：照抄错了、图属于别的场景或别人、或根本没被列出。别猜 id，也别指望上一轮的清单还有效 |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | artifact 的 scope 不在程序算出的可引用列表里（既不是本场景，也不是那个联动的本人私聊场景） |
@@ -219,8 +224,9 @@ import_integration_artifact(
 传别的 id 只会更窄、不会替换）、`ATTACHMENT_SCOPE_DENIED`、`ATTACHMENT_SHA_MISMATCH`、
 `ATTACHMENT_HASH_MISMATCH`、`ATTACHMENT_NOT_AN_IMAGE`、`ATTACHMENT_OVER_LIMIT`、`ATTACHMENT_MEDIA_TYPE_MISMATCH`。
 
-适配器侧（napcat-qq 0.5.1）：图有任何不对劲都是 **`failed` 回执、整条不发**，不降级成纯文字。
-reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enabled`（群）/
+适配器侧（napcat-qq 0.5.2）：私聊发 `[image, text]`，群里发 `[reply?, image, text/at…]`（图在话前面）。
+图有任何不对劲都是 **`failed` 回执、整条不发**，不降级成纯文字。
+reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enabled`（不认识的目标类型）/
 `attachment_artifact_id_missing` / `attachment_sha256_missing` / `attachment_media_type_unsupported` /
 `attachment_size_invalid` / `attachment_over_limit` / `attachment_fetch_unsupported` /
 `attachment_fetch_unavailable` / `attachment_fetch_<宿主码>` / `attachment_fetch_no_bytes` /
@@ -242,14 +248,15 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 
 ### 还没实测的
 
-适配器用 OneBot `base64://` data URI 发私聊图，NapCat 真客户端会不会渲染，源码里明写「NOT yet verified
+适配器用 OneBot `base64://` data URI 发图（私聊和群一样），NapCat 真客户端会不会渲染，源码里明写「NOT yet verified
 against a real client」。第一次真发就是实测；在那之前别说「QQ 那边已经能看到图了」——
 现在（2026-10-04 深夜）也确实一张都还没发过。
 
 ## 边界（硬）
 
-- 默认只给**主人**看：本机私聊用报告里的相对路径图，QQ 私聊用 `attach_image`。**不发群**，也不 @ 别人——
-  群方向在核心（`target_allowed` 只认 owner_private + dm）和适配器（`attachment_target_not_enabled`）都被挡着。
+- 生图、导入只在本机 owner 任务里做；本机私聊用报告里的相对路径图，QQ 私聊用 `attach_image`。
+  **群里只发自己做的图**：由她在那个群回合里自己 `attach_image`，别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
+  一律全年龄；行动脑不替她往群里发，也不 @ 别人。
 - **不自己声明 scope、不给 `attach_image` 传 scope、不把 `artifact_id` 当文件路径**；一回合最多一张图，
   再调用就是换图，不是加图。
 - **不用 base64 分段搬运**：`b64slice.py` 那条路把 32 KB 图变 43 KB 文本还要切片对 sha，纯属烧上下文；
@@ -295,6 +302,9 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v4（2026-10-05，Claude 改）：群里可以发她自己做的图（owner 2026-10-05，ADR-012 §4.6）。核心早已放行
+（`target_allowed` 的群分支、`accept_artifact(produced_only=True)`），napcat-qq 0.5.2 的适配器补上群发图；
+本技能去掉「不发群」的旧边界，补上群那条路和 `ATTACHMENT_NOT_HER_OWN`。
 v3（2026-10-05）：与当前运行时对齐——DECIDE 阶段已退役，QQ 私聊发图改成那一轮调用 `attach_image` 工具
 （拒绝是工具错误、同回合可改；一回合至多一张、再调用换成新的那张；`ATTACH_NOT_WHEN_SILENT` 已不在核代码里）；
 探测脚本改「写进 napcat-qq 候选 `integration/`、`integration_test` 冻结成 `/app` 试跑、跑完删」（`integration_dev`
@@ -309,6 +319,10 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-05（v4 这一轮，Claude 改，**没生成图、没发 QQ**）：适配器离线自检 `--selftest --offline` 281 通过、0 失败，
+新增 `att_group_sends_image_then_text` / `att_groupreply_sends_image_then_text`（群里 `[reply?, image, text]`）；
+本技能 `check_skill.py` 重跑全绿。
 
 2026-10-05（v3 对齐这一轮，**没生成图、没发 QQ、没重启适配器、没发布、没改 core 与宿主配置**）：
 

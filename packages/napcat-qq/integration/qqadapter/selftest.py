@@ -1020,10 +1020,25 @@ def _check_outbound_attachments(rep, cfg, root):
                   "%s fetches=%d %s" % (reason_of(host), len(host.attachment_calls),
                                         json.dumps((host.last().get("payload") or {}).get("response"),
                                                    ensure_ascii=False)[:160]))
-    stub, host, _c = run("group", item("group", GRP, attachment=_att_descriptor()), attachment=_att_ok())
-    rep.check("att_group_refused_for_now",
-              stub.calls == [] and host.attachment_calls == []
-              and reason_of(host) == "attachment_target_not_enabled", reason_of(host) or "-")
+    # a group carries her picture too (which one may go is the host's call); a reply stays first
+    for name, reply_to, head in (("group", None, []),
+                                 ("groupreply", "777001", [{"type": "reply", "data": {"id": "777001"}}])):
+        stub, host, _c = run(name, item(name, GRP, attachment=_att_descriptor(), reply_to=reply_to),
+                             attachment=_att_ok())
+        call = stub.calls[0] if stub.calls else {}
+        msg = (call.get("params") or {}).get("message") or []
+        rep.check("att_%s_sends_image_then_text" % name,
+                  call.get("action") == "send_group_msg"
+                  and msg == head + [{"type": "image", "data": {"file": "base64://" + b64}},
+                                     {"type": "text", "data": {"text": "这张给你"}}]
+                  and len(host.attachment_calls) == 1
+                  and (host.last().get("payload") or {}).get("status") == "platform_accepted",
+                  json.dumps(msg, ensure_ascii=False)[:220])
+    stub, host, _c = run("elsewhere", item("elsewhere", {"type": "channel", "id": "1"}, attachment=_att_descriptor()),
+                         attachment=_att_ok())
+    rep.check("att_unknown_target_sends_nothing",
+              not any(str(c["action"]).startswith("send_") for c in stub.calls) and host.attachment_calls == [],
+              reason_of(host) or "-")
 
     # 10. an item without an attachment is byte-for-byte the text send it always was
     stub, host, _c = run("plain", item("plain", DM))

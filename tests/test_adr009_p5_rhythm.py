@@ -195,3 +195,38 @@ def test_a_silent_heartbeat_is_rebuilt_once_and_she_is_told_once(store):
     assert service.watch_rhythm() is None                               # the owner turned it off: nothing to keep
 
 
+def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store):
+    from asuna.role_tools import promote
+    service = scheduler(store, rhythm={'settle_at': '04:00'})
+    store.config.pop('timezone', None)
+    assert service.ensure_settlement() is None                          # no time zone: no settlement
+    store.config['timezone'] = 'UTC'
+    plan = service.ensure_settlement()
+    assert plan['kind'] == 'settlement' and plan['rule']['clock'] == {'time': '04:00'}
+    assert fire(service, plan)['last_outcome'] == 'ENQUEUED'
+    assert service.controller.offers == [
+        ('settlement', 'settlement:' + datetime.now(timezone.utc).date().isoformat(), 'dm-a', 'A')]
+    assert fire(service, plan)['last_outcome'] == 'SKIPPED:ALREADY_SETTLED' and len(service.controller.offers) == 1
+
+    ep = {'_id': 'ep-settle', 'persona': 'P1', 'episode_kind': 'presence', 'tool_calls': {}}
+    item = {'fact': '他周末爱去河边走走', 'appraisal': '是他放松的方式', 'signal': '他提到累时可以问问',
+            'source_ids': ['ep-1', 'ep-2']}
+    with pytest.raises(Denied, match='PROMOTE_ONLY_IN_SETTLEMENT'):
+        promote(store, ep, item, key='k0')
+    ep['episode_kind'] = 'settlement'
+    for i in (1, 2):
+        store.db.episodes.insert_one({'_id': 'ep-%d' % i, 'schema_version': 1, 'scene_id': 'dm-a', 'source_event_id': 'in-%d' % i,
+                                      'episode_kind': 'external'})
+        store.db.audit_events.insert_one({'_id': 'ctx-%d' % i, 'schema_version': 1, 'type': 'context.prepared',
+                                          'stream_id': 'ep-%d' % i,
+                                          'occurred_at': '2026-10-01T1%d:00:00+00:00' % i})
+    with pytest.raises(Denied, match='PROMOTION_SOURCES_INSUFFICIENT: 2 turns / 1 dates'):
+        promote(store, ep, item, key='k1')                              # two turns, but one day
+    store.db.audit_events.update_one({'_id': 'ctx-2'}, {'$set': {'occurred_at': '2026-10-02T12:00:00+00:00'}})
+    kept = store.db.memory_units.find_one({'_id': promote(store, ep, item, key='k2')['memory_id']})
+    assert kept['status'] == 'active' and kept['source_ids'] == ['ep-1', 'ep-2'] and kept['episode_id'] == 'ep-settle'
+    ep['tool_calls'] = {call: {'tool': 'promote_memory', 'result': {}} for call in ('c1', 'c2')}
+    with pytest.raises(Denied, match='PROMOTION_QUOTA: 2'):
+        promote(store, ep, item, key='k3')                              # two a night
+
+

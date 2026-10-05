@@ -58,7 +58,7 @@ SERVICE = [
 
 # 硬边界：这些句子必须在，否则下次容易越界
 BOUNDARIES = [
-    ("boundary_no_group", "不发群"),
+    ("boundary_group_own_only", "群里只发自己做的图"),
     ("boundary_no_base64_transport", "base64"),
     ("boundary_keep_qq_adapter", "QQ 适配器"),
     ("boundary_no_visual_review_claim", "未做视觉复核"),
@@ -114,7 +114,8 @@ ATTACH = [
     ("attach_endpoint_sha_mismatch", "ATTACHMENT_SHA_MISMATCH"),
     ("attach_endpoint_media_type_mismatch", "ATTACHMENT_MEDIA_TYPE_MISMATCH"),
     # 适配器侧读法与历史读法
-    ("attach_adapter_group_not_enabled", "attachment_target_not_enabled"),
+    ("attach_group_not_her_own", "ATTACHMENT_NOT_HER_OWN"),
+    ("attach_adapter_unknown_target", "attachment_target_not_enabled"),
     ("attach_adapter_over_limit", "attachment_over_limit"),
     ("attach_adapter_fetch_unavailable", "attachment_fetch_unavailable"),
     ("attach_adapter_not_an_image", "attachment_not_an_image"),

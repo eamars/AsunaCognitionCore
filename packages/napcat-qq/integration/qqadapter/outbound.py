@@ -19,11 +19,13 @@ re-reported with the identical attempt_id.
 An outbox item may also declare one image attachment (metadata only: the host
 says an artifact exists and what its sha256 is).  The bytes are then fetched
 from the host channel API for that very publication -- the adapter never reads
-a host file path -- and a private send carries [image, text].  Anything odd
-about those bytes (unreachable, over the ceiling, wrong sha256, not an image)
-is a `failed` receipt with nothing sent: a text-only send that reports
-platform_accepted would claim a picture the peer never received.  Whether
-NapCat renders a `base64://` image data URI in a private chat is NOT yet
+a host file path -- and the send carries the image before her words (a group
+send keeps its reply segment first).  Which picture may go to a group is the
+host's decision, enforced on its attachment endpoint; the adapter only carries
+it.  Anything odd about those bytes (unreachable, over the ceiling, wrong
+sha256, not an image) is a `failed` receipt with nothing sent: a text-only
+send that reports platform_accepted would claim a picture the peer never
+received.  Whether NapCat renders a `base64://` image data URI is NOT yet
 verified against a real client.
 
 After a send the platform accepted, the adapter reads that one message back
@@ -48,9 +50,10 @@ SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
 # member by account, or recall one message by its platform id.  Nothing else is ever called.
 ADMIN_KINDS = ("mute", "unmute", "kick", "recall")
 MAX_MUTE_SECONDS = 30 * 86400
-# a group send may carry these; a private send carries `text`, plus one leading
-# `image` when the host attached a picture to this publication
+# a group send may carry these; a private send carries `text`; either may carry
+# one `image` before the words when the host attached a picture to this publication
 ALLOWED_OUT_SEGMENTS = ("reply", "text", "at")
+GROUP_IMAGE_SEGMENTS = ("reply", "image", "text", "at")
 PRIVATE_OUT_SEGMENTS = ("text",)
 PRIVATE_IMAGE_SEGMENTS = ("image", "text")
 
@@ -107,11 +110,12 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
 
     Group sends get a `reply` segment only when the host actually provided
     `reply_to`, and their text goes through encode_group_text; private sends are
-    byte-for-byte the 0.1.0 shape (one text segment, markers included) unless
-    `image_b64` is given, in which case the private send carries
-    [image, text] -- her words are never dropped to make room for the picture.
-    The image uses the OneBot `base64://` data URI, which NapCat documents but
-    which has not been verified against a real client yet.
+    byte-for-byte the 0.1.0 shape (one text segment, markers included).  With
+    `image_b64` the picture goes before her words: [image, text] in private,
+    [reply?, image, text/at...] in a group -- her words are never dropped to
+    make room for the picture.  The image uses the OneBot `base64://` data URI,
+    which NapCat documents but which has not been verified against a real
+    client yet.
     """
     action = SEND_ACTIONS.get(target_type)
     if action is None:
@@ -121,8 +125,10 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
         rid = str(reply_to).strip() if reply_to is not None else ""
         if rid:
             segments.append({"type": "reply", "data": {"id": rid}})
+        if image_b64:
+            segments.append({"type": "image", "data": {"file": "base64://" + image_b64}})
         segments.extend(encode_group_text(text))
-        allowed = ALLOWED_OUT_SEGMENTS
+        allowed = GROUP_IMAGE_SEGMENTS if image_b64 else ALLOWED_OUT_SEGMENTS
     else:
         segments = [{"type": "text", "data": {"text": text}}]
         allowed = PRIVATE_OUT_SEGMENTS
@@ -152,16 +158,16 @@ def attachment_plan(item, target_type, max_bytes=MAX_IMAGE_BYTES):
     """(descriptor, None) when this item's image may be fetched, else (None, reason).
 
     Everything here is checked before a single byte is requested, so a doomed
-    attachment costs no download.  Only private routes are enabled for images
-    for now: a group picture raises a "who can see this" question the host has
-    not answered yet, and refusing is cheaper than guessing.
+    attachment costs no download.  Private and group routes both carry images:
+    who may see which picture is the host's answer (in a group, only pictures
+    she made herself), checked again when it serves the bytes.
     """
     raw = item.get(ATTACHMENT_KEY)
     if raw is None:
         return None, "no_attachment"
     if not isinstance(raw, dict):
         return None, "attachment_descriptor_invalid"
-    if target_type != "dm":
+    if target_type not in SEND_ACTIONS:
         return None, "attachment_target_not_enabled"
     artifact = raw.get("artifact_id")
     if not isinstance(artifact, str) or not artifact or len(artifact) > 200:

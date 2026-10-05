@@ -22,7 +22,7 @@ import uuid
 from . import channel_kinds
 from .application import Application
 from .host import RuntimeHost
-from .config import DATA, ROOT, load, redact_text
+from .config import DATA, ROOT, database_lock, redact_text
 from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
@@ -238,8 +238,7 @@ class NativeLane:
 
 
 class BusinessWorker:
-    def __init__(self, config_path):
-        self.config_path = config_path
+    def __init__(self):
         self.stack = ExitStack()
         self.pending = {}
         self.pending_lock = threading.Lock()
@@ -277,11 +276,13 @@ class BusinessWorker:
         # Channel plugins (e.g. @asuna/napcat-qq) bring their platform's id formats before any route is read.
         channel_kinds.load(channels)
         from .native_settings import runtime_settings
-        config = (runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True)
-                  if deployment else load(self.config_path))
+        # The profile's settings are the only source (ADR-010 D3): no local configuration file is read.
+        if not deployment:
+            raise ValueError('NATIVE_DEPLOYMENT_REQUIRED')
+        config = runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True)
         # One Host per database: two Hosts may never run the same business queue
         # or publish the same scene concurrently.
-        self.stack.enter_context(RuntimeLease(Path(config['dsh_home']) / config['database'] / 'host.lock'))
+        self.stack.enter_context(RuntimeLease(database_lock(config)))
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')
@@ -996,10 +997,8 @@ class Dispatcher:
 def main():
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         stream.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', required=True)
-    args = parser.parse_args()
-    worker = BusinessWorker(args.config)
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    worker = BusinessWorker()
     dispatcher = Dispatcher(worker)
     try:
         for line in sys.stdin:

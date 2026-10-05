@@ -59,7 +59,7 @@ def test_a_platform_message_cannot_borrow_a_local_picture(store, tmp_path):
 
 def test_the_web_input_carries_the_pictures_to_the_queue(tmp_path, store):
     scene, _ = world(store, tmp_path)
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     local = {'scene_id': 'dm-a', 'person_id': 'A', 'workspace': str(tmp_path / 'local')}
     worker.app = SimpleNamespace(config={'chat': local}, store=store)
     accepted = []

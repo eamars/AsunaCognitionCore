@@ -26,7 +26,7 @@ def view():
     from asuna.documents import DocumentStore
     DocumentStore(store, 'p').seed('persona', 'persona', '真实人格正文', path='persona.md')   # the persona is a document
     store.init_head('relationship:qq:11', 'scene:one', {'body': '这个人偏好简洁表达'}, [])
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     worker.app = SimpleNamespace(store=store)
     return store, worker, binding
 

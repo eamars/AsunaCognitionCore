@@ -12,6 +12,11 @@ export function dataRoot(ctx, config) {
   throw new Error('ASUNA_DATA_ROOT_UNKNOWN: set the dataRoot setting');
 }
 
+/** The local chat's working folder, as the worker derives it (config.local_workspace). */
+export function localWorkspace(root) {
+  return path.join(root, 'work', 'local-user');
+}
+
 /** The floor's own state inside the data folder: activation, baselines, frozen copies and artifacts. A profile
  * set up before ADR-010 keeps its state in a subfolder (stateDir); a new one keeps it at the top. */
 export function floorState(root, config) {

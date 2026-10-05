@@ -1,7 +1,9 @@
 from __future__ import annotations
 import ipaddress
 import json
+import hashlib
 import os
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -11,6 +13,21 @@ ROOT = Path(__file__).resolve().parents[2]
 # This profile's data folder (ADR-010 D3): its working folders, locks, channel grants and evidence. The plugin
 # sets it from its dataRoot setting; a development checkout without it uses the checkout's own .runtime.
 DATA = Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT / '.runtime').resolve()
+# Locks that guard a database or an endpoint rather than one profile's folders: shared by every profile of this
+# user on this machine, so two profiles pointed at one database still exclude each other.
+LOCKS = Path(os.environ.get('ASUNA_LOCK_ROOT') or Path(tempfile.gettempdir()) / 'asuna-locks').resolve()
+
+
+def local_workspace():
+    """The local chat's working folder: one per profile, in its data folder."""
+    return DATA / 'work' / 'local-user'
+
+
+def database_lock(config):
+    """The lock file that keeps one Host per database (server address and name; never its credentials)."""
+    server = urlsplit(config['mongo_uri']).hostname or '', urlsplit(config['mongo_uri']).port or 27017
+    key = hashlib.sha256(json.dumps([*server, config['database']]).encode()).hexdigest()
+    return LOCKS / ('host-' + key + '.lock')
 # Behavior files (core prompts, runtime schemas) ship inside the package and are
 # published with it; the workspace never supplies or overrides them.
 RESOURCES = Path(__file__).with_name('resources')

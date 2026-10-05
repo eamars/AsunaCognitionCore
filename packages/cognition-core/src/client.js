@@ -94,7 +94,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.readback': '——回读（{path} 第 {from}–{to} 行，导入时快照）——',
       'settings.loading': '读取设置…', 'settings.unavailable': '配置暂不可用。', 'settings.aria': 'Asuna 设置',
       'settings.persona': '当前角色', 'settings.channelAdmission': '外部渠道接入策略', 'settings.python': 'Python',
-      'settings.configPath': '旧配置迁移来源',
+     
       'settings.route': '{brain} · {field}', 'settings.route.provider': '模型服务', 'settings.route.model': '模型',
       'settings.route.reasoningEffort': '推理强度', 'settings.route.maxTokens': '最大输出 token',
       'settings.newSecrets': '新增或更新凭据（JSON）', 'settings.overridden': '已覆盖', 'settings.reset': '恢复默认',
@@ -207,7 +207,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.readback': '— read back ({path}, lines {from}–{to}, snapshot taken at import) —',
       'settings.loading': 'Loading settings…', 'settings.unavailable': 'Settings are unavailable.', 'settings.aria': 'Asuna settings',
       'settings.persona': 'Character', 'settings.channelAdmission': 'Channel admission', 'settings.python': 'Python',
-      'settings.configPath': 'Imported configuration',
+     
       'settings.route': '{brain} · {field}', 'settings.route.provider': 'Model service', 'settings.route.model': 'Model',
       'settings.route.reasoningEffort': 'Reasoning effort', 'settings.route.maxTokens': 'Max output tokens',
       'settings.newSecrets': 'Add or update credentials (JSON)', 'settings.overridden': 'Overridden', 'settings.reset': 'Reset to default',
@@ -694,7 +694,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const [editor] = React.useState(() => {
         // Labels are read at render (the language may change); fields carry keys and parameters.
         const fields = [], add = (path, label, type = 'text') => fields.push({ path, label, type, field: JSON.stringify(path) });
-        for (const key of ['persona', 'channelAdmission', 'python', 'configPath'])
+        for (const key of ['persona', 'channelAdmission', 'python'])
           add([key], { key: 'settings.' + key }, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens'])
           add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + (lane === 'character' ? 'character' : 'executor') },

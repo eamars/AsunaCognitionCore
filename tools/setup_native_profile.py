@@ -106,14 +106,14 @@ def profile_patch(config, config_path, persona, shared_action_model=False, profi
         {'id': 'session-title-llm', 'disabled': True},
         {'id': 'agent-preset-registry', 'config': {'default': persona['preset']}},
         {'id': 'asuna-publication-floor', 'config': {
-            'dataRoot': str(data_root), 'python': sys.executable, 'configPath': str(config_path.resolve()),
+            'dataRoot': str(data_root), 'python': sys.executable,
             'defaultProject': persona['project'], 'route': routes['action'],
             **({'stateDir': state_dir} if state_dir else {}),
             'projects': [{'id': persona['project'], 'root': str(persona['root']), 'format': 'package'},
                          *({'id': c['project'], 'root': str(c['root']), 'format': 'package'} for c in channels),
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
-            'python': sys.executable, 'configPath': str(config_path.resolve()), 'persona': config['chat']['persona'], 'routes': routes,
+            'python': sys.executable, 'persona': config['chat']['persona'], 'routes': routes,
             **export_settings(config)}},
     ]
 
@@ -182,6 +182,12 @@ def main():
         # ADR-010 D3: the data folder replaced the checkout as the place a profile writes to.
         if row.get('id') in ('asuna-publication-floor', 'asuna-cognition-core'):
             row.get('config', {}).pop('workspace', None)
+            row.get('config', {}).pop('configPath', None)
+        if row.get('id') == 'asuna-cognition-core':
+            deployment = row.get('config', {}).get('deployment', {})
+            for key in ('dsh_home', 'workdir'):
+                deployment.pop(key, None)
+            deployment.get('chat', {}).pop('workspace', None)
     # Which packages are development projects is composition, not a saved setting:
     # an installed channel package must become a project even on an existing profile.
     floor = next(row for row in defaults if row['id'] == 'asuna-publication-floor')['config']

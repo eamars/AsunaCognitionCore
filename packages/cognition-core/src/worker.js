@@ -11,7 +11,7 @@ export class BusinessWorker {
     this.closed = false;
     // The worker runs in, and writes only to, this profile's data folder (paths.js).
     mkdirSync(config.dataRoot, { recursive: true });
-    this.process = spawn(config.python, ['-u', '-m', 'asuna.native_worker', '--config', config.configPath], {
+    this.process = spawn(config.python, ['-u', '-m', 'asuna.native_worker'], {
       cwd: config.dataRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
         ASUNA_DATA_ROOT: config.dataRoot,

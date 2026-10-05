@@ -10,7 +10,7 @@ from concurrent.futures import Future
 
 
 def test_task_fence_ends_old_pending_stage_without_ending_its_successor():
-    worker=BusinessWorker('unused'); events=[]; worker.emit=events.append
+    worker=BusinessWorker(); events=[]; worker.emit=events.append
     old,new=Future(),Future()
     for future,revision in ((old,1),(new,2)):
         future.asuna_task={'_id':'task','intent_revision':revision}
@@ -25,7 +25,7 @@ def test_task_fence_ends_old_pending_stage_without_ending_its_successor():
 
 
 def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path):
-    worker=BusinessWorker('unused'); calls=[]
+    worker=BusinessWorker(); calls=[]
     worker.session=lambda _: {'lane':'executor','task_id':'successor'}
     def valid(task):
         if task['_id']=='old':raise Denied('STALE_TASK_FENCE')
@@ -58,7 +58,7 @@ def test_group_role_is_continuous_across_speakers_but_not_scenes_or_authorizatio
 
 
 def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     prior = {'_id': 'group', 'revision': 1, 'lane': 'character', 'scene_id': 'group',
              'person_id': 'alice', 'persona': 'xiaoman', 'cwd': 'authorized', 'policy_epoch': 1}
     calls = []
@@ -80,7 +80,7 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
 
 
 def test_bound_session_checks_current_authorization_epoch():
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     record = {'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
     worker.app = SimpleNamespace(store=SimpleNamespace(
         db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record)),
@@ -90,7 +90,7 @@ def test_bound_session_checks_current_authorization_epoch():
 
 
 def test_qq_is_view_only_including_unbound_native_sessions():
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     rows = [{'native_host': True, '_id': 'qq', 'scene_id': 'qq:bot:dm:one', 'lane': 'character'},
             {'native_host': True, '_id': 'local', 'scene_id': 'local', 'lane': 'character'},
             {'native_host': True, '_id': 'old-local', 'scene_id': 'local', 'lane': 'character', 'successor_id': 'local'}]
@@ -105,7 +105,7 @@ def test_qq_is_view_only_including_unbound_native_sessions():
 
 @pytest.mark.parametrize('workspace', ['qq', 'local'])
 def test_web_input_requires_the_real_local_workspace(workspace, tmp_path):
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     local = {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}
     worker.app = SimpleNamespace(config={'chat': local}, store=SimpleNamespace(
         db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: None))))

@@ -1,9 +1,8 @@
 """Native DSH settings migration and model-free runtime validation."""
 from copy import deepcopy
-from pathlib import Path
 
 from . import channel_kinds
-from .config import DATA, validate_database, validate_endpoint
+from .config import local_workspace, validate_database, validate_endpoint
 
 SECRET_NAMES = {'mongo_uri', 'api_key', 'token', 'password', 'secret', 'access_token'}
 
@@ -26,7 +25,8 @@ def export_settings(config):
         if isinstance(value, list):
             return [visit(item, (*path, str(i))) for i, item in enumerate(value)]
         return value
-    value = deepcopy({k: v for k, v in config.items() if k not in ('character', 'executor')})
+    value = deepcopy({k: v for k, v in config.items() if k not in ('character', 'executor', 'dsh_home', 'workdir')})
+    value.get('chat', {}).pop('workspace', None)
     adapter = value.get('integration', {}).get('adapter_config', {})
     channel_id = adapter.get('host', {}).get('channel_id')
     if channel_id:
@@ -56,9 +56,11 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     for key in ('chat', 'embedding'):
         if not isinstance(value.get(key), dict):
             raise ValueError('INVALID_CONFIGURATION_SECTION: ' + key)
-    for key in ('scene_id', 'person_id', 'persona', 'workspace'):
+    for key in ('scene_id', 'person_id', 'persona'):
         if not isinstance(value['chat'].get(key), str) or not value['chat'][key]:
             raise ValueError('INVALID_LOCAL_CONFIGURATION: ' + key)
+    # Where the profile writes is its data folder's business (ADR-010 D3), not a setting.
+    value['chat']['workspace'] = str(local_workspace())
     validate_database(value, value['database'])
     validate_endpoint(value['embedding']['base_url'])
     if not isinstance(value['embedding'].get('model'), str) or not value['embedding']['model']:
@@ -69,12 +71,8 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         value.setdefault(key, 1800)
         if type(value[key]) not in (int, float) or not 1 <= value[key] <= 86400:
             raise ValueError('INVALID_TIMEOUT: ' + key)
-    for key in ('dsh_home', 'workdir'):
-        directory = Path(value[key]).resolve()
-        if not directory.is_relative_to(DATA):
-            raise ValueError('RUNTIME_DIRECTORY_OUTSIDE_WORKSPACE: ' + key)
-        if create_dirs:
-            directory.mkdir(parents=True, exist_ok=True)
+    if create_dirs:
+        local_workspace().mkdir(parents=True, exist_ok=True)
     if admission not in ('explicit', 'automatic'):
         raise ValueError('INVALID_CHANNEL_ADMISSION')
     # The DSH catalog owns model capability validation. Legacy provider

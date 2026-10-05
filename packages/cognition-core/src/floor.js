@@ -98,6 +98,13 @@ export class PublicationFloor {
     this.activationFile = path.join(this.base, 'activation.json');
     this.projects = new Map((config.projects ?? []).map(project => [project.id, project]));
     this.serial = Promise.resolve();
+    this.coreProbe = null;
+  }
+
+  /** Core lends the floor a settings check for a core candidate's worker (see prepare). Returns the release. */
+  setCoreProbe(probe) {
+    this.coreProbe = probe;
+    return () => { if (this.coreProbe === probe) this.coreProbe = null; };
   }
 
   async selected() { return json(this.activationFile, { projects: {}, active: {} }); }
@@ -354,9 +361,16 @@ export class PublicationFloor {
         path.join(target, 'python')]);
       if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
     }
-    if (workerPath) probe = await run(this.config.python, ['-c',
-      'import asuna.native_worker; from asuna.config import load; from asuna.state import Store; s=Store(load(__import__("sys").argv[1])); s.db.command("ping"); s.authorize(s.config["chat"]["scene_id"],s.config["chat"]["person_id"]); s.client.close(); print("Worker imports and existing database authorization passed; no live consumers started.")',
-      this.config.configPath], { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
+    if (workerPath) {
+      probe = await run(this.config.python, ['-c', 'import asuna.native_worker; print("Worker imports.")'],
+        { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
+      // With Core running, the candidate's worker also validates this profile's settings against the existing
+      // database (validate_settings: no consumers, no model): Core holds the settings, the floor never reads them.
+      if (probe.exit_code === 0 && this.coreProbe) {
+        const validated = await this.coreProbe(workerPath);
+        probe = { ...validated, stdout: probe.stdout + validated.stdout };
+      }
+    }
     return { packageRoot: target, workerPath, boot_probe: probe };
   }
 }

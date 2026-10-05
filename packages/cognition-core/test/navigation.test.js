@@ -41,8 +41,10 @@ test('native continuation preserves history and task children retain their actua
   await ctx.plugin(SessionProjectionCache, { writeEveryEvents: 100, writeIntervalMs: 1000 });
   await ctx.plugin(Workspace);
   await new Promise(resolve => ctx.inject(['workspaceRegistry', 'sessionProjectionCache'], () => resolve()));
-  const local = path.join(root, 'Local'), qq = path.join(root, 'QQ'), execution = path.join(root, 'sender');
-  for (const directory of [local, qq, execution]) await fs.mkdir(directory);
+  // The local chat's folder is derived from the data folder (paths.js), like the worker's.
+  const local = path.join(root, 'work', 'local-user'), qq = path.join(root, 'QQ'), execution = path.join(root, 'sender');
+  for (const directory of [local, qq, execution]) await fs.mkdir(directory, { recursive: true });
+  ctx.provide('asunaFloor', { dataRoot: root });
   let requests = 0;
   class Adapter extends LlmAdapter {
     async *stream() {

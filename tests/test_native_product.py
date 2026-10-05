@@ -6,7 +6,7 @@ import json
 import mongomock
 import pytest
 
-from asuna import host, channel_admission, native_worker, native_settings
+from asuna import config as asuna_config, host, channel_admission, native_worker, native_settings
 from asuna.channels import Channels
 from asuna.chat import Chat
 from asuna.native_worker import BusinessWorker
@@ -16,7 +16,7 @@ from asuna.state import Store, Denied
 
 @pytest.fixture
 def product(tmp_path, monkeypatch):
-    for module in (host, channel_admission, native_worker, native_settings):
+    for module in (asuna_config, host, channel_admission, native_worker):
         monkeypatch.setattr(module, 'DATA', tmp_path / '.runtime')
     config = {'chat': {'scene_id': 'local', 'person_id': 'owner', 'persona': 'xiaoman',
                       'workspace': str(tmp_path / 'local')}, 'workflow_timeout_seconds': 1,
@@ -29,7 +29,7 @@ def product(tmp_path, monkeypatch):
     db.put('scenes', {'_id': 'local', 'scope_key': 'scene:local', 'policy_epoch': 1,
                      'kind': 'dm', 'members': ['owner'], 'sequence': 0})
     app = SimpleNamespace(store=db, config=config, evidence=SimpleNamespace(record=lambda *_: None))
-    worker = BusinessWorker('unused')
+    worker = BusinessWorker()
     worker.app, worker.controller = app, Chat(app, config['chat'])
     worker.navigation = worker.prepare_navigation([])
     worker.projection_start = {'since': '2000-01-01'}
@@ -133,7 +133,6 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     p = product
     config = {**p.config, 'database': 'existing', 'allowed_databases': ['existing'],
         'mongo_uri': 'mongodb://fixture-user:fixture-password@127.0.0.1',
-        'dsh_home': str(p.root / '.runtime/dsh'), 'workdir': str(p.root / '.runtime/work'),
         'embedding': {'base_url': 'http://127.0.0.1:9999/v1', 'model': 'fixture', 'api_key': 'fixture-key'},
         'integration': {'adapter_config': {'host': {'channel_id': 'qq'}, 'napcat': {}}}}
     exported = native_settings.export_settings(config)
@@ -147,7 +146,8 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert adapter['host']['token'] == config['channels']['qq']['token']
     assert resolved['character']['model'] == resolved['executor']['model']
     assert 'character' not in exported['deployment']
-    assert not (p.root / '.runtime/dsh').exists()
+    assert 'dsh_home' not in exported['deployment'] and 'workspace' not in exported['deployment']['chat']
+    assert resolved['chat']['workspace'] == str(p.root / '.runtime' / 'work' / 'local-user')
 
 
 def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(product):

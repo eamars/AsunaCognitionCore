@@ -29,8 +29,7 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
   'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
-export const Config = z.object({ python: z.string().volatile(),
-  configPath: z.string().volatile(), persona: z.string().volatile(),
+export const Config = z.object({ python: z.string().volatile(), persona: z.string().volatile(),
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
   mountSchedule: z.boolean().default(true),
@@ -109,7 +108,7 @@ export class CognitionCore {
       throw error;
     }
     this.personas.set(persona.id, normalized);
-    if (persona.id === this.config.persona && this.config.python && this.config.configPath)
+    if (persona.id === this.config.persona && this.config.python && this.config.deployment)
       this.ready().catch(error => {
         this.ctx.logger.warn(String(error));
         process.stderr.write('Asuna worker could not start: ' + String(error) + '\n');
@@ -155,8 +154,8 @@ export class CognitionCore {
     if (!this.initializing) this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
       if (!persona) throw new Error('Select an installed Asuna persona');
-      if (!this.config.python || !this.config.configPath)
-        throw new Error('Configure the Asuna Python worker and local configuration');
+      if (!this.config.python || !this.config.deployment)
+        throw new Error('Configure the Asuna Python worker and deployment settings');
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
       this.efforts = await this.stageEfforts();
@@ -166,6 +165,11 @@ export class CognitionCore {
         pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
+      // A core candidate's worker is checked against these settings before it can be published (floor.js).
+      this.releaseProbe?.();
+      this.releaseProbe = this.ctx.asunaFloor.setCoreProbe(workerPath => this.validateSettings(this.config, workerPath).then(
+        () => ({ exit_code: 0, stdout: ' Profile settings validated against the existing database; no live consumers started.\n', stderr: '' }),
+        error => ({ exit_code: 1, stdout: '', stderr: String(error?.message ?? error) })));
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
         id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
       const channels = await this.channelPlugins(this.config.deployment);
@@ -249,7 +253,7 @@ export class CognitionCore {
 
   publicConfig() { return redactSecrets(Config, this.config).value; }
 
-  async validateSettings(next) {
+  async validateSettings(next, pythonPath) {
     if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
     const models = await this.resolveRoutes(next.routes);
     if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: import the existing deployment with setup_native_profile.py');
@@ -257,7 +261,7 @@ export class CognitionCore {
     // This process imports and validates the proposed business configuration.
     // It does not initialize a RuntimeHost, consume queues, or call any model.
     const probe = new BusinessWorker({ ...next, dataRoot: this.ctx.asunaFloor.dataRoot,
-      pythonPath: await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
+      pythonPath: pythonPath ?? await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
       await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
         models, persona: next.persona, admission: next.channelAdmission ?? 'explicit',
@@ -720,6 +724,7 @@ export class CognitionCore {
 
   async dispose() {
     this.disposed = true;
+    this.releaseProbe?.();
     clearTimeout(this.restartTimer);
     if (this.worker) this.worker.onFailure = null;
     await this.worker?.dispose();

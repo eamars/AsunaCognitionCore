@@ -1,4 +1,5 @@
 import { projectionCacheDomainSpec } from '@deepseek-ai/dsh-session-projection-cache';
+import { localWorkspace } from './paths.js';
 
 const needsTitle = (events, title, previous) => {
   const latest = events.findLast(event => event.type === 'session/title')?.data;
@@ -58,7 +59,7 @@ export async function recordChannelInput(core, receipt) {
   const { ctx } = core, { session_id: id, binding, input } = receipt;
   const channel = core.channelOf(binding.scene_id);
   if (!await ctx.sessionPersistence.stat(id)) await organizeNativeWorkspaces(core, {
-    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: core.config.deployment.chat.workspace },
+    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: localWorkspace(core.ctx.asunaFloor.dataRoot) },
     entries: [{ session_id: id, workspace: channel.title, binding }] });
   await ctx.workspaceRegistry.unarchiveSession(id);
   const message = await channelMessage(core, receipt);

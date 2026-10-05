@@ -31,14 +31,42 @@ test('successive runs of one thread get disjoint work ranges and their own repor
   await h.collab.start(stage('first')); h.step(3, '明天有雨'); await h.collab.finish(stage('first'));
   await h.collab.start(stage('second', 'task-two')); h.step(2, '后天晴'); await h.collab.finish(stage('second', 'task-two'));
   const entries = h.thread(h.events);
-  assert.deepEqual(entries.map(e => e.kind), ['open', 'work', 'report', 'work', 'report']);
-  const [, first, , second] = entries;
+  assert.deepEqual(entries.map(e => e.kind), ['open', 'work', 'report', 'open', 'work', 'report'], 'each run opens');
+  const [, first, , , second] = entries;
   assert.equal(first.tool_calls, 3); assert.equal(second.tool_calls, 2);
   assert.equal(second.after_seq, first.through_seq, 'the second range starts where the first ended');
   assert.deepEqual(entries.filter(e => e.kind === 'report').map(e => e.text), ['明天有雨', '后天晴']);
   const count = h.events.length;
   await h.collab.add('role', entries[0]);
   assert.equal(h.events.length, count, 'an entry with the same id is not appended twice');
+});
+
+test('an entry after the conversation moved on starts a new block there, from either brain', async () => {
+  const h = harness();
+  const say = (id, kind, from, text, extra = {}) => h.collab.entry({ session_id: 'role', thread: 'task-one',
+    task_id: 'task-one', entry: { id, kind, from, text, ...extra } });
+  await say('brief:task-one', 'message', 'character', '查一下明天的天气', { title: '查天气' });
+  await h.collab.start(stage('run')); h.step(2);
+  const first = h.thread(h.events);
+  assert.deepEqual(first.map(e => e.kind), ['message', 'open']);
+  assert.equal(new Set(first.map(e => e.block)).size, 1, 'a handover and the run it starts are one block');
+  h.events.push({ type: 'turn/start', data: { turn: 2 }, seq: h.events.length });     // the conversation moves on
+  await say('m:1', 'message', 'character', '顺便看看后天');
+  const second = h.thread(h.events).slice(first.length);
+  assert.deepEqual(second.map(e => e.kind), ['continued', 'open', 'work', 'message']);
+  assert.equal(second[0].block, first[0].block, 'the earlier block reads as continued below');
+  const block = second[1].block;
+  assert.ok(block !== first[0].block && second.slice(1).every(e => e.block === block));
+  assert.equal(second[1].title, '查天气', 'a new block carries the thread title');
+  assert.equal(second[1].child_session_id, 'same-source', 'it opens on the run still going, so its work shows there');
+  h.step(1, '明天有雨，后天晴');
+  h.events.push({ type: 'user/message', data: {}, seq: h.events.length });            // the owner says something
+  await h.collab.finish(stage('run'));
+  const third = h.thread(h.events).slice(first.length + second.length);
+  assert.deepEqual(third.map(e => e.kind), ['continued', 'open', 'work', 'report'], "the action brain's report shows where it arrives");
+  assert.equal(third[0].block, block);
+  await say('a:2', 'progress', 'action', '不会再分块');
+  assert.equal(h.thread(h.events).at(-1).block, third[1].block, 'without new conversation, entries stay in the block');
 });
 
 test('a question in the middle of a run splits its work, so the thread reads in order', async () => {

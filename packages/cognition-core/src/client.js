@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
       'collab.state.done': '已完成', 'collab.state.failed': '没做成', 'collab.state.stopped': '已叫停',
       'collab.state.paused': '已暂停', 'collab.paused': '宿主重启时暂停了；要接着做，在本机私聊里请她继续。',
+      'collab.state.continued': '下面接着', 'collab.working': '正在做 {duration}', 'collab.watch': '展开看实时过程',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
       'collab.work': '工作了 {duration}', 'collab.call': '{n} 次工具调用', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
       'collab.more': '展开全文', 'collab.less': '收起', 'collab.progress': '进展',
@@ -33,7 +34,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数', 'tool.pin_memory': '置顶记忆',
       'tool.feel': '心情', 'tool.plan': '安排', 'tool.group_action': '群管理', 'tool.promote_memory': '沉淀记忆',
       'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
-      'tool.refused': '被退回', 'tool.preparing': '正在写…',
+      'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '退回重写',
       'input.checking': '正在确认会话输入权限…', 'input.internal': '这是内部工作会话，请回到本地私聊。',
       'input.readOnly': '{platform} 会话仅供查看，请在 {platform} 中回复。', 'input.readOnlyLocal': '这个会话仅供查看。',
       'markdown.copy': '复制', 'markdown.copied': '已复制', 'markdown.footnotes': '来源',
@@ -133,6 +134,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
       'collab.state.done': 'Done', 'collab.state.failed': 'Not finished', 'collab.state.stopped': 'Stopped',
       'collab.state.paused': 'Paused', 'collab.paused': 'Paused when the Host restarted; ask her in the local chat to continue.',
+      'collab.state.continued': 'Continued below', 'collab.working': 'Working {duration}', 'collab.watch': 'Expand to watch it live',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
       'collab.work': 'Worked {duration}', 'collab.call': '{n} tool call', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
       'collab.more': 'Show all', 'collab.less': 'Show less', 'collab.progress': 'Progress',
@@ -144,6 +146,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.pin_memory': 'Pin a memory', 'tool.feel': 'Feeling', 'tool.plan': 'Plan', 'tool.group_action': 'Group action',
       'tool.promote_memory': 'Keep a memory', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
       'tool.report_progress': 'Report progress', 'tool.refused': 'Refused', 'tool.preparing': 'Writing…',
+      'repair.title': 'Sent back',
       'input.checking': 'Checking who may write here…', 'input.internal': 'This is an internal work conversation; go back to the local chat.',
       'input.readOnly': '{platform} conversations are read-only here; reply in {platform}.', 'input.readOnlyLocal': 'This conversation is read-only.',
       'markdown.copy': 'Copy', 'markdown.copied': 'Copied', 'markdown.footnotes': 'Sources',
@@ -445,12 +448,29 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }];
   }
 
+  /** The program's note that sends her final text back to be rewritten in the same Turn (ADR-011 §3.5).
+   * DSH draws a mid-Turn message only when a person sent it, so without this row the rejected draft and
+   * the rewrite read as two answers. It sits where the note was given: between the two, in the process. */
+  function repairDefinitions() {
+    return [{ kind: 'asuna-repair', target: 'chat',
+      match: event => event.type === 'user/message' && event.data.source?.kind === 'asuna' && event.data.source.phase === 'REPAIR'
+        ? { id: String(event.seq), role: 'start' } : null,
+      start: (_context, match) => ({ seq: match.event.seq, location: match.location,
+        text: (match.event.data.content ?? []).filter(part => part.type === 'text').map(part => part.text).join('\n').trim() }),
+      update: context => context.state,
+      buildViewNode: context => !context.state ? null : ({ key: context.key, kind: 'asuna-repair', id: context.id,
+        target: 'chat', anchorSeq: context.state.seq, location: context.state.location, visibility: 'visible',
+        data: { text: context.state.text } }),
+    }];
+  }
+
   // ── the two brains' thread (ADR-011 §7.1) ───────────────────────────
-  /** One node per task thread, from her session's `asuna/collab` entries (collab.js), anchored at its first. */
+  /** One node per block of a task thread (collab.js: an entry after the conversation moved on starts a new
+   * block where it happens), from her session's `asuna/collab` entries, anchored at the block's first. */
   function collabDefinitions() {
     return [{ kind: 'asuna-collab', target: 'chat',
       match: event => event.type === 'asuna/collab' && event.data?.thread
-        ? { id: String(event.data.thread), role: 'start' } : null,
+        ? { id: String(event.data.block ?? event.data.thread), role: 'start' } : null,
       start: (_context, match) => ({ anchor: match.event.seq, entries: [match.event.data] }),
       update: (context, match) => context.state.entries.some(entry => entry.id === match.event.data.id) ? context.state
         : { ...context.state, entries: [...context.state.entries, match.event.data] },
@@ -459,9 +479,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         data: context.state }),
     }];
   }
-  /** What a thread reads as: its title, its sessions, its state and how long it has run. */
+  /** What a block of a thread reads as: its title, its sessions, its state, how long it has run, and the
+   * action brain's work still going on (`live`: the range after its last work row). */
   function threadOf(entries) {
-    const open = entries.find(entry => entry.kind === 'open');
+    const open = entries.findLast(entry => entry.kind === 'open');
     const title = entries.find(entry => entry.title)?.title;
     const statuses = entries.filter(entry => entry.kind === 'status');
     const last = entries.at(-1);
@@ -471,9 +492,15 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     if (asked && !answered && !['done', 'failed', 'stopped', 'paused'].includes(state)) state = 'waiting';
     // A continuation runs again after a finished or paused run.
     if (['done', 'failed', 'paused'].includes(state) && last && last !== statuses.at(-1) && ['message', 'open'].includes(last.kind)) state = 'queued';
+    // The thread went on in a later block, below.
+    if (entries.some(entry => entry.kind === 'continued')) state = 'continued';
     const started = Date.parse(entries[0]?.at), ended = Date.parse(last?.at);
-    return { title, open, state, stopped: statuses.findLast(entry => entry.state === 'stopped'),
-      elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
+    const child = open?.child_session_id ?? entries.findLast(entry => entry.child_session_id)?.child_session_id;
+    const work = open && entries.slice(entries.indexOf(open)).findLast(entry => entry.kind === 'work');
+    const live = state === 'running' && child && (work?.through_seq ?? open?.after_seq) !== undefined
+      ? { child, after: work?.through_seq ?? open.after_seq, since: Date.parse(work?.at ?? open.at) } : null;
+    return { title, open, child, live, state, stopped: statuses.findLast(entry => entry.state === 'stopped'),
+      elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused', 'continued'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
   }
 
   // ── her tool rows (ADR-011 §7.2) ────────────────────────────────────
@@ -843,7 +870,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       document.head.append(style);
       return () => style.remove();
     });
-    for (const definition of [...stageDefinitions(), ...collabDefinitions()])
+    for (const definition of [...stageDefinitions(), ...collabDefinitions(), ...repairDefinitions()])
       ctx.effect(() => ctx.uiConversation.events.register(definition));
 
     // ── the collaboration thread ──────────────────────────────────────
@@ -894,11 +921,22 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         keepContentWhenOpen: true, open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
         open && h(Work, { ...props }));
     }
+    /** The action brain's work still going on: its native records after the last work row, as they come. */
+    function LiveWorkRow(props) {
+      const { live, t } = props;
+      const [open, setOpen] = React.useState(false), [now, setNow] = React.useState(Date.now());
+      React.useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
+      return h(DisclosureRow, { icon: h(IconChevronDownOutlineRegular), previewChevron: false,
+        title: t('collab.working', { duration: duration(t, Math.max(0, now - (Number.isFinite(live.since) ? live.since : now))) }),
+        collapsedContent: h('span', { style: { marginLeft: 8, ...small } }, t('collab.watch')),
+        keepContentWhenOpen: true, open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
+        open && h(Work, { ...props, entry: { child_session_id: live.child, after_seq: live.after } }));
+    }
     function CollabThread(props) {
       const t = props.t, { entries } = props.node.data;
       const thread = threadOf(entries);
       const parent = thread.open?.parent_session_id ?? props.sessionId;
-      const child = thread.open?.child_session_id;
+      const child = thread.child;
       const openAside = child && parent ? () => ctx.sidebarRight.openResource('dsh-resource://subagentchat/session/'
         + encodeURIComponent(child) + '?' + new URLSearchParams({ parent, mode: 'one-shot' }),
         { kind: 'subagentchat', preferNewPane: true }) : null;
@@ -910,13 +948,15 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           h(Pill, null, t('collab.state.' + thread.state)),
           thread.elapsed !== null && h('span', { style: small }, duration(t, thread.elapsed)),
           openAside && h(Button, { size: 'sm', variant: 'ghost', onClick: openAside }, t('collab.open'))),
-        ...entries.filter(entry => entry.kind !== 'open').map(entry =>
+        ...entries.filter(entry => entry.kind !== 'open' && entry.kind !== 'continued').map(entry =>
           entry.kind === 'work' ? h(WorkRow, { key: entry.id, entry, t, parent, SessionProvider: props.SessionProvider,
               renderSlot: props.renderSlot })
             : entry.kind === 'status' ? (entry.state === 'stopped' ? h('p', { key: entry.id, style: small },
               t('collab.stopped', { reason: entry.reason ?? '' }))
               : entry.state === 'paused' && entry === entries.at(-1) && h('p', { key: entry.id, style: small }, t('collab.paused')))
-            : h(Bubble, { key: entry.id, entry, t })));
+            : h(Bubble, { key: entry.id, entry, t })),
+        thread.live && h(LiveWorkRow, { key: 'live:' + thread.live.after, live: thread.live, t, parent,
+          SessionProvider: props.SessionProvider, renderSlot: props.renderSlot }));
     }
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-collab', locale: NS, children: {
@@ -953,6 +993,21 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
     for (const name of ROLE_TOOLS) ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
       name: 'tool.call.toolview', key: name, locale: NS }, RoleToolRow));
+    // The program's note between a rejected draft and her rewrite, drawn like her tool rows.
+    function RepairNote(props) {
+      const t = props.t, text = props.node.data.text;
+      const [open, setOpen] = React.useState(false);
+      const long = text.length > 80;
+      return h(DisclosureRow, { icon: h(primitives.IconInfoOutlineRegular), previewChevron: false,
+        title: t('repair.title'),
+        collapsedContent: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 'var(--dsh-content-font-size-secondary, 13px)' } },
+          h('span', { 'aria-hidden': true, style: { margin: '0 6px', opacity: .6 } }, '·'), text),
+        keepContentWhenOpen: true, open, expandable: long, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
+        ...(long ? [h('p', { key: 'note', style: { ...small, whiteSpace: 'pre-wrap' } }, text)] : []));
+    }
+    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+      name: 'conversation.chat.node', key: 'asuna-repair', locale: NS }, RepairNote));
 
     // ── a turn's trigger, titled in the viewer's language ─────────────
     // DSH titles a turn started by a notice "execution requested"; an Asuna notice says what started it.
@@ -1000,7 +1055,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }, ActiveStage));
 
   }
-  return { apply, stageDefinitions, collabDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
+  return { apply, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
     inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

@@ -7,6 +7,11 @@
  *
  * Entries are appended only while her agent is idle, so a thread opened by a turn's delegate call is
  * anchored after that turn; entries that arrive during a later turn wait for it to end.
+ *
+ * Every entry shows where it happens (owner, 2026-10-05): a thread is drawn as blocks, and an entry that
+ * arrives after the conversation moved on (a turn or a message since the thread's last entry) starts a
+ * new block there, with the thread's title; the previous block is marked as continued below. A block
+ * started while the action brain is running opens on that run, so its live work shows in the new block.
  */
 export class Collab {
   constructor(core) {
@@ -54,8 +59,34 @@ export class Collab {
       this.waiting.delete(parentId);
       const seen = new Set(role.session.snapshotEvents().filter(event => event.type === 'asuna/collab')
         .map(event => event.data.id));
-      for (const entry of entries) if (!seen.has(entry.id)) { seen.add(entry.id); role.session.append('asuna/collab', entry); }
+      for (const entry of entries) {
+        if (seen.has(entry.id)) continue;
+        for (const added of this.place(role.session.snapshotEvents(), entry)) {
+          seen.add(added.id); role.session.append('asuna/collab', added);
+        }
+      }
     });
+  }
+
+  /** The block an entry belongs to, and what starting a new one adds before it (see the module note). */
+  place(events, entry) {
+    const thread = events.filter(event => event.type === 'asuna/collab' && event.data.thread === entry.thread);
+    const last = thread.at(-1);
+    if (!last) return [{ ...entry, block: 'block:' + entry.id }];
+    const previous = last.data.block ?? last.data.thread;          // entries from before blocks: one per thread
+    const moved = events.some(event => event.seq > last.seq && (event.type === 'turn/start' || event.type === 'user/message'));
+    if (!moved) return [{ ...entry, block: previous }];
+    const block = 'block:' + entry.id, at = new Date().toISOString();
+    const title = entry.title ?? thread.findLast(event => event.data.title)?.data.title;
+    const run = this.runs.get(entry.thread);
+    return [
+      { id: 'continued:' + previous + ':' + block, thread: entry.thread, task_id: entry.task_id, kind: 'continued',
+        block: previous, next: block, at },
+      ...(run && entry.kind !== 'open' ? [{ id: 'open:' + block, thread: entry.thread, task_id: run.task, kind: 'open',
+        block, ...(title ? { title } : {}), child_session_id: run.child, parent_session_id: run.parent,
+        after_seq: run.after, at: new Date(run.started).toISOString() }] : []),
+      { ...entry, block, ...(title ? { title } : {}) },
+    ];
   }
 
   /** The action session's newest event sequence (live or persisted). */
@@ -92,8 +123,10 @@ export class Collab {
     const after = await this.sequence(stage.session_id);
     if (after === null) return;
     this.runs.set(task.thread, { parent, child: stage.session_id, after, started: Date.now(), task: task._id });
-    await this.add(parent, { id: 'open:' + task.thread, thread: task.thread, task_id: task._id, kind: 'open',
-      title: task.title, child_session_id: stage.session_id, parent_session_id: parent, at: new Date().toISOString() });
+    // One per run: a continuation's run opens again, in the block where it starts.
+    await this.add(parent, { id: 'open:' + task.thread + ':' + after, thread: task.thread, task_id: task._id, kind: 'open',
+      title: task.title, child_session_id: stage.session_id, parent_session_id: parent, after_seq: after,
+      at: new Date().toISOString() });
   }
 
   /** Close the open work range of a thread (before an entry that interrupts it, or at the run's end). */

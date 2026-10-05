@@ -22,7 +22,7 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, collabDefinitions, threadOf, subscribeInputPolicies, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
 const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
 
 test('cold composer stays blocked until QQ policy resolves, and stale queries cannot block Local', async () => {
@@ -98,6 +98,52 @@ test('a task thread is one node anchored at its first entry, through reload and 
   assert.equal(threadOf(done).state, 'done');
   assert.equal(threadOf([...done, { id: 'brief:t1b', kind: 'message', from: 'character', text: 'and tomorrow?', at }]).state, 'queued',
     'her follow-up to a finished task queues it again');
+});
+
+test('each block of a thread is its own node where it happened; an earlier one reads as continued below', () => {
+  const engine = assembler(collabDefinitions());
+  const at = '2026-10-05T10:00:00Z', later = '2026-10-05T10:05:00Z';
+  const c = (seq, data) => entry(seq, 'asuna/collab', { thread: 't1', task_id: 't1', at, ...data });
+  engine.replaceWindow([
+    c(1, { id: 'brief:t1', block: 'block:brief:t1', kind: 'message', from: 'character', text: 'clean up', title: 'skills' }),
+    c(2, { id: 'open:t1:0', block: 'block:brief:t1', kind: 'open', child_session_id: 'action', after_seq: 0 }),
+    entry(3, 'turn/start', { turn: 2 }),
+    c(4, { id: 'continued:block:brief:t1:block:m1', block: 'block:brief:t1', kind: 'continued', next: 'block:m1' }),
+    c(5, { id: 'open:block:m1', block: 'block:m1', kind: 'open', child_session_id: 'action', after_seq: 0, title: 'skills' }),
+    c(6, { id: 'work:t1:9', block: 'block:m1', kind: 'work', child_session_id: 'action', after_seq: 0, through_seq: 9,
+      tool_calls: 4, at: later }),
+    c(7, { id: 'm1', block: 'block:m1', kind: 'message', from: 'character', text: 'and the adapter docs', title: 'skills' }),
+  ], false);
+  const rows = snapshot(engine).nodes.toSorted((left, right) => left.anchorSeq - right.anchorSeq);
+  assert.deepEqual(rows.map(row => [row.id, row.anchorSeq]), [['block:brief:t1', 1], ['block:m1', 5]]);
+  const [earlier, current] = rows.map(row => threadOf(row.data.entries));
+  assert.equal(earlier.state, 'continued');
+  assert.equal(earlier.live, null, 'the work goes on below, not here');
+  assert.equal(current.state, 'running');
+  assert.deepEqual(current.live, { child: 'action', after: 9, since: Date.parse(later) }, 'live after the last work row');
+  assert.equal(current.title, 'skills');
+  assert.equal(threadOf([...rows[1].data.entries, { id: 's', kind: 'status', state: 'done', at }]).live, null);
+  assert.equal(words('collab.state.continued'), 'Continued below');
+});
+
+test('the program sending her final text back shows between the draft and the rewrite, inside her Turn', () => {
+  const note = { source: { kind: 'asuna', operation: 'ep:TURN:fix-1', lane: 'character', phase: 'REPAIR' },
+    content: [{ type: 'text', text: 'what you wrote last is sent as is; it mentioned the program' }] };
+  const events = [entry(0, 'turn/start', { turn: 1 }), entry(1, 'user/message', source('TURN', 'character')),
+    entry(2, 'step/start', { turn: 1, step: 1 }), entry(3, 'assistant/message', { turn: 1, step: 1 }),
+    entry(4, 'step/end', { turn: 1, step: 1 }), entry(5, 'user/message', note),
+    entry(6, 'step/start', { turn: 1, step: 2 }), entry(7, 'assistant/message', { turn: 1, step: 2 }),
+    entry(8, 'step/end', { turn: 1, step: 2 }), entry(9, 'turn/end', { turn: 1, reason: { kind: 'completed' } })];
+  const engine = assembler(repairDefinitions());
+  engine.replaceWindow(events, false);
+  const rows = snapshot(engine).nodes;
+  assert.equal(rows.length, 1, 'only the note that sends a draft back is drawn, not the turn notice');
+  assert.equal(rows[0].kind, 'asuna-repair');
+  assert.equal(rows[0].anchorSeq, 5, 'between the rejected draft (3) and the rewrite (7)');
+  assert.notEqual(rows[0].location.kind, 'session', 'it belongs to her Turn, so it folds with its process');
+  assert.equal(rows[0].data.text, 'what you wrote last is sent as is; it mentioned the program');
+  engine.replaceWindow(events, false);
+  assert.equal(snapshot(engine).nodes.length, 1, 'a reload draws it once');
 });
 
 test('explicit lane attribution exists before tokens and survives native stream settlement', () => {

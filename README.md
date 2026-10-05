@@ -1,36 +1,145 @@
-# Asuna Cognition Core
+<div align="center">
+  <img src="packages/cognition-core/icon.svg" alt="Asuna" width="160" height="160" />
 
-Asuna runs as plugins in one native DSH **0.2.0-rc.2** Web Host:
+<h1>Asuna Cognition Core</h1>
 
-- `@asuna/cognition-core` supplies cognition, task/channel authorization, the business worker, and publication tools.
-- A persona package (for example `packages/xiaoman`, the persona installed in this deployment) supplies the persona baseline, selected skills and its role preset. The core contains no persona; any persona package can replace it, and `tests/fixtures/personas/demo` is a synthetic one.
-- A channel package per platform (`packages/napcat-qq` for QQ through NapCat) supplies that platform's id formats, its adapter and the adapter's skill. The core names no platform.
+<p><strong>A framework for AI characters that live with you, on your own machine.</strong></p>
 
-DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker reuses the existing Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
+<p>
+    <a href="README_CN.md">简体中文</a>
+    ·
+    <a href="RUN_ASUNA.md">Running Asuna</a>
+    ·
+    <a href="INSTALL.md">Install</a>
+  </p>
 
-## Start
+<p>
+    <img alt="DeepSeek Harness" src="https://img.shields.io/badge/DeepSeek_Harness-plugin-4D6BFE" />
+    <img alt="Python" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white" />
+    <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-memory-47A248?logo=mongodb&logoColor=white" />
+    <img alt="Release" src="https://img.shields.io/badge/Release-v0.2.0-6f42c1" />
+    <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0--only-blue" />
+  </p>
+</div>
 
-After installing the local profile as described in [RUN_ASUNA.md](RUN_ASUNA.md):
+## What Asuna is
 
-```powershell
-.\start-asuna.cmd
+Most chatbots wait to be spoken to, answer, and forget. Asuna is built for a character who *stays*: one with a
+home, a sense of time, people they know, memories they keep, and work they can actually get done.
+
+Asuna is the home; the character is a **persona package** you bring. The framework knows nothing about who lives in
+it. Personality, voice, and skills all come from the persona package, and a different package gives you a different
+character in the same home. Asuna also knows nothing about where the character meets people: each platform is a
+**channel package** you plug in.
+
+## What a character can do
+
+**Think with two brains.** Every turn is led by the *character brain*: the part that is the character, that
+listens, feels, remembers, decides what to say, and says it. When something needs doing, such as looking things up,
+reading files, writing code, or checking a device, the character hands it to the *action brain*. It does the work
+with real tools in a sandbox and reports back, and the character decides what the result means. You can watch both
+brains side by side, each with its own colour: purple for the character, blue for the action.
+
+**Live at home, on their own rhythm.** The private chat with the owner is the character's home, not just an inbox.
+A heartbeat gives them time of their own: they can do nothing, follow up on something, or decide to drop by a group
+and start a topic. Each night they look back over the day and decide what is worth remembering for good.
+
+**Meet people where they are.** In group chats the character reads the room before speaking. They join in when
+called or when they have something to add, stay quiet when they don't, and get to know each person over time.
+
+**Keep memories of their own.** Characters write and revise their own notes and documents, keep a mood that carries
+from one conversation to the next, and recall what matters when it matters. Their inner state reaches them as words,
+not numbers, and they change it by choosing, not by typing values.
+
+**Grow by themselves.** A character keeps a notebook of things they'd like to improve, works on their own package
+in its own copy, and publishes the change only once it passes its checks and has been reviewed.
+
+**Stay trustworthy.** What a character shares with the owner stays private; groups only hear what is meant for
+them. Code runs in a sandbox, everything said on a platform goes through an audited outbox, and new abilities, a
+device on the home network for example, are granted one at a time when the character asks for them and says why.
+
+**Talk to other agents.** A *peer line* connects a character to an agent living in another DeepSeek Harness, such
+as an earlier version of the same character. The two can talk directly and hand knowledge over, and the line is the
+character's to open or close.
+
+## What it looks like
+
+<p align="center">
+  <img src="docs/images/asuna-handover.png" alt="The character brain hands a task to the action brain; the report comes back" width="900" />
+</p>
+
+<p align="center"><sub>The character brain (purple) hands a small task to the action brain (blue) with clear limits;
+the action brain reports what it found. The sidebar and names are blurred.</sub></p>
+
+## How a moment flows
+
+```mermaid
+flowchart LR
+  subgraph world["Where the character meets people"]
+    owner["You<br/>(the home chat)"]
+    chats["Chats and groups<br/>(channel packages)"]
+    peer["Another agent<br/>(peer line)"]
+  end
+  subgraph asuna["Asuna, inside DeepSeek Harness"]
+    beat["Heartbeat and<br/>nightly review"]
+    character["Character brain<br/>listens, feels, remembers,<br/>decides, speaks"]
+    action["Action brain<br/>tools, code, web, files<br/>(in a sandbox)"]
+    memory[("Memory<br/>people, documents, mood")]
+    outbox["Audited outbox"]
+  end
+  owner --> character
+  chats --> character
+  peer --> character
+  beat --> character
+  character <-->|"recalls and keeps"| memory
+  character -->|"hands over work"| action
+  action -->|"reports back"| character
+  character -->|"replies at home"| owner
+  character -->|"words for the outside"| outbox
+  outbox --> chats
+  outbox --> peer
 ```
 
-`start-asuna-ui.cmd` is an alias; `asuna ui` opens the same native profile. Open the authenticated localhost address printed by DSH (default port **8780**), select **Local** or **QQ**, and use the native composer. Delegated tasks keep real native action sessions; their original records appear in the main conversation, with blue **行动脑** and purple **角色脑** labels. Native reasoning and tool disclosures expand to show details. QQ conversations remain view-only.
+Whatever wakes the character (you, a message in a group, another agent, or their own heartbeat), the character
+brain decides first. Work goes to the action brain and comes back as a report. Words for the outside world leave
+only through the outbox, where each one is recorded.
 
-The right sidebar offers **记忆** for authorized state and source records. **Plugins → @asuna/cognition-core** contains the Asuna settings card. Save and apply are separate operations; providers and credentials stay in native/local configuration.
+## Built on DeepSeek Harness
 
-Existing Mongo persona, self, relationships, history and grants remain authoritative. Package upgrades seed only missing state. Old native lane logs remain on disk for diagnosis and are never replayed or merged into new transcripts.
+Asuna is a set of plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). DSH
+supplies the agent runtime and the web interface, and Asuna adds the character on top: the two brains, memory in
+MongoDB, the daily rhythm, and the channels. It reuses DSH's own interface instead of building another, so what you
+see is the regular DSH web page, with the character's conversations, the two brains' colours, and a memory panel
+added to it.
 
-## Develop
+The repository is split the same way:
 
-Owner actions edit the persistent candidate of the selected persona package by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start.
+| Part | What it is |
+|---|---|
+| `packages/cognition-core` | The home itself: cognition, memory, the two brains, privacy and safety. It names no character and no platform. |
+| `packages/napcat-qq` | A channel for QQ, through NapCat. |
+| `packages/dsh-peer` | A channel to an agent in another DeepSeek Harness (the peer line). |
+| `tests/fixtures/personas/demo` | A small synthetic persona, used by the tests and for trying things out. |
+| `packages/xiaoman` | The author's first persona, a personal one. It will be replaced by a generic example. |
 
-See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for package contracts and lifecycle, [RUNTIME_API.md](RUNTIME_API.md) for channel/tool semantics, and [AGENTS.md](AGENTS.md) for development rules. Plans in `docs/development_plans/` preserve design history rather than current runtime documentation.
+## Getting started
 
-## Install and licence
+You need DeepSeek Harness 0.2.0-rc.2, Python 3.12+, MongoDB, a model server for each brain (both brains may share
+one), and a persona package. Optional: WSL with bubblewrap for the sandbox, and NapCat for QQ.
 
-To install the released plugins into a DeepSeek Harness profile, follow [INSTALL.md](INSTALL.md) (written for the
-agent or person doing the install). The core (`packages/cognition-core`) and the channel packages are licensed under
-the GNU General Public License v3.0 only ([LICENSE](LICENSE)). Persona packages are not part of the release and carry
-no licence from this repository.
+- **Installing into DSH:** follow [INSTALL.md](INSTALL.md). It is written so a person or a coding agent can follow it.
+- **Running and day-to-day use:** see [RUN_ASUNA.md](RUN_ASUNA.md). On Windows, `start-asuna.cmd` opens the home;
+  then visit the address it prints.
+- **For developers:** [RUNTIME_API.md](RUNTIME_API.md) describes the channel and tool contracts. Design decisions
+  are kept in [docs/development_plans](docs/development_plans/README.md).
+
+## Status
+
+Asuna runs every day as the home of the author's first character. Version 0.2.0 is the first release that installs
+into a standard DeepSeek Harness profile. It is a personal project shared in the open, so expect it to keep
+changing.
+
+## License
+
+The core and the channel packages are licensed under the [GNU General Public License v3.0 only](LICENSE). Persona
+packages are not part of the release.

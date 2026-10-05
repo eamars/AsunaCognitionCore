@@ -2,6 +2,22 @@
 
 The default is the native DSH Web profile. One Host owns model execution and the Web UI; its managed Python worker owns business state and existing channel/integration services.
 
+## How Asuna is put together
+
+Asuna runs as plugins in one native DSH **0.2.0-rc.2** Web Host:
+
+- `@asuna/cognition-core` supplies cognition, task/channel authorization, the business worker, and publication tools.
+- A persona package (for example `packages/xiaoman`, the persona installed in this deployment) supplies the persona baseline, selected skills and its role preset. The core contains no persona; any persona package can replace it, and `tests/fixtures/personas/demo` is a synthetic one.
+- A channel package per platform supplies that platform's id formats, its adapter and the adapter's skill: `packages/napcat-qq` for QQ through NapCat, `packages/dsh-peer` for an agent in another DSH (ADR-013). The core names no platform.
+
+DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker reuses the existing Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
+
+The right sidebar offers **记忆** for authorized state and source records. **Plugins → @asuna/cognition-core** contains the Asuna settings card. Save and apply are separate operations; providers and credentials stay in native/local configuration. Existing Mongo persona, self, relationships, history and grants remain authoritative. Package upgrades seed only missing state. Old native lane logs remain on disk for diagnosis and are never replayed or merged into new transcripts.
+
+Owner actions edit the persistent candidate of the selected persona package by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start. See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for package contracts and lifecycle, [RUNTIME_API.md](RUNTIME_API.md) for channel/tool semantics, and [AGENTS.md](AGENTS.md) for development rules. Plans in `docs/development_plans/` preserve design history rather than current runtime documentation.
+
+To install the released plugins into another DeepSeek Harness profile, follow [INSTALL.md](INSTALL.md). The core and the channel packages are licensed under the GNU General Public License v3.0 only ([LICENSE](LICENSE)); persona packages are not part of the release.
+
 ## Prerequisites and installation
 
 Use the existing Mongo database and private deployment configuration. A compatible Node runtime, Python **3.12+**, and the existing WSL Ubuntu/bubblewrap environment are required for the configured workspace tools. Model and embedding services run independently.

@@ -145,3 +145,17 @@ def test_a_plain_http_request_is_refused():
     platform.thread.join(2)
     assert platform.head is None and platform.messages == []
     assert any('not a WebSocket upgrade' in line for line in log)
+
+
+def test_a_device_may_serve_on_a_low_port_but_the_relay_binds_high():
+    import pytest
+    from asuna.integration import validate_profile
+
+    def profile(port, target):
+        return {'chat': {'scene_id': 'local', 'person_id': 'owner'},
+                'integration': {'enabled': True, 'scene_id': 'local', 'person_id': 'owner',
+                                'endpoints': [{'name': 'gateway', 'host': '192.0.2.20', 'port': port, 'target_port': target}]}}
+    validate_profile(profile(9022, 22))
+    for port, target in ((22, 22), (9022, 0), (9022, 70000)):
+        with pytest.raises(ValueError, match='INVALID_INTEGRATION_PORT'):
+            validate_profile(profile(port, target))

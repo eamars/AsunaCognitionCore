@@ -189,8 +189,9 @@ def validate_profile(config):
         ip = ipaddress.ip_address(e['host'])
         if not (ip.is_private or ip.is_loopback) or ip.is_unspecified or ip.is_multicast:
             raise ValueError('INTEGRATION_ENDPOINT_MUST_BE_EXPLICIT_LOCAL_IP')
-        for key in ('port', 'target_port'):
-            if type(e[key]) is not int or not 1024 <= e[key] <= 65535:
+        # The relay binds `port` inside the namespace (unprivileged); the device's own port is whatever it serves on (SSH 22, HTTPS 443).
+        for key, low in (('port', 1024), ('target_port', 1)):
+            if type(e[key]) is not int or not low <= e[key] <= 65535:
                 raise ValueError('INVALID_INTEGRATION_PORT')
         if e['port'] in ports:
             raise ValueError('DUPLICATE_INTEGRATION_PORT')

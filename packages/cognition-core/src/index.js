@@ -45,6 +45,23 @@ const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' 
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
+/** What one stage of her turn said and saw, from her session's log (coordinator: her speech, and the lines it
+ * answers for). `said`: every text she wrote in the stage, in order — beside a tool call too, since her
+ * conversation shows each as hers. `seen_inputs`: platform lines in her view for the first time — after the
+ * last request of any earlier stage, before this stage's last request; DSH builds a request before the
+ * `asuna/stage` mark it gets, so a line written after that mark waits for the next stage to be seen. */
+export function stageView(events, token, turn) {
+  const marks = events.filter(event => event.type === 'asuna/stage' && event.data.operation === token);
+  const first = marks[0]?.seq ?? Infinity, lastRequest = marks.at(-1)?.seq ?? -1;
+  const before = events.findLast(event => event.type === 'asuna/stage' && event.seq < first)?.seq ?? -1;
+  const said = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn
+    && event.seq > first && !event.data.interrupted).map(event => textOf(event.data.message)).filter(text => text.trim());
+  const seen = events.filter(event => event.type === 'user/message' && event.seq > before && event.seq < lastRequest
+    && event.data.source?.kind === 'user' && event.data.source.channel && event.data.source.receipt)
+    .map(event => event.data.source.receipt);
+  return { said, seen_inputs: [...new Set(seen)] };
+}
+
 export class CognitionCore {
   constructor(ctx, config) {
     this.ctx = ctx;
@@ -567,10 +584,11 @@ export class CognitionCore {
       const state = this.state(agent.session.id);
       const stage = state.current;
       if (!stage) return;
-      const last = agent.session.snapshotEvents().filter(event => event.type === 'assistant/message'
-        && event.data.turn === turn).at(-1);
+      const events = agent.session.snapshotEvents();
+      const last = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn).at(-1);
       if (!last || last.data.interrupted) throw new Error('Native stage has no complete assistant output');
       const finishReason = state.finish === 'max-tokens' ? 'length' : 'stop';
+      const view = lane === 'character' ? stageView(events, stage.token, turn) : {};
       agent.session.append('asuna/stage-result', { operation: stage.token,
         turn, step: last.data.step, lane: stage.lane, phase: stage.phase,
         assistant_seq: last.seq, finish_reason: finishReason });
@@ -580,7 +598,7 @@ export class CognitionCore {
       const waiting = lane === 'character' ? this.next(agent.session.id, signal) : null;
       state.current = null;
       await this.worker.call('result', { token: stage.token,
-        result: this.result(stage, agent.id, last, finishReason) });
+        result: { ...this.result(stage, agent.id, last, finishReason), ...view } });
       if (waiting) {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);

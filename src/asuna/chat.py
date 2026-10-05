@@ -365,6 +365,10 @@ class Chat:
                     source = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
                     if source['policy_epoch'] != scene['policy_epoch']:
                         raise PermissionError('INPUT_POLICY_STALE')
+                    if source.get('absorbed_by'):
+                        # An earlier turn here had this line in view: she answered it there, or chose not to.
+                        input_state(self.app.store, episode, 'COMPLETE', result_state='SEEN_IN_TURN')
+                        continue
                     if event.get('channel'):
                         from .channels import route_for_scene, route_members
                         route = route_for_scene(self.app.config, event['channel']['id'], event['scene_id'])

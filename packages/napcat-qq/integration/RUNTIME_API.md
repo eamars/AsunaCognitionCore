@@ -117,6 +117,8 @@ The adapter sends only the returned text — plus the declared attachment, when 
 
 One reply may leave as several messages. When the persona model sets `speak.max_messages` above 1, a platform turn's context carries `speak_from_program`, a note telling her that her words go out as one message unless she writes the marker (`speak.split_marker`, default `[分条]`) where one should end. The core breaks the reply there, never inside a fenced code block and never on blank lines; pieces past the limit join the last message, and the local chat gets no note. Each piece is its own outbox item with `not_before` set by typing pace (`speak.chars_per_second`, clamped to `speak.min_gap_s`…`speak.max_gap_s`), and a piece is claimable only after the one before it settled: a failed or unknown piece cancels the rest (`CANCELLED_AFTER_FAILURE`). A picture rides on the first piece.
 
+What she says is every text she writes in the turn, in order — text written beside a tool call included, since her conversation shows each as hers; with more than one, each is its own message where the persona allows several, else they join as paragraphs. A received line joins her conversation as it arrives, so a running turn sees lines that arrive between its steps. A line belongs to the first turn that had it in view (it reached that turn's model request): when that turn ends with speech or a deliberate silence, every such line still queued for its own turn is marked `absorbed_by` that episode and completes as `SEEN_IN_TURN` without a model call, so one line is never answered twice. A line that arrives after the turn's last request is not in view and gets its own turn. Platform turns are told both rules (`speak_from_program`).
+
 ### Fetch attachment bytes
 
 ```http

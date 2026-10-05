@@ -15,6 +15,8 @@ class LaneResult:
     receipt: str | None=None
     diagnostic: dict | None=None
     delivery: dict | None=None     # what a native role notice left out because the session still shows it
+    said: list | None=None         # every text she wrote in the turn, in order (beside a tool call too)
+    seen_inputs: list | None=None  # platform lines in her view for the first time this turn (by input id)
 
 
 class Lane(Protocol):
@@ -27,6 +29,8 @@ class FakeTurn:
     calls: list = field(default_factory=list)      # [(tool name, args)]
     content: str = ''
     finish_reason: str = 'stop'
+    said: list = field(default_factory=list)       # texts she wrote beside her tool calls, before the final one
+    seen: list = field(default_factory=list)       # platform input ids that came into her view during the turn
 
 
 class FakeLane:
@@ -70,5 +74,7 @@ class FakeLane:
                 continue
             self.tool_results.append((operation,call_id,name,args,result,True))
             if conclude:
-                return LaneResult(content='',finish_reason=turn.finish_reason,tool_calls=made)
-        return LaneResult(content=turn.content,finish_reason=turn.finish_reason)
+                return LaneResult(content='',finish_reason=turn.finish_reason,tool_calls=made,
+                                  said=list(turn.said) or None,seen_inputs=list(turn.seen) or None)
+        return LaneResult(content=turn.content,finish_reason=turn.finish_reason,
+                          said=[*turn.said,turn.content] if turn.said else None,seen_inputs=list(turn.seen) or None)

@@ -9,12 +9,15 @@ question from the action brain. Its turn is one native DSH turn in her role sess
 
 The worker prepares the turn's context (context.py); the plugin composes it into the turn's first
 message. She calls `think` first, then the tools exposed for this turn (role_tools.py); each call is
-run here, on this thread, while the native turn waits for its result. Her last text without a tool
-call is what she says; it passes one check (answers.speech_problem) before the existing publication
-path sends it. Everything the old DECIDE/WRITE/SELF/REFLECT stages did is now a tool call.
+run here, on this thread, while the native turn waits for its result. Every text she writes in the
+turn — beside a tool call too — is what she says, in order (on a platform, each its own message); it
+passes one check (answers.speech_problem) before the existing publication path sends it. A platform line
+belongs to the first turn that had it in view: when that turn ends, the line gets no turn of its own
+(_absorb). Everything the old DECIDE/WRITE/SELF/REFLECT stages did is now a tool call.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import threading
 
@@ -204,9 +207,11 @@ class Coordinator:
         instruction=self._notice(ep)
         handler=lambda call_id,name,args:self.tools.call(ep['_id'],call_id,name,args)
         note=''
+        seen=[]
         for attempt in range(answers.REPAIRS+1):
             value=self._deliver(ep,operation if not attempt else operation+':fix-'+str(attempt),
                                 instruction if not attempt else note,names,handler,first=not attempt)
+            seen+=list(value.seen_inputs or ())
             ep=self.store.db.episodes.find_one({'_id':ep['_id']})
             if value.finish_reason not in answers.MODEL_FINISHES:
                 # Not her mistake (a transport error after DSH's retries, an interrupted turn).
@@ -215,16 +220,47 @@ class Coordinator:
             if kind=='consult' and ep.get('answer'):
                 return self._update(ep,state='COMMITTED')
             if ep.get('silent') and kind!='consult':
+                self._absorb(ep,seen)
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
-            issue=answers.speech_problem(value,thought=bool(ep.get('turn_thought')),consult=kind=='consult')
+            speech=self._speech(ep,value)
+            issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
+                                         consult=kind=='consult')
             if issue is None:
-                return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=value.content.strip()))
+                self._absorb(ep,seen)
+                return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))
             self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                 'request_refs':value.request_refs},ep['scope_key'])
             note=answers.turn_note(issue)
         raise ProtocolFailure('INVALID_TURN_OUTPUT: '+json.dumps({'problem':issue,'finish_reason':value.finish_reason,
             'request_refs':value.request_refs},ensure_ascii=False))
+
+    def _speech(self, ep, value):
+        """Every text she wrote this turn, in order; with more than one, each leaves as its own message where the
+        persona allows several (speak.max_messages), else they join as paragraphs of one."""
+        pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
+                if isinstance(text,str) and text.strip()]
+        if len(pieces)<=1:
+            return pieces[0] if pieces else ''
+        from .persona_model import effective
+        from .render import model_and_policy
+        from .rhythm import SPLIT_MARKER
+        model,policy=model_and_policy(self.store,ep['persona'])
+        if int(effective(model,'speak.max_messages',policy) or 1)>1:
+            return ('\n'+(effective(model,'speak.split_marker',policy) or SPLIT_MARKER)+'\n').join(pieces)
+        return '\n\n'.join(pieces)
+
+    def _absorb(self, ep, seen):
+        """Platform lines that came into her view for the first time during this turn are hers now: she answered
+        them here, or chose not to. Each still waiting for its own turn is marked, and the queue completes it
+        without one (chat.py) — the same line is never answered twice."""
+        own='in-'+ep['_id']
+        for input_id in dict.fromkeys(seen):
+            row=self.store.db.messages.find_one({'_id':input_id,'scene_id':ep['scene_id'],'direction':'inbound'})
+            if not row or input_id==own or row.get('absorbed_by') or row.get('ingress_state')!='ACCEPTED':
+                continue
+            self.store.put('messages',{**row,'absorbed_by':ep['_id']},expected=row['revision'],stream=ep['_id'])
+            self.store.audit(ep['_id'],'input.absorbed',{'input_id':input_id},ep['scope_key'])
 
     def _deliver(self, ep, operation, text, names, handler, *, first):
         """One delivery to her role session: the turn's notice, or the program's note in the same turn."""

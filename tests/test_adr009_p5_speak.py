@@ -144,11 +144,28 @@ def test_she_marks_where_a_message_ends_and_code_leaves_whole():
     assert split_speech('一[分条]二', SPLIT_MARKER, 1) == ['一[分条]二']                # one message: untouched
 
 
-def test_only_a_platform_turn_is_told_how_to_split(store):
+def test_only_a_platform_turn_is_told_how_its_words_leave(store):
     store.config['persona_model'] = model(3)
     _, local = turn(store, key='local', speech='好', channel=False)
     assert 'speak_from_program' not in local['context']
     channel_scene(store)
     _, qq = turn(store, key='qq', speech='好')
-    note = qq['context']['speak_from_program']['note']
-    assert '---split---' in note and '最多 3 条' in note and '代码块' in note
+    speak = qq['context']['speak_from_program']
+    assert '---split---' in speak['messages'] and '最多 3 条' in speak['messages'] and '代码块' in speak['messages']
+    assert '不会再单独叫你' in speak['new_lines'] and '工具调用旁边' in speak['sent']
+    store.config['persona_model'] = model(1)
+    _, one = turn(store, key='one-message', speech='好')
+    assert set(one['context']['speak_from_program']) == {'sent', 'new_lines'}
+
+
+def test_everything_she_wrote_in_the_turn_is_said(store):
+    channel_scene(store)
+    for count, texts in ((3, ['那必须的，被夸了我会更来劲。', '他教没教我不好说。']),
+                         (1, ['那必须的，被夸了我会更来劲。\n\n他教没教我不好说。'])):
+        store.config['persona_model'] = model(count)
+        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {})], '他教没教我不好说。', said=['那必须的，被夸了我会更来劲。'])])
+        event = {'event_id': 'said-%d' % count, 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你最近的回复好快！',
+                 'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-said-%d' % count}}
+        persist_input(store, event, managed=True)
+        ep = Coordinator(store, lane).ingest(event)
+        assert [r['text'] for r in outbound(store, ep['_id'])] == texts

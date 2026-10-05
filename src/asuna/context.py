@@ -611,13 +611,19 @@ class ContextBuilder:
         if phrasing:
             context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
-        messages=int(effective(model,'speak.max_messages',policy) or 1)
-        if scene.get('channel_id') and messages>1:
-            # On a platform her words may leave as a few messages, broken where she marks them (ADR-009 §11.1).
-            from .rhythm import SPLIT_MARKER
-            marker=effective(model,'speak.split_marker',policy) or SPLIT_MARKER
-            context['speak_from_program']={'note':f'这里说的话默认是一条消息。想像聊天那样分几条发，就在要断开的地方写 {marker}，'
-                f'最多 {messages} 条，多出来的并进最后一条；代码块里的 {marker} 不算，代码块总是整块发出。不用为了分条而分条。'}
+        if scene.get('channel_id'):
+            # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
+            speak={'sent':'你这回合写出来的每段话都会发出去，写在工具调用旁边的也算；不想说出口的放进 think。',
+                   'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
+                               '要回就在这回合一起回，它们不会再单独叫你一次。'}
+            messages=int(effective(model,'speak.max_messages',policy) or 1)
+            if messages>1:
+                # Her words may leave as a few messages, broken where she marks them (ADR-009 §11.1).
+                from .rhythm import SPLIT_MARKER
+                marker=effective(model,'speak.split_marker',policy) or SPLIT_MARKER
+                speak['messages']=(f'默认是一条消息。想像聊天那样分几条发，就在要断开的地方写 {marker}，最多 {messages} 条，'
+                    f'多出来的并进最后一条；分开写的几段话也各是一条。代码块里的 {marker} 不算，代码块总是整块发出。不用为了分条而分条。')
+            context['speak_from_program']=speak
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label

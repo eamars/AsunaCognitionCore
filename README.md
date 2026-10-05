@@ -133,12 +133,6 @@ one), and a persona package. Optional: WSL with bubblewrap for the sandbox, and 
 - **For developers:** [RUNTIME_API.md](RUNTIME_API.md) describes the channel and tool contracts. Design decisions
   are kept in [docs/development_plans](docs/development_plans/README.md).
 
-## Status
-
-Asuna runs every day as the home of the author's first character. Version 0.2.0 is the first release that installs
-into a standard DeepSeek Harness profile. It is a personal project shared in the open, so expect it to keep
-changing.
-
 ## License
 
 The core and the channel packages are licensed under the [GNU General Public License v3.0 only](LICENSE). Persona

@@ -162,11 +162,18 @@ def test_T4_9_persona_job_run_only_for_development_tasks(store):
     with pytest.raises(Refused, match='WORKSPACE_NOT_AUTHORIZED'):
         coordinator.tools.call(ep['_id'], 'forced-delegate', 'delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})
     assert not store.db.tasks.find_one({'scene_id': 'dm-b'})
-    # The owner's local scene without a development profile delegates, but its task has no persona jobs.
+    # ADR-011 §6.1: development (and with it persona jobs) comes with the owner's private chat only while
+    # self-development is enabled; with it off, the owner's own task has no persona jobs.
+    store.config['self_development'] = {**store.config.get('self_development', {}), 'enabled': False}
     lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})], '交给行动脑了。')])
     ep = Coordinator(store, lane).ingest(event('job-a'))
     task = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
     assert task['development_grant'] is False and 'persona_job_run' not in task['allowed_capabilities']
+    store.config['self_development']['enabled'] = True
+    lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})], '交给行动脑了。')])
+    ep = Coordinator(store, lane).ingest(event('job-b'))
+    task = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
+    assert task['development_grant'] is True and 'persona_job_run' in task['allowed_capabilities']
     assert PERSONA_JOB_TOOLS[0]['name'] == 'persona_job_run'
     from asuna.persona_jobs import tool_result
     run = JobRunner(store, 'P1', launcher=DirectLauncher()).run('migrate', dry_run=False,

@@ -103,3 +103,16 @@ def test_revision_sources_keep_interpretations_distinct_and_private_sources_hidd
         {'$set': {'source_ids': ['visible', 'private']}})
     detail = NativeMemory(worker, 'role').detail('head:relationship:qq:11|scene:one')
     assert [(s['_id'], s['category']) for s in detail['sources']] == [('visible', 'character_interpretation')]
+
+
+def test_her_idea_notebook_is_shown_only_in_an_owner_private_view(view):
+    store, worker, binding = view
+    store.db.ideas.insert_one({'_id': 'idea-1', 'persona': 'p', 'idea': '回复可以更短', 'why': '有人嫌长', 'state': 'adopted',
+                               'source': {'by': 'character', 'scene_id': binding['scene_id']}, 'created_at': '2026-10-05T00:00:00+00:00',
+                               'decisions': [{'decision': 'adopt', 'why': '值得做', 'at': '2026-10-05T01:00:00+00:00'}]})
+    assert NativeMemory(worker, 'role').page('ideas')['rows'] == [], 'a group conversation never shows her notebook'
+    store.config['chat'].update(scene_id=binding['scene_id'], person_id=binding['person_id'])   # now the owner's own
+    rows = NativeMemory(worker, 'role').page('ideas')['rows']
+    assert [(row['id'], row['title']) for row in rows] == [('idea:idea-1', '回复可以更短')]
+    detail = NativeMemory(worker, 'role').detail('idea:idea-1')
+    assert detail['status'] == 'idea.adopted' and {'key': 'memory.idea.decision.adopt', 'params': {'why': '值得做'}} in detail['body']

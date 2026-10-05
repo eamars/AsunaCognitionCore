@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | **实施中**（M0–M3 已完成，见 §13）。owner 已回答两轮共七个问题（§12） |
+| 状态 | **实施中**（M0–M4 已完成，M5 验收进行中，见 §13）。owner 已回答两轮共七个问题（§12） |
 | 日期 | 2026-10-05 |
 | 分支 | `claude/adr-011-brain-tools`（自 main `985171f2`） |
 | 基线 | 运行时固定 `@deepseek-ai/dsh` **0.2.0-rc.2** |
@@ -442,3 +442,10 @@ owner 的回答（两轮）：
 - **会话标题：** 会话标题由 DSH 原样显示，无法跟随界面语言，所以只用内容：人格名、群名或对方名、任务标题，不再加「本地私聊」「群聊」「行动脑 ·」这类界面词。侧栏的工作区名（Local、QQ）仍是固定的，留作后续。
 - **记忆页：** 服务端只发 locale 的键和参数，文字在客户端的 `asuna` 命名空间（zh、en）里；她的内容（文档、记忆、人格自己给心情起的词）照原样。
 - **测试：** 角色回合的用例按工具重写（`tests/test_adr011_turns.py` 是基准写法），离线自检同步更新；`decide_delta` 相关用例随协议删除。
+
+### M4（2026-10-05）
+- **开发工具的来源：** 统一成一条规则（`grants.development_granted`）：自我开发开启时，只有 owner 私聊（本机私聊或 owner 的 QQ 私聊）里 owner 自己发的消息、她的自我改进回合，以及这两种委托的结果回合，交出的事才带开发工具。presence、结算、定时这些内部回合不带。开发工具在执行时也只认 owner 私聊的任务。
+- **想法本：** `ideas` 集合。两个脑都能 `note_idea`；读和决定只在自我改进回合（`ideas_from_program` + `review_idea`），或 owner 在私聊里叫她整理时（`read_ideas` + `review_idea`）。决定和理由留在每条想法的 `decisions` 里；记忆页的 owner 私聊视图多了「改进想法」一类。
+- **`update_self`：** 放宽到 owner 私聊回合（与写文档同一道门槛）。
+- **核心技能：** `packages/cognition-core/skills/asuna-self-improvement`，随认知核发布，owner 私聊里的行动任务都能发现它；人格包里 `asuna-offline-selfchecks` 与人格无关的部分已并入。人格包里的旧技能留给她在 M5 自己更新。
+- **启动底线：** ① `persona.js`、`channel.js`、`settings.js` 列入保护；② 发布探针在子进程里真正 import 插件入口（找不到的包从当前宿主的安装里解析），并读 `persona-model.json`（人格 id 不能改）和 `cordis.patch.yml`；③ 人格包和通道包同样走这道检查；④ 启动器每次启动时给「已安装但还没确认运行」的选择计数，超过两次仍没起来就改回上一个 ACTIVE 选择并重新安装那个包，不动源码。

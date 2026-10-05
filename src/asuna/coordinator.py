@@ -402,13 +402,13 @@ class Coordinator:
         from .tasks import WORKSPACE_TOOLS, ACTION_DSH_CAPABILITIES
         from .vision import route_filtered_tool_names
         from .integration import event_granted, INTEGRATION_TOOLS
+        from .grants import development_granted
         source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}
         event=source.get('event',{})
-        local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
-        development=(ep.get('episode_kind')=='self_development' or
-            (event.get('development_profile')=='owner' and local and not event.get('channel')) or
-            ep.get('episode_kind')=='task_feedback' and bool(
-                (self.store.db.tasks.find_one({'_id':ep.get('task_id')}) or {}).get('development_grant')))
+        scene=self.store.db.scenes.find_one({'_id':ep['scene_id']}) or {'_id':ep['scene_id']}
+        development=ep.get('episode_kind')!='consult' and development_granted(self.store,scene,
+            {**event,'episode_kind':ep.get('episode_kind'),'task_id':ep.get('task_id'),'person_id':ep['person_id']},
+            (ep.get('manifest') or {}).get('session_class'))
         capabilities=list(WORKSPACE_TOOLS)
         if development:
             from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS

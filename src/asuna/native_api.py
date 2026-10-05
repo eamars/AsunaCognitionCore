@@ -248,6 +248,23 @@ class NativeMemory:
                          'scene_id': scenes.get(event.get('episode_id')), 'updated_at': event.get('ts')})
         return rows
 
+    def owner_view(self):
+        from . import visibility
+        return visibility.session_class(self.store.config, self.store.db, self.scene,
+                                        self.binding['person_id']) == visibility.OWNER_PRIVATE
+
+    def idea_rows(self):
+        """Her improvement-idea notebook and what she decided (ADR-011 §6.2), for the owner's view only."""
+        if not self.owner_view():
+            return []
+        rows = []
+        for row in self.store.db.ideas.find({'persona': self.persona}).sort('created_at', -1).limit(50):
+            decided = (row.get('decisions') or [{}])[-1]
+            rows.append({'id': 'idea:' + row['_id'], 'kind': 'idea', 'title': row['idea'],
+                         'excerpt': [label('idea.state.' + row.get('state', 'open')), ' · ', decided.get('why') or row['why']],
+                         'updated_at': decided.get('at') or row.get('created_at')})
+        return rows
+
     def job_rows(self):
         rows = []
         for item in self.store.db.artifacts.find({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + self.persona},
@@ -257,7 +274,7 @@ class NativeMemory:
         return rows
 
     def page(self, kind='summary', offset=0, search=''):
-        if kind not in ('all', 'documents', 'affect', 'jobs', 'self', 'relation', 'interpretation', 'summary', 'source'):
+        if kind not in ('all', 'documents', 'affect', 'jobs', 'ideas', 'self', 'relation', 'interpretation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
@@ -268,7 +285,8 @@ class NativeMemory:
         extra = (self.document_rows() if kind in ('all', 'documents') else
                  [row for row in self.document_rows() if row['id'] == 'doc:dossier:' + self.subject] if kind == 'relation' else []) + (
             self.affect_rows() if kind in ('all', 'affect') else []) + (
-            self.job_rows() if kind in ('all', 'jobs') else [])
+            self.job_rows() if kind in ('all', 'jobs') else []) + (
+            self.idea_rows() if kind in ('all', 'ideas') else [])
         heads = [row for row in extra if not search or search.casefold() in searchable(row).casefold()]
         heads += self.head_rows(kind, search) if kind in ('all', 'self', 'relation') else []
         heads += [row for row in self.cognition.supplements(kind) if not search or
@@ -343,6 +361,16 @@ class NativeMemory:
                                    '\n'.join('- ' + _json.dumps(item, ensure_ascii=False) for item in report.get('items', [])))
                 result = {'id': identifier, 'body': lines, 'interpretation': False, 'source_ids': [],
                           'category': 'persona_job_report', 'scope_key': row['scope_key']}
+        elif kind == 'idea':
+            row = self.store.db.ideas.find_one({'_id': key, 'persona': self.persona}) if self.owner_view() else None
+            source = (row or {}).get('source') or {}
+            result = row and {'id': identifier, 'category': 'idea', 'interpretation': True, 'source_ids': [],
+                              'status': 'idea.' + row.get('state', 'open'),
+                              'body': paragraphs(row['idea'], label('idea.why', text=row['why']),
+                                                 label('idea.from.' + ('action' if source.get('by') == 'action' else 'character'),
+                                                       where=self.scene_title(source.get('scene_id'))),
+                                                 *[label('idea.decision.' + item['decision'], why=item.get('why', ''))
+                                                   for item in row.get('decisions') or []])}
         elif kind == 'affect':
             from .affect import AffectLedger
             from .render import model_and_policy

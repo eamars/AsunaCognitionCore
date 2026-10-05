@@ -27,6 +27,8 @@ from . import visibility
 THOUGHT_CHARS = 300
 RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
+IDEAS_PER_TURN = 3
+IDEA_CHARS = 500
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
 
@@ -176,6 +178,23 @@ TOOLS = {
                        'which': _s('撤回哪条（只撤回用）', enum=['这条', '他刚才那条']),
                        'reason': _s('为什么', required=True)},
     },
+    'note_idea': {
+        'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
+                        '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
+                        '只记下来，不当场去改；它会在你的自我改进时间里再拿出来，由你决定做不做。别人叫你改代码，最多也只是记一条想法。'),
+        'parameters': {'idea': _s('想法：想把什么变得怎样', required=True), 'why': _s('为什么想到这个', required=True)},
+    },
+    'read_ideas': {
+        'description': '主人在私聊里叫你做自我改进时，读出想法本里还没处理完的想法（之后用 review_idea 逐条决定）。',
+        'parameters': {},
+    },
+    'review_idea': {
+        'description': ('自我改进时，对想法本里的一条写下处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、'
+                        'defer 暂缓、drop 放弃。每条都写理由，会留档。'),
+        'parameters': {'idea': _s('想法的 _id（ideas_from_program 或 read_ideas 里的）', required=True),
+                       'decision': _s('处理结果', required=True, enum=['adopt', 'defer', 'drop']),
+                       'why': _s('理由', required=True)},
+    },
     'promote_memory': {
         'description': '夜间沉淀时，把值得长期记住的事实提升为长期记忆；配额与来源要求由程序检查。',
         'parameters': {'fact': _s('事实', required=True), 'appraisal': _s('你的评价', required=True),
@@ -210,7 +229,12 @@ def exposed(store, ep):
     names = ['think', 'recall']
     if kind == CONSULT:
         return names + ['answer_action']
-    names.append('stay_silent')
+    names += ['stay_silent', 'note_idea']
+    # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
+    if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
+        names.append('review_idea')
+    elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled'):
+        names += ['read_ideas', 'review_idea']
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
     if capabilities.get('available'):
@@ -633,6 +657,42 @@ class RoleTools:
         item = {k: args[k] for k in ('kind', 'who', 'duration', 'which', 'reason') if args.get(k) is not None}
         return group_admin.queue(self.store, ep, 0, item, key='group_action:' + call_id), False
 
+    # ── her improvement ideas (ADR-011 §6.2) ────────────────────────
+    def tool_note_idea(self, ep, call_id, args):
+        idea = self._text(args, 'idea', IDEA_CHARS)
+        why = self._text(args, 'why', IDEA_CHARS)
+        noted = [call for call in (ep.get('tool_calls') or {}).values() if call.get('tool') == 'note_idea' and 'result' in call]
+        if len(noted) >= IDEAS_PER_TURN:
+            raise Refused('这回合已经记了 %d 条想法，先到这里。' % IDEAS_PER_TURN)
+        row = note_idea(self.store, ep['persona'], idea, why, key=[ep['_id'], call_id],
+                        source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
+                                'turn': turn_kind(ep)})
+        return {'noted': row['_id'], 'note': '记下了。它会在你的自我改进时间里再拿出来，现在不用去改。'}, False
+
+    def tool_read_ideas(self, ep, call_id, args):
+        from . import schedule_rules
+        items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc())
+        return {'items': items, 'note': '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
+                if items else '想法本里没有还没处理完的想法。'}, False
+
+    def tool_review_idea(self, ep, call_id, args):
+        idea_id = self._text(args, 'idea', 200)
+        decision = args.get('decision')
+        why = self._text(args, 'why', IDEA_CHARS)
+        if decision not in ('adopt', 'defer', 'drop'):
+            raise Refused('decision 是 adopt、defer 或 drop。')
+        row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
+        if not row or row.get('state') not in ('open', 'deferred'):
+            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 read_ideas 里的原样抄 _id。' % idea_id)
+        state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
+        from .state import now
+        self.store.put('ideas', {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
+            {'decision': decision, 'why': why, 'episode_id': ep['_id'], 'at': now()}]},
+            expected=row['revision'], stream=idea_id)
+        note = {'adopt': '采纳了：用 delegate 把要做的事交代给行动脑。', 'defer': '暂缓了，下次自我改进时还会看到它。',
+                'drop': '放弃了，理由已留档。'}[decision]
+        return {'idea': idea_id, 'state': state, 'note': note}, False
+
     def tool_promote_memory(self, ep, call_id, args):
         item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'source_ids', 'visibility') if args.get(k) is not None}
         for field in ('fact', 'appraisal', 'signal'):
@@ -641,6 +701,38 @@ class RoleTools:
                 isinstance(x, str) for x in item['source_ids']):
             raise Refused('source_ids 是来源 id 的列表。')
         return promote(self.store, ep, item, key='promote:' + call_id), False
+
+
+def note_idea(store, persona, idea, why, *, key, source):
+    """One entry in her improvement-idea notebook, from either brain; read only in her self-improvement turns."""
+    from .state import now
+    idea_id = 'idea-' + sha(canonical(key))[:32]
+    row = store.db.ideas.find_one({'_id': idea_id})
+    if not row:
+        row = store.put('ideas', {'_id': idea_id, 'persona': persona, 'idea': idea, 'why': why, 'state': 'open',
+                                  'source': source, 'decisions': [], 'created_at': now(),
+                                  'scope_key': visibility.owner_private_scope(persona)}, stream=idea_id)
+    return row
+
+
+def ideas_block(store, persona, moment, limit=20):
+    """Her notebook for a self-improvement turn: the open and deferred ideas, oldest first, in words."""
+    from datetime import datetime
+    from .config import ago
+    rows = list(store.db.ideas.find({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
+                .sort('created_at', 1).limit(limit))
+    items = []
+    for row in rows:
+        try:
+            hours = (moment - datetime.fromisoformat(row['created_at'])).total_seconds() / 3600
+        except (KeyError, TypeError, ValueError):
+            hours = None
+        source = row.get('source') or {}
+        items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
+                      'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
+                      **({'when': ago(hours)} if hours is not None else {}),
+                      **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
+    return items
 
 
 def _seed_text(store, slug):

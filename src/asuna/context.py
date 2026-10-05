@@ -378,6 +378,15 @@ class ContextBuilder:
                 'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
+        if event.get('episode_kind') == 'self_development':
+            # ADR-011 §6.2: ideas from anywhere are read and decided only here.
+            from .role_tools import ideas_block
+            ideas=ideas_block(self.store,persona,moment)
+            if ideas:
+                context['ideas_from_program']={'items':ideas,
+                    'note':'这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 review_idea 写下处理结果'
+                           '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 交代行动脑去做，它会带开发工具，'
+                           '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。'}
         if event.get('episode_kind') in ('self_development', 'presence'):
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']
@@ -507,14 +516,11 @@ class ContextBuilder:
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
             'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-        development = (event.get('episode_kind') == 'self_development' or
-            event.get('development_profile') == 'owner' or
-            event.get('episode_kind') == 'task_feedback' and bool(
-                (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
-        if development and (scene['_id'],event['person_id']) == (
-                self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
+        from .grants import development_granted
+        if development_granted(self.store, scene, event, session_class):
             context['action_capabilities_from_program']['development'] = {
-                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。'}
+                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
+                'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')

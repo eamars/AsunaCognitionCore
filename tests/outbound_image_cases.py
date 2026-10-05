@@ -1409,7 +1409,9 @@ def the_local_scene_keeps_its_own_images_readable():
     assert outbound_media.offer(store, store.config, local, 'owner_private', 'owner-p') is None
     assert outbound_media.target_allowed(store.config, local, 'owner_private')[1] == \
         'scene_has_no_channel_route'
-    # 同一份字节再导一次是两份 artifact（不去重），清单里新的在前
+    # 同一份字节再导一次是两份 artifact（不去重），清单里新的在前（Windows 时钟粒度粗：隔开一点，免得两次同一时刻）
+    import time
+    time.sleep(0.05)
     again = import_bytes(store, LOCAL_SCOPE, PNG)[0]['artifact']
     assert again['artifact_id'] != art['artifact_id']
     order = [item['artifact_id'] for item in outbound_media.image_artifacts(store, LOCAL_SCOPE)]

@@ -33,3 +33,21 @@ test('a restart can install the selected candidate without a global pnpm: the DS
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('ADR-011 §6.4: a selection that never comes up returns to the previous running one; the source stays', async () => {
+  const { advanceSelection, MAX_UNCONFIRMED_STARTS } = await import('../../../tools/asuna-launch.mjs');
+  const previous = { candidate: 'old', artifact: 'old.tgz', sha256: 'aa', state: 'ACTIVE', packageRoot: 'old-root' };
+  const selection = { projects: {
+    core: { candidate: 'new', artifact: 'new.tgz', sha256: 'bb', state: 'APPLIED', published_at: 't', previous },
+    persona: { candidate: 'p', artifact: 'p.tgz', state: 'ACTIVE' },
+    first: { candidate: 'f', artifact: 'f.tgz', state: 'APPLIED' } } };
+  for (let start = 1; start <= MAX_UNCONFIRMED_STARTS; start++) assert.deepEqual(advanceSelection(selection), []);
+  assert.equal(selection.projects.core.boots, MAX_UNCONFIRMED_STARTS);
+  const notes = advanceSelection(selection, 'now');
+  assert.match(notes[0], /core: returned to the previous running selection/);
+  assert.match(notes[1], /first: never started, and there is no earlier running selection/);
+  assert.deepEqual(selection.projects.core, { ...previous, state: 'HOST_RESTART_REQUIRED', reverted_at: 'now',
+    reverted_from: { candidate: 'new', sha256: 'bb', published_at: 't', starts: MAX_UNCONFIRMED_STARTS + 1 } },
+    'the launcher installs the previous artifact again; nothing else changes');
+  assert.equal(selection.projects.persona.boots, undefined, 'a running selection is left alone');
+});

@@ -133,7 +133,8 @@ class NativeLane:
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
                 'system_sha256': sha(system.encode()),
-                'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'])],
+                'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'],
+                                                                              self.store.db)],
             })
             scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
@@ -890,8 +891,10 @@ class NativeDevelopmentBridge:
         self.worker, self.config, self.store = worker, config, store
 
     def call(self, task, tool, args):
-        if not task.get('development_grant') or (task['scene_id'],task['requester_id']) != (
-                self.config['chat']['scene_id'],self.config['chat']['person_id']):
+        from . import visibility
+        scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+        if not task.get('development_grant') or visibility.session_class(
+                self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
             raise Denied('DEVELOPMENT_GRANT_REQUIRED')
         if tool == 'development_database_read':
             from .state import COLLECTIONS

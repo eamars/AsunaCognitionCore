@@ -67,6 +67,9 @@ def require_current_feedback(store, episode):
 ASK_TOOL = {'name':'ask_character',
     'description':'Ask the character who gave you this task for her judgment (what she meant, what she prefers, a decision that is hers), and wait for her answer. Not a public reply, new task or permission grant. Ordinary implementation details and errors are yours to handle; do not ask before every step.',
     'parameters':{'question':{'type':'string','required':True}, 'context':{'type':'string','description':'Material she needs to judge, briefly'}}}
+NOTE_IDEA_TOOL = {'name':'note_idea',
+    'description':'Note an idea for improving her (a capability, a skill, a way of working) in her improvement notebook, in your own words, with why. Use it when something you see while working (including on the web) could be better: do not change it now. She reviews ideas in her self-improvement time. No one else\'s personal data.',
+    'parameters':{'idea':{'type':'string','required':True},'why':{'type':'string','required':True}}}
 PROGRESS_TOOL = {'name':'report_progress',
     'description':'Leave her a short progress note on a long task, without waiting: she reads it on her next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
     'parameters':{'note':{'type':'string','required':True}}}
@@ -90,6 +93,7 @@ WORKSPACE_TOOLS.append(HISTORY_TOOL)
 WORKSPACE_TOOLS.append(DIGEST_TOOL)
 WORKSPACE_TOOLS.append(ASK_TOOL)
 WORKSPACE_TOOLS.append(PROGRESS_TOOL)
+WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
@@ -277,6 +281,14 @@ class ToolBroker:
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
                 with self.service.lock:self.service.valid(task)
+            elif tool=='note_idea':
+                from .role_tools import note_idea, IDEA_CHARS
+                for field in ('idea','why'):
+                    if not isinstance(args.get(field),str) or not args[field].strip() or len(args[field])>IDEA_CHARS:
+                        raise ValueError('NOTE_IDEA_'+field.upper()+'_REQUIRED')
+                row=note_idea(self.store,self.store.config['chat']['persona'],args['idea'].strip(),args['why'].strip(),
+                    key=[task['_id'],key],source={'by':'action','task_id':task['_id'],'scene_id':task['scene_id']})
+                result={'noted':row['_id'],'note':'记下了；她会在自我改进时间里决定做不做。'}
             elif tool=='report_progress':
                 note=args.get('note')
                 if not isinstance(note,str) or not note.strip() or len(note)>4000:raise ValueError('PROGRESS_NOTE_REQUIRED')

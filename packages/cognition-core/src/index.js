@@ -21,6 +21,8 @@ import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute } from './settings.js';
 import z from '@deepseek-ai/schemastery';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
@@ -107,7 +109,10 @@ export class CognitionCore {
   }
 
   async skillDirectories(persona, channels) {
-    return [...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
+    // Core's own persona-agnostic skills (asuna-self-improvement), from the core artifact that is running.
+    const core = path.join((await this.ctx.asunaFloor.effective('core'))?.packageRoot
+      ?? fileURLToPath(new URL('../', import.meta.url)), 'skills');
+    return [core, ...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
   }
 
   ready() {

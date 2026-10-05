@@ -74,14 +74,14 @@ Save validates model catalog references, business bindings and the existing data
 
 The persistent writable candidate is the selected persona package by default. Use `project="core"` for the authorized cognition source. Native skills discovery reads published resources. Skills, adapters and code change only through the development tools and take effect only through `development_publish`; no sandbox mounts them writable, and `integration_start` runs only the published adapter. Ordinary QQ identities do not acquire the local owner's source or credential access.
 
-`development_files` is paged. Read/write/run act on the selected project; commands retain the configured isolated workspace execution boundary. Publication freezes a candidate, checks source revisions, performs minimum structural/import checks, packs an immutable artifact and keeps lineage and actual failure evidence. The current source is never imported halfway through an edit.
+`development_files` is paged. Read/write/run act on the selected project; commands retain the configured isolated workspace execution boundary. Publication freezes a candidate, checks source revisions, checks syntax, imports the plugin entry in a child process and reads the persona model and Cordis patch, packs an immutable artifact and keeps lineage and actual failure evidence. The current source is never imported halfway through an edit.
 
 - `BOOT_FAILED` or `PACK_FAILED`: the candidate and reason remain available; nothing new was activated.
 - `APPLIED`: an artifact is selected; successful loading is not yet confirmed.
 - `ACTIVE`: the corresponding resources or worker loaded successfully.
 - `HOST_RESTART_REQUIRED`: JS, composition or dependency changes need an explicit Host restart to install the selected package. The launcher records installer failure while keeping the installed native repair entry available.
 
-Persona resources apply without restarting the Host. Python updates replace only the worker at an idle boundary. No automatic rollback substitutes an earlier version for a failed forward update. Publication feedback retains its original task/goal association.
+Persona resources apply without restarting the Host. Python updates replace only the worker at an idle boundary. A selection that never confirms running after more than two starts returns to the previous ACTIVE selection at the next start (the launcher reinstalls that artifact); sources are never rolled back. Publication feedback retains its original task/goal association.
 
 **Asuna recovery** is a native preset with project tools backed by the stable publication floor, independent of the mutable worker. It can inspect a failed candidate and publish a forward correction when Python cannot import. It does not grant database mutation or platform messages. The launcher, publication floor, recovery component and persistence boundary are protected from these project writes. Native Web and ordinary sessions remain available during worker failure.
 

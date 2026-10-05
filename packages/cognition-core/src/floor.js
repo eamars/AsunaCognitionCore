@@ -13,10 +13,41 @@ export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const hash = data => createHash('sha256').update(data).digest('hex');
 const excluded = new Set(['.runtime', '.venv', '.git', 'node_modules', '__pycache__', '.pytest_cache', 'reports']);
+// The floor and everything it imports (ADR-011 §6.4): persona.js and channel.js for floor.js,
+// settings.js for recovery.js. A publication can never replace what keeps the Host bootable.
+const FLOOR_FILES = ['floor.js', 'recovery.js', 'persistence.js', 'persona.js', 'channel.js', 'settings.js'];
 const protectedPaths = new Set(['start-asuna.cmd', 'tools/asuna-launch.mjs',
-  'packages/cognition-core/src/floor.js', 'packages/cognition-core/src/recovery.js',
-  'packages/cognition-core/src/persistence.js', 'packages/cognition-core/runtime-manifest.json',
-  'src/floor.js', 'src/recovery.js', 'src/persistence.js', 'runtime-manifest.json']);
+  ...FLOOR_FILES.map(name => 'packages/cognition-core/src/' + name), 'packages/cognition-core/runtime-manifest.json',
+  ...FLOOR_FILES.map(name => 'src/' + name), 'runtime-manifest.json']);
+// A child process that really imports a plugin entry, resolving bare packages from this Host's own
+// installation when the frozen artifact has none of its own, and reads the package's structured files.
+const PROBE_LOADER = `let fallback;
+export async function initialize(data) { fallback = data; }
+export async function resolve(specifier, context, next) {
+  try { return await next(specifier, context); }
+  catch (error) {
+    if (/^[./]|^[a-z][a-z0-9+.-]*:/i.test(specifier)) throw error;
+    return next(specifier, { ...context, parentURL: fallback });
+  }
+}`;
+const PROBE = `import { register } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import fs from 'node:fs/promises';
+const [entry, fallback, model, patch, persona] = process.argv.slice(1);
+register('data:text/javascript,' + encodeURIComponent(process.env.ASUNA_PROBE_LOADER), import.meta.url, { data: fallback });
+const loaded = await import(pathToFileURL(entry).href);
+if (typeof loaded.apply !== 'function') throw new Error('PLUGIN_ENTRY_HAS_NO_APPLY: ' + entry);
+if (model !== '-') {
+  const value = JSON.parse(await fs.readFile(model, 'utf8'));
+  if (typeof value?.persona?.id !== 'string' || !value.persona.id) throw new Error('PERSONA_MODEL_HAS_NO_ID');
+  if (persona !== '-' && value.persona.id !== persona) throw new Error('PERSONA_MODEL_ID_CHANGED: ' + value.persona.id);
+}
+if (patch !== '-') {
+  const { parse } = await import('yaml');
+  const value = parse(await fs.readFile(patch, 'utf8'));
+  if (value !== null && typeof value !== 'object') throw new Error('CORDIS_PATCH_NOT_A_DOCUMENT');
+}
+console.log('Plugin entry imported; ' + (model !== '-' ? 'persona model, ' : '') + (patch !== '-' ? 'cordis patch, ' : '') + 'structure valid.');`;
 const privateName = name => /(^|\/)(\.env(?:\..*)?|.*\.local\.json(?:\..*)?|local\.json(?:\..*)?|credentials\.json|secrets\.json|.*\.(?:key|pem|p12|pfx))$/i.test(name);
 const inside = (root, value) => { const relative = path.relative(root, value); return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative); };
 async function exists(file) { try { await fs.access(file); return true; } catch { return false; } }
@@ -99,7 +130,7 @@ export class PublicationFloor {
     for (const [id, value] of Object.entries(selected.projects)) {
       if (projectId && id !== projectId) continue;
       if (value.state !== 'APPLIED' && value.state !== 'ACTIVE') continue;
-      value.state = 'ACTIVE'; value.activated_at ??= new Date().toISOString();
+      value.state = 'ACTIVE'; value.activated_at ??= new Date().toISOString(); delete value.boots;
       selected.active[id] = value; activated.push(value);
     }
     await atomic(this.activationFile, selected); return activated;
@@ -238,6 +269,9 @@ export class PublicationFloor {
       receipt_id: 'self-publish-' + identity.slice(0, 32), origin,
       published_at: new Date().toISOString(), boot_probe: prepared.boot_probe };
     // No rollback pointer. The next successful publication advances this record.
+    // The last selection that actually ran: the launcher returns to it when this one never starts (§6.4).
+    const previous = selected.active?.[project.id];
+    if (previous) { const { previous: _older, boots: _boots, ...kept } = previous; value.previous = kept; }
     selected.projects[project.id] = value; await atomic(this.activationFile, selected);
     // Updating authorized source does not alter the already loaded artifact.
     for (const name of deleted) await fs.unlink(path.join(project.source, name));
@@ -281,6 +315,21 @@ export class PublicationFloor {
       if (name.endsWith('.js') || name.endsWith('.mjs')) {
         probe = await run(process.execPath, ['--check', file]); if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
       }
+    }
+    // Syntax alone is not a start: import the plugin entry as the Host would, and read its structure.
+    const manifest = await json(path.join(target, 'package.json'), null);
+    if (!manifest) return { packageRoot: target, workerPath,
+      boot_probe: { exit_code: 1, stdout: '', stderr: 'PACKAGE_JSON_MISSING_OR_INVALID' } };
+    const main = typeof manifest.exports === 'string' ? manifest.exports : manifest.exports?.['.'] ?? manifest.main;
+    if (typeof main === 'string') {
+      const optional = async name => await exists(path.join(target, name)) ? path.join(target, name) : '-';
+      // A persona's id is her state's identity: a candidate keeps the id its source already has.
+      const persona = (await json(path.join(project.source, 'persona-model.json'), null))?.persona?.id ?? '-';
+      const imported = await run(process.execPath, ['--input-type=module', '-e', PROBE, path.resolve(target, main),
+        new URL('../package.json', import.meta.url).href, await optional('persona-model.json'), await optional('cordis.patch.yml'),
+        persona], { cwd: target, env: { ...process.env, ASUNA_PROBE_LOADER: PROBE_LOADER } });
+      if (imported.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: imported };
+      probe = { ...imported, stdout: imported.stdout + probe.stdout };
     }
     if (!workerPath && await exists(path.join(target, 'python'))) {
       // A channel plugin's Python must at least parse before it can be published.

@@ -1,4 +1,5 @@
 """Workspace mode contracts; C2 live evidence is separate from these test doubles."""
+import shutil
 import uuid
 
 import pytest
@@ -15,8 +16,19 @@ THINK = ('think', {'thought': '先读原文再写，原文要保留。'})
 BRIEF = '根据 notes/source.txt 另写一份便条；保留原文，不改原文。'
 
 
+CREATED = []
+
+
+@pytest.fixture(autouse=True)
+def remove_workspaces():
+    yield
+    while CREATED:
+        shutil.rmtree(CREATED.pop(), ignore_errors=True)
+
+
 def setup_workspace(store):
     work = ROOT / '.runtime/work' / ('workspace-test-' + uuid.uuid4().hex)
+    CREATED.append(work)
     (work / 'notes').mkdir(parents=True)
     (work / 'notes/source.txt').write_text('原文保持不变', encoding='utf-8')
     store.config.update(task_mode='workspace', chat={**store.config['chat'], 'scene_id': 'dm-a', 'person_id': 'A', 'workspace': str(work), 'read_only_paths': ['notes']})

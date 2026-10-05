@@ -1,4 +1,5 @@
 """Real namespace/lifecycle contracts; fake model only for task authorization."""
+import shutil
 import uuid
 
 import pytest
@@ -28,10 +29,12 @@ def profile(scene='local', person='owner'):
 
 @pytest.fixture
 def runner():
-    value = IntegrationRunner(profile(), root=ROOT/'.runtime/integration'/('test-'+uuid.uuid4().hex))
+    root = ROOT/'.runtime/integration'/('test-'+uuid.uuid4().hex)
+    value = IntegrationRunner(profile(), root=root)
     yield value
     if value.lease: value.call('integration_stop', {})
     value.close()
+    shutil.rmtree(root, ignore_errors=True)
 
 
 def logs(value):

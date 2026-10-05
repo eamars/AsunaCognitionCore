@@ -93,6 +93,24 @@ def guard_test_run(adapter, endpoints, config=None):
     return adapter, endpoints
 
 
+READ_ONLY_REQUESTS = ('GET *', 'HEAD *')
+
+
+def guard_read_only(endpoints):
+    """An endpoint the owner marked read_only is read-only in every run: its relay passes GET and HEAD only.
+
+    With `tls` the relay also speaks TLS to the device, so a run reads an HTTPS service as plain HTTP from its
+    relay port (the relay must see the request to judge it). The Host header is the device's address.
+    """
+    endpoints = [dict(e) for e in endpoints]
+    for e in endpoints:
+        if e.get('read_only'):
+            e['guard'] = {'protocol': 'http', 'allow': list(READ_ONLY_REQUESTS), 'tls': bool(e.get('tls')),
+                          'host': e['host'], 'refusal': {'error': 'INTEGRATION_ENDPOINT_READ_ONLY',
+                                                         'detail': 'this endpoint passes GET and HEAD only'}}
+    return endpoints
+
+
 def linux(path, config=None):
     """A host path as the integration sandbox sees it."""
     from . import sandbox_backend
@@ -209,6 +227,8 @@ def validate_profile(config):
                 raise ValueError('INVALID_INTEGRATION_PORT')
         if e['port'] in ports:
             raise ValueError('DUPLICATE_INTEGRATION_PORT')
+        if any(type(e.get(key, False)) is not bool for key in ('read_only', 'tls')):
+            raise ValueError('INVALID_INTEGRATION_ENDPOINT_OPTION')
         names.add(e['name']); ports.add(e['port'])
     return profile
 
@@ -321,6 +341,7 @@ class IntegrationRunner:
         adapter, endpoints = copy.deepcopy(self.profile.get('adapter_config', {})), self.endpoints
         if mode != 'service':
             adapter, endpoints = guard_test_run(adapter, endpoints, self.config)
+        endpoints = guard_read_only(endpoints)
         connection = {'endpoints': {e['name']: {'host': '127.0.0.1', 'port': e['port']} for e in endpoints},
                       'adapter': adapter}
         config_path = directory/'config.json'; config_path.write_text(json.dumps(connection), encoding='utf-8')

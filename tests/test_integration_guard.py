@@ -212,3 +212,35 @@ def test_the_channel_api_refuses_events_claims_receipts_and_chunked_bodies():
         data, received, log = http_session(raw)
         assert data.startswith('HTTP/1.1 403') and 'INTEGRATION_TEST_READ_ONLY' in data
         assert received == [] and what in log[0]
+
+
+def test_an_endpoint_marked_read_only_passes_get_and_head_only_in_every_run():
+    from asuna.integration import guard_read_only
+    guarded = {e['name']: e for e in guard_read_only([
+        {'name': 'portal', 'host': '192.0.2.30', 'port': 9443, 'target_port': 443, 'read_only': True, 'tls': True},
+        {'name': 'image', 'host': '127.0.0.1', 'port': 9191, 'target_port': 8191}])}
+    guard = guarded['portal']['guard']
+    assert guard['protocol'] == 'http' and guard['allow'] == ['GET *', 'HEAD *']
+    assert guard['tls'] is True and guard['host'] == '192.0.2.30' and guard.get('credential') is None
+    assert 'guard' not in guarded['image']
+
+
+def test_read_only_and_tls_must_be_true_or_false():
+    import pytest
+    from asuna.integration import validate_profile
+    endpoint = {'name': 'portal', 'host': '192.0.2.30', 'port': 9443, 'target_port': 443, 'read_only': 'yes'}
+    with pytest.raises(ValueError, match='INVALID_INTEGRATION_ENDPOINT_OPTION'):
+        validate_profile({'chat': {'scene_id': 'local', 'person_id': 'owner'},
+                          'integration': {'enabled': True, 'scene_id': 'local', 'person_id': 'owner', 'endpoints': [endpoint]}})
+
+
+def test_a_read_only_request_carries_the_devices_own_host():
+    global HTTP_GUARD
+    saved, HTTP_GUARD = HTTP_GUARD, {'protocol': 'http', 'allow': ['GET *', 'HEAD *'], 'host': '192.0.2.30'}
+    try:
+        data, received, log = http_session(b'GET /index.html HTTP/1.1\r\nHost: 127.0.0.1:9443\r\n\r\n')
+        assert data.startswith('HTTP/1.1 200') and 'Host: 192.0.2.30' in received[0][0] and '127.0.0.1:9443' not in received[0][0]
+        data, received, log = http_session(b'POST /api/session/prompt HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}')
+        assert data.startswith('HTTP/1.1 403') and received == []
+    finally:
+        HTTP_GUARD = saved

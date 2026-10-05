@@ -238,7 +238,16 @@ def guarded_session(client, server, guard, log):
 
 
 def guarded_http(client, server, guard, log):
-    """One HTTP request per connection: forwarded only when "METHOD path" matches the guard, with its credential."""
+    """One HTTP request per connection: forwarded only when "METHOD path" matches the guard, with its credential.
+
+    With `tls` the relay speaks TLS to the device (a LAN service behind its own local CA, so the certificate is not
+    verified) while the run speaks plain HTTP to the relay, which is what lets the guard read the request.
+    """
+    if guard.get('tls'):
+        import ssl
+        context = ssl.create_default_context()
+        context.check_hostname, context.verify_mode = False, ssl.CERT_NONE
+        server = context.wrap_socket(server, server_hostname=guard.get('host'))
     server.settimeout(None)
     with client, server:
         inbound = Reader(client)
@@ -257,12 +266,16 @@ def guarded_http(client, server, guard, log):
         except (EOFError, ValueError, OSError):
             return
         if not request or not any(fnmatch.fnmatchcase(request, p) for p in guard['allow']):
-            log('INTEGRATION_TEST_REFUSED %s: this test run reaches the service read-only\n' % (request or 'a malformed request')[:120])
+            log('INTEGRATION_REFUSED %s: %s\n' % ((request or 'a malformed request')[:120],
+                (guard.get('refusal') or {}).get('detail', 'read-only here')))
             refusal = json.dumps(guard.get('refusal') or {'error': 'INTEGRATION_TEST_READ_ONLY'}).encode('utf-8')
             client.sendall(b'HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: %d\r\n'
                            b'Connection: close\r\n\r\n' % len(refusal) + refusal)
             return
-        kept = [line for line in headers if line.split(':', 1)[0].strip().lower() not in DROPPED_HEADERS | {'connection'}]
+        dropped = DROPPED_HEADERS | {'connection'} | ({'host'} if guard.get('host') else set())
+        kept = [line for line in headers if line.split(':', 1)[0].strip().lower() not in dropped]
+        if guard.get('host'):
+            kept.append('Host: ' + guard['host'])          # the device's own name, not the relay's
         if guard.get('credential'):
             kept.append('Authorization: Bearer ' + guard['credential'])
         try:

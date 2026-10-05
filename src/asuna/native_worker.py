@@ -30,7 +30,6 @@ from .people import People
 from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
-from .tasks import WORKSPACE_TOOLS, INTEGRATION_TOOLS, DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 
 
 class NativeLane:
@@ -796,7 +795,8 @@ class BusinessWorker:
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
             return self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
         if method == 'tool_specs':
-            return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+            # One list: the broker's, which is also what every call is checked against.
+            return self.app.broker.specs
         if method == 'action_message.delivered':
             # The action session read her message at a step (index.js): no extra round needed for it.
             row = self.app.store.db.task_messages.find_one({'_id': args['message_id'], 'from': 'character'})

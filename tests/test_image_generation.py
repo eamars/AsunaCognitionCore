@@ -175,3 +175,11 @@ def test_the_script_reports_one_json_line_and_never_a_url_fetch(monkeypatch, tmp
     script.main(['x', json.dumps({'endpoint': 'image', 'limit': 1024, 'timeout': 30, 'prompt': 'x'})])
     report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert report == {'generated': False, 'error': 'ENDPOINT_NOT_CONFIGURED', 'endpoint': 'image'}
+
+
+def test_the_plugin_learns_the_tool_from_the_broker_list():
+    from asuna.tasks import ToolBroker
+    names = [spec['name'] for spec in ToolBroker.specs.fget(None)]
+    assert gen.GENERATE_IMAGE_TOOL_NAME in names and 'import_integration_artifact' in names
+    source = open(__import__('asuna.native_worker', fromlist=['x']).__file__, encoding='utf-8').read()
+    assert "return self.app.broker.specs" in source

@@ -243,7 +243,7 @@ class ToolBroker:
         grant=workspace_grant(self.store.config,task['scene_id'],task['requester_id'])
         if Path(workspace).resolve()!=Path(grant['workspace']).resolve():raise Denied('WORKSPACE_GRANT_MISMATCH')
         protected=[Path(workspace)/p for p in grant.get('read_only_paths',[])]
-        self.bindings[session]=(task,Sandbox(workspace,protected,allowed_root=Path(grant['workspace'])))
+        self.bindings[session]=(task,Sandbox(workspace,protected,allowed_root=Path(grant['workspace']),config=self.store.config))
 
     def call(self,session,call_id,tool,args):
         with self.service.lock:

@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from . import channel_kinds
+from . import sandbox_backend, channel_kinds
 from .application import Application
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text
@@ -483,6 +483,9 @@ class BusinessWorker:
 
     def status(self):
         integration = self.host.integration.status() if self.host and self.host.integration else {'state': 'DISABLED'}
+        wanted = self.app and (self.app.config.get('integration') or {}).get('enabled')
+        if wanted and not (self.host and self.host.integration) and not sandbox_backend.available(self.app.config):
+            integration['error'] = 'no sandbox: ' + str(sandbox_backend.chosen(self.app.config)['reason'])
         return {'ready': bool(self.app), 'persona': self.app.config['chat']['persona'] if self.app else None,
                 'workspace': self.app.config['chat']['workspace'] if self.app else None,
                 'transport': 'stdio', 'model_runtime': 'dsh-host',
@@ -491,6 +494,8 @@ class BusinessWorker:
                 'schedules_active': bool(self.host and getattr(self.host, 'schedule', None)),
                 'integration_active': integration['state'] == 'RUNNING',
                 'integration_state': integration['state'], 'integration_error': integration.get('error'),
+                'sandbox': ({k: v for k, v in sandbox_backend.chosen(self.app.config).items() if k != 'distro'}
+                            if self.app else None),
                 'database': 'connected' if self.app else 'unavailable',
                 'self_source': 'existing Mongo state heads' if self.app else None,
                 'active_role': self.controller.active if self.controller else None,

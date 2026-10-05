@@ -1,12 +1,14 @@
-"""Bounded task-only Linux namespace via existing WSL bubblewrap."""
+"""Bounded task-only Linux namespace: bubblewrap under the worker's sandbox backend (sandbox_backend.py)."""
 from pathlib import Path
 import json
 import subprocess
 from .config import DATA
+from . import sandbox_backend
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path, protected_paths=(), *, allowed_root=None):
+    def __init__(self, task_dir: Path, protected_paths=(), *, allowed_root=None, config=None):
+        self.config = config if config is not None else {}
         self.task_dir = task_dir.resolve()
         root = Path(allowed_root).resolve() if allowed_root else DATA/'work'
         if not any(root.is_relative_to(DATA/name) for name in ('work','channels','integration')):
@@ -23,8 +25,8 @@ class Sandbox:
     def run(self, argv: list[str], timeout: int = 30) -> dict:
         if not argv or len(argv) > 40 or sum(map(len, argv)) > 16000:
             raise ValueError('INVALID_COMMAND')
-        p=self.task_dir
-        mount='/mnt/'+p.drive[0].lower()+p.as_posix()[2:]
+        sandbox=sandbox_backend.require(self.config)
+        mount=sandbox_backend.path(sandbox,self.task_dir)
         protected=[]
         for path in self.protected_paths:
             relative=path.relative_to(self.task_dir).as_posix()
@@ -52,7 +54,7 @@ finally:
  p.wait()
 print(json.dumps({'exit_code':p.returncode,'stdout':buffers[0].decode('utf-8','replace'),'stderr':buffers[1].decode('utf-8','replace'),'output_limit':limit,'timed_out':expired}))
 '''
-        command=['wsl','-d','Ubuntu','--exec','bwrap','--unshare-all','--die-with-parent','--new-session',
+        command=[*sandbox_backend.prefix(sandbox),'bwrap','--unshare-all','--die-with-parent','--new-session',
                  '--ro-bind','/usr','/usr','--symlink','usr/bin','/bin','--symlink','usr/lib','/lib',
                  '--symlink','usr/lib64','/lib64','--proc','/proc','--dev','/dev','--tmpfs','/tmp',
                  '--bind',mount,'/task',*protected,'--chdir','/task','--clearenv','--setenv','PATH','/usr/bin:/bin',

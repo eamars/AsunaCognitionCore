@@ -113,7 +113,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.activated': '已应用到业务 worker 与后续模型请求。',
       'settings.selfSource': '自我来源：{source}', 'settings.waiting': '等待连接', 'settings.channelsFallback': '外部渠道',
       'settings.channels': '{titles}：{state}', 'settings.channelOn': '本机入口已启动；适配器 {state}；平台连接未验证',
-      'settings.channelOff': '未启用', 'settings.schedule': '定时：{state}', 'settings.scheduleOn': '原生调度',
+      'settings.channelOff': '未启用', 'settings.schedule': '定时：{state}', 'settings.sandbox': '沙箱：{state}', 'settings.sandboxNone': '无（{reason}）：跑代码、自开发与集成已关闭', 'settings.scheduleOn': '原生调度',
       'settings.pending': '已保存的配置尚未应用。', 'settings.applied': '保存配置与当前应用配置一致。',
       'settings.apply': '应用已保存设置', 'settings.refresh': '刷新状态',
       'persona.aria': '人格数据', 'persona.title': '人格数据 · {persona}',
@@ -227,7 +227,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.activated': 'Applied to the business worker and later model requests.',
       'settings.selfSource': 'Self from: {source}', 'settings.waiting': 'waiting for connection', 'settings.channelsFallback': 'Channels',
       'settings.channels': '{titles}: {state}', 'settings.channelOn': 'local entry running; adapter {state}; platform connection not verified',
-      'settings.channelOff': 'off', 'settings.schedule': 'Schedules: {state}', 'settings.scheduleOn': 'native scheduler',
+      'settings.channelOff': 'off', 'settings.schedule': 'Schedules: {state}', 'settings.sandbox': 'Sandbox: {state}', 'settings.sandboxNone': 'none ({reason}): running code, self-development and integration are off', 'settings.scheduleOn': 'native scheduler',
       'settings.pending': 'Saved settings are not applied yet.', 'settings.applied': 'Saved settings match what is running.',
       'settings.apply': 'Apply saved settings', 'settings.refresh': 'Refresh status',
       'persona.aria': 'Persona data', 'persona.title': 'Persona data · {persona}',
@@ -853,7 +853,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           t('settings.channels', { titles: worker?.channel_titles?.join(t('memory.separator')) || t('settings.channelsFallback'),
             state: worker?.channels_active ? t('settings.channelOn', { state: worker.integration_state }) : t('settings.channelOff') })
             + (worker?.integration_error ? ' · ' + worker.integration_error : ''),
-          t('settings.schedule', { state: worker?.schedules_active ? t('settings.scheduleOn') : t('settings.channelOff') })].join(' · ')),
+          t('settings.schedule', { state: worker?.schedules_active ? t('settings.scheduleOn') : t('settings.channelOff') }),
+          ...(worker?.sandbox ? [t('settings.sandbox', { state: worker.sandbox.backend === 'none'
+            ? t('settings.sandboxNone', { reason: worker.sandbox.reason }) : worker.sandbox.backend })] : [])].join(' · ')),
         status && h('p', { role: 'status' }, status.pending ? t('settings.pending') : t('settings.applied')),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h(Button, { disabled: busy || state.shell.dirty || state.shell.saving, onClick: activate, variant: 'outline' }, t('settings.apply')),

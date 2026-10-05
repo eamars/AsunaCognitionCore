@@ -40,13 +40,17 @@ def owner_profile(config, scene, person):
 def event_granted(config, event):
     if event.get('integration_profile') != 'owner':
         return False
+    from . import sandbox_backend
+    if not sandbox_backend.available(config):
+        return False                      # the managed process only runs in the sandbox (ADR-010 D5)
     owner_profile(config, event['scene_id'], event['person_id'])
     return True
 
 
-def linux(path):
-    path = Path(path).resolve()
-    return '/mnt/' + path.drive[0].lower() + path.as_posix()[2:]
+def linux(path, config=None):
+    """A host path as the integration sandbox sees it."""
+    from . import sandbox_backend
+    return sandbox_backend.path(sandbox_backend.require(config if config is not None else {}), path)
 
 
 def valid_argv(argv):
@@ -66,8 +70,10 @@ class ManagedProcess:
         self.started = threading.Event()
         self.finished = threading.Event()
         self.stop_requested = False
+        from . import sandbox_backend
+        sandbox = sandbox_backend.require(config)
         self.process = subprocess.Popen(
-            ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).with_name('integration_worker.py'))],
+            [*sandbox_backend.prefix(sandbox), 'python3', sandbox_backend.path(sandbox, Path(__file__).with_name('integration_worker.py'))],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding='utf-8', errors='replace')
         self.process.stdin.write(json.dumps(spec)+'\n'); self.process.stdin.flush()
@@ -254,7 +260,7 @@ class IntegrationRunner:
         connection = {'endpoints': {e['name']: {'host': '127.0.0.1', 'port': e['port']} for e in self.endpoints},
                       'adapter': self.profile.get('adapter_config', {})}
         config_path = directory/'config.json'; config_path.write_text(json.dumps(connection), encoding='utf-8')
-        spec = {'snapshot': linux(snapshot), 'data': linux(data), 'config': linux(config_path),
+        spec = {'snapshot': linux(snapshot, self.config), 'data': linux(data, self.config), 'config': linux(config_path, self.config),
                 'argv': argv, 'endpoints': self.endpoints}
         process = ManagedProcess(spec, directory, self.config)
         if not process.started.wait(8):

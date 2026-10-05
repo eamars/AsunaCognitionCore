@@ -95,6 +95,8 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
             raise ValueError('INVALID_TIMEOUT: ' + key)
     if create_dirs:
         local_workspace().mkdir(parents=True, exist_ok=True)
+    from . import sandbox_backend
+    sandbox_backend.validate(value.get('sandbox'))
     if admission not in ('explicit', 'automatic'):
         raise ValueError('INVALID_CHANNEL_ADMISSION')
     # The DSH catalog owns model capability validation. Legacy provider

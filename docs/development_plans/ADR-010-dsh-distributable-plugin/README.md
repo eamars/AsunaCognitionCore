@@ -156,3 +156,8 @@
 - 包里带 `python/requirements.lock`：worker 依赖闭包的精确版本，由 `tools/pack_plugins.py` 从测过的环境冻结（保留平台标记）。D2-A 原写 `uv.lock`；改成锁定的 requirements 文件，uv 与 pip 都能用，打包的机器也不必装 uv。
 - `python` 设置留空时，Core 首次启动在 `<data>/python` 里按锁文件建 venv：PATH 上有 uv 就用 uv（uv 还能自己取 Python），否则找 Python 3.12+ 用 pip；锁不变就复用。状态行显示「preparing · Building the Python environment with …」，找不到解释器时报 `PYTHON_NOT_FOUND`。地板检查候选也用同一个解释器。`python` 设置仍然优先（开发用的 checkout）。
 - **验收**：全新 profile、Python 留空，保存时建好环境（这台机器没有 uv，走 `py -3.12` + pip），Apply 后「Business worker: ready · Mongo: connected」，worker 进程跑在数据目录的环境里。合成库与临时 home 事后删除。
+
+### M3（2026-10-05）
+- `sandbox_backend.py`：每个 worker 选一次后端，`sandbox_run`、受管集成进程、人格作业都经它取命令前缀与路径映射（原来三处各自写死 `wsl -d Ubuntu`）。设置 `deployment.sandbox`：`backend` 为 `auto`（默认）／`wsl-bwrap`／`none`，`wsl_distro` 默认 `Ubuntu`。`auto` 在 WSL 发行版里能找到 bubblewrap、python3、prlimit 时取 `wsl-bwrap`，否则取 `none` 并记下原因；明确写 `wsl-bwrap` 而探测不通时直接报 `SANDBOX_UNAVAILABLE`。
+- `none` 时：`sandbox_run` 不进行动脑的能力清单，集成授权与自开发授权都不给，宿主不起受管集成进程，人格作业返回「没有沙箱」；她的能力清单里写明这些交不出去（只说能力，不说机器怎么配）。设置卡片状态行显示后端或没有的原因。
+- Linux 的 `bwrap` 后端留到下一步（同一组命令去掉 `wsl` 前缀、路径不映射）。

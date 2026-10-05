@@ -111,7 +111,7 @@ def test_T4_5_sandbox_isolation_and_protocol(store, retrieval):
         job_config(store, entry=slow, timeout=2)
         timed = JobRunner(store, 'P1', launcher=DirectLauncher()).run('migrate')
         assert timed['status'] == 'error', timed   # killed on timeout
-        if not SandboxLauncher.available():
+        if not SandboxLauncher().available():
             pytest.skip('WSL + bubblewrap unavailable: isolation (paths, network, /out cap) not verified here')
         probe = write_job('main.py', '''import json,os,socket,sys
 start=json.loads(sys.stdin.readline())

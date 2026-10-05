@@ -531,6 +531,11 @@ class ContextBuilder:
             context['action_capabilities_from_program']['development'] = {
                 'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
                 'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
+        from . import sandbox_backend
+        if not sandbox_backend.available(self.store.config):
+            # What she cannot hand over, said as such (ADR-010 D5); never how the machine is set up.
+            context['action_capabilities_from_program']['not_available']=(
+                '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')

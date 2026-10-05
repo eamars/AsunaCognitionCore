@@ -30,32 +30,28 @@ from . import visibility
 OUT_LIMIT = 64 * 1024 * 1024
 
 
-def _wsl_path(path: Path) -> str:
-    path = Path(path).resolve()
-    return '/mnt/' + path.drive[0].lower() + path.as_posix()[2:]
-
-
 class SandboxLauncher:
-    """WSL bubblewrap: --unshare-all (no network), ro job code and sources, rw /out only."""
+    """Bubblewrap under the worker's sandbox backend: --unshare-all (no network), ro job code and sources, rw /out only."""
     name = 'wsl-bubblewrap'
 
-    @staticmethod
-    def available():
-        try:
-            probe = subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'sh', '-c', 'command -v bwrap && command -v python3'],
-                                   capture_output=True, timeout=30)
-            return probe.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            return False
+    def __init__(self, config=None):
+        self.config = config if config is not None else {}
+
+    def available(self):
+        from . import sandbox_backend
+        return sandbox_backend.available(self.config)
 
     def spawn(self, entry: Path, sources: dict, out: Path):
+        from . import sandbox_backend
+        sandbox = sandbox_backend.require(self.config)
+        at = lambda path: sandbox_backend.path(sandbox, path)
         mounts = []
         for root_id, path in sources.items():
-            mounts += ['--ro-bind', _wsl_path(path), '/src/' + root_id]
-        command = ['wsl', '-d', 'Ubuntu', '--exec', 'bwrap', '--unshare-all', '--die-with-parent', '--new-session',
+            mounts += ['--ro-bind', at(path), '/src/' + root_id]
+        command = [*sandbox_backend.prefix(sandbox), 'bwrap', '--unshare-all', '--die-with-parent', '--new-session',
                    '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
                    '--symlink', 'usr/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-                   '--ro-bind', _wsl_path(entry.parent), '/job', *mounts, '--bind', _wsl_path(out), '/out',
+                   '--ro-bind', at(entry.parent), '/job', *mounts, '--bind', at(out), '/out',
                    '--chdir', '/job', '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'PYTHONIOENCODING', 'utf-8',
                    '/usr/bin/prlimit', '--as=1073741824', '--fsize=67108864', '--nofile=256', '--',   # personal-scan: ok (1 GiB, 64 MiB byte limits)
                    'python3', '-u', '/job/' + entry.name]
@@ -82,7 +78,7 @@ class DirectLauncher:
 class JobRunner:
     def __init__(self, store, persona, *, retrieval=None, launcher=None):
         self.store, self.persona, self.retrieval = store, persona, retrieval
-        self.launcher = launcher or SandboxLauncher()
+        self.launcher = launcher or SandboxLauncher(store.config)
 
     def job(self, job_id):
         for job in (self.store.config.get('persona_contribution') or {}).get('jobs') or []:
@@ -94,7 +90,8 @@ class JobRunner:
         """Returns status, exit code, counts and the report artifact id — never an excerpt."""
         job = self.job(job_id)
         if not self.launcher.available():
-            return {'status': 'unavailable', 'job': job_id, 'reason': 'sandbox (WSL + bubblewrap) not available'}
+            from . import sandbox_backend
+            return {'status': 'unavailable', 'job': job_id, 'reason': 'no sandbox: ' + str(sandbox_backend.chosen(self.store.config)['reason'])}
         configured = persona_sources(self.store.config, self.persona)
         missing = [root for root in job['sources'] if root not in configured]
         if missing:

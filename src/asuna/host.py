@@ -166,7 +166,9 @@ class RuntimeHost:
             scenes = prepare_channels(self.app.store)
             channel_scenes_ready = time.perf_counter()
             self.integration = None
-            if self.config.get('integration', {}).get('enabled'):
+            from . import sandbox_backend
+            # The managed integration process runs only in the sandbox; without one it stays off (ADR-010 D5).
+            if self.config.get('integration', {}).get('enabled') and sandbox_backend.available(self.config):
                 from .integration import IntegrationRunner
                 self.integration = IntegrationRunner(self.config)
                 self.app.broker.integration = self.integration

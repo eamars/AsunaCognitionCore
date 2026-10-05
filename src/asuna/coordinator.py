@@ -451,6 +451,9 @@ class Coordinator:
             capabilities+=[*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
         integration=event_granted(self.store.config,event)
         if integration:capabilities+=INTEGRATION_TOOLS
+        from . import sandbox_backend
+        if not sandbox_backend.available(self.store.config):
+            capabilities=[tool for tool in capabilities if (tool['name'] if isinstance(tool,dict) else tool)!='sandbox_run']
         names=[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config),*ACTION_DSH_CAPABILITIES])]
         return development,integration,names
 

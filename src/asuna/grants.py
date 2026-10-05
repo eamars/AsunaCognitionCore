@@ -32,6 +32,9 @@ def development_granted(store, scene, event, session_class=None):
     from . import visibility
     if (store.config.get('self_development') or {}).get('enabled') is not True:
         return False
+    from . import sandbox_backend
+    if not sandbox_backend.available(store.config):
+        return False                      # her candidates are tested in the sandbox (ADR-010 D5)
     kind = event.get('episode_kind') or 'external'
     if kind == 'task_feedback':
         return bool((store.db.tasks.find_one({'_id': event.get('task_id')}) or {}).get('development_grant'))

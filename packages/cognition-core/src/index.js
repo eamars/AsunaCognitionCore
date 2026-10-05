@@ -669,7 +669,8 @@ export class CognitionCore {
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
-          return reply.value;
+          // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.
+          return attachImage({ attachments: scope.reflect.get('attachments') }, reply.value);
         },
       }));
     }

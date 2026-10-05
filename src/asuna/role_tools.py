@@ -23,6 +23,7 @@ from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
 from .evidence import canonical, sha
 from .state import Conflict, Denied
 from . import visibility
+from .vision import inline_summary as picture_receipt
 
 THOUGHT_CHARS = 300
 RECALLS_PER_TURN = 3
@@ -69,7 +70,7 @@ TOOLS = {
                                         'sid': _s('节的 sid', required=True)}}}},
     },
     'delegate': {
-        'description': ('把一件要在世界里做的事交给行动脑：查资料、看图、查完整原话、跑代码、改文件、生图、改能力。'
+        'description': ('把一件要在世界里做的事交给行动脑：查资料、查完整原话、跑代码、改文件、生图、改能力。'
                         'title 是简短标题；brief 是给行动脑的完整交代：要什么、为什么、有什么限制和要注意的。'
                         '行动脑看不到你的上下文，只看到 brief 和对方的原话。交出去以后你可以照常聊天，'
                         '结果回来会再叫你；没做完的事不要说成做完了。'),
@@ -213,6 +214,10 @@ TOOLS = {
     },
 }
 
+# Looking at a picture is one tool shared by both brains (ADR-011 §5.3 as amended): the action brain's own
+# read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
+from .vision import READ_IMAGE_TOOL as _READ_IMAGE
+TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name'}
 TOOL_NAMES = tuple(TOOLS)
 
 
@@ -237,6 +242,8 @@ def exposed(store, ep):
     names = ['think', 'recall']
     if kind == CONSULT:
         return names + ['answer_action']
+    if her_pictures(store, ep):
+        names.append('read_image')
     names += ['stay_silent', 'note_idea']
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
@@ -274,6 +281,19 @@ def exposed(store, ep):
     return names
 
 
+def her_pictures(store, ep):
+    """Whether she can look at a picture this turn: her own route takes images and the conversation's recent
+    pictures (the same window read_image reads) include one that can be pulled."""
+    from .vision import scene_attachments, vision_capability
+    if not vision_capability(store.config, 'character')['supported']:
+        return False
+    try:
+        listing = scene_attachments(store, ep, store.config)
+    except Denied:
+        return False
+    return any(item.get('pullable') for item in listing['attachments'])
+
+
 # Words for the refusals she is most likely to meet; any other code is passed on as it is.
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在本机或 owner 私聊里改。',
@@ -304,6 +324,13 @@ WORDS = {
     'VISIT_NOT_NOW': '现在去不了那里。',
     'VISIT_OFF': '出门现在没开。',
     'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里那个回合再挑也行。',
+    'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
+    'IMAGE_NOT_PULLABLE': '这张图拉不到。',
+    'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
+    'IMAGE_FETCH_FAILED': '这张图没拉下来（链接可能过期了）。',
+    'IMAGE_TOO_LARGE': '这张图太大，看不了。',
+    'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
+    'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就交给行动脑，把 ref 一起交代。',
 }
 
 
@@ -352,7 +379,9 @@ class RoleTools:
             message = words(exc)
             self._record(ep_id, call_id, name, args, refused=message)
             raise Refused(message) from None
-        self._record(ep_id, call_id, name, args, result=result, conclude=conclude)
+        # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
+        self._record(ep_id, call_id, name, args, conclude=conclude,
+                     result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return result, conclude
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False):
@@ -475,6 +504,14 @@ class RoleTools:
         return {'task': stopped['_id'], 'state': stopped['state'], 'note': '已叫停。'}, False
 
     # ── speech ──────────────────────────────────────────────────────
+    # ── looking ─────────────────────────────────────────────────────
+    def tool_read_image(self, ep, call_id, args):
+        from .blobs import BlobStore
+        from .vision import read_image_for_task
+        scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+        return read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
+                                   route='character'), False
+
     def tool_attach_image(self, ep, call_id, args):
         from . import outbound_media
         from .blobs import BlobStore

@@ -537,8 +537,8 @@ class ContextBuilder:
         from .vision import vision_capability
         if vision_capability(self.store.config)['supported']:
             context['action_capabilities_from_program']['read_image']=(
-                '图片按 Pull 模式接：入站只带元数据与占位符，委托行动脑时用 read_image(ref) 才把字节拉成'
-                '这一轮真实的视觉输入。没调用就是没看过，占位符只证明那里有过一张图。')
+                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一轮真实的视觉输入；'
+                '行动脑也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
         context['action_capabilities_from_program']['group_discussion']=(
             '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
             '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'

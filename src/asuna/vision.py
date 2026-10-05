@@ -143,23 +143,24 @@ def local_upload_item(message, item):
             and not (message or {}).get('event', {}).get('channel'))
 
 
-def vision_capability(config):
-    """这条模型路由现在到底能不能收图：只看配置声明，不看模型名字。"""
-    route = (config or {}).get('executor', {})
+def vision_capability(config, route='executor'):
+    """这条模型路由现在到底能不能收图：只看配置声明，不看模型名字。route 是 executor（行动脑）或 character（角色脑）。"""
+    lane = route
+    route = (config or {}).get(lane, {})
     vision = (config or {}).get('vision', {})
     modalities = [str(m).lower() for m in (route.get('input_modalities') or [])]
     configured = vision.get('image_hosts')
     hosts = [str(h) for h in (channel_kinds.image_hosts() if configured is None else configured)]
     reasons = []
     if 'image' not in modalities:
-        reasons.append('route_declares_image_input=false（config.executor.input_modalities 未声明 image）')
+        reasons.append(f'route_declares_image_input=false（config.{lane}.input_modalities 未声明 image）')
     if not hosts:
         reasons.append('image_hosts_allowlist_empty（vision.image_hosts 被显式清空，任何图片 URL 都会被拒）')
     return {'supported': not reasons, 'input_modalities': modalities, 'image_hosts': hosts,
             'max_bytes': int(vision.get('max_bytes', DEFAULT_MAX_BYTES)),
             'timeout_seconds': float(vision.get('timeout_seconds', DEFAULT_TIMEOUT_SECONDS)),
             'image_dirs': [str(d) for d in (vision.get('image_dirs') or [])],
-            'source': 'config.executor.input_modalities + config.vision',
+            'source': f'config.{lane}.input_modalities + config.vision',
             'unsupported_because': reasons}
 
 
@@ -372,8 +373,11 @@ def pull_bytes(entry, config, *, max_bytes=None):
     return data, media_type, entry.get('pull_via'), {'host': final_host, 'content_type': _clean(content_type, 80)}
 
 
-def read_image_for_task(store, blobs, task, config, args):
-    """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。"""
+def read_image_for_task(store, blobs, task, config, args, *, route='executor'):
+    """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
+
+    两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
+    scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。"""
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
@@ -385,7 +389,7 @@ def read_image_for_task(store, blobs, task, config, args):
     if max_bytes is not None and (not isinstance(max_bytes, int) or isinstance(max_bytes, bool)
                                   or not 1024 <= max_bytes <= HARD_MAX_BYTES):
         raise ValueError('INVALID_READ_IMAGE_MAX_BYTES')
-    capability = vision_capability(config)
+    capability = vision_capability(config, route)
     if not capability['supported']:
         raise ValueError('VISION_ROUTE_UNSUPPORTED:' + ';'.join(capability['unsupported_because']))
     listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
@@ -494,12 +498,20 @@ def task_attachment_context(store, task, config, source_message):
             'unsupported_because': capability['unsupported_because']}
 
 
+def line_refs(message, config):
+    """The refs of a platform line's readable pictures, as a short note under the line in her conversation:
+    the placeholder says a picture was there, the ref is what read_image takes. Empty when there is none."""
+    refs = [entry['ref'] for entry in attachments_of(message, config=config) if entry.get('pullable')]
+    return ('（图 ref：' + '、'.join(refs) + '）') if refs else ''
+
+
 def media_note(message, config):
     """给角色现场的附件元数据：不把图片字节放进上下文。"""
     block = media_block(message)
     if not block:
         return None
-    capability = vision_capability(config)
+    # Her own route decides whether she can look herself; the action brain's is what a delegation would use.
+    capability = vision_capability(config, 'character')
     items = attachments_of(message, config=config)
     others = [item for item in (block.get('items') or []) if isinstance(item, dict) and item.get('type') != 'image']
     note = {'items': items or None,
@@ -508,8 +520,11 @@ def media_note(message, config):
             'can_pull': capability['supported'],
             'unsupported_because': capability['unsupported_because'] or None,
             'meaning': (('这些是对方在本机聊天里直接发给你的图，就在对话里，你看得见。要交给行动脑处理，'
-                         '把图的 ref 一起交代给它，它用 read_image 读。')
+                         '把图的 ref 一起交代给它，它也用 read_image 读。')
                         if block.get('origin') == 'local_upload' and not (message or {}).get('event', {}).get('channel')
+                        else ('图片只有元数据和占位符，尚未进入上下文；想看就用 read_image(ref) 自己看，'
+                              '交给行动脑做事时把 ref 一起交代。没看就是没看过，占位符不代表看过；其他媒体仍只有占位符。')
+                        if capability['supported']
                         else ('图片只有元数据和占位符，尚未进入上下文；有需要时可委托行动脑按需读取。'
                               '不拉就不进上下文。占位符本身不代表看过图片；其他媒体仍只有占位符。'))}
     return {k: v for k, v in note.items() if v is not None}
@@ -518,7 +533,8 @@ def media_note(message, config):
 READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
     'description': ('按需拉取本授权场景某条消息里的图片附件，并把它变成这一轮真实的视觉输入（Pull 模式：'
-                    '入站只带元数据与占位符，没调用就等于没看过）。ref 取自任务输入的 attachments 清单。'
+                    '入站只带元数据与占位符，没调用就等于没看过）。ref 照抄附件清单（attachments、media_from_program）'
+                    '或对话里图片旁标出的 ref；只认这个对话最近的几张图。'
                     '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
                     '路由不支持图片、主机不在白名单、超限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
     'parameters': {'ref': {'type': 'string', 'required': True}, 'max_bytes': {'type': 'integer'}}}

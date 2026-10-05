@@ -385,6 +385,10 @@ class People:
             lines.append('  > 回复 %s：%s' % (self.speaker(scene, parent.get('author')), excerpt(quote, REPLY_EXCERPT)))
         body = self.mentions(scene, row.get('text') or '', account)
         lines += ['  ' + line for line in body.split('\n')]
+        from .vision import line_refs
+        refs = line_refs(row, self.config)
+        if refs:
+            lines.append('  ' + refs)
         return '\n'.join(lines)
 
     def identity_line(self, scene, row):

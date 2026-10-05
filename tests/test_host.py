@@ -447,3 +447,46 @@ def test_restart_reconciles_delivered_feedback_without_pausing_completed_work(st
     assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'RETURNED'
     assert store.db.episodes.find_one({'_id': original['_id']})['state'] == 'COMMITTED'
     assert chat.pending.empty() and chat.task_queue.empty()
+
+
+def chained_restart(store, tmp_path, name, feedback_state):
+    """A returned task whose feedback turn handed the work on to another task (its feedback stays WAITING_TASK)."""
+    from asuna.tasks import TaskService
+    coordinator = Coordinator(store, FakeLane(store, [delegating()]))
+    incoming = event(name)
+    persist_input(store, incoming, managed=True)
+    original = coordinator.ingest(incoming)
+    task = store.db.tasks.find_one({'_id': original['task_ids'][0]})
+    store.put('episodes', {'_id': name + '-feedback', 'state': feedback_state})
+    task = store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'WAITING_TASK',
+        'feedback_episode': name + '-feedback'}, expected=task['revision'])
+    chat = controller(store, tmp_path, coordinator)
+    chat.app.service = TaskService(store)
+    entries = []
+    chat.app.service.on_collab = lambda task, entry: entries.append((task['_id'], entry))
+    host = RuntimeHost(store.config, chat.app.evidence)
+    host.app, host.controller = chat.app, chat
+    return host, chat, original, task, entries
+
+
+def test_restart_leaves_a_task_whose_result_was_handed_on_to_another_task(store, tmp_path):
+    host, chat, original, task, entries = chained_restart(store, tmp_path, 'handed-on', 'WAITING_TASK')
+    host._recover_tasks()
+    assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'RETURNED'
+    assert store.db.episodes.find_one({'_id': original['_id']})['state'] == 'WAITING_TASK'
+    assert entries == [] and chat.pending.empty() and chat.task_queue.empty()
+
+
+def test_restart_gives_back_a_finished_task_an_earlier_restart_paused(store, tmp_path):
+    host, chat, original, task, entries = chained_restart(store, tmp_path, 'wrongly-paused', 'COMMITTED')
+    chat.app.service.pause_for_restart(task['_id'])           # what the earlier recovery did
+    entries.clear()
+    host._recover_tasks()
+    restored = store.db.tasks.find_one({'_id': task['_id']})
+    assert restored['state'] == 'RETURNED' and restored['feedback_state'] == 'DELIVERED'
+    assert 'paused_state' not in restored and 'pause_reason' not in restored
+    assert store.db.episodes.find_one({'_id': original['_id']})['state'] == 'COMMITTED'
+    assert [(task_id, entry['kind'], entry['state']) for task_id, entry in entries] == [(task['_id'], 'status', 'done')]
+    assert chat.pending.empty() and chat.task_queue.empty()
+    host._recover_tasks()
+    assert store.db.tasks.find_one({'_id': task['_id']})['revision'] == restored['revision']

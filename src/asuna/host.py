@@ -307,20 +307,50 @@ class RuntimeHost:
                 source = store.db.messages.find_one({'_id': parent['raw_input_refs'][0]}) if parent else None
             if not source or not source.get('host_managed'):
                 continue
-            if task.get('feedback_state') == 'DELIVERED':
-                feedback = store.db.episodes.find_one({'_id': task.get('feedback_episode')})
-                original = store.db.episodes.find_one({'_id': task['episode_id']})
-                if feedback and feedback['state'] == 'COMMITTED':
-                    if original and original['state'] == 'WAITING_TASK':
-                        store.put('episodes', {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
-                                  expected=original['revision'], stream=original['_id'])
-                    continue
+            if self._settle_received(task):
+                continue
             # Approved restart policy: unfinished actions/results remain
             # durable, but do not run or call the role model on startup.
             # A new explicit local DECIDE may continue their native context.
             paused = self.app.service.pause_for_restart(task['_id'])
             self.evidence.record('host.task_paused', {'task_id': task['_id'],
                 'previous_state': task['state'], 'state': paused['state']})
+        # A finished task whose result she had already taken was once paused here when her turn on it handed
+        # the work on to another task (its feedback stayed WAITING_TASK): it read as open work. Give it back.
+        for task in store.db.tasks.find({'state': 'PAUSED', 'pause_reason': 'host_restart',
+                                         'paused_state': {'$in': ['RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'UNKNOWN',
+                                                                  'NEEDS_CHARACTER_DECISION']}}):
+            if not self._feedback_taken(task):
+                continue
+            restored = {key: value for key, value in task.items()
+                        if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state')}
+            restored = store.put('tasks', {**restored, 'state': task['paused_state'],
+                                           'feedback_state': task.get('paused_feedback_state')},
+                                 expected=task['revision'], stream=task['_id'])
+            self._settle_received(restored)
+            self.app.service.collab(restored, 'status', {'state': 'done' if restored['state'] == 'RETURNED' else 'failed'},
+                                    'status:' + task['_id'] + ':restored:' + str(restored['revision']))
+            self.evidence.record('host.task_unpaused', {'task_id': task['_id'], 'state': restored['state']})
+
+    def _feedback_taken(self, task):
+        """Her turn on this task's result ran: it committed, or it handed the work on to another task."""
+        feedback = self.app.store.db.episodes.find_one({'_id': task['feedback_episode']}) if task.get('feedback_episode') else None
+        return feedback if feedback and feedback['state'] in ('COMMITTED', 'WAITING_TASK') else None
+
+    def _settle_received(self, task):
+        """A task whose result she took is finished work; once her turn on it committed, so is the turn that asked."""
+        store = self.app.store
+        feedback = self._feedback_taken(task)
+        if not feedback:
+            return False
+        if feedback['state'] == 'COMMITTED':
+            if task.get('feedback_state') != 'DELIVERED':
+                store.put('tasks', {**task, 'feedback_state': 'DELIVERED'}, expected=task['revision'], stream=task['_id'])
+            original = store.db.episodes.find_one({'_id': task['episode_id']})
+            if original and original['state'] == 'WAITING_TASK':
+                store.put('episodes', {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
+                          expected=original['revision'], stream=original['_id'])
+        return True
 
     def __exit__(self, *args):
         try:

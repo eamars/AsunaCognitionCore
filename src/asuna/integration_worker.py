@@ -282,13 +282,19 @@ def supervise():
                        if endpoint.get('guard') else relay_handler(connect))
             servers.append(launch_relay(Relay(relay_dir + '/' + endpoint['name'], handler)))
         inside = {'argv': spec['argv'], 'endpoints': [{'name': e['name'], 'port': e['port']} for e in spec['endpoints']]}
+        # Clients such as ssh refuse to run when their uid has no passwd entry; the namespace has no /etc of its own.
+        identity = Path(relay_dir) / '.identity'           # removed with the relay directory
+        identity.mkdir()
+        (identity / 'passwd').write_text('integration:x:%d:%d::/tmp:/usr/sbin/nologin\n' % (os.getuid(), os.getgid()))
+        (identity / 'group').write_text('integration:x:%d:\n' % os.getgid())
         command = ['bwrap', '--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL',
                    '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
                    '--symlink', 'usr/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
                    '--ro-bind', spec['snapshot'], '/app', '--bind', spec['data'], '/data',
                    '--ro-bind', spec['config'], '/integration/config.json', '--ro-bind', relay_dir, '/relay',
                    '--ro-bind', str(Path(__file__).resolve()), '/runner.py', '--chdir', '/app',
-                   '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'PYTHONUNBUFFERED', '1',
+                   '--ro-bind', str(identity / 'passwd'), '/etc/passwd', '--ro-bind', str(identity / 'group'), '/etc/group',
+                   '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'PYTHONUNBUFFERED', '1', '--setenv', 'HOME', '/tmp',
                    '/usr/bin/prlimit', '--as=536870912', '--fsize=8388608', '--nofile=128', '--',
                    'python3', '/runner.py', 'bootstrap', json.dumps(inside)]
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

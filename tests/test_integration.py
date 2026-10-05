@@ -51,6 +51,13 @@ def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
     assert value['timed_out'] and value['state'] == 'STOPPED'
 
 
+def test_the_run_has_a_user_entry_and_a_home(runner):
+    """ssh, git and similar clients refuse to run for a uid without a passwd entry."""
+    code = "import os, pwd; print(pwd.getpwuid(os.getuid()).pw_name, os.environ['HOME'], os.access('/tmp', os.W_OK))"
+    value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
+    assert value['exit_code'] == 0 and 'integration /tmp True' in logs(value)
+
+
 def test_start_runs_only_the_published_adapter(runner, tmp_path):
     # ADR-011 §5.2: unpublished edits never run as the managed service; there is no editing tool here.
     with pytest.raises(Denied, match='INTEGRATION_RELEASE_UNAVAILABLE'):

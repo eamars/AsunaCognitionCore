@@ -137,7 +137,7 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
         'integration': {'adapter_config': {'host': {'channel_id': 'qq'}, 'napcat': {}}}}
     exported = native_settings.export_settings(config)
     assert 'fixture-password' not in json.dumps(exported['deployment'])
-    assert exported['deployment']['embedding']['api_key'] == {'$secret': 'embedding/api_key'}
+    assert exported['deployment']['embedding']['api_key'] == {'$secret': 'ASUNA_EMBEDDING_API_KEY'}
     models = {'character': {'model': 'same-model'}, 'action': {'model': 'same-model'}}
     resolved = native_settings.runtime_settings(**exported, models=models, admission='automatic')
     assert resolved['channels']['qq']['admission'] == 'automatic'

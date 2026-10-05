@@ -51,7 +51,7 @@ UI development uses an isolated native DSH profile with synthetic inference for 
 - `config/personal-denylist.local.txt` (ignored; template `config/personal-denylist.example.txt`): your own account names, host names and similar literals for `tools/check_staged_secrets.py --personal`.
 - `.runtime/adr008/home/profiles/asuna-native/cordis.patch.yml`: editable native provider and Asuna settings. Do not pass it again as a command-line overlay.
 
-After migration the native profile's `deployment` and write-only `secrets` are authoritative; editing the old JSON files does not silently override saved settings. DSH's native Models page owns provider definitions and model API keys. No launcher environment override shadows keys changed there.
+After migration the native profile's `deployment` is authoritative and its secrets are in DSH's credential store (the setup tool moves them there; the settings keep only `ASUNA_…` references); editing the old JSON files does not silently override saved settings. DSH's native Models page owns provider definitions and model API keys. No launcher environment override shadows keys changed there.
 
 In **Plugins → @asuna/cognition-core**, edit business values (structured fields use JSON), persona/model references and credential fields, save, then **应用已保存设置**. Set **QQ 接入策略** to `automatic` for new DMs/groups/members, or `explicit` for configured enrollment. New contacts get isolated workspaces; they inherit no owner access. Use `channels.<id>.blocked_senders` / `blocked_groups` to refuse specific QQ identities. The native write-only JSON credential field can provision new secret references in the same save.
 

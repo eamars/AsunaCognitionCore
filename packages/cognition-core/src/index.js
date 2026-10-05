@@ -19,7 +19,8 @@ import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './
 import { NativeChildren } from './children.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
-import { assertSecretReferences, nativeRoute } from './settings.js';
+import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
+import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import z from '@deepseek-ai/schemastery';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +35,6 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
   mountSchedule: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
-  secrets: z.dict(z.string().role('secret')).volatile(),
   channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
   routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
 
@@ -180,7 +180,7 @@ export class CognitionCore {
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
         native_sessions: nativeSessions,
-        deployment: this.config.deployment, secrets: this.config.secrets, admission: this.config.channelAdmission,
+        deployment: this.config.deployment, secrets: await this.credentialValues(this.config.deployment), admission: this.config.channelAdmission,
         channels, apply_integrations: !!this.applying, schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
@@ -251,6 +251,34 @@ export class CognitionCore {
     return undefined;
   }
 
+  /** DSH's credential store, when this Host mounts one. */
+  credentialStore() {
+    try { return this.ctx.get('credentials'); } catch { return undefined; }
+  }
+
+  /** The values behind the settings' credential references, resolved for this one start or check and handed to the
+   * worker; never kept, never written to the settings. A reference with no value is left out, and the worker
+   * names it (CREDENTIAL_NOT_CONFIGURED). */
+  async credentialValues(deployment) {
+    const refs = secretReferences(deployment);
+    if (!refs.length) return {};
+    const store = this.credentialStore();
+    if (!store) throw new Error('CREDENTIAL_STORE_MISSING: this Host mounts no credential provider');
+    const values = {};
+    for (const ref of refs) {
+      const resolved = await store.resolve(credentialRef(ref));
+      if (resolved?.value) values[ref] = resolved.value;
+    }
+    return values;
+  }
+
+  /** Whether each credential reference has a value (for the settings page; never the value). */
+  async credentialStates(deployment) {
+    const store = this.credentialStore();
+    return Object.fromEntries(await Promise.all(secretReferences(deployment).map(async ref =>
+      [ref, store ? (await store.describe(credentialRef(ref))).configured === true : false])));
+  }
+
   publicConfig() { return redactSecrets(Config, this.config).value; }
 
   async validateSettings(next, pythonPath) {
@@ -263,7 +291,7 @@ export class CognitionCore {
     const probe = new BusinessWorker({ ...next, dataRoot: this.ctx.asunaFloor.dataRoot,
       pythonPath: pythonPath ?? await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
-      await probe.call('validate_settings', { deployment: next.deployment, secrets: next.secrets,
+      await probe.call('validate_settings', { deployment: next.deployment, secrets: await this.credentialValues(next.deployment),
         models, persona: next.persona, admission: next.channelAdmission ?? 'explicit',
         channels: await this.channelPlugins(next.deployment) });
     } finally { await probe.dispose(); }

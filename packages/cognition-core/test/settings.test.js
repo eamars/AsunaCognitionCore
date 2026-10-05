@@ -1,23 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Config, CognitionCore } from '../src/index.js';
-import { assertSecretReferences, editSettings } from '../src/settings.js';
+import { assertSecretReferences, editSettings, secretReferences } from '../src/settings.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { AsunaApi } from '../src/api.js';
 import { Context } from '@deepseek-ai/cordis';
 import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm';
 
-test('native settings redact credentials and edits preserve secrets omitted by the page', () => {
-  const original = { deployment: { mongo_uri: { $secret: 'mongo' }, channels: { qq: { token: { $secret: 'qq' } } } },
-    secrets: { mongo: 'private-database-credential', qq: 'private-qq-credential' }, qqAdmission: 'explicit' };
+test('settings carry credential references only; Core resolves their values from the credential store', async () => {
+  const original = { deployment: { mongo_uri: { $secret: 'ASUNA_MONGO_URI' }, channels: { qq: { token: { $secret: 'ASUNA_CHANNELS_QQ_TOKEN' } } } },
+    channelAdmission: 'explicit' };
   assertSecretReferences(original.deployment);
-  const publicValue = redactSecrets(Config, original).value;
-  assert.doesNotMatch(JSON.stringify(publicValue), /private-/);
-  const edited = editSettings(original, [{ op: 'set', path: ['qqAdmission'], value: 'automatic' }]);
-  assert.deepEqual(edited.secrets, original.secrets);
-  assert.equal(original.qqAdmission, 'explicit');
-  assert.throws(() => assertSecretReferences({ nested: { token: 'plaintext' } }), /USE_NATIVE_SECRET_REFERENCE/);
+  assert.deepEqual(secretReferences(original.deployment), ['ASUNA_MONGO_URI', 'ASUNA_CHANNELS_QQ_TOKEN']);
+  assert.equal(Object.hasOwn(Config.dict, 'secrets'), false, 'no setting holds a secret value');
+  const edited = editSettings(original, [{ op: 'set', path: ['channelAdmission'], value: 'automatic' }]);
+  assert.deepEqual(edited.deployment, original.deployment);
+  assert.equal(original.channelAdmission, 'explicit');
+  // A value under any secret-like key is refused, and so is a reference the store could never hold.
+  for (const value of [{ nested: { token: 'plaintext' } }, { bot_token: 'plaintext' }, { apiKey: 'plaintext' }])
+    assert.throws(() => assertSecretReferences(value), /USE_NATIVE_SECRET_REFERENCE/);
+  assert.throws(() => assertSecretReferences({ token: { $secret: 'channels/qq/token' } }), /INVALID_CREDENTIAL_REFERENCE/);
   assert.throws(() => editSettings(original, [{ op: 'set', path: ['__proto__', 'polluted'], value: 1 }]), /INVALID_SETTINGS_EDIT/);
+  const stored = { ASUNA_MONGO_URI: 'private-database-credential' };
+  const core = new CognitionCore({ get: name => name === 'credentials' ? {
+    resolve: async ref => stored[ref] ? { value: stored[ref], source: 'file' } : undefined,
+    describe: async ref => ({ configured: ref in stored, writable: true }) } : undefined }, original);
+  assert.deepEqual(await core.credentialValues(original.deployment), stored, 'a reference with no value is left for the worker to name');
+  assert.deepEqual(await core.credentialStates(original.deployment), { ASUNA_MONGO_URI: true, ASUNA_CHANNELS_QQ_TOKEN: false });
+  assert.doesNotMatch(JSON.stringify(redactSecrets(Config, original).value), /private-/);
 });
 
 test('failed validation leaves the current worker and native settings untouched', async () => {

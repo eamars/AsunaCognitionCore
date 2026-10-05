@@ -101,7 +101,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.choose': '请选择', 'settings.unavailableValue': '{value}（当前不可用）',
       'settings.admission.automatic': '自动接入私聊、群及新成员', 'settings.admission.explicit': '仅接入已配置身份',
       'settings.providerDefault': '使用模型服务默认值', 'settings.routeHint': '选项来自 DSH 已配置的模型服务及其能力。',
-      'settings.secretMapHint': '例如 {"新通道/token":"值"}。只更新列出的名称；留空不修改。', 'settings.secretHint': '留空保留现有凭据。',
+      'settings.secretMapHint': '例如 {"ASUNA_CHANNELS_NEW_TOKEN":"值"}：存进凭据库，设置里只写引用。只更新列出的名称；留空不修改。', 'settings.secretHint': '留空保留现有凭据。',
       'settings.secretAdd': '可添加凭据引用', 'settings.secretSet': '已配置', 'settings.secretUnset': '未配置',
       'settings.jsonHint': 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。', 'settings.invalidNumber': '请输入正整数',
       'settings.invalidJson': '请输入有效的 JSON 值', 'settings.form.unavailable': '配置暂不可用', 'settings.form.readOnly': '当前配置只读',
@@ -214,7 +214,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.choose': 'Choose', 'settings.unavailableValue': '{value} (unavailable now)',
       'settings.admission.automatic': 'Admit direct chats, groups and new members automatically', 'settings.admission.explicit': 'Admit configured identities only',
       'settings.providerDefault': 'Model service default', 'settings.routeHint': 'Choices come from the model services configured in DSH and what they offer.',
-      'settings.secretMapHint': 'For example {"new-channel/token":"value"}. Only the listed names change; leave empty for no change.',
+      'settings.secretMapHint': 'For example {"ASUNA_CHANNELS_NEW_TOKEN":"value"}: stored in the credential store; the settings keep only the reference. Only the listed names change; leave empty for no change.',
       'settings.secretHint': 'Leave empty to keep the current credential.',
       'settings.secretAdd': 'Credential references can be added', 'settings.secretSet': 'Configured', 'settings.secretUnset': 'Not configured',
       'settings.jsonHint': 'JSON; refer to credentials as {"$secret":"name"}.', 'settings.invalidNumber': 'Enter a positive whole number',
@@ -708,10 +708,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           if (typeof value.$secret === 'string') secretNames.add(value.$secret);
           else Object.values(value).forEach(collect); };
         collect(initial.deployment);
-        for (const key of secretNames) add(['secrets', key], key, 'secret');
-        // One native write-only field can provision references for a newly
-        // added channel without exposing or restating existing credentials.
-        add(['secrets'], { key: 'settings.newSecrets' }, 'secret-map');
+        // Credentials are write-only controls into DSH's credential store, never settings (ADR-010 D6): one per
+        // reference the settings name, and one that stores values for references a new section names.
+        for (const key of secretNames) add(['credentials', key], key, 'secret');
+        add(['credentials'], { key: 'settings.newSecrets' }, 'secret-map');
         const byId = new Map(fields.map(field => [field.field, field]));
         const flatten = value => Object.fromEntries(fields.flatMap(field => {
           const entry = field.path.reduce((value, key) => value?.[key], value);
@@ -722,12 +722,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           return { ...saved, value: flatten(saved.value), base: flatten(saved.base), user: flatten(saved.user) };
         }, mutate: async (ops, revision) => {
           try {
-            const edits = ops.flatMap(op => {
-              const field = byId.get(op.path[0]);
-              return field.type === 'secret-map' && op.op === 'set'
-                ? Object.entries(op.value).map(([key, value]) => ({ op: 'set', path: ['secrets', key], value }))
-                : [{ ...op, path: field.path }];
-            });
+            const edits = ops.map(op => ({ ...op, path: byId.get(op.path[0]).path }));
             await rpc('saveSettings', { ops: edits, revision });
             const response = await ctx.remote.settings.describe();
             if (response.ok) {
@@ -738,7 +733,23 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             setStatus(current); setNotice(current.pending ? t('settings.savedPending') : t('settings.savedApplied')); return true;
           } catch (error) { setNotice(error.message); return false; }
         } };
-        const model = new SettingsFormModel(scope, fields.map(field => ({ field: field.field,
+        const store = async values => {
+          for (const [ref, value] of Object.entries(values)) {
+            const response = await ctx.remote.credentials.set(ref, value);
+            if (response && response.ok === false) throw new Error(response.error?.message ?? 'CREDENTIAL_NOT_STORED');
+          }
+          const current = await rpc('status'); setStatus(current);
+          return Object.keys(values).every(ref => current.credentials?.[ref]);
+        };
+        const secrets = fields.filter(field => field.type.startsWith('secret')).map(field => ({ field: field.field,
+          write: async text => { try {
+            if (field.type === 'secret') return await store({ [field.path[1]]: text });
+            const value = JSON.parse(text);
+            if (!value || Array.isArray(value) || typeof value !== 'object' || Object.entries(value).some(([ref, item]) =>
+              typeof item !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref))) throw new Error(t('settings.secretMapHint'));
+            return await store(value);
+          } catch (error) { setNotice(error.message); return false; } } }));
+        const model = new SettingsFormModel(scope, fields.filter(field => !field.type.startsWith('secret')).map(field => ({ field: field.field,
           format: value => value === undefined ? '' : field.type === 'json' ? JSON.stringify(value) : String(value),
           parse: text => { try {
             // An empty reasoning choice explicitly uses the provider default;
@@ -746,12 +757,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             if (field.path[2] === 'reasoningEffort') return { kind: 'set', value: text };
             if (field.type === 'choice') return text ? { kind: 'set', value: text } : undefined;
             if (!text.trim()) return { kind: 'clear' };
-            const value = ['json', 'number', 'secret-map'].includes(field.type) ? JSON.parse(text) : text;
+            const value = ['json', 'number'].includes(field.type) ? JSON.parse(text) : text;
             if (field.type === 'number' && (!Number.isSafeInteger(value) || value < 1)) return undefined;
-            if (field.type === 'secret-map' && (!value || Array.isArray(value) || typeof value !== 'object'
-                || Object.values(value).some(item => typeof item !== 'string'))) return undefined;
             return { kind: 'set', value };
-          } catch { return undefined; } } })));
+          } catch { return undefined; } } })), secrets);
         return { fields, model, actions: model.actions(), store: model.bind(() => ({ shell: model.shell(),
           fields: Object.fromEntries(fields.map(field => [field.field, model.field(field.field)])) })) };
       });
@@ -807,9 +816,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             if (field.type === 'choice') return h(Select, { ...props, t, value: props.text, options: choices(field),
               onChange: value => choose(field, value),
               hint: field.path[0] === 'routes' ? t('settings.routeHint') : undefined });
-            return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: status?.credentials?.includes(field.path[1]) ?? false,
+            return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: status?.credentials?.[field.path[1]] ?? false,
               hint: field.type === 'secret-map' ? t('settings.secretMapHint') : t('settings.secretHint'),
-              stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : status?.credentials?.includes(field.path[1]) ? t('settings.secretSet') : t('settings.secretUnset') })
+              stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : status?.credentials?.[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })
               : h(SettingsValueField, { ...props, numeric: field.type === 'number',
                 hint: field.type === 'json' ? t('settings.jsonHint') : undefined });
           })),
@@ -1133,6 +1142,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   }
   return { apply, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
-    inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'configForms',
+    inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'remote.credentials', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

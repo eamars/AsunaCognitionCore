@@ -1,10 +1,18 @@
 """Native DSH settings migration and model-free runtime validation."""
 from copy import deepcopy
+import re
 
 from . import channel_kinds
 from .config import local_workspace, validate_database, validate_endpoint
 
-SECRET_NAMES = {'mongo_uri', 'api_key', 'token', 'password', 'secret', 'access_token'}
+# A secret's key, by substring (settings.js uses the same pattern): its value goes to DSH's credential store and the
+# settings keep a reference named like an environment variable (ADR-010 D6).
+SECRET_KEY = re.compile(r'mongo_uri|api_?key|token|password|secret', re.I)
+
+
+def credential_ref(path):
+    """The credential store's name for the secret at this settings path: ASUNA_EMBEDDING_API_KEY."""
+    return 'ASUNA_' + re.sub(r'[^A-Za-z0-9]+', '_', '_'.join(path)).strip('_').upper()
 
 
 def export_settings(config):
@@ -15,8 +23,8 @@ def export_settings(config):
             for key, item in value.items():
                 if key.startswith('_'):
                     continue
-                if key.lower() in SECRET_NAMES and isinstance(item, str):
-                    name = '/'.join((*path, key))
+                if SECRET_KEY.search(key) and isinstance(item, str):
+                    name = credential_ref((*path, key))
                     secrets[name] = item
                     result[key] = {'$secret': name}
                 else:

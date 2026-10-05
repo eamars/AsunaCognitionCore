@@ -16,7 +16,7 @@ import yaml
 
 from asuna import channel_kinds
 from asuna.config import ROOT, load
-from asuna.native_settings import export_settings
+from asuna.native_settings import credential_ref, export_settings
 
 
 def profile_base(profile):
@@ -82,6 +82,30 @@ def channel_package(directory):
             'python': directory / 'python', 'module': modules[0]}
 
 
+def move_secrets(core):
+    """Settings written before ADR-010 D6 carried plaintext under `secrets` and path-named references
+    ({"$secret": "embedding/api_key"}). Rename each reference to its credential-store name and hand back the values
+    to store, so the settings keep only references. Returns {ref: value}."""
+    old = core.pop('secrets', None) or {}
+    moved = {}
+    def visit(value):
+        if isinstance(value, dict):
+            if set(value) == {'$secret'}:
+                name = value['$secret']
+                ref = name if name.startswith('ASUNA_') else credential_ref(name.split('/'))
+                value['$secret'] = ref
+                if name in old:
+                    moved[ref] = old[name]
+                return
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+    visit(core.get('deployment', {}))
+    return moved
+
+
 def profile_patch(config, config_path, persona, shared_action_model=False, profile='asuna-native', channels=()):
     providers, routes = {}, {}
     for lane, source in (('character', 'executor' if shared_action_model else 'character'), ('action', 'executor')):
@@ -114,7 +138,7 @@ def profile_patch(config, config_path, persona, shared_action_model=False, profi
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
             'python': sys.executable, 'persona': config['chat']['persona'], 'routes': routes,
-            **export_settings(config)}},
+            'deployment': export_settings(config)['deployment']}},
     ]
 
 
@@ -164,6 +188,7 @@ def main():
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
     prior = yaml.safe_load(editable.read_text(encoding='utf-8')) if editable.exists() else []
     defaults = profile_patch(config, args.config, persona, args.shared_action_model, args.profile, channels)
+    stored = {}
     def merge(base, override):
         if isinstance(base, dict) and isinstance(override, dict):
             return {**base, **{key: merge(base.get(key), val) for key, val in override.items()}}
@@ -184,6 +209,7 @@ def main():
             row.get('config', {}).pop('workspace', None)
             row.get('config', {}).pop('configPath', None)
         if row.get('id') == 'asuna-cognition-core':
+            stored.update(move_secrets(row.get('config', {})))
             deployment = row.get('config', {}).get('deployment', {})
             for key in ('dsh_home', 'workdir'):
                 deployment.pop(key, None)
@@ -197,6 +223,9 @@ def main():
     editable.write_text(yaml.safe_dump(merged, allow_unicode=True, sort_keys=False), encoding='utf-8')
     credential_values = {'ASUNA_NATIVE_' + lane.upper() + '_KEY': config[source].get('api_key') or 'local-no-auth'
         for lane, source in (('character', 'executor' if args.shared_action_model else 'character'), ('action', 'executor'))}
+    # Business secrets go to the same store; existing values there are kept (import_native_credentials.mjs).
+    credential_values.update(export_settings(config)['secrets'])
+    credential_values.update(stored)
     subprocess.run(['node', str(ROOT / 'tools/import_native_credentials.mjs')], cwd=ROOT,
                    input=json.dumps({'home': str(home), 'values': credential_values}), text=True,
                    capture_output=True, check=True)

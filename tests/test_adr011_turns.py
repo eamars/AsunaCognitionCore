@@ -148,6 +148,17 @@ def test_stop_action_cancels_a_running_task(store):
     assert store.db.tasks.find_one({'_id': task_id})['state'] == 'CANCELLED'
 
 
+def test_stop_action_closes_a_task_a_restart_paused(store):
+    from asuna.tasks import TaskService
+    coordinator, _ = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
+    ep = coordinator.ingest(event())
+    task_id = ep['task_ids'][0]
+    TaskService(store).pause_for_restart(task_id)
+    coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('stop_action', {'task': task_id, 'reason': '那件事已经收尾了'})], '关掉了。')])
+    coordinator.ingest(event('e2', text='那条暂停的关掉吧'))
+    assert store.db.tasks.find_one({'_id': task_id})['state'] == 'CANCELLED'
+
+
 def test_a_mistyped_task_id_is_refused_with_candidates(store):
     coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())

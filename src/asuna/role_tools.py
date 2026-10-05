@@ -83,7 +83,7 @@ TOOLS = {
         'parameters': {'task': _s('任务 _id', required=True), 'message': _s('要对行动脑说的话', required=True)},
     },
     'stop_action': {
-        'description': '叫停一件还在做的事。只在对方明确要取消、或你确定不该再做时用；转换话题、说不急都不是取消。',
+        'description': '叫停一件还在做或暂停着的事。只在对方明确要取消、或你确定不该再做时用；转换话题、说不急都不是取消。',
         'parameters': {'task': _s('任务 _id', required=True), 'reason': _s('为什么叫停', required=True)},
     },
     'answer_action': {
@@ -256,7 +256,8 @@ def exposed(store, ep):
         names.append('delegate')
         if tasks:
             names.append('message_action')
-    if any(task.get('state') in ('READY', 'RUNNING') for task in tasks):
+    # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
+    if any(task.get('state') in ('READY', 'RUNNING', 'PAUSED') for task in tasks):
         names.append('stop_action')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
@@ -497,7 +498,7 @@ class RoleTools:
     def tool_stop_action(self, ep, call_id, args):
         task = self._own_task(ep, args.get('task'))
         reason = self._text(args, 'reason', 1000)
-        if task['state'] not in ('READY', 'RUNNING'):
+        if task['state'] not in ('READY', 'RUNNING', 'PAUSED'):
             return {'task': task['_id'], 'state': task['state'], 'note': '这件事已经不在进行中，不用叫停。'}, False
         stopped = self.coordinator.tasks.cancel(task['_id'], reason='character_stop', person_id=ep['person_id'])
         self.coordinator.collab(stopped, 'status', {'state': 'stopped', 'reason': reason})

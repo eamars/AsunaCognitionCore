@@ -582,7 +582,8 @@ class BusinessWorker:
         """Conversation title a person can read (content only): the configured name, else the group name or
         peer name the platform last sent with a message in that scene, else the number."""
         group = route['target']['type'] == 'group'
-        name = route.get('display_name')
+        # A configured name; earlier automatic admissions stored the number itself here, which is no name.
+        name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
         if not name:
             last = self.app.store.db.messages.find_one(
                 {'scene_id': route['scene_id'], 'direction': 'inbound', 'event.raw': {'$exists': True}},

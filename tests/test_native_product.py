@@ -150,6 +150,16 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert not (p.root / '.runtime/dsh').exists()
 
 
+def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(product):
+    p = product
+    p.channel.receive('qq', envelope(group='33330000', mid='n1', raw={'group_name': '读书会'}))
+    route = next(r for r in p.store.config['channels']['qq']['routes'].values() if r['target']['id'] == '33330000')
+    assert 'display_name' not in route
+    assert p.worker.channel_title(route) == '读书会'
+    # An admission stored earlier with the number as its name still reads by the group's name.
+    assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '读书会'
+
+
 def test_session_kinds_mark_her_platform_groups_and_dms_but_not_the_local_chat(product):
     p = product
     group = p.channel.receive('qq', envelope(group='22220000', mid='g1'))

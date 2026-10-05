@@ -3,11 +3,17 @@
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
 服务路径 / 关键步骤 / 边界语句在不在、QQ 私聊 `attach_image` 那条路的清单字段与失败码在不在、
-「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、同目录脚本能不能编译。
+「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
+不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
+同目录脚本能不能编译。
 
 2026-10-05 起改口径：QQ 私聊发图是那一轮调用 `attach_image` 工具（DECIDE 阶段与它的 `attach`
 字段已退役）。退役说法——`integration_dev`、`/skills` 挂载路径、把 DECIDE 的 `attach` 字段 /
 `ATTACH_NOT_WHEN_SILENT` / `episode.rejections` / `maxItems: 1` 当当前流程——回到散文里就红。
+
+群发前自检的四条要点只在「往群里发图之前的自检」这一节里查：正文别处合法提到历史口径
+（版本段引用「不发群」旧边界、试用记录里的旧句子）不算缺、也不误报红；把「不发群」这类
+旧限制写回这一节才红。
 
 归属与「过期说法」两类红只看散文：反引号里的字面量（错误码、历史段引用的旧句子、反证记录里
 被改坏的副本内容）按引用处理，不算数——和占位标记同一套口径。
@@ -131,6 +137,27 @@ ATTACH = [
     ("attach_history_decide_retired", "DECIDE 阶段后来整体退役"),
 ]
 
+# 往群里发图之前的自检：这一节必须在，四条要点必须都在这一节里（不是正文随便哪处）。
+# 只在这一节的范围内查——正文别处合法提到历史口径（版本段引用「不发群」旧边界、
+# 试用记录里的旧句子）不算缺，也不算多。
+GROUP_PRECHECK_HEADING = "### 往群里发图之前的自检"
+GROUP_PRECHECK = [
+    # 1. 全年龄是底线
+    ("group_pre_all_ages", "全年龄"),
+    # 2. 先看群笔记，没有就看当场最近聊天；判断不了就不发
+    ("group_pre_group_notes", "笔记"),
+    ("group_pre_recent_chat", "最近聊天"),
+    ("group_pre_cant_judge_no_send", "判断不了"),
+    # 3. 只发自己做的图，别人发进来的不转
+    ("group_pre_own_only", "我自己做的图"),
+    ("group_pre_no_forward_others", "别人发进来的图"),
+    # 4. 不为试功能发图，不发不算损失
+    ("group_pre_no_feature_test", "试功能"),
+    ("group_pre_not_a_loss", "不算损失"),
+]
+# 已退役的「不发群」旧限制不许写回这一节；只查这一节，别处引用历史口径不误报
+GROUP_PRECHECK_STALE = ["不发群", "群里不发图"]
+
 SECTIONS = [
     "## 用途",
     "## 前提与授权",
@@ -148,6 +175,7 @@ SECTIONS = [
     "## 版本",
     "## 试用记录",
     "## 步骤 8",          # 追加在末尾：老检查名（section_0..section_14）不跟着移位
+    "### 往群里发图之前的自检",   # 步骤 8 下的子节；同样追加在末尾，老编号不动
 ]
 
 # 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
@@ -193,6 +221,16 @@ def read_frontmatter(text):
     return fields, body
 
 
+def section_slice(body, heading):
+    """切出某个标题下、下一个任意级标题之前的正文；标题不在就返回空串。"""
+    start = body.find("\n" + heading + "\n")
+    if start == -1:
+        return ""
+    rest = body[start + 1 + len(heading):]
+    m = re.search(r"^#{2,6} ", rest, re.M)
+    return rest[:m.start()] if m else rest
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -224,6 +262,14 @@ def main():
 
     for name, token in TOOLS + SERVICE + BOUNDARIES + ATTACH:
         check(name, token in body, token)
+
+    # 群发前自检：四条要点只在这一节里查；「不发群」写回这一节才红，
+    # 版本段／试用记录里合法引用历史口径不误报。
+    group_section = section_slice(body, GROUP_PRECHECK_HEADING)
+    for name, token in GROUP_PRECHECK:
+        check(name, token in group_section, token)
+    stale_group = [item for item in GROUP_PRECHECK_STALE if item in group_section]
+    check("group_pre_no_stale_no_group_rule", not stale_group, ",".join(stale_group))
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
@@ -269,7 +315,8 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：技能文件、工具名、attach_image 那条路的清单与失败码、历史段、归属都在。" % (total, total))
+    print("%d/%d 通过：技能文件、工具名、attach_image 那条路的清单与失败码、历史段、"
+          "群发前自检四条要点、归属都在。" % (total, total))
     return 0
 
 

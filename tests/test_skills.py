@@ -17,5 +17,3 @@ def test_skill_discovery_follows_owner_and_sandbox_has_no_skill_mount(store):
     assert skill_directories(store.config, 'dm-b', 'A') == []
     assert skill_directories(store.config, 'dm-a', 'B') == []
     # Changing a skill goes through the development tools and development_publish only (ADR-011 §5.3).
-    run = Sandbox(work).run(['python3', '-c', "from pathlib import Path; assert not Path('/skills').exists()"])
-    assert run['exit_code'] == 0 and run['mount'] == 'task-only'

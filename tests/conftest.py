@@ -12,6 +12,25 @@ from asuna import channel_kinds
 QQ_CHANNEL={'python':ROOT/'packages'/'napcat-qq'/'python','module':'napcat_qq'}
 channel_kinds.load([QQ_CHANNEL])
 
+# Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does
+# on this machine: DSH's Windows runner, writes confined to the given root. Without it, sandboxed features are off.
+ACL_RUNNER=ROOT/'node_modules'/'@deepseek-ai'/'dsh-sandbox-windows-acl'/'lib'/'runner.js'
+HOST_SANDBOX=os.name=='nt' and ACL_RUNNER.exists() and bool(shutil.which('node'))
+
+
+def host_confine(argv,root):
+    import tempfile
+    return [shutil.which('node'),str(ACL_RUNNER),'--workspace',str(root),'--temp',tempfile.gettempdir(),
+            '--mode','workspace-write','--',*argv]
+
+
+@pytest.fixture(autouse=True)
+def host_sandbox():
+    from asuna import sandbox_backend
+    sandbox_backend.attach(host_confine if HOST_SANDBOX else None)
+    yield
+    sandbox_backend.attach(None)
+
 @pytest.fixture(autouse=True)
 def preserve_temporary_evidence(request):
     root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
@@ -111,6 +130,7 @@ def drop_database(config,name):
 @pytest.fixture
 def store(request):
     config=load();config['character_id']='demo'  # Synthetic persona of the fixture world.
+    config['_host_sandbox']={'available':HOST_SANDBOX,'reason':None if HOST_SANDBOX else 'no Host sandbox runner in tests'}
     pooled=Store.seed is _ORIGINAL_SEED
     name=_POOL.pop() if pooled and _POOL else isolated_database('asuna_v2_test_M1')
     if pooled:_OWNED.add(name)

@@ -5,9 +5,9 @@ Transport is stdio JSONL — the pipe is the token, there is no network endpoint
   job  → host  {"id":n,"method":"…","args":{…}}      host → job {"id":n,"value":…} | {"id":n,"error":{code,detail}}
   job  → host  {"kind":"report","status":"ok|red|error","summary","items"}
   exit code    0 = ok, 1 = red, 2 = error
-The sandbox launcher reuses the existing WSL bubblewrap environment with no
-network, read-only job code and source roots, and a size-capped /out. Without
-WSL/bubblewrap the feature reports "unavailable"; it never runs unsandboxed.
+The sandbox launcher runs the job under the Host's sandbox (DSH): it may write only its output folder, and
+the watchdog bounds its time and output size. Without a Host sandbox the feature reports "unavailable"; it never
+runs unconfined.
 The direct launcher exists only for protocol tests.
 """
 from __future__ import annotations
@@ -31,8 +31,8 @@ OUT_LIMIT = 64 * 1024 * 1024
 
 
 class SandboxLauncher:
-    """Bubblewrap under the worker's sandbox backend: --unshare-all (no network), ro job code and sources, rw /out only."""
-    name = 'wsl-bubblewrap'
+    """The Host's sandbox (sandbox_backend.py): job code and sources are read where they are; it writes only to out."""
+    name = 'dsh-sandbox'
 
     def __init__(self, config=None):
         self.config = config if config is not None else {}
@@ -43,20 +43,11 @@ class SandboxLauncher:
 
     def spawn(self, entry: Path, sources: dict, out: Path):
         from . import sandbox_backend
-        sandbox = sandbox_backend.require(self.config)
-        at = lambda path: sandbox_backend.path(sandbox, path)
-        mounts = []
-        for root_id, path in sources.items():
-            mounts += ['--ro-bind', at(path), '/src/' + root_id]
-        command = [*sandbox_backend.prefix(sandbox), 'bwrap', '--unshare-all', '--die-with-parent', '--new-session',
-                   '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
-                   '--symlink', 'usr/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-                   '--ro-bind', at(entry.parent), '/job', *mounts, '--bind', at(out), '/out',
-                   '--chdir', '/job', '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'PYTHONIOENCODING', 'utf-8',
-                   '/usr/bin/prlimit', '--as=1073741824', '--fsize=67108864', '--nofile=256', '--',   # personal-scan: ok (1 GiB, 64 MiB byte limits)
-                   'python3', '-u', '/job/' + entry.name]
-        mapped = {root_id: '/src/' + root_id for root_id in sources}
-        return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE), mapped, '/out'
+        command = sandbox_backend.confine(self.config, [sys.executable, '-u', str(entry)], out)
+        # stdin is the job's protocol pipe, never the worker's own (the Host's request pipe).
+        process = subprocess.Popen(command, cwd=str(entry.parent), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, env=sandbox_backend.environment())
+        return process, {root_id: str(path) for root_id, path in sources.items()}, str(out)
 
 
 class DirectLauncher:

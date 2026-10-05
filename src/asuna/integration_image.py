@@ -19,7 +19,7 @@ import time
 
 
 CONFIG_PATH = os.environ.get('ASUNA_INTEGRATION_CONFIG', '/integration/config.json')
-BODY_PATH = '/data/artifact.bin'
+BODY_PATH = os.path.join(os.environ.get('ASUNA_INTEGRATION_DATA', '/data'), 'artifact.bin')
 CHUNK = 65536
 POLL_SECONDS = 2.0
 TEXT_TO_IMAGE = 'text-to-image'

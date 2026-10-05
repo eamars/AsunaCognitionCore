@@ -198,7 +198,7 @@ export class CognitionCore {
           [...this.channels.values()].find(channel => channel.integration_directory)),
         native_sessions: nativeSessions,
         deployment: this.config.deployment, secrets: await this.credentialValues(this.config.deployment), admission: this.config.channelAdmission,
-        channels, apply_integrations: !!this.applying, schedule });
+        channels, apply_integrations: !!this.applying, schedule, sandbox: await this.sandboxStatus() });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
       // Publish the native controller's own summaries after cold metadata
@@ -294,6 +294,30 @@ export class CognitionCore {
   /** DSH's credential store, when this Host mounts one. */
   credentialStore() {
     try { return this.ctx.get('credentials'); } catch { return undefined; }
+  }
+
+  /** DSH's own sandbox (dsh-sandbox-local), when this Host mounts one: the worker runs commands under it. */
+  sandboxProvider() {
+    try { return this.ctx.get('sandbox'); } catch { return undefined; }
+  }
+
+  /** Whether the Host can confine the worker's commands, said once at initialize (sandbox_backend.py). Wrapping a
+   * probe argv selects the platform's runner without running anything or touching any folder. */
+  async sandboxStatus() {
+    const sandbox = this.sandboxProvider();
+    if (!sandbox) return { available: false, reason: 'this Host mounts no sandbox provider' };
+    try {
+      const probe = await sandbox.confine(['probe'], { mode: 'workspace-write', workspaceRoot: this.ctx.asunaFloor.dataRoot });
+      return { available: true, enforcement: probe.enforcement };
+    } catch (error) { return { available: false, reason: String(error?.message ?? error) }; }
+  }
+
+  /** One command wrapped by DSH's sandbox: writes confined to `root` (owner 2026-10-06: no read or network rule). */
+  async confine({ argv, root }) {
+    const sandbox = this.sandboxProvider();
+    if (!sandbox) throw new Error('SANDBOX_UNAVAILABLE: this Host mounts no sandbox provider');
+    const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: root });
+    return { argv: confined.argv, enforcement: confined.enforcement };
   }
 
   /** The values behind the settings' credential references, resolved for this one start or check and handed to the
@@ -417,6 +441,7 @@ export class CognitionCore {
       try {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
           : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
+          : event.method === 'sandbox' ? await this.confine(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its

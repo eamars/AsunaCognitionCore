@@ -68,25 +68,3 @@ def strip_derived(adapter):
         adapter.pop(key, None)
     adapter.get('napcat', {}).pop('account_id', None)
     return adapter
-
-
-# integration_test runs an unreviewed adapter against live NapCat. Through these guards it may read (OneBot
-# actions by name) and nothing else: no send, set, delete or upload, and none of the session secrets. QQ messages
-# leave only through the outbox and the published adapter. The core's relay holds the NapCat token for the run.
-READ_ONLY_ACTIONS = ('get_*', '_get_*', '.get_*', 'nc_get_*', 'can_*', 'fetch_*')
-SECRET_ACTIONS = ('get_cookies', 'get_credentials', 'get_csrf_token', 'get_clientkey', '*rkey*')
-
-
-def test_guards(adapter):
-    from urllib.parse import urlsplit
-    napcat = adapter.get('napcat') or {}
-    try:
-        port = urlsplit(napcat.get('url') or '').port
-    except ValueError:
-        port = None
-    if not port:
-        return []
-    return [{'port': port, 'field': 'action', 'allow': READ_ONLY_ACTIONS, 'deny': SECRET_ACTIONS,
-             'credential': ('napcat', 'token'), 'correlate': 'echo',
-             'refusal': {'status': 'failed', 'retcode': 1403, 'data': None,
-                         'message': 'integration_test reaches QQ read-only; sending goes through the outbox'}}]

@@ -98,8 +98,8 @@ def call(m,a):
 '''
 
 
-def test_T4_5_sandbox_isolation_and_protocol(store, retrieval):
-    """Protocol parts run everywhere; isolation parts need the real sandbox and skip without it."""
+def test_T4_5_sandbox_confinement_and_protocol(store, retrieval):
+    """Protocol parts run everywhere; the confined run needs the Host sandbox runner and skips without it."""
     other = write_job('main.py', PROTOCOL + 'r=call("documents.get",{"slug":"x","persona":"someone-else"})\n'
                       'sys.stdout.write(json.dumps({"kind":"report","status":"red","summary":r["error"]["code"],"items":[]})+"\\n");sys.exit(1)\n')
     try:
@@ -111,26 +111,26 @@ def test_T4_5_sandbox_isolation_and_protocol(store, retrieval):
         job_config(store, entry=slow, timeout=2)
         timed = JobRunner(store, 'P1', launcher=DirectLauncher()).run('migrate')
         assert timed['status'] == 'error', timed   # killed on timeout
-        if not SandboxLauncher().available():
-            pytest.skip('WSL + bubblewrap unavailable: isolation (paths, network, /out cap) not verified here')
-        probe = write_job('main.py', '''import json,os,socket,sys
+        if not SandboxLauncher(store.config).available():
+            pytest.skip('no Host sandbox runner here: the confined run is not verified')
+        probe = write_job('main.py', '''import json,os,sys
 start=json.loads(sys.stdin.readline())
-seen={"home_visible":os.path.exists("/mnt/c"),"source_listed":sorted(os.listdir(start["sources"]["demo-home"]))}
+seen={"source_listed":sorted(os.listdir(start["sources"]["demo-home"]))}
 try:
-    socket.create_connection(("192.0.2.1",80),timeout=2);seen["network"]=True
+    open(os.path.join(start["sources"]["demo-home"],"tamper.txt"),"w").write("x");seen["source_writable"]=True
 except OSError:
-    seen["network"]=False
+    seen["source_writable"]=False
 open(os.path.join(start["out"],"seen.json"),"w").write(json.dumps(seen))
 sys.stdout.write(json.dumps({"kind":"report","status":"ok","summary":json.dumps(seen),"items":[]})+"\\n")
 ''')
         job_config(store, entry=probe)
-        result = JobRunner(store, 'P1', launcher=SandboxLauncher()).run('migrate')
+        result = JobRunner(store, 'P1', launcher=SandboxLauncher(store.config)).run('migrate')
         seen = json.loads(json.loads(BlobStore(store).get(result['report_artifact_ids'][0], 'owner-private:P1', operator=True))['summary'])
-        assert seen == {'home_visible': False, 'source_listed': ['diary', 'notes', 'profile.md'], 'network': False}, seen
+        assert seen == {'source_listed': ['diary', 'notes', 'profile.md'], 'source_writable': False}, seen
         flood = write_job('main.py', 'import json,os,sys\nstart=json.loads(sys.stdin.readline())\n'
                           'open(os.path.join(start["out"],"big"),"wb").write(b"0"*(70*1024*1024))\n')
         job_config(store, entry=flood)
-        assert JobRunner(store, 'P1', launcher=SandboxLauncher()).run('migrate')['status'] == 'error'
+        assert JobRunner(store, 'P1', launcher=SandboxLauncher(store.config)).run('migrate')['status'] == 'error'
     finally:
         for path in (ROOT / '.runtime/work').glob('adr009-job-*'):
             shutil.rmtree(path, ignore_errors=True)

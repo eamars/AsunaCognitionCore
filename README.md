@@ -125,7 +125,7 @@ The repository is split the same way:
 ## Getting started
 
 You need DeepSeek Harness 0.2.0-rc.2, Python 3.12+, MongoDB, a model server for each brain (both brains may share
-one), and a persona package. Optional: WSL with bubblewrap for the sandbox, and NapCat for QQ.
+one), and a persona package. Optional: NapCat for QQ. Commands run under DSH's own sandbox.
 
 - **Installing into DSH:** follow [INSTALL.md](INSTALL.md). It is written so a person or a coding agent can follow it.
 - **Running and day-to-day use:** see [RUN_ASUNA.md](RUN_ASUNA.md). On Windows, `start-asuna.cmd` opens the home;

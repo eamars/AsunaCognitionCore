@@ -453,8 +453,11 @@ class Coordinator:
         if integration:capabilities+=INTEGRATION_TOOLS
         from .image_generation import available as image_available, GENERATE_IMAGE_TOOL
         if image_available(self.store.config):capabilities.append(GENERATE_IMAGE_TOOL)
-        from . import sandbox_backend
-        if not sandbox_backend.available(self.store.config):
+        from . import sandbox_backend, visibility
+        # Running commands is for the owner's own scenes (owner 2026-10-06): the Host sandbox confines writes only,
+        # so in anyone else's scene the boundary is that the tool is not given.
+        if (not sandbox_backend.available(self.store.config)
+                or (ep.get('manifest') or {}).get('session_class')!=visibility.OWNER_PRIVATE):
             capabilities=[tool for tool in capabilities if (tool['name'] if isinstance(tool,dict) else tool)!='sandbox_run']
         names=[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config),*ACTION_DSH_CAPABILITIES])]
         return development,integration,names

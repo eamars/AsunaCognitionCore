@@ -1,74 +1,43 @@
-"""Where code the worker does not trust runs (ADR-010 D5): one choice per worker, read by every sandboxed path.
+"""Where commands the worker does not write itself run: DSH's own sandbox (owner 2026-10-06).
 
-Backends:
-- `wsl-bwrap`: Windows, bubblewrap inside a WSL distro (`sandbox.wsl_distro`, default Ubuntu). This is what the
-  action brain's sandbox_run, the managed integration process and persona jobs have always used.
-- `none`: no sandbox on this machine, or turned off in the settings. Everything that needs one is off — sandbox_run,
-  managed integration, persona jobs and self-development — and her context says so instead of offering them.
-
-The setting `sandbox.backend` is `auto` (default), `wsl-bwrap` or `none`. `auto` takes wsl-bwrap when its probe
-passes and `none` otherwise, with the probe's reason. A Linux `bwrap` backend is the next one (ADR-010 M3 starts
-with these two).
+The Host wraps a command with `ctx.sandbox.confine` (dsh-sandbox-local: a restricted token on Windows, bubblewrap or
+Landlock on Linux, Seatbelt on macOS) and the worker runs the wrapped argv. DSH confines writes to one folder; reads
+and the network are not restricted, by the owner's choice: which sessions may run commands at all is decided by the
+tools a task is given (coordinator._grants). Backends:
+- `dsh`: the Host said at initialize that its sandbox can confine, and the worker asks it per command.
+- `none`: no Host sandbox, or turned off in the settings (`sandbox.backend: none`). Everything that runs commands is
+  off — sandbox_run, managed integration, persona jobs and self-development — and her context says so.
 """
 from __future__ import annotations
 
-import os
-import subprocess
-from pathlib import Path
-
-BACKENDS = ('auto', 'wsl-bwrap', 'none')
-DEFAULT_DISTRO = 'Ubuntu'
-_PROBES: dict = {}
+BACKENDS = ('auto', 'none')
+_CONFINE = {'call': None}
 
 
-def _probe_wsl(distro):
-    """(ok, reason) for bubblewrap, python3 and prlimit inside the distro; probed once per process."""
-    if distro in _PROBES:
-        return _PROBES[distro]
-    if os.name != 'nt':
-        result = (False, 'wsl-bwrap needs Windows with WSL')
-    else:
-        try:
-            probe = subprocess.run(['wsl', '-d', distro, '--exec', 'sh', '-c',
-                                    'command -v bwrap && command -v python3 && command -v prlimit'],
-                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=60)   # never the worker's pipe
-            result = (True, None) if probe.returncode == 0 else (
-                False, 'WSL distro %s lacks bubblewrap, python3 or prlimit (exit %d)' % (distro, probe.returncode))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            result = (False, 'WSL is not available: ' + type(exc).__name__)
-    _PROBES[distro] = result
-    return result
+def attach(confine):
+    """The worker's way to ask the Host: confine(argv, root) -> wrapped argv. None detaches (tests, shutdown)."""
+    _CONFINE['call'] = confine
 
 
 def validate(setting):
     if setting is None:
         return
-    if not isinstance(setting, dict) or set(setting) - {'backend', 'wsl_distro'}:
-        raise ValueError('INVALID_SANDBOX_SETTING: sandbox takes backend and wsl_distro')
+    if not isinstance(setting, dict) or set(setting) - {'backend'}:
+        raise ValueError('INVALID_SANDBOX_SETTING: sandbox takes backend')
     if setting.get('backend', 'auto') not in BACKENDS:
         raise ValueError('INVALID_SANDBOX_SETTING: backend is one of ' + ', '.join(BACKENDS))
-    distro = setting.get('wsl_distro', DEFAULT_DISTRO)
-    if not isinstance(distro, str) or not distro or not distro.replace('-', '').replace('.', '').replace('_', '').isalnum():
-        raise ValueError('INVALID_SANDBOX_SETTING: wsl_distro')
 
 
 def chosen(config):
-    """{'backend', 'reason', 'distro'} for this worker, decided once and kept in the config."""
-    if isinstance(config.get('_sandbox'), dict):
-        return config['_sandbox']
+    """{'backend', 'reason'} for this worker."""
     setting = config.get('sandbox') or {}
     validate(setting)
-    want, distro = setting.get('backend', 'auto'), setting.get('wsl_distro', DEFAULT_DISTRO)
-    if want == 'none':
-        value = {'backend': 'none', 'reason': 'turned off in the settings', 'distro': None}
-    else:
-        ok, reason = _probe_wsl(distro)
-        if not ok and want == 'wsl-bwrap':
-            raise ValueError('SANDBOX_UNAVAILABLE: ' + reason)
-        value = {'backend': 'wsl-bwrap', 'reason': None, 'distro': distro} if ok else \
-            {'backend': 'none', 'reason': reason, 'distro': None}
-    config['_sandbox'] = value
-    return value
+    if setting.get('backend') == 'none':
+        return {'backend': 'none', 'reason': 'turned off in the settings'}
+    host = config.get('_host_sandbox') or {}
+    if _CONFINE['call'] is None or not host.get('available'):
+        return {'backend': 'none', 'reason': host.get('reason') or 'the Host has no sandbox'}
+    return {'backend': 'dsh', 'reason': None, 'enforcement': host.get('enforcement')}
 
 
 def available(config):
@@ -82,12 +51,21 @@ def require(config):
     return sandbox
 
 
-def prefix(sandbox):
-    """What runs a Linux command under this backend."""
-    return ['wsl', '-d', sandbox['distro'], '--exec']
+def confine(config, argv, root):
+    """The Host's wrapped argv that runs `argv` with writes confined to `root`."""
+    require(config)
+    wrapped = _CONFINE['call'](list(argv), str(root))
+    if not isinstance(wrapped, list) or not wrapped or not all(isinstance(arg, str) for arg in wrapped):
+        raise RuntimeError('SANDBOX_CONFINE_FAILED')
+    return wrapped
 
 
-def path(sandbox, host_path):
-    """A host path as the sandbox sees it."""
-    p = Path(host_path).resolve()
-    return '/mnt/' + p.drive[0].lower() + p.as_posix()[2:]
+def environment(extra=None):
+    """What a confined command inherits: enough for Windows and Python to start, no credentials."""
+    import os
+    keep = ('SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
+            'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE')
+    env = {key: os.environ[key] for key in keep if key in os.environ}
+    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1')
+    env.update(extra or {})
+    return env

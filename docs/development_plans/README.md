@@ -19,8 +19,9 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 007 | Autonomous self-development foundation | Implemented (foundation report 2026-09-25). |
 | 008 | DSH native plugin | Implemented. |
 | 009 | Persona residency | Implemented, merged 2026-10-05; person files retired the same day. |
-| 010 | DSH distributable plugin | Approved 2026-10-05 (GitHub Release .tgz, uv, MongoDB, local inline patch, GPLv3). M0–M5 done (v0.2.0 tagged; Release assets built and checked). Pending: the D7-A upstream DSH PR is on hold by the owner (see ADR-010 §9). |
+| 010 | DSH distributable plugin (its D5 sandbox backend replaced by 015) | Approved 2026-10-05 (GitHub Release .tgz, uv, MongoDB, local inline patch, GPLv3). M0–M5 done (v0.2.0 tagged; Release assets built and checked). Pending: the D7-A upstream DSH PR is on hold by the owner (see ADR-010 §9). |
 | 011 | Her two brains on native tools | Implemented; live acceptance completed 2026-10-05. |
 | 012 | Heartbeat and places | Implemented 2026-10-05. |
 | 013 | DSH peer channel (talk with an agent in another DSH) | Implemented 2026-10-06 (`@asuna/dsh-peer`). |
 | 014 | Context budget: limits per turn, her notes tidied at night | Implemented 2026-10-06 (`context_budget.py`). |
+| 015 | DSH's own sandbox replaces WSL; commands only in the owner's scenes | Implemented 2026-10-06. |

@@ -78,7 +78,37 @@ PROGRESS_TOOL = {'name':'report_progress',
     'description':'Leave her a short progress note on a long task, without waiting: she reads it on her next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
     'parameters':{'note':{'type':'string','required':True}}}
 
-SANDBOX_TOOL={'name':'sandbox_run','description':'Execute argv in task-only Linux sandbox, no network or host credentials. Use python3 to read/write code and run tests. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'type':'array','items':{'type':'string'},'required':True}}}
+def workspace_file(root, protected, op, args):
+    """list_files / read_file / write_file inside the task folder; protected sources stay read-only. A refused or
+    failed operation is a result she reads (TASK_OPERATION_FAILED with the reason), not an exception."""
+    import traceback
+    root = Path(root).resolve()
+
+    def path(name):
+        target = (root / str(name)).resolve()
+        if not target.is_relative_to(root):
+            raise PermissionError('PATH_DENIED: outside the task folder')
+        return target
+    try:
+        if op == 'list_files':
+            return {'files': [{'path': p.relative_to(root).as_posix(), 'size': p.stat().st_size}
+                              for p in sorted(root.rglob('*')) if p.is_file()]}
+        target = path(args['path'])
+        if op == 'read_file':
+            if target.stat().st_size > 32768:
+                raise ValueError('READ_LIMIT: larger than 32 KiB')
+            return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8')}
+        if any(target == p or target.is_relative_to(p) for p in protected):
+            raise PermissionError('PROTECTED_PATH: %s is a read-only source' % target.relative_to(root).as_posix())
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('w' if args.get('overwrite', False) else 'x', encoding='utf-8') as handle:
+            handle.write(args['text'])
+        return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8'), 'written': True}
+    except Exception:
+        return {'error': 'TASK_OPERATION_FAILED', 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
+
+
+SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'type':'array','items':{'type':'string'},'required':True}}}
 
 WORKSPACE_TOOLS = [
     {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
@@ -341,21 +371,8 @@ class ToolBroker:
                             register=outbound_media.import_register(self.store, task)) if tool==IMPORT_TOOL_NAME
                         else self.integration.call(tool,args))
             elif tool in ('list_files','read_file','write_file'):
-                code="""import pathlib,json,sys
-a=json.loads(sys.argv[1]);op=sys.argv[2];root=pathlib.Path('/task')
-def path(name):
- p=(root/name).resolve();assert p.is_relative_to(root),'PATH_DENIED';return p
-if op=='list_files':r={'files':[{'path':str(p.relative_to(root)),'size':p.stat().st_size} for p in sorted(root.rglob('*')) if p.is_file()]}
-elif op=='read_file':
- p=path(a['path']);assert p.stat().st_size<=32768,'READ_LIMIT';r={'path':str(p.relative_to(root)),'text':p.read_text(encoding='utf-8')}
-elif op=='write_file':
- p=path(a['path']);p.parent.mkdir(parents=True,exist_ok=True)
- with p.open('w' if a.get('overwrite',False) else 'x',encoding='utf-8') as f:f.write(a['text'])
- r={'path':str(p.relative_to(root)),'text':p.read_text(encoding='utf-8'),'written':True}
-print(json.dumps(r,ensure_ascii=False))
-"""
-                raw=sandbox.run(['python3','-c',code,json.dumps(args),tool])
-                result={'error':'TASK_OPERATION_FAILED','execution':raw} if raw['exit_code'] else json.loads(raw['stdout'])
+                # Fixed file operations need no sandbox: the worker does them, inside the task folder only.
+                result=workspace_file(sandbox.task_dir,sandbox.protected_paths,tool,args)
             elif tool=='sandbox_run':
                 result=sandbox.run(args['argv'])
             else:
@@ -421,11 +438,11 @@ class Executor:
         if attachments:facts['attachments']=attachments
         text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
-            text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结为只读 /app 来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
+            text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
         if 'generate_image' in task.get('allowed_capabilities',()):
             text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。先用 workflows=true 看有哪些路线、各要什么样的提示词；画完用 read_image 传 artifact_id 亲眼看，不对就改了再画。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
         if task.get('development_grant'):
-            text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。技能也在候选里（角色包 skills/<kebab-case-name>/SKILL.md），同样只用 development_* 修改、经 development_publish 生效；原生 skill 工具读取的是已发布的版本。修改认知核需显式 project="core"。发布与否由你判断。'
+            text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在候选目录里运行命令（宿主沙箱：只能写候选目录；命令是本机原生的，Windows 上没有 sh，用 python3 写脚本）并返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。技能也在候选里（角色包 skills/<kebab-case-name>/SKILL.md），同样只用 development_* 修改、经 development_publish 生效；原生 skill 工具读取的是已发布的版本。修改认知核需显式 project="core"。发布与否由你判断。'
         # Her words that arrived before this run started belong to its first message.
         early=self.pending_messages(task)
         if early:

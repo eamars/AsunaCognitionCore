@@ -12,9 +12,9 @@ order; every step says how to check it worked.
 - **A persona package.** Asuna is persona-agnostic: the persona (who she is, her voice, her seeds) is a separate
   package the owner provides. None is published with the release.
 - **An embedding endpoint** on the local machine or network (an OpenAI-compatible `/embeddings`), for memory recall.
-- Optional, Windows: **WSL** with a distro that has `bubblewrap`, `python3` and `prlimit`
-  (e.g. `sudo apt install bubblewrap util-linux`). Without it, running code, self-development and channel adapters
-  are off, and Asuna says so; everything else works.
+- Nothing extra for the sandbox: commands run under DSH's own sandbox (on Windows the account running DSH needs
+  full control of the data folder, which the default location under the DSH home already has). Without a usable
+  Host sandbox, running code, self-development and channel adapters are off, and Asuna says so.
 
 ## 1. Install the plugins
 
@@ -45,13 +45,13 @@ Open Plugins → Asuna Cognition Core. A new profile shows `Business worker: unc
 - **embedding**: `{"base_url":"http://<host>:<port>/v1","model":"<embedding model>"}`.
 - **Python**: leave empty to let Asuna build its environment (needs uv or Python 3.12+), or give an interpreter
   that already has the pinned dependencies.
-- Optional `sandbox`: `{"backend":"auto"}` (default), `"none"`, or `"wsl-bwrap"` with `"wsl_distro"`.
+- Optional `sandbox`: `{"backend":"auto"}` (default: DSH's sandbox) or `{"backend":"none"}`.
 
 **Save settings**, then **Apply saved settings**. The first start may take a few minutes while the Python
 environment is built; the status line shows the step.
 
 Check: the card shows `Business worker: ready · Mongo: connected`, and its last status line names the sandbox
-(`Sandbox: wsl-bwrap`, or `none (reason)`).
+(`Sandbox: dsh`, or `none (reason)`).
 
 Everything the profile writes goes to its data folder, `$DSH_HOME/asuna/<profile>/` by default (the floor's
 `dataRoot` setting moves it). Nothing is written into the installed packages.

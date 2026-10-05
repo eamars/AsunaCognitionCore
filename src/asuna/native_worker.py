@@ -268,7 +268,7 @@ class BusinessWorker:
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
-                   schedule=True, channels=None):
+                   schedule=True, channels=None, sandbox=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -298,6 +298,10 @@ class BusinessWorker:
             if models and lane in models:
                 config[key] = {**config[key], **models[lane]}
         config['_integration_project'] = integration_project
+        # Commands run under the Host's own sandbox (sandbox_backend.py): the Host says whether it can confine, and
+        # wraps each command on request.
+        config['_host_sandbox'] = sandbox or {'available': False, 'reason': 'the Host did not offer its sandbox'}
+        sandbox_backend.attach(lambda argv, root: self.host_call('sandbox', {'argv': argv, 'root': root})['argv'])
         config['_native_apply_integrations'] = apply_integrations
         # The installed adapter release belongs to the channel plugin that ships it.
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]

@@ -563,6 +563,9 @@ class ContextBuilder:
             # What she cannot hand over, said as such (ADR-010 D5); never how the machine is set up.
             context['action_capabilities_from_program']['not_available']=(
                 '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
+        elif session_class!=visibility.OWNER_PRIVATE:
+            context['action_capabilities_from_program']['run_code']=(
+                '在这里交出去的事，行动脑不能跑代码或命令；那只在主人那边做。别在这里答应跑代码。')
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')

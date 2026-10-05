@@ -18,8 +18,8 @@ from .queue import RuntimeLease
 from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
 INTEGRATION_TOOLS = [
-    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable, and a platform only read-only: its relay holds the platform credential and refuses sending, changing and secret requests (the refusal is in the relay log of the result); the channel API likewise passes only attachment reads. Messages leave through the outbox and the published adapter. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
-    {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen /app copy of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
+    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. The run reaches the configured endpoints directly with the real settings, so a test run can really act on a platform: test with reads, and leave sending to the outbox and the published adapter. In argv, /app is the frozen adapter, /data its writable folder (separate from enabled service data) and /integration/config.json its settings (also in $ASUNA_INTEGRATION_CONFIG and $ASUNA_INTEGRATION_DATA); python3 is Python 3.12 on this machine. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
+    {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen copy (/app) of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
 ]
@@ -48,73 +48,26 @@ def event_granted(config, event):
     return True
 
 
-HELD_BY_RELAY = 'held-by-the-integration-relay'
-# The core's channel API (RUNTIME_API.md) in a test run: claiming the outbox is a GET that takes items, so the only
-# read is an attachment of an already claimed attempt. Posting events and receipts is refused as well.
-HOST_TEST_READS = ('GET /v1/channels/*/outbox/*/attachment',)
+def direct(adapter, endpoints):
+    """The run's view of its endpoints: each alias at the device's own address. The adapter settings name an
+    endpoint by its local port (`port`, where relays once served it); those references become the device's address."""
+    table = {e['name']: {'host': e['host'], 'port': e['target_port'], **({'tls': True} if e.get('tls') else {})}
+             for e in endpoints}
+    ports = {e['port']: e for e in endpoints}
 
+    def address(match):
+        e = ports.get(int(match.group(2)))
+        return match.group(0) if e is None else match.group(1) + e['host'] + ':' + str(e['target_port'])
 
-def guard_test_run(adapter, endpoints, config=None):
-    """Test runs (unreviewed adapter code) reach a platform only through its channel kind's read-only guard.
-
-    Each installed kind may name, from its own adapter settings, the relay port that carries its platform, the
-    request field and the read-only patterns (channel_kinds `test_guards`). Every alias of that platform then
-    gets the guard: the relay holds the credential and refuses the rest, and the run's own config carries a
-    placeholder instead. The core guards its own channel API the same way (HOST_TEST_READS). Sending stays with
-    the outbox and the published adapter (`integration_start`).
-    """
-    from . import channel_kinds
-    from urllib.parse import urlsplit
-    endpoints = [dict(e) for e in endpoints]
-    guards = [guard for kind in channel_kinds.kinds() for guard in getattr(kind, 'test_guards', lambda _adapter: [])(adapter)]
-    try:
-        host_port = urlsplit((adapter.get('host') or {}).get('base_url') or '').port
-    except ValueError:
-        host_port = None
-    if host_port:
-        guards.append({'protocol': 'http', 'port': host_port, 'allow': HOST_TEST_READS, 'credential': ('host', 'token'),
-                       'refusal': {'error': 'INTEGRATION_TEST_READ_ONLY',
-                                   'detail': 'test runs may not post events, claim the outbox or post receipts'}})
-    for guard in guards:
-        *parents, name = guard['credential']
-        node = adapter
-        for key in parents:
-            node = node.get(key) if isinstance(node, dict) else None
-        credential = node.get(name) if isinstance(node, dict) else None
-        if isinstance(node, dict) and name in node:
-            node[name] = HELD_BY_RELAY
-        platform = {(e['host'], e['target_port']) for e in endpoints if e['port'] == guard['port']}
-        for e in endpoints:
-            if (e['host'], e['target_port']) in platform:
-                e['guard'] = {'protocol': guard.get('protocol', 'websocket'), 'field': guard.get('field'),
-                              'allow': list(guard['allow']), 'deny': list(guard.get('deny', ())),
-                              'correlate': guard.get('correlate'), 'refusal': guard.get('refusal'),
-                              'credential': credential if isinstance(credential, str) else None}
-    return adapter, endpoints
-
-
-READ_ONLY_REQUESTS = ('GET *', 'HEAD *')
-
-
-def guard_read_only(endpoints):
-    """An endpoint the owner marked read_only is read-only in every run: its relay passes GET and HEAD only.
-
-    With `tls` the relay also speaks TLS to the device, so a run reads an HTTPS service as plain HTTP from its
-    relay port (the relay must see the request to judge it). The Host header is the device's address.
-    """
-    endpoints = [dict(e) for e in endpoints]
-    for e in endpoints:
-        if e.get('read_only'):
-            e['guard'] = {'protocol': 'http', 'allow': list(READ_ONLY_REQUESTS), 'tls': bool(e.get('tls')),
-                          'host': e['host'], 'refusal': {'error': 'INTEGRATION_ENDPOINT_READ_ONLY',
-                                                         'detail': 'this endpoint passes GET and HEAD only'}}
-    return endpoints
-
-
-def linux(path, config=None):
-    """A host path as the integration sandbox sees it."""
-    from . import sandbox_backend
-    return sandbox_backend.path(sandbox_backend.require(config if config is not None else {}), path)
+    def rewrite(value):
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, str):
+            return re.sub(r'(^|//|@)(?:127\.0\.0\.1|localhost):(\d+)', address, value)
+        return value
+    return rewrite(adapter), table
 
 
 def valid_argv(argv):
@@ -125,8 +78,26 @@ def valid_argv(argv):
     return argv
 
 
+def native_argv(argv, snapshot, data, config_path):
+    """An adapter argv as this machine runs it: python3 is the worker's Python; /app, /data and
+    /integration/config.json (how the adapter and its manual name them) are the run's own folders and file."""
+    import sys
+    names = {'/integration/config.json': Path(config_path), '/app': Path(snapshot), '/data': Path(data)}
+    out = [sys.executable if argv[0] in ('python3', 'python', 'python3.exe', 'python.exe') else argv[0]]
+    for arg in argv[1:]:
+        for name, path in names.items():
+            if arg == name or arg.startswith(name + '/'):
+                arg = path.as_posix() + arg[len(name):]
+                break
+        out.append(arg)
+    return out
+
+
 class ManagedProcess:
+    """One adapter (or trusted one-shot) process under the Host's sandbox (sandbox_backend.py): it may write only its
+    data folder, and reaches its endpoints directly (owner 2026-10-06: no network rule). Its output is kept as logs."""
     def __init__(self, spec, directory, config):
+        from . import sandbox_backend
         self.directory, self.config = directory, config
         self.logs = deque(maxlen=64)
         self.lock = threading.Lock()
@@ -134,15 +105,17 @@ class ManagedProcess:
         self.started = threading.Event()
         self.finished = threading.Event()
         self.stop_requested = False
-        from . import sandbox_backend
-        sandbox = sandbox_backend.require(config)
-        self.process = subprocess.Popen(
-            [*sandbox_backend.prefix(sandbox), 'python3', sandbox_backend.path(sandbox, Path(__file__).with_name('integration_worker.py'))],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding='utf-8', errors='replace')
-        self.process.stdin.write(json.dumps(spec)+'\n'); self.process.stdin.flush()
-        self.reader = threading.Thread(target=self._read, daemon=True); self.reader.start()
-        self.errors = threading.Thread(target=self._errors, daemon=True); self.errors.start()
+        command = sandbox_backend.confine(config, spec['argv'], spec['data'])
+        self.process = subprocess.Popen(command, cwd=spec['snapshot'], stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        env=sandbox_backend.environment({'ASUNA_INTEGRATION_CONFIG': spec['config'],
+                                                                         'ASUNA_INTEGRATION_DATA': spec['data'],
+                                                                         'PYTHONUNBUFFERED': '1'}))
+        self.started.set()
+        self.reader = threading.Thread(target=self._stream, args=(self.process.stdout, 'stdout'), daemon=True)
+        self.errors = threading.Thread(target=self._stream, args=(self.process.stderr, 'stderr'), daemon=True)
+        self.reader.start(); self.errors.start()
+        threading.Thread(target=self._wait, daemon=True).start()
 
     def _log(self, stream, text):
         with self.lock:
@@ -153,29 +126,15 @@ class ManagedProcess:
             except OSError as exc:
                 self.logs.append({'stream': 'supervisor_error', 'text': 'LOG_PERSISTENCE_FAILED: '+str(exc)})
 
-    def _errors(self):
-        while text := self.process.stderr.read(4096):
-            self._log('supervisor_stderr', text)
+    def _stream(self, pipe, name):
+        while chunk := pipe.read1(4096):
+            self._log(name, chunk.decode('utf-8', 'replace'))
 
-    def _read(self):
-        try:
-            for line in self.process.stdout:
-                value = json.loads(line)
-                if value['type'] == 'started':
-                    self.started.set()
-                elif value['type'] == 'log':
-                    self._log(value['stream'], value['text'])
-                elif value['type'] == 'exit':
-                    self.exit_code = value['exit_code']
-            code = self.process.wait()
-            if self.exit_code is None:
-                self.exit_code = code if code else -1
-        except Exception as exc:
-            self._log('supervisor_error', str(exc))
-            self.exit_code = -1
-            self.process.stdin.close()
-        finally:
-            self.finished.set()
+    def _wait(self):
+        code = self.process.wait()
+        self.reader.join(5); self.errors.join(5)
+        self.exit_code = code
+        self.finished.set()
 
     def snapshot(self):
         with self.lock:
@@ -189,21 +148,20 @@ class ManagedProcess:
                      'exit_code': self.exit_code,
                      'logs': [{'stream': name, 'text': redact_text(''.join(parts), self.config)} for name, parts in streams.items()],
                      'run_id': self.directory.name,
-                     'network': 'private namespace; configured TCP relays only'}
+                     'network': 'direct to the configured endpoints'}
         return value
 
     def stop(self):
         self.stop_requested = True
         try:
-            self.process.stdin.close()  # Supervisor EOF kills the whole namespace.
+            self.process.kill()   # the Host sandbox's runner holds the command in a kill-on-close job
         except OSError:
             pass
         try:
             self.process.wait(timeout=12)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError('INTEGRATION_STOP_UNCONFIRMED') from exc
-        self.reader.join(2)
-        self.errors.join(2)
+        self.finished.wait(5)
         return self.snapshot()
 
 
@@ -341,20 +299,14 @@ class IntegrationRunner:
         data.mkdir(exist_ok=True)
         adapter, endpoints = copy.deepcopy(self.profile.get('adapter_config', {})), self.endpoints
         if only is not None:
-            # A trusted one-shot run that needs one service sees only that relay, and no adapter settings.
+            # A trusted one-shot run that needs one service gets only that endpoint, and no adapter settings.
             adapter, endpoints = {}, [e for e in endpoints if e['name'] == only]
-        if mode != 'service':
-            adapter, endpoints = guard_test_run(adapter, endpoints, self.config)
-        endpoints = guard_read_only(endpoints)
-        connection = {'endpoints': {e['name']: {'host': '127.0.0.1', 'port': e['port']} for e in endpoints},
-                      'adapter': adapter}
-        config_path = directory/'config.json'; config_path.write_text(json.dumps(connection), encoding='utf-8')
-        spec = {'snapshot': linux(snapshot, self.config), 'data': linux(data, self.config), 'config': linux(config_path, self.config),
-                'argv': argv, 'endpoints': endpoints}
+        adapter, table = direct(adapter, endpoints)
+        config_path = directory/'config.json'
+        config_path.write_text(json.dumps({'endpoints': table, 'adapter': adapter}), encoding='utf-8')
+        spec = {'snapshot': str(snapshot), 'data': str(data), 'config': str(config_path),
+                'argv': native_argv(argv, snapshot, data, config_path)}
         process = ManagedProcess(spec, directory, self.config)
-        if not process.started.wait(8):
-            process.stop()
-            raise RuntimeError('INTEGRATION_LAUNCH_FAILED: '+json.dumps(process.snapshot()))
         process.finished.wait(.3)
         return process
 

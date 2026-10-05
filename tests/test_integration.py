@@ -1,4 +1,4 @@
-"""Real namespace/lifecycle contracts; fake model only for task authorization."""
+"""Real lifecycle contracts under the Host sandbox (conftest's DSH runner); fake model only for task authorization."""
 import shutil
 import uuid
 
@@ -24,7 +24,8 @@ def delegates(title):
 
 def profile(scene='local', person='owner'):
     return {'chat': {'scene_id': scene, 'person_id': person},
-            'integration': {'enabled': True, 'scene_id': scene, 'person_id': person, 'endpoints': []}}
+            'integration': {'enabled': True, 'scene_id': scene, 'person_id': person, 'endpoints': []},
+            '_host_sandbox': {'available': True}}
 
 
 @pytest.fixture
@@ -41,22 +42,14 @@ def logs(value):
     return ''.join(item['text'] for item in value['logs'])
 
 
-def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
+def test_stderr_timeout_and_a_snapshot_the_run_cannot_change(runner):
     (runner.dev/'version.txt').write_text('original')     # the development candidate's adapter (development_write)
-    code = "from pathlib import Path; import json,os; print(Path('/app/version.txt').read_text()); print(os.getuid()); Path('/app/version.txt').write_text('changed')"
+    code = "from pathlib import Path; print(Path('version.txt').read_text()); Path('version.txt').write_text('changed')"
     value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
-    assert value['exit_code'] != 0 and 'Read-only file system' in logs(value) and 'Traceback' in logs(value)
+    assert value['exit_code'] != 0 and 'PermissionError' in logs(value) and 'Traceback' in logs(value)
     assert (runner.dev/'version.txt').read_text() == 'original'
     value = runner.call('integration_test', {'argv': ['python3', '-c', 'import time; time.sleep(20)'], 'timeout': 1})
     assert value['timed_out'] and value['state'] == 'STOPPED'
-
-
-def test_the_run_has_a_user_entry_and_a_home(runner):
-    """ssh, git and similar clients refuse to run for a uid without a passwd entry."""
-    code = "import os, pwd; print(pwd.getpwuid(os.getuid()).pw_name, os.environ['HOME'], os.access('/tmp', os.W_OK))"
-    value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
-    assert value['exit_code'] == 0 and 'integration /tmp True' in logs(value)
-    assert list((runner.root/'snapshots').iterdir()) == []          # its copy of the adapter went with it
 
 
 def test_start_runs_only_the_published_adapter(runner, tmp_path):
@@ -68,7 +61,7 @@ def test_start_runs_only_the_published_adapter(runner, tmp_path):
     release = tmp_path/'release'; release.mkdir(); (release/'version.txt').write_text('published')
     (runner.dev/'version.txt').write_text('unpublished')
     runner.config['_native_integration_release'] = str(release)
-    value = runner.call('integration_start', {'argv': ['python3', '-c', "print(open('/app/version.txt').read()); import time; time.sleep(20)"]})
+    value = runner.call('integration_start', {'argv': ['python3', '-c', "print(open('version.txt').read()); import time; time.sleep(20)"]})
     assert value['state'] == 'RUNNING'
     import time
     deadline = time.monotonic() + 5

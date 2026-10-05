@@ -34,25 +34,20 @@ def test_a_bad_line_is_recorded_and_skipped_and_the_worker_keeps_reading():
 def test_a_sandbox_command_never_inherits_the_workers_stdin(tmp_path, monkeypatch):
     seen = {}
 
-    def run(command, **options):
-        seen.update(options)
-        return subprocess.CompletedProcess(command, 0, json.dumps(
-            {'exit_code': 0, 'stdout': '', 'stderr': '', 'output_limit': False, 'timed_out': False}), '')
+    class Process:
+        returncode = 0
+
+        def __init__(self, command, **options):
+            seen.update(options)
+            self.stdout, self.stderr = io.BytesIO(b'{}'), io.BytesIO(b'')
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            pass
     monkeypatch.setattr(sandbox_module, 'DATA', tmp_path)
-    monkeypatch.setattr(sandbox_backend, 'require', lambda config: {'backend': 'wsl-bwrap', 'distro': 'Ubuntu'})
-    monkeypatch.setattr(sandbox_module.subprocess, 'run', run)
-    Sandbox(tmp_path / 'work' / 't1').run(['ls'])
-    assert seen['stdin'] is subprocess.DEVNULL
-
-
-def test_the_wsl_probe_never_inherits_the_workers_stdin(monkeypatch):
-    seen = {}
-
-    def run(command, **options):
-        seen.update(options)
-        return subprocess.CompletedProcess(command, 0, b'', b'')
-    monkeypatch.setattr(sandbox_backend.subprocess, 'run', run)
-    monkeypatch.setattr(sandbox_backend.os, 'name', 'nt')
-    monkeypatch.setattr(sandbox_backend, '_PROBES', {})
-    sandbox_backend._probe_wsl('Probe-Distro')
+    sandbox_backend.attach(lambda argv, root: ['runner', '--', *argv])
+    monkeypatch.setattr(sandbox_module.subprocess, 'Popen', Process)
+    Sandbox(tmp_path / 'work' / 't1', config={'_host_sandbox': {'available': True}}).run(['ls'])
     assert seen['stdin'] is subprocess.DEVNULL

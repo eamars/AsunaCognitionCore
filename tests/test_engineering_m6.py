@@ -24,6 +24,8 @@ def task_setup(store):
     turn=FakeTurn([('think',{'thought':'交给行动脑复制，原件要保留。'}),
                    ('delegate',{'title':'copy fixture','brief':'复制受控文件，保留原件。'}),
                    ('stay_silent',{'reason':'做完再说'})])
+    # Running commands is for the owner's own scenes: dm-a is the owner's DM (A is the owner by account).
+    store.config['canonical_persons']={'A':store.config['chat']['person_id']}
     ep=Coordinator(store,FakeLane(store,[turn])).ingest({'event_id':'copy','scene_id':'dm-a','person_id':'A','text':'复制受控文件，保留原件。'})
     service=TaskService(store);task=service.claim(ep['task_ids'][0])
     work=Path(store.config['channels']['fixture']['routes']['dm-a']['workspace'])
@@ -63,7 +65,7 @@ def test_E06_duplicate_result_one_character_feedback(store):
 
 
 def test_E12_output_cap_and_literal_shell_arguments():
-    work=ROOT/'.runtime/work'/('limits-'+uuid.uuid4().hex);sandbox=Sandbox(work)
+    work=ROOT/'.runtime/work'/('limits-'+uuid.uuid4().hex);sandbox=Sandbox(work,config={'_host_sandbox':{'available':True}})
     text='literal; $(touch /tmp/ASUNA_HOST_ESCAPE) `echo nope`'
     result=sandbox.run(['python3','-c','import sys;print(sys.argv[1])',text])
     assert result['stdout'].strip()==text

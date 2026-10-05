@@ -71,6 +71,14 @@ async function files(root) {
   }
   await visit(root); return result;
 }
+const PYTHONS = new Set(['python3', 'python', 'python3.exe', 'python.exe']);
+/** What a sandboxed command inherits: enough for Windows and Python to start, no credentials (as sandbox_backend.py). */
+function commandEnvironment() {
+  const keep = ['SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
+    'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE'];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.includes(key.toUpperCase())));
+  return { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1' };
+}
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { windowsHide: true, ...options, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -238,14 +246,17 @@ export class PublicationFloor {
       if (tool === 'development_run') {
         if (!Array.isArray(args.argv) || !args.argv.length || args.argv.length > 40
           || args.argv.some(a => typeof a !== 'string' || a.includes('\0')) || args.argv.join('').length > 16000) throw new Error('DEVELOPMENT_ARGV_INVALID');
-        const linux = '/mnt/' + project.candidate[0].toLowerCase() + project.candidate.slice(2).replaceAll('\\', '/');
-        const result = await run('wsl', ['-d', 'Ubuntu', '--exec', 'timeout', '--kill-after=2', '35',
-          'bwrap', '--unshare-all', '--die-with-parent', '--new-session', '--ro-bind', '/usr', '/usr',
-          '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
-          '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--bind', linux, '/task', '--chdir', '/task',
-          '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', 'prlimit', '--cpu=20', '--as=1073741824',
-          '--fsize=8388608', '--nofile=128', '--', ...args.argv]);
-        return { ...result, argv: args.argv, sandbox: 'wsl-bubblewrap-unshare-all', network: 'isolated' };
+        // DSH's own sandbox (owner 2026-10-06): the command may write only its candidate. It runs natively on this
+        // machine: python3 is the worker's Python, and /task names the candidate folder (as her tools say).
+        const sandbox = this.sandbox?.();
+        if (!sandbox) throw new Error('SANDBOX_UNAVAILABLE: this Host mounts no sandbox provider');
+        const root = project.candidate.replaceAll('\\', '/');
+        const argv = args.argv.map((arg, index) => index === 0 && PYTHONS.has(arg) ? this.config.python ?? this.workerPython
+          : arg === '/task' || arg.startsWith('/task/') ? root + arg.slice(5) : arg);
+        const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: project.candidate });
+        const result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, timeout: 35000,
+          env: commandEnvironment() });
+        return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only' };
       }
       if (tool === 'development_publish') return this.publish(project, args.reason ?? '', origin);
       throw new Error('UNKNOWN_DEVELOPMENT_TOOL');
@@ -377,5 +388,8 @@ export class PublicationFloor {
 }
 
 export function apply(ctx, config = {}) {
-  ctx.provide('asunaFloor', new PublicationFloor(config, dataRoot(ctx, config)));
+  const floor = new PublicationFloor(config, dataRoot(ctx, config));
+  // DSH's own sandbox, when the Host mounts one (development_run).
+  floor.sandbox = () => { try { return ctx.get('sandbox'); } catch { return undefined; } };
+  ctx.provide('asunaFloor', floor);
 }

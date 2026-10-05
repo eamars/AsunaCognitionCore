@@ -5,11 +5,32 @@ before anything is attempted in memory, so a full queue, a crash or a SIGTERM
 cannot drop it silently.  Anything that stops being retried is moved into a
 journal file with a reason instead of vanishing.
 """
-import fcntl
 import json
 import os
 import threading
 import time
+
+try:                      # Linux and macOS
+    import fcntl
+except ImportError:       # Windows: the same non-blocking exclusive lock, on the file's first byte
+    fcntl = None
+    import msvcrt
+
+
+def _lock(fd):
+    if fcntl:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    else:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+
+
+def _unlock(fd):
+    if fcntl:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    else:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
 class Counters:
@@ -130,7 +151,7 @@ class Journal:
         path = os.path.join(self.root, "adapter.lock")
         fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock(fd)
         except OSError:
             os.close(fd)
             raise RuntimeError("another adapter process is holding %s" % path)
@@ -152,7 +173,7 @@ class Journal:
         if fd is None:
             return
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            _unlock(fd)
         except OSError:
             pass
         try:

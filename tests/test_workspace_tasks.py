@@ -46,7 +46,7 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         broker.bind('workspace', task, work)
         failed = broker.call('workspace', 'protected', 'write_file', {'path': 'notes/source.txt', 'text': '不应写入', 'overwrite': True})
         assert failed['error'] == 'TASK_OPERATION_FAILED'
-        assert 'Read-only file system' in failed['execution']['stderr']
+        assert 'PROTECTED_PATH' in failed['execution']['stderr']
         assert 'Traceback' in failed['execution']['stderr']
         assert (work / 'notes/source.txt').read_text(encoding='utf-8') == '原文保持不变'
         result = broker.call('workspace', 'new', 'write_file', {'path': '普通便条.txt', 'text': '这不是 stats.py'})

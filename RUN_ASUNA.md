@@ -20,7 +20,7 @@ To install the released plugins into another DeepSeek Harness profile, follow [I
 
 ## Prerequisites and installation
 
-Use the existing Mongo database and private deployment configuration. A compatible Node runtime, Python **3.12+**, and the existing WSL Ubuntu/bubblewrap environment are required for the configured workspace tools. Model and embedding services run independently.
+Use the existing Mongo database and private deployment configuration. A compatible Node runtime and Python **3.12+** are required; commands run under DSH's own sandbox (this install's `.runtime` grants the owner's account full control, which DSH's Windows sandbox needs). Model and embedding services run independently.
 
 ```powershell
 npm.cmd ci

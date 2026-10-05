@@ -1,11 +1,12 @@
-"""Trusted one-shot artifact fetcher, run only inside the managed integration namespace.
+"""Trusted one-shot artifact fetcher, run by the managed integration (integration.py) for one configured endpoint.
 
 The model supplies an endpoint alias and a path; this script supplies everything
-else. It reads the endpoint table the supervisor mounted at
-/integration/config.json, connects to the 127.0.0.1 relay port for that alias
-(the only address the namespace can reach), performs one plain HTTP/1.1 GET and
-writes the body to /data/artifact.bin. No URL is ever accepted, no redirect is
-followed, and at most limit+1 bytes are kept. Stdlib only.
+else. It reads the endpoint table in its config ($ASUNA_INTEGRATION_CONFIG),
+connects to that endpoint's address (HTTPS when the endpoint says tls; a LAN
+device's own certificate is not verified), performs one HTTP/1.1 GET and writes
+the body to artifact.bin in its data folder ($ASUNA_INTEGRATION_DATA). No URL is
+ever accepted, no redirect is followed, and at most limit+1 bytes are kept.
+Stdlib only.
 
 The report on stdout is one JSON line; the host re-reads the file and verifies
 the byte count and SHA-256 itself instead of trusting this process.
@@ -18,7 +19,7 @@ import sys
 
 
 CONFIG_PATH = os.environ.get('ASUNA_INTEGRATION_CONFIG', '/integration/config.json')
-BODY_PATH = '/data/artifact.bin'
+BODY_PATH = os.path.join(os.environ.get('ASUNA_INTEGRATION_DATA', '/data'), 'artifact.bin')
 CHUNK = 65536
 
 
@@ -80,7 +81,13 @@ def main(argv):
         if not isinstance(entry, dict) or type(entry.get('port')) is not int:
             # Second fence: even a wrong alias cannot turn this into a URL fetch.
             raise ValueError('ENDPOINT_NOT_CONFIGURED: ' + str(endpoint)[:80])
-        result = http_get(entry.get('host') or '127.0.0.1', entry['port'], path, limit, timeout)
+        connect = None
+        if entry.get('tls'):
+            # A LAN device behind its own local CA: TLS, but its certificate is not verified.
+            import http.client, ssl
+            context = ssl._create_unverified_context()
+            connect = lambda host, port, timeout: http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
+        result = http_get(entry.get('host') or '127.0.0.1', entry['port'], path, limit, timeout, connect=connect)
         body = result.pop('body')
         if result['status'] == 200 and not result['transport_error']:
             Path(BODY_PATH).write_bytes(body)

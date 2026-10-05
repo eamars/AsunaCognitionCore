@@ -1,5 +1,6 @@
 """Owner-granted, fixed-network integration lifecycle; contains no platform protocol."""
 from collections import deque
+import copy
 import hashlib
 import ipaddress
 import json
@@ -17,7 +18,7 @@ from .queue import RuntimeLease
 from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
 INTEGRATION_TOOLS = [
-    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
+    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate at /app, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. Only configured endpoints are reachable, and a platform only read-only: its relay holds the platform credential and refuses sending, changing and secret requests (the refusal is in the relay log of the result); messages leave through the outbox and the published adapter. Read /integration/config.json for explicit connection settings; writable /data is separate from enabled service data. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}, 'timeout': {'type': 'integer'}}},
     {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen /app copy of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'type': 'array', 'items': {'type': 'string'}, 'required': True}}},
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
@@ -45,6 +46,37 @@ def event_granted(config, event):
         return False                      # the managed process only runs in the sandbox (ADR-010 D5)
     owner_profile(config, event['scene_id'], event['person_id'])
     return True
+
+
+HELD_BY_RELAY = 'held-by-the-integration-relay'
+
+
+def guard_test_run(adapter, endpoints, config=None):
+    """Test runs (unreviewed adapter code) reach a platform only through its channel kind's read-only guard.
+
+    Each installed kind may name, from its own adapter settings, the relay port that carries its platform, the
+    request field and the read-only patterns (channel_kinds `test_guards`). Every alias of that platform then
+    gets the guard: the relay holds the credential and refuses the rest, and the run's own config carries a
+    placeholder instead. Sending stays with the outbox and the published adapter (`integration_start`).
+    """
+    from . import channel_kinds
+    endpoints = [dict(e) for e in endpoints]
+    for kind in channel_kinds.kinds():
+        for guard in getattr(kind, 'test_guards', lambda _adapter: [])(adapter):
+            *parents, name = guard['credential']
+            node = adapter
+            for key in parents:
+                node = node.get(key) if isinstance(node, dict) else None
+            credential = node.get(name) if isinstance(node, dict) else None
+            if isinstance(node, dict) and name in node:
+                node[name] = HELD_BY_RELAY
+            platform = {(e['host'], e['target_port']) for e in endpoints if e['port'] == guard['port']}
+            for e in endpoints:
+                if (e['host'], e['target_port']) in platform:
+                    e['guard'] = {'field': guard['field'], 'allow': list(guard['allow']), 'deny': list(guard.get('deny', ())),
+                                  'correlate': guard.get('correlate'), 'refusal': guard.get('refusal'),
+                                  'credential': credential if isinstance(credential, str) else None}
+    return adapter, endpoints
 
 
 def linux(path, config=None):
@@ -257,11 +289,14 @@ class IntegrationRunner:
         directory = self.root/'runs'/uuid.uuid4().hex; directory.mkdir(parents=True)
         data = self.root/'service-data' if mode == 'service' else directory/'data'
         data.mkdir(exist_ok=True)
-        connection = {'endpoints': {e['name']: {'host': '127.0.0.1', 'port': e['port']} for e in self.endpoints},
-                      'adapter': self.profile.get('adapter_config', {})}
+        adapter, endpoints = copy.deepcopy(self.profile.get('adapter_config', {})), self.endpoints
+        if mode != 'service':
+            adapter, endpoints = guard_test_run(adapter, endpoints, self.config)
+        connection = {'endpoints': {e['name']: {'host': '127.0.0.1', 'port': e['port']} for e in endpoints},
+                      'adapter': adapter}
         config_path = directory/'config.json'; config_path.write_text(json.dumps(connection), encoding='utf-8')
         spec = {'snapshot': linux(snapshot, self.config), 'data': linux(data, self.config), 'config': linux(config_path, self.config),
-                'argv': argv, 'endpoints': self.endpoints}
+                'argv': argv, 'endpoints': endpoints}
         process = ManagedProcess(spec, directory, self.config)
         if not process.started.wait(8):
             process.stop()

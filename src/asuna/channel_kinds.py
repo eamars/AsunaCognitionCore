@@ -8,6 +8,7 @@ A kind module knows one platform's id formats and adapter conventions:
   scene_id(bot, kind, target), scene_parts(id) a scene id and back
   outbound_mention(account)                    how her @ reaches the adapter
   adapter_config(adapter, channel), strip_derived(adapter)
+  test_guards(adapter)                         optional: read-only relay guards for test runs (integration.py)
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).

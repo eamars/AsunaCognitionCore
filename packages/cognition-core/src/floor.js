@@ -357,13 +357,13 @@ export class PublicationFloor {
     }
     if (!workerPath && await exists(path.join(target, 'python'))) {
       // A channel plugin's Python must at least parse before it can be published.
-      probe = await run(this.config.python, ['-c', 'import ast, pathlib, sys\n'
+      probe = await run(this.config.python ?? this.workerPython, ['-c', 'import ast, pathlib, sys\n'
         + 'for f in pathlib.Path(sys.argv[1]).rglob("*.py"): ast.parse(f.read_text(encoding="utf-8"), str(f))',
         path.join(target, 'python')]);
       if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
     }
     if (workerPath) {
-      probe = await run(this.config.python, ['-c', 'import asuna.native_worker; print("Worker imports.")'],
+      probe = await run(this.config.python ?? this.workerPython, ['-c', 'import asuna.native_worker; print("Worker imports.")'],
         { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
       // With Core running, the candidate's worker also validates this profile's settings against the existing
       // database (validate_settings: no consumers, no model): Core holds the settings, the floor never reads them.

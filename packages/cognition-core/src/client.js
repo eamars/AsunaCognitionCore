@@ -103,7 +103,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.providerDefault': '使用模型服务默认值', 'settings.routeHint': '选项来自 DSH 已配置的模型服务及其能力。',
       'settings.secretMapHint': '例如 {"ASUNA_CHANNELS_NEW_TOKEN":"值"}：存进凭据库，设置里只写引用。只更新列出的名称；留空不修改。', 'settings.secretHint': '留空保留现有凭据。',
       'settings.secretAdd': '可添加凭据引用', 'settings.secretSet': '已配置', 'settings.secretUnset': '未配置',
-      'settings.jsonHint': 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。', 'settings.invalidNumber': '请输入正整数',
+      'settings.jsonHint': 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。', 'settings.pythonHint': '留空：首次启动时在数据目录里按包里的锁文件建好 Python 环境（需要 uv 或 Python 3.12+）。', 'settings.invalidNumber': '请输入正整数',
       'settings.invalidJson': '请输入有效的 JSON 值', 'settings.form.unavailable': '配置暂不可用', 'settings.form.readOnly': '当前配置只读',
       'settings.form.saveFailed': '保存失败，草稿已保留。', 'settings.form.save': '保存设置', 'settings.form.saving': '保存中…',
       'settings.status': '业务 worker：{state} · Mongo：{database}', 'settings.disconnected': '未连接',
@@ -217,7 +217,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.secretMapHint': 'For example {"ASUNA_CHANNELS_NEW_TOKEN":"value"}: stored in the credential store; the settings keep only the reference. Only the listed names change; leave empty for no change.',
       'settings.secretHint': 'Leave empty to keep the current credential.',
       'settings.secretAdd': 'Credential references can be added', 'settings.secretSet': 'Configured', 'settings.secretUnset': 'Not configured',
-      'settings.jsonHint': 'JSON; refer to credentials as {"$secret":"name"}.', 'settings.invalidNumber': 'Enter a positive whole number',
+      'settings.jsonHint': 'JSON; refer to credentials as {"$secret":"name"}.', 'settings.pythonHint': 'Leave empty to build a Python environment from the package lock in the data folder on first start (needs uv or Python 3.12+).', 'settings.invalidNumber': 'Enter a positive whole number',
       'settings.invalidJson': 'Enter a valid JSON value', 'settings.form.unavailable': 'Settings are unavailable', 'settings.form.readOnly': 'Settings are read-only',
       'settings.form.saveFailed': 'Saving failed; your draft is kept.', 'settings.form.save': 'Save settings', 'settings.form.saving': 'Saving…',
       'settings.status': 'Business worker: {state} · Mongo: {database}', 'settings.disconnected': 'not connected',
@@ -825,7 +825,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const worker = status?.worker;
       return h('section', { style: stack, 'aria-label': t('settings.aria') },
         h('h3', null, 'Asuna'),
-        h('p', null, status ? t('settings.status', { state: status.lifecycle.state, database: worker?.database || t('settings.disconnected') })
+        h('p', null, status ? t('settings.status', { state: status.lifecycle.state + (status.lifecycle.step ? ' · ' + status.lifecycle.step : ''), database: worker?.database || t('settings.disconnected') })
           : t('settings.readingStatus')),
         status?.lifecycle.error && h('p', { role: 'alert' }, status.lifecycle.error),
         h('p', { style: small }, t('settings.note')),
@@ -846,7 +846,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               hint: field.type === 'secret-map' ? t('settings.secretMapHint') : t('settings.secretHint'),
               stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : credentialState[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })
               : h(SettingsValueField, { ...props, numeric: field.type === 'number',
-                hint: field.type === 'json' ? t('settings.jsonHint') : undefined });
+                hint: field.type === 'json' ? t('settings.jsonHint') : field.path[0] === 'python' ? t('settings.pythonHint') : undefined });
           })),
         status && h('p', { style: small }, [
           t('settings.selfSource', { source: worker?.self_source || t('settings.waiting') }),

@@ -21,6 +21,7 @@ import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { ensurePythonEnvironment } from './python-env.js';
 import z from '@deepseek-ai/schemastery';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,7 +109,7 @@ export class CognitionCore {
       throw error;
     }
     this.personas.set(persona.id, normalized);
-    if (persona.id === this.config.persona && this.config.python && this.config.deployment)
+    if (persona.id === this.config.persona && this.config.deployment)
       this.ready().catch(error => {
         this.ctx.logger.warn(String(error));
         process.stderr.write('Asuna worker could not start: ' + String(error) + '\n');
@@ -156,14 +157,14 @@ export class CognitionCore {
       // A profile not yet set up (a fresh install) is waiting for its settings, not failed.
       const unconfigured = message => Object.assign(new Error(message), { unconfigured: true });
       if (!persona) throw unconfigured('Select an installed Asuna persona');
-      if (!this.config.python || !this.config.deployment)
-        throw unconfigured('Configure the Asuna Python worker and deployment settings');
+      if (!this.config.deployment) throw unconfigured('Fill in the deployment settings');
+      const python = await this.workerPython(this.config);
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes(this.config.routes);
       this.efforts = await this.stageEfforts();
       this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
       const schedule = await this.attachSchedule();
-      this.worker = new BusinessWorker({ ...this.config, dataRoot: this.ctx.asunaFloor.dataRoot,
+      this.worker = new BusinessWorker({ ...this.config, python, dataRoot: this.ctx.asunaFloor.dataRoot,
         pythonPath: await this.ctx.asunaFloor.workerPath() },
         event => this.onEvent(event), this.ctx.logger);
       this.worker.onFailure = error => this.workerFailed(error);
@@ -259,6 +260,23 @@ export class CognitionCore {
     return undefined;
   }
 
+  /** The worker's interpreter: the python setting when given (a development checkout), otherwise the environment
+   * built from the package's lock in the data folder on first start (python-env.js). The floor checks candidates
+   * with the same interpreter. */
+  async workerPython(config) {
+    let python = config.python;
+    if (!python) {
+      const previous = { state: this.lifecycle.state, error: this.lifecycle.error };
+      this.lifecycle.state = 'preparing'; this.lifecycle.error = null;
+      try {
+        python = await ensurePythonEnvironment({ dataRoot: this.ctx.asunaFloor.dataRoot,
+          workerPath: await this.ctx.asunaFloor.workerPath(), report: step => { this.lifecycle.step = step; } });
+      } finally { this.lifecycle.step = undefined; if (this.lifecycle.state === 'preparing') Object.assign(this.lifecycle, previous); }
+    }
+    this.ctx.asunaFloor.workerPython = python;
+    return python;
+  }
+
   /** DSH's credential store, when this Host mounts one. */
   credentialStore() {
     try { return this.ctx.get('credentials'); } catch { return undefined; }
@@ -289,7 +307,7 @@ export class CognitionCore {
     assertSecretReferences(next.deployment);
     // This process imports and validates the proposed business configuration.
     // It does not initialize a RuntimeHost, consume queues, or call any model.
-    const probe = new BusinessWorker({ ...next, dataRoot: this.ctx.asunaFloor.dataRoot,
+    const probe = new BusinessWorker({ ...next, python: await this.workerPython(next), dataRoot: this.ctx.asunaFloor.dataRoot,
       pythonPath: pythonPath ?? await this.ctx.asunaFloor.workerPath() }, () => {}, this.ctx.logger);
     try {
       await probe.call('validate_settings', { deployment: next.deployment, secrets: await this.credentialValues(next.deployment),

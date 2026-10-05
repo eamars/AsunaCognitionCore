@@ -174,3 +174,8 @@
 - `tools/release.py --channel packages/napcat-qq`：只打核心与通道，逐个检查版本、许可证字段、`LICENSE`、个人数据扫描（第三方 vendored 代码与仓库里一样不扫）、包里不出现任何人格包的 id 或显示名；通过后在 `.runtime/release/<tag>/` 写出 tgz、`SHA256SUMS` 与 `NOTES.md`。打包前清掉本地运行留下的 `__pycache__`。
 - 第一次运行就拦下了 QQ 通道包里的人格名（适配器自测与文档里的示例），已换成中性的「示例角色」，适配器自测 281 项通过。
 - 用发布目录里的文件在全新 profile 上 `dsh plugin add` 演练成功。按 owner 的选择，Release 由 owner 在 GitHub 上建并上传这些文件；之后用 Release 链接再装一次作为 M5 验收。
+
+### 待办：D7-A 上游 PR（owner 2026-10-05：先不提）
+- 内容：把 `tools/dsh-inline/rc2-inline.patch` 里的 Session 级 Chat 片段工厂（`conversation.chat.content` 的 `main`／`fragment` 两种变体，以及不同授权来源绑定可复用同一工厂）整理成提给 DSH 上游的 PR。基线是 DSH `dsh-v0.2.0-rc.2`（`639ed015…`）。
+- 现状：**未提交**。owner 决定暂缓，何时提由 owner 定；在那之前不要向上游提交任何 PR 或 issue。
+- 提之前要做的：按上游当前主干重放补丁、补上游要求的测试与文档；插件的特性检测（M4）已保证合并前后都能用，上游合并后内联视图无需补丁即可恢复。

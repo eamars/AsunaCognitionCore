@@ -227,7 +227,7 @@ An accepted attachment writes metadata only, on the first `SPEAK` row (`attachme
 
 ## Schedules
 
-The host uses DSH's native scheduler; it does not run a second host timer wheel. Scheduling, updating, or cancelling a plan is a character decision in the authorized scene. A due plan re-enters that scene and asks the character to decide what to do. A due event is not new authorization and does not mean its requested work has completed. Plan status and policy epoch are checked before dispatch.
+The host uses DSH's native scheduler; it does not run a second host timer wheel. Scheduling, updating, or cancelling a plan is a character decision in the authorized scene. A due plan re-enters that scene and asks the character to decide what to do. A due event is not new authorization and does not mean its requested work has completed. Plan status and policy epoch are checked before dispatch. In a platform conversation (a group or a DM) the due plan is a core notice, not a platform input: it carries no channel envelope, so it is never re-checked as a member's message or shown in that conversation's session as one; it wakes the conversation as a scene tick, the plan's person must still be a member of the route (`SCHEDULE_ROUTE_REVOKED` otherwise), and what she says goes out on the conversation's own route, with no platform message to reply to.
 
 Asuna reuses an installed DSH Schedule service. When the Host has none, it mounts that same service once, unless the `asuna-cognition-core` setting `mountSchedule` is `false`; then plans, heartbeat and settlement are off. By DSH design the `schedule_*` tools of a mounted Schedule are visible to every root agent in the Host; Asuna's role and action presets restrict their own tools.
 

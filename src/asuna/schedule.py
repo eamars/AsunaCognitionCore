@@ -756,24 +756,22 @@ class ScheduleService:
             elif plan.get('kind') == 'settlement':
                 outcome = self._settlement(plan, occurrence)
             else:
-                channel = None
+                # A due plan is a core notice, not a platform input: it carries no channel envelope (that would
+                # be re-checked as a member's message and shown as one in the conversation). It wakes as a
+                # scene tick; what she says goes out on the conversation's own route (publish.py).
                 if scene.get('channel_id'):
                     route = route_for_scene(self.app.config, scene['channel_id'], scene['_id'])
                     if plan['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
                         raise Denied('SCHEDULE_ROUTE_REVOKED')
-                    channel = {'id': scene['channel_id'], 'account_id': scene['channel_account_id'],
-                               'target': route['target'], 'sender_id': 'scheduler', 'platform_event_id': None}
                 event = {'event_id': 'schedule:' + occurrence, 'scene_id': plan['scene_id'],
                          'person_id': plan['person_id'], 'adapter_id': 'scheduler',
                          'episode_kind': 'scheduled', 'scheduled_plan_id': plan_id,
                          'scene_tick': True,
                          'text': '你之前安排的计划「' + plan['intent'] + '」现在到期了。请重新判断是否继续；到期本身不是新授权或已完成的行动。'}
-                if channel:
-                    event['channel'] = channel
-                    if scene['kind'] == 'group':
-                        event['group_context'] = {'wake_reason': 'scheduled_plan',
-                            'topic_id': event['event_id'], 'reply_to': None,
-                            'reply_message_id': None, 'mentioned_account_ids': []}
+                if scene.get('channel_id') and scene['kind'] == 'group':
+                    event['group_context'] = {'wake_reason': 'scheduled_plan',
+                        'topic_id': event['event_id'], 'reply_to': None,
+                        'reply_message_id': None, 'mentioned_account_ids': []}
                 if plan.get('integration_profile') == 'owner' and event_granted(self.app.config,
                         {**event, 'integration_profile': 'owner'}):
                     event['integration_profile'] = 'owner'

@@ -63,9 +63,15 @@ class PublishService:
                 source_ep = db.episodes.find_one({'_id': task['episode_id']})
             source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
             channel = (source or {}).get('event', {}).get('channel', {})
-            if not channel and (source or {}).get('direction') == 'internal' \
-                    and source.get('event', {}).get('episode_kind') == 'visit':
-                # Her own visit (ADR-012 §4.2): no platform input to answer; she speaks to the group on its route.
+            origin = (source or {}).get('event', {})
+            core_notice = (
+                # Her own visit (ADR-012 §4.2), queued by the program in that group.
+                ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') == 'visit')
+                # One of her plans that came due here: the scheduler's notice for a plan of this conversation.
+                or (origin.get('episode_kind') == 'scheduled' and origin.get('adapter_id') == 'scheduler'
+                    and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1})))
+            if not channel and core_notice:
+                # No platform input to answer: she speaks to the conversation on its own route.
                 channel = {'id': scene['channel_id'], 'target': route['target'], 'platform_event_id': None,
                            'account_id': self.store.config['channels'][scene['channel_id']]['account_id']}
             if (channel.get('id') != scene['channel_id'] or channel.get('target') != route['target']

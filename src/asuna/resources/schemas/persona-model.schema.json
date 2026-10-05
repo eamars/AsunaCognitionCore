@@ -402,6 +402,24 @@
         },
         "skip_in_sleep": {
           "type": "boolean"
+        },
+        "visits": {
+          "type": "boolean"
+        },
+        "quiet_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        },
+        "after_own_min": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 1440
+        },
+        "visits_per_day": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
         }
       }
     },

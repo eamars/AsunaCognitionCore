@@ -59,6 +59,7 @@ HEARTBEAT_TEXT = ('这是一次内部在场机会（心跳），不是用户消�
                   '（15–240 分钟一拍）、heartbeat.min_gap_min（没有找你的新事时，两次之间至少隔多久）、'
                   'heartbeat.skip_in_sleep；想清静一阵就设 heartbeat.pause_min，到时自动恢复。')
 HEARTBEAT_RECONNECTED = '（你的心跳%s断过一次，程序已经重新接上，不用你做什么。）'
+HEARTBEAT_EARLY = '（这一拍是手动提前敲的，不是有人找你；照常过你自己的时间就好。）'
 
 
 def heartbeat_rest_gate(model, policy, config, moment=None) -> bool:

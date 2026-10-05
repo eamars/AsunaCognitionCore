@@ -3,7 +3,10 @@ from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 
 
-INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement'}
+INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement',
+                  'visit': 'visit'}
+# Where each internal moment may happen: her visit is a group's (ADR-012 §4.2); the rest are private.
+INTERNAL_SCENE_KIND = {'visit': 'group'}
 # Core notices queued in a person's scene (task results, due plans). They wake the role but are not
 # that person's words, so memory, summaries and the source list never treat them as speech.
 CORE_NOTICE_KINDS = ('task_feedback', 'scheduled')
@@ -19,7 +22,8 @@ def persist_input(store, event, *, managed=False):
     scene = store.authorize(event['scene_id'], event['person_id'])
     # Host-origin opportunities (no user message): self-development, heartbeat, nightly settlement.
     internal = event.get('episode_kind') in INTERNAL_KINDS
-    if internal and (event.get('adapter_id') != INTERNAL_KINDS[event['episode_kind']] or scene['kind'] != 'dm'):
+    if internal and (event.get('adapter_id') != INTERNAL_KINDS[event['episode_kind']]
+                     or scene['kind'] != INTERNAL_SCENE_KIND.get(event['episode_kind'], 'dm')):
         raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED' if event['episode_kind'] == 'self_development' else 'INTERNAL_SOURCE_DENIED')
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})

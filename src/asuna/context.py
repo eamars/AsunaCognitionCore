@@ -440,6 +440,19 @@ class ContextBuilder:
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
+        if event.get('episode_kind') == 'presence':
+            # ADR-012 §4.4: her groups in words, and what her recent visits came to.
+            from . import places
+            from .render import model_and_policy as _places_model
+            plan=self.store.db.plans.find_one({'_id':'plan-asuna-presence'}) or {}
+            _pm,_pp=_places_model(self.store,persona)
+            date=places.local_date(self.store.config,_pm,_pp,moment)
+            places_view=places.places_block(self.store,persona,_pm,_pp,plan,moment,date)
+            if places_view:
+                context['places_from_program']=places_view
+            visits=places.last_visits_block(self.store,persona,plan,moment)
+            if visits:
+                context['last_visits_from_program']=visits
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.
@@ -498,7 +511,8 @@ class ContextBuilder:
             self._reply_context(related, scene)
             speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
-                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) if source else []
+                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) \
+                if source and event.get('episode_kind')!='visit' else []
             self._reply_context(speaker_tail, scene)
             for row in [*related, *speaker_tail]:
                 row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
@@ -565,6 +579,13 @@ class ContextBuilder:
         if event_granted(self.store.config, event):
             context['action_capabilities_from_program']['integration'] = {
                 'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
+        if event.get('episode_kind')=='visit':
+            # ADR-012 §4.2: nobody called her; the room as it is now, and what she came for. The person on the
+            # event only authorizes the turn, so no block speaks of a current speaker.
+            from . import places
+            context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
+            for key in ('relationship','dossier_from_program','sender_identity','understanding_update_from_program'):
+                context.pop(key,None)
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

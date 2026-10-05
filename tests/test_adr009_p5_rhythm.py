@@ -29,13 +29,22 @@ class NativeLane:
             kind = next(k for k in ('every', 'daily', 'weekly', 'after') if k in payload or k + '_seconds' in payload)
             record = {'id': 'n%d' % self.created, 'prompt': 'ASUNA_PLAN:' + payload['plan_id'], 'kind': kind,
                       'scheduledAt': datetime.now(timezone.utc).isoformat(),
-                      **{k: v for k, v in payload.items() if k != 'plan_id'}}
+                      **{k: v for k, v in payload.items() if k not in ('plan_id', 'every_seconds')}}
+            if 'every_seconds' in payload:                # DSH stores an interval as everySeconds
+                record['everySeconds'] = payload['every_seconds']
             self.events.append({'seq': len(self.events) + 1, 'data': {'operation': 'create', 'schedule': record}})
             return record
         if path == '/schedule/update':
             record = dict([e['data']['schedule'] for e in self.events
                            if e['data'].get('schedule', {}).get('id') == payload['id']][-1])
-            record.update({k: v for k, v in payload['change'].items() if k != 'kind'}, kind=payload['change']['kind'])
+            change = payload.get('change')
+            if change:                                    # DSH: exactly kind and its own selector
+                selector = {'every': 'every_seconds', 'daily': 'daily', 'weekly': 'weekly', 'at': 'at'}.get(change['kind'])
+                assert selector and set(change) == {'kind', selector}, change
+                record.update({'everySeconds': change['every_seconds']} if change['kind'] == 'every'
+                              else {selector: change[selector]}, kind=change['kind'])
+            if payload.get('title'):
+                record['title'] = payload['title']
             self.events.append({'seq': len(self.events) + 1, 'data': {'operation': 'update', 'schedule': record}})
             return record
         if path == '/schedule/delete':
@@ -52,10 +61,12 @@ class Controller:
     def __init__(self):
         self.settings = {'persona': 'P1', 'scene_id': 'dm-a', 'person_id': 'A'}
         self.pending, self.active, self.active_task, self.offers, self.texts = SceneQueue(), None, None, [], []
+        self.envelopes = []
 
-    def offer_internal(self, kind, event_id, scene_id, person_id, text):
+    def offer_internal(self, kind, event_id, scene_id, person_id, text, **visit):
         self.offers.append((kind, event_id, scene_id, person_id))
         self.texts.append(text)
+        self.envelopes.append(visit)
 
 
 def scheduler(store, rhythm=None):

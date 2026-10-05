@@ -697,6 +697,24 @@ export function apply(ctx, config = {}) {
   };
   ctx.asunaFloor.activateRecovery = activateRecovery;
   new AsunaApi(ctx, core);
+  // ADR-012 §8: /heartbeat gives her one heartbeat now, through DSH's own command surface (no model message),
+  // and says when the next scheduled one is due. Her rhythm stays program-owned; this only knocks early.
+  ctx.inject(['commands'], child => child.effect(() => child.commands.register({
+    name: 'heartbeat',
+    description: 'Give her one heartbeat now (her own moment at home); shows when the next one is due',
+    handler: async ({ rawInput }) => {
+      if (String(rawInput ?? '').trim()) return { kind: 'error', text: 'Usage: /heartbeat (no arguments)' };
+      if (core.lifecycle.state !== 'ready') return { kind: 'error', text: 'Asuna is not ready yet: ' + core.lifecycle.state };
+      const result = await core.worker.call('heartbeat_now', {});
+      const next = result.next_at ? new Date(result.next_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+      if (result.state === 'ENQUEUED')
+        return { kind: 'success', text: 'Heartbeat given: her inner time starts at home as soon as she is free.'
+          + (next ? ' Next scheduled beat: ' + next + '.' : '') };
+      if (result.state === 'OFF' || result.state === 'NO_SCHEDULE')
+        return { kind: 'error', text: 'Her heartbeat is off (no heartbeat_target, or heartbeat.enabled is false).' };
+      return { kind: 'error', text: 'The heartbeat was not given: ' + result.state };
+    },
+  })));
   ctx.inject(['settings'], child => child.effect(() => {
     const settings = child.settings;
     core.settings = settings;

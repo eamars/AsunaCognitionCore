@@ -267,7 +267,7 @@ class RuntimeHost:
                 self._maybe_restart_after_publish()
             if self.schedule and time.monotonic() - checked >= RHYTHM_WATCH_SECONDS:
                 checked = time.monotonic()
-                self.schedule.watch_rhythm()
+                self.schedule.watch_rhythm(deep=True)
 
     def _complete_activations(self):
         """A successfully constructed live host supplies the actual boot result."""

@@ -38,7 +38,7 @@ class ProtocolFailure(RuntimeError):
 RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
 TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_development': 'internal',
-            'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule'}
+            'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit'}
 
 
 class Coordinator:

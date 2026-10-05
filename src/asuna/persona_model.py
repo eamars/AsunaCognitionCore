@@ -32,6 +32,11 @@ CORE_WRITABLE_KEYS = {
     'heartbeat.skip_in_sleep': {'type': 'boolean', 'what': '睡眠窗里是否跳过心跳'},
     'heartbeat.pause_min': {'type': 'integer', 'min': 0, 'max': 720,
                             'what': '让心跳安静一阵（分钟，0 = 马上恢复）；到时自动恢复'},
+    'heartbeat.visits': {'type': 'boolean', 'what': '心跳时可以出门，去你在的群里看看'},
+    'heartbeat.quiet_min': {'type': 'integer', 'min': 0, 'max': 240, 'what': '群里安静多久，才去那儿起话头（分钟）'},
+    'heartbeat.after_own_min': {'type': 'integer', 'min': 30, 'max': 1440,
+                                'what': '在一个群说过话或去看过以后，多久内不再去（分钟）'},
+    'heartbeat.visits_per_day': {'type': 'integer', 'min': 0, 'max': 8, 'what': '每天最多出门几次'},
 }
 # Only the owner turns her heartbeat on or off: a package may default it, never offer it to her as a policy key.
 OWNER_KEYS = {'heartbeat.enabled'}
@@ -44,7 +49,8 @@ CORE_DEFAULTS = {
                'kinds': {}, 'bands': [], 'policy': []},
     'dossier': {'inject_last': 0, 'index_size': 30},
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
-    'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'skip_in_sleep': False, 'pause_min': 0},
+    'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'skip_in_sleep': False, 'pause_min': 0,
+                  'visits': False, 'quiet_min': 30, 'after_own_min': 360, 'visits_per_day': 4},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
     'speak': {'max_messages': 1, 'split_marker': '---split---', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},

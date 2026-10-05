@@ -98,6 +98,11 @@
                   maxTokens: 2048
                   thresholdRatio: 0.05
                   retainRatio: 0.012
+    # ADR-012 §8: DSH's own task page and session reminder catalog over the Schedule this plugin mounts, so
+    # the owner sees her heartbeat and plans with their next run and delivery records. Only the page: the
+    # optional schedule bundle's time context would add the browser's zone to her turns, including public ones.
+    - id: asuna-ui-schedule
+      name: '@deepseek-ai/dsh-client-ui-schedule'
     - id: asuna-scheduler-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:

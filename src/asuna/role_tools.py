@@ -178,6 +178,16 @@ TOOLS = {
                        'which': _s('撤回哪条（只撤回用）', enum=['这条', '他刚才那条']),
                        'reason': _s('为什么', required=True)},
     },
+    'visit': {
+        'description': ('出门：去你在的某个群看看。place 照抄 places_from_program 里的 place，intent 是你去做什么。'
+                        '程序会在那个群里给你开一个回合，你在那儿看了现场再决定说不说、说什么；这回合在家里照常结束，'
+                        '结果下次心跳带回来。topic 是你想聊的话头，会原样带进群里的那个回合：只写你愿意在那儿说的，'
+                        '不写家里的私事。每次心跳最多出门一次。'),
+        'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
+                       'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
+                       'topic': _s('想聊的话头，80 字以内，可省略'),
+                       'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
+    },
     'note_idea': {
         'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
                         '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
@@ -250,7 +260,7 @@ def exposed(store, ep):
         names.append('write_document')
     if cls == visibility.OWNER_PRIVATE:
         names += ['update_self', 'set_policy', 'pin_memory']
-    if kind not in ('presence', 'settlement', 'self_development') and (
+    if kind not in ('presence', 'settlement', 'self_development', 'visit') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
     if context.get('affect_from_program'):
@@ -260,6 +270,9 @@ def exposed(store, ep):
         names.append('group_action')
     if kind == 'settlement':
         names.append('promote_memory')
+    # ADR-012 §4.2: from a heartbeat at home she may go and see one of her groups.
+    if kind == 'presence' and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
+        names.append('visit')
     return names
 
 
@@ -289,6 +302,10 @@ WORDS = {
     'GROUP_ACTION_NOT_A_GROUP': '这里不是群。',
     'GROUP_ACTION_DISABLED': '这个群关掉了管理动作。',
     'GROUP_ACTION_NOT_AN_ADMIN': '你在这个群不是管理员。',
+    'VISIT_PLACE_UNKNOWN': '没有这个地方；照抄 places_from_program 里的 place。',
+    'VISIT_NOT_NOW': '现在去不了那里。',
+    'VISIT_OFF': '出门现在没开。',
+    'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里那个回合再挑也行。',
 }
 
 
@@ -667,6 +684,24 @@ class RoleTools:
         from . import group_admin
         item = {k: args[k] for k in ('kind', 'who', 'duration', 'which', 'reason') if args.get(k) is not None}
         return group_admin.queue(self.store, ep, 0, item, key='group_action:' + call_id), False
+
+    def tool_visit(self, ep, call_id, args):
+        from . import places
+        if turn_kind(ep) != 'presence' or self._cls(ep) != visibility.OWNER_PRIVATE:
+            raise Refused('只有在家里的心跳时间才能出门。')
+        if any(call.get('tool') == 'visit' and 'result' in call for call in (ep.get('tool_calls') or {}).values()):
+            raise Refused('这次心跳已经出过一次门了；下次心跳再去别处。')
+        place = self._text(args, 'place', 40)
+        intent = args.get('intent')
+        if intent not in places.INTENTS:
+            raise Refused('intent 是 %s 之一。' % '、'.join(places.INTENTS))
+        topic = self._text(args, 'topic', places.TOPIC_CHARS, required=False)
+        artifact = self._text(args, 'artifact_id', 200, required=False)
+        if artifact and intent != 'share_picture':
+            raise Refused('只有 intent=share_picture 才带 artifact_id。')
+        if not self.coordinator.scheduler:
+            raise Refused('现在没有定时服务，出不了门。')
+        return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
 
     # ── her improvement ideas (ADR-011 §6.2) ────────────────────────
     def tool_note_idea(self, ep, call_id, args):

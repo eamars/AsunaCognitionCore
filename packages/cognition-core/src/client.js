@@ -17,7 +17,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'date.locale': 'zh-CN',
       'brain.character': '角色脑', 'brain.executor': '行动脑',
       'trigger.message': '收到消息', 'trigger.task_result': '行动脑交回了结果', 'trigger.question': '行动脑在问她',
-      'trigger.internal': '她的内部时间', 'trigger.schedule': '到了安排的时间', 'trigger.brief': '她的交代',
+      'trigger.internal': '她的内部时间', 'trigger.visit': '她自己来看看', 'trigger.schedule': '到了安排的时间', 'trigger.brief': '她的交代',
       'trigger.follow-up': '她的补充',
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': '一件事',
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
@@ -34,7 +34,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.attach_image': '配图', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数', 'tool.pin_memory': '置顶记忆',
       'tool.feel': '心情', 'tool.plan': '安排', 'tool.group_action': '群管理', 'tool.promote_memory': '沉淀记忆',
-      'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
+      'tool.visit': '出门', 'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
       'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '草稿退回重写',
       'input.checking': '正在确认会话输入权限…', 'input.internal': '这是内部工作会话，请回到本地私聊。',
       'input.readOnly': '{platform} 会话仅供查看，请在 {platform} 中回复。', 'input.readOnlyLocal': '这个会话仅供查看。',
@@ -129,7 +129,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'date.locale': 'en-US',
       'brain.character': 'Character brain', 'brain.executor': 'Action brain',
       'trigger.message': 'Message received', 'trigger.task_result': 'The action brain reported back',
-      'trigger.question': 'The action brain asks her', 'trigger.internal': 'Her inner time', 'trigger.schedule': 'A plan came due',
+      'trigger.question': 'The action brain asks her', 'trigger.internal': 'Her inner time', 'trigger.visit': 'Her own visit', 'trigger.schedule': 'A plan came due',
       'trigger.brief': 'Her brief', 'trigger.follow-up': 'Her follow-up',
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': 'A task',
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
@@ -146,7 +146,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.stay_silent': 'Stay silent', 'tool.attach_image': 'Attach a picture', 'tool.write_document': 'Write document',
       'tool.update_self': 'Update self', 'tool.understand_person': 'Understand this person', 'tool.set_policy': 'Adjust a setting',
       'tool.pin_memory': 'Pin a memory', 'tool.feel': 'Feeling', 'tool.plan': 'Plan', 'tool.group_action': 'Group action',
-      'tool.promote_memory': 'Keep a memory', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
+      'tool.promote_memory': 'Keep a memory', 'tool.visit': 'Go and see a group', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
       'tool.report_progress': 'Report progress', 'tool.refused': 'Refused', 'tool.preparing': 'Writing…',
       'repair.title': 'Draft sent back',
       'input.checking': 'Checking who may write here…', 'input.internal': 'This is an internal work conversation; go back to the local chat.',
@@ -521,13 +521,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     update_self: 'IconPersonalizationOutlineRegular', understand_person: 'IconUserOutlineRegular', set_policy: 'IconSlidersTwoOutlineRegular',
     pin_memory: 'IconPinOutlineRegular', feel: 'IconLikeOutlineRegular', plan: 'IconAlarmClockOutlineRegular',
     group_action: 'IconUsersOutlineRegular', promote_memory: 'IconArchiveOutlineRegular', note_idea: 'IconLightOutlineRegular',
-    read_ideas: 'IconListPenOutlineRegular', review_idea: 'IconChecklistOutlineRegular',
+    read_ideas: 'IconListPenOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
     ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular' };
   // The argument that says what a call was about (her own words), and the one shown in full when opened.
   const TOOL_SUMMARY = { think: 'thought', recall: 'query', delegate: 'title', message_action: 'message', stop_action: 'reason',
     answer_action: 'answer', stay_silent: 'reason', attach_image: 'why', write_document: 'doc', update_self: 'target',
     understand_person: 'body', set_policy: 'key', pin_memory: 'memory_id', feel: 'why', plan: 'intent', group_action: 'who',
-    promote_memory: 'fact', note_idea: 'idea', review_idea: 'why', ask_character: 'question', report_progress: 'note' };
+    promote_memory: 'fact', note_idea: 'idea', review_idea: 'why', ask_character: 'question', report_progress: 'note',
+    visit: 'topic' };
   const TOOL_BODY = { think: 'thought', delegate: 'brief', message_action: 'message', answer_action: 'answer',
     write_document: 'body', update_self: 'body', understand_person: 'body', note_idea: 'idea', ask_character: 'question',
     report_progress: 'note', promote_memory: 'fact' };

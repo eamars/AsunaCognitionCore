@@ -26,6 +26,14 @@ export class NativeSchedules {
 
   rows(agent) { return agent.session.snapshotEvents().filter(e => e.type === 'asuna/schedule'); }
 
+  // The fields that say what a record is and when it runs next. When DSH changes one (it advances the next
+  // target after each delivery, or the owner edits the task in DSH's task page), the change is logged as an
+  // update, so the worker always reads the record as it is now.
+  static fields(record) {
+    const { kind, title, prompt, scheduledAt, everySeconds, afterSeconds, at, time, timeZone, weekdays, expression, status } = record;
+    return JSON.stringify({ kind, title, prompt, scheduledAt, everySeconds, afterSeconds, at, time, timeZone, weekdays, expression, status });
+  }
+
   async refresh(agent) {
     const catalog = (await this.ctx.schedule.catalog()).filter(row => row.sessionId === agent.session.id
       && row.prompt.startsWith('ASUNA_PLAN:'));
@@ -33,6 +41,14 @@ export class NativeSchedules {
     for (const record of catalog) {
       if (!rows.some(e => e.data.operation === 'create' && e.data.schedule.id === record.id))
         agent.session.append('asuna/schedule', { operation: 'create', schedule: record });
+    }
+    rows = this.rows(agent);
+    const latest = new Map();
+    for (const e of rows) if (['create', 'update'].includes(e.data.operation)) latest.set(e.data.schedule.id, e.data.schedule);
+    for (const record of catalog) {
+      const logged = latest.get(record.id);
+      if (logged && NativeSchedules.fields(logged) !== NativeSchedules.fields(record))
+        agent.session.append('asuna/schedule', { operation: 'update', schedule: record });
     }
     rows = this.rows(agent);
     const known = new Set(rows.filter(e => e.data.operation === 'dispatch').map(e => e.data.id + ':' + e.data.message_id));
@@ -79,9 +95,10 @@ export class NativeSchedules {
       const agent = await this.agent(sessionId);
       if (path === '/schedule/events') return this.refresh(agent);
       if (path === '/schedule/create') {
-        const { plan_id: planId, ...timing } = payload;
+        // The worker names each task as she and the owner read it (her plan's words, or her rhythm).
+        const { plan_id: planId, title, ...timing } = payload;
         const result = await this.ctx.schedule.create(sessionId, {
-          title: 'Asuna · ' + planId, prompt: 'ASUNA_PLAN:' + planId, ...timing });
+          title: title || 'Asuna · ' + planId, prompt: 'ASUNA_PLAN:' + planId, ...timing });
         if (result.id) agent.session.append('asuna/schedule', { operation: 'create', schedule: result });
         await this.ctx.sessions.flush(agent.session);
         return result;
@@ -91,7 +108,10 @@ export class NativeSchedules {
         // so reconciliation never mistakes it for a delete followed by a create.
         const expected = (await this.ctx.schedule.catalog()).find(row => row.id === payload.id && row.sessionId === sessionId);
         if (!expected) return { id: payload.id, updated: false, code: 'schedule_not_found' };
-        const result = await this.ctx.schedule.update({ sessionId, id: payload.id, expected, change: payload.change });
+        const request = { sessionId, id: payload.id, expected };
+        if (payload.change) request.change = payload.change;
+        if (payload.title) request.title = payload.title;
+        const result = await this.ctx.schedule.update(request);
         if (result.updated && result.record) {
           agent.session.append('asuna/schedule', { operation: 'update', schedule: result.record });
           await this.ctx.sessions.flush(agent.session);

@@ -712,6 +712,10 @@ class BusinessWorker:
                     if row.get('cwd') and Path(row['cwd']).resolve() == (ROOT / '.runtime/work' / platform.KIND).resolve():
                         policies[row['id']] = self.read_only_note(platform)
             return policies
+        if method == 'heartbeat_now':
+            # The owner's /heartbeat command (ADR-012 §8): one beat now, and when the next one is due.
+            scheduler = self.app.coordinator.scheduler
+            return scheduler.beat_now() if scheduler else {'state': 'NO_SCHEDULE'}
         if method == 'session_kinds':
             # Her conversations on a platform among these sessions: a group or a DM (the sidebar mark).
             local = self.app.config['chat']['scene_id']

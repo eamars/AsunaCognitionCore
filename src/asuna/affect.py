@@ -16,7 +16,9 @@ from pymongo.errors import DuplicateKeyError
 from .evidence import canonical, sha
 from .state import Denied, now
 from . import visibility
-from .config import ago
+from .context_budget import AFFECT_REASONS, rough_ago
+
+SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
 SECONDS_PER_HOUR = 3600.0
 COLLECTIONS = ('affect_events', 'affect_amendments', 'affect_proposals')
@@ -221,11 +223,19 @@ def interpret(model, state, cls):
     out['main_feelings'] = [kind_label(model, item['kind']) for item in view['top_kinds']]
     if view['open_count']:
         out['unsettled'] = f"{view['open_count']} 件事还挂着"
+    # Bounded and stable (context_budget.py): every unsettled feeling, then the strongest others up to the limit;
+    # times in coarse words and short ids, so an unchanged mood reads the same from one turn to the next.
+    rows = view['contributions']
+    held = [row for row in rows if row.get('held')]
+    shown = held + [row for row in rows if not row.get('held')][:max(AFFECT_REASONS - len(held), 0)]
     out['reasons'] = [{'feeling': kind_label(model, row['kind']),
                        'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
-                       'when': ago(row['age_h']),
-                       **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''), 'event_id': row['event_id']}
-                      for row in view['contributions']]
+                       'when': rough_ago(row['age_h']),
+                       **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''),
+                       'event_id': row['event_id'][:SHORT_ID]}
+                      for row in rows if row in shown]
+    if len(rows) > len(shown):
+        out['fainter'] = f'还有 {len(rows) - len(shown)} 笔较淡的心情没列出'
     return out
 
 
@@ -369,6 +379,12 @@ class AffectLedger:
         returns the amendment already made instead of reporting it as a second, impossible change.
         """
         target = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona})
+        if not target and len(str(item['event_id'])) >= 8:
+            # She reads short ids (interpret): a prefix that names exactly one of her events is that event.
+            import re
+            found = list(self.store.db.affect_events.find({'_id': {'$regex': '^' + re.escape(str(item['event_id']))},
+                                                           'persona': self.persona}).limit(2))
+            target = found[0] if len(found) == 1 else None
         if not target:
             raise AffectError('AFFECT_EVENT_UNKNOWN', item['event_id'])
         if not self.readable(target.get('source_scope'), ep['scope_key'], cls):
@@ -423,7 +439,10 @@ class AffectLedger:
             if not self.readable(row['source_scope'], ep_scope, cls):
                 continue
             state = self.proposal_state(row, at)
-            if state == 'expired' and not self.store.db.affect_proposals.find_one({'_id': 'decision:' + row['_id']}):
+            if state == 'expired':
+                # Said once, on the turn it lapses; after that it is decided (expired) and leaves the view.
+                if self.store.db.affect_proposals.find_one({'_id': 'decision:' + row['_id']}):
+                    continue
                 self._insert('affect_proposals', {'_id': 'decision:' + row['_id'], 'persona': self.persona,
                              'kind_row': 'decision', 'proposal_id': row['_id'], 'decision': 'expired',
                              'why': 'proposal_ttl_h elapsed', 'created_at': now(), 'source_scope': row['source_scope']},

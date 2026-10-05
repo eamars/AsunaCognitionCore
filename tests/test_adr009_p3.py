@@ -39,7 +39,8 @@ def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     for value in ('OWNER_SECRET_WHY', 'OWNER_SECRET_COST', 'private-1', '靠近一点'):
         assert value not in visible, value
     block = ep['context']['affect_from_program']
-    assert {'label', 'policy', 'tendencies', 'note', 'how_to_record'} <= set(block) and block['label']
+    assert {'label', 'policy', 'tendencies', 'note'} <= set(block) and block['label']
+    assert ep['context']['how_to_record_from_program']['kinds']          # how to record is its own block
     assert not set(block) & {'val', 'arl', 'reasons', 'main_feelings', 'contributions'}
     assert all(slot['slot'] != '提要求' for slot in block['policy'])      # owner-private slot hidden
 

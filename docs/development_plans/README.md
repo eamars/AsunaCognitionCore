@@ -23,3 +23,4 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 011 | Her two brains on native tools | Implemented; live acceptance completed 2026-10-05. |
 | 012 | Heartbeat and places | Implemented 2026-10-05. |
 | 013 | DSH peer channel (talk with an agent in another DSH) | Implemented 2026-10-06 (`@asuna/dsh-peer`). |
+| 014 | Context budget: limits per turn, her notes tidied at night | Implemented 2026-10-06 (`context_budget.py`). |

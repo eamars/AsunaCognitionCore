@@ -24,12 +24,14 @@ from .evidence import canonical, sha
 from .state import Conflict, Denied
 from . import visibility
 from .vision import inline_summary as picture_receipt
+from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 300
 RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
+GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
 
@@ -43,9 +45,9 @@ def _s(description, **extra):
 
 
 AFFECT_FIELDS = {
-    'kind': _s('心情的种类：how_to_record.kinds 里的一种，可省略'),
-    'intensity': _s('多强：how_to_record.intensity 里的一个词'),
-    'arousal': _s('多激动：how_to_record.arousal 里的一个词，可省略'),
+    'kind': _s('心情的种类：how_to_record_from_program.kinds 里的一种，可省略'),
+    'intensity': _s('多强：how_to_record_from_program.intensity 里的一个词'),
+    'arousal': _s('多激动：how_to_record_from_program.arousal 里的一个词，可省略'),
     'direction': _s('好或坏；种类本身带好坏时不写', enum=['好', '坏']),
     'ref': _s('触动你的那件事：ref_index 里的 id'),
     'why': _s('来由'),
@@ -104,7 +106,8 @@ TOOLS = {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
                         'set_tags 只改 visibility/inject/tags；adopt_seed 接收人格包里更新的种子。'
-                        '没写 visibility 的新节按 owner_private 保存。不写对用户的台词，不把没发生的事写成发生过。'),
+                        '没写 visibility 的新节按 owner_private 保存。inject=always 的节每回合都会带上，有上限：'
+                        '不常用的节改成 on_demand 收起来（还在，recall 能读）。不写对用户的台词，不把没发生的事写成发生过。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
@@ -138,7 +141,7 @@ TOOLS = {
         'parameters': {'memory_id': _s('记忆 id', required=True), 'pinned': {'type': 'boolean', 'required': True}},
     },
     'feel': {
-        'description': ('记一笔心情（op=record，只用 how_to_record 里的词，不写数字）；事情了结用 close，'
+        'description': ('记一笔心情（op=record，只用 how_to_record_from_program 里的词，不写数字）；事情了结用 close，'
                         '发现前提不成立用 void（必须写 why）；情感评估路由的提案用 adopt 逐条决定（accept/decline/edit）。'
                         '没有触动就不要记。'),
         'parameters': {
@@ -156,7 +159,7 @@ TOOLS = {
                         '计时只选一种：after_seconds 几秒后；every_seconds 固定间隔；at 场景时区的本地时刻'
                         '「YYYY-MM-DDTHH:MM」；clock 每天或每周的本地钟点。改期只给新的计时，只改内容就只给 intent。'
                         '到期只会让你再想一次，不能当作已经做完。已有的安排在 plans_from_program，现在的钟面在 '
-                        'schedule_control_from_program。'),
+                        'clock_from_program。'),
         'parameters': {
             'op': _s('做什么', required=True, enum=['create', 'update', 'cancel']),
             'plan_id': _s('update/cancel 的那条安排'),
@@ -316,7 +319,8 @@ def her_pictures(store, ep):
 # Words for the refusals she is most likely to meet; any other code is passed on as it is.
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在本机或 owner 私聊里改。',
-    'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记只能在那个群里，用 append_section 或 replace_section 写。',
+    'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
+    'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节；先用 recall 看清 sid。',
     'DOC_BODY_REQUIRED': '这个操作要在 body 里写正文。',
     'DOC_HEADING_REQUIRED': '新的一节要有 heading。',
@@ -562,11 +566,19 @@ class RoleTools:
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
             scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
-            if (scene or {}).get('kind') != 'group' or item.get('op') not in ('append_section', 'replace_section'):
+            if (scene or {}).get('kind') != 'group' or item.get('op') not in GROUP_NOTE_OPS:
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP')
-            item = {**item, 'doc': notes_slug(ep['scene_id']), 'visibility': 'public', 'inject': 'always'}
+            item = {**item, 'doc': notes_slug(ep['scene_id'])}
         elif cls != visibility.OWNER_PRIVATE:
             raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE')
+        if item['doc'].startswith('group:'):
+            # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
+            # tidy them by name from her nightly settlement (context_budget.review_block).
+            if item.get('op') not in GROUP_NOTE_OPS:
+                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP')
+            item = {**item, 'visibility': 'public'}
+            if item['op'] == 'append_section' or 'inject' in item:
+                item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
         docs = DocumentStore(self.store, ep['persona'])
         slug = item['doc']
         base = docs.read(slug)[0]
@@ -587,7 +599,7 @@ class RoleTools:
     def tool_update_self(self, ep, call_id, args):
         from .self_state import SelfState
         target = args.get('target')
-        body = self._text(args, 'body', 12000)
+        body = self._text(args, 'body', SINGLE_BODY_CHARS)
         self._text(args, 'reason', 2000)
         committed = SelfState(self.store).commit(self._fresh(ep), target, body, mutation=f"self-state:{ep['_id']}:{call_id}")
         return {**committed, 'note': '已保存，之后的回合都能读到。'}, False
@@ -596,7 +608,7 @@ class RoleTools:
         from .memory import MemoryService
         from .queue import database_effects_lock
         from .tasks import require_current_feedback
-        body = self._text(args, 'body', 12000)
+        body = self._text(args, 'body', SINGLE_BODY_CHARS)
         if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
             raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
         if (ep.get('understanding_update') or {}).get('state') == 'COMMITTED':
@@ -792,7 +804,9 @@ class RoleTools:
     def tool_read_ideas(self, ep, call_id, args):
         from . import schedule_rules
         items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc())
-        return {'items': items, 'note': '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
+        more = ideas_left(self.store, ep['persona'], len(items))
+        return {'items': items, **({'more': more} if more else {}),
+                'note': '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
                 if items else '想法本里没有还没处理完的想法。'}, False
 
     def tool_review_idea(self, ep, call_id, args):
@@ -836,11 +850,13 @@ def note_idea(store, persona, idea, why, *, key, source):
 
 
 def ideas_block(store, persona, moment, limit=20):
-    """Her notebook for a self-improvement turn: the open and deferred ideas, oldest first, in words."""
+    """Her notebook for a self-improvement turn, in words: open ideas first (oldest first), then deferred ones, so
+    ideas she put off never crowd out new ones (ideas_left counts what the limit leaves out)."""
     from datetime import datetime
     from .config import ago
-    rows = list(store.db.ideas.find({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
-                .sort('created_at', 1).limit(limit))
+    rows = list(store.db.ideas.find({'persona': persona, 'state': 'open'}).sort('created_at', 1).limit(limit))
+    rows += list(store.db.ideas.find({'persona': persona, 'state': 'deferred'}).sort('created_at', 1)
+                 .limit(limit - len(rows))) if len(rows) < limit else []
     items = []
     for row in rows:
         try:
@@ -853,6 +869,12 @@ def ideas_block(store, persona, moment, limit=20):
                       **({'when': ago(hours)} if hours is not None else {}),
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
     return items
+
+
+def ideas_left(store, persona, shown):
+    """Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None."""
+    waiting = store.db.ideas.count_documents({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
+    return '还有 %d 条没列出，处理掉几条就会轮到它们。' % (waiting - shown) if waiting > shown else None
 
 
 def _seed_text(store, slug):

@@ -120,12 +120,15 @@ def report_budget(store, persona, persona_doc, voice_doc, common):
 
 
 def budget_gate(store, persona):
-    """For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render."""
+    """For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render, and growth of a
+    note already far over its limit (context_budget.note_gate)."""
     from .documents import DocumentError
+    from .context_budget import note_gate
     docs = DocumentStore(store, persona)
 
     def check(slug, new_content):
         if slug not in ('persona', 'voice'):
+            note_gate(slug, docs.read(slug)[1], new_content)
             return
         limit = budget_limit(store, persona)
         if not limit:

@@ -49,15 +49,15 @@ RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scen
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
     'self_state': ('self_state_from_program', 'recent_thoughts_from_program'),
-    'affect': ('affect_from_program',),
+    'affect': ('affect_from_program', 'how_to_record_from_program'),
     'affect_proposals': ('affect_proposals_from_program',),
     'relationship': ('relationship', 'relationship_shared_from_program'),
     'ledgers': ('ledgers_from_program',),
     'rhythm': ('rhythm_from_program',),
     'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
     'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
-    'tasks_plans': ('task_state_from_program', 'plans_from_program', 'schedule_control_from_program',
-                    'scheduled_plan_from_program'),
+    'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
+                    'schedule_control_from_program', 'scheduled_plan_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
     'media': ('media_from_program', 'image_artifacts_from_program'),
     'group_continuity': ('group_continuity_from_program',),
@@ -103,6 +103,8 @@ def _section_view(section):
 
 
 def ledger_block(docs, cls):
+    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
+    from .context_budget import NOTE_CHARS, note_view
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
@@ -110,8 +112,9 @@ def ledger_block(docs, cls):
             continue
         sections = readable_sections(content, cls)
         if sections:
+            kept, about = note_view(sections, NOTE_CHARS['ledger'])
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
-                        'sections': [_section_view(s) for s in sections]})
+                        'sections': [_section_view(s) for s in kept], **about})
     return out
 
 
@@ -234,6 +237,8 @@ class ContextBuilder:
                 if stamp:row['at']=stamp
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
+        for row in undelivered:
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         if source:
             for queued in self.store.db.messages.find({'scene_id':scene['_id'], 'direction':'inbound',
@@ -346,7 +351,10 @@ class ContextBuilder:
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。',
                  'task_state_from_program':task_states,
                  'plans_from_program':plans,
-                 'schedule_control_from_program':schedule_rules.control_note(schedule_zone,moment),
+                 # The clock changes every turn; how to write a plan does not, so it is its own block and a
+                 # session that already holds it is not sent it again (context-delivery.js).
+                 'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
+                 'schedule_control_from_program':schedule_rules.control_note(schedule_zone),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
@@ -373,10 +381,11 @@ class ContextBuilder:
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
         if event.get('episode_kind') == 'self_development':
             # ADR-011 §6.2: ideas from anywhere are read and decided only here.
-            from .role_tools import ideas_block
+            from .role_tools import ideas_block, ideas_left
             ideas=ideas_block(self.store,persona,moment)
             if ideas:
-                context['ideas_from_program']={'items':ideas,
+                more=ideas_left(self.store,persona,len(ideas))
+                context['ideas_from_program']={'items':ideas,**({'more':more} if more else {}),
                     'note':'这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 review_idea 写下处理结果'
                            '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 交代行动脑去做，它会带开发工具，'
                            '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。'}
@@ -590,7 +599,8 @@ class ContextBuilder:
             m=ledger.model
             # Words only (AGENTS.md: interpreted state): her mood, its hints and reasons, and how to record one.
             from .affect import interpret, recording_guide
-            context['affect_from_program']={**interpret(m,ledger.projection(),session_class),'how_to_record':recording_guide(m)}
+            context['affect_from_program']=interpret(m,ledger.projection(),session_class)
+            context['how_to_record_from_program']=recording_guide(m)
             proposals=ledger.proposals(scope,session_class)
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
@@ -623,15 +633,28 @@ class ContextBuilder:
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label
-            open_events=[{'event_id':e['_id'],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
+            from .affect import SHORT_ID
+            open_events=[{'event_id':e['_id'][:SHORT_ID],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
                          for e in ledger.events() if e.get('open')
                          and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
             context['settlement_from_program']={'open_affect_events':open_events,
                 'promotion_candidates':promotion_candidates(self.store,model,policy),
                 'promotion_quota':effective(model,'memory.promotion.daily_quota',policy) or 0,
                 'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
+            # Her notes that show every turn and are due for tidying (owner 2026-10-06, context_budget.py).
+            from .context_budget import review_block
+            review=review_block(self.store,persona,moment)
+            if review:
+                context['notes_review_from_program']=review
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
+        # The whole turn stays under its ceiling (context_budget.py); what is left out is said, and recall reaches it.
+        from .context_budget import size as _size, trim_turn
+        trimmed=trim_turn(context)
+        manifest['context_chars']=_size(context)
+        if trimmed:
+            manifest['trimmed']=trimmed
+            self.store.audit(event['event_id'],'context.trimmed',{'left_out':trimmed,'chars':manifest['context_chars']},scope)
         people.relabel(context,scene,event['person_id'])
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))

@@ -386,15 +386,14 @@ def line_stamp(zone, value):
     return '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
 
 
-def control_note(zone, moment=None):
-    """给角色的"安排"控制面：现场钟面 + plan 工具怎么写。她负责把话换算成这些键，
-    本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
-    return {**local_clock(zone, moment),
-            'plan_tool': {
+def control_note(zone=None):
+    """给角色的"安排"控制面：plan 工具怎么写（现场钟面另成一块 clock_from_program，每回合都变）。
+    她负责把话换算成这些键，本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
+    return {'plan_tool': {
                 'create': {'intent': '要做什么（给人看的短句）',
                            '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',
                                         'every_seconds': '整数秒：固定间隔重复，最小 %d 秒（原生限制）' % MIN_INTERVAL_SECONDS,
-                                        'at': 'YYYY-MM-DDTHH:MM：一次性，按上面 timezone 那个钟面读',
+                                        'at': 'YYYY-MM-DDTHH:MM：一次性，按 clock_from_program 里 timezone 那个钟面读',
                                         'clock': '{"time":"HH:MM","weekdays":[0,2]}：每日/每周本地钟点；'
                                                  'weekdays 用 0=周一…6=周日，省略就是每天'}},
                 'update': {'plan_id': 'plans_from_program 里的 _id',

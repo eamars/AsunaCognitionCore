@@ -764,7 +764,7 @@ def load_coordinator():
     # documents / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
     # role_tools：ADR-011 后她的每个动作（含 plan）都是一次工具调用，coordinator 同包 import 它。
     # schedule.py：plan 工具接的是真的 ScheduleService，与 role_tools 同包装，异常类才是同一个。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py', 'context_budget.py', 'lines.py', 'sandbox_backend.py', 'image_generation.py', 'integration_import.py', 'places.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', 'answers.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
@@ -986,13 +986,15 @@ def explains_the_plan_tool(note):
 
 @case
 def control_note_carries_the_local_clock(env):
+    """钟面与 plan 工具说明分成两块：钟面每回合都变，说明不变（会话里已有就不再重发）。"""
     rules = env['rules']
     zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
-    note = rules.control_note(zone, env['state'].CLOCK[0])
-    return (note['now_local'] == '2026-09-24T07:00+02:00' and note['weekday'] == '周四'
-            and explains_the_plan_tool(note)
-            and not {'utc_offset_minutes', 'tz_source', 'min_interval_seconds'} & set(note)), \
-        {'now_local': note['now_local'], 'fields': sorted(note.get('fields') or {})}
+    clock = rules.local_clock(zone, env['state'].CLOCK[0])
+    note = rules.control_note(zone)
+    return (clock['now_local'] == '2026-09-24T07:00+02:00' and clock['weekday'] == '周四'
+            and explains_the_plan_tool(note) and 'now_local' not in note
+            and not {'utc_offset_minutes', 'tz_source', 'min_interval_seconds'} & set(clock)), \
+        {'now_local': clock['now_local'], 'fields': sorted(note)}
 
 
 @case
@@ -1018,7 +1020,7 @@ def context_projection_runs_end_to_end(env):
     _system, context, _manifest = module.ContextBuilder(store, retrieval=None).prepare(
         {'event_id': 'evt-1', 'scene_id': SCENE_ID, 'person_id': PERSON, 'text': '我有哪些安排'})
     rows = context['plans_from_program']
-    note = context['schedule_control_from_program']
+    note = {**context['clock_from_program'], **context['schedule_control_from_program']}
     # 这一条走的是真 now（不是假时钟），所以断言"形状与口径"而不是钉死某个日期：
     # 下一次必须落在本地 09:00、带这个场景的偏移、并且晚于她看到的现场钟面。
     fire = datetime.fromisoformat(rows[0]['local'])
@@ -1035,7 +1037,9 @@ def context_projection_runs_end_to_end(env):
 def media_placeholder_reaches_the_character_scene(env):
     """带图那条消息进现场时，她看到的是「这里有过一张图、能不能按需拉」，图片正文不在上下文里。"""
     module, json = load_coordinator()
+    # 她自己的路由能收图时，她自己用 read_image 看（7f145252 起两个脑共用这一个工具）。
     store = Store(config_with(top={'executor': {'input_modalities': ['text', 'image']},
+                                   'character': {'input_modalities': ['text', 'image']},
                                    'vision': {'image_hosts': ['multimedia.nt.qq.com.cn']}}))
     store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
     from persona_rows import persona_rows
@@ -1057,7 +1061,7 @@ def media_placeholder_reaches_the_character_scene(env):
     return (media.get('can_pull') is True and len(items) == 1
             and items[0]['placeholder'] == '[图片（未解析）]' and items[0]['pullable'] is True
             and 'url' not in items[0] and 'base64' not in json.dumps(media, ensure_ascii=False)
-            and '不拉就不进上下文' in media['meaning']), items
+            and '没看就是没看过' in media['meaning']), items
 
 
 # ── 跑法 ────────────────────────────────────────────────────

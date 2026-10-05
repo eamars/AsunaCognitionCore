@@ -27,7 +27,8 @@ class SelfState:
             raise ValueError('INVALID_SELF_STATE_UPDATE')
         if (episode.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE:
             raise Denied('SELF_STATE_REQUIRES_OWNER_PRIVATE')
-        if len(body) > 12000:
+        from .context_budget import SINGLE_BODY_CHARS
+        if len(body) > SINGLE_BODY_CHARS:
             raise ValueError('SELF_STATE_TOO_LARGE')
         scope = 'global-safe'
         entity = target + ':' + episode['persona']

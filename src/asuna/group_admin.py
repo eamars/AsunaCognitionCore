@@ -137,12 +137,18 @@ def notes_slug(scene_id):
 
 
 def notes_block(docs, scene):
-    """Her own notes about this group (who is who, its customs, how she acts here), as a context block."""
+    """Her own notes about this group (who is who, its customs, how she acts here), as a context block, within
+    its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading."""
+    from .context_budget import NOTE_CHARS, note_view
     revision, content = docs.read(notes_slug(scene['_id']))
-    sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in (content or {}).get('sections', [])]
+    kept, about = note_view((content or {}).get('sections', []), NOTE_CHARS['group_notes'])
+    sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
-            'doc 写 group_notes（op 用 append_section 或 replace_section）。这是你的笔记，不是群规的权威来源。')
-    return revision, {'sections': sections, 'note': note if sections else '你还没写过这个群的笔记。' + note}
+            'doc 写 group_notes（op 用 append_section 或 replace_section；不常用的节用 set_tags 把 inject 改成 '
+            'on_demand 收起来）。这是你的笔记，不是群规的权威来源。')
+    if not (content or {}).get('sections'):
+        return revision, {'sections': [], 'note': '你还没写过这个群的笔记。' + note}
+    return revision, {'sections': sections, **about, 'note': note}
 
 
 # ---- outbox (channels.py) ------------------------------------------------

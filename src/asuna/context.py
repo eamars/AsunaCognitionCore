@@ -559,6 +559,11 @@ class ContextBuilder:
             '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
             '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
             '判断，不自动总结、不自动发言。')
+        from .image_generation import available as image_available
+        if image_available(self.store.config):
+            context['action_capabilities_from_program']['image_generation']=(
+                '行动脑能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
+                '外部公开的生图服务也能用，但那样只能给链接。')
         from .integration import event_granted
         if event_granted(self.store.config, event):
             context['action_capabilities_from_program']['integration'] = {

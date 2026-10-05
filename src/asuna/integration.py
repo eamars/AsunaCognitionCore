@@ -248,6 +248,7 @@ class IntegrationRunner:
         self.dev.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.active, self.active_snapshot = None, None
+        self.busy = set()                 # snapshots of trusted one-shot runs still in flight
         self.enabled_path = self.root/'enabled.json'
         self.fingerprint = sha(canonical(self.profile))
         self.restoration_error = None
@@ -264,7 +265,7 @@ class IntegrationRunner:
 
     def _sweep_snapshots(self):
         """Remove finished copies: keep only the one the service runs from and the one enabled for restart."""
-        keep = {self.active_snapshot}
+        keep = {self.active_snapshot, *self.busy}
         try:
             keep.add(json.loads(self.enabled_path.read_text(encoding='utf-8')).get('snapshot'))
         except (OSError, ValueError):
@@ -333,12 +334,15 @@ class IntegrationRunner:
                 raise Denied('INTEGRATION_SNAPSHOT_SPECIAL_FILE_DENIED')
         return destination
 
-    def _launch(self, snapshot, argv, mode):
+    def _launch(self, snapshot, argv, mode, only=None):
         argv = valid_argv(argv)
         directory = self.root/'runs'/uuid.uuid4().hex; directory.mkdir(parents=True)
         data = self.root/'service-data' if mode == 'service' else directory/'data'
         data.mkdir(exist_ok=True)
         adapter, endpoints = copy.deepcopy(self.profile.get('adapter_config', {})), self.endpoints
+        if only is not None:
+            # A trusted one-shot run that needs one service sees only that relay, and no adapter settings.
+            adapter, endpoints = {}, [e for e in endpoints if e['name'] == only]
         if mode != 'service':
             adapter, endpoints = guard_test_run(adapter, endpoints, self.config)
         endpoints = guard_read_only(endpoints)
@@ -400,21 +404,58 @@ class IntegrationRunner:
 
     def _fetch_artifact(self, endpoint, path, limit, timeout=20):
         """One managed-namespace GET: only that endpoint's configured relay is reachable, never a URL."""
+        request = {'endpoint': endpoint['name'], 'path': path, 'limit': limit, 'timeout': timeout}
+        report, body, failure = self._trusted_run('integration_fetch.py', request, timeout + 10, 'IMPORT_FETCH')
+        if failure:
+            return {'transport_error': failure}
+        if report.get('status') != 200 or report.get('transport_error'):
+            body = b''
+        if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
+            return {'transport_error': 'IMPORT_ARTIFACT_VERIFY_FAILED: reported %s bytes, read %s'
+                    % (report.get('bytes'), len(body))}
+        return {'status': report.get('status'), 'declared': report.get('declared'), 'body': body,
+                'content_type': report.get('content_type'), 'location': report.get('location'),
+                'transport_error': report.get('transport_error')}
+
+    def generate_image(self, request):
+        """One picture from the image endpoint (image_generation); only that relay is reachable.
+
+        The runner lock covers the launch only: a generation can take minutes, and the integration tools,
+        status and stop must not wait behind it.
+        """
+        from .image_generation import IMAGE_ENDPOINT
+        if not any(e['name'] == IMAGE_ENDPOINT for e in self.endpoints):
+            return {'transport_error': 'IMAGE_ENDPOINT_NOT_CONFIGURED'}
+        report, body, failure = self._trusted_run('integration_image.py', {**request, 'endpoint': IMAGE_ENDPOINT},
+                                                  request['timeout'] + 30, 'IMAGE', only=IMAGE_ENDPOINT)
+        if failure:
+            return {'transport_error': failure}
+        if report.get('generated'):
+            if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
+                return {'transport_error': 'IMAGE_VERIFY_FAILED: reported %s bytes, read %s'
+                        % (report.get('bytes'), len(body))}
+        return {'report': report, 'body': body if report.get('generated') else b''}
+
+    def _trusted_run(self, script, request, wait, label, only=None):
+        """Run one of the platform's own scripts in a test-mode namespace: (report, artifact bytes, failure)."""
         source = self.root/'fetch'/uuid.uuid4().hex
-        source.mkdir(parents=True)
         process = snapshot = None
         try:
-            shutil.copyfile(Path(__file__).with_name('integration_fetch.py'), source/'integration_fetch.py')
-            request = json.dumps({'endpoint': endpoint['name'], 'path': path, 'limit': limit, 'timeout': timeout})
-            snapshot = self._snapshot(source)
-            process = self._launch(snapshot, ['python3', 'integration_fetch.py', request], 'test')
-            expired = not process.finished.wait(timeout + 10)
+            with self.lock:
+                if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
+                source.mkdir(parents=True)
+                shutil.copyfile(Path(__file__).with_name(script), source/script)
+                snapshot = self._snapshot(source)
+                self.busy.add(snapshot.name)
+                process = self._launch(snapshot, ['python3', script, json.dumps(request)], 'test', only=only)
+            expired = not process.finished.wait(wait)
             value = process.snapshot()
             if expired:
                 try:
                     process.stop()
                 except BaseException:
                     pass
+                return None, b'', '%s_TIMEOUT: %ss' % (label, wait)
             streams = {}
             for entry in value['logs']:
                 streams.setdefault(entry['stream'], []).append(entry['text'])
@@ -425,28 +466,20 @@ class IntegrationRunner:
                     report = json.loads(line); break
                 except ValueError:
                     continue
-            if expired:
-                return {'transport_error': 'IMPORT_FETCH_TIMEOUT: %ss' % timeout}
-            if report is None:
-                return {'transport_error': 'IMPORT_FETCH_REPORT_MISSING (exit %s): %s'
-                        % (value.get('exit_code'), (stdout + stderr)[-300:])}
-            body = b''
-            if report.get('status') == 200 and not report.get('transport_error'):
-                try:
-                    body = (process.directory/'data'/'artifact.bin').read_bytes()
-                except OSError as exc:
-                    return {'transport_error': 'IMPORT_ARTIFACT_READ_FAILED: ' + str(exc)[:200]}
-            if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
-                return {'transport_error': 'IMPORT_ARTIFACT_VERIFY_FAILED: reported %s bytes, read %s'
-                        % (report.get('bytes'), len(body))}
-            return {'status': report.get('status'), 'declared': report.get('declared'), 'body': body,
-                    'content_type': report.get('content_type'), 'location': report.get('location'),
-                    'transport_error': report.get('transport_error')}
+            if not isinstance(report, dict):
+                return None, b'', '%s_REPORT_MISSING (exit %s): %s' % (label, value.get('exit_code'), (stdout + stderr)[-300:])
+            artifact = process.directory/'data'/'artifact.bin'
+            try:
+                body = artifact.read_bytes() if artifact.exists() else b''
+            except OSError as exc:
+                return None, b'', '%s_ARTIFACT_READ_FAILED: %s' % (label, str(exc)[:200])
+            return report, body, None
         except Exception as exc:
-            return {'transport_error': (type(exc).__name__ + ': ' + str(exc))[:300]}
+            return None, b'', (type(exc).__name__ + ': ' + str(exc))[:300]
         finally:
             shutil.rmtree(source, ignore_errors=True)
             if snapshot is not None:
+                self.busy.discard(snapshot.name)
                 shutil.rmtree(snapshot, ignore_errors=True)
             if process is not None:
                 try:

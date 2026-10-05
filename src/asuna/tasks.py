@@ -236,7 +236,8 @@ class ToolBroker:
 
     @property
     def specs(self):
-        return [*WORKSPACE_TOOLS, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        from .image_generation import GENERATE_IMAGE_TOOL
+        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
 
     def bind(self,session,task,workspace):
         from .grants import workspace_grant
@@ -272,7 +273,7 @@ class ToolBroker:
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool=='generate_image' or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied('DEVELOPMENT_GRANT_REQUIRED')
@@ -322,6 +323,14 @@ class ToolBroker:
                 # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE')
                 result=self.vision.read_image(task,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool=='generate_image':
+                # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。
+                # 图登记到任务绑定的 scope，来源是 integration:image:…，算她自己做的图。
+                if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE')
+                from .image_generation import generate
+                result=generate(args,runner=self.integration,workspace=sandbox.task_dir,
+                                protected=sandbox.protected_paths,register=outbound_media.import_register(self.store,task))
                 with self.service.lock:self.service.valid(task)
             elif integration_gated(tool):
                 # 导入产物：端点白名单、工作区边界、默认不覆盖与大小上限都在
@@ -413,6 +422,8 @@ class Executor:
         text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结为只读 /app 来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 仅在受管理集成进程可读，含端点别名与 adapter 配置。仅明确配置的 TCP 转发可达。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。普通 sandbox_run 仍无网络。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
+        if 'generate_image' in task.get('allowed_capabilities',()):
+            text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
         if task.get('development_grant'):
             text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在仅挂载候选的隔离 Linux 命令环境返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。技能也在候选里（角色包 skills/<kebab-case-name>/SKILL.md），同样只用 development_* 修改、经 development_publish 生效；原生 skill 工具读取的是已发布的版本。修改认知核需显式 project="core"。发布与否由你判断。'
         # Her words that arrived before this run started belong to its first message.

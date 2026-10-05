@@ -451,6 +451,8 @@ class Coordinator:
             capabilities+=[*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
         integration=event_granted(self.store.config,event)
         if integration:capabilities+=INTEGRATION_TOOLS
+        from .image_generation import available as image_available, GENERATE_IMAGE_TOOL
+        if image_available(self.store.config):capabilities.append(GENERATE_IMAGE_TOOL)
         from . import sandbox_backend
         if not sandbox_backend.available(self.store.config):
             capabilities=[tool for tool in capabilities if (tool['name'] if isinstance(tool,dict) else tool)!='sandbox_run']

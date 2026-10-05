@@ -55,7 +55,7 @@ AFFECT_FIELDS = {
 
 TOOLS = {
     'think': {
-        'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句要点，'
+        'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句心里话，'
                         '%d 字以内，不是完整的推理过程。每回合第一步必须先调用它；心里话会存档，下一回合你能看到最近几段。'
                         % THOUGHT_CHARS),
         'parameters': {'thought': _s('心里话', required=True)},

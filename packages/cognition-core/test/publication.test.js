@@ -62,8 +62,9 @@ test('native spilled output stays readable only by its own action, in bounded pa
   } finally { await ctx.fiber.dispose(); }
 });
 
-test('ADR-011 §6.4: publication imports the plugin entry and reads its structure; the floor closure is protected', async () => {
+test('ADR-011 §6.4: publication imports the plugin entry and reads its structure; the floor closure is protected', async t => {
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/import-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe-persona', version: '0.0.0',
     type: 'module', exports: { '.': './src/index.js' }, files: ['src', 'persona-model.json', 'cordis.patch.yml'] }));

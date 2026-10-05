@@ -992,7 +992,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const refused = props.phase === 'result' && props.block.isError;
       const said = args[TOOL_SUMMARY[name]];
       const summary = name === 'think' ? firstSentence(said) : typeof said === 'string' ? said : said === undefined ? '' : JSON.stringify(said);
-      const body = typeof args[TOOL_BODY[name]] === 'string' ? args[TOOL_BODY[name]] : '';
+      // A call whose only text is its summary (stay_silent's reason, feel's why…) still opens to that text in
+      // full when the one-line row would cut it off; a call with a body opens to the body.
+      const body = typeof args[TOOL_BODY[name]] === 'string' ? args[TOOL_BODY[name]]
+        : name !== 'think' && typeof said === 'string' && said.length > 40 ? said : '';
       const result = props.phase === 'result' ? resultText(props.block) : '';
       const Icon = primitives[TOOL_ICONS[name]] ?? primitives.IconInfoOutlineRegular;
       const detail = [body && h(MarkdownText, { key: 'body', text: body, labels: markdownLabels(t) }),

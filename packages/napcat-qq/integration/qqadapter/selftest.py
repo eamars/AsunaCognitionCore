@@ -327,9 +327,9 @@ def _check_private(rep, cfg):
               and result[1]["media_types"] == "image" and result[1]["media_only"] is False, reason)
     result, reason = inbound_mod.classify(_msg_event(cfg, message="纯字符串消息", message_id=8), cfg, seen)
     rep.check("filter_string_message", reason == "accepted" and result[0]["text"] == "纯字符串消息", reason)
-    result, reason = inbound_mod.classify(_msg_event(cfg, message=_text("@小满 在吗"), message_id=11), cfg, seen)
+    result, reason = inbound_mod.classify(_msg_event(cfg, message=_text("@示例角色 在吗"), message_id=11), cfg, seen)
     rep.check("filter_private_ignores_at_text", reason == "accepted" and
-              "mentioned_account_ids" not in result[0] and result[0]["text"] == "@小满 在吗", reason)
+              "mentioned_account_ids" not in result[0] and result[0]["text"] == "@示例角色 在吗", reason)
     result, reason = inbound_mod.classify(_msg_event(cfg, message=[{"type": "at", "data": {"qq": "123"}},
                                      {"type": "text", "data": {"text": "在吗"}}], message_id=12), cfg, seen)
     rep.check("filter_private_text_unchanged_by_at", reason == "accepted" and
@@ -418,10 +418,10 @@ def _check_group_inbound(rep, gcfg):
     rep.check("group_envelope_keys", set(env) <= ALLOWED_GROUP_ENVELOPE_KEYS, ",".join(sorted(env)))
 
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4101,
-                                                   message=_text("@全体成员 小满 在吗")), gcfg, seen)
+                                                   message=_text("@全体成员 示例角色 在吗")), gcfg, seen)
     rep.check("group_at_text_is_not_mention", reason == "accepted" and res[0]["mentioned_account_ids"] == []
               and "reply_to" not in res[0] and res[1]["mentions"] == 0
-              and res[0]["text"] == "@全体成员 小满 在吗",
+              and res[0]["text"] == "@全体成员 示例角色 在吗",
               "%s text=%r" % (reason, res[0].get("text") if reason == "accepted" else None))
 
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], only_a, 4102), gcfg, seen)
@@ -579,8 +579,8 @@ def _check_outbound_params(rep, gcfg, root):
     got = wire("at3", GRP, "@qq:10001 和 @qq:10002 都到了")
     rep.check("ob_group_two_markers_in_order",
               got == [A("10001"), T(" 和 "), A("10002"), T(" 都到了")], json.dumps(got, ensure_ascii=False))
-    got = wire("at4", GRP, "@小满 @全体 看这里")
-    rep.check("ob_group_nick_and_at_all_stay_text", got == [T("@小满 @全体 看这里")],
+    got = wire("at4", GRP, "@示例角色 @全体 看这里")
+    rep.check("ob_group_nick_and_at_all_stay_text", got == [T("@示例角色 @全体 看这里")],
               json.dumps(got, ensure_ascii=False))
     got = wire("at5", GRP, "@qq:all @qq:abc @qq:")
     rep.check("ob_group_marker_requires_digits", got == [T("@qq:all @qq:abc @qq:")],
@@ -1936,8 +1936,8 @@ def _check_media(rep, gcfg, root):
     parsed = inbound_mod.parse_message([{"type": "json", "data": {"data": json.dumps({"app": 0, "prompt": "网页链接"})}}])
     rep.check("media_card_prompt_used", "网页链接" in parsed["text_with_media"], parsed["text_with_media"])
     parsed = inbound_mod.parse_message([{"type": "xml",
-                                         "data": {"data": "<msg><title><![CDATA[群分享：小满]]></title></msg>"}}])
-    rep.check("media_xml_title_used", "群分享：小满" in parsed["text_with_media"], parsed["text_with_media"])
+                                         "data": {"data": "<msg><title><![CDATA[群分享：示例角色]]></title></msg>"}}])
+    rep.check("media_xml_title_used", "群分享：示例角色" in parsed["text_with_media"], parsed["text_with_media"])
     parsed = inbound_mod.parse_message([{"type": "json", "data": {"data": "{not json"}}])
     rep.check("media_unreadable_card_does_not_raise",
               parsed["text_with_media"] == "[卡片消息（未解析）]", parsed["text_with_media"])

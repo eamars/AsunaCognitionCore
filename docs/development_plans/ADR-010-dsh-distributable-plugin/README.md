@@ -168,3 +168,9 @@
 - **验收**：全新 profile 用 DSH 自带 UI（没有补丁包），真实的演示人格委托一件 `sandbox_run` 的事，结果 1024 回来；工作行展开是「在侧栏打开完整过程」，点开是 DSH 原生子会话，页面无错误。合成库与临时 home 事后删除。
 - 这次验收顺带发现：首启建的环境里没有 `tzdata`，Windows 上 zoneinfo 没有时区库，她的第一轮失败。worker 现在声明并锁定 `tzdata`。
 - D7-A（向 DSH 上游提片段工厂的 PR）不在本仓库的权限内，留给 owner 决定何时提。
+
+### M5（2026-10-05，发布准备）
+- 仓库根 `LICENSE` 是 FSF 的 GPLv3 原文（按 owner 同意从 gnu.org 取，SHA-256 `3972dc97…6986`、35149 字节，与公开值一致），核心与 QQ 通道包各带一份，`package.json` 写 `"license": "GPL-3.0-only"`。人格包不带。
+- `tools/release.py --channel packages/napcat-qq`：只打核心与通道，逐个检查版本、许可证字段、`LICENSE`、个人数据扫描（第三方 vendored 代码与仓库里一样不扫）、包里不出现任何人格包的 id 或显示名；通过后在 `.runtime/release/<tag>/` 写出 tgz、`SHA256SUMS` 与 `NOTES.md`。打包前清掉本地运行留下的 `__pycache__`。
+- 第一次运行就拦下了 QQ 通道包里的人格名（适配器自测与文档里的示例），已换成中性的「示例角色」，适配器自测 281 项通过。
+- 用发布目录里的文件在全新 profile 上 `dsh plugin add` 演练成功。按 owner 的选择，Release 由 owner 在 GitHub 上建并上传这些文件；之后用 Release 链接再装一次作为 M5 验收。

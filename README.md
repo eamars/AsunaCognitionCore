@@ -27,3 +27,10 @@ Existing Mongo persona, self, relationships, history and grants remain authorita
 Owner actions edit the persistent candidate of the selected persona package by default; use `project="core"` for cognition code. `development_publish` builds a frozen artifact and reports its actual activation state. Skill resources apply without restarting the Host; Python updates replace the worker when idle; JS/composition/dependency changes require a Host restart. **Asuna recovery** provides native project tools even when the mutable business worker cannot start.
 
 See [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) for package contracts and lifecycle, [RUNTIME_API.md](RUNTIME_API.md) for channel/tool semantics, and [AGENTS.md](AGENTS.md) for development rules. Plans in `docs/development_plans/` preserve design history rather than current runtime documentation.
+
+## Install and licence
+
+To install the released plugins into a DeepSeek Harness profile, follow [INSTALL.md](INSTALL.md) (written for the
+agent or person doing the install). The core (`packages/cognition-core`) and the channel packages are licensed under
+the GNU General Public License v3.0 only ([LICENSE](LICENSE)). Persona packages are not part of the release and carry
+no licence from this repository.

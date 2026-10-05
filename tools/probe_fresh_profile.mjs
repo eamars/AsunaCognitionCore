@@ -4,7 +4,9 @@
 // profile. Asuna is configured afterwards on its settings page, like any user would.
 //
 //   node tools/probe_fresh_profile.mjs --home <empty dir> --persona @asuna/demo [--channel @asuna/napcat-qq]
-//     [--mongo-from config/local.json]
+//     [--release <url or path of a released .tgz> ...] [--mongo-from config/local.json]
+// With --release, the core and channels come from those files or links (a GitHub Release) instead of this
+// checkout's pack; the persona still comes from the pack, since no persona is ever released.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -28,10 +30,13 @@ await fs.mkdir(home, { recursive: true });
 assert.equal((await fs.readdir(home)).length, 0, 'the fresh home must be empty');
 
 // The release assets: core plus the named persona and channels, never the checkout's patched DSH UI packages.
-const wanted = new Set(['@asuna/cognition-core', option('--persona'), ...all('--channel')].filter(Boolean));
+const released = all('--release');
+const wanted = new Set(released.length ? [option('--persona')]
+  : ['@asuna/cognition-core', option('--persona'), ...all('--channel')].filter(Boolean));
 const artifacts = JSON.parse(await fs.readFile(path.join(root, '.runtime/adr008/packages/manifest.json'), 'utf8'))
   .filter(artifact => wanted.has(artifact.name));
 assert.equal(artifacts.length, wanted.size, 'pack these packages first (tools/pack_plugins.py)');
+artifacts.push(...released.map(url => ({ name: url, path: /^https?:/.test(url) ? url : path.resolve(url) })));
 
 const profileDir = path.join(home, 'profiles', profile);
 initProfile(profileDir, PROFILE_TEMPLATES.web.bundles);

@@ -5,7 +5,7 @@ support adds a second gate: account -> group allowlist -> that group's member
 snapshot -> self echo -> content -> local dedup.  Real `at` segments become
 `mentioned_account_ids` (list of account id strings) and a real `reply` segment
 becomes an optional `reply_to`.  In group text each real `at` is additionally
-rendered in place as `@<account>` so the sentence keeps its shape: "at 小满 +
+rendered in place as `@<account>` so the sentence keeps its shape: "at 示例角色 +
 你刚刚回复 + at 101030 + 了么？" stays "@101354你刚刚回复 @101030了么？"
 instead of collapsing into "你刚刚回复  了么？".  That rendering is a readable
 representation of position only - wake permission still comes from the segment

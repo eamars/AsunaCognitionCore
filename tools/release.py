@@ -50,7 +50,9 @@ def check(path, version, names):
         if not (package / 'LICENSE').is_file():
             problems.append('LICENSE missing')
         files = [str(f) for f in package.rglob('*') if f.is_file()]
-        scan = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', '--paths', *files],
+        # Vendored third-party code is outside the scan, as it is in the repository (check_staged_secrets.py).
+        scanned = [f for f in files if not Path(f).relative_to(package).as_posix().startswith('integration/vendor/')]
+        scan = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', '--paths', *scanned],
                               capture_output=True, text=True, encoding='utf-8', errors='replace')
         hits = re.search(r'personal-scan: (\d+) hit', scan.stdout)
         if not hits or int(hits.group(1)):
@@ -75,8 +77,10 @@ def main():
     tag = args.tag or 'v' + version
     if tag != 'v' + version:
         raise SystemExit('The tag must name the core version (v%s)' % version)
-    subprocess.run([sys.executable, str(ROOT / 'tools/pack_plugins.py'), *sum((['--channel', str(c)] for c in args.channel), [])],
-                   check=True, capture_output=True)
+    packed = subprocess.run([sys.executable, str(ROOT / 'tools/pack_plugins.py'), *sum((['--channel', str(c)] for c in args.channel), [])],
+                            capture_output=True, text=True, encoding='utf-8', errors='replace')
+    if packed.returncode:
+        raise SystemExit('Packing failed:\n' + packed.stderr[-2000:])
     manifest = json.loads((PACKAGES / 'manifest.json').read_text(encoding='utf-8'))
     wanted = {'@asuna/cognition-core', *(json.loads((c / 'package.json').read_text(encoding='utf-8'))['name'] for c in args.channel)}
     artifacts = [a for a in manifest if a['name'] in wanted]

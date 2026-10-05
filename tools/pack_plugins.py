@@ -125,6 +125,8 @@ def main():
     bundle_python()
     artifacts = list(native)
     for directory in [ROOT / 'packages/cognition-core', *[p.resolve() for p in [*args.persona, *args.channel]]]:
+        for cache in [c for c in directory.rglob('__pycache__') if 'node_modules' not in c.parts]:
+            shutil.rmtree(cache)          # bytecode a local run left behind is never packed
         result = subprocess.run(['npm.cmd', 'pack', '--json', '--pack-destination', str(DESTINATION)],
                                 cwd=directory, capture_output=True, text=True, check=True)
         package = json.loads(result.stdout)[0]

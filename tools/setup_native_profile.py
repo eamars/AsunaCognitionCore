@@ -90,15 +90,18 @@ def move_secrets(core):
     moved = {}
     def visit(value):
         if isinstance(value, dict):
-            if set(value) == {'$secret'}:
-                name = value['$secret']
+            for key, item in list(value.items()):
+                if not (isinstance(item, dict) and set(item) == {'$secret'}):
+                    visit(item)
+                    continue
+                name = item['$secret']
+                if name in old and not old[name]:
+                    del value[key]          # an empty secret is no secret (the store refuses empty values)
+                    continue
                 ref = name if name.startswith('ASUNA_') else credential_ref(name.split('/'))
-                value['$secret'] = ref
+                item['$secret'] = ref
                 if name in old:
                     moved[ref] = old[name]
-                return
-            for item in value.values():
-                visit(item)
         elif isinstance(value, list):
             for item in value:
                 visit(item)

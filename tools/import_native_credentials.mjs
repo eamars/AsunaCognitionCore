@@ -9,6 +9,7 @@ const ctx = new Context();
 try {
   const credentials = new Credentials(ctx, { dshHome: home, watch: false });
   for (const [name, value] of Object.entries(values)) {
+    if (!value) continue;                      // an empty value is no credential; the store refuses it
     const ref = credentialRef(name);
     if (!await credentials.resolve(ref)) await credentials.set(ref, value);
   }

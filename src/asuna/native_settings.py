@@ -24,6 +24,8 @@ def export_settings(config):
                 if key.startswith('_'):
                     continue
                 if SECRET_KEY.search(key) and isinstance(item, str):
+                    if not item:
+                        continue        # an empty secret is no secret: the key is left out (e.g. a keyless endpoint)
                     name = credential_ref((*path, key))
                     secrets[name] = item
                     result[key] = {'$secret': name}

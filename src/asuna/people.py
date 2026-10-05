@@ -376,7 +376,10 @@ class People:
                 self.entry(scene, self.account_person(scene['_id'], number))
         self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
-        lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now()))]
+        # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
+        from .schedule_rules import line_stamp, scene_timezone
+        stamp = line_stamp(scene_timezone(self.config, scene), row.get('received_at'))
+        lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')]
         parent_id = group.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
                                            {'author': 1, 'text': 1}) if parent_id else None

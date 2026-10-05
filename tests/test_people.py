@@ -1,5 +1,6 @@
 """Who is who in a group (people.py): fixed labels, safe names, the owner by account, program notes."""
 import json
+import re
 
 from asuna.people import People, name_key, safe_name
 
@@ -29,8 +30,20 @@ def row(number, text, card='', nickname='', role='member', at='2026-10-04T01:00:
                                              'nickname': nickname, 'role': role}}}}
 
 
+STAMP = re.compile(r' \d{1,2}/\d{1,2} \d{2}:\d{2}$')
+
+
 def head(people, scene, item):
-    return people.transcript(scene, item).split('\n')[0]
+    """The label line without the time it was said (that has its own test)."""
+    return STAMP.sub('', people.transcript(scene, item).split('\n')[0])
+
+
+def test_every_line_says_when_it_was_said_on_her_clock(store):
+    from asuna.schedule_rules import line_stamp, scene_timezone
+    scene = setup(store)
+    line = People(store).transcript(scene, row(20002, 'hi', card='阿杰')).split('\n')[0]
+    expected = line_stamp(scene_timezone(store.config, scene), '2026-10-04T01:00:00+00:00')
+    assert expected and line.endswith(' ' + expected) and STAMP.search(line)
 
 
 def test_safe_name_cannot_break_a_label():

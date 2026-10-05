@@ -227,8 +227,11 @@ class ContextBuilder:
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
         else:
-            for row in history:                  # read only to size the catch-up window; not shown as raw times
-                row.pop('received_at',None); row.pop('receipt_at',None)
+            zone=schedule_rules.scene_timezone(self.store.config,scene)
+            for row in history:                  # no raw times: when it was said, on her clock face
+                said=row.pop('received_at',None); delivered=row.pop('receipt_at',None)
+                stamp=schedule_rules.line_stamp(zone,said or delivered)
+                if stamp:row['at']=stamp
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
@@ -575,6 +578,10 @@ class ContextBuilder:
             context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
             for key in ('relationship','sender_identity','understanding_update_from_program'):
                 context.pop(key,None)
+        if scene.get('kind')=='group':
+            # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
+            from . import places
+            context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

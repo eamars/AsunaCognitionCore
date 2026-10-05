@@ -374,6 +374,18 @@ def local_clock(zone, moment=None):
             'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 
+def line_stamp(zone, value):
+    """When one stored line was said, on her clock face (month/day hour:minute); '' when unknown."""
+    if not value:
+        return ''
+    try:
+        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return ''
+    local = _aware(moment).astimezone(zone['tz'])
+    return '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
+
+
 def control_note(zone, moment=None):
     """给角色的"安排"控制面：现场钟面 + plan 工具怎么写。她负责把话换算成这些键，
     本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""

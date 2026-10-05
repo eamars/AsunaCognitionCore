@@ -113,6 +113,47 @@ def room(store, scene, moment):
             'called': bool(called)}
 
 
+# The pace of a group (owner 2026-10-06): how old the talk is and how much was said since, so she can tell a
+# line that is still the topic from one the room has moved past. Facts in words only; what counts as stale is
+# hers to learn per group. A stretch is talk without a pause of PACE_GAP; PACE_ROWS bounds the look back.
+PACE_VERSION = 1
+PACE_GAP = timedelta(minutes=30)
+PACE_ROWS = 300
+SAID = ((0, '还没有别的话'), (5, '几句'), (20, '一二十句'), (60, '几十句'), (None, '很多句'))
+
+
+def _span(delta):
+    minutes = delta.total_seconds() / 60
+    return ('%d 分钟' % round(minutes) if minutes < 60 else '%d 小时' % round(minutes / 60) if minutes < 48 * 60
+            else '%d 天' % round(minutes / 1440))
+
+
+def pace(store, scene, moment, zone):
+    """The group's talk as it reads now: the current stretch and, before it, the last pause and what came since."""
+    from .schedule_rules import line_stamp
+    rows = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+        '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
+        {'received_at': 1, 'receipt_at': 1}).sort('scene_seq', -1).limit(PACE_ROWS))
+    times = [at for at in (_at(row.get('received_at') or row.get('receipt_at')) for row in rows) if at]
+    if not times:
+        return {'last_line': '还没见过有人说话'}
+    value = {'last_line': '上一句是%s（%s）' % (_ago(moment, times[0]), line_stamp(zone, times[0].isoformat()))}
+    stretch = 1
+    while stretch < len(times) and times[stretch - 1] - times[stretch] < PACE_GAP:
+        stretch += 1
+    start = times[stretch - 1]
+    value['this_stretch'] = '眼下这一段从 %s 开始，到现在说了%s' % (line_stamp(zone, start.isoformat()),
+                                                             _tier(SAID, stretch))
+    if stretch < len(times):
+        before = times[stretch]
+        value['before'] = '再往前停过 %s（%s 到 %s）；%s 那句之后又说了%s' % (
+            _span(start - before), line_stamp(zone, before.isoformat()), line_stamp(zone, start.isoformat()),
+            line_stamp(zone, before.isoformat()), _tier(SAID, stretch))
+    else:
+        value['before'] = '往前看的这些话中间没停过'
+    return value
+
+
 def episode_key(visit):
     from .ingress import episode_id
     return episode_id({'scene_id': visit['scene_id'], 'event_id': visit['event_id'], 'episode_kind': 'visit'})

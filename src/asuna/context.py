@@ -38,8 +38,12 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 # Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
 HISTORY_ROW_CHARS = 1500
 MEMORY_CHARS = 1200
-EXPERIENCE_MESSAGE_CHARS = 400
-EXPERIENCE_TASK_CHARS = 800
+EXPERIENCE_MESSAGE_CHARS = 160      # recent experience is headlines; recall reads the rest
+EXPERIENCE_TASK_CHARS = 200
+EXPERIENCE_MESSAGES = 20
+EXPERIENCE_TASKS = 8
+EXPERIENCE_PUBLICATIONS = 5
+FINISHED_TASKS_SHOWN = 3              # task state: every open task, and only the last few finished
 RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scene carry into the next turn
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
@@ -316,11 +320,22 @@ class ContextBuilder:
                 'pipeline':[{'$project':{'received_at':1,'_id':0}}],'as':'_inputs'}},
             {'$addFields':{'_active':{'$cond':[{'$in':['$state',['READY','RUNNING']]},1,0]},
                 '_input_time':{'$max':'$_inputs.received_at'}}},
-            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':8},
-            {'$project':{'_id':1,'intent_revision':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'revision_requested_at':1,'pause_reason':1,'paused_at':1,'paused_state':1}},
+            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
+            {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
+                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1}},
         ]))
+        # Every open task, and only the last few finished ones (their results came back as their own turns).
+        open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED']
+        task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
         for task in task_states:
+            task.pop('_active',None)
+            # A task's title is what she called it; the old goal text only when there is no title.
+            if task.get('title'):
+                task.pop('goal',None)
+            elif task.get('goal'):
+                task['goal']=excerpt(task['goal'],EXPERIENCE_TASK_CHARS)
+            if task['state'] not in ('READY','RUNNING'):
+                continue
             # What the action brain reported on its own while working (report_progress), newest last.
             notes=list(self.store.db.task_messages.find({'task_id':task['_id'],'from':'action'},
                 {'text':1}).sort('created_at',-1).limit(2))
@@ -399,18 +414,28 @@ class ContextBuilder:
                 'scene_id': {'$in': list(allowed)},
                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
-                 'delivery_state':1}).sort('received_at',-1).limit(30))
+                 'delivery_state':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
             for row in recent:
                 row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
+            # Headlines (owner, 2026-10-05): titles, states and the start of each report; recall reads more.
             tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
-                {'scene_id':1,'state':1,'goal':1,'failure_type':1,'result':1,
-                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(12))
+                {'scene_id':1,'state':1,'title':1,'goal':1,'failure_type':1,'result':1,
+                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(EXPERIENCE_TASKS))
             for item in tasks:
-                if item.get('result'):
-                    item['result_excerpt']=excerpt(json.dumps(item.pop('result'),ensure_ascii=False,default=str),EXPERIENCE_TASK_CHARS)
+                if item.get('title'):
+                    item.pop('goal',None)
+                elif item.get('goal'):
+                    item['goal']=excerpt(item['goal'],EXPERIENCE_TASK_CHARS)
+                result=item.pop('result',None)
+                if isinstance(result,dict) and result.get('text'):
+                    item['report_start']=excerpt(result['text'],EXPERIENCE_TASK_CHARS)
             lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
-                {'candidate':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
-                 'activated_at':1,'task_id':1,'reason':1}).sort('published_at',-1).limit(8))
+                {'project':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
+                 'activated_at':1,'task_id':1}).sort('published_at',-1).limit(EXPERIENCE_PUBLICATIONS))
+            for row in lineage:
+                # How much each publication changed, not every path (the receipt keeps the list).
+                row['changed_files']=len(row.get('changed_files') or [])
+                row['deleted_files']=len(row.get('deleted_files') or [])
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}

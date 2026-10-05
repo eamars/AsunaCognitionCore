@@ -38,7 +38,11 @@ OBSERVATION_CHARS = 600
 
 def bounded_result(result):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
-        return {**result, 'text': excerpt(result['text'], REPORT_CHARS)}
+        # The ids of its tool records are audit, not something she reads: a count says how much was done.
+        refs = result.get('artifact_refs')
+        value = {key: item for key, item in result.items() if key != 'artifact_refs'}
+        return {**value, 'text': excerpt(result['text'], REPORT_CHARS),
+                **({'tool_records': len(refs)} if isinstance(refs, list) else {})}
     return result
 
 

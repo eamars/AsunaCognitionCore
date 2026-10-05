@@ -1,6 +1,6 @@
 # ADR-005 P2 部署记录
 
-2026-09-24 22:01（Pacific/Auckland），小满交付的 `P2_SUMMARY_LOOP.patch` 与 `P2_SUMMARY_LOOP_2.patch` 已依序应用到现有宿主，并通过 `start-asuna.cmd --port 8767` 重载。原 Web 工作台已恢复可打开。补丁代码、测试与使用说明均由小满编写；Codex 只做机械应用与维护重载，没有另做产品验收。
+2026-09-24 22:01（<owner-time-zone>），小满交付的 `P2_SUMMARY_LOOP.patch` 与 `P2_SUMMARY_LOOP_2.patch` 已依序应用到现有宿主，并通过 `start-asuna.cmd --port 8767` 重载。原 Web 工作台已恢复可打开。补丁代码、测试与使用说明均由小满编写；Codex 只做机械应用与维护重载，没有另做产品验收。
 
 小满报告其自测结果：离线自检 24/24、闭环探针 21 项、边界检查 42 项，且重新核对了两片补丁的应用链。她在正式 Web 明确表示补丁可以部署。
 

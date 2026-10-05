@@ -16,8 +16,8 @@
 开发侧改不动也带不进发布，**启用这一步只能操作员在已安装那份里加**：
 
 ```json
-  "context_links": {"local-dm": ["qq:3768713357:dm:673225019"]},
-  "canonical_persons": {"qq:673225019": "local-user"}
+  "context_links": {"local-dm": ["qq:900000300:dm:900000301"]},
+  "canonical_persons": {"qq:900000301": "local-user"}
 ```
 
 - `context_links` 是**有向边**：左边能读右边，反过来读不到。不做通配（`*` 照实丢掉），
@@ -87,21 +87,21 @@ python3 -m pytest tests/test_history_query.py tests/test_discussion_digest.py te
   pytest-9.0.2）。170 条 warning 全来自 `history_query.py:773` 那句既有的 `datetime.utcnow()`
   弃用告警，与本次改动无关，留到下一次连带测试的改动一起换 `datetime.now(datetime.UTC)`。
 - 发布回执 `state=ACTIVE`、`activated_at=2026-09-25T08:41:08.214933+00:00`；启动探针 exit 0。
-- 启动投影确实写进了真库：`scenes.local-dm.readable_scenes=["qq:3768713357:dm:673225019"]`
-  （`revision` 18→19），`identities.qq:673225019` 带 `alias_of`／`canonical_person_id=local-user`，
+- 启动投影确实写进了真库：`scenes.local-dm.readable_scenes=["qq:900000300:dm:900000301"]`
+  （`revision` 18→19），`identities.qq:900000301` 带 `alias_of`／`canonical_person_id=local-user`，
   `identities.local-user` 带 `canonical_person_id=local-user`；QQ 私聊场景文档**没有**
   `readable_scenes`（边有向，反向没被偷偷打开）。
-- 在本机场景用正常工具查「贴贴」能命中 `qq:3768713357:dm:673225019#24`
-  （`in-ep-66e41ac0a0d5430c44d97e0fd44451e7`，`author=qq:673225019`，`time_source=messages.occurred_at`），
-  `scope.linked_scenes`／`same_person_ids=[local-user, qq:673225019]` 照实报出，行首带来源场景号。
+- 在本机场景用正常工具查「贴贴」能命中 `qq:900000300:dm:900000301#24`
+  （`in-ep-66e41ac0a0d5430c44d97e0fd44451e7`，`author=qq:900000301`，`time_source=messages.occurred_at`），
+  `scope.linked_scenes`／`same_person_ids=[local-user, qq:900000301]` 照实报出，行首带来源场景号。
 - 那条 QQ 原话在 `messages` 里仍只有一行：A2 不产生镜像行，所以没有重复记录、没有双唤醒。
-- 库里仍留着 A2 之前那条 `relationship:qq:673225019|scene:qq:3768713357:dm:673225019` head
+- 库里仍留着 A2 之前那条 `relationship:qq:900000301|scene:qq:900000300:dm:900000301` head
   （这次不迁数据）。从现在起同一个人的关系／偏好写 `relationship:local-user|scene:local-dm` 那一份；
   旧 head 当历史，要不要合并是另一个决定。
 
 ## 已知边界
 
-- 只做了这一条边：`local-dm ← qq:3768713357:dm:673225019`。群场景没有联动边，也不自动反向。
+- 只做了这一条边：`local-dm ← qq:900000300:dm:900000301`。群场景没有联动边，也不自动反向。
 - 联动读的是**已入库**的原话；QQ 那边新说的话要先进 `messages` 才读得到（不引入第二条同步通道）。
 - 一条边带多了场景会直接推高每轮上下文成本，所以有 `MAX_LINKS=8` 的硬上限，不做通配。
 - 每轮上下文里联动行实际排在哪，落在 `context_projection_runs`，开发侧读不到那个集合；

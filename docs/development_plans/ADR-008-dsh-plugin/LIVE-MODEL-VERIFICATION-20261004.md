@@ -7,7 +7,7 @@
 - 服务模型目录只公布 `qwen38-next-uncensored-strata-vision`。实际原生请求记录分别使用 `asuna-character` 与 `asuna-action` provider，两者的 model 都是该完整名称，输出预算 32,768、推理设置 high；本轮没有使用 freetoken。
 - 在现有“小满 · 本地私聊”从 Web 输入区发起只读文档任务。角色实际完成 MONOLOGUE、DECIDE，委托行动脑；行动完成 7 个原生步骤、13 次读取/列举调用，随后角色形成最终回复。没有为了通过测试修改人格或回复措辞。
 - 同一主 Chat 显示真实行动来源的 Think、工具及正文；展开 `development_read · RUN_ASUNA.md` 的原生 IN/OUT，可核对实际内容与 SHA-256。原生角色记录仍在主会话，只有一个输入区。动作来源关联的边界为 `after_seq=-1`、`through_seq=69`、`state=completed`。
-- 指定 QQ 群 1002866238 的真实新消息进入原来的连续会话，包括本轮 23:51 及之后的正常群聊消息。群与主人 DM 673225019 都显示原生只读输入区。此项证明消息接收与展示；没有据此声称新的 QQ 回复已送达。
+- 指定 QQ 群 900000102 的真实新消息进入原来的连续会话，包括本轮 23:51 及之后的正常群聊消息。群与主人 DM 900000301 都显示原生只读输入区。此项证明消息接收与展示；没有据此声称新的 QQ 回复已送达。
 - 最终版本的页面重载前后，本地角色日志与本轮只读行动日志的 SHA-256 完全相同；观察/刷新没有重放这个已完成任务。
 
 ## 本轮修复
@@ -81,7 +81,7 @@ Host 重启恢复了一条先前未处理的旧 `task_feedback` 输入：原任�
 
 任务上下文已改为优先 READY/RUNNING，其余依真实持久输入 received_at 排列；保持 8 项上限，复用 messages 的原 ID 查询，不建额外索引库或消息记录。只读正式数据探针调用实际 ContextBuilder 后，两轮文档任务均进入上下文。回归另外保留 9 个较早的高 revision 任务，证明活跃任务优先，最近已返回任务仍可见。没有为通过测试调整人格或回复。
 
-正式群 1002866238 的后续实际任务 `task-ep-dc763fd9b7b8cf2060faaacfb33456c4` 已 RETURNED、feedback DELIVERED。其角色回复 `ep-a8d86dae61cfc2dc93910c20b718bea0:speak:0` 的 delivery_basis 为 platform_ack，实际 QQ adapter 保存 platform_accepted、retcode=0 和 message_id=521134024。此项补齐群发送证据；本轮没有手工编写群回复或伪造平台回执。指定主人 DM 在本轮时间窗口仍无新的入站/出站，不能据此声称新的 DM 往返已验证。
+正式群 900000102 的后续实际任务 `task-ep-dc763fd9b7b8cf2060faaacfb33456c4` 已 RETURNED、feedback DELIVERED。其角色回复 `ep-a8d86dae61cfc2dc93910c20b718bea0:speak:0` 的 delivery_basis 为 platform_ack，实际 QQ adapter 保存 platform_accepted、retcode=0 和 message_id=900000702。此项补齐群发送证据；本轮没有手工编写群回复或伪造平台回执。指定主人 DM 在本轮时间窗口仍无新的入站/出站，不能据此声称新的 DM 往返已验证。
 
 执行介入及上下文修复包 `f31917851afaaf59cd3d4e546e128b683f14f55ad53711f5e364d1d6913177cf` 通过正式 DSH 安装，worker 于 2026-10-03 14:35:24 UTC 返回 ACTIVE，83 文件逐字匹配，profile 配置 SHA-256 不变。已完成 29 项原生及 59 项 Python/Mongo 回归；拥有的测试数据库清单为空。安装后在原本地聊天提出新的真实模型只读续接请求；其运行结果另记，不预先计为续接通过。
 

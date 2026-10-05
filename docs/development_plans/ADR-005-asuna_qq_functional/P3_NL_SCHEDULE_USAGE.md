@@ -31,7 +31,7 @@
 ## 3. 时区读哪个
 
 优先级：这条计划创建时记下的时区 > 群/私聊 route 的 `schedule.timezone` > 场景行 `timezone` >
-顶层 `timezone` > 默认 `Pacific/Auckland`（与 DECISIONS §6 一致）。改配置不追改旧安排——旧计划
+顶层 `timezone` > 默认 `<owner-time-zone>`（与 DECISIONS §6 一致）。改配置不追改旧安排——旧计划
 按它创建时那个钟面走，`tz_source` 里写着这条是从哪儿来的，投影里一并给她。
 
 route 里可以这么写（与 `proactive` 同一层，同一个场景一个钟面）：
@@ -47,7 +47,7 @@ route 里可以这么写（与 `proactive` 同一层，同一个场景一个钟�
 
 ## 4. DST 的确定性例子（Q5 要的）
 
-场景时区 `Pacific/Auckland`，2026-09-27 当地 02:00 拨快到 03:00，2026-04-05 当地 03:00 拨回 02:00：
+场景时区 `<owner-time-zone>`，2026-09-27 当地 02:00 拨快到 03:00，2026-04-05 当地 03:00 拨回 02:00：
 
 - 规则 `clock 09:00` 在 09-26 响于 `2026-09-25T21:00Z`（+12），下一次响于 `2026-09-26T20:00Z`
   （+13）：**本地仍是 09:00**，两次间隔 23 小时。跨回拨那天间隔 25 小时，本地还是 09:00。
@@ -96,7 +96,7 @@ python3 -m pytest tests/test_p3_schedule.py  # 真 Mongo 那一层（操作员�
   若不记，取消后重启可能把那条当成还在（多挂一次），不会导致重复行动。
 - `/schedule/create` 响应确切字段：现在只认 `id`，拿不到就报 `NATIVE_SCHEDULE_CREATE_INCOMPLETE`，
   不会当成功。
-- Windows 宿主上 `zoneinfo` 能不能取到 `Pacific/Auckland`：取不到就走 §3 的降级台阶，
+- Windows 宿主上 `zoneinfo` 能不能取到 `<owner-time-zone>`：取不到就走 §3 的降级台阶，
   投影与审计会写明 `tz_source`。要按命名时区跑（含 DST），要么装 `tzdata`，要么 route 里给
   `utc_offset_minutes`。
 

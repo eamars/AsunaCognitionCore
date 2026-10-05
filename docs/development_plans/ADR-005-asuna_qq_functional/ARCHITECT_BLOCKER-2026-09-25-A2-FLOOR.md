@@ -22,8 +22,8 @@ A2 的读权限写在 `config/asuna-channel.local.json` 顶层，而这个文件
    `copy /Y C:\workspace\asuna_cognition_core_v2\config\asuna-channel.local.json
    C:\workspace\asuna_cognition_core_v2\.runtime\work\self-development\project\config\`
 2. 再在宿主那份里加启用键：
-   `"context_links": {"local-dm": ["qq:3768713357:dm:673225019"]}`、
-   `"canonical_persons": {"qq:673225019": "local-user"}`。
+   `"context_links": {"local-dm": ["qq:900000300:dm:900000301"]}`、
+   `"canonical_persons": {"qq:900000301": "local-user"}`。
 
 顺序反了（先改宿主那份再复制）会让候选与基线不一致，地板保护照样挡。
 也别删 `.runtime\adr007\baseline.json`：那会让 `ensure()` 拿宿主那份覆盖整个候选，
@@ -36,13 +36,13 @@ A2 的读权限写在 `config/asuna-channel.local.json` 顶层，而这个文件
 - 它**不在** `changed_files` 里：`ensure()` 把宿主那次外部改动当作有效项目的一部分刷进了基线
   （基线记录的就是宿主那份的摘要），所以启用不依赖发布去覆盖宿主文件——宿主本来就在读它自己那份。
 - 拿真配置跑 `config.load` → `scene_links`：`read_scope(local-dm)` 得到
-  `scene_ids=[local-dm, qq:3768713357:dm:673225019]`、`linked_scenes=[qq 那条]`；
+  `scene_ids=[local-dm, qq:900000300:dm:900000301]`、`linked_scenes=[qq 那条]`；
   从 QQ 那条场景看回去 `linked_scenes=[]`（边是有向的）；`person_classes` 把
-  `local-user` 与 `qq:673225019` 算成同一个人；`scene_id_filter` 在本机视角是 `$in` 两个场景、
+  `local-user` 与 `qq:900000301` 算成同一个人；`scene_id_filter` 在本机视角是 `$in` 两个场景、
   在 QQ 视角仍是单值 `scene_id`。
 - 拿真库的 `scenes`／`identities` 行做干跑：启动时 `sync_scene_docs` 会给 `local-dm` 补
   `readable_scenes=[qq:...]`（CAS 用现有 revision 18），`sync_identity_docs` 会给
-  `qq:673225019` 补 `canonical_person_id`／`alias_of`；`relationship_target` 从 QQ 那一轮算出
+  `qq:900000301` 补 `canonical_person_id`／`alias_of`；`relationship_target` 从 QQ 那一轮算出
   `relationship:local-user|scene:local-dm`、`shared=true`、`linked_scopes=[scene:qq:...]`，
   从本机那一轮仍是原来那一份，未联动的群场景只归一 entity、scope 不动。
 - 当时真库里这两个派生字段还没有：跑的是重启前的旧代码，符合预期。
@@ -53,10 +53,10 @@ A2 的读权限写在 `config/asuna-channel.local.json` 顶层，而这个文件
   tests/test_discussion_digest.py tests/test_understanding.py` →
   `13 + 15 + 2 = 30 passed, 170 warnings in 24.79s`。170 条 warning 全来自
   `history_query.py:773` 那句既有的 `datetime.utcnow()` 弃用告警，与本次改动无关。
-- **启动投影与跨场景读取**：`scenes.local-dm.readable_scenes=["qq:3768713357:dm:673225019"]`
-  （`revision` 18→19）、`identities.qq:673225019` 带 `alias_of`／`canonical_person_id`（rev 2）、
+- **启动投影与跨场景读取**：`scenes.local-dm.readable_scenes=["qq:900000300:dm:900000301"]`
+  （`revision` 18→19）、`identities.qq:900000301` 带 `alias_of`／`canonical_person_id`（rev 2）、
   `identities.local-user` 带 `canonical_person_id`（rev 2）；QQ 私聊场景文档没有 `readable_scenes`。
-  在本机场景用正常工具查「贴贴」命中 `qq:3768713357:dm:673225019#24`，`scope.linked_scenes`／
+  在本机场景用正常工具查「贴贴」命中 `qq:900000300:dm:900000301#24`，`scope.linked_scenes`／
   `same_person_ids` 照实报出。那条 QQ 原话在 `messages` 里仍只有一行。
   UI 侧关系记录走同一个 `relationship_target` 口径（`ui.py`），库里 A2 之前那条
-  `relationship:qq:673225019|scene:qq:...dm...` head 保留不迁。
+  `relationship:qq:900000301|scene:qq:...dm...` head 保留不迁。

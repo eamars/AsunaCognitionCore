@@ -98,6 +98,8 @@ def _match(row, spec):
         if isinstance(want, dict):
             if '$in' in want and have not in want['$in']:
                 return False
+            if '$nin' in want and have in want['$nin']:
+                return False
             if '$ne' in want and have == want['$ne']:
                 return False
         elif have != want:
@@ -720,7 +722,7 @@ def outage_acts_once_and_arms_the_future(env):
                                                 'next': after['next_fire_at']}
 
 
-# ── DECIDE 形状与控制字段：连 coordinator.py 的真 schema 一起验 ────────
+# ── 她的 plan 工具：连 coordinator.py / role_tools.py 的真调用口一起验 ────────
 STUB_EXTRA = {
     'config.py': 'import json, os\nfrom pathlib import Path\n'
                  'RESOURCES=Path(os.environ["ASUNA_P3_RESOURCES"])\nROOT=RESOURCES.parents[2]\n'
@@ -759,10 +761,12 @@ def load_coordinator():
     # 这条用例只会红在 ModuleNotFoundError 上，看不出是夹具缺文件——真文件新增同包 import 时这里同步。
     # vision.py 也得带上：真 context.prepare 遇到带图消息时 import 它（同包 evidence/state 用上面的替身）。
     # render / visibility：真 coordinator 与 context 在拆分后各自 import 它们；没有这两份的旧副本就不带。
-    # documents / decide_delta / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'decide_delta.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py')
+    # documents / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
+    # role_tools：ADR-011 后她的每个动作（含 plan）都是一次工具调用，coordinator 同包 import 它。
+    # schedule.py：plan 工具接的是真的 ScheduleService，与 role_tools 同包装，异常类才是同一个。
+    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
-    for name in ('coordinator.py', 'context.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
+    for name in ('coordinator.py', 'context.py', 'schedule.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', 'answers.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound
         if name in optional and not os.path.exists(os.path.join(SRC, name)):
             continue
@@ -782,72 +786,132 @@ def load_coordinator():
         sys.modules.setdefault('pymongo', stub)
         sys.modules.setdefault('pymongo.errors', errors)
     sys.path.insert(0, root)
-    for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule_rules', 'p3coord.self_state',
-                 'p3coord.vision', 'p3coord.scene_links', 'p3coord.render', 'p3coord.visibility',
-                 'p3coord.outbound_media'):
+    for name in ('p3coord.coordinator', 'p3coord.context', 'p3coord.schedule', 'p3coord.schedule_rules',
+                 'p3coord.self_state', 'p3coord.vision', 'p3coord.scene_links', 'p3coord.render',
+                 'p3coord.visibility', 'p3coord.outbound_media', 'p3coord.role_tools'):
         sys.modules.pop(name, None)
-    module = __import__('p3coord.coordinator', fromlist=['WORKSPACE_DECISION_SCHEMA'])
+    module = __import__('p3coord.coordinator', fromlist=['Coordinator'])
     _PACKAGES['p3coord'] = (module, json)
     return module, json
 
 
-@case
-def decide_schema_accepts_the_four_timings(env):
-    import jsonschema
-    module, _ = load_coordinator()
-    schema = module.WORKSPACE_DECISION_SCHEMA
-    base = {'next': 'speak', 'goal': 'g', 'constraints': [], 'recall_query': '',
-            'speak_before_action': False}
-    samples = [dict(base, schedule={'intent': 'x', 'after_seconds': 600}),
-               dict(base, schedule={'intent': 'x', 'every_seconds': 900}),
-               dict(base, schedule={'intent': 'x', 'at': '2026-10-01T15:00'}),
-               dict(base, schedule={'intent': 'x', 'clock': {'time': '09:00', 'weekdays': [0, 4]}}),
-               dict(base, update_plan={'plan_id': 'plan-1', 'schedule': {'clock': {'time': '21:30'}}}),
-               dict(base, update_plan={'plan_id': 'plan-1', 'intent': '换个说法'})]
-    for sample in samples:
-        jsonschema.validate(sample, schema)
-    return True, '%d 份 DECIDE 都过' % len(samples)
+def plan_turn(plans=(), clock=T0, config=None):
+    """她这一回合的 plan 工具：真 Coordinator + 真 RoleTools + 真 ScheduleService（假集合、假原生）。
 
-
-@case
-def decide_schema_still_rejects_bad_shapes(env):
-    import jsonschema
+    回合已经 think 过（think 也是真调用）；返回 (store, lane, ep_id, call)。
+    call(name, args) 走的就是原生回合里每次工具调用都走的 RoleTools.call：
+    成功给 ('ok', 结果)，退回给 ('refused', 给她看的那句话)。
+    """
     module, _ = load_coordinator()
-    schema = module.WORKSPACE_DECISION_SCHEMA
-    base = {'next': 'speak', 'goal': 'g', 'constraints': [], 'recall_query': '',
-            'speak_before_action': False}
-    bad = [dict(base, schedule={'intent': 'x'}),
-           dict(base, schedule={'intent': 'x', 'at': '2026-10-01T15:00', 'every_seconds': 900}),
-           dict(base, schedule={'intent': 'x', 'clock': {'hour': 9}}),
-           dict(base, schedule={'intent': 'x', 'cron': '0 9 * * *'}),
-           dict(base, update_plan={'schedule': {'after_seconds': 60}})]
-    rejected = 0
-    for sample in bad:
+    load_package()                                  # 假原生 Lane 读的是 p3pkg 那份假时钟
+    import importlib
+    schedule, state = importlib.import_module('p3coord.schedule'), sys.modules['p3coord.state']
+    role_tools = sys.modules['p3coord.role_tools']
+    state.CLOCK[0] = sys.modules['p3pkg.state'].CLOCK[0] = clock
+    store = Store(config or config_with(FIXED))
+    store.db.scenes.rows.update({SCENE['_id']: dict(SCENE, revision=1)})
+    for row in plans:
+        store.db.plans.rows[row['_id']] = dict(row)
+    lane = Lane()
+    service = schedule.ScheduleService.__new__(schedule.ScheduleService)
+    service.store, service.lane, service.controller = store, lane, Controller()
+    service.deliver_lock = threading.RLock()
+    service.app = types.SimpleNamespace(config=store.config, evidence=Evidence())
+    coordinator = module.Coordinator(store, None, context=object(), publisher=object(), task_service=object())
+    coordinator.scheduler = service
+    rules = sys.modules['p3coord.schedule_rules']
+    listed = [rules.project(row, rules.scene_timezone(store.config, SCENE, row), clock) for row in plans]
+    ep = dict(EP, source_event_id='evt-3001', persona='demo', monologue_refs=[], tool_calls={},
+              manifest={'session_class': 'public'}, context={'plans_from_program': listed})
+    ep['turn_tools'] = role_tools.exposed(store, ep)
+    ep['turn_thought'] = False
+    store.put('episodes', ep)
+    counter = [0]
+
+    def call(name, args):
+        counter[0] += 1
         try:
-            jsonschema.validate(sample, schema)
-        except jsonschema.ValidationError:
-            rejected += 1
-    return rejected == len(bad), '%d/%d 被拒' % (rejected, len(bad))
+            result, _conclude = coordinator.tools.call(ep['_id'], ep['_id'] + ':TURN#%d' % counter[0], name, args)
+            return 'ok', result
+        except role_tools.Refused as exc:
+            return 'refused', str(exc)
+    thought = call('think', {'thought': '他要我记着这件事，我替他安排一下。'})
+    if thought[0] != 'ok':
+        raise AssertionError('think 没过：%s' % (thought,))
+    return store, lane, ep['_id'], call
+
+
+@case
+def plan_tool_accepts_the_four_timings(env):
+    """ADR-011：DECIDE 的 schedule / update_plan 换成 plan 工具；四种计时与改期都要真落到 plans。"""
+    store, _lane, ep_id, call = plan_turn()
+    tools = store.db.episodes.find_one({'_id': ep_id})['turn_tools']
+    made = [call('plan', dict({'op': 'create', 'intent': 'x'}, **timing)) for timing in (
+        {'after_seconds': 600}, {'every_seconds': 900}, {'at': '2026-10-01 15:00'},
+        {'clock': {'time': '09:00', 'weekdays': [0, 4]}})]
+    if [outcome for outcome, _ in made] != ['ok'] * 4:
+        return False, made
+    rules = [store.db.plans.find_one({'_id': result['plan_id']})['rule'] for _, result in made]
+    # 改期：对着上一回合留下、这一回合 plans_from_program 里列出的那一条
+    first = store.db.plans.find_one({'_id': made[3][1]['plan_id']})
+    store2, _lane2, _ep2, call2 = plan_turn(plans=[first])
+    moved = call2('plan', {'op': 'update', 'plan_id': first['_id'], 'clock': {'time': '21:30'}})
+    after = store2.db.plans.find_one({'_id': first['_id']})
+    return ('plan' in tools and len({result['plan_id'] for _, result in made}) == 4
+            and rules[0] == {'after_seconds': 600} and rules[1] == {'every_seconds': 900}
+            and 'at' in rules[2] and rules[3] == {'clock': {'time': '09:00', 'weekdays': [0, 4]}}
+            and moved[0] == 'ok' and after['rule'] == {'clock': {'time': '21:30'}}
+            and after['plan_version'] == 2 and after['intent'] == 'x'), \
+        {'rules': rules, 'moved': moved}
+
+
+@case
+def plan_tool_update_can_change_only_the_intent(env):
+    """只改内容不改时间：plan 工具说明（update 改期或改内容）与控制面（只改内容就给 intent）都许诺了这一种。"""
+    service = env['service']
+    plan = service.create(EP, DAILY)
+    store, _lane, _ep, call = plan_turn(plans=[env['store'].db.plans.find_one({'_id': plan['_id']})])
+    renamed = call('plan', {'op': 'update', 'plan_id': plan['_id'], 'intent': '换个说法'})
+    after = store.db.plans.find_one({'_id': plan['_id']})
+    return (renamed[0] == 'ok' and after['intent'] == '换个说法'
+            and after['rule'] == {'clock': {'time': '09:00'}}), {'renamed': renamed}
+
+
+@case
+def plan_tool_refuses_bad_shapes_in_words(env):
+    """形状不对的 plan 调用：退回给她一句能照着改的话，什么也不落库，回合照常。"""
+    store, lane, ep_id, call = plan_turn()
+    bad = [{'op': 'create', 'intent': 'x'},                                                  # 没给计时
+           {'op': 'create', 'intent': 'x', 'at': '2026-10-01 15:00', 'every_seconds': 900},  # 两种计时
+           {'op': 'create', 'intent': 'x', 'clock': {'hour': 9}},                            # 钟点形状不对
+           {'op': 'create', 'intent': 'x', 'cron': '0 9 * * *'},                             # 不认的计时
+           {'op': 'update', 'clock': {'time': '09:00'}},                                     # 改期没说改哪条
+           {'op': 'every day', 'intent': 'x', 'after_seconds': 60}]                          # 不认的操作
+    outcomes = [call('plan', args) for args in bad]
+    ep = store.db.episodes.find_one({'_id': ep_id})
+    recorded = [row for row in ep['tool_calls'].values() if row['tool'] == 'plan']
+    return ([outcome for outcome, _ in outcomes] == ['refused'] * len(bad)
+            and all(isinstance(text, str) and text for _, text in outcomes)
+            and not store.db.plans.rows and not lane.events
+            and len(recorded) == len(bad) and all('refused' in row for row in recorded)), outcomes
 
 
 @case
 def rejected_time_does_not_kill_the_turn(env):
-    module, _ = load_coordinator()
-    store = Store(config_with({'timezone': ZONE}))
-    episode = {'_id': 'ep-9', 'revision': 3, 'scope_key': 'scene:' + SCENE_ID}
-    store.db.episodes.rows['ep-9'] = dict(episode)          # 这条回合已经在库里躺着了
-    coordinator = module.Coordinator(store, None, context=object(), publisher=object())
-    coordinator.scheduler = object()             # 只验控制字段怎么记，不验它底下接的是谁
-
-    def boom():
-        raise ValueError('SCHEDULE_TIME_ALREADY_PAST: 2026-09-23T09:00 已经过了')
-    assert coordinator._plan_row({'context': {'plans_from_program': [{'_id': 'plan-1'}]}},
-                                 'plan-1') == {'_id': 'plan-1'}
-    assert coordinator._plan_row({'context': {'plans_from_program': []}}, 'plan-9') is None
-    updated = coordinator._plan_control(episode, 'plan_result', boom)
-    return (updated['plan_result']['accepted'] is False
-            and 'SCHEDULE_TIME_ALREADY_PAST' in updated['plan_result']['error']
-            and 'schedule.control_rejected' in store.kinds('ep-9')), updated['plan_result']
+    """时间已经过了：退回给她原因和这个场景的钟面，她在同一回合改了再试就成。"""
+    store, _lane, ep_id, call = plan_turn(config=config_with({'timezone': ZONE}))
+    past = call('plan', {'op': 'create', 'intent': '昨天那件事', 'at': '2026-09-23 09:00'})
+    # 改期／取消只对 plans_from_program 里列出的那条：没列出的退回，不去碰库
+    unlisted = call('plan', {'op': 'cancel', 'plan_id': 'plan-9'})
+    retry = call('plan', {'op': 'create', 'intent': '明天那件事', 'at': '2026-09-25 09:00'})
+    ep = store.db.episodes.find_one({'_id': ep_id})
+    calls = sorted(ep['tool_calls'].values(), key=lambda row: row['seq'])
+    return (past[0] == 'refused' and 'SCHEDULE_TIME_ALREADY_PAST' in past[1] and '2026-09-24' in past[1]
+            and unlisted[0] == 'refused' and 'plan-9' in unlisted[1] and 'plans_from_program' in unlisted[1]
+            and retry[0] == 'ok' and len(store.db.plans.rows) == 1
+            and [row['tool'] for row in calls] == ['think', 'plan', 'plan', 'plan']
+            and [('refused' in row) for row in calls] == [False, True, True, False]), \
+        {'past': past, 'unlisted': unlisted, 'retry': retry}
 
 
 @case
@@ -859,17 +923,36 @@ def driver_keeps_all_date_math_out_of_itself(env):
 
 
 @case
-def hooks_are_wired_in_context_and_coordinator(env):
+def hooks_are_wired_in_context_and_role_tools(env):
     context = open(os.path.join(SRC, 'context.py'), encoding='utf-8').read()
-    coordinator = open(os.path.join(SRC, 'coordinator.py'), encoding='utf-8').read()
+    tools_path = os.path.join(SRC, 'role_tools.py')
+    tools = open(tools_path, encoding='utf-8').read() if os.path.exists(tools_path) else ''
     need = [('context 投影走 schedule_rules.project', "schedule_rules.project(row" in context),
             ('context 给出控制面与钟面', "schedule_control_from_program':schedule_rules.control_note" in context),
             ('context 也列已暂停的计划', "'ACTIVE','SUSPENDED'" in context),
-            ('DECIDE 有 update_plan', "['properties']['update_plan']" in coordinator),
-            ('DECIDE 走 _plan_control', coordinator.count('self._plan_control(') >= 3),
-            ('改期结果进本轮记录', "'plan_update_result'" in coordinator),
-            ('改期撞已取消时不打死这轮', 'SCHEDULE_PLAN_NOT_ACTIVE' in coordinator)]
+            ('她有 plan 工具，三种操作', "enum=['create', 'update', 'cancel']" in tools),
+            ('每回合都给 plan', "names.append('plan')" in tools),
+            ('plan 接真 ScheduleService 的三个口',
+             all('c.scheduler.%s(' % op in tools for op in ('create', 'update', 'cancel'))),
+            ('换算失败退回给她自己改，不打死这轮', '没安排成' in tools)]
     return all(flag for _, flag in need), [name for name, flag in need if not flag]
+
+
+@case
+def update_of_a_plan_cancelled_meanwhile_is_refused_not_fatal(env):
+    """上下文里还列着、库里已经取消了：改期退回给她 SCHEDULE_PLAN_NOT_ACTIVE，回合照常，原生那边不动。"""
+    service = env['service']
+    plan = service.create(EP, DAILY)
+    store, lane, ep_id, call = plan_turn(plans=[env['store'].db.plans.find_one({'_id': plan['_id']})])
+    current = store.db.plans.find_one({'_id': plan['_id']})
+    store.put('plans', {**current, 'status': 'CANCELLED'}, expected=current['revision'], stream=plan['_id'])
+    moved = call('plan', {'op': 'update', 'plan_id': plan['_id'], 'clock': {'time': '10:00'}})
+    after = call('stay_silent', {'reason': '已经取消了，不用再说'})
+    paths = [path for path, _ in lane.calls]
+    return (moved[0] == 'refused' and 'SCHEDULE_PLAN_NOT_ACTIVE' in moved[1] and after[0] == 'ok'
+            and '/schedule/create' not in paths and '/schedule/update' not in paths
+            and store.db.plans.find_one({'_id': plan['_id']})['status'] == 'CANCELLED'), \
+        {'moved': moved, 'paths': paths}
 
 
 @case
@@ -888,15 +971,28 @@ def projection_explains_active_cancelled_and_suspended(env):
         [row.get('local') or row.get('why_no_next') for row in rows]
 
 
+RETIRED_PLAN_FIELDS = ('update_plan', 'cancel_plan_id')     # ADR-011 前 DECIDE 里的控制字段，现在是 plan 工具
+
+
+def explains_the_plan_tool(note):
+    """控制面讲的是 plan 工具怎么写：四种计时都讲到、间隔下限写明，不再叫她写已退役的 DECIDE 字段。"""
+    import json
+    import re
+    text = json.dumps(note, ensure_ascii=False)
+    return (all(re.search(r'(?<![A-Za-z_])%s(?![A-Za-z_])' % timing, text)
+                for timing in ('after_seconds', 'every_seconds', 'at', 'clock'))
+            and '最小 60 秒' in text and not [field for field in RETIRED_PLAN_FIELDS if field in text])
+
+
 @case
 def control_note_carries_the_local_clock(env):
     rules = env['rules']
     zone = rules.scene_timezone(config_with({'timezone': ZONE}), SCENE)
     note = rules.control_note(zone, env['state'].CLOCK[0])
     return (note['now_local'] == '2026-09-24T07:00+02:00' and note['weekday'] == '周四'
-            and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}
-            and '最小 60 秒' in note['fields']['schedule']['计时四选一']['every_seconds']
-            and not {'utc_offset_minutes', 'tz_source', 'min_interval_seconds'} & set(note)), note['now_local']
+            and explains_the_plan_tool(note)
+            and not {'utc_offset_minutes', 'tz_source', 'min_interval_seconds'} & set(note)), \
+        {'now_local': note['now_local'], 'fields': sorted(note.get('fields') or {})}
 
 
 @case
@@ -915,6 +1011,10 @@ def context_projection_runs_end_to_end(env):
                                      'status': 'ACTIVE', 'timezone': ZONE,
                                      'tz_source': 'route', 'plan_version': 1, 'revision': 1,
                                      'created_at': '2026-09-24T04:00:00+00:00'}
+    # Her rhythms belong to the program (ADR-012 §4.3): never in her list, so her plan tool cannot cancel them.
+    for kind in ('presence', 'settlement', 'self_development'):
+        store.db.plans.rows['plan-rhythm-' + kind] = {**store.db.plans.rows['plan-7'], '_id': 'plan-rhythm-' + kind,
+                                                      'kind': kind, 'intent': kind, 'rule': {'every_seconds': 3600}}
     _system, context, _manifest = module.ContextBuilder(store, retrieval=None).prepare(
         {'event_id': 'evt-1', 'scene_id': SCENE_ID, 'person_id': PERSON, 'text': '我有哪些安排'})
     rows = context['plans_from_program']
@@ -927,7 +1027,8 @@ def context_projection_runs_end_to_end(env):
             and rows[0]['local'].endswith(('+01:00', '+02:00'))
             and fire > datetime.fromisoformat(note['now_local'])
             and note['timezone'] == ZONE
-            and set(note['fields']) == {'schedule', 'update_plan', 'cancel_plan_id'}),         [rows[0].get('local'), note.get('now_local')]
+            and explains_the_plan_tool(note)), \
+        [rows[0].get('local'), note.get('now_local'), sorted(note.get('fields') or {})]
 
 
 @case

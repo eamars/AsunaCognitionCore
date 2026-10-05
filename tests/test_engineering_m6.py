@@ -1,14 +1,35 @@
 import json,time,uuid
+from pathlib import Path
 import pytest
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane,LaneResult
+from asuna.lanes import FakeLane,FakeTurn
 from asuna.sandbox import Sandbox
 from asuna.config import ROOT
 from asuna.privacy import PrivacyService
 from asuna.state import Denied
 from asuna.audit import verify
-from test_engineering_m1 import decision,event,normal
-from test_engineering_m3 import task_setup
+from asuna.tasks import TaskService,ToolBroker
+from test_engineering_m1 import event
+
+
+def normal(store):
+    """One ordinary character turn: her thought, then what she says."""
+    lane=FakeLane(store,[FakeTurn([('think',{'thought':'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})],'回来了。')])
+    return Coordinator(store,lane),lane
+
+
+def task_setup(store):
+    """A running task she delegated in dm-a without saying anything yet, bound to the fixture grant's
+    workspace as session s-test (nothing is published before the tests start)."""
+    turn=FakeTurn([('think',{'thought':'交给行动脑复制，原件要保留。'}),
+                   ('delegate',{'title':'copy fixture','brief':'复制受控文件，保留原件。'}),
+                   ('stay_silent',{'reason':'做完再说'})])
+    ep=Coordinator(store,FakeLane(store,[turn])).ingest({'event_id':'copy','scene_id':'dm-a','person_id':'A','text':'复制受控文件，保留原件。'})
+    service=TaskService(store);task=service.claim(ep['task_ids'][0])
+    work=Path(store.config['channels']['fixture']['routes']['dm-a']['workspace'])
+    (work/'a.txt').write_text('controlled original',encoding='utf-8')
+    broker=ToolBroker(service);broker.bind('s-test',task,work)
+    return service,task,broker,work
 
 
 def test_E09_E16_owner_cancellation_and_expired_lease(store):
@@ -32,11 +53,11 @@ def test_E06_duplicate_result_one_character_feedback(store):
         done=store.put('tasks',{**current,'state':'RETURNED','feedback_state':'READY','result':{'task_id':task['_id'],
             'intent_revision':1,'text':'文件已查阅','facts':[{'text':'文件已查阅','evidence_refs':[ref]}],'artifact_refs':[ref]}},
             expected=current['revision'])
-        lane=FakeLane(store,[LaneResult('这是工具结果，我来说明。'),decision(),LaneResult('文件已经查过了。')])
+        lane=FakeLane(store,[FakeTurn([('think',{'thought':'这是工具结果，我来说明。'})],'文件已经查过了。')])
         c=Coordinator(store,lane)
         assert service.feedback(done,c)['state']=='COMMITTED'
         for _ in range(3):assert service.feedback(done,c) is None
-        assert len(lane.calls)==3 and len(store.public_messages('dm-a','A'))==1
+        assert len(lane.calls)==1 and len(store.public_messages('dm-a','A'))==1
         assert '文件已查阅'!=store.public_messages('dm-a','A')[0]['text']
     finally:broker.close()
 

@@ -54,7 +54,7 @@ def test_receipt_is_visible_before_processing_and_replayed_until_native_ack(prod
     assert p.store.db.episodes.count_documents({}) == 0
     receipt = p.events[0]
     assert receipt['binding']['main_conversation']
-    assert receipt['binding']['native_title'] == '群聊 · 22220000'
+    assert receipt['binding']['native_title'] == '22220000'
     assert receipt['binding']['scope_key'] == 'scene:qq:99990000:group:22220000'
     assert receipt['input']['id'] == 'in-' + result['episode_id']
     p.worker.dispatch('navigation.ready', {})
@@ -148,3 +148,25 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert resolved['character']['model'] == resolved['executor']['model']
     assert 'character' not in exported['deployment']
     assert not (p.root / '.runtime/dsh').exists()
+
+
+def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(product):
+    p = product
+    p.channel.receive('qq', envelope(group='33330000', mid='n1', raw={'group_name': '读书会'}))
+    route = next(r for r in p.store.config['channels']['qq']['routes'].values() if r['target']['id'] == '33330000')
+    assert 'display_name' not in route
+    assert p.worker.channel_title(route) == '读书会'
+    # An admission stored earlier with the number as its name still reads by the group's name.
+    assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '读书会'
+
+
+def test_session_kinds_mark_her_platform_groups_and_dms_but_not_the_local_chat(product):
+    p = product
+    group = p.channel.receive('qq', envelope(group='22220000', mid='g1'))
+    dm = p.channel.receive('qq', envelope(sender='11110000', mid='d1'))
+    sessions = {event['binding']['scene_id']: event['session_id'] for event in p.events if 'binding' in event}
+    local = p.store.db.sessions.find_one({'scene_id': 'local', 'lane': 'character'})
+    asked = [*sessions.values(), *([local['_id']] if local else []), 'not-a-session']
+    kinds = p.worker.dispatch('session_kinds', {'session_ids': asked})
+    assert sorted(kinds.values()) == ['dm', 'group'] and set(kinds) == set(sessions.values())
+    assert group['status'] != 'duplicate' and dm['status'] != 'duplicate'

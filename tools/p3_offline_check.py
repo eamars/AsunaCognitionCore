@@ -21,8 +21,8 @@ MUST_FAIL_ON_BASELINE = (
     'create_daily_registers_one_native_single_shot',      # 每日钟点：旧代码只认 after/every
     'update_keeps_one_plan_and_one_live_native',          # 改期：旧代码根本没有 update
     'stale_dispatch_after_update_does_not_act',
-    'decide_schema_accepts_the_four_timings',             # DECIDE 形状：旧 schema 不认 at/clock
-    'hooks_are_wired_in_context_and_coordinator',         # 投影与控制面接线
+    'plan_tool_accepts_the_four_timings',                 # plan 工具：旧代码不认 at/clock，也没有这个工具
+    'hooks_are_wired_in_context_and_role_tools',          # 投影、控制面与 plan 工具接线
 )
 STDLIB_ONLY = ('json', 'datetime', 'zoneinfo', 're')
 

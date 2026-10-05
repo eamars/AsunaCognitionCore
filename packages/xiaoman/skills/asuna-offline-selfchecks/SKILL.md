@@ -1,75 +1,47 @@
 ---
 name: asuna-offline-selfchecks
-description: 在没有 pytest、没有 pymongo、不联网的隔离沙箱里验证 Asuna 项目改动：跑仓库自带的零依赖离线用例与自检（P2 摘要环 / P3 自然语言安排 / P5 主动插话 / 讨论整理），外加 compileall；含各条命令、覆盖范围、退出码读法与已知坑（夹具替身包必须带上被装载真文件 import 的同包真模块）。development_* 默认绑定 xiaoman 插件项目，跑这套与发布认知核都要显式 project="core"。
+description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件与 p3 的反证基线参数、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-offline-selfchecks
 
 ## 用途
 
-`development_run` 给的沙箱里只有标准库：`pytest`、`pymongo` 都 import 不到（`jsonschema` 有，`zoneinfo` 带真 DST 规则）。
-仓库里 `tests/test_*.py` 大多要 Mongo，跑不动。能跑的是这套**零依赖离线自检**——它们用假集合 + 假 lane
-把真文件装进临时包真算，不需要 Mongo、不需要 pytest、不碰网络，也不需要先起宿主。
+改完代码要自证、发布前想看一眼有没有碰坏行为——那条唯一的路在核心技能 **`asuna-self-improvement`**（随认知核发布，两个脑都读得到）。
+零依赖离线套件的命令清单（P2 摘要环 / P3 自然语言安排 / P5 主动插话 / 出站图片 / 讨论整理，外加 compileall）、退出码读法、
+`__pycache__` 清理、哪些改动触发宿主重启、地板文件、「夹具替身包必须带上被装载真文件 import 的同包真模块」这个坑——全在那一份里，
+**本文件不再重复**。两份说法不一致时按 `asuna-self-improvement` 来；这里只留它没有、我自己又踩过的几条增量。
 
-改完代码要自证、或者发布前想看一眼有没有碰坏行为，跑这一套；全绿再 `development_publish`。
+## 增量（核心技能没写的几条）
 
-## 项目归属（ADR-008：跑之前先认准 project）
+### 「挂错项目」的红怎么读
 
-`development_*` 工具不写 `project` 时绑定的是**默认的 xiaoman 角色插件**项目（本技能文件就存在这个候选里）。
-那个候选根目录只有 `skills/ seeds/ persona-model.json src/index.js`，**没有 `tools/` 也没有 `tests/`**，
-下面这套命令在里面跑只会红在 `No such file or directory`——那是挂错项目，不是产品坏了。
+`development_*` 不带 `project` 挂的是 xiaoman 插件候选：根下只有 `skills/ seeds/ persona-model.json src/index.js`，
+**没有 `tools/` 也没有 `tests/`**。在那里面跑离线套件只会红在
+`python3: can't open file '/task/tools/...': [Errno 2] No such file or directory`——那是选错项目，不是产品坏了；
+带 `project: "core"` 重跑就是了。发布同理：不带 project 的 publish 只冻结 xiaoman，认知核改动会照样返回成功
+却一点没上线。（核心技能有 project 表；这条是真错起来的样子。）
 
-- 跑这套离线套件：`development_run` 显式带 `project: "core"`（认知核候选里才有 `tools/` 和 `tests/`）。
-- 发布：`development_publish` 默认也只冻结并发布 **xiaoman 插件**；改的是认知核（`src/asuna`、`tools/`、
-  `tests/`）必须显式 `project: "core"`，否则 publish 会照样成功返回，但核改动一点没上线。
-- 反过来也成立：只动插件（`skills/*/SKILL.md`）就不必带 project，而这套用例也不覆盖插件文件。
-- QQ 适配器和它的技能在 **napcat-qq** 通道包里（`project: "napcat-qq"`，候选里是 `integration/ skills/ python/`）；
-  `integration_*` 工具改的就是这个候选的 `integration/`，发布要带 `project: "napcat-qq"`，自测用 `qqadapter/selftest.py`。
+### 单独跑某个用例文件、p3 的反证基线
 
-## 入口（在认知核候选根目录 /task 里跑，`development_run` 带 `project="core"`）
-
-```sh
-python3 tools/p2_offline_check.py          # 摘要触发/归属/更正/闭环：P2
-python3 tools/p5_offline_check.py          # 主动插话闸门与再核：P5
-python3 tools/p3_offline_check.py          # 自然语言安排：编译面 + 只用标准库 + 38 条用例 + 基线反证
-PYTHONPATH=tests python3 tests/discussion_digest_cases.py   # 讨论整理（按需整理）
-python3 -m compileall -q src/asuna tests tools              # 语法面
-```
-
-- 退出码 0 = 全绿；非 0 时最后一行会写出「N/M 通过，失败：<用例名>」，`p3_offline_check` 红的时候打印
-  `P3 自检：1 项不合格`，绿的时候打印 `P3 自检：可以出补丁`。
-- 单独跑用例文件也行：`PYTHONPATH=tests python3 tests/p3_schedule_cases.py`（`p2_summary_loop_cases.py`、
-  `p5_proactive_cases.py` 同理），它们自己打印 PASS/FAIL 行。
+- 单独跑用例文件也行：`PYTHONPATH=tests python3 tests/p3_schedule_cases.py`
+  （`p2_summary_loop_cases.py`、`p5_proactive_cases.py` 同理），它们自己打印 PASS/FAIL 行。
 - `p3_offline_check.py [基线目录]` 的第二参是「改动前」副本，用来做反证；默认 `/task/p3-baseline`，
   找不到就跳过反证并说明——跳过不算失败。
 
-## ADR-008 之后不再跑：`tools/p5b_ui_offline_check.py`
+### 退役与「没收录」怎么读
 
-自绘三栏旧工作台随 ADR-008 退役（ADR-008 UI_SPEC：本方案替代旧
-"自绘 Asuna 三栏工作台"；`CODEX_START.md` 验收口径写明"旧工作台不再是默认入口"；`IMPLEMENTATION.md` P4
-"接回 QQ/定时/发布并退出旧工作台"）。随它一起退役的还有 `tools/p5b_ui_offline_check.py`——现在 `tools/`
-里已经没有这个文件，硬跑只会 `python3: can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2]
-No such file or directory`、exit 2。那是文件不存在，别当成"UI 检查挂了"或者产品坏了。
+- `tools/p5b_ui_offline_check.py` 随旧自绘工作台（ADR-008）一起退役了：硬跑会报
+  `can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2] No such file or directory`、exit 2——
+  那是文件不存在，别报成「UI 检查挂了」或产品坏了。界面口径的验证位置搬去了真实 DSH Web 页面
+  （composer、角色实际内容、行动会话跳转、旧 `/asuna/api/state` 已退出），那部分连同宿主侧 `tests/test_*.py` 由操作员跑。
+- `tools/` 里还有 `p1c_offline_check.py`、`read_image_offline_check.py`、`linked_scenes_offline_check.py` 这几份，
+  核心技能一直没收录，**没收录 ≠ 已退役**；要跑它们先看各自 usage。
 
-界面口径的验证位置也跟着搬了：UI_SPEC §6 要求在真实 DSH Web 页面上看 composer、角色实际内容、行动会话跳转、
-记忆标签点开才取详情，并确认旧 `/asuna/api/state`、`/asuna/api/stream` 已退出；这部分连同宿主侧
-`tests/test_*.py` 由操作员跑——本来这套离线件就覆盖不到 UI 实点，退役只是把那份假 lane 自检整个拿掉了。
+### 适配器的自检不在这套里
 
-顺带一句免得误读：`tools/` 里还有 `p1c_offline_check.py`、`read_image_offline_check.py`、
-`linked_scenes_offline_check.py` 这几份，本技能一直没收录，**没收录 ≠ 已退役**；要跑它们先看各自 usage。
-
-## 权限与边界
-
-- 全部只读产品代码 + 只往 `/tmp` 写临时包；不写 Mongo、不发 QQ、不调模型。
-- 跑完会留 `__pycache__`，发布前清掉：`find . -name '__pycache__' -type d -prune -exec rm -rf {} +`
-- 这套覆盖不到真 Mongo 的 CAS、真 DSH 原生定时与 UI 实点：那些仍要宿主侧 `tests/test_*.py`（操作员跑）。
-
-## 已知坑
-
-夹具把**真文件**复制进临时包（`p3pkg` / `p3coord`），外面垫替身。真文件新加一条同包 import，
-复制清单就得同步加一个文件，否则用例只会红在 `ModuleNotFoundError: No module named 'p3xxx.<name>'`，
-看不出是夹具少带了文件。2026-09-24 就踩过一次：真 `context.prepare` 会 `from .self_state import SelfState`，
-`p3coord` 没带 `self_state.py`，`context_projection_runs_end_to_end` 长期红。
+napcat-qq 适配器的自检（`--selftest --offline`，跑内置占位夹具）在通道包里、用 `napcat-qq` 项目跑，
+口径与已知坑看 `qq-napcat-adapter` 技能——别在认知核这套里找它。
 
 ## 版本
 
@@ -79,8 +51,13 @@ v1.1（2026-10-02）：补 ADR-008 项目归属一节——`development_publish`
 认知核改动与这套离线套件都要显式 `project="core"`；入口标题同步标注。命令本身与判定口径没改。
 
 v1.2（2026-10-02）：按 ADR-008 的退役变化对齐清单——摘掉 `p5b_ui_offline_check.py`（文件已不在 `tools/`，
-frontmatter 描述与入口同步去掉 P5-b），新增退役一节写清"文件不存在"这种红怎么读、以及 UI 口径的新验证位置；
+frontmatter 描述与入口同步去掉 P5-b），新增退役一节写清「文件不存在」这种红怎么读、以及 UI 口径的新验证位置；
 P3 用例数按实跑写成 38 条。旧工作台 / P5-b 的历史记录留在试用记录里，不删。
+
+v2（2026-10-05）：压缩。通用离线自检规则（命令清单、退出码读法、`__pycache__` 清理、权限与边界、
+夹具坑、project 归属表）与核心技能 `asuna-self-improvement`（ADR-011，随核发布）重复，删掉并指向它；
+只留增量：挂错项目的红怎么读、单个用例文件与 p3 反证基线、p5b 退役读法、没收录 ≠ 已退役、适配器自检的去处。
+试用记录按历史保留不删。新增零依赖自检 `check_skill.py`：查本文件的指向、增量与「通用清单没有回潮」。
 
 ## 试用记录
 
@@ -111,7 +88,7 @@ P3 用例数按实跑写成 38 条。旧工作台 / P5-b 的历史记录留在�
   我改不动，也不该由这个 bug 决定发布结果）；因此 v1.1 仍未上线，改动留在候选里等发布器修好。
 
 2026-10-02（同一 UTC 日内的第二次，沙箱 UTC 钟 23:57），仍只改本技能文件（v1.2：与 ADR-008 退役对齐）。
-按"只跑与本次改动必要、且当前仍保留的件"选，带 `project="core"` 实跑：
+按「只跑与本次改动必要、且当前仍保留的件」选，带 `project="core"` 实跑：
 
 - 退役核对：`tools/` 清单（63 个文件）里没有 `p5b_ui_offline_check.py`；硬跑 → exit 2 +
   `can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2] No such file or directory`，与本节口径一致；
@@ -125,3 +102,14 @@ P3 用例数按实跑写成 38 条。旧工作台 / P5-b 的历史记录留在�
   （`development_files` 里 `tools/` `tests/` 全部 `changed=false`），与退役改动无关，属于可省掉的重复；
 - 发布：本轮是操作员在宿主侧修好那对引号（v1.1 记的 `PACK_FAILED`）之后的首次尝试；具体结果以本次行动的
   `development_publish` 回执为准——这条记录能随新版本被发现，就说明打包过了、v1.1+v1.2 一起上线。
+
+2026-10-05（v2 压缩这一轮，只改本技能文件并新增 `check_skill.py`，xiaoman 候选，**未发布**）：
+
+- 压缩依据：核心技能 v1 的「发布前自检」一节已含五条命令、退出码读法、`__pycache__` 清理与夹具坑，
+  「发布」一节已含重启清单与地板文件，「项目」一节已含 project 参数表——本文件原来的「入口」「权限与边界」
+  「已知坑」和「项目归属」大半是重复，删掉改成指向；不一致时以核心技能为准。
+- 保留的增量就是「增量」一节那四条。三条旧试用记录（2026-09-24、2026-10-02 两次）按历史保留：
+  里面的 P5-b `24/24`、P3 `33/38` 是当时的实跑事实，别按它们跑现在这套。
+- `check_skill.py` 为本轮新增：查 frontmatter、`name` 与目录一致、指向核心技能、四条增量在、
+  通用命令清单没有回潮散文（`tools/p2_offline_check.py` 这类字面量在反引号里按引用放过）、脚本能编译。
+  实跑与反证结果见行动报告。

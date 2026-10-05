@@ -180,7 +180,8 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
         if row.get('direction') == OUTBOUND:
             origin = origins.get('in-' + str(row.get('episode_id')))
             origin_group = (origin or {}).get('event', {}).get('group_context', {})
-            if origin_group.get('wake_reason') != WAKE_REASON:
+            # Her visits (ADR-012) count toward the same caps as her own interjections.
+            if origin_group.get('wake_reason') not in (WAKE_REASON, 'visit'):
                 continue
             at = _outbound_time(row, sink_times)[0]
             stamp = summary_trigger._epoch(at)

@@ -124,10 +124,13 @@ export async function organizeNativeWorkspaces(core, plan) {
   const { ctx } = core;
   const workspaces = new Map();
   for (const [title, directory] of Object.entries(plan.workspaces)) {
-    const workspace = await ctx.workspaceRegistry.create(directory, title);
-    await workspace.setTitle(title);
+    // The key stays the identifier; the title shown is the viewer's word for it when one was given (api.js).
+    const shown = core.workspaceTitles?.[title] ?? title;
+    const workspace = await ctx.workspaceRegistry.create(directory, shown);
+    await workspace.setTitle(shown);
     workspaces.set(title, workspace);
   }
+  core.navigationWorkspaces = workspaces;
   for (const entry of plan.entries) {
     const { session_id: id, binding } = entry;
     const persisted = await ctx.sessionPersistence.stat(id);

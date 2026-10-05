@@ -60,7 +60,9 @@ export class AsunaApi extends TypertRemoteService {
     const binding = await this.core.worker.call('session', { session_id: sessionId }).catch(() => null);
     if (binding?.lane !== 'character') return null;
     const role = this.core.ctx.sessions.get(sessionId);
-    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/action-linked')?.data.session_id;
+    // The newest action session of her collaboration threads (collab.js).
+    const action = role?.snapshotEvents().findLast(event => event.type === 'asuna/collab' && event.data.child_session_id)
+      ?.data.child_session_id;
     return { action: action ? await this.contextProjections(action) : null };
   }
 
@@ -70,6 +72,38 @@ export class AsunaApi extends TypertRemoteService {
     if (hot) return ctx.sessionProjections.snapshot(hot, keys).values;
     const header = (await ctx.sessionPersistence.stat(id))?.header;
     return (header && ctx.sessionProjectionCache.cachedSnapshot(header, keys)?.values) ?? null;
+  }
+
+  /** Her platform conversations among these sessions, 'group' or 'dm' (the sidebar mark in client.js). */
+  async sessionKinds(sessionIds) {
+    if (!Array.isArray(sessionIds) || sessionIds.length > 500 || sessionIds.some(id => typeof id !== 'string'))
+      throw new Error('INVALID_SESSION_IDS');
+    await this.core.ready();
+    return this.core.worker.call('session_kinds', { session_ids: sessionIds });
+  }
+
+  /** Workspace titles in the viewer's language: DSH stores them as plain text, so the client says which
+   * words it shows (client.js). Only workspaces navigation created can be titled. */
+  async workspaceTitles(titles) {
+    if (!titles || typeof titles !== 'object' || Array.isArray(titles)) throw new Error('INVALID_TITLES');
+    await this.core.ready();
+    const titled = [];
+    for (const [key, title] of Object.entries(titles)) {
+      if (typeof title !== 'string' || !title.trim() || title.length > 40) throw new Error('INVALID_TITLE');
+      const workspace = this.core.navigationWorkspaces?.get(key);
+      if (!workspace) continue;
+      this.core.workspaceTitles = { ...this.core.workspaceTitles, [key]: title.trim() };
+      await workspace.setTitle(title.trim()); titled.push(key);
+    }
+    return { titled };
+  }
+
+  /** The presets her two brains run in: her persona's and the action brain's. DSH's permission presets set
+   * its own shell sandbox and approvals, which neither uses (her character has no DSH tools; the action
+   * brain's run in Asuna's sandbox under her grants), so the client does not show that picker there. */
+  async brainPresets() {
+    return [...new Set([...this.core.personas.values()].map(persona => persona.preset)
+      .filter(preset => typeof preset === 'string' && preset)), 'asuna-action'];
   }
 
   async personaSources() {
@@ -110,7 +144,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

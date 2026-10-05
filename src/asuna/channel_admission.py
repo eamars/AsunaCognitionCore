@@ -54,7 +54,7 @@ def admit(controller, channel_id, body):
             raise Denied('CHANNEL_TARGET_ALREADY_BOUND')
     route = deepcopy(existing) if existing else {
         'scene_id': platform.scene_id(channel['account_id'], kind, target),
-        'target': {'type': kind, 'id': target}, 'display_name': target}
+        'target': {'type': kind, 'id': target}}           # its name comes from the platform's messages
     if route['target'] != {'type': kind, 'id': target}:
         raise Denied('CHANNEL_GROUP_DENIED')
     identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})

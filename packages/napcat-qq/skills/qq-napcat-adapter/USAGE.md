@@ -2,10 +2,10 @@
 
 ## 启动 / 停止 / 看状态
 
-- 启动：`integration_start ["python3","/app/adapter.py","--service"]`
+- 启动：`integration_start ["python3","/app/adapter.py","--service"]`（启用的是**已发布**适配器的冻结副本；未发布的候选改动不会在这里上线，宿主重启后恢复当时已发布的版本）
 - 停止：`integration_stop`（只停我们这个命名空间，不碰 NapCat 和旧机器人）
 - 状态：`integration_status` 看有界日志；`/data/health.json` 看计数器、连接位、`group_routes`、`peers`（身份目录规模）
-- 看身份目录：`integration_dev ["python3","/app/adapter.py","--peers","--data-dir","<服务数据目录>"]`（只读导出，不联网）；文件在 `/data/peers/peers.json`，变化流水在 `/data/journal/peer_changes.jsonl`
+- 看身份目录：`--peers` 是只读导出、不联网，可用 `integration_test` 试跑（跑的是开发候选的冻结副本，它的 `/data` 与启用服务的数据分开——那里看到的是测试数据目录，不是运行中服务的目录）。运行中服务的目录规模看 `integration_status` 日志里的 `PEERS` 行与它 `/data/health.json` 的 `peers` 段；目录文件在 `/data/peers/peers.json`，变化流水在 `/data/journal/peer_changes.jsonl`
 - 宿主 profile（端点或 adapter 配置）改过之后，自动恢复会拒绝并回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START`；这是运维要求，显式 start 一次即可
 
 ## 日志行含义
@@ -42,7 +42,7 @@
 
 - **STATUS 显示 ws_event=down**：NapCat 重启或网络抖动，退避重连（1/2/5/10/20/30s 封顶）；断连窗口内的事件会漏，adapter 不猜内容。
 - **spool_inbound 一直不清**：宿主没在收（503/断连），看 `INBOUND_RETRY`；超过 10 次进 `journal/inbound_failed.jsonl`。
-- **改了代码没生效**：冻结副本不会自动更新，`integration_stop` 后重新 `integration_start`。
+- **改了代码没生效**：代码只经 `development_publish`（`project: "napcat-qq"`）生效，`integration_start` 只运行已发布版本——未发布的候选重启多少次也不会上线。发布后 `integration_stop` → `integration_start` 才换新版本。
 - **起不来报 `another adapter process is holding /data/adapter.lock`**：另一个活进程正持有这把 flock（通常是上一个服务还没停干净）。持有者一退出内核就释放，遗留的文件本身不挡重启，所以不需要删 `/data` 里的任何东西；也没有 TTL、心跳或 30 秒等待可等。
 - **群消息没进来**：按 `INBOUND_IGNORED reason=` 分辨——`group_not_allowed`（群不在 allowlist）、`group_route_missing`（在 allowlist 但没路由）、`unauthorized_group_member`（发言人不在该群成员快照；名单是快照，新人要等配置更新）、`no_text`（0.4 起只剩真的什么都没有的：单独一个 @别人、单独一个 @全体；纯图/表情现在会落盘，正文是 `[图片（未解析）]` 这类占位符）。
 - **群目标发送回执 failed `target_not_authorized`**：outbox 给的群号不在 `allowed_group_ids` 或没有对应路由，adapter 没有发出任何东西。

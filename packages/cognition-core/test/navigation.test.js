@@ -63,6 +63,7 @@ test('native continuation preserves history and task children retain their actua
   } });
   await ctx.agentPresets.register({ id: 'ordinary', plugins: [] });
   await ctx.agentPresets.register({ id: 'asuna-action', plugins: [{ name: new URL('../src/action.js', import.meta.url).href }] });
+  await ctx.agentPresets.register({ id: 'asuna-summary', plugins: [{ name: new URL('../src/summary.js', import.meta.url).href }] });
   const original = await ctx.agents.create({ sessionId: 'original', meta: { cwd: local }, agentOptions: route });
   original.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'existing conversation' }] }));
   await original.agent.whenIdle();
@@ -133,11 +134,31 @@ test('native continuation preserves history and task children retain their actua
     if (method === 'session') return args.session_id === role._id ? role : child;
     if (method === 'result') { assert.ok(args.result, args.error); complete(args.result); }
   } };
-  const stage = { session_id: 'action', lane: 'executor', phase: 'EXECUTE',
-    token: 'task-one:execute:0', text: 'execute assigned task', system: 'action role', binding: child };
+  const stage = { session_id: 'action', lane: 'executor', phase: 'execution', trigger: 'brief',
+    token: 'task-one:execute:0', text: 'execute assigned task', system: 'action role', binding: child,
+    task: { _id: 'task-one', thread: 'task-one', title: 'one', parent_session_id: role._id } };
   await core.children.start(stage);
   const result = await completed;
   assert.equal(result.content, 'native response');
+  // A summary is the worker's own bookkeeping, not a delegation: a hidden child without a catalog entry.
+  let summarized;
+  const summaryDone = new Promise(resolve => { summarized = resolve; });
+  const summaryBinding = { _id: 'summary-one', lane: 'summary', cwd: execution, scene_id: role.scene_id,
+    parent_session_id: role._id, role_session_id: role._id, allowed_capabilities: [] };
+  core.worker = { async call(method, args) {
+    if (method === 'stage.valid') return { valid: true };
+    if (method === 'session') return args.session_id === role._id ? role : summaryBinding;
+    if (method === 'result') summarized(args);
+  } };
+  await core.children.start({ session_id: 'summary-one', lane: 'summary', phase: 'dialogue-summary',
+    token: 'summary-one:0', text: 'summarize this', system: 'summary role', binding: summaryBinding });
+  assert.ok((await summaryDone).result, 'the summary still ran');
+  const summaryHeader = (await ctx.sessionPersistence.stat('summary-one')).header;
+  assert.equal(summaryHeader.origin, 'subagent', 'a child header keeps it out of the sidebar');
+  assert.equal(summaryHeader.parentSession, role._id);
+  const listed = ctx.agents.get(role._id).session.snapshotEvents().filter(event => event.type === 'subagent/catalog');
+  assert.deepEqual(listed.map(event => event.data.childId), ['action'], 'the subagent list shows the task only');
+  const settledRequests = requests;
   await core.children.dispose();
   const saved = await ctx.sessionPersistence.stat('action');
   assert.equal(saved.header.cwd, execution);
@@ -145,7 +166,7 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(saved.header.parentSession, role._id);
   const childLog = await ctx.sessionPersistence.open('action', 'read');
   const childEvents = (await childLog.read()).events; await childLog.close();
-  assert.equal(childEvents.find(event => event.type === 'session/title').data.title, '行动脑 · task-one');
+  assert.equal(childEvents.find(event => event.type === 'session/title').data.title, 'one', 'her task title, no UI words');
   assert.equal(childEvents.find(event => event.type === 'asuna/stage').data.lane, 'executor');
   const parent = ctx.agents.get(role._id);
   parent.session.append('session/title', { title: 'My QQ name', source: { kind: 'user' }, messageSeqs: [] });
@@ -153,16 +174,18 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(ctx.sessionProjectionCache.cachedSnapshot(parent.session.header).values.title, 'My QQ name',
     'native user renaming must survive organization and startup');
   assert.ok(parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog' && event.data.childId === 'action'));
-  const link = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-linked' && event.data.session_id === 'action');
-  assert.equal(link.data.parent_session_id, role._id);
-  assert.equal(link.data.after_seq, -1);
-  const range = parent.session.snapshotEvents().find(event => event.type === 'asuna/action-range' && event.data.segment_id === link.data.segment_id);
-  assert.equal(range.data.state, 'completed');
-  assert.ok(range.data.through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
+  // ADR-011 §7.1: the thread in her conversation opens on the task, then the work range and the report.
+  const thread = parent.session.snapshotEvents().filter(event => event.type === 'asuna/collab').map(event => event.data);
+  assert.deepEqual(thread.map(entry => entry.kind), ['open', 'work', 'report']);
+  assert.equal(thread[0].child_session_id, 'action');
+  assert.equal(thread[0].parent_session_id, role._id);
+  assert.ok(thread[1].after_seq < childEvents.find(event => event.type === 'user/message').seq, 'the range covers her brief');
+  assert.ok(thread[1].through_seq >= childEvents.find(event => event.type === 'assistant/message').seq);
+  assert.equal(thread[2].text, 'native response');
   await core.children.start(stage);
-  assert.equal(requests, 3, 'a durable stage receipt must not rerun inference or tools');
+  assert.equal(requests, settledRequests, 'a durable stage receipt must not rerun inference or tools');
   assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'subagent/catalog').length, 1);
-  assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/action-linked').length, 1);
+  assert.equal(parent.session.snapshotEvents().filter(event => event.type === 'asuna/collab').length, 3);
   assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);
   // A line the record missed is queued again on the agent before its stage's turn, so a new conversation's
   // first turn still reads head, line, notice (not head, notice, monologue, line).

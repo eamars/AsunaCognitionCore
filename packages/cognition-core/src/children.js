@@ -38,13 +38,12 @@ export class NativeChildren {
         const actual = stored.find(event => event.seq === receipt.data.assistant_seq
           && event.type === 'assistant/message' && !event.data.interrupted);
         if (!actual) throw new Error('Saved Asuna receipt has no native assistant event');
-        await core.actionRecords.link(stage, { completed: true });
         await core.worker.call('result', { token: stage.token,
           result: core.result(stage, stage.session_id, actual, receipt.data.finish_reason) });
         return;
       }
     }
-    if (!this.registered) {
+    if (stage.lane === 'executor' && !this.registered) {
       this.registered = ctx.subagents.registerProvider({ name: 'asuna-worker', inheritsParentContext: false,
         capabilities: { agentOptions: true, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
         start: request => this.create(this.pending.get(request.prompt), request) });
@@ -54,7 +53,7 @@ export class NativeChildren {
     const prompt = [{ type: 'text', text: stage.text }];
     this.pending.set(prompt, stage);
     const request = { parent, prompt,
-      label: stage.title ?? (stage.lane === 'executor' ? '行动脑 · ' + stage.binding.task_id : '交流摘要 · ' + stage.binding.scene_id),
+      label: stage.title ?? stage.task?.title ?? stage.binding.task_id ?? stage.binding.scene_id,
       signal: new AbortController().signal, agentOptions: nativeRoute(core.config.routes.action) };
     const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data;
     // Resume the owned native source for a crash recovery or a successor task
@@ -63,7 +62,10 @@ export class NativeChildren {
     // human continuation is deliberately unavailable on this action preset.
     const catalogued = parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog'
       && event.data.childId === stage.session_id);
-    const run = descriptor && catalogued ? await this.create(stage, { ...request, descriptor })
+    // Only a task is a delegation. A summary, attention gate or appraisal is the worker's own
+    // machinery: a hidden child session (its header keeps it out of the sidebar) without a catalog
+    // entry, so the conversation's subagent list shows her tasks only (ADR-011 §4).
+    const run = stage.lane !== 'executor' || (descriptor && catalogued) ? await this.create(stage, { ...request, descriptor })
       : await ctx.subagents.start('asuna-worker', request);
     this.pending.delete(prompt);
     this.runs.add(run);
@@ -83,7 +85,7 @@ export class NativeChildren {
     request.signal.addEventListener('abort', cancel, { once: true });
     const state = core.state(agent.id);
     state.current = stage; state.system = stage.system;
-    await core.linkAction(stage);
+    await core.collab.start(stage);
     agent.followup(core.message(stage));
     const result = agent.whenIdle().then(() => {
       const events = agent.session.snapshotEvents();
@@ -93,7 +95,7 @@ export class NativeChildren {
         end?.data.reason.kind === 'completed' ? 'completed' : end?.data.reason.kind === 'aborted' ? 'aborted' : 'error' };
     });
     // Freeze the visible range only after the native Turn end is durable.
-    const settled = result.then(async value => { await core.actionRecords.finish(stage); return value; });
+    const settled = result.then(async value => { await core.collab.finish(stage); return value; });
     let disposed = false;
     return { id: agent.id, localAgent: agent, result: settled, dispose: async () => {
       if (disposed) return; disposed = true;

@@ -52,6 +52,16 @@ def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
     return block
 
 
+# What a heartbeat says to her (ADR-012 §4.1): her own moment, kept by the program, paced by her.
+HEARTBEAT_TEXT = ('这是一次内部在场机会（心跳），不是用户消息或新授权。看看此刻的节律、心情、活账和最近发生的事，'
+                  '自己决定是否想说一句、做点什么、写下点什么，或者安静待着。大多数时候什么都不做也完全正常。'
+                  '心跳由程序替你守着，不用你续，也不会丢。节奏是你的：用 set_policy 调 heartbeat.every_min'
+                  '（15–240 分钟一拍）、heartbeat.min_gap_min（没有找你的新事时，两次之间至少隔多久）、'
+                  'heartbeat.skip_in_sleep；想清静一阵就设 heartbeat.pause_min，到时自动恢复。')
+HEARTBEAT_RECONNECTED = '（你的心跳%s断过一次，程序已经重新接上，不用你做什么。）'
+HEARTBEAT_EARLY = '（这一拍是手动提前敲的，不是有人找你；照常过你自己的时间就好。）'
+
+
 def heartbeat_rest_gate(model, policy, config, moment=None) -> bool:
     """True only when the persona chose heartbeat.skip_in_sleep and the local time is in her sleep window."""
     if not effective(model, 'heartbeat.skip_in_sleep', policy):

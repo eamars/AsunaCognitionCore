@@ -46,13 +46,16 @@ async function harness(t, finish = 'stop', composition) {
   const core = new CognitionCore(ctx, { routes: { character: { provider: 'fixture', model: 'one-model' } } });
   core.ready = async () => {};
   ctx.provide('asuna', core);
-  const business = [];
+  const business = [], stages = new Map();
+  // The worker ends each character turn with turn_done (coordinator._turn); stages name their session.
+  const onEvent = core.onEvent.bind(core);
+  core.onEvent = async event => { if (event.kind === 'stage') stages.set(event.token, event.session_id); return onEvent(event); };
   core.worker = { async call(method, args) {
     business.push({ method, args });
     if (method === 'input') await core.onEvent({ kind: 'stage', session_id: args.session_id,
-      token: 'stage-' + args.session_id, phase: 'MONOLOGUE', lane: 'character',
+      token: 'stage-' + args.session_id, phase: 'TURN', lane: 'character',
       system: 'Current persona from existing state: ' + args.session_id, text: 'Internal context' });
-    if (method === 'result') await core.onEvent({ kind: 'episode_finished', session_id: args.token.slice(6) });
+    if (method === 'result') await core.onEvent({ kind: 'turn_done', session_id: stages.get(args.token) ?? args.token.slice(6) });
     return { accepted: true };
   } };
   const handles = [];
@@ -81,7 +84,7 @@ test('first native request has persona; one real input and no duplicate assistan
   assert.equal(events.filter(x => x.type === 'user/message' && x.data.source.kind === 'user').length, 1);
   assert.equal(events.filter(x => x.type === 'user/message' && x.data.source.kind === 'asuna').length, 1);
   const stage = events.find(x => x.type === 'asuna/stage');
-  assert.deepEqual(stage.data, { turn: 1, step: 1, operation: 'stage-role', lane: 'character', phase: 'MONOLOGUE' });
+  assert.deepEqual(stage.data, { turn: 1, step: 1, operation: 'stage-role', lane: 'character', phase: 'TURN' });
   assert.equal(events.find(x => x.type === 'user/message' && x.data.source.kind === 'asuna').data.source.lane, 'character');
   assert.ok(stage.seq < events.find(x => x.type === 'assistant/message').seq);
   assert.equal(h.business.find(x => x.method === 'result').args.result.content, 'actual native assistant event');
@@ -173,13 +176,28 @@ test('T0.5 role system prompt is exactly the worker render, without harness iden
   assert.match(JSON.stringify(ordinaryRequest.messages), /RUNTIME_CONTEXT_FIXTURE/);
 });
 
-test('T6.4 CONSULT runs in the idle role session while the action tool waits; the role keeps no lock', async t => {
+test('ADR-011: her other lanes carry neither the harness identity nor the host runtime context', async t => {
+  const h = await harness(t);
+  h.ctx.systemPrompt.context({ name: 'fixture-runtime-context', order: 1, text: 'RUNTIME_CONTEXT_FIXTURE' });
+  await h.ctx.agentPresets.register({ id: 'summary-fixture',
+    plugins: [{ name: new URL('../src/summary.js', import.meta.url).href }] });
+  const handle = await h.ctx.agents.create({ sessionId: 'summary', agentOptions: { provider: 'fixture', model: 'one-model' },
+    setup: async scope => { await h.ctx.agentPresets.mount(scope, 'summary-fixture'); } });
+  t.after(() => handle.dispose());
+  handle.agent.followup(createUserMessage({ source: { kind: 'asuna', form: 'notice', lane: 'summary', phase: 'summary' },
+    content: [{ type: 'text', text: 'Summarize' }] }));
+  await handle.agent.whenIdle();
+  assert.equal(h.requests.length, 1);
+  assert.doesNotMatch(JSON.stringify(h.requests[0].messages), /powered by DeepSeek Harness|RUNTIME_CONTEXT_FIXTURE/);
+});
+
+test('T6.4 the action brain question runs as her turn in the idle role session while its tool waits; no lock is kept', async t => {
   const h = await harness(t);
   const role = await h.create('role');
   let toolDone = false;
   let releaseTool;
   const actionTool = new Promise(resolve => { releaseTool = resolve; }).then(() => { toolDone = true; });
-  await h.core.onEvent({ kind: 'stage', session_id: 'role', token: 'task-1:consult:0', phase: 'CONSULT',
+  await h.core.onEvent({ kind: 'stage', session_id: 'role', token: 'task-1:consult:0', phase: 'TURN', trigger: 'question',
     lane: 'character', system: 'Current persona from existing state: role', text: 'Question from the action',
     binding: { scene_id: 'local-scene' } });
   await role.whenIdle();
@@ -188,7 +206,7 @@ test('T6.4 CONSULT runs in the idle role session while the action tool waits; th
   assert.equal(toolDone, false, 'the action tool was still waiting when the role answered');
   const state = h.core.states.get('role');
   assert.equal(state.current, null);
-  assert.equal(state.waiter, null, 'a consultation does not wait for a next stage');
+  assert.equal(state.waiter, null, 'the worker ended her answering turn (turn_done)');
   role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Human input' }] }));
   await role.whenIdle();
   assert.equal(h.business.filter(x => x.method === 'input').length, 1);

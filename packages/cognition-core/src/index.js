@@ -17,10 +17,12 @@ import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
-import { ActionRecords } from './action-records.js';
+import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute } from './settings.js';
 import z from '@deepseek-ai/schemastery';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
@@ -57,7 +59,7 @@ export class CognitionCore {
     this.channelWrites = new Map();
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
-    this.actionRecords = new ActionRecords(this);
+    this.collab = new Collab(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
   }
 
@@ -107,7 +109,10 @@ export class CognitionCore {
   }
 
   async skillDirectories(persona, channels) {
-    return [...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
+    // Core's own persona-agnostic skills (asuna-self-improvement), from the core artifact that is running.
+    const core = path.join((await this.ctx.asunaFloor.effective('core'))?.packageRoot
+      ?? fileURLToPath(new URL('../', import.meta.url)), 'skills');
+    return [core, ...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
   }
 
   ready() {
@@ -133,7 +138,7 @@ export class CognitionCore {
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
-        skill_workspace: await this.ctx.asunaFloor.skillWorkspace(), native_sessions: nativeSessions,
+        native_sessions: nativeSessions,
         deployment: this.config.deployment, secrets: this.config.secrets, admission: this.config.channelAdmission,
         channels, apply_integrations: !!this.applying, schedule });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
@@ -145,6 +150,7 @@ export class CognitionCore {
       for (const summary of catalog.items)
         if (primary.has(summary.sessionId)) this.ctx.emit('api-session/added', summary);
       this.specs = await this.worker.call('tool_specs');
+      this.roleSpecs = await this.worker.call('role_tool_specs');
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
     })().catch(async error => {
@@ -270,9 +276,19 @@ export class CognitionCore {
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;
     }
+    // The summary is a stable identifier, never shown as prose; the client titles a turn's trigger
+    // from `trigger` in the viewer's language (client.js).
     return createUserMessage({ content: [{ type: 'text', text }],
-      source: { kind: 'asuna', form: 'notice', summary: ({ character: '角色脑', executor: '行动脑', attend: '接话判断' }[stage.lane] ?? '交流摘要') + ' · ' + stage.phase,
-        operation: stage.token, lane: stage.lane, phase: stage.phase, ...(carried ? { carried } : {}) } });
+      source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':' + stage.phase,
+        operation: stage.token, lane: stage.lane, phase: stage.phase,
+        ...(stage.trigger ? { trigger: stage.trigger } : {}), ...(carried ? { carried } : {}) } });
+  }
+
+  /** Her words for a running action session (collab.js), marked so its claim can be acknowledged. */
+  relay(message) {
+    return createUserMessage({ content: [{ type: 'text', text: '她补充：\n' + message.text }],
+      source: { kind: 'asuna', form: 'notice', summary: 'asuna:executor:message', lane: 'executor',
+        phase: 'message', trigger: 'follow-up', message_id: message.id } });
   }
 
   async onEvent(event) {
@@ -299,11 +315,13 @@ export class CognitionCore {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
           : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
           : (() => { throw new Error('Unknown Host request'); })();
-        if (event.method === 'development' && value.project === this.ctx.asunaFloor.config.defaultProject
-            && value.state === 'APPLIED') {
+        if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
+          // A persona or channel publication that needs no restart: new action scopes discover its
+          // skills, and the next integration_start runs its adapter. A core one restarts the worker.
           const persona = this.personas.get(this.config.persona);
+          const channels = await this.channelPlugins(this.config.deployment);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
-            skill_directories: await this.skillDirectories(persona, await this.channelPlugins(this.config.deployment)) });
+            skill_directories: await this.skillDirectories(persona, channels), channels });
           [value] = await this.ctx.asunaFloor.workerReady(value.project);
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
@@ -312,6 +330,10 @@ export class CognitionCore {
       }
       return;
     }
+    // The two brains' thread and her words for a running action session (ADR-011 §4, §7.1). These name
+    // her role session but never answer a stage, so they are handled before any stage waiter.
+    if (event.kind === 'collab') { await this.collab.entry(event); return; }
+    if (event.kind === 'action_message') { await this.collab.message(event); return; }
     if (event.kind === 'task_fenced') {
       const active = this.states.get(event.session_id)?.current;
       if (active?.token === event.token) this.ctx.agents.get(event.session_id)?.cancel(
@@ -329,7 +351,7 @@ export class CognitionCore {
         return;
       }
       const agent = await this.ensureAgent(event);
-      if (event.lane === 'executor') await this.linkAction(event);
+      if (event.lane === 'executor') await this.collab.start(event);
       const saved = agent.session.snapshotEvents().find(e => e.type === 'asuna/stage-result'
         && e.data.operation === event.token);
       if (saved) {
@@ -385,15 +407,11 @@ export class CognitionCore {
     if (!persisted && stage.lane === 'executor') {
       // Child Agents are owned by native subagent routing; the top-level
       // session command controller deliberately refuses to acquire them.
-      handle.agent.session.append('session/title', { title: stage.title ?? '行动脑 · ' + stage.binding.task_id,
+      handle.agent.session.append('session/title', { title: stage.title ?? stage.task?.title ?? stage.binding.task_id,
         source: { kind: 'user' }, messageSeqs: [] });
       await this.ctx.sessions.flush(handle.agent.session);
     }
     return handle.agent;
-  }
-
-  async linkAction(stage) {
-    await this.actionRecords.link(stage);
   }
 
   result(stage, sessionId, last, finishReason) {
@@ -436,12 +454,18 @@ export class CognitionCore {
     if (this.restartAgain) { this.restartAgain = false; await this.restart(); }
   }
 
+  /** The tools a stage exposes: her turn's (role_tools.exposed) or the action task's grant. */
+  exposed(lane, sessionId) {
+    const state = this.state(sessionId);
+    return lane === 'executor' ? state.allowed : lane === 'character' ? new Set(state.current?.tools ?? []) : new Set();
+  }
+
   attachPreset(scope, lane) {
     // DSH 0.2 mounts a standing preset once and routes each member Agent's
     // events through it. Keep registrations here and state on session IDs.
     if (lane === 'character') scope.tools.restrict({ allow: [] });
-    scope.tools.guard(exec => lane !== 'executor'
-      || !this.state(exec.agent.session.id).allowed?.has(exec.name) ? 'Asuna capability not granted' : undefined);
+    scope.tools.guard(exec => !this.exposed(lane, exec.agent.session.id)?.has(exec.name)
+      ? (lane === 'character' ? 'Not available in this turn' : 'Asuna capability not granted') : undefined);
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();
       await this.worker.call('session', { session_id: exec.agent.session.id });
@@ -463,10 +487,17 @@ export class CognitionCore {
     // turn is only known inside the assemble waterfall below (after the worker
     // admits the claimed input), so it is enforced there as the sole section;
     // a `complete` section's text is resolved before the waterfall runs.
-    if (lane === 'character') scope.systemPrompt.suppressRuntimeContext();
+    // Every other lane is her too (or her internal machinery): none carries the harness identity or the
+    // host's runtime snapshot (checkout path, Web GUI); deployment details stay in diagnostics (AGENTS.md).
+    scope.systemPrompt.suppressRuntimeContext();
+    scope.systemPrompt.section({ name: 'harness:identity',
+      order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY'), text: '' });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
       if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);
+      // Her message reached the running action session at a step: no extra round for it (tasks.py).
+      if (lane === 'executor' && message.source.kind === 'asuna' && message.source.message_id)
+        this.worker?.call('action_message.delivered', { message_id: message.source.message_id }).catch(() => {});
     });
     // DSH assembles BEFORE pre-step. Claimed input is prepared at this public
     // scoped assembly boundary, so the first request has its actual persona.
@@ -489,8 +520,9 @@ export class CognitionCore {
         if (stage.kind === 'stage') { state.current = stage; state.system = stage.system; }
       }
       const assembly = await next();
+      const exposed = this.exposed(lane, agent.session.id);
       return { ...assembly,
-        tools: assembly.tools.filter(tool => lane === 'executor' && state.allowed?.has(tool.name)),
+        tools: assembly.tools.filter(tool => exposed?.has(tool.name)),
         sections: lane === 'character'
           ? [{ name: PERSONA_PREFIX_SECTION, text: state.system, interpolate: false }]
           : assembly.sections.map(section =>
@@ -504,7 +536,6 @@ export class CognitionCore {
         const admission = await this.worker.call('stage.valid', { token: stage?.token, session_id: agent.id });
         if (admission.valid !== true) throw new Error('ASUNA_ACTION_STAGE_SUPPRESSED');
       }
-      if (lane === 'character' && stage) await this.actionRecords.pause(agent.id);
       // Business attribution only. DSH still owns the request, stream, tools,
       // process folding and assistant body. Every tool-followup step retains
       // its actual lane, even when both lanes use the same model.
@@ -544,10 +575,10 @@ export class CognitionCore {
         turn, step: last.data.step, lane: stage.lane, phase: stage.phase,
         assistant_seq: last.seq, finish_reason: finishReason });
       await this.ctx.sessions.flush(agent.session);
-      const waiting = lane === 'character' && stage.phase !== 'CONSULT'
-        ? this.next(agent.session.id, signal) : null;
+      // Her turn may continue with the program's note (a failed end-of-turn check): wait for the
+      // worker's next stage, or its word that the episode finished.
+      const waiting = lane === 'character' ? this.next(agent.session.id, signal) : null;
       state.current = null;
-      if (lane === 'character' && stage.phase === 'CONSULT') await this.actionRecords.resume(agent.id);
       await this.worker.call('result', { token: stage.token,
         result: this.result(stage, agent.id, last, finishReason) });
       if (waiting) {
@@ -555,7 +586,7 @@ export class CognitionCore {
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
           state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
-        } else await this.actionRecords.resume(agent.id);
+        }
       }
     });
     scope.on('agent/error', ({ agent, error }) => {
@@ -565,6 +596,9 @@ export class CognitionCore {
       if (stage) this.worker?.call('result', { token: stage.token, error: String(error) }).catch(() => {});
     });
     scope.on('agent/status', ({ agent, status }) => {
+      // The thread's entries that arrived during her turn are appended once she is idle (collab.js).
+      if (lane === 'character' && status === 'idle')
+        this.collab.flush(agent.session.id).catch(error => this.ctx.logger.warn(String(error)));
       const state = this.states.get(agent.session.id);
       if (!state) return;
       if (status !== 'idle' || !state.current) return;
@@ -577,6 +611,27 @@ export class CognitionCore {
       state.waiter?.reject(new Error('Asuna session disposed')); state.waiter = null;
       this.states.delete(agent.session.id);
     });
+  }
+
+  /** Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()). */
+  async attachRole(agent) {
+    const scope = agent.ctx;
+    await this.ready();
+    for (const spec of this.roleSpecs ?? []) {
+      scope.tools.register(defineTool({ ...spec,
+        output: { schema: { type: 'json' }, render: asunaRender },
+        execute: async (args, exec) => {
+          exec.signal.throwIfAborted();
+          const operation = this.state(agent.session.id).current?.token;
+          const reply = await this.worker.call('role_tool', {
+            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args });
+          // A refusal is hers to correct in this turn: the tool error says what to do instead.
+          if (reply.refused) throw new Error(reply.refused);
+          if (reply.conclude) exec.concludeTurn();
+          return reply.value;
+        },
+      }));
+    }
   }
 
   async attachAction(agent, attachments) {
@@ -592,11 +647,11 @@ export class CognitionCore {
     if (allowed.has('todo_write')) await scope.plugin(todoTool, { allowParallelInProgress: true });
     if (allowed.has('web_search') || allowed.has('web_fetch'))
       await scope.plugin(webTool, { search: allowed.has('web_search'), fetch: allowed.has('web_fetch') });
-    if (allowed.has('skill') && (binding.skill_directories?.length || binding.skills_dir)) {
+    if (allowed.has('skill') && binding.skill_directories?.length) {
       const skills = scope.isolate('skills');
       await skills.plugin(SkillService, {});
       await skills.plugin(skillFilesystem, { includeDefaultRoots: false,
-        customSkillDirs: binding.skill_directories ?? [binding.skills_dir], watchFollowSymlinks: false });
+        customSkillDirs: binding.skill_directories, watchFollowSymlinks: false });
       await skills.plugin(skillTool, {});
     }
     for (const spec of this.specs.filter(spec => allowed.has(spec.name))) {
@@ -642,6 +697,24 @@ export function apply(ctx, config = {}) {
   };
   ctx.asunaFloor.activateRecovery = activateRecovery;
   new AsunaApi(ctx, core);
+  // ADR-012 §8: /heartbeat gives her one heartbeat now, through DSH's own command surface (no model message),
+  // and says when the next scheduled one is due. Her rhythm stays program-owned; this only knocks early.
+  ctx.inject(['commands'], child => child.effect(() => child.commands.register({
+    name: 'heartbeat',
+    description: 'Give her one heartbeat now (her own moment at home); shows when the next one is due',
+    handler: async ({ rawInput }) => {
+      if (String(rawInput ?? '').trim()) return { kind: 'error', text: 'Usage: /heartbeat (no arguments)' };
+      if (core.lifecycle.state !== 'ready') return { kind: 'error', text: 'Asuna is not ready yet: ' + core.lifecycle.state };
+      const result = await core.worker.call('heartbeat_now', {});
+      const next = result.next_at ? new Date(result.next_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+      if (result.state === 'ENQUEUED')
+        return { kind: 'success', text: 'Heartbeat given: her inner time starts at home as soon as she is free.'
+          + (next ? ' Next scheduled beat: ' + next + '.' : '') };
+      if (result.state === 'OFF' || result.state === 'NO_SCHEDULE')
+        return { kind: 'error', text: 'Her heartbeat is off (no heartbeat_target, or heartbeat.enabled is false).' };
+      return { kind: 'error', text: 'The heartbeat was not given: ' + result.state };
+    },
+  })));
   ctx.inject(['settings'], child => child.effect(() => {
     const settings = child.settings;
     core.settings = settings;

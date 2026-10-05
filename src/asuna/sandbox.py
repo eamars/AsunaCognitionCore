@@ -6,7 +6,7 @@ from .config import ROOT
 
 
 class Sandbox:
-    def __init__(self, task_dir: Path, protected_paths=(), skills_dir=None, *, allowed_root=None, skill_root=None):
+    def __init__(self, task_dir: Path, protected_paths=(), *, allowed_root=None):
         self.task_dir = task_dir.resolve()
         root = Path(allowed_root).resolve() if allowed_root else (ROOT/'.runtime/work').resolve()
         if not any(root.is_relative_to((ROOT/'.runtime'/name).resolve()) for name in ('work','channels','integration')):
@@ -14,12 +14,6 @@ class Sandbox:
         if not self.task_dir.is_relative_to(root):
             raise PermissionError('TASK_WORKSPACE_OUTSIDE_ALLOWLIST')
         self.task_dir.mkdir(parents=True, exist_ok=True)
-        self.skills_dir = Path(skills_dir).resolve() if skills_dir else None
-        skills_root = Path(skill_root).resolve() if skill_root else (ROOT/'.runtime/skills').resolve()
-        if skill_root and not skills_root.is_relative_to((ROOT/'.runtime/work/self-development').resolve()):
-            raise PermissionError('SKILL_PROJECT_OUTSIDE_ALLOWLIST')
-        if self.skills_dir and not self.skills_dir.is_relative_to(skills_root):
-            raise PermissionError('SKILL_DIRECTORY_OUTSIDE_ALLOWLIST')
         self.protected_paths=[]
         for path in protected_paths:
             path=Path(path).resolve()
@@ -32,9 +26,6 @@ class Sandbox:
         p=self.task_dir
         mount='/mnt/'+p.drive[0].lower()+p.as_posix()[2:]
         protected=[]
-        if self.skills_dir:
-            skill_mount='/mnt/'+self.skills_dir.drive[0].lower()+self.skills_dir.as_posix()[2:]
-            protected+=['--bind',skill_mount,'/skills']
         for path in self.protected_paths:
             relative=path.relative_to(self.task_dir).as_posix()
             protected+=['--ro-bind',mount+'/'+relative,'/task/'+relative]
@@ -73,4 +64,4 @@ print(json.dumps({'exit_code':p.returncode,'stdout':buffers[0].decode('utf-8','r
         if value['output_limit']:raise RuntimeError('TOOL_OUTPUT_LIMIT')
         if value['timed_out']:raise TimeoutError('TOOL_TIMEOUT')
         return {'argv':argv,**value,
-                'sandbox':'wsl-bubblewrap-unshare-all','network':'isolated','mount':'task-and-skills' if self.skills_dir else 'task-only'}
+                'sandbox':'wsl-bubblewrap-unshare-all','network':'isolated','mount':'task-only'}

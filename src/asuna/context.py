@@ -38,12 +38,17 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 # Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
 HISTORY_ROW_CHARS = 1500
 MEMORY_CHARS = 1200
-EXPERIENCE_MESSAGE_CHARS = 400
-EXPERIENCE_TASK_CHARS = 800
+EXPERIENCE_MESSAGE_CHARS = 160      # recent experience is headlines; recall reads the rest
+EXPERIENCE_TASK_CHARS = 200
+EXPERIENCE_MESSAGES = 20
+EXPERIENCE_TASKS = 8
+EXPERIENCE_PUBLICATIONS = 5
+FINISHED_TASKS_SHOWN = 3              # task state: every open task, and only the last few finished
+RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scene carry into the next turn
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
-    'self_state': ('self_state_from_program',),
+    'self_state': ('self_state_from_program', 'recent_thoughts_from_program'),
     'dossier': ('dossier_from_program',),
     'affect': ('affect_from_program',),
     'affect_proposals': ('affect_proposals_from_program',),
@@ -191,6 +196,20 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
+    def recent_thoughts(self, scope, moment):
+        from datetime import datetime
+        from .config import ago
+        rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
+            {'body_markdown':1,'formed_at':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+        out=[]
+        for row in reversed(rows):
+            try:
+                hours=(moment-datetime.fromisoformat(row['formed_at'])).total_seconds()/3600
+            except (KeyError,TypeError,ValueError):
+                hours=None
+            out.append({'thought':excerpt(row.get('body_markdown'),MEMORY_CHARS),**({'when':ago(hours)} if hours is not None else {})})
+        return out
+
     def prepare(self, event: dict, persona='P1', recall=False):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
@@ -301,13 +320,31 @@ class ContextBuilder:
                 'pipeline':[{'$project':{'received_at':1,'_id':0}}],'as':'_inputs'}},
             {'$addFields':{'_active':{'$cond':[{'$in':['$state',['READY','RUNNING']]},1,0]},
                 '_input_time':{'$max':'$_inputs.received_at'}}},
-            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':8},
-            {'$project':{'_id':1,'intent_revision':1,'state':1,'goal':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'revision_requested_at':1,'pause_reason':1,'paused_at':1,'paused_state':1}},
+            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
+            {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
+                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1}},
         ]))
+        # Every open task, and only the last few finished ones (their results came back as their own turns).
+        open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED']
+        task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
+        for task in task_states:
+            task.pop('_active',None)
+            # A task's title is what she called it; the old goal text only when there is no title.
+            if task.get('title'):
+                task.pop('goal',None)
+            elif task.get('goal'):
+                task['goal']=excerpt(task['goal'],EXPERIENCE_TASK_CHARS)
+            if task['state'] not in ('READY','RUNNING'):
+                continue
+            # What the action brain reported on its own while working (report_progress), newest last.
+            notes=list(self.store.db.task_messages.find({'task_id':task['_id'],'from':'action'},
+                {'text':1}).sort('created_at',-1).limit(2))
+            if notes:
+                task['progress_from_action']=[excerpt(row['text'],HISTORY_ROW_CHARS) for row in reversed(notes)]
         plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
             'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
-            'kind':{'$ne':'self_development'},
+            # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
+            'kind':{'$nin':['self_development','presence','settlement']},
             'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
             {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
              'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,
@@ -336,10 +373,14 @@ class ContextBuilder:
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
+        thoughts=self.recent_thoughts(scope,moment)
+        if thoughts:
+            context['recent_thoughts_from_program']={'items':thoughts,
+                'note':'这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'}
         if any(task['state'] == 'PAUSED' for task in task_states):
             context['task_continuation_from_program'] = (
                 'PAUSED 是重启后等待操作者决定的旧行动，历史与回执仍保留。'
-                '只有本地用户明确要求继续时才可通过 continue_task_id 续接；'
+                '只有本地用户明确要求继续时才可以用 message_action 接着做；'
                 '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
                 '继续时先核实已有结果，未确认回执的操作不能盲目重做。')
         if read['linked_scenes']:
@@ -353,6 +394,15 @@ class ContextBuilder:
                 'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
+        if event.get('episode_kind') == 'self_development':
+            # ADR-011 §6.2: ideas from anywhere are read and decided only here.
+            from .role_tools import ideas_block
+            ideas=ideas_block(self.store,persona,moment)
+            if ideas:
+                context['ideas_from_program']={'items':ideas,
+                    'note':'这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 review_idea 写下处理结果'
+                           '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 交代行动脑去做，它会带开发工具，'
+                           '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。'}
         if event.get('episode_kind') in ('self_development', 'presence'):
             if event.get('task_id'):
                 context['ongoing_development_task_id_from_program']=event['task_id']
@@ -365,21 +415,44 @@ class ContextBuilder:
                 'scene_id': {'$in': list(allowed)},
                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
-                 'delivery_state':1}).sort('received_at',-1).limit(30))
+                 'delivery_state':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
             for row in recent:
                 row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
+            # Headlines (owner, 2026-10-05): titles, states and the start of each report; recall reads more.
             tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
-                {'scene_id':1,'state':1,'goal':1,'failure_type':1,'result':1,
-                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(12))
+                {'scene_id':1,'state':1,'title':1,'goal':1,'failure_type':1,'result':1,
+                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(EXPERIENCE_TASKS))
             for item in tasks:
-                if item.get('result'):
-                    item['result_excerpt']=excerpt(json.dumps(item.pop('result'),ensure_ascii=False,default=str),EXPERIENCE_TASK_CHARS)
+                if item.get('title'):
+                    item.pop('goal',None)
+                elif item.get('goal'):
+                    item['goal']=excerpt(item['goal'],EXPERIENCE_TASK_CHARS)
+                result=item.pop('result',None)
+                if isinstance(result,dict) and result.get('text'):
+                    item['report_start']=excerpt(result['text'],EXPERIENCE_TASK_CHARS)
             lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
-                {'candidate':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
-                 'activated_at':1,'task_id':1,'reason':1}).sort('published_at',-1).limit(8))
+                {'project':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
+                 'activated_at':1,'task_id':1}).sort('published_at',-1).limit(EXPERIENCE_PUBLICATIONS))
+            for row in lineage:
+                # How much each publication changed, not every path (the receipt keeps the list).
+                row['changed_files']=len(row.get('changed_files') or [])
+                row['deleted_files']=len(row.get('deleted_files') or [])
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
+        if event.get('episode_kind') == 'presence':
+            # ADR-012 §4.4: her groups in words, and what her recent visits came to.
+            from . import places
+            from .render import model_and_policy as _places_model
+            plan=self.store.db.plans.find_one({'_id':'plan-asuna-presence'}) or {}
+            _pm,_pp=_places_model(self.store,persona)
+            date=places.local_date(self.store.config,_pm,_pp,moment)
+            places_view=places.places_block(self.store,persona,_pm,_pp,plan,moment,date)
+            if places_view:
+                context['places_from_program']=places_view
+            visits=places.last_visits_block(self.store,persona,plan,moment)
+            if visits:
+                context['last_visits_from_program']=visits
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.
@@ -438,7 +511,8 @@ class ContextBuilder:
             self._reply_context(related, scene)
             speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
-                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) if source else []
+                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) \
+                if source and event.get('episode_kind')!='visit' else []
             self._reply_context(speaker_tail, scene)
             for row in [*related, *speaker_tail]:
                 row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
@@ -474,22 +548,19 @@ class ContextBuilder:
         # Available with or without a record: her first understanding of someone creates it.
         context['understanding_update_from_program']={
             'available':True,'target':target_note,
-            'route':'有值得留下的理解变化时，在 DECIDE 中选择 reflect_understanding=true；程序随后让你独立反思一次并提交。无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+            'route':'有值得留下的理解变化时，用 understand_person 写下完整的新理解；无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={
-            'available':bool(grant),'route':'通过 DECIDE 的 delegate 委托行动脑；角色本身不直接调用工具。',
+            'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话或接着做用 message_action，叫停用 stop_action。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
             'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-        development = (event.get('episode_kind') == 'self_development' or
-            event.get('development_profile') == 'owner' or
-            event.get('episode_kind') == 'task_feedback' and bool(
-                (self.store.db.tasks.find_one({'_id':event.get('task_id')}) or {}).get('development_grant')))
-        if development and (scene['_id'],event['person_id']) == (
-                self.store.config['chat']['scene_id'],self.store.config['chat']['person_id']):
+        from .grants import development_granted
+        if development_granted(self.store, scene, event, session_class):
             context['action_capabilities_from_program']['development'] = {
-                'candidate':'持久的有效项目候选；可委托行动脑检查、修改和自行发布。'}
+                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
+                'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
@@ -507,10 +578,14 @@ class ContextBuilder:
         from .integration import event_granted
         if event_granted(self.store.config, event):
             context['action_capabilities_from_program']['integration'] = {
-                'grant': '本机 owner 工作域允许集成开发。开发目录独立持久保存；试运行和启用使用冻结副本。仅配置端点可达；进程启动不证明平台发送。'}
-        from .skills import skills_directory
-        if skills_directory(self.store.config,scene['_id'],event['person_id']):
-            context['action_capabilities_from_program']['skill_development']='行动脑可在独立持久目录创建、试用和复用技能。你决定适用方式，再委托行动脑；下列目录说明不是已完成任务或公开承诺。'
+                'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
+        if event.get('episode_kind')=='visit':
+            # ADR-012 §4.2: nobody called her; the room as it is now, and what she came for. The person on the
+            # event only authorizes the turn, so no block speaks of a current speaker.
+            from . import places
+            context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
+            for key in ('relationship','dossier_from_program','sender_identity','understanding_update_from_program'):
+                context.pop(key,None)
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

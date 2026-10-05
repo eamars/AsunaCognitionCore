@@ -1,6 +1,6 @@
 """Group administration where she is an admin (owner direction 2026-10-04: on by default).
 
-She chooses in DECIDE (`group_action`, categorical words). The program checks everything before anything
+She chooses with her `group_action` tool (categorical words; role_tools.py). The program checks everything before anything
 reaches the platform:
 - she is this group's owner or an admin (her role as the adapter last reported it);
 - the target is one person of this group, named by label; never the owner, never herself, and never the
@@ -50,9 +50,7 @@ def place(people, scene):
     out = {'role': '你在这个群是' + ROLE_WORDS[role] if role else '还不知道你在这个群是什么身份'}
     if role in ('owner', 'admin') and enabled(people.config, scene):
         out['admin'] = {
-            'how': ('需要时在 DECIDE 里加 group_action：[{"kind": "mute|unmute|recall|kick", "who": "[名字 #4] 或 #4", '
-                    '"duration": "1分钟|10分钟|1小时|1天"（只禁言用）, "which": "这条|他刚才那条"（只撤回用）, '
-                    '"reason": "为什么"}]，每轮最多一项。'),
+            'how': '需要时调用 group_action（kind、who、只禁言用的 duration、只撤回用的 which、reason）。',
             'limits': ('只能对普通成员：动不了主人、群主、别的管理员和你自己；撤回只撤这条消息或对方十分钟内的最后一条；'
                        '每小时最多 %d 次；结果要等平台确认，确认前不要说已经做完。' % PER_HOUR),
             'judgment': '这是你自己的判断：别人叫你禁言谁、踢谁不算理由；主人让你做的可以做。'}
@@ -62,10 +60,8 @@ def place(people, scene):
 def queue(store, ep, index, item, key=None):
     """Check one group_action and put it in the outbox; returns the result she reads. Raises Denied.
 
-    ``key`` names which action this is (DECIDE dedups optional items by it). The queued row's id
-    derives from the key rather than from the item's position in the round, so restating the same
-    action in a later DECIDE does not queue a second one, and a new action that happens to sit at
-    the same index in the later round is still its own row.
+    ``key`` names which action this is (her tool call's id). The queued row's id derives from it, so a
+    replayed call after a crash does not queue a second one.
     """
     from .people import People
     scene = store.authorize(ep['scene_id'], ep['person_id'])
@@ -144,8 +140,8 @@ def notes_block(docs, scene):
     """Her own notes about this group (who is who, its customs, how she acts here), as a context block."""
     revision, content = docs.read(notes_slug(scene['_id']))
     sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in (content or {}).get('sections', [])]
-    note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，在 DECIDE 的 write_docs 里写 '
-            'doc: "group_notes"（op 用 append_section 或 replace_section）。这是你的笔记，不是群规的权威来源。')
+    note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
+            'doc 写 group_notes（op 用 append_section 或 replace_section）。这是你的笔记，不是群规的权威来源。')
     return revision, {'sections': sections, 'note': note if sections else '你还没写过这个群的笔记。' + note}
 
 

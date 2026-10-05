@@ -5,10 +5,10 @@ import threading
 
 from asuna.affect import AffectLedger
 from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from asuna.render import action_values
 from conftest import FIXTURES
-from test_adr009_p2 import owner, decide
+from test_adr009_p2 import owner, THINK
 from test_engineering_m1 import event
 
 MODEL = json.loads((FIXTURES / 'personas/demo/persona-model.json').read_text(encoding='utf-8'))
@@ -26,13 +26,17 @@ def ref_of(key):
 
 def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     setup(store)
-    secret = {'kind': 'attachment', 'intensity': '强烈', 'arousal': '激动', 'ref': 'private-1', 'why': 'OWNER_SECRET_WHY',
-              'who': 'OWNER_SECRET_WHO', 'cost': 'OWNER_SECRET_COST'}
-    Coordinator(store, FakeLane(store, [LaneResult('想。'), decide(affect=[secret]), LaneResult('嗯。')])).ingest(event('private-1'))
-    group = FakeLane(store, [LaneResult('群里。'), decide(), LaneResult('大家好。')])
+    secret = {'op': 'record', 'kind': 'attachment', 'intensity': '强烈', 'arousal': '激动', 'ref': 'private-1',
+              'why': 'OWNER_SECRET_WHY', 'cost': 'OWNER_SECRET_COST'}
+    private = FakeLane(store, [FakeTurn([THINK, ('feel', secret)], '嗯。')])
+    Coordinator(store, private).ingest(event('private-1'))
+    assert private.tool_results[1][5], private.tool_results[1]
+    assert store.db.affect_events.find_one({'why': 'OWNER_SECRET_WHY'})          # the private feeling was recorded
+    group = FakeLane(store, [FakeTurn([THINK], '大家好。')])
     ep = Coordinator(store, group).ingest(event('group-1', scene='g1'))
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
     visible = json.dumps([ep['context'], group.calls], ensure_ascii=False) + action_values(store, 'P1')
-    for value in ('OWNER_SECRET_WHY', 'OWNER_SECRET_WHO', 'OWNER_SECRET_COST', 'private-1', '靠近一点'):
+    for value in ('OWNER_SECRET_WHY', 'OWNER_SECRET_COST', 'private-1', '靠近一点'):
         assert value not in visible, value
     block = ep['context']['affect_from_program']
     assert {'label', 'policy', 'tendencies', 'note', 'how_to_record'} <= set(block) and block['label']
@@ -45,15 +49,21 @@ def test_T3_8_she_reads_and_writes_feelings_in_words_and_the_same_state_reads_th
     from asuna.affect import interpret
     import re
     ledger = setup(store)
-    ep = Coordinator(store, FakeLane(store, [LaneResult('想。'), decide(affect=[
-        {'kind': 'joy', 'intensity': '明显', 'arousal': '有些波动', 'ref': 'happy-1', 'why': '他夸了我', 'cost': '有点不好意思'},
-        {'kind': 'joy', 'intensity': '很多很多', 'ref': 'happy-1', 'why': '不在词表里'}]),
-        LaneResult('嗯。')])).ingest(event('happy-1'))
+    lane = FakeLane(store, [FakeTurn([THINK, ('feel', {'op': 'record', 'kind': 'joy', 'intensity': '明显', 'arousal': '有些波动',
+                                                      'ref': 'happy-1', 'why': '他夸了我', 'cost': '有点不好意思'}),
+                                      ('feel', {'op': 'record', 'kind': 'joy', 'intensity': '很多很多', 'ref': 'happy-1',
+                                                'why': '不在词表里'})], '嗯。')])
+    ep = Coordinator(store, lane).ingest(event('happy-1'))
+    assert 'feel' in lane.calls[0]['tools'] and ep['state'] == 'COMMITTED', ep.get('failure')
     stored = store.db.affect_events.find_one({'why': '他夸了我'})
-    assert stored, ep.get('rejections')
+    assert stored, lane.tool_results
     scale = ledger.model['scale']
     assert (stored['val'], stored['arl']) == (scale['val']['明显'], scale['arl']['有些波动'])
-    assert {r['code'] for r in ep['rejections']} == {'AFFECT_INTENSITY_UNKNOWN'}
+    _, recorded, unknown = lane.tool_results
+    assert recorded[5] and recorded[4]['event_id'] == stored['_id']
+    # A word outside her table is refused back to her in words; nothing is stored for it.
+    assert not unknown[5] and 'AFFECT_INTENSITY_UNKNOWN' in unknown[4]
+    assert not store.db.affect_events.find_one({'why': '不在词表里'})
     from datetime import datetime, timedelta
     at = (datetime.fromisoformat(stored['ts']) + timedelta(hours=1)).isoformat()   # one fixed moment
     state = ledger.projection(at)
@@ -68,7 +78,7 @@ class BlockingLane:
     def __init__(self, reply):
         self.reply, self.release, self.called = reply, threading.Event(), threading.Event()
 
-    def generate(self, binding, operation, phase, text, system):
+    def generate(self, binding, operation, phase, text, system, **_delivery):
         self.called.set()
         assert self.release.wait(20)
         return LaneResult(json.dumps(self.reply, ensure_ascii=False))

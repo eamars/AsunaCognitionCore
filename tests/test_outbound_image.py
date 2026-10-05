@@ -21,9 +21,10 @@ from asuna.channels import Channels
 from asuna.coordinator import Coordinator
 from asuna.ingress import persist_input
 from asuna.integration_import import MAX_ARTIFACT_BYTES, import_artifact
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
+from asuna.role_tools import Refused
 from asuna.state import Denied
-from test_adr009_p2 import decide, owner
+from test_adr009_p2 import THINK, owner
 
 LOCAL = 'dm-a'
 QQ = 'dm-qq'
@@ -88,9 +89,7 @@ def import_bytes(store, scope_key, body=PNG, *, target='artifacts/pic.png', work
 
 def turn(store, *, scene=QQ, person='A', attach=None, speech='这张给你看看。', key='b7', target='dm'):
     store.config['persona_model'] = model()
-    lane = FakeLane(store, [LaneResult('想一想。'),
-                            decide(**({'attach': attach} if attach else {})),
-                            LaneResult(speech)])
+    lane = FakeLane(store, [FakeTurn([THINK, *([('attach_image', attach)] if attach else [])], speech)])
     coordinator = Coordinator(store, lane)
     event = {'event_id': key, 'scene_id': scene, 'person_id': person, 'text': '图呢',
              'channel': {'id': 'replay', 'account_id': 'bot',
@@ -103,9 +102,27 @@ def speak_rows(store, ep_id):
     return list(store.db.messages.find({'episode_id': ep_id, 'phase': 'SPEAK'}).sort('scene_seq', 1))
 
 
-def attach_rejections(ep):
-    return {item['code']: item.get('detail') for item in ep.get('rejections') or []
-            if item.get('field') == 'attach'}
+def attach_calls(coordinator):
+    """This turn's attach_image calls as (result | refusal words | 'NOT_EXPOSED', ok)."""
+    return [(row[4], row[5]) for row in coordinator.character.tool_results if row[2] == 'attach_image']
+
+
+def refusal_code(words):
+    """{code: detail} from a refusal's words (role_tools.words keeps the code in brackets at the end)."""
+    import re
+    found = re.search(r'（([A-Z_]+)(?::\s*(.*))?）$', words)
+    return {found.group(1): found.group(2)} if found else {words: None}
+
+
+def forced_attach(store, coordinator, ep, attach):
+    """Defence in depth: were attach_image offered in this turn anyway, the tool itself refuses, in words."""
+    row = store.db.episodes.find_one({'_id': ep['_id']})
+    store.put('episodes', {**row, 'state': 'TURN', 'turn_tools': [*row['turn_tools'], 'attach_image']},
+              expected=row['revision'], stream=ep['_id'])
+    with pytest.raises(Refused) as refused:
+        coordinator.tools.call(ep['_id'], 'forced-attach', 'attach_image', attach)
+    assert not store.db.episodes.find_one({'_id': ep['_id']}).get('attachment')
+    return refusal_code(str(refused.value))
 
 
 def bridge(store):
@@ -171,8 +188,11 @@ def test_T_B7_2_local_image_is_offered_attached_and_delivered_in_the_qq_turn(sto
     assert art['artifact_id'] in listed and listed[art['artifact_id']]['from_linked_scene'] is True
     assert listed[art['artifact_id']]['scene_id'] == LOCAL, listed[art['artifact_id']]
 
-    _, ep = turn(store, attach=[{'artifact_id': art['artifact_id'], 'why': '给你看看'}])
-    assert not attach_rejections(ep), attach_rejections(ep)
+    coordinator, ep = turn(store, attach={'artifact_id': art['artifact_id'], 'why': '给你看看'})
+    assert 'attach_image' in coordinator.character.calls[0]['tools']
+    [(result, ok)] = attach_calls(coordinator)
+    assert ok and result['attached'] == art['artifact_id'], result
+    assert ep['state'] == 'COMMITTED' and ep['attachment']['artifact_id'] == art['artifact_id']
     rows = speak_rows(store, ep['_id'])
     assert rows and rows[0]['attachment']['artifact_id'] == art['artifact_id'], rows[0].get('attachment')
     assert rows[0]['attachment']['sha256'] == art['sha256']
@@ -194,37 +214,45 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     owner(store)
     channel_scene(store, QQ)
     art = import_bytes(store, LOCAL_SCOPE, workspace=tmp_path)['artifact']
-    attach = [{'artifact_id': art['artifact_id'], 'why': '给你看看'}]
+    attach = {'artifact_id': art['artifact_id'], 'why': '给你看看'}
 
-    # 没有那条边：清单里就没有这张图，DECIDE 先按「本轮没列出」退回（真实流水线的第一道闸），
-    # 行上也不写元数据。scope 围栏本身（列出了但 scope 不在可引用集合里）在离线套件里逐条覆盖：
-    # python3 tools/outbound_image_offline_check.py
+    def refused_turn(**where):
+        """The turn has no attach_image (nothing listed or the direction is not allowed): her words still go
+        out, without an image row; the tool itself would refuse with the fence's reason."""
+        coordinator, ep = turn(store, attach=attach, **where)
+        assert ep['state'] == 'COMMITTED', ep.get('failure')
+        assert 'attach_image' not in coordinator.character.calls[0]['tools']
+        assert attach_calls(coordinator) == [('NOT_EXPOSED', False)]
+        rows = speak_rows(store, ep['_id'])
+        assert rows and not any(row.get('attachment') for row in rows)
+        return forced_attach(store, coordinator, ep, attach)
+
+    # 没有那条边：清单里就没有这张图，这一回合根本没有 attach_image（真实流水线的第一道闸），
+    # 行上也不写元数据；工具自己再按「本轮没列出」退回。scope 围栏本身（列出了但 scope 不在可引用集合里）
+    # 在离线套件里逐条覆盖：python3 tools/outbound_image_offline_check.py
     assert outbound_media.offer(store, store.config, store.db.scenes.find_one({'_id': QQ}),
                                 'owner_private', 'A') is None
-    _, ep = turn(store, attach=attach, key='nolink')
-    assert list(attach_rejections(ep)) == ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'], attach_rejections(ep)
-    assert not any(row.get('attachment') for row in speak_rows(store, ep['_id']))
+    assert refused_turn(key='nolink') == {'ATTACH_ARTIFACT_NOT_IN_CONTEXT': art['artifact_id']}
 
-    # 群：群永远不是 owner_private，先撞 session_class 闸门，不静默降级成「只发文字却报平台已送达」
+    # 群：她自己做出来的图（从她的生成端点导入的）可以随话发进她在的群，她自己挑（owner 2026-10-05）
     channel_scene(store, GROUP, person='A', target='group')
-    link(store, GROUP, LOCAL)
-    _, group_ep = turn(store, scene=GROUP, attach=attach, key='group', target='group')
-    assert attach_rejections(group_ep) == {
-        'ATTACH_TARGET_NOT_ALLOWED': 'session_class_not_owner_private'}, attach_rejections(group_ep)
+    coordinator, ep = turn(store, scene=GROUP, key='group', target='group', attach=attach)
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'attach_image' in coordinator.character.calls[0]['tools']
+    assert [ok for _said, ok in attach_calls(coordinator)] == [True]
+    rows = speak_rows(store, ep['_id'])
+    assert rows[0]['attachment']['artifact_id'] == art['artifact_id']
 
     # 别人的私聊：不是同一个人的私人空间
     channel_scene(store, OTHER, person='B')
     link(store, OTHER, LOCAL)
-    _, other_ep = turn(store, scene=OTHER, person='B', attach=attach, key='other')
-    assert attach_rejections(other_ep) == {
-        'ATTACH_TARGET_NOT_ALLOWED': 'session_class_not_owner_private'}, attach_rejections(other_ep)
+    assert refused_turn(scene=OTHER, person='B', key='other') == {
+        'ATTACH_TARGET_NOT_ALLOWED': 'session_class_not_owner_private'}
 
     # 主人自己的 dm 场景却把路由目标配成群：确定性撞 target_not_dm（配置错了也不静默发）
     channel_scene(store, QQ, person='A', target='group', kind='dm')
     link(store, QQ, LOCAL)
-    _, misrouted = turn(store, attach=attach, key='misroute', target='group')
-    assert attach_rejections(misrouted) == {
-        'ATTACH_TARGET_NOT_ALLOWED': 'target_not_dm'}, attach_rejections(misrouted)
+    assert refused_turn(key='misroute', target='group') == {'ATTACH_TARGET_NOT_ALLOWED': 'target_not_dm'}
 
 
 def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_path):
@@ -233,8 +261,8 @@ def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_pa
     link(store, QQ, LOCAL)
     art = import_bytes(store, LOCAL_SCOPE, workspace=tmp_path)['artifact']
     other = BlobStore(store).put(JPEG, LOCAL_SCOPE, 'image', media_type='image/jpeg')
-    turn(store, key='b7a', attach=[{'artifact_id': art['artifact_id'], 'why': '给你看看'}])
-    turn(store, key='b7b', attach=[{'artifact_id': art['artifact_id'], 'why': '再给一次'}])
+    turn(store, key='b7a', attach={'artifact_id': art['artifact_id'], 'why': '给你看看'})
+    turn(store, key='b7b', attach={'artifact_id': art['artifact_id'], 'why': '再给一次'})
 
     server = bridge(store)
     first = server.claim('replay')['items'][0]                           # 没声明 supports=image

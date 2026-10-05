@@ -30,6 +30,27 @@ export async function packageManagerEnv(env, { nodeDir = path.dirname(process.ex
   return { ...env, [key]: [shimDir, ...dirs].join(path.delimiter), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' };
 }
 
+// A selection installed but never confirmed running (ACTIVE) counts each start; past this many the
+// launcher returns to the previous ACTIVE selection (ADR-011 §6.4). Only which package runs changes;
+// the published source is never rolled back.
+export const MAX_UNCONFIRMED_STARTS = 2;
+
+/** Advance one start: count unconfirmed selections and revert those that never came up. Returns notes. */
+export function advanceSelection(selection, now = new Date().toISOString()) {
+  const notes = [];
+  for (const [id, selected] of Object.entries(selection.projects ?? {})) {
+    if (selected.state !== 'APPLIED') continue;
+    selected.boots = (selected.boots ?? 0) + 1;
+    if (selected.boots <= MAX_UNCONFIRMED_STARTS) continue;
+    if (!selected.previous?.artifact) { notes.push(id + ': never started, and there is no earlier running selection'); continue; }
+    const { previous, boots, ...failed } = selected;
+    selection.projects[id] = { ...previous, state: 'HOST_RESTART_REQUIRED', reverted_at: now,
+      reverted_from: { candidate: failed.candidate, sha256: failed.sha256, published_at: failed.published_at, starts: boots } };
+    notes.push(id + ': returned to the previous running selection after ' + boots + ' starts that never came up');
+  }
+  return notes;
+}
+
 // The owner's original profile keeps its location; any other profile (e.g. the
 // demo) has its own DSH home, activation state and launch record.
 export function profileBase(profile) {
@@ -85,6 +106,7 @@ async function main() {
 
   const selectionPath = path.join(launch.base, 'activation.json');
   const selection = await read(selectionPath, { projects: {} });
+  for (const note of advanceSelection(selection)) process.stderr.write('Asuna selection: ' + note + '\n');
   for (const selected of Object.values(selection.projects)) {
     if (selected.state !== 'HOST_RESTART_REQUIRED') continue;
     try {
@@ -98,6 +120,10 @@ async function main() {
       selected.install_error = String(error);
       process.stderr.write('Selected plugin could not be installed. Opening native Web with the installed repair floor; the pending candidate is retained.\n');
     }
+    await fs.writeFile(selectionPath + '.tmp', JSON.stringify(selection, null, 2));
+    await fs.rename(selectionPath + '.tmp', selectionPath);
+  }
+  if (Object.keys(selection.projects ?? {}).length) {
     await fs.writeFile(selectionPath + '.tmp', JSON.stringify(selection, null, 2));
     await fs.rename(selectionPath + '.tmp', selectionPath);
   }

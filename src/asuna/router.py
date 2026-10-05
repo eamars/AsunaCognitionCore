@@ -28,7 +28,7 @@ class Router:
         # Identity and integration grants come from the host envelope, never
         # from quoted JSON in event text. Channel adapters cannot submit grants.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
-        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','supersedes_task_id','adapter_id')
+        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','adapter_id','visit')
         trusted={k:event[k] for k in allowed if k in event}
         # Only the private native Host adapter supplies this execution identity;
         # channel payloads cannot choose a local native session or its authority.
@@ -52,9 +52,6 @@ class Router:
                 and self.store.config.get('self_development',{}).get('enabled')):
             trusted['development_profile']='owner'
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':event.get('adapter_id') or ('channel' if event.get('channel') else 'local')},scene['scope_key'])
-        if event.get('supersedes_task_id'):
-            if not self.tasks:raise Denied('TASK_SERVICE_UNAVAILABLE')
-            self.tasks.revise(event['supersedes_task_id'],trusted)
         wake = event.get('group_context', {}).get('wake_reason') if event.get('channel') else (event.get('mentioned') or event.get('scene_tick'))
         if scene['kind']=='group' and not wake and event.get('episode_kind') != 'task_feedback':
             from .ingress import persist_input
@@ -62,9 +59,13 @@ class Router:
             self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
             return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
         ep=self.coordinator.ingest(trusted,persona=persona)
-        while ep['state']=='WAITING_TASK' and workspace is not None and self.executor:
-            task=self.executor.run(ep['task_id'],workspace)
-            feedback=self.tasks.feedback(task,self.coordinator)
-            if feedback is None:break
-            ep=feedback
+        # Without the queued native Host (tests, diagnostics): run what she delegated, then her feedback turns.
+        while workspace is not None and self.executor:
+            ready=[task_id for task_id in ep.get('task_ids') or ()
+                   if (self.store.db.tasks.find_one({'_id':task_id},{'state':1}) or {}).get('state')=='READY']
+            if not ready:break
+            for task_id in ready:
+                task=self.executor.run(task_id,workspace)
+                feedback=self.tasks.feedback(task,self.coordinator)
+                if feedback is not None:ep=feedback
         return ep

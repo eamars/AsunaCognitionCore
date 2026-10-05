@@ -18,10 +18,12 @@ DEVELOPMENT_TOOLS = [
 DEVELOPMENT_NAMES = {tool['name'] for tool in DEVELOPMENT_TOOLS}
 # ADR-009 §7.4: a persona runs her own published jobs from an owner development task.
 # Granted with development tools; the result carries status, counts and report ids only.
+# Read and analyse only (ADR-011 §5.2): her identity data is written by the character brain alone.
 PERSONA_JOB_TOOLS = [
-    {'name': 'persona_job_run', 'description': 'Run one of the selected persona package\'s published jobs in the sandbox. '
-     'Returns status, exit code, counts and report artifact ids only; reports are read in the memory tab.',
-     'parameters': {'job': {'type': 'string', 'required': True}, 'dry_run': {'type': 'boolean'},
+    {'name': 'persona_job_run', 'description': 'Run one of the selected persona package\'s published jobs in the sandbox, '
+     'read and analyse only: it is always a dry run, so documents, parameters, memories and mood are never written from here '
+     '(the character writes those herself). Returns status, exit code, counts and report artifact ids only; reports are read in the memory tab.',
+     'parameters': {'job': {'type': 'string', 'required': True},
                     'args': {'type': 'object', 'additionalProperties': True}}},
 ]
 for _tool in DEVELOPMENT_TOOLS:

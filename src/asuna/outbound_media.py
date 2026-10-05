@@ -1,4 +1,4 @@
-"""出站图片附件：DECIDE 的 attach → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+"""出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 
 字节只在 BlobStore（GridFS）里。messages 行只带 ``{artifact_id, media_type, sha256, size}``，
 不带 base64：普通 BSON 行 1 MiB 上限，而一张 QQ 照片常有 4–6 MiB。领取方（napcat-qq 0.5.0）
@@ -54,10 +54,15 @@ IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要�
                  'image_artifacts_from_program 里引用；同一主人的另一个私聊入口也能引用它。')
 
 OFFER_NOTE = ('这些是程序已经存好、这一轮可以随你要说的那条消息一起发出去的图片。'
-              '想发就在 DECIDE 里给 attach:[{"artifact_id":"…","why":"…"}]（至多 1 条），'
+              '想发就调用 attach_image（artifact_id、why；一回合至多一张，再调用就换成新的那张），'
               'artifact_id 只能照抄下面列出的值——它不是文件路径也不是文件名。'
               '正文里不要写文件路径、文件名或「见图」之类的话，图是随这条消息一起到的。'
               '没列出的图片不能发；一轮最多带一张。')
+# A group may receive only pictures she produced (owner, 2026-10-05): bytes she imported from her own
+# generator (import_register), never a picture someone sent her. Any group she is in; she picks.
+PRODUCED_SOURCE = 'integration:'
+GROUP_NOTE = ('这是群聊：这里只列你自己做出来的图（不是别人发给你的）。发不发、发哪张由你决定，'
+              '但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
 PEER_NOTE = ('其中标了 from_linked_scene 的那几张不是这个场景里生成的，是你另一个只属于'
              '你自己的私聊入口里存的图，程序确认过那一边也是你本人的私人空间，可以照发。')
 
@@ -133,31 +138,68 @@ def declared(row):
 def attachment_for_speak(ep):
     """这一轮被程序接受的那张图 → SPEAK 第一行要写的元数据（没有就 None）。
 
-    图只跟最后一次 DECIDE 走：``decide_delta.apply`` 每一轮都把 ``delta_results['attach']`` 重写成
-    本轮接受的那一张 —— 本轮没给、或给的那张被退回，就没有这一项，也就没有图（前一轮那张不会跟着走）。
-    schema 一轮至多一条，所以这里只看那一条，形状不对就当没有。
+    这一回合最后一次被接受的 attach_image（role_tools）记在 ``ep['attachment']``；没有、或被退回
+    就没有图。形状不对就当没有。
     """
-    items = ((ep or {}).get('delta_results') or {}).get('attach') or []
-    item = items[0] if items and isinstance(items[0], dict) else None
-    return descriptor({ATTACHMENT_KEY: item}) if item else None
+    item = (ep or {}).get('attachment')
+    return descriptor({ATTACHMENT_KEY: item}) if isinstance(item, dict) else None
 
 
-def target_allowed(config, scene, session_class):
-    """第一版的收件方向：owner 私聊 + 该场景路由 target.type=dm。返回 (可以, 原因)。"""
-    if session_class != OWNER_PRIVATE:
-        return False, 'session_class_not_owner_private'
+def route_target(config, scene):
+    """这个场景的路由目标类型（dm / group），没有渠道路由就是 None。"""
     scene_id = (scene or {}).get('_id')
     channel_id = (scene or {}).get('channel_id')
     if not scene_id or not channel_id:
-        return False, 'scene_has_no_channel_route'
+        return None
     try:
         from .channels import route_for_scene       # 路由只有一份来源，这里不另算一遍
         route = route_for_scene(config, channel_id, scene_id)
     except Exception:
-        return False, 'channel_route_not_authorized'
-    if ((route or {}).get('target') or {}).get('type') != 'dm':
+        return None
+    return ((route or {}).get('target') or {}).get('type')
+
+
+def group_scene(config, scene):
+    """一个真正的群：场景是群，路由目标也是群（配置把私聊路由成群的不算）。"""
+    return (scene or {}).get('kind') == 'group' and route_target(config, scene) == 'group'
+
+
+def produced(item):
+    """她自己做出来的图：从她自己的生成端点导入时登记的（import_register）。"""
+    return any(str(source).startswith(PRODUCED_SOURCE) for source in (item or {}).get('source_ids') or ())
+
+
+def target_allowed(config, scene, session_class):
+    """收件方向：主人的私聊（路由 dm、owner_private），或她在的任何一个群（只发她自己做的图）。"""
+    target = route_target(config, scene)
+    if target is None:
+        return False, 'scene_has_no_channel_route' if not (scene or {}).get('channel_id') else 'channel_route_not_authorized'
+    if target == 'group' and (scene or {}).get('kind') == 'group':
+        return True, ''
+    if session_class != OWNER_PRIVATE:
+        return False, 'session_class_not_owner_private'
+    if target != 'dm':
         return False, 'target_not_dm'
     return True, ''
+
+
+def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
+    """她做出来的图（不分场景），新的在前；群聊回合里只列这些。"""
+    count = max(1, int(limit or 1))
+    try:
+        # Bounded: the newest images only, and her own among them (the offline store has no $regex).
+        cursor = store.db.artifacts.find({'kind': ATTACHMENT_KIND, 'state': 'DONE', 'storage': 'gridfs'})
+        if hasattr(cursor, 'sort'):
+            cursor = cursor.sort('created_at', -1)
+        if hasattr(cursor, 'limit'):
+            cursor = cursor.limit(200)
+        rows = [row for row in cursor if produced(row)]
+    except Exception:
+        return []
+    mine = {row['_id'] for row in rows}
+    scopes = list(dict.fromkeys(row['scope_key'] for row in rows if row.get('scope_key')))
+    items = image_artifacts(store, scopes, limit=count * 10, own_scope='')
+    return [item for item in items if item['artifact_id'] in mine][:count]
 
 
 def _route_person(config, scene, channel_id=None):
@@ -254,6 +296,18 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
     return out
 
 
+def row_is_group(store, row):
+    """这条消息是不是发往一个群：按行自己的场景与路由现算。"""
+    row = row or {}
+    try:
+        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {}
+    except Exception:
+        return False
+    if not scene.get('channel_id') and row.get('channel_id'):
+        scene = dict(scene, channel_id=row.get('channel_id'))
+    return group_scene(store.config, scene)
+
+
 def row_image_scopes(store, row):
     """这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。"""
     row = row or {}
@@ -319,6 +373,11 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     allowed, _reason = target_allowed(config, scene, session_class)
     if not allowed:
         return None
+    if group_scene(config, scene):
+        items = produced_images(store, limit=limit)
+        for item in items:
+            item.pop('from_linked_scene', None); item.pop('scene_id', None)
+        return {'items': items, 'note': OFFER_NOTE + GROUP_NOTE} if items else None
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
                             limit=limit, own_scope=own_scope)
@@ -328,7 +387,7 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     return {'items': items, 'note': note}
 
 
-def accept_artifact(store, blobs, artifact_id, scope_keys):
+def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False):
     """程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 
     ``scope_keys`` 是程序算好的可引用 scope 列表（本场景 + 同一主人的另一个 owner_private
@@ -339,7 +398,10 @@ def accept_artifact(store, blobs, artifact_id, scope_keys):
     item = store.db.artifacts.find_one({'_id': artifact_id})
     if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
-    if item.get('scope_key') not in scopes:
+    if produced_only:
+        if not produced(item):
+            raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group gets only pictures she made
+    elif item.get('scope_key') not in scopes:
         raise Denied('ATTACHMENT_SCOPE_DENIED')
     if item.get('kind') != ATTACHMENT_KIND:
         raise Denied('ATTACHMENT_NOT_AN_IMAGE')
@@ -374,7 +436,10 @@ def serve(store, blobs, row, declared):
     item = store.db.artifacts.find_one({'_id': declared['artifact_id']})
     if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
-    if item.get('scope_key') not in row_image_scopes(store, row):
+    if row_is_group(store, row):
+        if not produced(item):
+            raise Denied('ATTACHMENT_NOT_HER_OWN')
+    elif item.get('scope_key') not in row_image_scopes(store, row):
         raise Denied('ATTACHMENT_SCOPE_DENIED')
     if str(item.get('sha256') or '').strip().lower() != declared['sha256']:
         raise Denied('ATTACHMENT_SHA_MISMATCH')

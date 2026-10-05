@@ -239,6 +239,11 @@ def local_moment(zone_name, moment=None):
     return _aware(moment or now_utc()).astimezone(ZoneInfo(zone_name))
 
 
+def minutes_later(minutes, moment=None):
+    """An ISO moment some minutes after now (her heartbeat pause)."""
+    return (_aware(moment or now_utc()) + timedelta(minutes=int(minutes))).isoformat(timespec='seconds')
+
+
 def is_iana(zone_name) -> bool:
     """An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept."""
     if not isinstance(zone_name, str) or not (zone_name == 'UTC' or '/' in zone_name) or ZoneInfo is None:
@@ -370,21 +375,21 @@ def local_clock(zone, moment=None):
 
 
 def control_note(zone, moment=None):
-    """给角色的"安排"控制面：现场钟面 + 三个控制字段怎么写。她负责把话换算成这些键，
+    """给角色的"安排"控制面：现场钟面 + plan 工具怎么写。她负责把话换算成这些键，
     本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
     return {**local_clock(zone, moment),
-            'fields': {
-                'schedule': {'intent': '要做什么（给人看的短句）',
-                             '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',
-                                          'every_seconds': '整数秒：固定间隔重复，最小 %d 秒（原生限制）' % MIN_INTERVAL_SECONDS,
-                                          'at': 'YYYY-MM-DDTHH:MM：一次性，按下面 timezone 那个钟面读',
-                                          'clock': '{"time":"HH:MM","weekdays":[0,2]}：每日/每周本地钟点；'
-                                                   'weekdays 用 0=周一…6=周日，省略就是每天'}},
-                'update_plan': {'plan_id': 'plans_from_program 里的 _id',
-                                'intent': '可选：只改内容就给这个',
-                                'schedule': '改时间：与 schedule 一样的四种计时之一'},
-                'cancel_plan_id': 'plans_from_program 里的 _id'},
-            'rules': ['时间不完整或已经过了：程序会拒绝并把原因写进本轮结果，问一句就好，不用自己猜',
+            'plan_tool': {
+                'create': {'intent': '要做什么（给人看的短句）',
+                           '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',
+                                        'every_seconds': '整数秒：固定间隔重复，最小 %d 秒（原生限制）' % MIN_INTERVAL_SECONDS,
+                                        'at': 'YYYY-MM-DDTHH:MM：一次性，按上面 timezone 那个钟面读',
+                                        'clock': '{"time":"HH:MM","weekdays":[0,2]}：每日/每周本地钟点；'
+                                                 'weekdays 用 0=周一…6=周日，省略就是每天'}},
+                'update': {'plan_id': 'plans_from_program 里的 _id',
+                           'intent': '可选：只改内容就只给这个',
+                           '计时': '改时间：与 create 一样的四种计时之一'},
+                'cancel': {'plan_id': 'plans_from_program 里的 _id'}},
+            'rules': ['时间不完整或已经过了：plan 会被退回并说明原因，问一句就好，不用自己猜',
                       '每日/每周按这个时区的本地钟点算；DST 空档顺延到那天第一个真实存在的钟点，'
                       '重叠的钟点只取较早的一次',
                       '到期只是把你叫醒：做不做、怎么做仍由你判断；没做不会让这条安排消失',

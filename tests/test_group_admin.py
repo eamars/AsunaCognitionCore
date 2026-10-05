@@ -159,20 +159,26 @@ def test_the_adapter_reports_her_own_role_from_napcat():
 def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     from asuna.coordinator import Coordinator
     from asuna.documents import DocumentStore
-    from asuna.lanes import FakeLane, LaneResult
+    from asuna.lanes import FakeLane, FakeTurn
     setup(store, 'admin')
-    decision = {'next': 'speak', 'goal': '提醒一下', 'constraints': [], 'recall_query': '', 'speak_before_action': False,
-                'group_action': [{'kind': 'mute', 'who': '#2', 'duration': '1分钟', 'reason': '连续刷屏'}],
-                'write_docs': [{'doc': 'group_notes', 'op': 'append_section', 'heading': '刷屏', 'reason': '记下做法'}]}
-    lane = FakeLane(store, [LaneResult('他在刷屏'), LaneResult(json.dumps(decision, ensure_ascii=False)),
-                            LaneResult('刷屏的先禁言一分钟。'), LaneResult('先禁言一分钟哦')])
+    mute = {'kind': 'mute', 'who': '#2', 'duration': '1分钟', 'reason': '连续刷屏'}
+    notes = {'doc': 'group_notes', 'op': 'append_section', 'heading': '刷屏', 'reason': '记下做法',
+             'body': '刷屏的先禁言一分钟。'}
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '他在刷屏，先禁言一分钟，再记下做法。'}),
+                                      ('group_action', mute), ('write_document', notes)], '先禁言一分钟哦')])
     event = {'event_id': 'spam-1', 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 刷屏',
              'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}, 'sender_id': '20002',
                          'platform_event_id': 'spam-1'}}
     ep = Coordinator(store, lane).ingest(event, persona='P1')
-    assert ep['delta_results']['group_action'][0]['state'] == '已交给平台，等确认'
-    assert [call['phase'] for call in lane.calls] == ['MONOLOGUE', 'DECIDE', 'WRITE', 'SPEAK']
-    assert '已交给平台，等确认' in lane.calls[-1]['messages'][-1]['content']        # SPEAK hears it is not done yet
-    _, notes = DocumentStore(store, 'P1').read(group_admin.notes_slug(SCENE))
-    assert notes['sections'][0]['visibility'] == 'public' and notes['sections'][0]['body'] == '刷屏的先禁言一分钟。'
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert [call['phase'] for call in lane.calls] == ['TURN']           # one turn: the notes' body is in the call
+    assert {'group_action', 'write_document'} <= set(lane.calls[0]['tools'])
+    _, acted, wrote = lane.tool_results
+    assert acted[5] and acted[4]['state'] == '已交给平台，等确认'          # she hears it is not done yet
+    assert store.db.artifacts.find_one({'kind': 'group_action'})['admin'] == {'kind': 'mute', 'account': '20002', 'seconds': 60}
+    assert wrote[5] and wrote[4]['doc'] == group_admin.notes_slug(SCENE), wrote
+    _, written = DocumentStore(store, 'P1').read(group_admin.notes_slug(SCENE))
+    assert written['sections'][0]['visibility'] == 'public' and written['sections'][0]['body'] == '刷屏的先禁言一分钟。'
+    spoken = [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'})]
+    assert spoken == ['先禁言一分钟哦']

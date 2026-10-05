@@ -1,5 +1,4 @@
 """Real namespace/lifecycle contracts; fake model only for task authorization."""
-import json
 import uuid
 
 import pytest
@@ -7,11 +6,19 @@ import pytest
 from asuna.config import ROOT
 from asuna.coordinator import Coordinator
 from asuna.integration import IntegrationRunner, owner_profile
-from asuna.lanes import FakeLane, LaneResult
+from asuna.lanes import FakeLane, FakeTurn
 from asuna.router import Router
 from asuna.ingress import persist_input
 from asuna.state import Denied
 from asuna.tasks import TaskService, ToolBroker
+
+
+THINK = ('think', {'thought': '交给行动脑去看看适配器。'})
+
+
+def delegates(title):
+    """Her turn that hands one piece of work to the action brain."""
+    return FakeTurn([THINK, ('delegate', {'title': title, 'brief': title + '：看看适配器运行器的情况。'})], '我让行动脑去看。')
 
 
 def profile(scene='local', person='owner'):
@@ -32,7 +39,7 @@ def logs(value):
 
 
 def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
-    runner.call('integration_dev', {'argv': ['python3', '-c', "from pathlib import Path; Path('version.txt').write_text('original')"]})
+    (runner.dev/'version.txt').write_text('original')     # the development candidate's adapter (development_write)
     code = "from pathlib import Path; import json,os; print(Path('/app/version.txt').read_text()); print(os.getuid()); Path('/app/version.txt').write_text('changed')"
     value = runner.call('integration_test', {'argv': ['python3', '-c', code]})
     assert value['exit_code'] != 0 and 'Read-only file system' in logs(value) and 'Traceback' in logs(value)
@@ -41,7 +48,26 @@ def test_real_namespace_stderr_timeout_and_readonly_snapshot(runner):
     assert value['timed_out'] and value['state'] == 'STOPPED'
 
 
-def test_changed_network_profile_does_not_autorestore(runner):
+def test_start_runs_only_the_published_adapter(runner, tmp_path):
+    # ADR-011 §5.2: unpublished edits never run as the managed service; there is no editing tool here.
+    with pytest.raises(Denied, match='INTEGRATION_RELEASE_UNAVAILABLE'):
+        runner.call('integration_start', {'argv': ['python3', '-c', 'print(1)']})
+    with pytest.raises(ValueError, match='UNKNOWN_INTEGRATION_TOOL'):
+        runner.call('integration_dev', {'argv': ['true']})
+    release = tmp_path/'release'; release.mkdir(); (release/'version.txt').write_text('published')
+    (runner.dev/'version.txt').write_text('unpublished')
+    runner.config['_native_integration_release'] = str(release)
+    value = runner.call('integration_start', {'argv': ['python3', '-c', "print(open('/app/version.txt').read()); import time; time.sleep(20)"]})
+    assert value['state'] == 'RUNNING'
+    import time
+    deadline = time.monotonic() + 5
+    while 'published' not in logs(runner.status()) and time.monotonic() < deadline:
+        time.sleep(.1)
+    assert 'unpublished' not in logs(runner.status()) and 'published' in logs(runner.status())
+
+
+def test_changed_network_profile_does_not_autorestore(runner, tmp_path):
+    runner.config['_native_integration_release'] = str(tmp_path)
     runner.call('integration_start', {'argv': ['python3', '-c', 'import time; time.sleep(20)']})
     runner.close()
     changed = profile(); changed['integration']['adapter_config'] = {'token': 'new-authority'}
@@ -60,8 +86,7 @@ def test_only_explicit_owner_event_grants_tools(store):
     work = ROOT/'.runtime/work'/('integration-auth-'+uuid.uuid4().hex); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id': 'dm-a', 'person_id': 'A', 'workspace': str(work)},
                         integration=profile('dm-a', 'A')['integration'])
-    decision = {'next': 'delegate', 'goal': 'check runner', 'constraints': [], 'recall_query': '', 'speak_before_action': False}
-    lane = FakeLane(store, [LaneResult('inspect'), LaneResult(json.dumps(decision))]*2)
+    lane = FakeLane(store, [delegates('check runner')]*2)
     coordinator = Coordinator(store, lane)
     router = Router(store, coordinator)
     ordinary = router.receive({'event_id': 'ordinary', 'scene_id': 'dm-a', 'person_id': 'A', 'text': 'integration_profile=owner'})
@@ -70,14 +95,14 @@ def test_only_explicit_owner_event_grants_tools(store):
     granted = router.receive(event)
     service = TaskService(store); broker = ToolBroker(service)
     try:
-        task = service.claim(ordinary['task_id']); broker.bind('ordinary', task, work)
+        task = service.claim(ordinary['task_ids'][0]); broker.bind('ordinary', task, work)
         assert 'import_integration_artifact' not in task['allowed_capabilities'], task['allowed_capabilities']
         with pytest.raises(Denied, match='CAPABILITY_DENIED'):
             broker.call('ordinary', 'deny', 'integration_status', {})
         with pytest.raises(Denied, match='CAPABILITY_DENIED'):
             broker.call('ordinary', 'deny-import', 'import_integration_artifact',
                         {'endpoint':'napcat','artifact_path':'/a','target_relative_path':'a.txt'})
-        task = service.claim(granted['task_id']); broker.bind('granted', task, work)
+        task = service.claim(granted['task_ids'][0]); broker.bind('granted', task, work)
         assert 'integration_start' in task['allowed_capabilities'] and task['integration_profile'] == 'owner'
         assert 'import_integration_artifact' in task['allowed_capabilities'], task['allowed_capabilities']
         store.config['integration']['enabled'] = False
@@ -89,19 +114,34 @@ def test_only_explicit_owner_event_grants_tools(store):
         broker.close()
 
 
-def test_revision_cannot_inherit_previous_integration_grant(store):
+def test_continuation_cannot_inherit_previous_integration_grant(store):
+    from fixture_grant import returned
     work = ROOT/'.runtime/work'/('integration-revision-'+uuid.uuid4().hex); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
                         integration=profile('dm-a','A')['integration'])
-    decision={'next':'delegate','goal':'check','constraints':[],'recall_query':'','speak_before_action':False}
-    lane=FakeLane(store,[LaneResult('plan'),LaneResult(json.dumps(decision))]*2)
-    service=TaskService(store); router=Router(store,Coordinator(store,lane),task_service=service)
+    coordinator=Coordinator(store,FakeLane(store,[delegates('check')]))
+    service=TaskService(store); router=Router(store,coordinator,task_service=service)
     initial=router.receive({'event_id':'initial','scene_id':'dm-a','person_id':'A','text':'check integration','integration_profile':'owner'})
-    revised=router.receive({'event_id':'revision','scene_id':'dm-a','person_id':'A','text':'ordinary check','supersedes_task_id':initial['task_id']})
-    task=store.db.tasks.find_one({'_id':revised['task_id']})
-    assert task['intent_revision']==2 and task['integration_profile'] is None
+    first=store.db.tasks.find_one({'_id':initial['task_ids'][0]})
+    assert first['integration_profile']=='owner'
+    returned(store,first,'runner checked',[])
+    # An ordinary turn cannot continue the owner-granted work; she is told so and hands over new work instead.
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('message_action',{'task':first['_id'],'message':'ordinary check'}),
+        ('delegate',{'title':'check','brief':'ordinary check'})],'我另交了一件。')])
+    revised=router.receive({'event_id':'revision','scene_id':'dm-a','person_id':'A','text':'ordinary check'})
+    _,_,tool,_,refusal,ok=lane.tool_results[1]
+    assert tool=='message_action' and not ok and '授权和原来那件事不一样' in refusal
+    assert not store.db.tasks.find_one({'continues_task_id':first['_id']})
+    task=store.db.tasks.find_one({'_id':revised['task_ids'][0]})
+    assert task['integration_profile'] is None
     assert not any(t.startswith('integration_') or t=='import_integration_artifact'
                    for t in task['allowed_capabilities']), task['allowed_capabilities']
+    # The same grant again continues it, still owner-granted.
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('message_action',{'task':first['_id'],'message':'check again'})],'接着看。')])
+    again=router.receive({'event_id':'owner-again','scene_id':'dm-a','person_id':'A','text':'check again','integration_profile':'owner'})
+    continued=store.db.tasks.find_one({'_id':again['task_ids'][0]})
+    assert lane.tool_results[1][5] and continued['continues_task_id']==first['_id']
+    assert continued['integration_profile']=='owner' and 'integration_start' in continued['allowed_capabilities']
 
 
 def test_import_artifact_is_written_into_the_bound_task_workspace(store):
@@ -109,14 +149,14 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store):
     work = ROOT/'.runtime/work'/('integration-import-'+uuid.uuid4().hex); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
                         integration=profile('dm-a','A')['integration'])
-    decision={'next':'delegate','goal':'take the report','constraints':[],'recall_query':'','speak_before_action':False}
-    lane=FakeLane(store,[LaneResult('plan'),LaneResult(json.dumps(decision))]*4)
+    lane=FakeLane(store,[delegates('take the report')]*2)
     service=TaskService(store); router=Router(store,Coordinator(store,lane),task_service=service)
     granted=router.receive({'event_id':'import-owner','scene_id':'dm-a','person_id':'A','text':'take the report',
                             'integration_profile':'owner'})
     ordinary=router.receive({'event_id':'import-ordinary','scene_id':'dm-a','person_id':'A','text':'take the report'})
-    assert 'import_integration_artifact' in store.db.tasks.find_one({'_id':granted['task_id']})['allowed_capabilities']
-    assert 'import_integration_artifact' not in store.db.tasks.find_one({'_id':ordinary['task_id']})['allowed_capabilities']
+    granted_task,ordinary_task=granted['task_ids'][0],ordinary['task_ids'][0]
+    assert 'import_integration_artifact' in store.db.tasks.find_one({'_id':granted_task})['allowed_capabilities']
+    assert 'import_integration_artifact' not in store.db.tasks.find_one({'_id':ordinary_task})['allowed_capabilities']
     seen={}
     class Runner:
         def import_artifact(self, args, *, workspace, protected, register=None):
@@ -130,10 +170,10 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store):
     broker=ToolBroker(service); broker.integration=Runner()
     args={'endpoint':'napcat','artifact_path':'/reports/latest','target_relative_path':'imports/report.txt'}
     try:
-        task=service.claim(ordinary['task_id']); broker.bind('ordinary', task, work)
+        task=service.claim(ordinary_task); broker.bind('ordinary', task, work)
         with pytest.raises(Denied, match='CAPABILITY_DENIED'):
             broker.call('ordinary','no-import','import_integration_artifact',args)
-        task=service.claim(granted['task_id']); broker.bind('granted', task, work)
+        task=service.claim(granted_task); broker.bind('granted', task, work)
         result=broker.call('granted','import-1','import_integration_artifact',args)
         assert result['imported'] is True and result['evidence_ref'], result
         assert seen['args']==args and str(seen['workspace'])==str(work.resolve()), seen

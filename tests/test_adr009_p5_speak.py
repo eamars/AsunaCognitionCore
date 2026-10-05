@@ -1,4 +1,4 @@
-"""ADR-009 P5 MongoDB tests: T5.4 multi-segment SPEAK, T5.9 segment crash recovery."""
+"""ADR-009 P5 MongoDB tests: T5.4 multi-segment speech, T5.9 segment crash recovery."""
 from datetime import datetime
 from types import SimpleNamespace
 import threading
@@ -8,8 +8,8 @@ import pytest
 from asuna.channels import Channels
 from asuna.coordinator import Coordinator
 from asuna.ingress import persist_input
-from asuna.lanes import FakeLane, LaneResult
-from test_adr009_p2 import decide
+from asuna.lanes import FakeLane, FakeTurn
+from test_adr009_p2 import THINK
 
 SPEECH = '第一段，先说这个。\n---split---\n第二段。\n---split---\n第三段收尾。'
 TARGET = {'type': 'dm', 'id': 'peer'}
@@ -29,7 +29,7 @@ def channel_scene(store):
 
 
 def turn(store, key='one', crash=None, speech=SPEECH, channel=True):
-    lane = FakeLane(store, [LaneResult('想一想。'), decide(), LaneResult(speech)])
+    lane = FakeLane(store, [FakeTurn([THINK], speech)])
     coordinator = Coordinator(store, lane)
     event = {'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'}
     if channel:

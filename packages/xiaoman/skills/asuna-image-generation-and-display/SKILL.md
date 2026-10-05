@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么用 attach 发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，DECIDE 给 attach 照抄 artifact_id、SPEAK 正文不写路径/文件名/见图，只对 owner_private + dm 路由开放、群确定性不发。含大小上限与服务端小副本做法、attach 全部失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_NOT_WHEN_SILENT / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核的真实边界（只认场景附件 ref，工作区文件实测 IMAGE_ATTACHMENT_NOT_IN_SCENE）、硬边界（不发群、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，要发图就在那一轮调用 attach_image 工具（artifact_id 照抄、一回合至多一张、再调用换成新的那张、正文不写路径/文件名/见图），只对 owner_private + dm 路由开放、群确定性不发。含大小上限与服务端小副本做法、attach_image 拒绝码（工具错误、同回合可改）与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核的真实边界（只认场景附件 ref，工作区文件实测 IMAGE_ATTACHMENT_NOT_IN_SCENE）、硬边界（不发群、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-image-generation-and-display
@@ -12,21 +12,26 @@ description: 一个任务内走完「文字生图 → 导入本机工作区 → 
 
 2026-10-04 那次是分三段跑的（查端点 → 生成 → 导入），中间还试过 base64 分段搬运，绕了远路。
 这份技能把走通的那条路记成一条：提示词 → 服务回执里的 `artifact_path` → 导入工作区 → 相对路径展示；
-步骤 8 记的是后半段：导入时顺手登记的 image artifact → QQ 私聊那一轮的 `attach`。
+步骤 8 记的是后半段：导入时顺手登记的 image artifact → QQ 私聊那一轮的 `attach_image`。
 
 ## 前提与授权
 
 - 需要 owner 集成授权。`import_integration_artifact` 属 managed integration 组，**QQ 任务的授权里不带它**
   （RUNTIME_API §tools）；这条流程只能跑在有该授权的本机 owner 任务里。
 - 生图请求只能在集成进程里发：`/integration/config.json` 只有受管理集成进程可读；普通 `sandbox_run` 完全无网络，
-  `integration_test` 只允许配置内的 TCP 转发。脚本放 `integration_dev` 的 `/task`，用 `integration_test` 跑（冻结成 `/app`）。
+  `integration_test` 只允许配置内的 TCP 转发。探测脚本写进 **napcat-qq 通道包候选的 `integration/`**
+  （`development_write` 带 `project: "napcat-qq"`），`integration_test` 把候选的 `integration/` 冻结成只读 `/app`
+  试跑（实测：cwd 是 `/app`，往 `/app` 写报 `OSError` 只读文件系统；`/data` 是可写区，与启用服务的数据分开）。
+  跑完把探针文件从候选里删掉（`development_run` 的 `rm`），别让它跟着下一次发布上线。
 - 只写端点**别名**（`image`），不在脚本里硬编码 host/port；别名和地址由配置给，变了也不用我改代码。
 - 展示这一步依赖文件落在**本任务绑定的工作区**：`import_integration_artifact` 写的就是这个工作区。
-- 发图到 QQ 不需要行动侧授权：那是角色那一轮（DECIDE）的决定，字节由程序搬；我这边只负责让图**存在且可引用**。
+- 发图到 QQ 不需要行动侧授权：那是角色那一轮的工具调用（`attach_image`），字节由程序搬；
+  我这边只负责让图**存在且可引用**。
 
 ## 步骤 0：确认 image 端点在（30 秒，只读）
 
-把探测脚本写进 `integration_dev` 的 `/task/imggen/agent_probe.py`，用 `integration_test` 跑：
+把探测脚本写进 napcat-qq 候选的 `integration/imggen_probe.py`，
+`integration_test` 跑 `["python3", "/app/imggen_probe.py"]`（跑完删掉探针）：
 
 ```python
 import json, urllib.request
@@ -133,8 +138,8 @@ import_integration_artifact(
 - Claude 2026-10-04 在本机页面核过（那次是 Claude 核的，不是主人）：DSH 自己的图片组件会渲染，
   文件接口返回 200 / `image/webp` / 32272 字节。
 - 本机这条私聊**没有通道路由**，所以本机那一轮根本不会出现可发图清单（见步骤 8）；本机展示就靠上面这个 Markdown 图。
-- 主人在 QQ 私聊里要图时走另一条路：核心 B 阶段已上线（上下文 `image_artifacts_from_program` + DECIDE 的 `attach`），
-  适配器 0.5.0 的私聊段白名单已经是 `("image", "text")`。按步骤 8 发，别把路径贴进正文。
+- 主人在 QQ 私聊里要图时走另一条路：上下文出现 `image_artifacts_from_program`，那一轮由她调用
+  `attach_image` 把图带上；适配器 0.5.x 的私聊段白名单已经是 `("image", "text")`。按步骤 8 发，别把路径贴进正文。
 
 ## 步骤 7（可选）：自己看一眼 —— `read_image` 的真实边界
 
@@ -150,7 +155,7 @@ import_integration_artifact(
 - 做不到就照实写「未做视觉复核」，并说清依据只有 job 回执 + 字节核验 + 当时提交的 prompt。
   2026-10-04 那张就是这种情况，报告里也是这么写的。
 
-## 步骤 8：主人在 QQ 私聊要图时，用 attach 发（不是发路径）
+## 步骤 8：主人在 QQ 私聊要图时，调用 `attach_image` 发（不是发路径）
 
 ### 前提：三件都成立，那一轮才有这条路
 
@@ -158,7 +163,8 @@ import_integration_artifact(
    （现在就是主人的 QQ 私聊 （主人的 QQ 私聊场景，场景 id 以配置为准））。两个条件都过时，程序在那轮上下文里放
    `image_artifacts_from_program`：`items[]` 每条给 `artifact_id / sha256 / size / media_type / created_at`，
    新的在前、最多 6 条，外加一句 note 说明这些是程序存的、不是文件路径。
-   **方向不对或没图可引用时这块根本不出现**——不是「空清单」，别拿它的缺席当「清单为空」推。
+   **`attach_image` 也只在这个清单出现时才进那一轮的工具列表**——方向不对或没图可引用时，
+   清单块和工具都不出现；别拿它的缺席当「清单为空」推。
 2. **只对主人私聊可发**：群聊、别人的场景、public 会话一律不发。第一版是**确定性拒绝**，
    不静默降级成「只发文字却报平台已送达」——那种回执会声称对方收到一张从没到达的图。
 3. **图从哪来**（两条，都由程序登记，我不动 scope）：
@@ -175,31 +181,30 @@ import_integration_artifact(
      `scene:local-dm`（148285 字节、sha `9f7f4e8e…`）；`messages` 里带 `attachment` 的行是 **0** ——
      这条路还没真发过一张 QQ 图。
 
-### 怎么发：DECIDE 给 attach，SPEAK 别写路径
+### 怎么发：那一轮调用 `attach_image`，正文别写路径
 
 ```json
-{"next": "speak", "goal": "把刚画好的那张图给主人看",
- "attach": [{"artifact_id": "blob-0f3c1e9a7b2d4c8f9a0b1c2d3e4f5061", "why": "他要看的就是这张"}]}
+{"tool": "attach_image", "args": {"artifact_id": "blob-0f3c1e9a7b2d4c8f9a0b1c2d3e4f5061", "why": "他要看的就是这张"}}
 ```
 
-- `attach` **至多 1 条**（schema `maxItems: 1`）；`artifact_id` 必填（≤200 字符）、`why` 可选（≤300 字符），
-  不接受额外字段。不想发图就**不要输出这个字段**，别给空数组。
+- 参数：`artifact_id` 必填（≤200 字符）、`why` 必填（≤500 字符）。**一回合最多一张，再调用就换成新的那张**
+  （那一回合最后一次被接受的调用写进消息）。
 - `artifact_id` 照抄清单里的值——它**不是文件路径也不是文件名**，别自己拼，也别填工作区里的 `xiaoman_selfie.webp`。
 - SPEAK 正文不写文件路径、文件名，也不写「见图」「见附件」这类话：图随这条消息一起到。
   `from_linked_scene` 那几张也不必解释来处（程序已经核过那一边也是主人自己的私人空间）。
 - 被接受的 attach 只把 `{artifact_id, media_type, sha256, size}` 写到 SPEAK **第一行**，字节留在 BlobStore。
   适配器 claim 时带 `supports=image` 才拿得到这份元数据，再按 publication + attempt 来取字节；
   没声明就只发文字，并在行上记 `attachment_skipped=channel_does_not_declare_image`。
+- 这一轮最后如果没出声（`stay_silent`），没有消息能挂这张图，图也不发——这一版没有为此单独的拒绝码。
 
 ### 失败怎么读
 
-DECIDE 侧的拒绝只进 `episode.rejections`（`{field: "attach", index, code, detail}`），**这一轮照常继续**，
-按判定顺序是：方向 → 是否出声 → 在不在本轮清单 → 字节本身。
+`attach_image` 被拒是**工具错误**：她读得到、同一回合就能改（比如换清单里另一个 id 再调一次），
+回合不会因此失败。判定顺序：方向 → 在不在本轮清单 → 字节本身。
 
 | code | 意思 / 我该怎么办 |
 | --- | --- |
 | `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`session_class_not_owner_private` / `scene_has_no_channel_route` / `channel_route_not_authorized` / `target_not_dm`。在群里想发图就是这条 |
-| `ATTACH_NOT_WHEN_SILENT` | 这一轮决定不出声，图也不跟着走。要发图就得说话 |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在**本轮**清单里：照抄错了、图属于别的场景或别人、或根本没被列出。别猜 id，也别指望上一轮的清单还有效 |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | artifact 的 scope 不在程序算出的可引用列表里（既不是本场景，也不是那个联动的本人私聊场景） |
@@ -214,7 +219,7 @@ DECIDE 侧的拒绝只进 `episode.rejections`（`{field: "attach", index, code,
 传别的 id 只会更窄、不会替换）、`ATTACHMENT_SCOPE_DENIED`、`ATTACHMENT_SHA_MISMATCH`、
 `ATTACHMENT_HASH_MISMATCH`、`ATTACHMENT_NOT_AN_IMAGE`、`ATTACHMENT_OVER_LIMIT`、`ATTACHMENT_MEDIA_TYPE_MISMATCH`。
 
-适配器侧（napcat-qq 0.5.0）：图有任何不对劲都是 **`failed` 回执、整条不发**，不降级成纯文字。
+适配器侧（napcat-qq 0.5.1）：图有任何不对劲都是 **`failed` 回执、整条不发**，不降级成纯文字。
 reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enabled`（群）/
 `attachment_artifact_id_missing` / `attachment_sha256_missing` / `attachment_media_type_unsupported` /
 `attachment_size_invalid` / `attachment_over_limit` / `attachment_fetch_unsupported` /
@@ -226,6 +231,15 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 `attested: false` = 平台没带附件证据，只能说「按程序自己的记录算」；`sent: false, reason: channel_does_not_declare_image`
 = 那条只有文字出去了；`attachment_evidence_mismatch` = 送达回执里的附件对不上，不能当成图已发出。
 
+### 历史：DECIDE 时代的 attach（v2 的写法，别照它教当前流程）
+
+2026-10-04 的 v2 记的是当时的事实：角色回合还有 DECIDE 阶段，DECIDE 输出里带 `attach` 字段
+（`maxItems: 1`、`artifact_id` 必填 ≤200、`why` ≤300、无额外字段），被拒不中断回合、只进
+`episode.rejections`（`{field: "attach", index, code, detail}`），当时还有 `ATTACH_NOT_WHEN_SILENT`
+（那轮决定不出声，图不跟着走）。DECIDE 阶段后来整体退役：角色回合现在是一次原生回合，
+发图就是调用 `attach_image` 工具，`ATTACH_NOT_WHEN_SILENT` 一类的「静默拒绝码」在核代码里已不存在。
+读旧记录按本段口径；别把 DECIDE 的 `attach` 字段当成现在的流程。
+
 ### 还没实测的
 
 适配器用 OneBot `base64://` data URI 发私聊图，NapCat 真客户端会不会渲染，源码里明写「NOT yet verified
@@ -234,9 +248,10 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 
 ## 边界（硬）
 
-- 默认只给**主人**看：本机私聊用报告里的相对路径图，QQ 私聊用 attach。**不发群**，也不 @ 别人——
+- 默认只给**主人**看：本机私聊用报告里的相对路径图，QQ 私聊用 `attach_image`。**不发群**，也不 @ 别人——
   群方向在核心（`target_allowed` 只认 owner_private + dm）和适配器（`attachment_target_not_enabled`）都被挡着。
-- **不自己声明 scope、不给 attach 传 scope、不把 `artifact_id` 当文件路径**；一轮最多一张图。
+- **不自己声明 scope、不给 `attach_image` 传 scope、不把 `artifact_id` 当文件路径**；一回合最多一张图，
+  再调用就是换图，不是加图。
 - **不用 base64 分段搬运**：`b64slice.py` 那条路把 32 KB 图变 43 KB 文本还要切片对 sha，纯属烧上下文；
   `import_integration_artifact` 一次 GET 就够。（出站时适配器内部用 `base64://`，那是它的事，不是我搬字节的方式。）
 - **不停 QQ 适配器**（它跑在同一个集成上）、**不重启宿主**、**不改宿主/集成配置**、不改 core 与通道包代码。
@@ -246,15 +261,15 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 ## 离线自检（零依赖，不生成图）
 
 ```sh
-python3 /skills/asuna-image-generation-and-display/check_skill.py     # 沙箱：对着已挂载的 /skills
-python3 skills/asuna-image-generation-and-display/check_skill.py      # 候选根目录（development_run）
-python3 -m compileall -q skills/asuna-image-generation-and-display    # 语法面
+python3 skills/asuna-image-generation-and-display/check_skill.py    # 候选根目录（development_run，默认 xiaoman 项目）
+python3 -m compileall -q skills/asuna-image-generation-and-display  # 语法面（跑完清 __pycache__）
 ```
 
 退出码 0 = 全绿；非 0 时最后一行是 `N/M 通过，失败：<检查名>`。
 它只查技能文件自己：frontmatter 能解析、`name` 与目录名一致、关键工具名 / 端点 / 服务路径 /
-关键步骤 / 边界语句在不在、attach 那条路的清单字段与全部失败码在不在、示例图路径是不是相对的、
-「页面核验」的归属是不是 Claude、脚本能不能编译。
+关键步骤 / 边界语句在不在、`attach_image` 那条路的清单字段与失败码在不在、退役说法
+（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程）有没有回到散文里、
+示例图路径是不是相对的、「页面核验」的归属是不是 Claude、脚本能不能编译。
 判红只看散文：反引号里的字面量（错误码、示例、反证记录里引用的旧句子）按引用处理。
 **不碰网络、不调服务、不生成图、不发 QQ。**
 技能内容改了之后重跑一次即可；服务侧的真实可用性由步骤 0 的只读探测负责，
@@ -263,7 +278,8 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 ## 已知坑
 
 - **挂错目录**：`development_*` 不带 `project` 时是 xiaoman 插件候选（根下只有 `skills/ seeds/ src/ persona-model.json`
-  等），本技能文件就在这里；生图脚本要跑在 `integration_dev` 的 `/task`（通道包的开发目录，和 `/skills` 不是一个地方）。
+  等），本技能文件就在这里；生图探测脚本要写进 napcat-qq 通道包候选的 `integration/`（`project: "napcat-qq"`，
+  `integration_test` 把它冻结成 `/app`）——两个候选不是一个地方，集成沙箱也不挂载技能目录。
 - `/integration/config.json` 在普通 `sandbox_run` 里读不到（那边也没网络）。别把「我读不到」报成「端点不存在」。
 - manifest 328 KB，整份读进上下文会挤掉正事；按键取（`operations` / `prompt_contract` / `prompting` / `route_table` / `result_contract`）。
 - `resolve` 的 `style` 只是路由选择器，不是画面保证；`not_for` 与 `compatibility_notes` 是约束。
@@ -271,15 +287,21 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 - 导入上限是硬围栏（默认 1 MiB / 最大 4 MiB）：超了就在服务端出小副本，不要退回 base64 搬运。
 - **两个大小上限不是一回事**：导入 1 MiB（可调到 4 MiB）是搬字节的围栏；出站 8 MiB 是发图的围栏。
   导入的图超过 8 MiB 时文件仍在工作区，但 `artifact.registered=false / reason=ATTACHMENT_OVER_LIMIT`，QQ 那边引用不到它。
-- **清单缺席 ≠ 清单为空**：`image_artifacts_from_program` 不出现就是「这一轮不能发图」，别凭记忆报一个 id 上去。
-- **本机那一轮没有清单**：本机私聊没有通道路由，attach 这条路只属于 QQ 私聊；本机仍用步骤 6 的 Markdown 图。
-- **DECIDE 被拒 ≠ 消息没发**：attach 被拒只进 rejections，文字照发；反过来适配器侧失败是整条不发。
-  所以「图没发出去」有两种形状，看红在哪一层。
+- **清单缺席 ≠ 清单为空**：`image_artifacts_from_program` 不出现就是「这一轮不能发图」（`attach_image` 工具也不出现），
+  别凭记忆报一个 id 上去。
+- **本机那一轮没有清单**：本机私聊没有通道路由，`attach_image` 这条路只属于 QQ 私聊；本机仍用步骤 6 的 Markdown 图。
+- **`attach_image` 被拒 ≠ 消息没发**：被拒是工具错误，她同一回合可以改了再调，文字不受影响；
+  反过来适配器侧失败是整条不发。所以「图没发出去」有两种形状，看红在哪一层。
 
 ## 版本
 
-v2（2026-10-04 深夜）：补上步骤 8（QQ 私聊用 attach 发图：前提、只对主人私聊、图的来处、失败码读法），
-并把「本机页面核验」的归属从主人改成 Claude——那次是 Claude 核的，主人那晚在睡，这一轮主人还在睡，
+v3（2026-10-05）：与当前运行时对齐——DECIDE 阶段已退役，QQ 私聊发图改成那一轮调用 `attach_image` 工具
+（拒绝是工具错误、同回合可改；一回合至多一张、再调用换成新的那张；`ATTACH_NOT_WHEN_SILENT` 已不在核代码里）；
+探测脚本改「写进 napcat-qq 候选 `integration/`、`integration_test` 冻结成 `/app` 试跑、跑完删」（`integration_dev`
+与 `/skills` 挂载是退役说法，从当前流程里去掉）；旧的 DECIDE attach 流程移入「历史」段，只作当时做法保留。
+事实来自 2026-10-05 对 core 候选 `role_tools.py` / `outbound_media.py` 的只读复核与 `integration_test` 的 `/app` 布局实测。
+v2（2026-10-04 深夜）：补上步骤 8（QQ 私聊发图：前提、只对主人私聊、图的来处、失败码读法，当时挂在 DECIDE 的
+`attach` 字段上），并把「本机页面核验」的归属从主人改成 Claude——那次是 Claude 核的，主人那晚在睡，这一轮主人还在睡，
 所以没有主人侧的新核验。事实来自 core 0.2.0-281beb47（B 阶段）与 napcat-qq 0.5.0 的源码、
 core 侧离线自检实跑，以及只读查库看到的 `artifacts` / `messages` 现状。
 v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实都来自 2026-10-04 那次实跑
@@ -288,13 +310,31 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 
 ## 试用记录
 
+2026-10-05（v3 对齐这一轮，**没生成图、没发 QQ、没重启适配器、没发布、没改 core 与宿主配置**）：
+
+- 只读复核 core 候选：`role_tools.py`（`attach_image` 工具定义：`artifact_id` 必填 ≤200、`why` 必填 ≤500；
+  工具只在 `image_artifacts_from_program` 出现时才进那一轮的工具列表；`tool_attach_image` 判定顺序
+  target_allowed → 本轮清单 → `accept_artifact`，拒绝以 `Denied` 工具错误返回、同回合可改；成功写 `ep['attachment']`，
+  一回合内最后一次被接受的算数）、`outbound_media.py`（`OFFER_NOTE`「一回合至多一张，再调用就换成新的那张」；
+  `target_allowed` 四个 detail 原因不变；`accept_artifact` / `serve` 失败码不变）。
+- DECIDE 阶段退役核对：core 候选里 `decide_delta.py` 与 `decision-delta.schema.json` 已不存在，
+  `resources/prompts/` 只剩 `turn.md` / `turn_consult.md` 等；`ATTACH_NOT_WHEN_SILENT` 在 `src/asuna` 源码里
+  已搜不到（只剩旧 `__pycache__` 的 .pyc 里还有）。
+- `integration_test` 实测 `/app` 布局：探针脚本写进 napcat-qq 候选 `integration/`，
+  `["python3", "/app/_dsh_layout_probe.py"]` → `CWD /app`、`APP_HAS_ADAPTER True`、
+  `APP_READONLY OSError 30`（只读文件系统）、`ENDPOINT_KEYS ['host', 'image', 'napcat']`；探针跑完已删。
+- 观察（本次不改，core 自己的文本）：core 根 `RUNTIME_API.md` 的「Sending an image with her words」一节
+  还写着 DECIDE 时代的「She may answer with `attach: [...]`」，而同文件的回合工具列表已经是 `attach_image`。
+  本技能按核代码的真实形状教；那句旧文本留给 core 侧决定。
+- `check_skill.py` 同步改口径（`attach_image` 清单与拒绝码、退役说法进散文判红），实跑结果见行动报告；
+  compileall 通过，`__pycache__` 已清。
+
 2026-10-04 深夜（补步骤 8 这一轮，**没生成图、没发 QQ、没重启宿主、没改 core 与通道包**）：
 
 - 只读复核 core 与通道包源码：`outbound_media.py`（`target_allowed` / `image_scopes` / `image_artifacts` /
   `offer` / `accept_artifact` / `serve` / `register_imported_image` / `history_slot`）、`decide_delta._attach`
   的判定顺序、`channels.attachment` 的 403 码、`context.py`（`image_artifacts_from_program` 挂在 media 块，
-  方向不对或没图就不写这个键）、`decision-delta.schema.json`（`attach` `maxItems: 1`、`artifact_id` 必填 ≤200、
-  `why` ≤300、无额外字段）、`stage_decide.md` / `stage_speak.md`、`RUNTIME_API.md` 的
+  方向不对或没图就不写这个键）、`decision-delta.schema.json`（`attach` `maxItems: 1`、`artifact_id` 必填 ≤200、`why` ≤300、无额外字段）、`stage_decide.md` / `stage_speak.md`、`RUNTIME_API.md` 的
   §Claim public output / §Fetch attachment bytes / §Sending an image with her words。
 - core 侧离线自检实跑：`python3 -B tools/outbound_image_offline_check.py` → `33/33 通过`、exit 0。
   里面正好覆盖我写进技能的每条红：`decide_attach_rejects_artifact_not_offered_this_turn`

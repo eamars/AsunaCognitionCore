@@ -21,8 +21,7 @@ def build(template: dict, local: dict) -> dict:
     # Paths become absolute under this checkout (the Host and the worker run from different directories).
     value.pop('workdir', None)
     value['dsh_home'] = (ROOT / value['dsh_home']).resolve().as_posix()
-    for key in ('workspace', 'skills_dir'):
-        value['chat'][key] = (ROOT / value['chat'][key]).resolve().as_posix()
+    value['chat']['workspace'] = (ROOT / value['chat']['workspace']).resolve().as_posix()
     for roots in (value.get('persona_sources') or {}).values():
         for root in roots.values():
             root['path'] = (ROOT / root['path']).resolve().as_posix()
@@ -41,8 +40,7 @@ def main():
     args = parser.parse_args()
     template = json.loads((ROOT / 'config/demo.example.json').read_text(encoding='utf-8'))
     value = build(template, json.loads(args.local.read_text(encoding='utf-8')))
-    for key in ('workspace', 'skills_dir'):
-        Path(value['chat'][key]).mkdir(parents=True, exist_ok=True)
+    Path(value['chat']['workspace']).mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'written': str(args.out), 'database': value['database'], 'persona': value['chat']['persona']}))
 

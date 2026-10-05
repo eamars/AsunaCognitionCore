@@ -148,7 +148,7 @@ def render_html(events, output: Path):
         return ''.join(views)
     for event in events:
         phase=event['payload'].get('phase')
-        label={'MONOLOGUE':'角色持久独白','DECIDE':'角色意图','SPEAK':'公开回复候选（以送达回执为准）'}.get(phase,'')
+        label={'TURN':'角色回合','REPAIR':'程序检查后的同一回合','SPEAK':'公开回复候选（以送达回执为准）'}.get(phase,'')
         title=html.escape(f"{event['stream_id']} / {event['seq']} / {event['type']} {label}")
         extra=''
         if event['type']=='compaction.native':

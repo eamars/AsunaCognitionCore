@@ -63,6 +63,11 @@ class PublishService:
                 source_ep = db.episodes.find_one({'_id': task['episode_id']})
             source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
             channel = (source or {}).get('event', {}).get('channel', {})
+            if not channel and (source or {}).get('direction') == 'internal' \
+                    and source.get('event', {}).get('episode_kind') == 'visit':
+                # Her own visit (ADR-012 §4.2): no platform input to answer; she speaks to the group on its route.
+                channel = {'id': scene['channel_id'], 'target': route['target'], 'platform_event_id': None,
+                           'account_id': self.store.config['channels'][scene['channel_id']]['account_id']}
             if (channel.get('id') != scene['channel_id'] or channel.get('target') != route['target']
                     or channel.get('account_id') != self.store.config['channels'][scene['channel_id']]['account_id']):
                 raise Denied('PUBLICATION_SOURCE_TARGET_MISMATCH')

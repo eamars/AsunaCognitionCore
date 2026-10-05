@@ -923,8 +923,20 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       ctx.effect(() => ctx.uiConversation.events.register(definition));
 
     // ── the collaboration thread ──────────────────────────────────────
-    /** The action session's own records for one stretch of work, as DSH renders them (a fragment). */
+    // The action brain's records render inline only where DSH's Chat offers its fragment factory (the local
+    // rendering extension, ADR-010 D7); elsewhere a work row opens the action session in DSH's own subagent view.
+    const inlineChat = () => ctx.slots.snapshot('factory:conversation.chat.content').length > 0;
+    const openSubagent = (child, parent) => ctx.sidebarRight.openResource('dsh-resource://subagentchat/session/'
+      + encodeURIComponent(child) + '?' + new URLSearchParams({ parent, mode: 'one-shot' }),
+      { kind: 'subagentchat', preferNewPane: true });
     function Work(props) {
+      if (inlineChat()) return h(InlineWork, props);
+      const { entry, parent, t } = props;
+      return h(Button, { size: 'sm', variant: 'ghost', onClick: () => openSubagent(entry.child_session_id, parent) },
+        t('collab.open'));
+    }
+    /** The action session's own records for one stretch of work, as DSH renders them (a fragment). */
+    function InlineWork(props) {
       const { entry, parent } = props;
       const [reference, setReference] = React.useState(null), [error, setError] = React.useState('');
       React.useEffect(() => {
@@ -992,9 +1004,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       }, [thread.state]);
       const parent = thread.open?.parent_session_id ?? props.sessionId;
       const child = thread.child;
-      const openAside = child && parent ? () => ctx.sidebarRight.openResource('dsh-resource://subagentchat/session/'
-        + encodeURIComponent(child) + '?' + new URLSearchParams({ parent, mode: 'one-shot' }),
-        { kind: 'subagentchat', preferNewPane: true }) : null;
+      const openAside = child && parent ? () => openSubagent(child, parent) : null;
       return h('section', { className: 'asuna-collab', 'aria-label': t('collab.header', {
         character: t('brain.character'), action: t('brain.executor') }) },
         h('div', { className: 'asuna-collab-head' },

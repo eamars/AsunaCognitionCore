@@ -39,7 +39,7 @@ def prepare_resources(destination: Path) -> list:
     return mappings
 
 
-WORKER_DEPENDENCIES = ['httpx', 'pymongo', 'jsonschema', 'pydantic', 'PyYAML']
+WORKER_DEPENDENCIES = ['httpx', 'pymongo', 'jsonschema', 'pydantic', 'PyYAML', 'tzdata']
 
 
 def pinned_requirements(roots):
@@ -97,7 +97,7 @@ build-backend = "hatchling.build"
 name = "asuna-cognition-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["httpx==0.28.1", "pymongo==4.16.0", "jsonschema==4.26.0", "pydantic==2.12.5", "PyYAML==6.0.3"]
+dependencies = ["httpx==0.28.1", "pymongo==4.16.0", "jsonschema==4.26.0", "pydantic==2.12.5", "PyYAML==6.0.3", "tzdata==2026.4"]
 [tool.hatch.build.targets.wheel]
 packages = ["asuna"]
 ''', encoding='utf-8')

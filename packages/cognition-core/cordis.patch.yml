@@ -44,6 +44,10 @@
                   thresholdChars: 8192
                   headChars: 4096
                   tailChars: 1024
+              # read_image puts pictures in this session: past the route's image budget, DSH swaps the
+              # oldest for placeholders and retries, as its base preset does, instead of ending the turn.
+              - id: image-offload
+                name: '@deepseek-ai/dsh-compaction-image-offload'
     - id: asuna-summary-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:

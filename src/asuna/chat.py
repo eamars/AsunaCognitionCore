@@ -148,9 +148,16 @@ class Chat:
                 if self.on_turn_finished:
                     self.on_turn_finished()
 
-    def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None):
+    def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None, media=None):
+        if media:
+            # Pictures the owner attached (vision.local_uploads): their placeholders lead the text, as a
+            # platform's do, so history and recall know a picture came even after her session compacts.
+            marks = ' '.join(item['placeholder'] for item in media['items'])
+            text = marks + ('\n' + text if text else '')
         event = {'event_id': event_id or str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
+        if media:
+            event['raw'] = {'asuna_media': media}
         if native_session_id:
             event.update(native_session_id=native_session_id,native_message_ids=native_message_ids or [])
         config=self.app.config

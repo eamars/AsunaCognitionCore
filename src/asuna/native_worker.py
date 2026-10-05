@@ -738,8 +738,14 @@ class BusinessWorker:
             if existing and (existing['scene_id'], existing['person_id'], existing['lane']) != (
                     local['scene_id'], local['person_id'], 'character'):
                 raise Denied('NATIVE_INPUT_SOURCE_MISMATCH')
+            media = None
+            if args.get('images'):
+                # Pictures the owner attached: DSH shows them to her; the program keeps its own record.
+                from .vision import local_uploads
+                scene = self.app.store.db.scenes.find_one({'_id': local['scene_id']}, {'scope_key': 1})
+                media = local_uploads(self.app.store, scene['scope_key'], args['images'], args['message_ids'][0])
             return self.controller.submit(args['text'], event_id=args['message_ids'][0],
-                native_session_id=session_id, native_message_ids=args['message_ids'])
+                native_session_id=session_id, native_message_ids=args['message_ids'], media=media)
         if method == 'result':
             with self.pending_lock:
                 future = self.pending.get(args['token'])

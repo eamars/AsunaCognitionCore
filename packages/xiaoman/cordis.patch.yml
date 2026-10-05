@@ -34,3 +34,7 @@
                   thresholdChars: 8192
                   headChars: 4096
                   tailChars: 1024
+              # Pictures the owner sends in her local chat stay in this session: past the route's image
+              # budget, DSH swaps the oldest for placeholders and retries instead of ending her turn.
+              - id: image-offload
+                name: '@deepseek-ai/dsh-compaction-image-offload'

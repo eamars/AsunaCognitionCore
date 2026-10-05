@@ -50,6 +50,25 @@ const textOf = message => (message?.content ?? []).filter(x => x.type === 'text'
  * conversation shows each as hers. `seen_inputs`: platform lines in her view for the first time — after the
  * last request of any earlier stage, before this stage's last request; DSH builds a request before the
  * `asuna/stage` mark it gets, so a line written after that mark waits for the next stage to be seen. */
+/** Pictures attached to the owner's local messages (DSH keeps them in her conversation, so she sees them),
+ * read back for the program's own record: history, her action brain's read_image, an image she may send on.
+ * At most 8; one that cannot be read is reported, never skipped. */
+export async function imagesOf(attachments, messages, signal) {
+  const refs = messages.flatMap(message => (message?.content ?? [])
+    .filter(block => block.type === 'image' && block.attachment).map(block => block.attachment)).slice(0, 8);
+  const images = [];
+  for (const ref of refs) {
+    try {
+      const { data } = await attachments.readImage(ref, signal);
+      images.push({ data: Buffer.from(data).toString('base64'), media_type: ref.mediaType, name: ref.name ?? null,
+        width: ref.width, height: ref.height, attachment_id: ref.attachmentId });
+    } catch (error) {
+      images.push({ name: ref.name ?? null, error: String(error?.code ?? error?.message ?? error).slice(0, 120) });
+    }
+  }
+  return images;
+}
+
 export function stageView(events, token, turn) {
   const marks = events.filter(event => event.type === 'asuna/stage' && event.data.operation === token);
   const first = marks[0]?.seq ?? Infinity, lastRequest = marks.at(-1)?.seq ?? -1;
@@ -526,11 +545,15 @@ export class CognitionCore {
         if (lane !== 'character') throw new Error('Action sessions accept only their bound task');
         if (state.current) throw new Error('Asuna role input arrived during an unfinished stage');
         const humans = state.claimed.splice(0);
+        // DSH's attachment store when the host provides one (read without making it a requirement of the role).
+        const attachments = scope.reflect.get('attachments');
+        const images = attachments ? await imagesOf(attachments, humans, signal) : [];
         const waiting = this.next(agent.session.id, signal);
         // Observe both failures immediately; the signal also releases waiting.
         const [, stage] = await Promise.all([
           this.worker.call('input', { session_id: agent.session.id, cwd: agent.session.header.cwd,
-            message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n') }), waiting,
+            message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n'),
+            ...(images.length ? { images } : {}) }), waiting,
         ]);
         if (stage.error) throw new Error(stage.error);
         state.admitted = stage;

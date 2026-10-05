@@ -98,6 +98,51 @@ def sniff_media_type(data):
     return None
 
 
+LOCAL_UPLOAD = 'local-upload:'          # source of a picture the owner attached in her local chat (+ event id)
+
+
+def local_uploads(store, scope_key, images, event_id):
+    """Pictures the owner attached in her local chat → her images in that chat (BlobStore, kind image) and the
+    media block her input row records, the same shape a platform adapter writes. DSH already shows each picture
+    to her; this is the program's record of it. A retried input stores nothing twice; one that could not be
+    read is recorded as such, never dropped."""
+    from .blobs import BlobStore
+    source = LOCAL_UPLOAD + str(event_id)
+    items = []
+    for image in list(images or ())[:MAX_ITEMS_PER_MESSAGE]:
+        image = image if isinstance(image, dict) else {}
+        name = _clean(image.get('name'), 120) or 'image'
+        try:
+            data = base64.b64decode(image.get('data') or '', validate=True)
+        except ValueError:
+            data = b''
+        media_type = sniff_media_type(data) if data else None
+        if image.get('error') or not media_type or len(data) > HARD_MAX_BYTES:
+            items.append({'type': 'image', 'placeholder': f'[图片：{name}（没能读取）]', 'file': name,
+                          'unreadable': _clean(image.get('error'), 120) or ('IMAGE_TOO_LARGE' if media_type
+                                                                            else 'IMAGE_TYPE_UNSUPPORTED')})
+            continue
+        digest = sha(data)
+        stored = store.db.artifacts.find_one({'scope_key': scope_key, 'kind': 'image', 'sha256': digest,
+                                              'source_ids': source, 'state': 'DONE', 'storage': 'gridfs'})
+        artifact = stored['_id'] if stored else BlobStore(store).put(
+            data, scope_key, 'image', media_type=media_type, source_ids=[source])['artifact_id']
+        item = {'type': 'image', 'placeholder': f'[图片：{name}]', 'file': name, 'size': str(len(data)),
+                'artifact_id': artifact, 'sha256': digest, 'media_type': media_type}
+        for key in ('width', 'height'):
+            if isinstance(image.get(key), int) and not isinstance(image.get(key), bool):
+                item[key] = image[key]
+        items.append(item)
+    return {'origin': 'local_upload', 'count': len(items), 'items': items} if items else None
+
+
+def local_upload_item(message, item):
+    """A picture the program stored itself from the owner's local chat: never a platform message's claim."""
+    return (isinstance(item, dict) and isinstance(item.get('artifact_id'), str)
+            and (media_block(message) or {}).get('origin') == 'local_upload'
+            and not (message or {}).get('event', {}).get('channel'))
+
+
 def vision_capability(config):
     """这条模型路由现在到底能不能收图：只看配置声明，不看模型名字。"""
     route = (config or {}).get('executor', {})
@@ -142,12 +187,22 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
                  'summary': _clean(item.get('summary'), 80)}
         if name:
             entry['file'] = name
+        if local_upload_item(message, item):
+            # Stored by the program when the owner sent it: read back from the blob store, no host involved.
+            reason = None if 'image' in vision['input_modalities'] else 'route_declares_image_input=false（当前模型路由不收图片）'
+            entry.update(pullable=reason is None, pull_via='blob', in_conversation=True)
+            if reason:
+                entry['not_pullable_because'] = reason
+            out.append(entry)
+            continue
         if url:
             entry['url_host'] = host
         reason = None
         scheme_ok = bool(parsed and parsed.scheme in ('https', 'http') and not parsed.username and not parsed.password)
         local_ok = bool(name and vision['image_dirs'] and '/' not in name and '\\' not in name)
-        if 'image' not in vision['input_modalities']:
+        if item.get('unreadable'):
+            reason = 'unreadable（' + _clean(item['unreadable'], 80) + '）'
+        elif 'image' not in vision['input_modalities']:
             # 路由本身不收图：清单里就标不可拉，别让她以为拉了能看到东西。
             reason = 'route_declares_image_input=false（当前模型路由不收图片）'
         elif not url and not local_ok:
@@ -340,13 +395,20 @@ def read_image_for_task(store, blobs, task, config, args):
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE:' + str(entry.get('not_pullable_because') or ''))
-    full = dict(entry)
-    full['url'] = (media_source_url(store, task, config, entry))
-    data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
+    if entry.get('pull_via') == 'blob':
+        # A picture from the owner's local chat: already stored when it arrived; read it back, store nothing new.
+        data, blob = local_upload_bytes(store, blobs, task, config, entry, max_bytes)
+        media_type, via, source = sniff_media_type(data), 'blob', {'host': '', 'content_type': ''}
+    else:
+        full = dict(entry)
+        full['url'] = (media_source_url(store, task, config, entry))
+        data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
+        blob = None
     digest = sha(data)
-    # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
-    blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
-                      source_ids=[entry['source_message_id']]) if blobs else None)
+    if blob is None:
+        # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
+        blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
+                          source_ids=[entry['source_message_id']]) if blobs else None)
     payload = {'ref': ref, 'scene_id': task['scene_id'],
                'image_scene_id': _clean(entry.get('scene_id'), 90) or task['scene_id'],
                'linked_scene': bool(entry.get('linked_scene')),
@@ -362,6 +424,33 @@ def read_image_for_task(store, blobs, task, config, args):
         payload['scene_note'] = ('这张图来自本场景按配置只读联动的另一个场景（同一个人在那边的入口）。'
                                  '放宽的只有读：字节按本任务的 scope 存，写与出站不因此放宽。')
     return payload
+
+
+def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
+    """A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the
+    program's own local input (no platform envelope), and the artifact must be in that row's scope with that
+    input as its source — a platform message naming an artifact id gets nothing."""
+    scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
+    if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
+        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
+    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
+                                      'policy_epoch': task['policy_epoch']})
+    items = (media_block(row) or {}).get('items') or [] if row else []
+    item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
+    if not local_upload_item(row, item):
+        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
+    artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE',
+                                            'storage': 'gridfs'})
+    if (not blobs or not artifact or artifact.get('scope_key') != row.get('scope_key')
+            or LOCAL_UPLOAD + str(row['event'].get('event_id')) not in (artifact.get('source_ids') or [])):
+        raise ValueError('IMAGE_SOURCE_UNAVAILABLE')
+    data = blobs.get(artifact['_id'], artifact['scope_key'], operator=True)
+    cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
+    if len(data) > cap:
+        raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+    if sniff_media_type(data) is None:
+        raise ValueError('IMAGE_TYPE_UNSUPPORTED:只支持 png/jpeg/webp/gif（按魔数判定）')
+    return data, {'artifact_id': artifact['_id'], 'sha256': artifact['sha256']}
 
 
 def media_source_url(store, task, config, entry):
@@ -418,8 +507,11 @@ def media_note(message, config):
             'count': block.get('count'), 'truncated': bool(block.get('truncated')),
             'can_pull': capability['supported'],
             'unsupported_because': capability['unsupported_because'] or None,
-            'meaning': ('图片只有元数据和占位符，尚未进入上下文；有需要时可委托行动脑按需读取。'
-                        '不拉就不进上下文。占位符本身不代表看过图片；其他媒体仍只有占位符。')}
+            'meaning': (('这些是对方在本机聊天里直接发给你的图，就在对话里，你看得见。要交给行动脑处理，'
+                         '把图的 ref 一起交代给它，它用 read_image 读。')
+                        if block.get('origin') == 'local_upload' and not (message or {}).get('event', {}).get('channel')
+                        else ('图片只有元数据和占位符，尚未进入上下文；有需要时可委托行动脑按需读取。'
+                              '不拉就不进上下文。占位符本身不代表看过图片；其他媒体仍只有占位符。'))}
     return {k: v for k, v in note.items() if v is not None}
 
 

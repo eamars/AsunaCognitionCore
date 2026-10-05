@@ -22,6 +22,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': '一件事',
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
       'collab.state.done': '已完成', 'collab.state.failed': '没做成', 'collab.state.stopped': '已叫停',
+      'collab.state.paused': '已暂停', 'collab.paused': '宿主重启时暂停了；要接着做，在本机私聊里请她继续。',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
       'collab.work': '工作了 {duration}', 'collab.call': '{n} 次工具调用', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
       'collab.more': '展开全文', 'collab.less': '收起', 'collab.progress': '进展',
@@ -131,6 +132,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': 'A task',
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
       'collab.state.done': 'Done', 'collab.state.failed': 'Not finished', 'collab.state.stopped': 'Stopped',
+      'collab.state.paused': 'Paused', 'collab.paused': 'Paused when the Host restarted; ask her in the local chat to continue.',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
       'collab.work': 'Worked {duration}', 'collab.call': '{n} tool call', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
       'collab.more': 'Show all', 'collab.less': 'Show less', 'collab.progress': 'Progress',
@@ -466,12 +468,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     const asked = entries.findLast(entry => entry.kind === 'question');
     const answered = asked && entries.slice(entries.indexOf(asked)).some(entry => entry.kind === 'answer');
     let state = statuses.at(-1)?.state ?? (open ? 'running' : 'queued');
-    if (asked && !answered && !['done', 'failed', 'stopped'].includes(state)) state = 'waiting';
-    // A continuation runs again after a finished run.
-    if (['done', 'failed'].includes(state) && last && last !== statuses.at(-1) && ['message', 'open'].includes(last.kind)) state = 'queued';
+    if (asked && !answered && !['done', 'failed', 'stopped', 'paused'].includes(state)) state = 'waiting';
+    // A continuation runs again after a finished or paused run.
+    if (['done', 'failed', 'paused'].includes(state) && last && last !== statuses.at(-1) && ['message', 'open'].includes(last.kind)) state = 'queued';
     const started = Date.parse(entries[0]?.at), ended = Date.parse(last?.at);
     return { title, open, state, stopped: statuses.findLast(entry => entry.state === 'stopped'),
-      elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
+      elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
   }
 
   // ── her tool rows (ADR-011 §7.2) ────────────────────────────────────
@@ -911,8 +913,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         ...entries.filter(entry => entry.kind !== 'open').map(entry =>
           entry.kind === 'work' ? h(WorkRow, { key: entry.id, entry, t, parent, SessionProvider: props.SessionProvider,
               renderSlot: props.renderSlot })
-            : entry.kind === 'status' ? (entry.state === 'stopped' && h('p', { key: entry.id, style: small },
-              t('collab.stopped', { reason: entry.reason ?? '' })))
+            : entry.kind === 'status' ? (entry.state === 'stopped' ? h('p', { key: entry.id, style: small },
+              t('collab.stopped', { reason: entry.reason ?? '' }))
+              : entry.state === 'paused' && entry === entries.at(-1) && h('p', { key: entry.id, style: small }, t('collab.paused')))
             : h(Bubble, { key: entry.id, entry, t })));
     }
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({

@@ -150,12 +150,15 @@ class TaskService:
             task = self.store.db.tasks.find_one({'_id': task_id})
             if not task or task['state'] in ('CANCELLED', 'STALE', 'PAUSED'):
                 return task
-            return self.store.put('tasks', {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
+            paused = self.store.put('tasks', {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
                 'paused_at': now(), 'paused_state': task['state'], 'paused_feedback_state': task.get('feedback_state'),
                 'feedback_state': 'PAUSED', 'fencing_token': task['fencing_token'] + 1,
                 'execution_binding': task.get('execution_binding') or
                     f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"},
                 expected=task['revision'], stream=task_id)
+        # Without it the thread would still read as queued or running (ADR-011 §7.1).
+        self.collab(paused,'status',{'state':'paused','reason':'host_restart'},'status:'+task_id+':paused:'+str(paused['fencing_token']))
+        return paused
 
     @contextmanager
     def keepalive(self,task,interval=30):

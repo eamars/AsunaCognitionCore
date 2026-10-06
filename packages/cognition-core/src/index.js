@@ -8,6 +8,7 @@ import * as skillFilesystem from '@deepseek-ai/dsh-skill-filesystem';
 import SkillService from '@deepseek-ai/dsh-skill';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
+import { imageRefusalListener } from './image-refusal.js';
 import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
@@ -864,6 +865,9 @@ export function apply(ctx, config = {}) {
     const release = settings.configure({ auto: false }, ctx.fiber);
     return () => { if (core.settings === settings) core.settings = null; return release(); };
   }));
+  // A picture the model refuses becomes DSH's offload placeholder in that conversation, and the request is tried
+  // once more, instead of ending her turn and every later one there (image-refusal.js).
+  ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   ctx.on('dispose', () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;
     return core.dispose();

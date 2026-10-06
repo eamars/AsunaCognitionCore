@@ -28,6 +28,9 @@ except Exception:                     # 拿不到就整体不带附件位，行�
     outbound_media = None
 
 # 主动机会给角色看的说明：只说清这是什么、她能选什么，不暗示她该说。
+CHAIN_NOTE = ('群里在跟队形：好几个人接连发了同一样东西，没人叫你。要跟就发同样的东西：一句话就照抄；'
+              '是表情包就先用 sticker 的 keep 收下那条的表情包 ref，再单独写「[表情包:名字]」。'
+              '这一串程序只叫你这一次；跟不跟、怎么跟由你定，不跟就 stay_silent。')
 PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的闸门（安静时段、群里现在的语速、'
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
                   '说多少、还是继续旁听，都由你定。沉默不需要理由，也不因为"有机会"就该开口。'
@@ -533,6 +536,13 @@ class ContextBuilder:
                           'current_speaker_tail': list(reversed(speaker_tail))}
             if str(group.get('wake_reason') or '').startswith('proactive'):
                 continuity['proactive_from_program'] = PROACTIVE_NOTE
+            elif group.get('wake_reason') == 'chain' and isinstance(group.get('chain'), dict):
+                # Owner 2026-10-06: a chain forming is when joining fits; she decides, once per chain.
+                chain = group['chain']
+                continuity['chain_from_program'] = {
+                    'what': '同一张表情包或图' if chain.get('media') else excerpt(chain.get('what'), 60),
+                    'people': '%d 个人接连发了这个' % int(chain.get('people') or 0),
+                    'note': CHAIN_NOTE}
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}

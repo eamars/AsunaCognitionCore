@@ -75,7 +75,8 @@ def _clock(text, fallback):
 
 def route_settings(config, scene):
     """这个群场景开没开主动模式。没配 = 一切照旧（旁听就是旁听），不猜默认开启。"""
-    limits = {'enabled': False, 'quiet_windows': [tuple(QUIET_DEFAULT[0])], 'utc_offset_minutes': None,
+    limits = {'enabled': False, 'quiet_windows': [(_clock(start, 0), _clock(end, 0)) for start, end in QUIET_DEFAULT],
+              'utc_offset_minutes': None,
               'probe_interval_seconds': PROBE_INTERVAL_SECONDS,
               'min_interval_seconds': MIN_INTERVAL_SECONDS, 'max_per_hour': MAX_PER_HOUR,
               'dense_max_gap': DENSE_MAX_GAP, 'merge_window_seconds': MERGE_WINDOW_SECONDS,
@@ -92,6 +93,11 @@ def route_settings(config, scene):
     if route is None:
         return limits
     block = route.get('proactive')
+    if isinstance(block, dict) and block.get('enabled') is not True:
+        # Off, but its night and offset still decide when a chain may call her (chain_decision).
+        offset = block.get('utc_offset_minutes')
+        if type(offset) is int and -840 <= offset <= 840:
+            limits['utc_offset_minutes'] = offset
     if not isinstance(block, dict) or block.get('enabled') is not True:
         return limits
     windows = []
@@ -290,26 +296,92 @@ def decide(profile, limits, *, now_ts=None, can_run=True):
                                 'min_interval_seconds', 'max_per_hour', 'note')}}
 
 
+# ── 跟队形（owner 2026-10-06）：好几个人接连发同一句或同一张，正是该叫她的时候 ──────────
+CHAIN_REASON = 'chain'
+CHAIN_PEOPLE = 3              # 至少这么多个不同的人接连发了同一样东西才算队形
+CHAIN_SCAN = 12               # 往回看几行找这串队形
+
+
+def _chain_key(row):
+    """这一行「发的是什么」：同一句话，或同一张图/表情包（按文件，商城表情按 id）；认不出就 None。"""
+    items = (((row.get('event') or {}).get('raw') or {}).get('asuna_media') or {}).get('items') or []
+    text = (row.get('text') or '').strip()
+    if items and text.startswith('['):
+        marks = [str(item.get('emoji_id') or item.get('file') or '') for item in items]
+        return ('media', tuple(marks)) if all(marks) else None
+    return ('text', text) if text else None
+
+
+def chain(store, scene, row, *, character=None):
+    """这条行是不是正在形成的队形：结尾一串同样内容、来自至少 CHAIN_PEOPLE 个不同的人、她还没跟过、
+    这串也还没叫过她。返回 {'what','people','media','first'}；不是就 None。只读已落库的行。"""
+    rows = list(store.db.messages.find(
+        {'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch'),
+         'scene_seq': {'$lte': row.get('scene_seq') or 0},
+         '$or': [{'direction': 'inbound'}, {'direction': OUTBOUND}]},
+        {'scene_seq': 1, 'direction': 1, 'author': 1, 'text': 1, 'proactive': 1, 'event.raw.asuna_media': 1})
+        .sort('scene_seq', -1).limit(CHAIN_SCAN))
+    if not rows or rows[0]['_id'] != row['_id']:
+        return None
+    key = _chain_key(rows[0])
+    if key is None:
+        return None
+    run = []
+    for item in rows:
+        if item.get('direction') != 'inbound' or _chain_key(item) != key:
+            break                      # 她自己的话或别的内容截断了这串：她已经跟过，或队形断了
+        run.append(item)
+    people = {item.get('author') for item in run}
+    if len(people) < CHAIN_PEOPLE or any(((item.get('proactive') or {}).get('chain') or {}).get('woke')
+                                         for item in run[1:]):
+        return None
+    return {'what': rows[0].get('text') or '', 'people': len(people), 'media': key[0] == 'media',
+            'first': run[-1]['_id']}
+
+
+def chain_decision(found, limits, now_ts, can_run):
+    """队形叫她只看两道闸：深夜安静时段，前台正忙。快速连发、冷却、每小时上限都不拦——队形本来就是快的，
+    一串只叫一次。"""
+    holds = []
+    if in_quiet(local_minutes(now_ts, limits.get('utc_offset_minutes')), limits.get('quiet_windows') or []):
+        holds.append('quiet_hours')
+    if not can_run:
+        holds.append('foreground_busy')
+    return {'fire': not holds, 'holds': holds, 'signals': ['chain'] if not holds else [], 'chain': found,
+            'note': '%d 个人接连发了同一%s' % (found['people'], '张' if found['media'] else '句')}
+
+
 def consider(store, evidence, config, scene, row, *, now_ts=None, can_run=True):
     """旁听行落库之后的一次评估：把决定写进那一行，返回（决定，可直接入队的事件）。
 
     不调模型、不发 QQ、不新增集合；写不下去（CAS 撞车）就当这次没评估，下一条消息还会再问。
+    队形在她所有的群里都叫她（没开主动模式的群也一样），其余照主动模式的闸门。
     """
     limits = route_settings(config, scene)
     moment = now_ts() if now_ts is None else now_ts
-    if not limits['enabled']:
+    found = chain(store, scene, row) if isinstance(scene, dict) and scene.get('kind') == 'group' else None
+    if found:
+        decision = chain_decision(found, limits, moment, can_run)
+    elif not limits['enabled']:
         return {'fire': False, 'holds': [limits.get('why') or 'not_enrolled'], 'signals': [],
                 'note': '这个场景没开主动模式，照旧只旁听'}, None
-    profile = observe(store, scene, now_ts=moment, trigger=row, limits=limits)
-    decision = decide(profile, limits, now_ts=moment, can_run=can_run)
+    else:
+        profile = observe(store, scene, now_ts=moment, trigger=row, limits=limits)
+        decision = decide(profile, limits, now_ts=moment, can_run=can_run)
     current = store.db.messages.find_one({'_id': row['_id']})
     if not current:
         return decision, None
     event = dict(current.get('event') or {})
-    if decision['fire']:
+    if decision['fire'] and found:
+        event['group_context'] = {**(event.get('group_context') or {}), 'wake_reason': CHAIN_REASON,
+                                  'topic_via': 'chain',
+                                  'chain': {k: found[k] for k in ('what', 'people', 'media')}}
+    elif decision['fire']:
         event['group_context'] = {**(event.get('group_context') or {}),
                                   'wake_reason': WAKE_REASON, 'topic_via': 'proactive'}
     record = {field: decision.get(field) for field in REPORT_FIELDS}
+    if found:
+        record['chain'] = {**{k: found[k] for k in ('people', 'media', 'first')}, 'woke': bool(decision['fire'])}
     record.update(decided_at=datetime.fromtimestamp(moment, timezone.utc).isoformat(),
                   wake=bool(decision['fire']))
     try:

@@ -19,6 +19,7 @@ GATED = {
     'proactive_unprompted': '群里在聊，没人叫你；按群里的节奏，这会儿可以插一句',
     'reply_in_active_topic': '有人在你说过话的那条线里接话，不是回你',
     'name_called': '有人提到了你的名字，但没有 @ 你',
+    'chain': '群里在跟队形：好几个人接连发了同一句或同一张，没人叫你',
 }
 CHOICES = {'接话': 'join', '不理': 'quiet'}
 # Catch-up: the lines since she last spoke here, reaching back at least 10 and at most 60 minutes.

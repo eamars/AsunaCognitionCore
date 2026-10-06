@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import copy
 
-from . import scene_links
+from . import channel_kinds, scene_links
 
 OWNER_PRIVATE = 'owner_private'
 PUBLIC = 'public'
@@ -40,6 +40,8 @@ def session_class(config, db, scene: dict, person_id: str) -> str:
         return OWNER_PRIVATE
     if scene.get('kind') == 'dm' and scene_links.canonical_person_id(config, db, person_id) == owner:
         return OWNER_PRIVATE
+    if channel_kinds.home(scene_id):
+        return OWNER_PRIVATE          # ADR-017: a trusted home channel (the owner's own agents), not a platform
     return PUBLIC
 
 
@@ -65,7 +67,8 @@ def owner_private_scenes(config) -> set:
             if not isinstance(route, dict) or (route.get('target') or {}).get('type') != 'dm':
                 continue
             person = route.get('person_id')
-            if person and mapping.get(person, person) == owner and route.get('scene_id'):
+            if route.get('scene_id') and ((person and mapping.get(person, person) == owner)
+                                          or channel_kinds.home(route['scene_id'])):
                 scenes.add(route['scene_id'])
     return scenes
 

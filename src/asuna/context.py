@@ -480,6 +480,16 @@ class ContextBuilder:
                 from .vision import vision_capability as _vision
                 mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+        # ADR-017: at home the owner may send her on an errand; where it can go, and what came of the last ones
+        # (program words only: nobody's reply comes home this way).
+        if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind')!='settlement':
+            from . import places as _places
+            targets=_places.errand_places(self.store,persona)
+            if targets:
+                context['errand_places_from_program']=targets
+            errands=_places.errands_block(self.store,persona,moment)
+            if errands:
+                context['errands_from_program']=errands
         # ADR-016: her sticker shelf where stickers can go out (and at home, to tidy it), the platform's faces.
         from . import stickers as _stickers
         if _stickers.sends(scene):

@@ -203,6 +203,15 @@ TOOLS = {
                        'topic': _s('想聊的话头，80 字以内，可省略'),
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
+    'errand': {
+        'description': ('替主人去别处说一句：去 errand_places_from_program 里的某个群或私聊。只在主人让你办的时候用。'
+                        'request 照抄主人要你带过去的话（或他交代的事）；exactly=true 是他要你原样转达。'
+                        '程序会在那边开一轮，那一轮只看得到那边和这句话，家里的事带不过去；你在那边再决定怎么说，'
+                        '不合适就不发。办没办成之后在家里的 errands_from_program 看，那边的人怎么回的不会带回来。'),
+        'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
+                       'request': _s('主人要带过去的话或交代的事，500 字以内', required=True),
+                       'exactly': {'type': 'boolean', 'description': '主人要原样转达时为 true'}},
+    },
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
                         '不叫醒你，以后也不补发；你自己的话照常发得出去。关多久由你选：an_hour 一小时，'
@@ -306,6 +315,9 @@ def exposed(store, ep):
         names.append('promote_memory')
     if (context.get('lines_from_program') or {}).get('items'):
         names.append('peer_line')
+    # ADR-017: in a home conversation the owner may send her on an errand to another chat.
+    if cls == visibility.OWNER_PRIVATE and context.get('errand_places_from_program'):
+        names.append('errand')
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
         names.append('visit')
@@ -375,6 +387,9 @@ WORDS = {
     'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
     'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
+    'ERRAND_PLACE_UNKNOWN': '没有这个地方；照抄 errand_places_from_program 里的 place。',
+    'ERRAND_LIMIT': '今天替人跑腿的次数用完了，明天再办。',
+    'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊、旧居那条线）才能接主人的差事。',
     'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
     'IMAGE_NOT_PULLABLE': '这张图拉不到。',
     'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
@@ -808,6 +823,16 @@ class RoleTools:
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，出不了门。')
         return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
+
+    def tool_errand(self, ep, call_id, args):
+        from .places import ERRAND_CHARS
+        if self._cls(ep) != visibility.OWNER_PRIVATE:
+            raise Denied('ERRAND_ONLY_AT_HOME')
+        place = self._text(args, 'place', 40)
+        request = self._text(args, 'request', ERRAND_CHARS)
+        if not self.coordinator.scheduler:
+            raise Refused('现在没有定时服务，办不了。')
+        return self.coordinator.scheduler.errand(ep, place, request, bool(args.get('exactly'))), False
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_peer_line(self, ep, call_id, args):

@@ -22,8 +22,11 @@ def persist_input(store, event, *, managed=False):
     scene = store.authorize(event['scene_id'], event['person_id'])
     # Host-origin opportunities (no user message): self-development, heartbeat, nightly settlement.
     internal = event.get('episode_kind') in INTERNAL_KINDS
+    where = INTERNAL_SCENE_KIND.get(event.get('episode_kind'), 'dm')
+    if event.get('episode_kind') == 'visit' and (event.get('visit') or {}).get('intent') == 'errand':
+        where = ('group', 'dm') if scene.get('channel_id') else ()      # ADR-017: an owner errand, to a platform chat
     if internal and (event.get('adapter_id') != INTERNAL_KINDS[event['episode_kind']]
-                     or scene['kind'] != INTERNAL_SCENE_KIND.get(event['episode_kind'], 'dm')):
+                     or scene['kind'] not in ((where,) if isinstance(where, str) else where)):
         raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED' if event['episode_kind'] == 'self_development' else 'INTERNAL_SOURCE_DENIED')
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})

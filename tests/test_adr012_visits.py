@@ -127,6 +127,59 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
         service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
 
 
+def test_the_owner_sends_her_on_an_errand_and_only_its_status_comes_home(store):
+    """ADR-017: home -> a group or a configured DM; the turn there sees that chat and the owner's words only;
+    home sees a program status, never anyone's reply."""
+    service = group_world(store)
+    store.config['channels']['qq']['routes']['r3'] = {'scene_id': 'dm-b', 'target': {'type': 'dm', 'id': 's-b'},
+                                                      'sender_id': 's-b', 'person_id': 'B'}
+    store.db.scenes.update_one({'_id': 'dm-b'}, {'$set': {'channel_id': 'qq', 'channel_account_id': 'acct'}})
+    store.db.messages.insert_one({'_id': 'home-secret', 'schema_version': 1, 'scene_id': 'dm-a', 'policy_epoch': 1,
+        'scene_seq': 999, 'direction': 'inbound', 'author': 'A', 'text': 'HOME_SECRET_LINE', 'received_at': now()})
+    home = FakeLane(store, [FakeTurn([THINK, ('errand', {'place': PLACE, 'request': '今晚八点开会', 'exactly': True}),
+                                      ('errand', {'place': places.place_id('dm-b'), 'request': '问他周末来不来'})],
+                                     '好，我去说')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    ep = coordinator.ingest({'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '帮我去群里说一声'})
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'errand' in home.calls[0]['tools']
+    names = {item['name'] for item in ep['context']['errand_places_from_program']}
+    assert len(names) == 2 and not any('dm-a' in name for name in names)            # never a home chat
+    assert all(row[5] for row in home.tool_results if row[2] == 'errand'), home.tool_results
+    (kind_g, event_g, scene_g, person_g), (kind_d, event_d, scene_d, person_d) = service.controller.offers[-2:]
+    assert (kind_g, scene_g, kind_d, scene_d, person_d) == ('visit', 'g1', 'visit', 'dm-b', 'B')
+    envelope = service.controller.envelopes[-2]
+    assert envelope['visit']['intent'] == 'errand' and envelope['visit']['request'] == '今晚八点开会' and envelope['visit']['exactly']
+    # The errand turn in the group: the owner's words and the room, nothing from home.
+    group = FakeLane(store, [FakeTurn([THINK], '主人让我转告：今晚八点开会')])
+    visit = Coordinator(store, group).ingest({'event_id': event_g, 'scene_id': 'g1', 'person_id': person_g,
+        'adapter_id': 'visit', 'episode_kind': 'visit', 'text': service.controller.texts[-2], **envelope})
+    assert visit['state'] in ('COMMITTED', 'WAITING_TASK'), visit.get('failure')
+    block = visit['context']['visit_from_program']
+    assert block['request'] == '今晚八点开会' and '原样' in block['how'] and visit['manifest']['session_class'] == 'public'
+    assert 'HOME_SECRET_LINE' not in json.dumps([visit['context'], group.calls], ensure_ascii=False)
+    assert not {'errand', 'visit'} & set(group.calls[0]['tools'])
+    said = store.db.messages.find_one({'episode_id': visit['_id'], 'direction': 'outbound'})
+    store.db.messages.update_one({'_id': said['_id']}, {'$set': {'delivery_state': 'DELIVERED', 'receipt_at': now()}})
+    line(store, 'g1', 'm-reply', 'REPLY_FROM_THE_GROUP', minutes_ago=0)
+    # Home: the status in program words; the group's reply does not come home.
+    later = FakeLane(store, [FakeTurn([THINK], '嗯')])
+    back = Coordinator(store, later).ingest({'event_id': 'ask-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '办了吗'})
+    states = {item['state'] for item in back['context']['errands_from_program']['items']}
+    assert states == {'发出去了，那边有人接'}                         # the DM errand was never queued in this fake
+    assert 'REPLY_FROM_THE_GROUP' not in json.dumps(back['context'], ensure_ascii=False)
+
+
+def test_the_old_home_line_is_a_trusted_home_conversation(store):
+    from asuna import channel_kinds, visibility
+    from asuna.config import ROOT
+    channel_kinds.load([{'python': ROOT / 'packages' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
+    scene = {'_id': 'dsh:new-home:dm:old-home', 'kind': 'dm'}
+    assert visibility.session_class(store.config, store.db, scene, 'dsh:old-home') == visibility.OWNER_PRIVATE
+    assert visibility.session_class(store.config, store.db, {'_id': 'qq:1:dm:2', 'kind': 'dm'}, 'qq:2') == visibility.PUBLIC
+
+
 def test_at_home_other_peoples_group_lines_do_not_arrive_live(store):
     """ADR-017 (owner 2026-10-06): public words reach home only through her own review, never in a heartbeat."""
     from asuna.config import character_id

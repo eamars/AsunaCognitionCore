@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from .channels import route_members
-from .config import ago, character_id
+from .config import ago, character_id, excerpt
 from .evidence import sha
 
 TABLES_VERSION = 1
@@ -19,7 +19,7 @@ TABLES_VERSION = 1
 ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊'), (None, '很热闹'))
 # Different people who spoke over the last hour.
 VOICES = ((0, '没有人'), (1, '一个人'), (3, '两三个人'), (None, '好几个人'))
-INTENTS = {'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
+INTENTS = {'errand': '主人交代的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
            'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记'}
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
@@ -71,6 +71,76 @@ def groups(config):
 def find(config, place):
     return next(((scene_id, route, channel) for scene_id, route, channel in groups(config)
                  if place_id(scene_id) == place), None)
+
+
+# ── errands (ADR-017, owner 2026-10-06): from a home turn the owner may have her say something elsewhere ──────
+ERRAND_CHARS = 500
+ERRANDS_PER_DAY = 20
+ERRANDS_SHOWN = 5
+ERRAND_STATES = {'answered': '发出去了，那边有人接', 'unanswered': '发出去了', 'sending': '正在发',
+                 'not_sent': '没发出去', 'silent': '她没发', 'notes': '她没发', 'failed': '没办成（出错了）',
+                 'pending': '还在路上'}
+
+
+def errand_targets(config):
+    """(scene_id, route, channel) for every platform chat she has a route to that is not a home one: her groups
+    nobody blocked, and the direct chats configured for her."""
+    from . import visibility
+    home = visibility.owner_private_scenes(config)
+    for channel in (config.get('channels') or {}).values():
+        blocked = set(channel.get('blocked_groups') or [])
+        for route in (channel.get('routes') or {}).values():
+            target = route.get('target') or {}
+            if route.get('scene_id') in home or target.get('type') not in ('group', 'dm')                     or (target['type'] == 'group' and target.get('id') in blocked):
+                continue
+            yield route['scene_id'], route, channel
+
+
+def find_errand(config, place):
+    return next(((scene_id, route, channel) for scene_id, route, channel in errand_targets(config)
+                 if place_id(scene_id) == place), None)
+
+
+def errand_places(store, persona):
+    """errand_places_from_program: where an errand can go, by name."""
+    from .people import People
+    people = People(store, persona)
+    items = []
+    for scene_id, route, _ in errand_targets(store.config):
+        scene = store.db.scenes.find_one({'_id': scene_id})
+        if scene:
+            items.append({'place': place_id(scene_id), 'name': people.scene_title(scene),
+                          'kind': '群' if route['target']['type'] == 'group' else '私聊'})
+    return items
+
+
+def errands_lately(store, moment):
+    """Errands queued in the last day (the daily cap counts these)."""
+    since = (moment - timedelta(days=1)).isoformat()
+    return store.db.messages.count_documents({'event.visit.intent': 'errand', 'received_at': {'$gte': since}})
+
+
+def errand_text(exactly):
+    return ('这是主人在家里交代你来这里办的一件事，不是这里有人叫你。他的原话在 visit_from_program.request。'
+            + ('他要你原样转达：照原话发，前面带一句「主人让我转告」。' if exactly else '用适合这里的话把事办了。')
+            + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。家里的事这一轮看不到，也别提。')
+
+
+def errands_block(store, persona, moment):
+    """errands_from_program at home: what came of her last errands, as program words only -- never what anyone
+    there said back (ADR-017: public words reach home only through her own review)."""
+    from .people import People
+    people = People(store, persona)
+    rows = list(store.db.messages.find({'event.visit.intent': 'errand'},
+                                       {'scene_id': 1, 'received_at': 1, 'event.event_id': 1, 'event.visit': 1})
+                .sort('received_at', -1).limit(ERRANDS_SHOWN))
+    items = []
+    for row in rows:
+        scene = store.db.scenes.find_one({'_id': row['scene_id']}) or {'_id': row['scene_id']}
+        state = outcome(store, {'scene_id': row['scene_id'], 'event_id': row['event']['event_id']})
+        items.append({'to': people.scene_title(scene), 'asked': excerpt(row['event']['visit'].get('request'), 60),
+                      'state': ERRAND_STATES.get(state, state), 'when': _ago(moment, _at(row.get('received_at')))})
+    return {'items': items, 'note': '你最近替主人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'}         if items else None
 
 
 def visitor(route, channel):
@@ -304,6 +374,10 @@ def visit_block(store, scene, visit, moment):
              'basis': '你上次说话以后，有人叫过你' if here['called'] else '没人叫你：开口是你自己的主意',
              'note': ('这是你自己出门来的。先读懂这里在聊什么、是谁在说，再决定要不要开口；接不上就别硬接，'
                       '沉默也是正常结果。看到值得记的（谁是谁、聊什么、什么话题和图合适），可以写进群笔记。')}
+    if visit.get('intent') == 'errand':
+        block.update(basis='主人交代的：不是这里有人叫你', request=visit.get('request') or '',
+                     how='原样转达，前面带「主人让我转告」' if visit.get('exactly') else '用适合这里的话说',
+                     note='这是主人交代你来办的事。先读懂这里在聊什么，再用合适的方式把话带到；不合适就不发。')
     if visit.get('topic'):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):

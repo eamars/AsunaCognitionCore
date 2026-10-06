@@ -34,6 +34,7 @@ RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
+IDEAS_PAGE = 20                 # one page of her notebook (read_ideas pages and searches the rest)
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
 # Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
@@ -299,8 +300,10 @@ TOOLS = {
         'parameters': {'idea': _s('想法：想把什么变得怎样', required=True), 'why': _s('为什么想到这个', required=True)},
     },
     'read_ideas': {
-        'description': '主人在私聊里叫你做自我改进时，读出想法本里还没处理完的想法（之后用 review_idea 逐条决定）。',
-        'parameters': {},
+        'description': ('读出想法本里还没处理完的想法（之后用 review_idea 逐条决定）：先没处理的、再暂缓的，旧的在前，'
+                        '一页 %d 条。page 翻页；search 写几个字，只列想法或理由里带这几个字的。' % IDEAS_PAGE),
+        'parameters': {'page': {'type': 'integer', 'description': '第几页，从 1 开始，可省略'},
+                       'search': _s('只看带这几个字的想法（40 字以内），可省略')},
     },
     'review_idea': {
         'description': ('自我改进时，对想法本里的一条写下处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、'
@@ -366,7 +369,7 @@ def exposed(store, ep):
             return names + ['watch']
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
-        names.append('review_idea')
+        names += ['read_ideas', 'review_idea']           # the listing shows the first page; she reads on herself
     elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
         names += ['read_ideas', 'review_idea']
     capabilities = context.get('action_capabilities_from_program') or {}
@@ -1084,11 +1087,25 @@ class RoleTools:
 
     def tool_read_ideas(self, ep, call_id, args):
         from . import schedule_rules
-        items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc())
-        more = ideas_left(self.store, ep['persona'], len(items))
-        return {'items': items, **({'more': more} if more else {}),
-                'note': '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
-                if items else '想法本里没有还没处理完的想法。'}, False
+        try:
+            page = int(args.get('page') or 1)
+        except (TypeError, ValueError):
+            raise Refused('page 是从 1 开始的整数。') from None
+        search = self._text(args, 'search', 40, required=False)
+        total = len(idea_rows(self.store, ep['persona'], search))
+        pages = max(1, -(-total // IDEAS_PAGE))
+        if page < 1 or page > pages:
+            raise Refused('只有 %d 页（%d 条）。' % (pages, total))
+        items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc(), page=page, search=search)
+        after = total - (page - 1) * IDEAS_PAGE - len(items)
+        if not items:
+            note = ('没有带「%s」的、还没处理完的想法。' % search) if search else '想法本里没有还没处理完的想法。'
+        else:
+            note = '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
+        return {'items': items, 'page': '第 %d 页，共 %d 页（%d 条%s）' % (page, pages, total,
+                                                                        '带「%s」' % search if search else ''),
+                **({'more': '后面还有 %d 条：page=%d 接着看。' % (after, page + 1)} if after > 0 else {}),
+                'note': note}, False
 
     def tool_review_idea(self, ep, call_id, args):
         idea_id = self._text(args, 'idea', 200)
@@ -1130,16 +1147,25 @@ def note_idea(store, persona, idea, why, *, key, source):
     return row
 
 
-def ideas_block(store, persona, moment, limit=20):
-    """Her notebook for a self-improvement turn, in words: open ideas first (oldest first), then deferred ones, so
-    ideas she put off never crowd out new ones (ideas_left counts what the limit leaves out)."""
+def idea_rows(store, persona, search=None):
+    """Her undecided ideas in reading order: open ones first (oldest first), then deferred ones, so ideas she put
+    off never crowd out new ones. search keeps those whose idea or reason contains it."""
+    import re
+    query = {'persona': persona}
+    if search:
+        query['$or'] = [{'idea': {'$regex': re.escape(search)}}, {'why': {'$regex': re.escape(search)}}]
+    return [row for state in ('open', 'deferred')
+            for row in store.db.ideas.find({**query, 'state': state}).sort('created_at', 1)]
+
+
+def ideas_block(store, persona, moment, limit=None, page=1, search=None):
+    """Her notebook in words, one page (ideas_left counts what the first page leaves out)."""
     from datetime import datetime
     from .config import ago
     from .people import People
     people = People(store, persona)
-    rows = list(store.db.ideas.find({'persona': persona, 'state': 'open'}).sort('created_at', 1).limit(limit))
-    rows += list(store.db.ideas.find({'persona': persona, 'state': 'deferred'}).sort('created_at', 1)
-                 .limit(limit - len(rows))) if len(rows) < limit else []
+    limit = limit or IDEAS_PAGE
+    rows = idea_rows(store, persona, search)[(page - 1) * limit:page * limit]
     items = []
     for row in rows:
         try:
@@ -1159,7 +1185,8 @@ def ideas_block(store, persona, moment, limit=20):
 def ideas_left(store, persona, shown):
     """Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None."""
     waiting = store.db.ideas.count_documents({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
-    return '还有 %d 条没列出，处理掉几条就会轮到它们。' % (waiting - shown) if waiting > shown else None
+    return ('还有 %d 条没列出：read_ideas 翻页（page）或按字找（search），处理掉几条也会轮到它们。' % (waiting - shown)
+            if waiting > shown else None)
 
 
 def _seed_text(store, slug):

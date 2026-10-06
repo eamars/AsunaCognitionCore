@@ -128,8 +128,28 @@ def test_open_ideas_come_before_deferred_ones_and_the_rest_are_counted(store):
     fresh = note_idea(store, 'P1', '新想法', '因为', key=['n'], source=source)
     items = ideas_block(store, 'P1', datetime.now(timezone.utc), limit=2)
     assert [item['_id'] for item in items] == [fresh['_id'], deferred[0]['_id']]
-    assert ideas_left(store, 'P1', len(items)) == '还有 2 条没列出，处理掉几条就会轮到它们。'
+    assert ideas_left(store, 'P1', len(items)).startswith('还有 2 条没列出：read_ideas 翻页')
     assert ideas_left(store, 'P1', 4) is None
+
+
+def test_she_can_page_and_search_her_whole_notebook(store):
+    """The first page is 20; ideas past it were out of her sight (2026-10-07). read_ideas pages and searches."""
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    from asuna.role_tools import IDEAS_PAGE, Refused, note_idea
+    rows = [note_idea(store, 'P1', '想法 %02d' % n, '因为', key=['p', n], source={'by': 'character'})
+            for n in range(IDEAS_PAGE + 3)]
+    note_idea(store, 'P1', '群里裸发命令要一个不引用的开关', '引用会让 bot 认不出', key=['q'], source={'by': 'character'})
+    tools = Coordinator(store, FakeLane(store, [])).tools
+    ep = {'persona': 'P1'}
+    first, _ = tools.tool_read_ideas(ep, 'c1', {})
+    assert len(first['items']) == IDEAS_PAGE and first['more'].startswith('后面还有 4 条：page=2')
+    second, _ = tools.tool_read_ideas(ep, 'c2', {'page': 2})
+    assert [item['_id'] for item in second['items']][:3] == [row['_id'] for row in rows[IDEAS_PAGE:]] and 'more' not in second
+    found, _ = tools.tool_read_ideas(ep, 'c3', {'search': '不引用'})
+    assert [item['idea'] for item in found['items']] == ['群里裸发命令要一个不引用的开关'] and '带「不引用」' in found['page']
+    with pytest.raises(Refused, match='只有 2 页'):
+        tools.tool_read_ideas(ep, 'c4', {'page': 3})
 
 
 # ---- nightly tidying ---------------------------------------------------------------

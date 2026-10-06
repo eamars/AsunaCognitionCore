@@ -409,10 +409,10 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     ref = args.get('ref')
     if not isinstance(ref, str) or not 4 <= len(ref) <= 80:
         raise ValueError('INVALID_READ_IMAGE_REF')
-    max_bytes = args.get('max_bytes')
-    if max_bytes is not None and (not isinstance(max_bytes, int) or isinstance(max_bytes, bool)
-                                  or not 1024 <= max_bytes <= HARD_MAX_BYTES):
-        raise ValueError('INVALID_READ_IMAGE_MAX_BYTES')
+    # The size cap is the program's (vision.max_bytes); DSH scales every picture for the model. A caller's own
+    # max_bytes only refused pictures over its guess (2026-10-06: 20 KB-200 KB guesses on stickers), so an old
+    # call that still sends one is read with the program's cap.
+    max_bytes = None
     capability = vision_capability(config, route)
     if not capability['supported']:
         raise ValueError('VISION_ROUTE_UNSUPPORTED:' + ';'.join(capability['unsupported_because']))
@@ -593,8 +593,9 @@ READ_IMAGE_TOOL = {
                     '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
                     'ref 也可以是一张已存好的图的 artifact_id（blob-…）：自己画的图（generate_image 回执里的 '
                     'artifact.artifact_id）、本场景存过的图、这一轮可发的图——画完或发之前用它亲眼看一遍。'
-                    '路由不支持图片、主机不在白名单、超限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
-    'parameters': {'ref': {'type': 'string', 'required': True}, 'max_bytes': {'type': 'integer'}}}
+                    '大小不用管：程序按自己的上限拉，给模型之前会自己缩放。'
+                    '路由不支持图片、主机不在白名单、超过程序上限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
+    'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 
 class VisionService:

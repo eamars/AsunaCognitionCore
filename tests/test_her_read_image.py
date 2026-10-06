@@ -91,6 +91,20 @@ def test_a_picture_she_drew_can_be_looked_at_from_any_scene(store, tmp_path):
     assert base64.b64decode(result['image']['data']) == PNG and result['pulled_via'] == 'artifact' and result['produced']
 
 
+def test_the_size_cap_is_the_programs_not_a_guess_in_the_call(store, tmp_path):
+    """She used to pass max_bytes guesses (20 KB-200 KB) and had her own stickers refused as too large."""
+    from asuna.blobs import BlobStore
+    from asuna.vision import READ_IMAGE_TOOL, read_image_for_task
+    world(store, tmp_path)
+    big = PNG + b'x' * 5000
+    ref = BlobStore(store).put(big, 'scene:dm-a', 'image', media_type='image/png', source_ids=['in-someone'])['artifact_id']
+    store.config.update(executor={**store.config.get('executor', {}), 'input_modalities': ['text', 'image']})
+    task = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
+    result = read_image_for_task(store, BlobStore(store), task, store.config, {'ref': ref, 'max_bytes': 1024})
+    assert result['bytes'] == len(big)
+    assert set(READ_IMAGE_TOOL['parameters']) == {'ref'}
+
+
 def test_a_picture_in_the_scene_itself_can_be_looked_at_again(store, tmp_path):
     world(store, tmp_path)
     here = stored(store, 'scene:dm-a', 'in-someone')

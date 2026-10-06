@@ -110,9 +110,23 @@ TOOLS = {
         'description': ('等不等回话。群里你这回合的话 @ 了谁、或是在回谁，程序默认等他：发出去后大约三分钟里，'
                         '他下一句哪怕没 @ 你、没引用你，也会叫你看一眼（接话／不理），一句话只看一次。'
                         'wait=no 关掉这回合的等待（比如只是随口一句、不需要他回）；'
-                        '没 @ 谁也没在回谁、却想等这里谁的回话，就 wait=yes。'),
+                        '没 @ 谁也没在回谁、却想等这里谁的回话，就 wait=yes。只管你这一句、这个群、三分钟；'
+                        '想几个小时里、在哪儿都知道某个人开口，用 watch。'),
         'parameters': {'wait': _s('等还是不等', required=True, enum=['yes', 'no']),
                        'why': _s('wait=yes 时：在等什么回话，一句话')},
+    },
+    'watch': {
+        'description': ('盯一个人：on 把这个对话里看得到的一个人加进 watch 名单（person 写他的标签、#编号或名字），'
+                        '之后他在你任何一个对话里说话，你都会在他说话的那个对话里知道（群里会叫你看一眼，接不接由你）。'
+                        'mode=once（默认）他第一次说话就叫你，然后不盯了；burst 他每次沉默十分钟以上再开口都叫你，到期为止。'
+                        'hours 盯多久（1–72）。最多同时盯 5 个人，到期自己停；off 停掉一个（id 照抄 watching_from_program）。'
+                        '等刚说的那句的回话不用盯：@ 了或回了谁，程序本来就会等他三分钟（await_answer）。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['on', 'off']),
+                       'person': _s('on 用：这个对话里的人（标签、#编号或名字）'),
+                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72'},
+                       'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
+                       'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
+                       'id': _s('off 用：watching_from_program 里的 id')},
     },
     'attach_image': {
         'description': ('给这回合要说的话配一张图，随话一起发出去。artifact_id 只能照抄 image_artifacts_from_program '
@@ -327,6 +341,8 @@ def exposed(store, ep):
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
+    if scene_kind in ('group', 'dm') or context.get('watching_from_program'):
+        names.append('watch')
     if scene_kind == 'group':
         names.append('await_answer')
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
@@ -422,6 +438,12 @@ WORDS = {
     'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
     'STICKER_CANDIDATE_NOT_LOOKED': '先用 read_image 看过这个候选（ref 照抄 candidate），再收或记。',
     'STICKER_NOT_LOOKED': '先用 read_image 看过这个表情包，再记它是什么。',
+    'WATCH_HOURS_INVALID': 'hours 是 1 到 72 之间的整数。',
+    'WATCH_MODE_INVALID': 'mode 是 once 或 burst。',
+    'WATCH_PERSON_NOT_HERE': '这个对话里找不到这个人：照抄他的标签或 #编号。',
+    'WATCH_PERSON_UNCLEAR': '这个名字对得上不止一个人：用标签里的 #编号。',
+    'WATCH_LIST_FULL': 'watch 名单满了（最多 5 个）：先 off 一个。',
+    'WATCH_NOT_FOUND': '名单上没有这个 id：照抄 watching_from_program 里的 id。',
     'STICKER_NO_FINGERPRINT': '这个表情包平台没给能认出它的标记，记不住；想留着就 keep。',
     'STICKER_CANDIDATE_GONE': '这个候选已经不在池子里了（挤掉了或收过了）。',
     'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
@@ -575,6 +597,17 @@ class RoleTools:
             raise Refused('how 是 source（引用叫你的那条）或 none（不引用）。')
         self.coordinator._update(self._fresh(ep), quote=how)
         return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
+
+    def tool_watch(self, ep, call_id, args):
+        from . import watches
+        op = args.get('op')
+        if op == 'on':
+            if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
+                raise Refused('只能在看得到这个人的对话里盯他（群或私聊）。')
+            return watches.add(self.store, ep, ep['persona'], self._cls(ep), args), False
+        if op == 'off':
+            return watches.stop(self.store, ep['persona'], args.get('id')), False
+        raise Refused('op 是 on 或 off。')
 
     def tool_await_answer(self, ep, call_id, args):
         wait = args.get('wait', 'yes')

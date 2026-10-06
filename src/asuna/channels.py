@@ -227,6 +227,13 @@ class Channels:
         from . import lines
         if lines.is_closed(self.store, route['scene_id']):
             return {'status': 'line_closed'}           # she closed this peer line: passed over, never replayed
+        from . import watches
+        watched = watches.seen(self.store, member['person_id'])
+        if watched:
+            # Someone on her watchlist spoke: she hears of it here, where they spoke (owner 2026-10-06).
+            event['watched'] = watched['_id']
+            if 'group_context' in event and not event['group_context']['wake_reason']:
+                event['group_context']['wake_reason'] = 'watched'     # one look, through the relevance gate
         return self.controller.receive(event)
 
     def _valid_publication(self, message, channel_id):

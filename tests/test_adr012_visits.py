@@ -343,5 +343,14 @@ def test_at_home_she_sees_what_she_herself_did_elsewhere_and_nothing_anyone_said
     [item] = block['items']
     assert '一句' in item['you'] and '1张你自己画的图' in item['you'] and item['handed_over'] == ['画一张自画像（做完回来了）']
     assert '都是你' in block['note']
+    # Her other home lines too: seen from another home conversation, what she did in this one is listed as home.
+    store.db.messages.insert_one({'_id': 'mine-home', 'schema_version': 1, 'scene_id': 'dm-a', 'policy_epoch': 1,
+        'scene_seq': 800, 'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
+        'text': 'MY_HOME_LINE', 'receipt_at': now()})
+    from asuna import places as _places, visibility
+    assert 'dm-a' in visibility.owner_private_scenes(store.config)
+    again = _places.elsewhere(store, 'P1', datetime.now(timezone.utc), {'another-home-line'},
+                              visibility.owner_private_scenes(store.config))
+    assert any(item['where'].endswith('（家里）') for item in again['items'])
     text = json.dumps(block, ensure_ascii=False)
     assert 'SOMEONE_ELSES_LINE' not in text and 'MY_OWN_LINE' not in text

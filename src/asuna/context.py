@@ -496,7 +496,7 @@ class ContextBuilder:
         if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence'):
             # Owner 2026-10-06: her own doings elsewhere, as words (heartbeats have recent_experience instead).
             from . import places as _places
-            done_elsewhere=_places.elsewhere(self.store,persona,moment,visibility.owner_private_scenes(self.store.config)|{scene['_id']})
+            done_elsewhere=_places.elsewhere(self.store,persona,moment,{scene['_id']},visibility.owner_private_scenes(self.store.config))
             if done_elsewhere:
                 context['elsewhere_from_program']=done_elsewhere
         if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external')=='external':

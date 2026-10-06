@@ -411,8 +411,9 @@ def _lines_word(count):
     return '一句' if count == 1 else '几句' if count <= 4 else '十来句' if count <= 15 else '很多句'
 
 
-def elsewhere(store, persona, moment, home):
-    """elsewhere_from_program: per place outside home in the last hours, what she said, sent and handed over."""
+def elsewhere(store, persona, moment, home, private=()):
+    """elsewhere_from_program: per other conversation in the last hours (groups, others' chats and her other home
+    lines alike; `home` is the one she is in), what she said, sent and handed over."""
     from .people import People
     since = (moment - timedelta(hours=ELSEWHERE_HOURS)).isoformat()
     me = character_id(store.config)
@@ -447,11 +448,11 @@ def elsewhere(store, persona, moment, home):
             did.append('发了%d张你自己画的图' % place['pictures'])
         if place['stickers']:
             did.append('发了%d个表情包' % place['stickers'])
-        item = {'where': people.scene_title(scene), 'you': '，'.join(did) or '没说话',
+        item = {'where': people.scene_title(scene) + ('（家里）' if scene_id in private else ''), 'you': '，'.join(did) or '没说话',
                 'last': _ago(moment, place['last']) if place['last'] else ''}
         if place['tasks']:
             item['handed_over'] = place['tasks'][:3]
         items.append(item)
     return {'items': items,
-            'note': '这是你自己最近 %d 小时在别处做过的事（只有你做的，没有别人的话）。那些回合看不到家里，'
-                    '家里也只看到这些；都是你。' % ELSEWHERE_HOURS}
+            'note': '这是你自己最近 %d 小时在别的对话里做过的事（只有你做的，没有别人的话）。每个对话只看得到'
+                    '自己那一块，这里补上你在别处干过什么；都是你。' % ELSEWHERE_HOURS}

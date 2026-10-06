@@ -72,6 +72,7 @@ class People:
         from .persona_model import effective
         from .render import model_and_policy
         persona = persona or chat.get('persona') or self.self_id
+        self.persona = persona
         model, policy = model_and_policy(store, persona) if persona else ({}, {})
         self.owner_label = safe_name(effective(model, 'people.owner_label', policy)) or '本机用户'
         self.self_name = safe_name(chat.get('display_name')) or str(self.self_id or '')
@@ -388,8 +389,9 @@ class People:
             lines.append('  > 回复 %s：%s' % (self.speaker(scene, parent.get('author')), excerpt(quote, REPLY_EXCERPT)))
         body = self.mentions(scene, row.get('text') or '', account)
         lines += ['  ' + line for line in body.split('\n')]
+        from .stickers import recognized
         from .vision import line_refs
-        refs = line_refs(row, self.config)
+        refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries))
         if refs:
             lines.append('  ' + refs)
         return '\n'.join(lines)

@@ -26,6 +26,16 @@ def sticker_of(item):
         return 'market'
     return 'custom' if str(item.get('sub_type') or '').strip() in ('1', '7') else None
 
+
+# QQ names a picture's file by the md5 of its bytes (checked on live stickers, 2026-10-06).
+MD5_FILE = re.compile(r'([0-9A-Fa-f]{32})\.[A-Za-z0-9]{2,5}')
+
+
+def sticker_md5(item):
+    match = MD5_FILE.fullmatch(str(item.get('file') or '').strip())
+    return match.group(1) if match else None
+
+
 ACCOUNT = re.compile(r'[0-9]{4,20}')
 # The adapter writes a real @ in inbound text as @<account>; her outbound @ reaches it as @qq:<account>.
 INBOUND_MENTION = re.compile(r'@(\d{5,12})')

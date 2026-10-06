@@ -124,12 +124,14 @@ TOOLS = {
                         '「表情包 ref」（att-…），或你自己画的图的 artifact_id（blob-…）；起个名字（name），写一句什么时候用'
                         '（when）。只有表情包能收，照片不行；架子满了先 drop 一个。drop：按名字放下一个。'
                         'rename：改名字（new_name）或用法（when）。sticker_candidates_from_program 里的候选：先 read_image 看过，'
-                        '再 keep 并写 candidate。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename']),
+                        '再 keep 并写 candidate。remember：看过但不想收的表情包（ref 或 candidate），记个名字和一句它在说什么'
+                        '（when），以后再有人发它，下面会标你认得它，不用再看；记错了再 remember 一次就改了。'
+                        '收下和记住的名字、说明在群里也会被看到。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内', required=True),
-                       'ref': _s('keep 用：表情包 ref（att-…）或你自己画的图的 artifact_id（blob-…）'),
-                       'candidate': _s('keep 用：候选池里的 candidate（照抄 sticker_candidates_from_program，先看过）'),
-                       'when': _s('keep 必填、rename 可改：什么时候用它，40 字以内'),
+                       'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
+                       'candidate': _s('keep/remember 用：候选池里的 candidate（照抄 sticker_candidates_from_program，先看过）'),
+                       'when': _s('keep、remember 必填，rename 可改：什么时候用它／它在说什么，40 字以内'),
                        'new_name': _s('rename 用：新名字')},
     },
     'write_document': {
@@ -352,6 +354,10 @@ def exposed(store, ep):
     return names
 
 
+STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看：用 sticker 的 remember 记个名字和一句它在说什么'
+                       '（ref 照抄）；想收着自己发就 keep。都不想就不用管。')
+
+
 def offered_pictures(ep):
     """The artifact ids her turn may send (image_artifacts_from_program): she may also look at them."""
     from .stickers import candidate_ids
@@ -414,7 +420,9 @@ WORDS = {
     'STICKER_IS_A_PHOTO': '这是一张照片，不是表情包：照片不能收。',
     'STICKER_NOT_REACHABLE': '这个表情包拉不到了（链接可能过期了），收不了。',
     'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
-    'STICKER_CANDIDATE_NOT_LOOKED': '先用 read_image 看过这个候选（ref 照抄 candidate），再收。',
+    'STICKER_CANDIDATE_NOT_LOOKED': '先用 read_image 看过这个候选（ref 照抄 candidate），再收或记。',
+    'STICKER_NOT_LOOKED': '先用 read_image 看过这个表情包，再记它是什么。',
+    'STICKER_NO_FINGERPRINT': '这个表情包平台没给能认出它的标记，记不住；想留着就 keep。',
     'STICKER_CANDIDATE_GONE': '这个候选已经不在池子里了（挤掉了或收过了）。',
     'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
@@ -632,6 +640,8 @@ class RoleTools:
         if ref:                                       # what she looked at this turn (a candidate is kept only after)
             fresh = self._fresh(ep)
             self.coordinator._update(fresh, looked=[*dict.fromkeys([*(fresh.get('looked') or []), ref])])
+        if isinstance(result, dict) and result.get('sticker'):
+            result['sticker_note'] = STICKER_LOOKED_NOTE
         return result, False
 
     def tool_attach_image(self, ep, call_id, args):
@@ -667,7 +677,9 @@ class RoleTools:
             return stickers.drop(self.store, ep['persona'], args.get('name')), False
         if op == 'rename':
             return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when')), False
-        raise Refused('op 是 keep、drop 或 rename。')
+        if op == 'remember':
+            return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
+        raise Refused('op 是 keep、drop、rename 或 remember。')
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):

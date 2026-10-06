@@ -90,6 +90,16 @@ def sticker_of(item):
     return None
 
 
+def sticker_md5(item):
+    """The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind)."""
+    for kind in _KINDS.values():
+        found = getattr(kind, 'sticker_md5', None)
+        value = found(item) if found else None
+        if value:
+            return value.upper()
+    return None
+
+
 def image_hosts():
     """The media hosts the installed platforms deliver images from (vision's default allowlist)."""
     return [host for kind in _KINDS.values() for host in getattr(kind, 'IMAGE_HOSTS', ())]

@@ -243,3 +243,63 @@ def test_group_stickers_wait_in_a_pool_and_reach_her_shelf_only_after_she_looks(
     stickers.rotate(store)
     [left] = list(store.db.sticker_pool.find({}))
     assert left['source_message_id'] == 'in-market'                        # the least recently seen left first
+
+
+def test_a_sticker_she_kept_or_looked_at_is_named_when_it_comes_back(store, monkeypatch):
+    """Owner 2026-10-06: stickers she kept, or looked at and named, stay known by fingerprint for good; posted
+    again, the line under them says what she called them, so she need not look again."""
+    import hashlib
+    from asuna.people import People
+    refs = group_world(store, monkeypatch)
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    ep = {'scene_id': SCENE, 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'], 'persona': 'P1',
+          'looked': []}
+    stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': refs['custom'], 'name': '摸鱼', 'when': '有人摸鱼的时候'},
+                  store.config)
+    # QQ names a picture's file by the md5 of its bytes: the same sticker posted again is known by its name alone.
+    md5 = hashlib.md5(PNG + STICKER_URL.encode()).hexdigest().upper()
+    again = media_line(store, 'in-again', '[表情包]', {'file': md5 + '.png', 'url': STICKER_URL + '-expired',
+                                                      'sub_type': '1', 'sticker': 'custom'}, 9)
+    row = store.db.messages.find_one({'_id': 'in-again'})
+    known = lambda entries: stickers.recognized(store, 'P1', entries)
+    assert vision.line_refs(row, store.config, known) == '（表情包 ref：%s，你认得：「摸鱼」，有人摸鱼的时候；在你架子上）' % again
+    assert '你认得：「摸鱼」' in People(store, 'P1').transcript(scene, row)
+    assert vision.line_refs(row, store.config) == '（表情包 ref：%s）' % again       # without memory: as before
+    stickers.rename(store, 'P1', '摸鱼', new_name='划水')
+    stickers.drop(store, 'P1', '划水')
+    assert '「划水」，有人摸鱼的时候；你收过又放下了' in vision.line_refs(row, store.config, known)
+    # Known even when this route cannot look at pictures: the name says what it is.
+    store.config['character']['input_modalities'] = ['text']
+    assert '你认得：「划水」' in vision.line_refs(row, store.config, known)
+    store.config['character']['input_modalities'] = ['text', 'image']
+    # One she looked at and does not want: remembered in her words, only after looking.
+    remember = lambda ref, name, looked: stickers.remember(store, {**ep, 'looked': looked}, 'P1',
+                                                          {'ref': ref, 'name': name, 'when': '嫌弃的意思'}, store.config)
+    with pytest.raises(Exception, match='STICKER_NOT_LOOKED'):
+        remember(refs['market'], '臭', [])
+    with pytest.raises(Exception, match='STICKER_IS_A_PHOTO'):
+        remember(refs['photo'], '照片', [refs['photo']])
+    assert remember(refs['market'], '臭', [refs['market']]) == {'remembered': '臭'}
+    assert remember(refs['market'], '好臭', [refs['market']]) == {'remembered': '好臭'}      # a new look renames it
+    market = store.db.messages.find_one({'_id': 'in-market'})
+    assert '「好臭」，嫌弃的意思；你看过没收' in vision.line_refs(market, store.config, known)
+    nameless = media_line(store, 'in-nameless', '[表情包]', {'file': 'x.png', 'url': STICKER_URL + '3',
+                                                            'sub_type': '1', 'sticker': 'custom'}, 10)
+    with pytest.raises(Exception, match='STICKER_NO_FINGERPRINT'):
+        remember(nameless, '无名', [nameless])
+    # A sticker she knows is no candidate; one she looks at in the pool and lets go leaves it.
+    blobs = BlobStore(store)
+    assert stickers.pool_seen(store, blobs, store.config, 'in-market') == 0
+    assert stickers.pool_seen(store, blobs, store.config, 'in-old') == 1
+    [candidate] = [row['artifact_id'] for row in store.db.sticker_pool.find({})]
+    stickers.remember(store, {**ep, 'looked': [candidate]}, 'P1', {'candidate': candidate, 'name': '老图', 'when': '怀旧'},
+                      store.config)
+    assert store.db.sticker_pool.count_documents({}) == 0
+    assert stickers.pool_seen(store, blobs, store.config, 'in-old') == 0
+    # Her shelf is always known: at startup, a shelf sticker without a memory gets one.
+    store.db.sticker_memory.delete_many({})
+    stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': refs['custom'], 'name': '摸鱼', 'when': '有人摸鱼的时候'},
+                  store.config)
+    store.db.sticker_memory.delete_many({})
+    assert stickers.remember_shelf(store, 'P1') == 1 and stickers.remember_shelf(store, 'P1') == 0
+    assert '「摸鱼」' in vision.line_refs(row, store.config, known)

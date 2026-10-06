@@ -13,10 +13,13 @@ fits; a picture she made herself may go on the shelf too. Only stickers can be k
 - The shelf holds STICKER_SHELF; her turn lists names and notes only. Rotating is hers: a weekly look in
   the nightly settlement lists the ones she has not used, and she drops what she no longer wants. The
   program never drops one for her.
+- A sticker she kept or looked at and named stays known (``sticker_memory``): posted again, its line says
+  what she called it, so she need not look again.
 """
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
 import re
 
 from . import channel_kinds
@@ -42,7 +45,8 @@ ORIGIN_WORDS = {'own': '你自己画的', 'collected': '群里收来的'}
 STICKERS_NOTE = ('这是你收着的表情包（只有名字和你写的用法）。在这里想发哪个，就在要说的话里单独写一行'
                  '「[表情包:名字]」，它会作为单独一条发出去，一回合最多一个；不想发就不用。'
                  '群里别人发的表情包下面会标「（表情包 ref：att-…）」，喜欢的可以用 sticker 的 keep 收下，'
-                 '起个你记得住的名字、写一句什么时候用；只有表情包能收，照片不行。架子有上限，满了先 drop 一个。')
+                 '起个你记得住的名字、写一句什么时候用；只有表情包能收，照片不行。架子有上限，满了先 drop 一个。'
+                 '你认得的表情包（收过的、看过记下的）下面会直接标你给它起的名字。')
 HOME_NOTE = ('这是你收着的表情包。这里发不出去；想整理就用 sticker（drop 放下、rename 改名或改用法），'
              '你自己画的图也可以用 keep 放上来，在群里就能当表情包发。')
 FACES_NOTE = ('%s 自己的小黄脸写「[表情:名字]」，夹在话里就行，会变成真的表情；名字要用 %s 的'
@@ -123,12 +127,15 @@ def keep(store, blobs, ep, persona, args, config):
             data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, scene, config, entry)}, config)
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
-                       media_type=media_type or sniff_media_type(data), identity='sha:' + stored['sha256'])
+                       media_type=media_type or sniff_media_type(data), identity='sha:' + stored['sha256'],
+                       md5=hashlib.md5(data).hexdigest().upper())
     same = store.db.stickers.find_one({'persona': persona, 'identity': doc['identity']})
     if same:
         raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
     doc['_id'] = 'stk-' + sha((persona + '|' + doc['identity']).encode())[:20]
     store.put('stickers', doc, stream='stickers:' + persona)
+    _kept(store, persona, doc)
+    store.db.sticker_pool.delete_many({'identity': doc['identity']})
     count = store.db.stickers.count_documents({'persona': persona})
     return {'kept': name, 'shelf': '%d 个，%s' % (count, fullness(count))}
 
@@ -157,6 +164,7 @@ def rename(store, persona, name, new_name=None, when=None):
     if not changes:
         raise Denied('STICKER_NOTHING_TO_CHANGE')
     store.put('stickers', {**row, **changes}, expected=row['revision'], stream='stickers:' + persona)
+    _kept(store, persona, {**row, **changes})
     return {'renamed': row['name'], **changes}
 
 
@@ -325,6 +333,9 @@ def pool_seen(store, blobs, config, message_id):
     for entry in attachments_of(row, config=config):
         if not entry.get('sticker') or not entry.get('pullable'):
             continue
+        fingerprint = memory_key(entry)
+        if fingerprint and store.db.sticker_memory.find_one({'key': fingerprint}, {'_id': 1}):
+            continue                                   # she knows it already: kept once, or looked and let go
         try:
             data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, task, config, entry)}, config)
         except Exception:
@@ -332,8 +343,11 @@ def pool_seen(store, blobs, config, message_id):
         stored = blobs.put_once(data, SCOPE, 'image', source_ids=[POOL_SOURCE + message_id])
         identity = ('market:' + entry['market']['emoji_id'] if entry['sticker'] == 'market'
                     else 'sha:' + stored['sha256'])
+        md5 = hashlib.md5(data).hexdigest().upper()
         if store.db.stickers.find_one({'identity': identity}, {'_id': 1}):
             continue                                   # already on her shelf
+        if store.db.sticker_memory.find_one({'key': 'md5:' + md5}, {'_id': 1}):
+            continue                                   # known by its bytes, though the platform named it otherwise
         at = row.get('received_at') or now()
         key = 'cand-' + sha(identity.encode())[:16]
         current = store.db.sticker_pool.find_one({'_id': key})
@@ -344,7 +358,7 @@ def pool_seen(store, blobs, config, message_id):
                           expected=current['revision'], stream='sticker-pool')
             else:
                 doc = {'_id': key, 'identity': identity, 'kind': entry['sticker'], 'artifact_id': stored['artifact_id'],
-                       'sha256': stored['sha256'], 'size': stored['size'], 'media_type': media_type,
+                       'sha256': stored['sha256'], 'md5': md5, 'size': stored['size'], 'media_type': media_type,
                        'first_seen': at, 'last_seen': at, 'seen': 1, 'scenes': [scene['_id']],
                        'source_message_id': message_id}
                 if entry['sticker'] == 'market':
@@ -400,8 +414,8 @@ def keep_candidate(store, ep, persona, args):
     row = store.db.sticker_pool.find_one({'artifact_id': candidate})
     if not row:
         raise Denied('STICKER_CANDIDATE_GONE')
-    if candidate not in (ep.get('looked') or []):
-        raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
+    if candidate not in (ep.get('looked') or []) and not known(store, persona, _pool_key(store, row)):
+        raise Denied('STICKER_CANDIDATE_NOT_LOOKED')       # one she knows from before counts as looked
     if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
         raise Denied('STICKER_SHELF_FULL')
     if find(store, persona, name):
@@ -415,8 +429,126 @@ def keep_candidate(store, ep, persona, args):
     if row['kind'] == 'market':
         doc['market'] = row['market']
     else:
-        doc.update(artifact_id=row['artifact_id'], sha256=row['sha256'], size=row['size'], media_type=row.get('media_type'))
+        doc.update(artifact_id=row['artifact_id'], sha256=row['sha256'], size=row['size'], media_type=row.get('media_type'),
+                   md5=row.get('md5') or _md5_of(store, row['artifact_id']))
     store.put('stickers', doc, stream='stickers:' + persona)
+    _kept(store, persona, doc)
     store.db.sticker_pool.delete_one({'_id': row['_id']})
     count = store.db.stickers.count_documents({'persona': persona})
     return {'kept': name, 'shelf': '%d 个，%s' % (count, fullness(count))}
+
+
+# ── the stickers she knows (owner 2026-10-06) ───────────────────────
+# A sticker she looked at and named stays known for good, by a fingerprint: the md5 of a picture's bytes (a
+# platform may name the file by it, channel_kinds.sticker_md5) or a store sticker's ids. When it is posted
+# again, the line under it says what she called it, so she need not look again. The words are only hers: a
+# sticker on her shelf is known by its name and note (and stays known after she drops it); one she looked at
+# and does not want to send she may remember with a name and a line of her own.
+MEMORY_WORDS = {'kept': '在你架子上', 'dropped': '你收过又放下了', 'looked': '你看过没收'}
+
+
+def memory_key(entry):
+    """The fingerprint a posted sticker is known by; None when the platform gives none."""
+    if entry.get('sticker') == 'market':
+        emoji = (entry.get('market') or {}).get('emoji_id')
+        return 'market:' + emoji if emoji else None
+    md5 = channel_kinds.sticker_md5(entry)
+    return 'md5:' + md5 if md5 else None
+
+
+def _md5_of(store, artifact_id):
+    import hashlib
+    from .blobs import BlobStore
+    row = store.db.artifacts.find_one({'_id': artifact_id}, {'scope_key': 1})
+    if not row:
+        return None
+    return hashlib.md5(BlobStore(store).get(artifact_id, row['scope_key'], operator=True)).hexdigest().upper()
+
+
+def _shelf_key(store, doc):
+    if doc.get('kind') == 'market':
+        return 'market:' + doc['market']['emoji_id']
+    md5 = doc.get('md5') or _md5_of(store, doc['artifact_id'])
+    return 'md5:' + md5 if md5 else None
+
+
+def _know(store, persona, key, name, note, how, identity=None):
+    """Write what she knows of one sticker (a new look replaces the old words)."""
+    _id = 'skm-' + sha((persona + '|' + key).encode())[:20]
+    current = store.db.sticker_memory.find_one({'_id': _id})
+    doc = {**(current or {}), '_id': _id, 'persona': persona, 'key': key, 'name': name, 'note': note, 'how': how,
+           'identity': identity or (current or {}).get('identity'), 'at': now()}
+    return store.put('sticker_memory', doc, expected=current and current['revision'], stream='sticker-memory:' + persona)
+
+
+def remember_shelf(store, persona):
+    """Every sticker on her shelf is known (startup: the shelf as it is now)."""
+    count = 0
+    for doc in shelf(store, persona):
+        key = _shelf_key(store, doc)
+        if key and not store.db.sticker_memory.find_one({'persona': persona, 'key': key}, {'_id': 1}):
+            _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'])
+            count += 1
+    return count
+
+
+def _kept(store, persona, doc):
+    key = _shelf_key(store, doc)
+    if key:
+        _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'])
+
+
+def _pool_key(store, row):
+    if row['kind'] == 'market':
+        return row['identity']
+    return 'md5:' + (row.get('md5') or _md5_of(store, row['artifact_id']))
+
+
+def known(store, persona, key):
+    return store.db.sticker_memory.find_one({'persona': persona, 'key': key}) if key else None
+
+
+def recognized(store, persona, entries):
+    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf."""
+    out = {}
+    for entry in entries:
+        row = entry.get('sticker') and known(store, persona, memory_key(entry))
+        if not row:
+            continue
+        how = row['how']
+        if how == 'kept' and not store.db.stickers.find_one({'persona': persona, 'identity': row.get('identity')}, {'_id': 1}):
+            how = 'dropped'
+        out[entry['ref']] = '你认得：「%s」，%s；%s' % (row['name'], row['note'], MEMORY_WORDS[how])
+    return out
+
+
+def remember(store, ep, persona, args, config):
+    """She looked at a posted sticker or a candidate this turn and names it, without keeping it."""
+    from .vision import scene_attachments
+    name, when = _name(args.get('name')), _when(args.get('when'))
+    looked = ep.get('looked') or []
+    candidate = str(args.get('candidate') or '').strip()
+    if candidate:
+        row = store.db.sticker_pool.find_one({'artifact_id': candidate})
+        if not row:
+            raise Denied('STICKER_CANDIDATE_GONE')
+        if candidate not in looked:
+            raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
+        _know(store, persona, _pool_key(store, row), name, when, 'looked')
+        store.db.sticker_pool.delete_one({'_id': row['_id']})
+        return {'remembered': name}
+    ref = str(args.get('ref') or '').strip()
+    scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+    entry = next((item for item in scene_attachments(store, scene, config)['attachments'] if item['ref'] == ref), None)
+    if not entry:
+        raise Denied('STICKER_REF_NOT_HERE')
+    if not entry.get('sticker'):
+        raise Denied('STICKER_IS_A_PHOTO')
+    if ref not in looked:
+        raise Denied('STICKER_NOT_LOOKED')
+    key = memory_key(entry)
+    if not key:
+        raise Denied('STICKER_NO_FINGERPRINT')
+    _know(store, persona, key, name, when, 'looked')
+    store.db.sticker_pool.delete_many({'$or': [{'identity': key}, {'md5': key[4:]}]})
+    return {'remembered': name}

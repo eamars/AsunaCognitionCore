@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import threading
 import time
+import traceback
 
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
@@ -163,6 +164,11 @@ class RuntimeHost:
             local_ready = time.perf_counter()
             from .channel_admission import restore_admissions
             restore_admissions(self.app.store)
+            try:
+                from .stickers import remember_shelf
+                remember_shelf(self.app.store, self.settings['persona'])     # her shelf is always known
+            except Exception:
+                self.evidence.record('sticker.memory_error', {'traceback': traceback.format_exc()[-800:]})
             scenes = prepare_channels(self.app.store)
             channel_scenes_ready = time.perf_counter()
             self.integration = None

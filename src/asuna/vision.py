@@ -444,7 +444,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
                'linked_scene': bool(entry.get('linked_scene')),
                'source_message_id': entry['source_message_id'],
                'placeholder': entry.get('placeholder'), 'summary': entry.get('summary') or None,
-               'media_type': media_type, 'bytes': len(data), 'sha256': digest, 'pulled_via': via,
+               'sticker': entry.get('sticker') or None, 'media_type': media_type, 'bytes': len(data), 'sha256': digest, 'pulled_via': via,
                'source': source, 'blob_artifact': (blob or {}).get('artifact_id'),
                'blob_sha256': (blob or {}).get('sha256'),
                'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
@@ -548,16 +548,20 @@ def task_attachment_context(store, task, config, source_message):
             'unsupported_because': capability['unsupported_because']}
 
 
-def line_refs(message, config):
+def line_refs(message, config, recognize=None):
     """The refs of a platform line's readable pictures, as a short note under the line in her conversation:
-    the placeholder says a picture was there, the ref is what read_image takes. Empty when there is none."""
-    entries = [entry for entry in attachments_of(message, config=config)
-               if entry.get('pullable') or entry.get('sticker') == 'market']
+    the placeholder says a picture was there, the ref is what read_image takes. Empty when there is none.
+    ``recognize`` (entries -> {ref: words}) adds what she already knows of a sticker (stickers.recognized)."""
+    every = attachments_of(message, config=config)
+    known = recognize(every) if recognize else {}
+    entries = [entry for entry in every
+               if entry.get('pullable') or entry.get('sticker') == 'market' or entry['ref'] in known]
     pictures = [entry['ref'] for entry in entries if not entry.get('sticker')]
-    stickers = [entry['ref'] for entry in entries if entry.get('sticker')]
+    stickers = [entry['ref'] + ('，' + known[entry['ref']] if entry['ref'] in known else '')
+                for entry in entries if entry.get('sticker')]
     # A sticker's ref is also what keeping it takes (ADR-016); a store sticker can be kept without looking.
     return (('（图 ref：' + '、'.join(pictures) + '）') if pictures else '') + \
-           (('（表情包 ref：' + '、'.join(stickers) + '）') if stickers else '')
+           (('（表情包 ref：' + ('；' if known else '、').join(stickers) + '）') if stickers else '')
 
 
 def media_note(message, config):

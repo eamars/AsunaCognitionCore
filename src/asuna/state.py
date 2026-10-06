@@ -16,7 +16,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # ADR-011: what the two brains say to each other about a task, and her improvement ideas.
                'task_messages','ideas',
                # ADR-016: the stickers she keeps; the candidates people posted in her groups (owner 2026-10-06).
-               'stickers','sticker_pool')
+               'stickers','sticker_pool',
+               # The stickers she knows by fingerprint, in her words (owner 2026-10-06): kept, or looked at.
+               'sticker_memory')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
@@ -104,6 +106,7 @@ class Store:
             'ideas': [([('persona',1),('state',1),('created_at',1)],{})],
             'stickers': [([('persona',1),('name',1)],{'unique':True}), ([('persona',1),('identity',1)],{'unique':True})],
             'sticker_pool': [([('last_seen',1)],{}), ([('artifact_id',1)],{})],
+            'sticker_memory': [([('persona',1),('key',1)],{'unique':True})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:

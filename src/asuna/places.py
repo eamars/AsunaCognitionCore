@@ -20,7 +20,9 @@ ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊')
 # Different people who spoke over the last hour.
 VOICES = ((0, '没有人'), (1, '一个人'), (3, '两三个人'), (None, '好几个人'))
 INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
-           'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记'}
+           'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记',
+           'note': '你自己的一张便条叫你来的'}
+VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
             'pending': '还在那儿', 'failed': '没去成'}
@@ -381,6 +383,10 @@ def visit_block(store, scene, visit, moment):
         block.update(basis='%s托你办的：不是这里有人叫你' % who, request=visit.get('request') or '',
                      how=('原样转达，前面带「%s让我转告」' % who) if visit.get('exactly') else '用适合这里的话说',
                      note='这是%s托你来办的事。先读懂这里在聊什么，再用合适的方式把话带到；不合适就不发。' % who)
+    if visit.get('intent') == 'note':
+        # ADR-018: what the note says is in note_from_program, with where she wrote it.
+        block.update(basis='你自己在别处写的便条叫你来的：不是这里有人叫你',
+                     note='先读懂这里在聊什么，再决定便条上的事在这里怎么办；不合适就不说，stay_silent。')
     if visit.get('topic'):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):

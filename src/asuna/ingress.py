@@ -4,12 +4,13 @@ from .state import Conflict, Denied, now
 
 
 INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement',
-                  'visit': 'visit'}
-# Where each internal moment may happen: her visit is a group's (ADR-012 §4.2); the rest are private.
+                  'visit': 'visit', 'note': 'note'}
+# Where each internal moment may happen: her visit is a group's (ADR-012 §4.2); the rest are private. A note's own
+# turn (ADR-018) is only ever at home; a note to a group arrives as a visit there.
 INTERNAL_SCENE_KIND = {'visit': 'group'}
 # Core notices queued in a person's scene (task results, due plans). They wake the role but are not
 # that person's words, so memory, summaries and the source list never treat them as speech.
-CORE_NOTICE_KINDS = ('task_feedback', 'scheduled')
+CORE_NOTICE_KINDS = ('task_feedback', 'scheduled', 'note')
 NOT_CORE_NOTICE = {'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)}}
 
 
@@ -28,6 +29,10 @@ def persist_input(store, event, *, managed=False):
     if internal and (event.get('adapter_id') != INTERNAL_KINDS[event['episode_kind']]
                      or scene['kind'] not in ((where,) if isinstance(where, str) else where)):
         raise Denied('SELF_DEVELOPMENT_SOURCE_DENIED' if event['episode_kind'] == 'self_development' else 'INTERNAL_SOURCE_DENIED')
+    if event.get('episode_kind') == 'note':
+        from .visibility import owner_private_scenes
+        if scene['_id'] not in owner_private_scenes(store.config):
+            raise Denied('INTERNAL_SOURCE_DENIED')
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:

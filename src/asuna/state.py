@@ -20,7 +20,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # The stickers she knows by fingerprint, in her words (owner 2026-10-06): kept, or looked at.
                'sticker_memory',
                # Her watchlist: people she wants to hear about when they speak anywhere (owner 2026-10-06).
-               'watches')
+               'watches',
+               # Notes between her own conversations (ADR-018, owner 2026-10-07).
+               'notes')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
@@ -28,7 +30,8 @@ INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_propos
 AUDIT_INLINE_LIMIT = 16 * 1024
 # Counters written with $inc outside a revision (scene sequence, retrieval salience); not part of a document's digest.
 COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',),
-                  'watches': ('last_seen_at', 'appeared')}     # every line of a watched person moves these
+                  'watches': ('last_seen_at', 'appeared'),     # every line of a watched person moves these
+                  'notes': ('seen_in',)}                       # every turn that shows a note adds itself
 
 
 def content_digest(collection, doc):
@@ -111,6 +114,8 @@ class Store:
             'sticker_pool': [([('last_seen',1)],{}), ([('artifact_id',1)],{})],
             'sticker_memory': [([('persona',1),('key',1)],{'unique':True})],
             'watches': [([('persona',1),('person',1),('state',1)],{})],
+            'notes': [([('to_scene',1),('created_at',-1)],{}), ([('from_scene',1),('created_at',-1)],{}),
+                      ([('persona',1),('created_at',-1)],{}), ([('reply_to',1)],{})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:

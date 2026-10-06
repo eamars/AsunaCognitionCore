@@ -41,7 +41,7 @@ class ProtocolFailure(RuntimeError):
 RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
 TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_development': 'internal',
-            'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit'}
+            'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit', 'note': 'note'}
 
 
 class Coordinator:
@@ -275,7 +275,8 @@ class Coordinator:
         body=(json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+text) if first and not delivery else text
         value=self.character.generate(self._binding(ep),operation,'TURN' if first else 'REPAIR',body,
                                       episode_system(self.store,ep),tools=names,handler=handler,
-                                      trigger=TRIGGERS.get(role_tools.turn_kind(ep),'message'),**delivery)
+                                      trigger='note' if ep['context'].get('note_from_program')
+                                      else TRIGGERS.get(role_tools.turn_kind(ep),'message'),**delivery)
         self.crash('after_lane_delivery')
         from .state import content_ref
         self.store.audit(ep['_id'],'turn.output',{'operation':operation,**content_ref(value.content),

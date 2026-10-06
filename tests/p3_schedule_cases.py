@@ -159,7 +159,7 @@ class Store:
                                         messages=Collection(), audit_events=Collection(),
                                         episodes=Collection(), tasks=Collection(),
                                         memory_units=Collection(), state_heads=Collection(),
-                                        state_revisions=Collection(), watches=Collection())
+                                        state_revisions=Collection(), watches=Collection(), notes=Collection())
 
     def put(self, collection, document, *, expected=None, stream='state'):
         coll = getattr(self.db, collection)
@@ -764,7 +764,7 @@ def load_coordinator():
     # documents / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
     # role_tools：ADR-011 后她的每个动作（含 plan）都是一次工具调用，coordinator 同包 import 它。
     # schedule.py：plan 工具接的是真的 ScheduleService，与 role_tools 同包装，异常类才是同一个。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py', 'context_budget.py', 'lines.py', 'sandbox_backend.py', 'image_generation.py', 'integration_import.py', 'places.py', 'stickers.py', 'watches.py', 'credentials.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py', 'context_budget.py', 'lines.py', 'sandbox_backend.py', 'image_generation.py', 'integration_import.py', 'places.py', 'stickers.py', 'watches.py', 'credentials.py', 'notes.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', 'answers.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound

@@ -449,6 +449,52 @@ class ScheduleService:
         return {'going_to': people.scene_title(scene),
                 'note': '程序会在那边开一轮，那一轮只看得到那边和这句话；办没办成，下次在家会看到。'}
 
+    def note(self, ep, cls, args, call_id):
+        """A note of hers to another of her conversations (ADR-018). A `wake` note is an input at the tail of that
+        scene's queue: at home its own `note` turn, in a group a visit with intent `note` (from home it counts as a
+        visit, under the same limits). Nothing is sent into a running turn."""
+        from . import notes, places
+        moment = schedule_rules._aware(now())
+        draft, existing = notes.prepare(self.store, ep, cls, args, call_id, moment)
+        if existing:
+            return notes.result(self.store, existing)
+        scene = self.store.db.scenes.find_one({'_id': draft['to_scene']})
+        counted = None
+        if draft['mode'] == notes.WAKE and draft['kind'] == 'group' and draft['trust'] == notes.TRUSTED:
+            persona, model, policy = self._persona()
+            plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
+            date = places.local_date(self.app.config, model, policy, moment)
+            can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
+                                          intent='note')
+            if not can:
+                raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', '现在叫不醒那个群：%s。可以改成 next_time，下次在那边看到。' % why)
+            counted = (plan, date)
+        person = notes.receiver(self.app.config, draft['to_scene'])
+        if draft['mode'] == notes.WAKE and not person:
+            raise notes.NoteRefused('NOTE_TARGET_UNKNOWN', '那边没有可以接待你的成员授权，叫不醒；可以改成 next_time。')
+        if draft['mode'] != notes.WAKE:
+            return notes.result(self.store, notes.record(self.store, draft))
+        if draft['kind'] == 'home':
+            event_id = 'note:%s:%s' % (draft['to_scene'], draft['_id'])
+            row = notes.record(self.store, draft, event_id)
+            self.controller.offer_internal('note', event_id, draft['to_scene'], person, notes.WAKE_TEXT,
+                                           note={'id': draft['_id'], 'trust': draft['trust'], 'hop': draft['hop']})
+        else:
+            # Her own moment in that group, as a visit: no channel envelope, so no member is shown saying it.
+            event_id = 'visit:note:%s:%s' % (draft['to_scene'], draft['_id'])
+            row = notes.record(self.store, draft, event_id)
+            self.controller.offer_internal('visit', event_id, draft['to_scene'], person, notes.WAKE_TEXT,
+                scene_tick=True,
+                group_context={'wake_reason': places.WAKE_REASON, 'topic_id': event_id, 'reply_to': None,
+                               'reply_message_id': None, 'mentioned_account_ids': []},
+                visit={'intent': 'note', 'topic': None, 'artifact_id': None, 'note': draft['_id'], 'from': ep['_id']})
+            if counted and counted[0]:
+                current = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+                self.store.put('plans', {**current, **places.record(current, draft['to_scene'], event_id, 'note',
+                                                                    moment, counted[1])},
+                               expected=current['revision'], stream=PRESENCE_PLAN)
+        return notes.result(self.store, row)
+
     def _last_home_beat(self, plan):
         """Her last internal turn at home: a heartbeat, or a settlement or self-improvement turn."""
         times = [plan.get('last_presence_at')]

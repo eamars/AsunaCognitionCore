@@ -211,7 +211,7 @@ def from_words(model, item):
     return {**value, 'val': scale['val'][item['intensity']] * (1 if direction == '好' else -1), 'arl': scale['arl'][arousal]}
 
 
-def interpret(model, state, cls):
+def interpret(model, state, cls, where=None):
     """Projection → the words she reads (no numbers). Public: mood, public tendencies and hints, and a note."""
     view = describe(model, state, cls)
     scale = model.get('scale') or CORE['scale']
@@ -232,6 +232,8 @@ def interpret(model, state, cls):
                        'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
                        'when': rough_ago(row['age_h']),
                        **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''),
+                       # ADR-018 §6: a reason written outside says where (where: event id -> words, home only).
+                       **({'where': where[row['event_id']]} if where and row['event_id'] in where else {}),
                        'event_id': row['event_id'][:SHORT_ID]}
                       for row in rows if row in shown]
     if len(rows) > len(shown):
@@ -322,6 +324,8 @@ class AffectLedger:
     def readable(self, source_scope, ep_scope, cls):
         if visibility.is_owner_private_scope(source_scope):
             return cls == visibility.OWNER_PRIVATE and source_scope == visibility.owner_private_scope(self.persona)
+        if cls == visibility.OWNER_PRIVATE:
+            return True          # home is shown every reason, so it may settle one written outside (ADR-018 §3.3)
         return source_scope in ('global-safe', ep_scope)
 
     def check(self, item, refs):

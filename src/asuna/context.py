@@ -37,6 +37,9 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   'related_messages 里带 topic_id 的是这条话题线到目前为止的原话（含没@你的旁听行），'
                   '谁说的以行上的 speaker 为准。')
 
+# ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
+ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
+
 
 # Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
 HISTORY_ROW_CHARS = 1500
@@ -66,6 +69,7 @@ BLOCKS = {
     'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
               'stickers_from_program', 'faces_from_program'),
     'group_continuity': ('group_continuity_from_program', 'watched_from_program'),
+    'notes': ('note_from_program', 'notes_from_program', 'notes_sent_from_program', 'note_places_from_program'),
     'sender_identity': ('sender_identity',),
 }
 CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
@@ -536,6 +540,22 @@ class ContextBuilder:
         if watching:context['watching_from_program']=watching
         watched=_watches.watched_block(self.store,event,session_class)
         if watched:context['watched_from_program']=watched
+        # ADR-018: notes between her conversations -- the one that opened this turn, the others written to here,
+        # what came of the ones she wrote here, and where a note from here can go.
+        from . import notes as _notes
+        from .ingress import episode_id as _note_episode
+        note_kind=event.get('episode_kind') or 'external'
+        first_note=_notes.opening_for(self.store,event) if note_kind in ('note','visit') else None
+        this_turn=_note_episode(event)
+        if first_note:
+            context['note_from_program']=_notes.opening_block(self.store,persona,first_note,session_class,this_turn,moment)
+        got=_notes.received_block(self.store,persona,scene['_id'],session_class,note_kind,this_turn,moment,skip=first_note)
+        if got:context['notes_from_program']=got
+        sent=_notes.sent_block(self.store,persona,scene['_id'],moment)
+        if sent:context['notes_sent_from_program']=sent
+        if note_kind!='consult':
+            note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
+            if note_places:context['note_places_from_program']=note_places
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
@@ -679,6 +699,10 @@ class ContextBuilder:
             context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
             for key in ('relationship','sender_identity','understanding_update_from_program'):
                 context.pop(key,None)
+        if event.get('episode_kind')=='note':
+            # ADR-018 §5.1: a note's own turn at home. Nobody here sent it; the person on the event only authorizes it.
+            for key in ('relationship','relationship_shared_from_program','sender_identity','understanding_update_from_program'):
+                context.pop(key,None)
         if scene.get('kind')=='group':
             # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
             from . import places
@@ -691,7 +715,18 @@ class ContextBuilder:
             m=ledger.model
             # Words only (AGENTS.md: interpreted state): her mood, its hints and reasons, and how to record one.
             from .affect import interpret, recording_guide
-            context['affect_from_program']=interpret(m,ledger.projection(),session_class)
+            where,mood=None,ledger.projection()
+            if session_class==visibility.OWNER_PRIVATE:
+                # ADR-018 §6: reasons she wrote outside say where she wrote them.
+                titles,where={},{}
+                for row in self.store.db.affect_events.find({'persona':persona,
+                        '_id':{'$in':[item['event_id'] for item in mood.get('contributions') or ()]},
+                        'source_scope':{'$nin':[visibility.owner_private_scope(persona),'global-safe']}},{'source_scope':1}):
+                    scope_key=row.get('source_scope')
+                    if scope_key not in titles:
+                        titles[scope_key]=people.scene_title(self.store.db.scenes.find_one({'scope_key':scope_key}))
+                    where[row['_id']]='在%s记的'%titles[scope_key]
+            context['affect_from_program']=interpret(m,mood,session_class,where)
             context['how_to_record_from_program']=recording_guide(m)
             proposals=ledger.proposals(scope,session_class)
             if proposals:
@@ -714,6 +749,8 @@ class ContextBuilder:
             speak={'sent':'你这回合写出来的每段话都会发出去，写在工具调用旁边的也算；不想说出口的放进 think。',
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
+            if session_class!=visibility.OWNER_PRIVATE:
+                speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
             messages=int(effective(model,'speak.max_messages',policy) or 1)
             if messages>1:
                 # Her words may leave as a few messages, broken where she marks them (ADR-009 §11.1).

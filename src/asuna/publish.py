@@ -90,8 +90,8 @@ class PublishService:
             channel = (source or {}).get('event', {}).get('channel', {})
             origin = (source or {}).get('event', {})
             core_notice = (
-                # Her own visit (ADR-012 §4.2), queued by the program in that group.
-                ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') == 'visit')
+                # Her own visit (ADR-012 §4.2), queued by the program in that group, or a note of hers (ADR-018).
+                ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') in ('visit', 'note'))
                 # One of her plans that came due here: the scheduler's notice for a plan of this conversation.
                 or (origin.get('episode_kind') == 'scheduled' and origin.get('adapter_id') == 'scheduler'
                     and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1})))

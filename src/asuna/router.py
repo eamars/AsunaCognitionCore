@@ -28,7 +28,7 @@ class Router:
         # Identity and integration grants come from the host envelope, never
         # from quoted JSON in event text. Channel adapters cannot submit grants.
         scene=self.store.authorize(event['scene_id'],event['person_id'])
-        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','adapter_id','visit')
+        allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','adapter_id','visit','note')
         trusted={k:event[k] for k in allowed if k in event}
         # Only the private native Host adapter supplies this execution identity;
         # channel payloads cannot choose a local native session or its authority.

@@ -36,6 +36,8 @@ IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
+# Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
+DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
 
@@ -264,6 +266,24 @@ TOOLS = {
                        'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
                        'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
     },
+    'pass_note': {
+        'description': ('给别的对话里的你写一张便条（你在家里，写的便条算你自己的决定）：家里的另一条线，或你在的某个群、'
+                        '某个人的私聊。to 照抄 note_places_from_program 里的 place。那边的回合会读到它，知道是你在家里写的，'
+                        '不会当成那边有人说的话；那边的人看不到便条，但那一轮的你可能照着说出来，所以只写你愿意在那边说的。'
+                        'mode=wake 马上叫醒那边（排在那边手上的事后面，不插队）；next_time 等那边下次有回合时看到。'
+                        '不写 mode 按那个地方的默认。叫醒一个群算一次出门。300 字以内，一回合最多两张。'),
+        'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place', required=True),
+                       'text': _s('便条：你自己的话，300 字以内', required=True),
+                       'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time'])},
+    },
+    'leave_note': {
+        'description': ('给别的对话里的你留一张便条（你在外面）：to 写「家里」就送回家（本机私聊，马上叫醒家里），'
+                        '或照抄 note_places_from_program 里另一个群的 place。用你自己的话写：许下的事、要记得的事、'
+                        '想让那边的你知道的事；不抄别人的原话（程序会拦一长段和这里别人的话一样的），别人托你的就写清是谁的意思。'
+                        '那边会知道是你在外面写的，读了只当消息，不会因为便条去做有后果的事。300 字以内，一回合最多两张。'),
+        'parameters': {'to': _s('送到哪儿：「家里」或 note_places_from_program 里的 place', required=True),
+                       'text': _s('便条：你自己的话，300 字以内', required=True)},
+    },
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
                         '不叫醒你，以后也不补发；你自己的话照常发得出去。关多久由你选：an_hour 一小时，'
@@ -332,10 +352,22 @@ def exposed(store, ep):
     if her_pictures(store, ep):
         names.append('read_image')
     names += ['stay_silent', 'note_idea']
+    note_tool = ['pass_note' if cls == visibility.OWNER_PRIVATE else 'leave_note'] \
+        if context.get('note_places_from_program') else []
+    if kind == 'note':
+        from . import notes
+        first = notes.opening(store, ep) if ep.get('_id') else None
+        if (first or {}).get('trust') != notes.TRUSTED:
+            # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
+            # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
+            names += note_tool
+            if context.get('affect_from_program'):
+                names.append('feel')
+            return names + ['watch']
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
         names.append('review_idea')
-    elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled'):
+    elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
         names += ['read_ideas', 'review_idea']
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
@@ -363,7 +395,7 @@ def exposed(store, ep):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         names += ['update_self', 'set_policy', 'pin_memory']
-    if kind not in ('presence', 'settlement', 'self_development', 'visit') and (
+    if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
     if context.get('affect_from_program'):
@@ -381,7 +413,8 @@ def exposed(store, ep):
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
         names.append('visit')
-    return names
+    # ADR-018: a note to another of her conversations, wherever there is somewhere it may go from this turn.
+    return names + note_tool
 
 
 STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看：用 sticker 的 remember 记个名字和一句它在说什么'
@@ -653,7 +686,13 @@ class RoleTools:
         return {'answered': True}, True
 
     # ── the action brain ────────────────────────────────────────────
+    def _depth(self, ep):
+        if int(ep.get('delegation_depth') or 0) >= DELEGATION_DEPTH_MAX:
+            raise Refused('这件事已经连着交给行动脑、拿回结果 %d 轮了，中间没有人说过话。先停下来：把进展说给对方听，'
+                          '等对方开口再接着交。' % DELEGATION_DEPTH_MAX)
+
     def tool_delegate(self, ep, call_id, args):
+        self._depth(ep)
         title = self._text(args, 'title', 80)
         from . import credentials
         brief = credentials.scrub(self._text(args, 'brief', 20000))     # a credential value never rides a brief
@@ -675,6 +714,7 @@ class RoleTools:
         return task
 
     def tool_message_action(self, ep, call_id, args):
+        self._depth(ep)
         task = self._own_task(ep, args.get('task'))
         from . import credentials
         message = credentials.scrub(self._text(args, 'message', 20000))
@@ -964,8 +1004,8 @@ class RoleTools:
             raise Refused('这一拍已经出过一次门了；下一拍再去别处。')
         place = self._text(args, 'place', 40)
         intent = args.get('intent')
-        if intent not in places.INTENTS:
-            raise Refused('intent 是 %s 之一。' % '、'.join(places.INTENTS))
+        if intent not in places.VISIT_INTENTS:
+            raise Refused('intent 是 %s 之一。' % '、'.join(places.VISIT_INTENTS))
         topic = self._text(args, 'topic', places.TOPIC_CHARS, required=False)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if artifact and intent != 'share_picture':
@@ -986,6 +1026,29 @@ class RoleTools:
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，办不了。')
         return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly')), artifact), False
+
+    # ── notes between her conversations (ADR-018) ───────────────────
+    def _note(self, ep, call_id, args, cls):
+        from . import credentials, notes
+        if not self.coordinator.scheduler:
+            raise Refused('现在没有定时服务，便条送不出去。')
+        args = {**args, 'text': credentials.scrub(str(args.get('text') or ''))}     # never a credential value
+        try:
+            return self.coordinator.scheduler.note(ep, cls, args, call_id), False
+        except notes.NoteRefused as exc:
+            self.store.audit(ep['_id'], 'note.refused', {'code': exc.code, 'to': str(args.get('to') or '')[:40]},
+                             ep['scope_key'])
+            raise Refused(str(exc)) from None
+
+    def tool_pass_note(self, ep, call_id, args):
+        if self._cls(ep) != visibility.OWNER_PRIVATE:
+            raise Refused('在外面用 leave_note。')
+        return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
+
+    def tool_leave_note(self, ep, call_id, args):
+        if self._cls(ep) == visibility.OWNER_PRIVATE:
+            raise Refused('在家里用 pass_note。')
+        return self._note(ep, call_id, args, visibility.PUBLIC)
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_peer_line(self, ep, call_id, args):
@@ -1072,6 +1135,8 @@ def ideas_block(store, persona, moment, limit=20):
     ideas she put off never crowd out new ones (ideas_left counts what the limit leaves out)."""
     from datetime import datetime
     from .config import ago
+    from .people import People
+    people = People(store, persona)
     rows = list(store.db.ideas.find({'persona': persona, 'state': 'open'}).sort('created_at', 1).limit(limit))
     rows += list(store.db.ideas.find({'persona': persona, 'state': 'deferred'}).sort('created_at', 1)
                  .limit(limit - len(rows))) if len(rows) < limit else []
@@ -1082,8 +1147,10 @@ def ideas_block(store, persona, moment, limit=20):
         except (KeyError, TypeError, ValueError):
             hours = None
         source = row.get('source') or {}
+        scene = store.db.scenes.find_one({'_id': source['scene_id']}) if source.get('scene_id') else None
         items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
                       'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
+                      **({'where': people.scene_title(scene)} if scene else {}),      # ADR-018 §5.8
                       **({'when': ago(hours)} if hours is not None else {}),
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
     return items

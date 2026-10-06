@@ -59,11 +59,15 @@ def _person(store, person_id):
     return People(store).person(person_id)
 
 
-def _why(row, cls):
-    """Her reason, where it may be read: one written at home stays at home."""
-    if row.get('why') and (row.get('set_class') == visibility.PUBLIC or cls == visibility.OWNER_PRIVATE):
-        return row['why']
-    return None
+def _why(row, cls, store=None):
+    """Her reason, where it may be read: one written at home stays at home. One written outside says so at home
+    (ADR-018 §6): it may carry someone else's intent."""
+    if not row.get('why') or (row.get('set_class') != visibility.PUBLIC and cls != visibility.OWNER_PRIVATE):
+        return None
+    if store is not None and cls == visibility.OWNER_PRIVATE and row.get('set_class') == visibility.PUBLIC:
+        from .people import People
+        return '%s（在%s写的）' % (row['why'], People(store).scene_title(store.db.scenes.find_one({'_id': row.get('set_in')})))
+    return row['why']
 
 
 # ── adding and stopping ─────────────────────────────────────────────
@@ -153,7 +157,7 @@ def watching_block(store, persona, cls, moment):
             continue
         hours = (until - moment).total_seconds() / 3600 if until else 0
         items.append({'id': row['_id'], 'who': row['name'], 'left': _tier(LEFT_WORDS, hours), 'how': MODE_WORDS[row['mode']],
-                      **({'why': _why(row, cls)} if _why(row, cls) else {})})
+                      **({'why': _why(row, cls, store)} if _why(row, cls) else {})})
     out = {}
     if items:
         out.update(items=items, note=WATCHING_NOTE)
@@ -167,5 +171,5 @@ def watched_block(store, event, cls):
     row = store.db.watches.find_one({'_id': event.get('watched')}) if event.get('watched') else None
     if not row:
         return None
-    return {'who': row['name'], 'how': MODE_WORDS[row['mode']], **({'why': _why(row, cls)} if _why(row, cls) else {}),
+    return {'who': row['name'], 'how': MODE_WORDS[row['mode']], **({'why': _why(row, cls, store)} if _why(row, cls) else {}),
             'note': WATCHED_NOTE}

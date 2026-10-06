@@ -155,7 +155,7 @@ def test_only_a_platform_turn_is_told_how_its_words_leave(store):
     assert '不会再单独叫你' in speak['new_lines'] and '工具调用旁边' in speak['sent']
     store.config['persona_model'] = model(1)
     _, one = turn(store, key='one-message', speech='好')
-    assert set(one['context']['speak_from_program']) == {'sent', 'new_lines'}
+    assert set(one['context']['speak_from_program']) == {'sent', 'new_lines', 'one_self'}     # ADR-018 §5.7
 
 
 def test_everything_she_wrote_in_the_turn_is_said(store):

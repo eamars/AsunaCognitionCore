@@ -108,7 +108,7 @@ def workspace_file(root, protected, op, args):
         return {'error': 'TASK_OPERATION_FAILED', 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
 
 
-SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'type':'array','items':{'type':'string'},'required':True}}}
+SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True}}}
 
 WORKSPACE_TOOLS = [
     {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
@@ -277,6 +277,8 @@ class ToolBroker:
         self.bindings[session]=(task,Sandbox(workspace,protected,allowed_root=Path(grant['workspace']),config=self.store.config))
 
     def call(self,session,call_id,tool,args):
+        from .tool_args import normalize
+        args,adjusted=normalize(tool,args)          # what she plainly meant; said back in the result (tool_args.py)
         with self.service.lock:
             if session not in self.bindings:raise Denied('UNBOUND_EXECUTOR')
             task,sandbox=self.bindings[session]
@@ -380,6 +382,7 @@ class ToolBroker:
             self.service.crash('after_tool_before_receipt')
             result['evidence_ref']=key
             result['artifact_ref']=key
+            if adjusted:result['adjusted']=adjusted
             # read_image 的 base64 只交给调用方，不进回执：一张图就能顶破普通 BSON 行的 1 MiB 上限，
             # 字节本身已经在 GridFS 里，回执留 blob 引用与内联摘要。
             stored_result=read_image_receipt(result) if tool==READ_IMAGE_TOOL_NAME else result

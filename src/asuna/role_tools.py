@@ -27,6 +27,9 @@ from .vision import inline_summary as picture_receipt
 from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 300
+# What she is told is THOUGHT_CHARS; refused only past this. Most refusals were a few characters over a count a
+# model cannot keep exactly (owner 2026-10-06), and each cost her a full retry.
+THOUGHT_HARD_CHARS = 360
 RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
@@ -125,7 +128,8 @@ TOOLS = {
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
                         'set_tags 只改 visibility/inject/tags；adopt_seed 接收人格包里更新的种子。'
                         '没写 visibility 的新节按 owner_private 保存。visibility 也决定你哪些回合用得上这一节：public 的节群里和别人私聊里的'
-                        '你也读得到；owner_private 的只有家里的你读得到。inject=always 的节每回合都会带上，有上限：'
+                        '你也读得到，owner_private 的只有家里的你读得到。每回合自动带上的只有 persona 和 voice 里 inject=always 的节'
+                        '（其他文档要 recall 才读得到），有上限：'
                         '不常用的节改成 on_demand 收起来（还在，recall 能读）。不写对用户的台词，不把没发生的事写成发生过。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
@@ -135,7 +139,7 @@ TOOLS = {
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
-            'visibility': _s('谁能读到：public＝所有回合（包括群里）的你；owner_private＝只有家里的你', enum=['public', 'owner_private']),
+            'visibility': _s('谁能读到：public＝所有回合（包括群里）的你；owner_private＝只有家里的你（自动带上只限 persona、voice 的 always 节）', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
         },
     },
@@ -164,7 +168,7 @@ TOOLS = {
                         '发现前提不成立用 void（必须写 why）；情感评估路由的提案用 adopt 逐条决定（accept/decline/edit）。'
                         '没有触动就不要记。'),
         'parameters': {
-            'op': _s('做什么', required=True, enum=['record', 'close', 'void', 'adopt']),
+            'op': _s('做什么（不写时：有 kind 就是 record）', enum=['record', 'close', 'void', 'adopt']),
             **AFFECT_FIELDS,
             'event_id': _s('close/void 的那一笔'),
             'proposal_id': _s('adopt 的那条提案'),
@@ -181,7 +185,7 @@ TOOLS = {
                         'clock_from_program。在家里新建时可以写 line：到点在那条线里开一轮（lines_from_program 里的 line），'
                         '那条安排之后在那条线里看、改。'),
         'parameters': {
-            'op': _s('做什么', required=True, enum=['create', 'update', 'cancel']),
+            'op': _s('做什么（不写时：没有 plan_id、写了 intent 和计时就是 create）', enum=['create', 'update', 'cancel']),
             'plan_id': _s('update/cancel 的那条安排'),
             'intent': _s('届时要重新考虑的事'),
             'after_seconds': {'type': 'integer'}, 'every_seconds': {'type': 'integer'},
@@ -496,7 +500,7 @@ class RoleTools:
     # ── mind ────────────────────────────────────────────────────────
     def tool_think(self, ep, call_id, args):
         thought = self._text(args, 'thought', 100000)
-        if len(thought) > THOUGHT_CHARS:
+        if len(thought) > THOUGHT_HARD_CHARS:
             raise Refused('心里话 %d 字，超过 %d 字：精简到 %d 字以内，只留要点；详细的推演留在思考里。'
                           % (len(thought), THOUGHT_CHARS, THOUGHT_CHARS))
         from .config import character_id
@@ -754,7 +758,7 @@ class RoleTools:
         ledger = AffectLedger(self.store, ep['persona'], *model_and_policy(self.store, ep['persona']))
         if not ledger.enabled:
             raise Refused('你没有情感账。')
-        op, cls, key = args.get('op'), self._cls(ep), 'feel:' + call_id
+        op, cls, key = args.get('op') or ('record' if args.get('kind') else None), self._cls(ep), 'feel:' + call_id
         fields = {k: v for k, v in args.items() if k in AFFECT_FIELDS and v is not None}
         if op == 'record':
             row = ledger.record(ep, 0, fields, cls, key=key)
@@ -785,8 +789,8 @@ class RoleTools:
         c = self.coordinator
         if not c.scheduler:
             raise Refused('现在没有定时服务，安排不了。')
-        op = args.get('op')
         timing = {k: args[k] for k in ('after_seconds', 'every_seconds', 'at', 'clock') if args.get(k) is not None}
+        op = args.get('op') or ('create' if args.get('intent') and timing and not args.get('plan_id') else None)
         planned = {row.get('_id'): row for row in (ep.get('context') or {}).get('plans_from_program') or []}
 
         def run(action):

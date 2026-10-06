@@ -931,18 +931,31 @@ class NativeDevelopmentBridge:
             from .state import COLLECTIONS
             collection=args.get('collection')
             query=args.get('filter',{}); projection=args.get('projection')
-            skip=args.get('skip',0);limit=args.get('limit',20)
-            if collection not in COLLECTIONS: raise Denied('DEVELOPMENT_COLLECTION_DENIED')
+            skip=args.get('skip',0);limit=args.get('limit',20);sort=args.get('sort')
+            if collection not in COLLECTIONS:
+                # Not a permission: the name does not exist. Say which do, and where the common guesses live.
+                raise Denied('DEVELOPMENT_COLLECTION_DENIED: no collection %r; there are %s. Relationships, documents '
+                             'and self descriptions are state_heads/state_revisions rows.' % (collection, ', '.join(COLLECTIONS)))
             if not isinstance(query,dict) or projection is not None and not isinstance(projection,dict):
                 raise ValueError('DEVELOPMENT_QUERY_INVALID')
             if type(skip) is not int or skip<0 or type(limit) is not int or not 1<=limit<=50:
-                raise ValueError('DEVELOPMENT_PAGE_INVALID')
-            rows=list(self.store.db[collection].find(query,projection).skip(skip).limit(limit))
+                raise ValueError('DEVELOPMENT_PAGE_INVALID: skip >= 0, limit 1..50')
+            if sort is not None and (not isinstance(sort,dict) or any(v not in (1,-1) for v in sort.values())):
+                raise ValueError('DEVELOPMENT_SORT_INVALID: {field: 1 or -1}')
+            cursor=self.store.db[collection].find(query,projection)
+            if sort:cursor=cursor.sort(list(sort.items()))
+            rows=list(cursor.skip(skip).limit(limit))
             if len(json.dumps(rows,ensure_ascii=False,default=str).encode())>262144:
                 raise ValueError('DEVELOPMENT_PAGE_TOO_LARGE')
             return {'database':self.store.name,'collection':collection,'skip':skip,'limit':limit,'rows':rows}
-        result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
-            'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision']}})
+        try:
+            result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
+                'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision']}})
+        except RuntimeError as exc:
+            if tool == 'development_write' and 'EEXIST' in str(exc):
+                raise ValueError('DEVELOPMENT_FILE_EXISTS: %s already exists; pass overwrite: true to replace it'
+                                 % str(args.get('path'))[:200]) from None
+            raise
         if tool == 'development_publish' and result.get('receipt_id'):
             self.store.put('sink_receipts', {
                 **result, '_id':result['receipt_id'], 'kind':'self_development_publish',

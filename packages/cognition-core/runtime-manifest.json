@@ -281,6 +281,10 @@
       "python/asuna/testing.py"
     ],
     [
+      "src/asuna/tool_args.py",
+      "python/asuna/tool_args.py"
+    ],
+    [
       "src/asuna/visibility.py",
       "python/asuna/visibility.py"
     ],
@@ -370,7 +374,14 @@
           "required": true
         },
         "overwrite": {
-          "type": "boolean"
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "project": {
           "type": "string",
@@ -383,10 +394,17 @@
       "description": "Run a command in the candidate and return raw stdout, stderr and exit status, including failures.",
       "parameters": {
         "argv": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ],
           "required": true
         },
         "project": {
@@ -397,7 +415,7 @@
     },
     {
       "name": "development_database_read",
-      "description": "Read unredacted records from the existing real Asuna database, bound to this local owner development task. No public database endpoint.",
+      "description": "Read unredacted records from the existing real Asuna database, bound to this local owner development task. No public database endpoint. Up to 50 rows a call (more is served as the first 50; page with skip). Relationships, documents and her self descriptions are state_heads/state_revisions rows.",
       "parameters": {
         "collection": {
           "type": "string",
@@ -410,6 +428,11 @@
         "projection": {
           "type": "object",
           "additionalProperties": true
+        },
+        "sort": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "{field: 1 or -1}"
         },
         "skip": {
           "type": "integer"

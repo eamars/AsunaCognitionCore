@@ -302,6 +302,9 @@ class BusinessWorker:
         # wraps each command on request.
         config['_host_sandbox'] = sandbox or {'available': False, 'reason': 'the Host did not offer its sandbox'}
         sandbox_backend.attach(lambda argv, root: self.host_call('sandbox', {'argv': argv, 'root': root})['argv'])
+        # Her credentials live in DSH's credential store; the Host reads and writes them on request (credentials.py).
+        from . import credentials
+        credentials.attach(lambda args: self.host_call('credentials', args))
         config['_native_apply_integrations'] = apply_integrations
         # The installed adapter release belongs to the channel plugin that ships it.
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]

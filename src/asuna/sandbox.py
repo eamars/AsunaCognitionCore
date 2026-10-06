@@ -38,11 +38,12 @@ class Sandbox:
             out.append(root + arg[len('/task'):] if arg == '/task' or arg.startswith('/task/') else arg)
         return out
 
-    def run(self, argv: list[str], timeout: int = 30) -> dict:
+    def run(self, argv: list[str], timeout: int = 30, env=None) -> dict:
+        """``env``: extra variables for this one command (her credentials, credentials.environment)."""
         if not argv or len(argv) > 40 or sum(map(len, argv)) > 16000 or any(not isinstance(a, str) or '\0' in a for a in argv):
             raise ValueError('INVALID_COMMAND')
         command = sandbox_backend.confine(self.config, self.native(argv), self.task_dir)
-        value = run_bounded(command, self.task_dir, timeout)
+        value = run_bounded(command, self.task_dir, timeout, env=env)
         if value['launch_failed']:
             raise RuntimeError('SANDBOX_LAUNCH_FAILED (exit %s)\nstderr:\n%s' % (value['exit_code'], value['stderr']))
         if value['output_limit']:raise RuntimeError('TOOL_OUTPUT_LIMIT')

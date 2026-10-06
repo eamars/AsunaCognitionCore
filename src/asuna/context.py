@@ -60,7 +60,8 @@ BLOCKS = {
     'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
     'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
-                    'schedule_control_from_program', 'scheduled_plan_from_program', 'watching_from_program'),
+                    'schedule_control_from_program', 'scheduled_plan_from_program', 'watching_from_program',
+                    'credentials_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
     'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
               'stickers_from_program', 'faces_from_program'),
@@ -524,6 +525,11 @@ class ContextBuilder:
         elif session_class==visibility.OWNER_PRIVATE and not event.get('episode_kind') in ('settlement',):
             shelf=_stickers.block(self.store,persona,scene,at_home=True)
             if shelf:context['stickers_from_program']=shelf
+        # Owner 2026-10-07: her credential vault at home, names and notes only (credentials.py).
+        if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external') in ('external','task_feedback','self_development'):
+            from . import credentials as _credentials
+            vault=_credentials.listing()
+            if vault:context['credentials_from_program']={'items':vault,'note':_credentials.CREDENTIALS_NOTE}
         # Owner 2026-10-06: her watchlist, and this line's speaker being on it.
         from . import watches as _watches
         watching=_watches.watching_block(self.store,persona,session_class,moment)

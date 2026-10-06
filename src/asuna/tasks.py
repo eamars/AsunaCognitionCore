@@ -108,7 +108,7 @@ def workspace_file(root, protected, op, args):
         return {'error': 'TASK_OPERATION_FAILED', 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
 
 
-SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True}}}
+SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'}}}
 
 WORKSPACE_TOOLS = [
     {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
@@ -376,9 +376,18 @@ class ToolBroker:
                 # Fixed file operations need no sandbox: the worker does them, inside the task folder only.
                 result=workspace_file(sandbox.task_dir,sandbox.protected_paths,tool,args)
             elif tool=='sandbox_run':
-                result=sandbox.run(args['argv'])
+                if args.get('credentials'):
+                    # Owner 2026-10-07: a credential's variables reach one sandboxed command of a home task, nothing else.
+                    from . import credentials
+                    if not credentials.home_task(self.store,task):raise Denied('CREDENTIALS_HOME_ONLY')
+                    result=sandbox.run(args['argv'],env=credentials.environment(args['credentials']))
+                else:
+                    result=sandbox.run(args['argv'])
             else:
                 raise Denied('UNKNOWN_TOOL')
+            if tool!=READ_IMAGE_TOOL_NAME:
+                from . import credentials
+                result=credentials.scrub(result)          # no stored credential value reaches her or a receipt
             self.service.crash('after_tool_before_receipt')
             result['evidence_ref']=key
             result['artifact_ref']=key
@@ -439,6 +448,10 @@ class Executor:
         # Pull 模式：只告诉她有什么图、ref 是什么、能不能拉；图片正文不进输入。
         attachments=task_attachment_context(self.service.store,task,self.service.store.config,source) if source else None
         if attachments:facts['attachments']=attachments
+        if cls==visibility.OWNER_PRIVATE and 'sandbox_run' in task.get('allowed_capabilities',()):
+            from . import credentials
+            vault=credentials.listing()
+            if vault:facts['credentials']={'items':vault,'how':'sandbox_run 写 credentials（名字照抄），这些环境变量只在那一条命令里有；脚本用 os.environ 读，值不要写进文件、脚本、报告。'}
         text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
@@ -479,10 +492,12 @@ class Executor:
         observations=artifacts
         # The model reports in natural language; identities and actual receipts
         # are attached by the program, never recopied or invented by the model.
-        result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'text':value.content,
+        from . import credentials
+        content=credentials.scrub(value.content)
+        result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'text':content,
                 'finish_reason':value.finish_reason,'artifact_refs':[a['_id'] for a in observations],
                 'diagnostic':value.diagnostic,
-                'facts':[{'text':value.content,'evidence_refs':[a['_id'] for a in observations]}],
+                'facts':[{'text':content,'evidence_refs':[a['_id'] for a in observations]}],
                 'uncertainties':(['行动脑没有给出可用的报告（'+unusable+'）；保留已产生的工具事实，不宣称目标完成。'] if unusable
                     else [] if value.finish_reason=='stop' else ['原生回合未正常结束；保留已产生的工具事实，不宣称目标完成。'])}
         returned=value.finish_reason=='stop' and not unusable

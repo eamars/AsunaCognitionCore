@@ -116,6 +116,17 @@ TOOLS = {
         'parameters': {'wait': _s('等还是不等', required=True, enum=['yes', 'no']),
                        'why': _s('wait=yes 时：在等什么回话，一句话')},
     },
+    'credential': {
+        'description': ('保险箱：有人给你密码、口令、令牌、账号这类凭据时，用 keep 收进去（name 起个短名，如 enlighten；note 写它是干什么的；'
+                        'env 是环境变量名到值，如 {"ENLIGHTEN_EMAIL": "…", "ENLIGHTEN_PASSWORD": "…"}）。收进去以后值谁都看不到，'
+                        '包括你自己和行动脑；要用就交代行动脑在 sandbox_run 里写 credentials 这个名字。值只在 keep 这一次出现：'
+                        '交代、回话、文档、想法本里都不要写值。drop 按名字删掉。只在家里有。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop']),
+                       'name': _s('凭据的短名（小写字母、数字、连字符）', required=True),
+                       'note': _s('keep 用：它是干什么的，一句话（不写值）'),
+                       'env': {'type': 'object', 'additionalProperties': {'type': 'string'},
+                               'description': 'keep 用：环境变量名（大写）→ 值'}},
+    },
     'watch': {
         'description': ('盯一个人：on 把这个对话里看得到的一个人加进 watch 名单（person 写他的标签、#编号或名字），'
                         '之后他在你任何一个对话里说话，你都会在他说话的那个对话里知道（群里会叫你看一眼，接不接由你）。'
@@ -342,6 +353,8 @@ def exposed(store, ep):
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
+    if cls == visibility.OWNER_PRIVATE and kind in ('external', 'task_feedback'):
+        names.append('credential')            # her credential vault: filed at home only (credentials.py)
     if scene_kind in ('group', 'dm') or context.get('watching_from_program'):
         names.append('watch')
     if scene_kind == 'group':
@@ -439,6 +452,11 @@ WORDS = {
     'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
     'STICKER_CANDIDATE_NOT_LOOKED': '先用 read_image 看过这个候选（ref 照抄 candidate），再收或记。',
     'STICKER_NOT_LOOKED': '先用 read_image 看过这个表情包，再记它是什么。',
+    'CREDENTIAL_NAME_INVALID': 'name 是 2–32 个小写字母、数字或连字符，字母开头。',
+    'CREDENTIAL_NOTE_INVALID': 'note 写一句它是干什么的（80 字以内），不写值。',
+    'CREDENTIAL_ENV_INVALID': 'env 是 1–6 个「大写环境变量名 → 值」，名字不能是系统要用的（PATH 之类）。',
+    'CREDENTIAL_NOT_FOUND': '保险箱里没有这个名字。',
+    'CREDENTIALS_UNAVAILABLE': '这会儿保险箱连不上（宿主没提供凭据存储）。',
     'WATCH_HOURS_INVALID': 'hours 是 1 到 72 之间的整数。',
     'WATCH_MODE_INVALID': 'mode 是 once 或 burst。',
     'WATCH_PERSON_NOT_HERE': '这个对话里找不到这个人：照抄他的标签或 #编号。',
@@ -599,6 +617,14 @@ class RoleTools:
         self.coordinator._update(self._fresh(ep), quote=how)
         return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
 
+    def tool_credential(self, ep, call_id, args):
+        from . import credentials
+        if args.get('op') == 'keep':
+            return credentials.keep(args.get('name'), args.get('note'), args.get('env')), False
+        if args.get('op') == 'drop':
+            return credentials.drop(args.get('name')), False
+        raise Refused('op 是 keep 或 drop。')
+
     def tool_watch(self, ep, call_id, args):
         from . import watches
         op = args.get('op')
@@ -629,7 +655,8 @@ class RoleTools:
     # ── the action brain ────────────────────────────────────────────
     def tool_delegate(self, ep, call_id, args):
         title = self._text(args, 'title', 80)
-        brief = self._text(args, 'brief', 20000)
+        from . import credentials
+        brief = credentials.scrub(self._text(args, 'brief', 20000))     # a credential value never rides a brief
         task = self.coordinator.delegate(ep, call_id, title, brief)
         return {'task': task['_id'], 'state': '已交给行动脑，正在排队',
                 'note': '结果回来会再叫你；在那之前不要说已经做完。'}, False
@@ -649,7 +676,8 @@ class RoleTools:
 
     def tool_message_action(self, ep, call_id, args):
         task = self._own_task(ep, args.get('task'))
-        message = self._text(args, 'message', 20000)
+        from . import credentials
+        message = credentials.scrub(self._text(args, 'message', 20000))
         outcome = self.coordinator.message_action(ep, call_id, task, message)
         return outcome, False
 

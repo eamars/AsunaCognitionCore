@@ -23,7 +23,7 @@ import { NativeChildren } from './children.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
-import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials';
 import { ensurePythonEnvironment } from './python-env.js';
 import z from '@deepseek-ai/schemastery';
 import path from 'node:path';
@@ -45,6 +45,8 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
 // Responsibility routes are configured independently; a lane name never implies a model.
 // The relevance gate (attend) is her own judgment, so it uses the character route.
 const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
+// Her credentials' records in DSH's credential store: <scope>/<name> (credentialRecords).
+const CREDENTIAL_SCOPE = 'asuna-cognition-core';
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
@@ -298,6 +300,31 @@ export class CognitionCore {
     try { return this.ctx.get('credentials'); } catch { return undefined; }
   }
 
+  /** Her credentials (owner 2026-10-07): one DSH credential record per name under this plugin's scope, a grant whose
+   * payload is {note, env}. Only the worker asks, and it hands values to one sandboxed command at a time; a list
+   * carries names, notes and variable names, never values. */
+  async credentialRecords({ op, name, note, env }) {
+    const store = this.credentialStore();
+    if (!store) throw new Error('CREDENTIAL_STORE_MISSING: this Host mounts no credential provider');
+    if (op === 'list') {
+      const out = [];
+      for (const { key } of await store.listRecords()) {
+        if (!key.startsWith(CREDENTIAL_SCOPE + '/')) continue;
+        const payload = (await store.readRecord(key))?.payload ?? {};
+        out.push({ name: key.slice(CREDENTIAL_SCOPE.length + 1), note: String(payload.note ?? ''), env: Object.keys(payload.env ?? {}) });
+      }
+      return out;
+    }
+    const key = credentialKey(CREDENTIAL_SCOPE, name);
+    if (op === 'read') return (await store.readRecord(key))?.payload ?? null;
+    if (op === 'write') {
+      await store.modifyRecord(key, async () => ({ kind: 'grant', payload: { note, env } }));
+      return { written: name };
+    }
+    if (op === 'delete') { await store.deleteRecord(key); return { deleted: name }; }
+    throw new Error('Unknown credentials op');
+  }
+
   /** DSH's own sandbox (dsh-sandbox-local), when this Host mounts one: the worker runs commands under it. */
   sandboxProvider() {
     try { return this.ctx.get('sandbox'); } catch { return undefined; }
@@ -444,6 +471,7 @@ export class CognitionCore {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
           : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
           : event.method === 'sandbox' ? await this.confine(event.args)
+          : event.method === 'credentials' ? await this.credentialRecords(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its

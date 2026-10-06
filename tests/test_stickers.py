@@ -217,3 +217,29 @@ def test_napcats_send_timeout_is_an_unknown_send_not_a_failed_one():
     outbound.handle_item({'publication_id': 'p1', 'attempt_id': 'a1', 'target': {'type': 'group', 'id': GROUP}, 'text': '看图'})
     assert receipts[-1]['status'] == 'unknown' and receipts[-1]['response']['reason'] == 'platform_send_timeout', receipts
     assert not platform_send_timed_out({'retcode': 1200, 'message': 'group not found'})     # a real 1200 still fails
+
+
+def test_group_stickers_wait_in_a_pool_and_reach_her_shelf_only_after_she_looks(store, monkeypatch):
+    """Owner 2026-10-06: candidates are saved as they arrive; she looks, names and keeps; the pool rotates."""
+    from asuna import role_tools
+    group_world(store, monkeypatch)
+    from asuna.blobs import BlobStore
+    blobs = BlobStore(store)
+    added = [stickers.pool_seen(store, blobs, store.config, rid) for rid in ('in-sticker', 'in-old', 'in-market', 'in-photo')]
+    assert added == [1, 1, 1, 0]                                           # a photo is never a candidate
+    assert stickers.pool_seen(store, blobs, store.config, 'in-sticker') == 0   # the same picture again: counted, not added
+    moment = datetime(2026, 10, 6, 2, 0, tzinfo=timezone.utc)
+    block = stickers.candidates_block(store, moment)
+    assert len(block['items']) == 3 and '几次' in block['items'][0]['seen'] and '30' in block['note']
+    first = block['items'][0]['candidate']
+    assert role_tools.offered_pictures({'context': {'sticker_candidates_from_program': block}})[0] == first
+    ep = {'scene_id': SCENE, 'persona': 'P1', 'looked': []}
+    with pytest.raises(Exception, match='STICKER_CANDIDATE_NOT_LOOKED'):
+        stickers.keep_candidate(store, ep, 'P1', {'candidate': first, 'name': '摸鱼', 'when': '有人摸鱼的时候'})
+    kept = stickers.keep_candidate(store, {**ep, 'looked': [first]}, 'P1', {'candidate': first, 'name': '摸鱼', 'when': '有人摸鱼的时候'})
+    assert kept['kept'] == '摸鱼' and store.db.sticker_pool.count_documents({}) == 2
+    assert stickers.pool_seen(store, blobs, store.config, 'in-sticker') == 0    # on her shelf now: not a candidate again
+    monkeypatch.setattr(stickers, 'POOL_MAX', 1)
+    stickers.rotate(store)
+    [left] = list(store.db.sticker_pool.find({}))
+    assert left['source_message_id'] == 'in-market'                        # the least recently seen left first

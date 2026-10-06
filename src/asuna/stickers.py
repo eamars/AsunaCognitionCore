@@ -293,3 +293,130 @@ def review_block(store, persona, moment):
     return {'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
             'items': [{'sticker': row['name'], 'when': row['when'], 'why': why} for _, _, row, why in idle[:STICKER_REVIEW]],
             'note': REVIEW_NOTE}
+
+
+# ── the candidate pool (owner 2026-10-06) ───────────────────────────
+# Stickers people post in her groups are saved as they arrive (platform links expire within hours) into a pool
+# of candidates. Nothing goes on her shelf by itself: she looks at a candidate (read_image) and keeps it with a
+# name and a note of her own. Past POOL_MAX the least recently seen leave; one that keeps being posted stays.
+POOL_MAX = 30
+POOL_SHOWN = 8                  # nightly: the most posted first
+POOL_SHOWN_HERE = 4             # in a group's turn: posted there lately
+POOL_HERE_HOURS = 2
+POOL_SOURCE = 'sticker-pool:'
+SEEN_WORDS = ((2, '一次'), (4, '几次'), (10, '好些次'), (None, '很多次'))
+POOL_NOTE = ('这些是群里有人发过的表情包，程序先替你存着（池子最多 %d 个，很久没人发的会被挤掉）。'
+             '想收哪个：先用 read_image 看（ref 照抄 candidate），看过了用 sticker 的 keep（candidate 照抄，'
+             '起个名字、写一句什么时候用）；没看过的收不了。不想要的不用管。' % POOL_MAX)
+
+
+def pool_seen(store, blobs, config, message_id):
+    """A group message's stickers join the pool (bytes saved now); returns how many new candidates."""
+    from .state import Conflict
+    from .vision import attachments_of, media_source_url, pull_bytes
+    row = store.db.messages.find_one({'_id': message_id})
+    if not row or row.get('direction') != 'inbound':
+        return 0
+    scene = store.db.scenes.find_one({'_id': row['scene_id']})
+    if not scene or scene.get('kind') != 'group':
+        return 0
+    task = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
+    added = 0
+    for entry in attachments_of(row, config=config):
+        if not entry.get('sticker') or not entry.get('pullable'):
+            continue
+        try:
+            data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, task, config, entry)}, config)
+        except Exception:
+            continue                                   # gone already: nothing to save
+        stored = blobs.put_once(data, SCOPE, 'image', source_ids=[POOL_SOURCE + message_id])
+        identity = ('market:' + entry['market']['emoji_id'] if entry['sticker'] == 'market'
+                    else 'sha:' + stored['sha256'])
+        if store.db.stickers.find_one({'identity': identity}, {'_id': 1}):
+            continue                                   # already on her shelf
+        at = row.get('received_at') or now()
+        key = 'cand-' + sha(identity.encode())[:16]
+        current = store.db.sticker_pool.find_one({'_id': key})
+        try:
+            if current:
+                store.put('sticker_pool', {**current, 'seen': current['seen'] + 1, 'last_seen': at,
+                                           'scenes': list(dict.fromkeys([*current['scenes'], scene['_id']]))[-5:]},
+                          expected=current['revision'], stream='sticker-pool')
+            else:
+                doc = {'_id': key, 'identity': identity, 'kind': entry['sticker'], 'artifact_id': stored['artifact_id'],
+                       'sha256': stored['sha256'], 'size': stored['size'], 'media_type': media_type,
+                       'first_seen': at, 'last_seen': at, 'seen': 1, 'scenes': [scene['_id']],
+                       'source_message_id': message_id}
+                if entry['sticker'] == 'market':
+                    doc['market'] = {**entry['market'], 'summary': entry.get('summary') or '[商城表情]'}
+                store.put('sticker_pool', doc, stream='sticker-pool')
+                added += 1
+        except Conflict:
+            continue                                   # the same sticker, counted by a concurrent arrival
+    rotate(store)
+    return added
+
+
+def rotate(store):
+    """Past POOL_MAX, the least recently seen candidates leave the pool."""
+    extra = store.db.sticker_pool.count_documents({}) - POOL_MAX
+    if extra > 0:
+        for doc in list(store.db.sticker_pool.find({}, {'identity': 1, 'revision': 1}).sort('last_seen', 1).limit(extra)):
+            store.db.sticker_pool.delete_one({'_id': doc['_id'], 'revision': doc['revision']})
+            store.audit('sticker-pool', 'sticker.pool.rotated', {'identity': doc['identity']})
+
+
+def candidates_block(store, moment, scene_id=None):
+    """sticker_candidates_from_program: nightly the most posted; in a group's turn, the ones posted there lately."""
+    from datetime import timedelta
+    from .people import People
+    query, limit = {}, POOL_SHOWN
+    if scene_id:
+        query = {'scenes': scene_id, 'last_seen': {'$gte': (moment - timedelta(hours=POOL_HERE_HOURS)).isoformat()}}
+        limit = POOL_SHOWN_HERE
+    rows = list(store.db.sticker_pool.find(query).sort([('seen', -1), ('last_seen', -1)]).limit(limit))
+    if not rows:
+        return None
+    people = People(store)
+    items = []
+    for row in rows:
+        where = '、'.join(people.scene_title(store.db.scenes.find_one({'_id': s}) or {'_id': s}) for s in row['scenes'][-2:])
+        hours = _hours(moment, row['last_seen'])
+        items.append({'candidate': row['artifact_id'], 'seen': '%s见过%s' % (where, _tier(SEEN_WORDS, row['seen'])),
+                      **({'last': _tier(ROUGH_AGO, hours)} if hours is not None else {})})
+    return {'items': items, 'pool': '池子里 %d 个' % store.db.sticker_pool.count_documents({}), 'note': POOL_NOTE}
+
+
+def candidate_ids(context):
+    """The candidate pictures listed this turn: she may look at them with read_image."""
+    items = ((context or {}).get('sticker_candidates_from_program') or {}).get('items') or ()
+    return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))
+
+
+def keep_candidate(store, ep, persona, args):
+    """A candidate from the pool goes on her shelf -- only one she looked at in this turn (read_image)."""
+    name, when = _name(args.get('name')), _when(args.get('when'))
+    candidate = str(args.get('candidate') or '').strip()
+    row = store.db.sticker_pool.find_one({'artifact_id': candidate})
+    if not row:
+        raise Denied('STICKER_CANDIDATE_GONE')
+    if candidate not in (ep.get('looked') or []):
+        raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
+    if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
+        raise Denied('STICKER_SHELF_FULL')
+    if find(store, persona, name):
+        raise Denied('STICKER_NAME_TAKEN: ' + name)
+    same = store.db.stickers.find_one({'persona': persona, 'identity': row['identity']})
+    if same:
+        raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
+    doc = {'_id': 'stk-' + sha((persona + '|' + row['identity']).encode())[:20], 'persona': persona, 'name': name,
+           'when': when, 'kept_at': now(), 'kept_in': ep['scene_id'], 'sent': 0, 'last_sent_at': None,
+           'origin': 'collected', 'kind': row['kind'], 'identity': row['identity']}
+    if row['kind'] == 'market':
+        doc['market'] = row['market']
+    else:
+        doc.update(artifact_id=row['artifact_id'], sha256=row['sha256'], size=row['size'], media_type=row.get('media_type'))
+    store.put('stickers', doc, stream='stickers:' + persona)
+    store.db.sticker_pool.delete_one({'_id': row['_id']})
+    count = store.db.stickers.count_documents({'persona': persona})
+    return {'kept': name, 'shelf': '%d 个，%s' % (count, fullness(count))}

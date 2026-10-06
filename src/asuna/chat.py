@@ -252,6 +252,23 @@ class Chat:
             return None, None, None
         return proactive, scene, row
 
+    def _sticker_pool(self, event, episode):
+        """Stickers posted in a group go to her candidate pool while their links still work (owner 2026-10-06).
+        Fetching runs off the input path; a failure is evidence, never a failed input."""
+        channel = event.get('channel') if isinstance(event.get('channel'), dict) else {}
+        if (channel.get('target') or {}).get('type') != 'group' or not (event.get('raw') or {}).get('asuna_media'):
+            return
+
+        def run():
+            try:
+                from .blobs import BlobStore
+                from .stickers import pool_seen
+                pool_seen(self.app.store, BlobStore(self.app.store), self.app.config, 'in-' + episode)
+            except Exception:
+                self.app.evidence.record('sticker.pool_error', {'episode_id': episode,
+                                                                 'traceback': traceback.format_exc()[-800:]})
+        threading.Thread(target=run, name='sticker-pool', daemon=True).start()
+
     def _proactive_consider(self, event, episode, result):
         """分寸判断是可选腿：它自己出错只记证据，不许把已经跑完的一轮改成失败。"""
         try:
@@ -397,6 +414,7 @@ class Chat:
                         result = self.app.router.receive(event, persona=self.settings['persona'])
                     input_state(self.app.store, episode, 'COMPLETE', result_state=result['state'])
                     self._proactive_consider(event, episode, result)
+                    self._sticker_pool(event, episode)
                 self.app.store.authorize(event['scene_id'], event['person_id'])
                 messages = list(self.app.store.db.messages.find({
                     'episode_id': episode, 'scene_id': event['scene_id'],

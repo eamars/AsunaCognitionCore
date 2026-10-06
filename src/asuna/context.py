@@ -62,7 +62,7 @@ BLOCKS = {
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
                     'schedule_control_from_program', 'scheduled_plan_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
-    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program',
+    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
               'stickers_from_program', 'faces_from_program'),
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
@@ -515,6 +515,10 @@ class ContextBuilder:
         from . import stickers as _stickers
         if _stickers.sends(scene):
             context['stickers_from_program']=_stickers.block(self.store,persona,scene)
+            if scene.get('kind')=='group':
+                # Stickers people posted here lately, saved in her candidate pool (owner 2026-10-06).
+                here=_stickers.candidates_block(self.store,moment,scene['_id'])
+                if here:context['sticker_candidates_from_program']=here
             faces=_stickers.faces_block(self.store,scene)
             if faces:context['faces_from_program']=faces
         elif session_class==visibility.OWNER_PRIVATE and not event.get('episode_kind') in ('settlement',):
@@ -727,6 +731,11 @@ class ContextBuilder:
             shelf_review=_sticker_review(self.store,persona,moment)
             if shelf_review:
                 context['stickers_review_from_program']=shelf_review
+            # The candidate pool: what people posted in her groups, for her to look at and keep or let go.
+            from .stickers import candidates_block as _candidates
+            pool=_candidates(self.store,moment)
+            if pool:
+                context['sticker_candidates_from_program']=pool
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         # The whole turn stays under its ceiling (context_budget.py); what is left out is said, and recall reaches it.

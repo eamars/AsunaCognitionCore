@@ -123,10 +123,12 @@ TOOLS = {
         'description': ('整理你的表情包架子（stickers_from_program）。keep：收下一个表情包——ref 照抄群里表情包下面标的'
                         '「表情包 ref」（att-…），或你自己画的图的 artifact_id（blob-…）；起个名字（name），写一句什么时候用'
                         '（when）。只有表情包能收，照片不行；架子满了先 drop 一个。drop：按名字放下一个。'
-                        'rename：改名字（new_name）或用法（when）。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
+                        'rename：改名字（new_name）或用法（when）。sticker_candidates_from_program 里的候选：先 read_image 看过，'
+                        '再 keep 并写 candidate。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内', required=True),
                        'ref': _s('keep 用：表情包 ref（att-…）或你自己画的图的 artifact_id（blob-…）'),
+                       'candidate': _s('keep 用：候选池里的 candidate（照抄 sticker_candidates_from_program，先看过）'),
                        'when': _s('keep 必填、rename 可改：什么时候用它，40 字以内'),
                        'new_name': _s('rename 用：新名字')},
     },
@@ -318,7 +320,7 @@ def exposed(store, ep):
         names.append('stop_action')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
-    if context.get('stickers_from_program') or context.get('stickers_review_from_program'):
+    if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
@@ -352,8 +354,9 @@ def exposed(store, ep):
 
 def offered_pictures(ep):
     """The artifact ids her turn may send (image_artifacts_from_program): she may also look at them."""
+    from .stickers import candidate_ids
     items = ((ep.get('context') or {}).get('image_artifacts_from_program') or {}).get('items') or ()
-    return tuple(item['artifact_id'] for item in items if isinstance(item, dict) and item.get('artifact_id'))
+    return tuple(item['artifact_id'] for item in items if isinstance(item, dict) and item.get('artifact_id'))         + candidate_ids(ep.get('context'))                 # sticker candidates: she looks before she keeps
 
 
 def her_pictures(store, ep):
@@ -411,6 +414,8 @@ WORDS = {
     'STICKER_IS_A_PHOTO': '这是一张照片，不是表情包：照片不能收。',
     'STICKER_NOT_REACHABLE': '这个表情包拉不到了（链接可能过期了），收不了。',
     'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
+    'STICKER_CANDIDATE_NOT_LOOKED': '先用 read_image 看过这个候选（ref 照抄 candidate），再收。',
+    'STICKER_CANDIDATE_GONE': '这个候选已经不在池子里了（挤掉了或收过了）。',
     'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
     'ERRAND_PLACE_UNKNOWN': '没有这个地方；照抄 errand_places_from_program 里的 place。',
@@ -621,8 +626,13 @@ class RoleTools:
         from .blobs import BlobStore
         from .vision import read_image_for_task
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
-        return read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
-                                   route='character', offered=offered_pictures(ep)), False
+        result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
+                                     route='character', offered=offered_pictures(ep))
+        ref = str((args or {}).get('ref') or '')
+        if ref:                                       # what she looked at this turn (a candidate is kept only after)
+            fresh = self._fresh(ep)
+            self.coordinator._update(fresh, looked=[*dict.fromkeys([*(fresh.get('looked') or []), ref])])
+        return result, False
 
     def tool_attach_image(self, ep, call_id, args):
         from . import outbound_media
@@ -649,6 +659,8 @@ class RoleTools:
         from . import stickers
         from .blobs import BlobStore
         op = args.get('op')
+        if op == 'keep' and args.get('candidate'):
+            return stickers.keep_candidate(self.store, self._fresh(ep), ep['persona'], args), False
         if op == 'keep':
             return stickers.keep(self.store, BlobStore(self.store), ep, ep['persona'], args, self.store.config), False
         if op == 'drop':

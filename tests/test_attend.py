@@ -114,8 +114,9 @@ def test_catch_up_reaches_back_to_her_last_words_within_an_hour(store):
 
 
 def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store):
-    """Owner 2026-10-06 + her own rule: only lines she marked with await_answer; the person she answered; once;
-    within AWAIT_SECONDS. Anything addressed to someone else is not hers to look at."""
+    """Owner 2026-10-06: a line addressed to someone (answered or @-tagged) waits by default, like a reply; she turns it
+    off with await_answer wait=no. The addressed person; once; within AWAIT_SECONDS. Lines addressed elsewhere are not
+    hers to look at."""
     from datetime import datetime, timedelta, timezone
     from asuna.channels import AWAIT_SECONDS, awaited_answer
     from asuna.config import character_id
@@ -125,14 +126,15 @@ def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store)
     store.db.messages.insert_one({'_id': 'in-ep-ask', 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
                                   'scene_seq': 900, 'direction': 'inbound', 'author': 'qq:20002', 'text': '嗨'})
 
-    def said(seconds_ago, waits=True, seq=901):
+    def said(seconds_ago, waits=True, seq=901, text='', reply_to='in-ep-ask'):
         store.db.messages.delete_many({'direction': 'outbound', 'scene_id': SCENE})
         store.db.messages.insert_one({'_id': 'out-%d' % seq, 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
             'scene_seq': seq, 'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
-            'reply_to': 'in-ep-ask', 'episode_id': 'ep-ask',
+            'reply_to': reply_to, 'episode_id': 'ep-ask', 'text': text,
             'receipt_at': (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).isoformat()})
         store.db.episodes.delete_many({'_id': 'ep-ask'})
-        store.db.episodes.insert_one({'_id': 'ep-ask', 'schema_version': 1, **({'await_answer': {'why': '问他怎么有空'}} if waits else {})})
+        choice = {'await_answer': {'why': '问他怎么有空'}} if waits is True else {'await_answer': {'off': True}} if waits == 'off' else {}
+        store.db.episodes.insert_one({'_id': 'ep-ask', 'schema_version': 1, **choice})
 
     said(30)
     assert awaited_answer(store, scene, 'qq:20002', [], None)                   # the asked person, unaddressed
@@ -142,7 +144,17 @@ def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store)
     said(AWAIT_SECONDS + 5)
     assert not awaited_answer(store, scene, 'qq:20002', [], None)               # too late: people moved on
     said(30, waits=False)
-    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # a remark of hers, not a question
+    assert awaited_answer(store, scene, 'qq:20002', [], None)                   # answering him waits by default
+    said(30, waits='off')
+    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # she turned it off for this line
+    if not store.db.scene_people.find_one({'scene_id': SCENE, 'handle': 1}):
+        store.db.scene_people.insert_one({'_id': SCENE + '|qq:20002', 'schema_version': 1, 'scene_id': SCENE,
+                                          'person': 'qq:20002', 'handle': 1})
+    said(30, waits=False, reply_to='in-internal-visit', text='@[阿杰 #1] 你来看看')
+    assert awaited_answer(store, scene, 'qq:20002', [], None)                   # an @-tag of hers waits for that person
+    assert not awaited_answer(store, scene, 'qq:20003', [], None)
+    said(30, waits=False, reply_to='in-internal-visit', text='大家晚上好')
+    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # a remark to nobody: no wait
     said(30)
     store.db.messages.insert_one({'_id': 'in-look', 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': 902, 'direction': 'inbound',
                                   'author': 'qq:20002', 'event': {'group_context': {'wake_reason': 'awaited_answer'}}})

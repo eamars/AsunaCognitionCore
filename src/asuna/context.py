@@ -587,7 +587,7 @@ class ContextBuilder:
                 waiting = ((self.store.db.episodes.find_one({'_id':(mine or {}).get('episode_id')},{'await_answer':1}) or {})
                            .get('await_answer') or {}).get('why')
                 continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
-                    'note': '你上一句说了在等回话；这句没 @ 你也没引用你，是不是在回你由你判断。'}
+                    'note': '你上一句 @ 了他或是在回他（或你说了在等回话）；这句没 @ 你也没引用你，是不是在回你由你判断。'}
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}

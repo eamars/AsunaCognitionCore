@@ -84,7 +84,7 @@ A group message wakes her for one of these reasons. An @ of her account or a rep
 - her name without an @ (her display name or the persona's `people.self_names`);
 - the proactive rules of a group that opted in;
 - a chain (below);
-- an awaited answer: her newest delivered line in the group was one she marked with `await_answer` (`why`, kept on her episode), and within `channels.AWAIT_SECONDS` (180 s; in her groups 90% of human answers come within about 3 minutes) the person that line answered (anyone, when it answered nobody) writes a line that @s and quotes no one. One look per line of hers (`wake_reason: awaited_answer`); her turn carries `awaited_from_program` with what she said she was waiting for. Untagged lines are otherwise not hers to catch (owner 2026-10-06: missing them is human); the marker is her choice per line.
+- an awaited answer: her newest delivered line in the group was addressed to someone — the people she @-tagged by label and the author of the line she answered (`channels.addressees`), waited on by default like a reply (owner 2026-10-06) — and within `channels.AWAIT_SECONDS` (180 s; in her groups 90% of human answers come within about 3 minutes) one of them writes a line that @s and quotes no one. `await_answer` (`wait`: `no` turns it off for the turn; `yes` with `why` waits for anyone when the line is addressed to nobody). One look per line of hers (`wake_reason: awaited_answer`); her turn carries `awaited_from_program`.
 
 The gate is one short request in a small per-group child session (`asuna-attend-…`, preset `asuna-attend`). It runs on the character route at a low effort, and compacts at about 5% of the context window. It reads only words:
 - why she is asked;

@@ -107,10 +107,12 @@ TOOLS = {
         'parameters': {'how': _s('引用还是不引用', required=True, enum=['source', 'none'])},
     },
     'await_answer': {
-        'description': ('群里这句是在问某个人、或跟人要个东西，想等对方回：调用它，这句发出去后大约三分钟里，'
-                        '对方下一句哪怕没 @ 你、没引用你，你也会被叫来看一眼（接话／不理）。一句话只看一次；'
-                        '这句不是在等回话就不用调。'),
-        'parameters': {'why': _s('在等什么回话，一句话', required=True)},
+        'description': ('等不等回话。群里你这回合的话 @ 了谁、或是在回谁，程序默认等他：发出去后大约三分钟里，'
+                        '他下一句哪怕没 @ 你、没引用你，也会叫你看一眼（接话／不理），一句话只看一次。'
+                        'wait=no 关掉这回合的等待（比如只是随口一句、不需要他回）；'
+                        '没 @ 谁也没在回谁、却想等这里谁的回话，就 wait=yes。'),
+        'parameters': {'wait': _s('等还是不等', required=True, enum=['yes', 'no']),
+                       'why': _s('wait=yes 时：在等什么回话，一句话')},
     },
     'attach_image': {
         'description': ('给这回合要说的话配一张图，随话一起发出去。artifact_id 只能照抄 image_artifacts_from_program '
@@ -562,9 +564,15 @@ class RoleTools:
         return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
 
     def tool_await_answer(self, ep, call_id, args):
+        wait = args.get('wait', 'yes')
+        if wait not in ('yes', 'no'):
+            raise Refused('wait 是 yes 或 no。')
+        if wait == 'no':
+            self.coordinator._update(self._fresh(ep), await_answer={'off': True})
+            return {'note': '这回合不等回话。'}, False
         why = self._text(args, 'why', 200)
         self.coordinator._update(self._fresh(ep), await_answer={'why': why})
-        return {'note': '这句发出去后约三分钟里，对方下一句没 @ 你也会叫你看一眼。'}, False
+        return {'note': '这句发出去后约三分钟里，你 @ 的人、你回的人（都没有时这里任何人）下一句没 @ 你也会叫你看一眼。'}, False
 
     def tool_answer_action(self, ep, call_id, args):
         answer = self._text(args, 'answer', 20000)

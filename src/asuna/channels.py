@@ -66,15 +66,30 @@ def called_by_name(store, text):
     return any(len(name) >= 2 and name in text for name in People(store).self_names)
 
 
-# A line of hers that waits for an answer (role_tools.await_answer): the asked person's next unaddressed line
-# within this long gets her one look. Human answers in her groups: median 40 s, 90% within ~3 min (2026-10-06).
+# A line of hers addressed to someone waits for their answer: the people she @-tagged and the person she answered.
+# Their next unaddressed line within this long gets her one look (owner 2026-10-06: by default, like a reply; she
+# turns it off for a line with await_answer). Human answers in her groups: median 40 s, 90% within ~3 min.
 AWAIT_SECONDS = 180
 
 
+def addressees(store, scene, line):
+    """The people her line is addressed to: whoever she @-tagged by label, and the author of the line she answered."""
+    from .people import LABEL_MENTION
+    people = People(store)
+    handles = {match.group(2) or match.group(3) for match in LABEL_MENTION.finditer(line.get('text') or '')}
+    found = {people.person(doc.get('person')) for doc in people.roster(scene['_id']).values()
+             if str(doc.get('handle')) in handles and doc.get('person')}
+    answered = store.db.messages.find_one({'_id': line.get('reply_to')}, {'author': 1, 'direction': 1}) or {}
+    if answered.get('direction') == 'inbound' and answered.get('author'):
+        found.add(people.person(answered['author']))
+    return found
+
+
 def awaited_answer(store, scene, person_id, mentions, reply):
-    """Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line
-    in this group asked for one, it was under AWAIT_SECONDS ago, this is the person it answered (anyone, when her
-    line answered nobody), the line @s or quotes no one else, and that line has not had its look yet."""
+    """Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line in
+    this group was addressed to this person (or she asked for an answer from anyone with await_answer), it was under
+    AWAIT_SECONDS ago, she did not turn the wait off, the line @s or quotes no one else, and hers has not had its
+    look yet."""
     if mentions or reply:
         return False                   # addressed to someone: an @ or quote of her is already its own wake
     mine = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
@@ -88,12 +103,15 @@ def awaited_answer(store, scene, person_id, mentions, reply):
         return False
     if since.total_seconds() > AWAIT_SECONDS:
         return False
-    ep = store.db.episodes.find_one({'_id': mine.get('episode_id')}, {'await_answer': 1}) or {}
-    if not ep.get('await_answer'):
+    choice = (store.db.episodes.find_one({'_id': mine.get('episode_id')}, {'await_answer': 1}) or {}).get('await_answer')
+    if (choice or {}).get('off'):
         return False
-    asked = (store.db.messages.find_one({'_id': mine.get('reply_to')}, {'author': 1, 'direction': 1}) or {})
-    if asked.get('direction') == 'inbound' and asked.get('author') and asked['author'] != person_id:
-        return False
+    asked = addressees(store, scene, mine)
+    if asked:
+        if People(store).person(person_id) not in asked:
+            return False
+    elif not choice:
+        return False                   # addressed to nobody and no wait asked for: a remark of hers
     return not store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': {'$gt': mine.get('scene_seq', 0)},
                                            'event.group_context.wake_reason': 'awaited_answer'}, {'_id': 1})
 

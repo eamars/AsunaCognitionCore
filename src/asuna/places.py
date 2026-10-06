@@ -396,3 +396,62 @@ def record(plan, scene_id, event_id, intent, moment, date):
     visits = [*((plan or {}).get('visits') or []), {'scene_id': scene_id, 'event_id': event_id, 'intent': intent,
                                                     'at': moment.isoformat(), 'date': date}][-VISITS_KEPT:]
     return {'visits': visits}
+
+
+# ── what she did elsewhere (owner 2026-10-06) ────────────────────────────────────────────────────
+# A home turn otherwise knows nothing of her own doings outside: shown the pictures she made, she took them
+# for another person's. Only her own actions, as program words -- nobody else's words (ADR-017).
+ELSEWHERE_HOURS = 6
+ELSEWHERE_PLACES = 5
+TASK_STATES = {'READY': '在做', 'RUNNING': '在做', 'QUEUED': '在做', 'PAUSED': '停着', 'RETURNED': '做完回来了',
+               'BLOCKED': '没做成', 'CANCELLED': '叫停了'}
+
+
+def _lines_word(count):
+    return '一句' if count == 1 else '几句' if count <= 4 else '十来句' if count <= 15 else '很多句'
+
+
+def elsewhere(store, persona, moment, home):
+    """elsewhere_from_program: per place outside home in the last hours, what she said, sent and handed over."""
+    from .people import People
+    since = (moment - timedelta(hours=ELSEWHERE_HOURS)).isoformat()
+    me = character_id(store.config)
+    places = {}
+    for row in store.db.messages.find({'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
+                                       'receipt_at': {'$gte': since}, 'scene_id': {'$nin': list(home)}},
+                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1}):
+        place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'tasks': [], 'last': None})
+        if isinstance(row.get('sticker'), dict):
+            place['stickers'] += 1
+        elif row.get('attachment'):
+            place['pictures'] += 1
+        else:
+            place['lines'] += 1
+        at = _at(row.get('receipt_at'))
+        place['last'] = max(filter(None, (place['last'], at)), default=None)
+    for task in store.db.tasks.find({'scene_id': {'$nin': list(home), '$in': list(places) or [None]},
+                                     'created_at': {'$gte': since}}, {'scene_id': 1, 'title': 1, 'state': 1}):
+        if task.get('title'):
+            places[task['scene_id']]['tasks'].append('%s（%s）' % (excerpt(task['title'], 40),
+                                                                  TASK_STATES.get(task.get('state'), '在做')))
+    if not places:
+        return None
+    people = People(store, persona)
+    items = []
+    for scene_id, place in sorted(places.items(), key=lambda kv: kv[1]['last'] or moment, reverse=True)[:ELSEWHERE_PLACES]:
+        scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+        did = []
+        if place['lines']:
+            did.append('说了%s' % _lines_word(place['lines']))
+        if place['pictures']:
+            did.append('发了%d张你自己画的图' % place['pictures'])
+        if place['stickers']:
+            did.append('发了%d个表情包' % place['stickers'])
+        item = {'where': people.scene_title(scene), 'you': '，'.join(did) or '没说话',
+                'last': _ago(moment, place['last']) if place['last'] else ''}
+        if place['tasks']:
+            item['handed_over'] = place['tasks'][:3]
+        items.append(item)
+    return {'items': items,
+            'note': '这是你自己最近 %d 小时在别处做过的事（只有你做的，没有别人的话）。那些回合看不到家里，'
+                    '家里也只看到这些；都是你。' % ELSEWHERE_HOURS}

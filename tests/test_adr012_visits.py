@@ -323,3 +323,25 @@ def test_her_rhythm_is_named_in_the_task_page_and_her_pace_holds_against_edits_t
     service.lane.events.append({'seq': len(service.lane.events) + 1, 'data': {'operation': 'delete', 'id': plan['schedule_id']}})
     service.watch_rhythm(deep=True)
     assert store.db.plans.find_one({'_id': plan['_id']})['schedule_id'] != plan['schedule_id']
+
+
+def test_at_home_she_sees_what_she_herself_did_elsewhere_and_nothing_anyone_said(store):
+    """Owner 2026-10-06: shown pictures she made in a group, a home turn took them for someone else's."""
+    from asuna.config import character_id
+    group_world(store)
+    me = character_id(store.config)
+    for n, extra in enumerate(({}, {'attachment': {'artifact_id': 'blob-x'}})):
+        store.db.messages.insert_one({'_id': 'mine-%d' % n, 'schema_version': 1, 'scene_id': 'g1', 'policy_epoch': 1,
+            'scene_seq': 700 + n, 'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
+            'text': 'MY_OWN_LINE', 'receipt_at': now(), **extra})
+    line(store, 'g1', 'm-theirs', 'SOMEONE_ELSES_LINE', minutes_ago=0)
+    store.db.tasks.insert_one({'_id': 'task-draw', 'schema_version': 1, 'scene_id': 'g1', 'title': '画一张自画像',
+                               'state': 'RETURNED', 'created_at': now()})
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '嗯')])).ingest(
+        {'event_id': 'home-look', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你在群里画画了？'})
+    block = ep['context']['elsewhere_from_program']
+    [item] = block['items']
+    assert '一句' in item['you'] and '1张你自己画的图' in item['you'] and item['handed_over'] == ['画一张自画像（做完回来了）']
+    assert '都是你' in block['note']
+    text = json.dumps(block, ensure_ascii=False)
+    assert 'SOMEONE_ELSES_LINE' not in text and 'MY_OWN_LINE' not in text

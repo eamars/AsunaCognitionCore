@@ -493,6 +493,12 @@ class ContextBuilder:
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
         # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).
+        if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence'):
+            # Owner 2026-10-06: her own doings elsewhere, as words (heartbeats have recent_experience instead).
+            from . import places as _places
+            done_elsewhere=_places.elsewhere(self.store,persona,moment,visibility.owner_private_scenes(self.store.config)|{scene['_id']})
+            if done_elsewhere:
+                context['elsewhere_from_program']=done_elsewhere
         if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external')=='external':
             from . import places as _places
             targets=_places.errand_places(self.store,persona)

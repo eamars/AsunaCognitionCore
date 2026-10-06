@@ -124,7 +124,8 @@ TOOLS = {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
                         'set_tags 只改 visibility/inject/tags；adopt_seed 接收人格包里更新的种子。'
-                        '没写 visibility 的新节按 owner_private 保存。inject=always 的节每回合都会带上，有上限：'
+                        '没写 visibility 的新节按 owner_private 保存。visibility 也决定你哪些回合用得上这一节：public 的节群里和别人私聊里的'
+                        '你也读得到；owner_private 的只有家里的你读得到。inject=always 的节每回合都会带上，有上限：'
                         '不常用的节改成 on_demand 收起来（还在，recall 能读）。不写对用户的台词，不把没发生的事写成发生过。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
@@ -134,7 +135,7 @@ TOOLS = {
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
-            'visibility': _s('谁能读到', enum=['public', 'owner_private']),
+            'visibility': _s('谁能读到：public＝所有回合（包括群里）的你；owner_private＝只有家里的你', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
         },
     },

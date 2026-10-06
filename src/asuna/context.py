@@ -68,6 +68,8 @@ BLOCKS = {
     'sender_identity': ('sender_identity',),
 }
 CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+UNDELIVERED_WORDS = {'READY': '还没发', 'QUEUED_EXTERNAL': '在发', 'SENDING': '在发', 'FAILED': '没发出去',
+                     'UNKNOWN': '平台没给准话：多半已经发出去了，先看看那边有没有再决定，别直接重发'}
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
                 'recent_experience_from_program')
 
@@ -243,6 +245,8 @@ class ContextBuilder:
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
+            row['delivery_state']=UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state'))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         if source:
             for queued in self.store.db.messages.find({'scene_id':scene['_id'], 'direction':'inbound',

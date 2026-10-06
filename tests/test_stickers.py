@@ -200,3 +200,20 @@ def test_the_shelf_has_a_limit_and_rotating_it_is_hers(store, monkeypatch):
     monkeypatch.setattr(stickers, 'STICKER_SHELF', 60)                 # not full: the week decides
     assert stickers.review_block(store, 'P1', moment + timedelta(days=1)) is None
     assert stickers.block(store, 'P1', {'_id': 'dm-a'}, at_home=True)['note'] == stickers.HOME_NOTE
+
+
+def test_napcats_send_timeout_is_an_unknown_send_not_a_failed_one():
+    """Owner 2026-10-06: every picture NapCat reported as a sendMsg timeout had reached the group; she resent them."""
+    from qqadapter.outbound import platform_send_timed_out
+    receipts = []
+    napcat_said = {'status': 'failed', 'retcode': 1200, 'data': None, 'wording': '',
+               'message': 'Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{}\n'}
+    outbound = Outbound(
+        cfg=SimpleNamespace(route_for_target=lambda ttype, tid: {'id': 'g'}, napcat={'account_id': BOT}),
+        host=SimpleNamespace(post_receipt=lambda pub, payload: receipts.append(payload) or SimpleNamespace(kind='ok', code=200)),
+        onebot=SimpleNamespace(api_call=lambda action, params, timeout=None, meta=None: napcat_said),
+        journal=SimpleNamespace(append=lambda *a, **k: None), counters=SimpleNamespace(inc=lambda *a: None),
+        log=lambda *a: None, verify=False)
+    outbound.handle_item({'publication_id': 'p1', 'attempt_id': 'a1', 'target': {'type': 'group', 'id': GROUP}, 'text': '看图'})
+    assert receipts[-1]['status'] == 'unknown' and receipts[-1]['response']['reason'] == 'platform_send_timeout', receipts
+    assert not platform_send_timed_out({'retcode': 1200, 'message': 'group not found'})     # a real 1200 still fails

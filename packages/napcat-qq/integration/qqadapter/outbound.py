@@ -44,6 +44,14 @@ from . import faces
 from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
 
 RETRY_WAITS = (0, 2, 5)
+
+
+def platform_send_timed_out(resp):
+    """NapCat's retcode 1200 for sendMsg whose own confirmation event never came: the send's outcome is unknown."""
+    if not isinstance(resp, dict) or resp.get("retcode") != 1200:
+        return False
+    text = str(resp.get("message") or "") + str(resp.get("wording") or "")
+    return "Timeout" in text and "sendMsg" in text
 MAX_SPOOL_TRIES = 20
 
 SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
@@ -537,6 +545,12 @@ class Outbound:
             self.counters.inc("send_accepted")
             status, pmid, tag = "platform_accepted", str(mid), "platform_accepted"
             response = resp
+        elif platform_send_timed_out(resp):
+            # NapCat stopped waiting for QQ's own confirmation (a fresh picture's first upload is slow); QQ delivered
+            # every such send we have seen (owner 2026-10-06). Not failed: unknown, which is never re-sent.
+            self.counters.inc("send_unknown")
+            status, pmid, tag = "unknown", None, "platform_send_timeout"
+            response = dict(resp, reason="platform_send_timeout")
         else:
             self.counters.inc("send_failed")
             status, pmid, tag = "failed", None, "retcode_%s" % retcode

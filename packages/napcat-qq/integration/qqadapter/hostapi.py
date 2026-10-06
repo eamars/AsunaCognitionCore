@@ -24,7 +24,7 @@ import urllib.request
 # never queues a publication this adapter could only half-send.  An older host
 # ignores an unknown query parameter (the channel server reads only
 # `wait_seconds`), so declaring is safe before the host learns about it.
-CAPABILITIES = ("image",)
+CAPABILITIES = ("image", "sticker")
 
 # One attachment's bytes.  QQ photos are commonly 1-6 MiB; this is the
 # adapter's own ceiling, not the host's, and it is enforced while reading.

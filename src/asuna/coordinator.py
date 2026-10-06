@@ -226,6 +226,9 @@ class Coordinator:
             speech=self._speech(ep,value)
             issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
                                          consult=kind=='consult')
+            if issue is None and kind!='consult':
+                from . import stickers
+                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
             if issue is None:
                 self._absorb(ep,seen)
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))
@@ -295,6 +298,8 @@ class Coordinator:
         model,policy=model_and_policy(self.store,ep['persona'])
         segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or SPLIT_MARKER,
                               effective(model,'speak.max_messages',policy) or 1)
+        from . import stickers
+        segments=stickers.split(segments)       # ADR-016: a sticker leaves as a message of its own
         scene=self.store.db.scenes.find_one({'_id':ep['scene_id']})
         times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
                      effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
@@ -307,8 +312,13 @@ class Coordinator:
             if not self.store.db.messages.find_one({'_id':key}):
                 sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
                 row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
-                if index==0 and attach_meta:
-                    row['attachment']=dict(attach_meta)
+                sticker=stickers.outbound(self.store,ep['persona'],segment)
+                if sticker:
+                    row.update(sticker)
+                    stickers.sent(self.store,ep['persona'],sticker['sticker']['name'],ep['scene_id'])
+                elif attach_meta and not self.store.db.messages.find_one({'episode_id':ep_id,'phase':'SPEAK',
+                        'attachment':{'$exists':True},'sticker':{'$exists':False}},{'_id':1}):
+                    row['attachment']=dict(attach_meta)     # her attach_image picture: on her first words
                 if len(segments)>1:
                     row.update(segment_index=index,segment_count=len(segments))
                     if scene.get('channel_id'):

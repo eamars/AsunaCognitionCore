@@ -103,6 +103,17 @@ TOOLS = {
                         '里列出的值；正文里不要写文件名、路径或「见图」。一回合最多一张，再调用就换成新的那张。'),
         'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s('为什么发这张', required=True)},
     },
+    'sticker': {
+        'description': ('整理你的表情包架子（stickers_from_program）。keep：收下一个表情包——ref 照抄群里表情包下面标的'
+                        '「表情包 ref」（att-…），或你自己画的图的 artifact_id（blob-…）；起个名字（name），写一句什么时候用'
+                        '（when）。只有表情包能收，照片不行；架子满了先 drop 一个。drop：按名字放下一个。'
+                        'rename：改名字（new_name）或用法（when）。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename']),
+                       'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内', required=True),
+                       'ref': _s('keep 用：表情包 ref（att-…）或你自己画的图的 artifact_id（blob-…）'),
+                       'when': _s('keep 必填、rename 可改：什么时候用它，40 字以内'),
+                       'new_name': _s('rename 用：新名字')},
+    },
     'write_document': {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
@@ -274,6 +285,8 @@ def exposed(store, ep):
         names.append('stop_action')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
+    if context.get('stickers_from_program') or context.get('stickers_review_from_program'):
+        names.append('sticker')
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
@@ -349,6 +362,17 @@ WORDS = {
     'VISIT_NOT_NOW': '现在去不了那里。',
     'VISIT_OFF': '出门现在没开。',
     'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里那个回合再挑也行。',
+    'STICKER_SHELF_FULL': '表情包架子满了：先用 drop 放下一个不想要的，再收。',
+    'STICKER_NAME_TAKEN': '架子上已经有这个名字了：换一个名字。',
+    'STICKER_NAME_INVALID': '名字不合适。',
+    'STICKER_WHEN_INVALID': '要写一句什么时候用它。',
+    'STICKER_NOT_YOURS': '只有你自己画的图能直接放上架子；别人的要用群里表情包下面的 ref 收。',
+    'STICKER_REF_NOT_HERE': '这个对话最近的消息里没有这个 ref：照抄表情包下面标的 ref；太早的收不到了。',
+    'STICKER_IS_A_PHOTO': '这是一张照片，不是表情包：照片不能收。',
+    'STICKER_NOT_REACHABLE': '这个表情包拉不到了（链接可能过期了），收不了。',
+    'STICKER_ALREADY_KEPT': '这个表情包你已经收过了。',
+    'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
+    'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
     'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
     'IMAGE_NOT_PULLABLE': '这张图拉不到。',
     'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
@@ -557,6 +581,18 @@ class RoleTools:
             produced_only=group)
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
         return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
+
+    def tool_sticker(self, ep, call_id, args):
+        from . import stickers
+        from .blobs import BlobStore
+        op = args.get('op')
+        if op == 'keep':
+            return stickers.keep(self.store, BlobStore(self.store), ep, ep['persona'], args, self.store.config), False
+        if op == 'drop':
+            return stickers.drop(self.store, ep['persona'], args.get('name')), False
+        if op == 'rename':
+            return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when')), False
+        raise Refused('op 是 keep、drop 或 rename。')
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):

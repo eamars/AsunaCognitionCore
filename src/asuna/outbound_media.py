@@ -439,6 +439,17 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
             'size': len(data)}
 
 
+def kept_sticker(store, row, item):
+    """This row sends a sticker, and its picture is one she keeps on her shelf."""
+    if not isinstance((row or {}).get('sticker'), dict):
+        return False
+    try:
+        from .stickers import on_shelf
+    except Exception:       # flat offline load: no shelf
+        return False
+    return on_shelf(store, item['_id'])
+
+
 def serve(store, blobs, row, declared):
     """字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。
 
@@ -455,7 +466,9 @@ def serve(store, blobs, row, declared):
     item = store.db.artifacts.find_one({'_id': declared['artifact_id']})
     if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
-    if row_is_group(store, row):
+    if kept_sticker(store, row, item):
+        pass                # a sticker on her shelf, sent as a sticker (ADR-016): any conversation that takes one
+    elif row_is_group(store, row):
         if not produced(item):
             raise Denied('ATTACHMENT_NOT_HER_OWN')
     elif item.get('scope_key') not in row_image_scopes(store, row):

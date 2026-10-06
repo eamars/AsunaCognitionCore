@@ -59,7 +59,8 @@ BLOCKS = {
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
                     'schedule_control_from_program', 'scheduled_plan_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
-    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program'),
+    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program',
+              'stickers_from_program', 'faces_from_program'),
     'group_continuity': ('group_continuity_from_program',),
     'sender_identity': ('sender_identity',),
 }
@@ -470,6 +471,15 @@ class ContextBuilder:
                 from .vision import vision_capability as _vision
                 mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+        # ADR-016: her sticker shelf where stickers can go out (and at home, to tidy it), the platform's faces.
+        from . import stickers as _stickers
+        if _stickers.sends(scene):
+            context['stickers_from_program']=_stickers.block(self.store,persona,scene)
+            faces=_stickers.faces_block(self.store,scene)
+            if faces:context['faces_from_program']=faces
+        elif session_class==visibility.OWNER_PRIVATE and not event.get('episode_kind') in ('settlement',):
+            shelf=_stickers.block(self.store,persona,scene,at_home=True)
+            if shelf:context['stickers_from_program']=shelf
         if event.get('episode_kind')=='scheduled':
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
@@ -657,6 +667,11 @@ class ContextBuilder:
             review=review_block(self.store,persona,moment)
             if review:
                 context['notes_review_from_program']=review
+            # ADR-016: once a week, the stickers she kept and has not been sending; dropping is hers.
+            from .stickers import review_block as _sticker_review
+            shelf_review=_sticker_review(self.store,persona,moment)
+            if shelf_review:
+                context['stickers_review_from_program']=shelf_review
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         # The whole turn stays under its ceiling (context_budget.py); what is left out is said, and recall reaches it.

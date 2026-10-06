@@ -230,6 +230,15 @@ class Channels:
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
+                    sticker = row.get('sticker') if isinstance(row.get('sticker'), dict) else None
+                    if sticker and 'sticker' not in (supports or ()):
+                        # A sticker is the whole message: one this adapter cannot send is not sent at all (ADR-016).
+                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED',
+                                                'failure': 'CHANNEL_DOES_NOT_DECLARE_STICKER'},
+                                                expected=row['revision'], stream=row['episode_id'])
+                        from .publish import PublishService
+                        PublishService(self.store).cancel_after(failed)
+                        continue
                     attempt = uuid.uuid4().hex
                     declared = outbound_media.descriptor(row)
                     carries = bool(declared) and outbound_media.supports_image(supports)
@@ -248,6 +257,10 @@ class Channels:
                             'reply_to': row['platform_reply_to']}
                     if carries:
                         item[outbound_media.ATTACHMENT_KEY] = declared      # 只有元数据，不带 base64；字节走下面的 GET
+                    if sticker:
+                        # her row keeps the [表情包:名字] she wrote; the platform gets the sticker alone
+                        item['text'] = ''
+                        item['sticker'] = {k: v for k, v in sticker.items() if k != 'name'}
                     return {'items': [item]}
             if time.monotonic() >= deadline:
                 break

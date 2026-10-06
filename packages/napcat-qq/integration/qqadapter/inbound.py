@@ -41,6 +41,8 @@ import re
 import threading
 from datetime import datetime, timezone
 
+from . import faces
+
 MAX_TEXT = 16000
 MEDIA_KEY = "asuna_media"
 MEDIA_MODES = ("full", "annotate", "off")
@@ -152,13 +154,22 @@ def _media_item(stype, data):
     else:
         label, self_describing = known
     name = ""
-    if stype == "image":
-        # NapCat labels animated stickers with a summary ("[动画表情]"); a
-        # plain photo has none, and then the placeholder says nothing more than
-        # "there was a picture here"
+    sticker = sticker_kind(data) if stype == "image" else None
+    if sticker:
+        # A sticker is a picture sent as a sticker (0.6): `[表情包]`, or `[表情包:臭]` when the platform
+        # named it (a store sticker, or a small named one like [赞]).  The generic "[动画表情]" names nothing.
+        label, self_describing = "表情包", True
+        name = _clean(data.get("summary"), MAX_LABEL).strip("[]【】 ")
+        if name in ("动画表情", "图片"):
+            name = ""
+    elif stype == "image":
+        # a plain photo has no summary, and then the placeholder says nothing more
+        # than "there was a picture here"
         name = _clean(data.get("summary"), MAX_LABEL).strip("[]【】 ")
     elif stype == "face":
-        name = _clean(data.get("text") or data.get("Text"), 24).strip("[]【】 ")
+        # NapCat names a face in raw.faceText ('/汪汪'); classic faces carry no
+        # name there, and then the id is looked up in faces.json (0.6)
+        name = faces.name_of(data)
     elif stype == "location":
         name = _clean(data.get("name") or data.get("address"), MAX_LABEL)
     elif stype == "poke":
@@ -183,7 +194,36 @@ def _media_item(stype, data):
         val = _clean(data.get("sub_type"), 12)
         if val:
             item["sub_type"] = val
+    if sticker:
+        item["sticker"] = sticker
+        if sticker == "market":
+            # what sending this very store sticker back takes (an `mface` segment)
+            for key, limit in (("emoji_id", 64), ("emoji_package_id", 24), ("key", 64)):
+                val = _clean(data.get(key), limit)
+                if val:
+                    item[key] = val
+    if stype == "face":
+        val = _clean(data.get("id"), 8)
+        if val.isdigit():
+            item["face_id"] = val
     return item
+
+
+STICKER_SUB_TYPES = ("1", "7")          # a custom sticker (still or animated), a small named sticker
+MARKET_HOST = "gxh.vip.qq.com"          # store stickers come from QQ's sticker shop host
+
+
+def sticker_kind(data):
+    """'market' for a store sticker, 'custom' for a picture sent as a sticker, None for a photo.
+
+    NapCat delivers both as `image`: a store sticker carries emoji ids (or comes from the shop host), a
+    custom sticker carries sub_type 1 (or 7 for the small named ones); a photo is sub_type 0.  The file
+    format says nothing -- custom stickers are jpg and png as often as gif."""
+    if data.get("emoji_id") or ("//%s/" % MARKET_HOST) in str(data.get("url") or ""):
+        return "market"
+    if _clean(data.get("sub_type"), 12) in STICKER_SUB_TYPES:
+        return "custom"
+    return None
 
 
 def parse_message(message):

@@ -21,6 +21,8 @@ TURN_CHARS = 48000                  # the whole turn context, as JSON characters
 FOLDED_HEADINGS = 20                # headings named for the sections a note does not show
 REVIEW_EVERY_DAYS = 7               # a changed note is due for tidying this long after the last time
 REVIEW_PER_NIGHT = 3                # notes listed in one settlement
+STICKER_SHELF = 60                  # stickers she keeps (ADR-016); her turn lists their names only
+STICKER_REVIEW = 6                  # stickers listed for her weekly look at the shelf
 
 # How full a note is, in words (share of its limit).
 FULLNESS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))

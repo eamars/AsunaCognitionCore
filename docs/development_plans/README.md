@@ -25,3 +25,4 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 013 | DSH peer channel (talk with an agent in another DSH) | Implemented 2026-10-06 (`@asuna/dsh-peer`). |
 | 014 | Context budget: limits per turn, her notes tidied at night | Implemented 2026-10-06 (`context_budget.py`). |
 | 015 | DSH's own sandbox replaces WSL; commands only in the owner's scenes | Implemented 2026-10-06. |
+| 016 | QQ faces and her own sticker shelf | Implemented 2026-10-06 (`stickers.py`, napcat-qq 0.6.0). |

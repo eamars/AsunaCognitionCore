@@ -164,6 +164,20 @@ def vision_capability(config, route='executor'):
             'unsupported_because': reasons}
 
 
+MARKET_IDS = ('emoji_id', 'emoji_package_id', 'key')
+
+
+def sticker_kind(item):
+    """'market' (a store sticker the platform can send again by its ids), 'custom' (a picture sent as a
+    sticker: kept by its bytes), or None (a photo). The adapter marks stickers; for items stored before it
+    did, the platform's kind module may tell from the item (channel_kinds.sticker_of). A store sticker
+    without its ids is kept by its bytes like a custom one."""
+    marked = item.get('sticker') or channel_kinds.sticker_of(item)
+    if marked == 'market':
+        return 'market' if all(_clean(item.get(key), 64) for key in MARKET_IDS) else 'custom'
+    return 'custom' if marked == 'custom' else None
+
+
 def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
     """一条消息 → 有界附件清单（只列图片；其它类型只保留占位符事实）。"""
     block = media_block(message)
@@ -188,6 +202,12 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
                  'summary': _clean(item.get('summary'), 80)}
         if name:
             entry['file'] = name
+        kind = sticker_kind(item)
+        if kind:
+            # The platform said this picture was sent as a sticker (ADR-016): she may keep it on her shelf.
+            entry['sticker'] = kind
+            if kind == 'market':
+                entry['market'] = {key: _clean(item.get(key), 64) for key in MARKET_IDS}
         if local_upload_item(message, item):
             # Stored by the program when the owner sent it: read back from the blob store, no host involved.
             reason = None if 'image' in vision['input_modalities'] else 'route_declares_image_input=false（当前模型路由不收图片）'
@@ -531,8 +551,13 @@ def task_attachment_context(store, task, config, source_message):
 def line_refs(message, config):
     """The refs of a platform line's readable pictures, as a short note under the line in her conversation:
     the placeholder says a picture was there, the ref is what read_image takes. Empty when there is none."""
-    refs = [entry['ref'] for entry in attachments_of(message, config=config) if entry.get('pullable')]
-    return ('（图 ref：' + '、'.join(refs) + '）') if refs else ''
+    entries = [entry for entry in attachments_of(message, config=config)
+               if entry.get('pullable') or entry.get('sticker') == 'market']
+    pictures = [entry['ref'] for entry in entries if not entry.get('sticker')]
+    stickers = [entry['ref'] for entry in entries if entry.get('sticker')]
+    # A sticker's ref is also what keeping it takes (ADR-016); a store sticker can be kept without looking.
+    return (('（图 ref：' + '、'.join(pictures) + '）') if pictures else '') + \
+           (('（表情包 ref：' + '、'.join(stickers) + '）') if stickers else '')
 
 
 def media_note(message, config):

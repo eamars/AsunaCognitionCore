@@ -40,6 +40,7 @@ import base64
 import re
 import time
 
+from . import faces
 from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
 
 RETRY_WAITS = (0, 2, 5)
@@ -52,10 +53,17 @@ ADMIN_KINDS = ("mute", "unmute", "kick", "recall")
 MAX_MUTE_SECONDS = 30 * 86400
 # a group send may carry these; a private send carries `text`; either may carry
 # one `image` before the words when the host attached a picture to this publication
-ALLOWED_OUT_SEGMENTS = ("reply", "text", "at")
-GROUP_IMAGE_SEGMENTS = ("reply", "image", "text", "at")
-PRIVATE_OUT_SEGMENTS = ("text",)
-PRIVATE_IMAGE_SEGMENTS = ("image", "text")
+ALLOWED_OUT_SEGMENTS = ("reply", "text", "at", "face")
+GROUP_IMAGE_SEGMENTS = ("reply", "image", "text", "at", "face")
+PRIVATE_OUT_SEGMENTS = ("text", "face")
+PRIVATE_IMAGE_SEGMENTS = ("image", "text", "face")
+# 0.6: a sticker goes out alone -- her own or one she kept, as a picture QQ shows as a sticker
+# (image + sub_type 1), or a store sticker as itself (mface, no bytes)
+STICKER_KEY = "sticker"
+STICKER_SEGMENTS = ("image", "mface")
+CUSTOM_STICKER_SUMMARY = "[动画表情]"
+# get_msg reads a store sticker back as an `image` segment (that is how NapCat delivers one inbound)
+STORED_AS = {"mface": "image"}
 
 ATTACHMENT_KEY = "attachment"
 MAX_IMAGE_BYTES = 8 * 1024 * 1024          # the adapter's own ceiling for one image
@@ -96,16 +104,58 @@ def encode_group_text(text):
     for match in AT_MARKER.finditer(text):
         before = text[pos:match.start()]
         if before:
-            segments.append({"type": "text", "data": {"text": before}})
+            segments.extend(encode_faces(before))
         segments.append({"type": "at", "data": {"qq": match.group(1)}})
         pos = match.end()
     tail = text[pos:]
     if tail:
-        segments.append({"type": "text", "data": {"text": tail}})
+        segments.extend(encode_faces(tail))
     return segments
 
 
-def build_send_params(target_type, target_id, text, reply_to=None, image_b64=None):
+def encode_faces(text):
+    """Split text into text/face segments: each `[表情:名字]` whose name is in faces.json becomes a real
+    QQ face at that position (0.6); an unknown name stays text."""
+    segments = []
+    pos = 0
+    for match in faces.TOKEN.finditer(text):
+        face_id = faces.BY_NAME.get(match.group(1))
+        if face_id is None:
+            continue
+        if match.start() > pos:
+            segments.append({"type": "text", "data": {"text": text[pos:match.start()]}})
+        segments.append({"type": "face", "data": {"id": face_id}})
+        pos = match.end()
+    if pos < len(text):
+        segments.append({"type": "text", "data": {"text": text[pos:]}})
+    return segments
+
+
+def sticker_plan(item):
+    """(sticker, None) when this item is a sticker this build can send, (None, None) when it is not a
+    sticker, else (None, reason).  A custom sticker needs its picture attached; a store sticker needs the
+    three ids the platform gave when it arrived."""
+    raw = item.get(STICKER_KEY)
+    if raw is None:
+        return None, None
+    if not isinstance(raw, dict) or raw.get("kind") not in ("custom", "market"):
+        return None, "sticker_descriptor_invalid"
+    if raw["kind"] == "custom":
+        if item.get(ATTACHMENT_KEY) is None:
+            return None, "sticker_picture_missing"
+        return {"kind": "custom"}, None
+    out = {"kind": "market"}
+    for key, limit in (("emoji_id", 64), ("emoji_package_id", 24), ("key", 64)):
+        value = str(raw.get(key) or "").strip()
+        if not value or len(value) > limit:
+            return None, "sticker_market_ids_missing"
+        out[key] = value
+    summary = str(raw.get("summary") or "").strip()
+    out["summary"] = summary[:24] if summary else "[商城表情]"
+    return out, None
+
+
+def build_send_params(target_type, target_id, text, reply_to=None, image_b64=None, sticker=None):
     """Return (action, params) for a host outbox target, or None if unusable.
 
     Group sends get a `reply` segment only when the host actually provided
@@ -120,6 +170,17 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
     action = SEND_ACTIONS.get(target_type)
     if action is None:
         return None
+    key = "group_id" if target_type == "group" else "user_id"
+    if sticker is not None:
+        # a sticker is its own message: no reply, no words
+        if sticker["kind"] == "market":
+            segment = {"type": "mface", "data": {k: sticker[k] for k in ("emoji_id", "emoji_package_id", "key", "summary")}}
+        elif image_b64:
+            segment = {"type": "image", "data": {"file": "base64://" + image_b64, "sub_type": 1,
+                                                  "summary": CUSTOM_STICKER_SUMMARY}}
+        else:
+            return None
+        return action, {key: int(target_id), "message": [segment]}
     if target_type == "group":
         segments = []
         rid = str(reply_to).strip() if reply_to is not None else ""
@@ -130,7 +191,7 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
         segments.extend(encode_group_text(text))
         allowed = GROUP_IMAGE_SEGMENTS if image_b64 else ALLOWED_OUT_SEGMENTS
     else:
-        segments = [{"type": "text", "data": {"text": text}}]
+        segments = encode_faces(text)
         allowed = PRIVATE_OUT_SEGMENTS
         if image_b64:
             segments.insert(0, {"type": "image", "data": {"file": "base64://" + image_b64}})
@@ -140,7 +201,6 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
     for seg in segments:
         if seg["type"] not in allowed:
             return None
-    key = "group_id" if target_type == "group" else "user_id"
     return action, {key: int(target_id), "message": segments}
 
 
@@ -200,7 +260,7 @@ def verify_payload(resp, checked_id, meta):
     `segment_mismatch` means the platform stored a different segment shape than
     the one we submitted.
     """
-    sent = [str(s) for s in ((meta or {}).get("segments") or [])]
+    sent = [STORED_AS.get(str(s), str(s)) for s in ((meta or {}).get("segments") or [])]
     ttype = str((meta or {}).get("target_type") or "")
     tid = str((meta or {}).get("target_id") or "")
     out = {"checked_id": str(checked_id), "sent_segments": sent, "result": "unavailable"}
@@ -404,8 +464,17 @@ class Outbound:
                                             {"reason": "target_not_authorized", "target_type": ttype, "target_id": tid}),
                         "target_not_authorized")
             return
-        if not isinstance(text, str) or not text.strip():
+        sticker, reason = sticker_plan(item)
+        if reason:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": reason, "target_type": ttype}), reason)
+            return
+        if sticker is None and (not isinstance(text, str) or not text.strip()):
             self.report(pub, receipt_payload("failed", attempt, {"reason": "empty_text"}), "empty_text")
+            return
+        text = text if isinstance(text, str) else ""
+        if sticker is not None and sticker["kind"] == "market" and item.get(ATTACHMENT_KEY) is not None:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": "sticker_descriptor_invalid"}),
+                        "sticker_descriptor_invalid")
             return
         plan, reason = attachment_plan(item, ttype)
         image_b64, attachment = None, None
@@ -428,7 +497,7 @@ class Outbound:
                 return
             self.log("ATTACHMENT pub=%s attempt=%s fetched=%s bytes=%s sha256=%s"
                      % (pub, attempt, plan["media_type"], attachment.get("bytes"), plan["sha256"][:12]))
-        built = build_send_params(ttype, tid, text, item.get("reply_to"), image_b64=image_b64)
+        built = build_send_params(ttype, tid, text, item.get("reply_to"), image_b64=image_b64, sticker=sticker)
         if built is None:
             self.counters.inc("outbox_shape_reject")
             self.report(pub, receipt_payload("failed", attempt,

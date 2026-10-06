@@ -8,6 +8,7 @@ A kind module knows one platform's id formats and adapter conventions:
   scene_id(bot, kind, target), scene_parts(id) a scene id and back
   outbound_mention(account)                    how her @ reaches the adapter
   adapter_config(adapter, channel), strip_derived(adapter)
+  FACES, STICKERS (optional)                   the platform's own faces by name -> id; whether it sends stickers
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).
@@ -57,6 +58,25 @@ def kinds():
 def person_ids(account):
     """Every platform person id a bare account number could be (qq:<account>, …)."""
     return [kind.person_id(account) for kind in _KINDS.values() if kind.ACCOUNT.fullmatch(str(account))]
+
+
+def faces_of(identifier):
+    """The platform faces (name -> id) of the kind a scene id belongs to; empty when it has none."""
+    return dict(getattr(of(identifier), 'FACES', None) or {})
+
+
+def sends_stickers(identifier):
+    return bool(getattr(of(identifier), 'STICKERS', False))
+
+
+def sticker_of(item):
+    """'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind)."""
+    for kind in _KINDS.values():
+        found = getattr(kind, 'sticker_of', None)
+        value = found(item) if found else None
+        if value:
+            return value
+    return None
 
 
 def image_hosts():

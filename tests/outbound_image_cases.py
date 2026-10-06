@@ -941,9 +941,14 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
     public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
         'image_artifacts_from_program': {'items': [{'artifact_id': stored2['artifact_id']}], 'note': ''}})
     outcome2, said2, after2 = attach(store2, public_ep2, stored2['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome2 == 'refused' and 'ATTACH_TARGET_NOT_ALLOWED' in said2, said2
-    assert 'session_class_not_owner_private' in said2 and 'attachment' not in after2, said2
-    return True, '群：只列、只收、只发她自己做的图（别人发的图 ATTACHMENT_NOT_HER_OWN）；非主人的私聊照旧退回'
+    assert outcome2 == 'refused' and 'ATTACHMENT_NOT_HER_OWN' in said2 and 'attachment' not in after2, said2
+    # 别人的私聊也能发她自己做的图（owner 2026-10-06），别人的图照样不发
+    made2 = BlobStore(store2).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
+                                  source_ids=['integration:image:/made2.jpg'])
+    offered2 = outbound_media.offer(store2, CONFIG, scene_row(), 'public')
+    assert [item['artifact_id'] for item in offered2['items']] == [made2['artifact_id']], offered2
+    assert '别人的私聊' in offered2['note']
+    return True, '群和别人的私聊：只列、只收、只发她自己做的图（别人发的图 ATTACHMENT_NOT_HER_OWN）'
 
 
 @case

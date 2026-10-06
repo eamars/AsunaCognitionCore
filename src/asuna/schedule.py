@@ -410,7 +410,7 @@ class ScheduleService:
         return {'going_to': People(self.store, persona).scene_title(scene), 'for': places.INTENTS[intent],
                 'note': '程序会在那个群里给你开一个回合；你在那儿看了现场再决定说不说、说什么。结果下次心跳带回来。'}
 
-    def errand(self, ep, call_id, place, request, exactly):
+    def errand(self, ep, call_id, place, request, exactly, artifact_id=None):
         """An errand someone at home gave her (ADR-017): a turn in that chat sees only that chat and the words she
         was given, named as whose they are. No visit limits (she was asked), a daily cap; what comes home is the
         program's status only."""
@@ -425,6 +425,9 @@ class ScheduleService:
         person = places.visitor(route, channel)
         if not person:
             raise ValueError('ERRAND_PLACE_UNKNOWN: 那边没有可以接待你的成员授权')
+        from . import outbound_media
+        if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
+            raise ValueError('ERRAND_PICTURE_NOT_HERS')     # outside home only her own pictures go (any of hers may)
         from .evidence import canonical, sha
         from .people import People
         persona, _, _ = self._persona()
@@ -437,7 +440,7 @@ class ScheduleService:
             scene_tick=True,
             group_context={'wake_reason': places.WAKE_REASON, 'topic_id': topic, 'reply_to': None,
                            'reply_message_id': None, 'mentioned_account_ids': []},
-            visit={'intent': 'errand', 'topic': None, 'artifact_id': None, 'request': request,
+            visit={'intent': 'errand', 'topic': None, 'artifact_id': artifact_id, 'request': request,
                    'exactly': bool(exactly), 'from': ep['_id'], 'by': by, 'author': author})
         self.store.audit(ep['_id'], 'errand.offered', {'scene_id': scene['_id'], 'event_id': event_id,
                                                        'exactly': bool(exactly), 'chars': len(request),

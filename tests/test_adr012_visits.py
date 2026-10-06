@@ -62,8 +62,10 @@ def test_her_places_read_in_words_and_each_says_whether_she_can_go(store):
     [row] = view(store, service)['items']
     assert row['can_visit'].startswith('正有人在聊：可以去看看') and row['called_you'] and '零星有人说话' in row['now']
     beat = {'_id': 'ep-home', 'source_event_id': 'presence:s-p5:1'}
-    with pytest.raises(ValueError, match='起话头或发图等安静下来'):
+    with pytest.raises(ValueError, match='起话头等安静下来'):
         service.visit(beat, PLACE, 'start_topic', None, None)        # talking: no new topic over them
+    assert places.eligibility(store, store.db.scenes.find_one({'_id': 'g1'}), {}, places.settings(
+        store.config['persona_model'], {}), datetime.now(timezone.utc), None, intent='share_picture')[0]
     assert service.visit(beat, PLACE, 'write_notes', None, None)['going_to']   # but she may go and look
     service = group_world(store, quiet_hours=[('00:00', '23:59')])
     assert '夜里' in view(store, service)['items'][0]['can_visit']
@@ -182,6 +184,8 @@ def test_two_errands_to_one_place_in_one_turn_both_go(store):
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     events = [offer[1] for offer in service.controller.offers[-2:]]
     assert len(set(events)) == 2 and all(event.startswith('visit:errand:g1:') for event in events)
+    with pytest.raises(ValueError, match='ERRAND_PICTURE_NOT_HERS'):     # outside home, only her own pictures
+        service.errand({**ep, 'source_event_id': 'ask-1'}, 'c9', PLACE, '看图', False, 'att-someone-elses')
 
 
 def test_errands_are_taken_only_when_someone_at_home_asks(store):

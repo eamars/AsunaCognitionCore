@@ -194,3 +194,17 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store):
             broker.call('granted','import-3','import_integration_artifact',args)
     finally:
         broker.close()
+
+
+def test_the_owners_own_platform_dm_carries_the_workspace_grant():
+    """Owner 2026-10-06: LAN devices from the owner's DM too; someone else's DM, or another speaker, never."""
+    from asuna.integration import owner_dm
+    config = {**profile(), 'canonical_persons': {'qq:1': 'owner'},
+              'channels': {'qq': {'routes': {'me': {'scene_id': 'qq:9:dm:1', 'target': {'type': 'dm', 'id': '1'}, 'person_id': 'qq:1'},
+                                             'b': {'scene_id': 'qq:9:dm:2', 'target': {'type': 'dm', 'id': '2'}, 'person_id': 'qq:2'},
+                                             'g': {'scene_id': 'qq:9:group:5', 'target': {'type': 'group', 'id': '5'}}}}}}
+    assert owner_profile(config, 'qq:9:dm:1', 'qq:1')['enabled'] and owner_profile(config, 'local', 'owner')
+    assert not owner_dm(config, 'qq:9:dm:2', 'qq:2') and not owner_dm(config, 'qq:9:group:5', 'qq:1')
+    for scene, person in (('qq:9:dm:2', 'qq:2'), ('qq:9:dm:1', 'qq:2'), ('qq:9:group:5', 'qq:1')):
+        with pytest.raises(Denied, match='INTEGRATION_OWNER_REQUIRED'):
+            owner_profile(config, scene, person)

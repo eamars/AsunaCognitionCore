@@ -28,12 +28,31 @@ INTEGRATION_TOOLS.append(IMPORT_TOOL)
 
 
 
+def owner_dm(config, scene, person):
+    """The owner's own direct chat on a platform: a dm route to the owner, and the owner speaking (canonical
+    persons by configuration; a name never decides it)."""
+    from . import scene_links
+    owner = (config.get('chat') or {}).get('person_id')
+    mapping = scene_links.canonical_map(config)
+    if not owner or not person or mapping.get(person, person) != owner:
+        return False
+    for channel in (config.get('channels') or {}).values():
+        for route in (channel.get('routes') or {}).values() if isinstance(channel, dict) else ():
+            if (isinstance(route, dict) and route.get('scene_id') == scene and (route.get('target') or {}).get('type') == 'dm'
+                    and route.get('person_id') and mapping.get(route['person_id'], route['person_id']) == owner):
+                return True
+    return False
+
+
 def owner_profile(config, scene, person):
+    """The owner's workspace grant: the owner in the local chat, or in their own platform DM (owner 2026-10-06).
+    The profile itself stays bound to the local chat."""
     profile = config.get('integration', {})
     local = config.get('chat', {})
-    if profile.get('enabled') is not True or (scene, person) != (local.get('scene_id'), local.get('person_id')):
+    here = (scene, person) == (local.get('scene_id'), local.get('person_id')) or owner_dm(config, scene, person)
+    if profile.get('enabled') is not True or not here:
         raise Denied('INTEGRATION_OWNER_REQUIRED')
-    if (scene, person) != (profile.get('scene_id'), profile.get('person_id')):
+    if (local.get('scene_id'), local.get('person_id')) != (profile.get('scene_id'), profile.get('person_id')):
         raise Denied('INTEGRATION_PROFILE_BINDING_MISMATCH')
     return profile
 

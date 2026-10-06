@@ -243,11 +243,13 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     rows = speak_rows(store, ep['_id'])
     assert rows[0]['attachment']['artifact_id'] == art['artifact_id']
 
-    # 别人的私聊：不是同一个人的私人空间
+    # 别人的私聊：不是主人的私人空间，但她自己做的图照样能带（owner 2026-10-06：家往外由她判断）
     channel_scene(store, OTHER, person='B')
     link(store, OTHER, LOCAL)
-    assert refused_turn(scene=OTHER, person='B', key='other') == {
-        'ATTACH_TARGET_NOT_ALLOWED': 'session_class_not_owner_private'}
+    coordinator, ep = turn(store, scene=OTHER, person='B', key='other', attach=attach)
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert [ok for _said, ok in attach_calls(coordinator)] == [True]
+    assert speak_rows(store, ep['_id'])[0]['attachment']['artifact_id'] == art['artifact_id']
 
     # 主人自己的 dm 场景却把路由目标配成群：确定性撞 target_not_dm（配置错了也不静默发）
     channel_scene(store, QQ, person='A', target='group', kind='dm')

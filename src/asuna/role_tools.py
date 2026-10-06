@@ -211,7 +211,8 @@ TOOLS = {
                         '不合适就不发。办没办成之后在家里的 errands_from_program 看，那边的人怎么回的不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
                        'request': _s('要带过去的话或交代的事，500 字以内', required=True),
-                       'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'}},
+                       'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
+                       'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
     },
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
@@ -367,9 +368,9 @@ WORDS = {
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
     'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同回合和日期。',
-    'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：只有 owner 的私聊、或你在的群（只发你自己做的图）能带。',
+    'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：私聊和你在的群能带（群和别人的私聊只发你自己做的图）。',
     'ATTACH_ARTIFACT_NOT_IN_CONTEXT': '只能用 image_artifacts_from_program 里列出的 artifact_id。',
-    'ATTACHMENT_NOT_HER_OWN': '群里只能发你自己做的图。',
+    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图。',
     'GROUP_ACTION_NOT_A_GROUP': '这里不是群。',
     'GROUP_ACTION_DISABLED': '这个群关掉了管理动作。',
     'GROUP_ACTION_NOT_AN_ADMIN': '你在这个群不是管理员。',
@@ -391,6 +392,7 @@ WORDS = {
     'ERRAND_PLACE_UNKNOWN': '没有这个地方；照抄 errand_places_from_program 里的 place。',
     'ERRAND_LIMIT': '今天替人跑腿的次数用完了，明天再办。',
     'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊这类可信的对话）才能接差事。',
+    'ERRAND_PICTURE_NOT_HERS': '差事只能带你自己做的图。',
     'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一轮接；自己想去，用 visit。',
     'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
     'IMAGE_NOT_PULLABLE': '这张图拉不到。',
@@ -594,10 +596,10 @@ class RoleTools:
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + artifact)
-        group = outbound_media.group_scene(self.store.config, scene)
+        mine_only = outbound_media.own_only(self.store.config, scene, cls)
         meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
-            [] if group else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
-            produced_only=group)
+            [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
+            produced_only=mine_only)
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
         return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
 
@@ -834,9 +836,10 @@ class RoleTools:
             raise Denied('ERRAND_ONLY_WHEN_ASKED')
         place = self._text(args, 'place', 40)
         request = self._text(args, 'request', ERRAND_CHARS)
+        artifact = self._text(args, 'artifact_id', 200, required=False)
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，办不了。')
-        return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly'))), False
+        return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly')), artifact), False
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_peer_line(self, ep, call_id, args):

@@ -26,7 +26,7 @@ OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，�
             'pending': '还在那儿', 'failed': '没去成'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Intents that open a conversation: these wait until the group has been quiet for heartbeat.quiet_min.
-STARTING = ('start_topic', 'share_picture')
+STARTING = ('start_topic',)          # a picture fits into talk; a new topic waits (owner 2026-10-06)
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
 WAKE_REASON = 'visit'
@@ -277,7 +277,7 @@ def last_visit(store, plan, scene_id):
 
 def eligibility(store, scene, plan, settings, moment, date, here=None, intent=None):
     """(can go, words). Deterministic; the view and the visit tool use the same answer. While people are
-    talking she may still go and look or take notes; starting a topic or sharing a picture waits for quiet."""
+    talking she may still go and look, take notes or share a picture; starting a topic waits for quiet."""
     here = here or room(store, scene, moment)
     if today(store, plan, date) >= settings['per_day']:
         return False, '今天出门的次数用完了'
@@ -292,8 +292,8 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
         return False, '你%s来过这里（说过话或来看过），过一阵再来' % _ago(moment, max(recent))
     if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
         if intent in STARTING:
-            return False, '这会儿有人在聊；起话头或发图等安静下来，只去看看、写笔记可以'
-        return True, '正有人在聊：可以去看看、写笔记；起话头或发图等安静下来'
+            return False, '这会儿有人在聊；起话头等安静下来，去看看、写笔记、发图可以'
+        return True, '正有人在聊：可以去看看、写笔记、发图；起话头等安静下来'
     return True, '可以去'
 
 
@@ -385,7 +385,9 @@ def visit_block(store, scene, visit, moment):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):
         block['picture'] = {'artifact_id': visit['artifact_id'],
-                            'note': '这是你出门时想分享的那张图；发不发、配什么话，看了现场再定。'}
+                            'note': ('这是托你一起带过去的那张图，用 attach_image 随话发；看了现场觉得不合适也可以不发。'
+                                     if visit.get('intent') == 'errand' else
+                                     '这是你出门时想分享的那张图；发不发、配什么话，看了现场再定。')}
     return block
 
 

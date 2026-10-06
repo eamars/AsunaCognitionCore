@@ -472,7 +472,8 @@ class ContextBuilder:
             if media:context['media_from_program']=media
         if outbound_media is not None:
             # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
-            offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'])
+            offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
+                                     picked=(event.get('visit') or {}).get('artifact_id'))
             if offer:context['image_artifacts_from_program']=offer
             elif session_class==visibility.OWNER_PRIVATE:
                 # Looking does not wait on sending: where none of her pictures can go out (her local chat), she

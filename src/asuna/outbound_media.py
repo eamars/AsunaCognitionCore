@@ -63,6 +63,7 @@ OFFER_NOTE = ('这些是程序已经存好、这一轮可以随你要说的那�
 PRODUCED_SOURCE = 'integration:'
 GROUP_NOTE = ('这是群聊：这里只列你自己做出来的图（不是别人发给你的）。发不发、发哪张由你决定，'
               '但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
+DM_NOTE = ('这是别人的私聊：这里只列你自己做出来的图。发不发、发哪张由你决定，看对方和聊的事合不合适。')
 PEER_NOTE = ('其中标了 from_linked_scene 的那几张不是这个场景里生成的，是你另一个只属于'
              '你自己的私聊入口里存的图，程序确认过那一边也是你本人的私人空间，可以照发。')
 
@@ -170,7 +171,8 @@ def produced(item):
 
 
 def target_allowed(config, scene, session_class):
-    """收件方向：主人的私聊（路由 dm、owner_private），或她在的任何一个群（只发她自己做的图）。"""
+    """收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的
+    私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。"""
     target = route_target(config, scene)
     if target is None:
         return False, 'scene_has_no_channel_route' if not (scene or {}).get('channel_id') else 'channel_route_not_authorized'
@@ -182,11 +184,27 @@ def target_allowed(config, scene, session_class):
         return False, 'channel_carries_text_only'
     if target == 'group' and (scene or {}).get('kind') == 'group':
         return True, ''
-    if session_class != OWNER_PRIVATE:
-        return False, 'session_class_not_owner_private'
     if target != 'dm':
         return False, 'target_not_dm'
     return True, ''
+
+
+def own_only(config, scene, session_class):
+    """Only pictures she made go here: a group, or anyone's chat that is not the owner's."""
+    return group_scene(config, scene) or session_class != OWNER_PRIVATE
+
+
+def row_own_only(store, row):
+    """own_only for a stored outbound row, recomputed from the row's own scene and route."""
+    if row_is_group(store, row):
+        return True
+    row = row or {}
+    try:
+        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+        person = _route_person(store.config, scene, row.get('channel_id'))
+        return visibility is None or not person or             visibility.session_class(store.config, store.db, scene, person) != OWNER_PRIVATE
+    except Exception:
+        return True
 
 
 def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
@@ -393,16 +411,20 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     return out
 
 
-def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED):
-    """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。"""
+def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None):
+    """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
+    picked：出门或差事带来的那张她自己做的图，不在最新几张里也列上。"""
     allowed, _reason = target_allowed(config, scene, session_class)
     if not allowed:
         return None
-    if group_scene(config, scene):
+    if own_only(config, scene, session_class):
         items = produced_images(store, limit=limit)
+        if picked and picked not in {item['artifact_id'] for item in items}:
+            items = [item for item in produced_images(store, limit=50) if item['artifact_id'] == picked] + items
         for item in items:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
-        return {'items': items, 'note': OFFER_NOTE + GROUP_NOTE} if items else None
+        note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
+        return {'items': items, 'note': OFFER_NOTE + note} if items else None
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
                             limit=limit, own_scope=own_scope)
@@ -425,7 +447,7 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     if produced_only:
         if not produced(item):
-            raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group gets only pictures she made
+            raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group or someone else's chat gets only pictures she made
     elif item.get('scope_key') not in scopes:
         raise Denied('ATTACHMENT_SCOPE_DENIED')
     if item.get('kind') != ATTACHMENT_KIND:
@@ -474,7 +496,7 @@ def serve(store, blobs, row, declared):
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     if kept_sticker(store, row, item):
         pass                # a sticker on her shelf, sent as a sticker (ADR-016): any conversation that takes one
-    elif row_is_group(store, row):
+    elif row_own_only(store, row):
         if not produced(item):
             raise Denied('ATTACHMENT_NOT_HER_OWN')
     elif item.get('scope_key') not in row_image_scopes(store, row):

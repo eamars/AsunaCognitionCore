@@ -82,3 +82,30 @@ def test_the_vault_tool_is_offered_at_home_only(store):
     assert 'credential' in turn(visibility.OWNER_PRIVATE, 'task_feedback')
     assert 'credential' not in turn(visibility.PUBLIC)
     assert 'credential' not in turn(visibility.OWNER_PRIVATE, 'settlement')
+
+
+def test_every_tool_schema_stays_inside_what_dsh_registers():
+    """DSH's defineTool takes a JSON-schema subset (dsh-tools): additionalProperties is a boolean, nothing else. One
+    tool outside it fails the whole preset, and every session of hers goes unavailable (2026-10-07)."""
+    from asuna.development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
+    from asuna.tasks import SANDBOX_TOOL
+    allowed = {'type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const',
+               'description', 'title', 'default', 'examples'}
+
+    def check(node, path):
+        assert isinstance(node, dict), path
+        extra = set(node) - allowed
+        assert not extra, '%s: %s' % (path, extra)
+        if 'additionalProperties' in node:
+            assert isinstance(node['additionalProperties'], bool), path + '.additionalProperties'
+        for key, child in (node.get('properties') or {}).items():
+            check(child, path + '.' + key)
+        for i, child in enumerate(node.get('oneOf') or ()):
+            check(child, '%s.oneOf[%d]' % (path, i))
+        if isinstance(node.get('items'), dict):
+            check(node['items'], path + '.items')
+
+    specs = role_tools.all_specs() + DEVELOPMENT_TOOLS + PERSONA_JOB_TOOLS + [SANDBOX_TOOL]
+    for spec in specs:
+        for name, param in spec['parameters'].items():
+            check({k: v for k, v in param.items() if k != 'required'}, spec['name'] + '.' + name)

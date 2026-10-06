@@ -124,8 +124,8 @@ TOOLS = {
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop']),
                        'name': _s('凭据的短名（小写字母、数字、连字符）', required=True),
                        'note': _s('keep 用：它是干什么的，一句话（不写值）'),
-                       'env': {'type': 'object', 'additionalProperties': {'type': 'string'},
-                               'description': 'keep 用：环境变量名（大写）→ 值'}},
+                       'env': {'type': 'object', 'additionalProperties': True,      # DSH: boolean only
+                               'description': 'keep 用：环境变量名（大写）→ 值（都是字符串）'}},
     },
     'watch': {
         'description': ('盯一个人：on 把这个对话里看得到的一个人加进 watch 名单（person 写他的标签、#编号或名字），'

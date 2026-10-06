@@ -460,6 +460,16 @@ class ContextBuilder:
             from .render import model_and_policy as _line_model
             _lm,_lp=_line_model(self.store,persona)
             context['lines_from_program']=_lines.view(self.store,peer_lines,_line_zone(_lm,_lp,self.store.config)[0],moment)
+            # What she has planned to do in each line from home (plan with line=…): her own words and the timing.
+            for _item,_line in zip(context['lines_from_program']['items'],peer_lines):
+                if _line['scene_id']==event['scene_id']:
+                    continue
+                _rows=list(self.store.db.plans.find({'scene_id':_line['scene_id'],'status':{'$in':['CREATING','ACTIVE']},
+                    'kind':{'$nin':['self_development','presence','settlement']}}).sort('created_at',-1).limit(3))
+                if _rows:
+                    _scene=self.store.db.scenes.find_one({'_id':_line['scene_id']}) or {'_id':_line['scene_id']}
+                    _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
+                        self.store.config,_scene,r),moment).items() if k in ('intent','description','local')} for r in _rows]
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.

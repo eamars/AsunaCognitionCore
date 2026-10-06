@@ -527,7 +527,9 @@ class ScheduleService:
         self.store.put('plans', {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
 
-    def create(self, ep, spec, plan_id=None):
+    def create(self, ep, spec, plan_id=None, where=None):
+        """where: {scene_id, person_id} of a peer line when she plans from home into that line (role_tools checks
+        the turn is home); the plan then lives, fires and is changed in that line."""
         intent = spec.get('intent') if isinstance(spec, dict) else None
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
             raise ValueError('INVALID_SCHEDULE_SPEC')
@@ -535,6 +537,12 @@ class ScheduleService:
         scene = self.store.authorize(ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied('SCHEDULE_SOURCE_STALE')
+        target = {'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'scope_key': ep['scope_key'],
+                  'policy_epoch': ep['policy_epoch']}
+        if where:
+            scene = self.store.authorize(where['scene_id'], where['person_id'])
+            target = {'scene_id': scene['_id'], 'person_id': where['person_id'], 'scope_key': scene['scope_key'],
+                      'policy_epoch': scene['policy_epoch']}
         zone = self.zone_of(scene)
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())   # 已过/本地不存在都明确抛回
         # One turn may make several plans: each of her plan calls names its own (role_tools).
@@ -542,13 +550,12 @@ class ScheduleService:
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if not plan:
             source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
-            plan = self.store.put('plans', {'_id': plan_id, 'scene_id': ep['scene_id'],
-                'person_id': ep['person_id'], 'scope_key': ep['scope_key'],
-                'policy_epoch': ep['policy_epoch'], 'source_episode_id': ep['_id'],
+            plan = self.store.put('plans', {'_id': plan_id, **target,
+                **({'from_scene_id': ep['scene_id']} if where else {}), 'source_episode_id': ep['_id'],
                 'intent': intent.strip(), 'rule': rule,
                 'timezone': zone['name'], 'tz_source': zone['source'],
                 'next_fire_at': fire_at.isoformat(timespec='seconds'), 'plan_version': 1,
-                'integration_profile': 'owner' if event_granted(self.app.config, (source or {}).get('event', {})) else None,
+                'integration_profile': 'owner' if not where and event_granted(self.app.config, (source or {}).get('event', {})) else None,
                 'status': 'CREATING', 'created_at': now()}, stream=plan_id)
         elif plan['source_episode_id'] != ep['_id'] or plan['intent'] != intent.strip() or plan['rule'] != rule:
             raise Denied('SCHEDULE_PLAN_CONTENT_CHANGED')

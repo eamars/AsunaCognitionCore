@@ -70,3 +70,32 @@ def test_in_the_line_she_sees_it_and_closes_it_herself(store):
                                                  'target': {'type': 'dm', 'id': 'peer'}, 'sender_id': 'peer'}})
     assert lines.is_closed(store, SCENE)
     assert any('关着，到' in str(result) for result in lane.tool_results)
+
+
+def test_from_home_she_plans_a_turn_in_a_peer_line(store):
+    """Owner 2026-10-06: at home she can time a turn in the line (both ends are home); it fires there."""
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane, FakeTurn
+    from test_adr009_p5_rhythm import fire, scheduler
+    service = scheduler(store)
+    with_line(store)
+    store.put('scenes', {'_id': SCENE, 'scene_id': SCENE, 'kind': 'dm', 'members': ['dsh:peer'],
+                         'scope_key': 'scene:' + SCENE, 'policy_epoch': 1, 'sequence': 0,
+                         'channel_id': 'dsh', 'channel_account_id': 'home'})
+    received = []
+    service.controller.receive = received.append
+    turn = FakeTurn([('think', {'thought': '晚点问她太阳能的事。'}),
+                     ('plan', {'op': 'create', 'intent': '问她太阳能读数', 'after_seconds': 600, 'line': 'dsh:peer'})], '好')
+    lane = FakeLane(store, [turn, FakeTurn([('think', {'thought': '嗯'})], '嗯')])
+    coordinator = Coordinator(store, lane)
+    coordinator.scheduler = service
+    ep = coordinator.ingest({'event_id': 'home-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你想问旧居什么'})
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert all(row[5] for row in lane.tool_results if row[2] == 'plan'), lane.tool_results
+    plan = store.db.plans.find_one({'intent': '问她太阳能读数'})
+    assert (plan['scene_id'], plan['person_id'], plan['from_scene_id']) == (SCENE, 'dsh:peer', 'dm-a')
+    later = coordinator.ingest({'event_id': 'home-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '挂上了吗'})
+    [item] = later['context']['lines_from_program']['items']
+    assert item['your_plans_there'][0]['intent'] == '问她太阳能读数'
+    fire(service, plan)
+    assert received and received[-1]['scene_id'] == SCENE and received[-1]['episode_kind'] == 'scheduled'

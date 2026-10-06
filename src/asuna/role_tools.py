@@ -171,13 +171,15 @@ TOOLS = {
                         '计时只选一种：after_seconds 几秒后；every_seconds 固定间隔；at 场景时区的本地时刻'
                         '「YYYY-MM-DDTHH:MM」；clock 每天或每周的本地钟点。改期只给新的计时，只改内容就只给 intent。'
                         '到期只会让你再想一次，不能当作已经做完。已有的安排在 plans_from_program，现在的钟面在 '
-                        'clock_from_program。'),
+                        'clock_from_program。在家里新建时可以写 line：到点在那条线里开一轮（lines_from_program 里的 line），'
+                        '那条安排之后在那条线里看、改。'),
         'parameters': {
             'op': _s('做什么', required=True, enum=['create', 'update', 'cancel']),
             'plan_id': _s('update/cancel 的那条安排'),
             'intent': _s('届时要重新考虑的事'),
             'after_seconds': {'type': 'integer'}, 'every_seconds': {'type': 'integer'},
             'at': _s('本地时刻 YYYY-MM-DDTHH:MM'),
+            'line': _s('只在家里 create 时用：到点在哪条线里开一轮，照抄 lines_from_program 里的 line；不写就是这里'),
             'clock': {'type': 'object', 'additionalProperties': False, 'properties': {
                 'time': _s('HH:MM', required=True),
                 'weekdays': {'type': 'array', 'items': {'type': 'integer'}, 'description': '0=周一 … 6=周日；不写就是每天'}}},
@@ -780,7 +782,18 @@ class RoleTools:
         try:
             if op == 'create':
                 spec = {'intent': self._text(args, 'intent', 1000), **timing}
-                plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32]))
+                where = None
+                if args.get('line'):
+                    # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
+                    from . import lines
+                    if self._cls(ep) != visibility.OWNER_PRIVATE:
+                        raise Refused('只有在家里才能把安排挂到一条线上。')
+                    wanted = self._text(args, 'line', 80)
+                    where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
+                    if not where:
+                        raise Refused('没有这条线；照抄 lines_from_program 里的 line。')
+                plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32],
+                                                      where=where))
             elif op in ('update', 'cancel'):
                 plan_id = self._text(args, 'plan_id', 200)
                 row = planned.get(plan_id)

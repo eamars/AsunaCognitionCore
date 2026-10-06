@@ -101,6 +101,11 @@ TOOLS = {
         'description': '这回合不说话，直接结束回合。只在确实不用回应时用，不代表出错。',
         'parameters': {'reason': _s('为什么不说', required=True)},
     },
+    'quote': {
+        'description': ('群里这回合你说的第一句要不要引用叫你的那条。不调时程序这样定：那条之后别人又说过话才引用，'
+                        '否则直接发（群里的人大多不引用）。发 bot 命令（如 #napcat）这类要裸发的就选 none。'),
+        'parameters': {'how': _s('引用还是不引用', required=True, enum=['source', 'none'])},
+    },
     'await_answer': {
         'description': ('群里这句是在问某个人、或跟人要个东西，想等对方回：调用它，这句发出去后大约三分钟里，'
                         '对方下一句哪怕没 @ 你、没引用你，你也会被叫来看一眼（接话／不理）。一句话只看一次；'
@@ -317,7 +322,9 @@ def exposed(store, ep):
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
     if scene_kind == 'group':
-        names.append('await_answer')          # her line asks someone: their next unaddressed line gets her a look
+        names.append('await_answer')
+        if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
+            names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         names += ['update_self', 'set_policy', 'pin_memory']
     if kind not in ('presence', 'settlement', 'self_development', 'visit') and (
@@ -546,6 +553,13 @@ class RoleTools:
         reason = self._text(args, 'reason', 1000)
         self.coordinator._update(self._fresh(ep), silent={'reason': reason})
         return {'silent': True}, True
+
+    def tool_quote(self, ep, call_id, args):
+        how = args.get('how')
+        if how not in ('source', 'none'):
+            raise Refused('how 是 source（引用叫你的那条）或 none（不引用）。')
+        self.coordinator._update(self._fresh(ep), quote=how)
+        return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
 
     def tool_await_answer(self, ep, call_id, args):
         why = self._text(args, 'why', 200)

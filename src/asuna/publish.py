@@ -27,6 +27,31 @@ class PublishService:
     def publish(self, message_id: str):
         with database_effects_lock(self.store.name):return self._publish(message_id)
 
+    def _quote(self, ep, msg, scene, route, source, channel):
+        """Which platform message her line quotes, if any (owner 2026-10-06). In a group people quote about one line in
+        six; she quoted nine in ten. A group line quotes the line she answers only when others have spoken since (so
+        it would be unclear otherwise), only her first message of the turn, and her own choice (role_tools `quote`)
+        overrides that either way. Direct chats keep the line as before."""
+        wanted = channel.get('platform_event_id')
+        if not wanted or (route.get('target') or {}).get('type') != 'group':
+            return wanted
+        choice = ep.get('quote')
+        if choice == 'none':
+            return None
+        db = self.store.db
+        first = db.messages.find_one({'episode_id': ep['_id'], 'direction': 'outbound', 'phase': 'SPEAK'},
+                                     {'_id': 1}, sort=[('scene_seq', 1)])
+        if first and first['_id'] != msg['_id']:
+            return None                                   # only her first message of the turn may quote
+        if choice == 'source':
+            return wanted
+        since = (source or {}).get('scene_seq')
+        if since is None:
+            return wanted
+        others = db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound',
+                                       'scene_seq': {'$gt': since, '$lt': msg.get('scene_seq', 1 << 62)}}, {'_id': 1})
+        return wanted if others else None
+
     def _publish(self, message_id: str):
         db=self.store.db
         msg=db.messages.find_one({'_id':message_id})
@@ -80,7 +105,7 @@ class PublishService:
             return self.store.put('messages', {**msg, 'delivery_state': 'QUEUED_EXTERNAL',
                                   'channel_id': scene['channel_id'], 'target': route['target'],
                                   'channel_account_id': channel['account_id'],
-                                  'platform_reply_to': channel['platform_event_id']},
+                                  'platform_reply_to': self._quote(ep, msg, scene, route, source, channel)},
                                   expected=msg['revision'], stream=ep['_id'])
         if msg['delivery_state']=='SENDING' and not self.idempotent:
             return self.store.put('messages',{**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])

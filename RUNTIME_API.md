@@ -76,6 +76,8 @@ Direct message example:
 
 Group events use the same endpoint and add `group_id`, `mentioned_account_ids`, and optionally `reply_to`. These values must come from the adapter's parsed platform event. Direct-message routes reject group-only fields. The host checks the configured group and member bindings. A group event wakes the character only under the configured mention and saved-reply rules; other authorized group messages can be persisted without starting a character turn.
 
+Quoting (owner 2026-10-06; people in her groups quote about 16% of lines, she quoted 92%): in a group her first message of a turn quotes the line that called her only when someone else has spoken since that line; her other messages never quote. Her `quote` tool (`how`: `source` | `none`, group turns that answer a line) overrides this for the turn, e.g. `none` for a bot command that must go out bare. Direct chats quote the line they answer as before (`publish._quote`).
+
 A group message wakes her for one of these reasons. An @ of her account or a reply to a message of hers runs her full turn. The others go through the relevance gate first:
 
 - a reply inside a thread she was in;

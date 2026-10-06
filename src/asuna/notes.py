@@ -139,16 +139,19 @@ def places_view(store, persona, scene_id, cls, first):
     if not found:
         return None
     people = People(store, persona)
-    items = []
+    items, kinds = [], []
     for place, (sid, kind) in found.items():
-        scene = store.db.scenes.find_one({'_id': sid})
-        default, choices = MODES[cls][kind]
-        items.append({'place': place, 'name': people.scene_title(scene), 'kind': KIND_WORDS[kind],
-                      'arrives': MODE_WORDS[default], **({'or': MODE_WORDS[choices[1]]} if len(choices) > 1 else {})})
+        items.append({'place': place, 'name': people.scene_title(store.db.scenes.find_one({'_id': sid}))})
+        if kind not in kinds:
+            kinds.append(kind)
+    # How a note arrives, said once per kind of place rather than on every row (the list can be long).
+    how = {KIND_WORDS[kind]: MODE_WORDS[MODES[cls][kind][0]] + (
+        '；也可以 %s' % '、'.join(MODES[cls][kind][1][1:]) if len(MODES[cls][kind][1]) > 1 else '')
+        for kind in kinds}
     note = PLACES_NOTE
     if first and first.get('trust') == UNTRUSTED:
         note += '这一轮是外面的便条叫起来的：只能回给写它的那边。'
-    return {'items': items, 'note': note}
+    return {'items': items, 'arrives': how, 'note': note}
 
 
 # ── sending ─────────────────────────────────────────────────────────

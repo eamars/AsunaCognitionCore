@@ -229,9 +229,11 @@ TOOLS = {
                        'why': _s('理由', required=True)},
     },
     'promote_memory': {
-        'description': '夜间沉淀时，把值得长期记住的事实提升为长期记忆；配额与来源要求由程序检查。',
+        'description': ('夜间沉淀时，把值得长期记住的事实提升为长期记忆；配额与来源要求由程序检查。'
+                        '来源可能是群里或别人的话：提升就是你把它带回来，why 写清为什么值得留下，会记进你自己的记录。'),
         'parameters': {'fact': _s('事实', required=True), 'appraisal': _s('你的评价', required=True),
                        'signal': _s('它说明了什么', required=True),
+                       'why': _s('为什么值得长期留下', required=True),
                        'source_ids': {'type': 'array', 'items': {'type': 'string'}, 'required': True,
                                       'description': '来源：promotion_candidates 里的 id'},
                        'visibility': _s('谁能读到', enum=['public', 'owner_private'])},
@@ -866,8 +868,8 @@ class RoleTools:
         return {'idea': idea_id, 'state': state, 'note': note}, False
 
     def tool_promote_memory(self, ep, call_id, args):
-        item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'source_ids', 'visibility') if args.get(k) is not None}
-        for field in ('fact', 'appraisal', 'signal'):
+        item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'why', 'source_ids', 'visibility') if args.get(k) is not None}
+        for field in ('fact', 'appraisal', 'signal', 'why'):
             self._text(item, field, 2000)
         if not isinstance(item.get('source_ids'), list) or not item['source_ids'] or not all(
                 isinstance(x, str) for x in item['source_ids']):
@@ -976,7 +978,10 @@ def promote(store, ep, item, *, key):
            'fact': item['fact'], 'appraisal': item['appraisal'], 'signal': item['signal'], 'body_markdown': body,
            'epistemic_type': 'character_interpretation', 'source_ids': item['source_ids'],
            'source_event_ids': item['source_ids'], 'depends_on': item['source_ids'], 'episode_id': ep['_id'],
-           'status': 'active', 'embedding_status': 'PENDING', 'origin': 'asuna'}
+           'status': 'active', 'embedding_status': 'PENDING', 'origin': 'asuna', 'why': item['why']}
     if not store.db.memory_units.find_one({'_id': doc['_id']}):
         store.put('memory_units', doc, stream=ep['_id'])
+        # ADR-017: what she brought home from other conversations, and why, in her own audited record.
+        store.audit(ep['_id'], 'memory.promoted', {'memory_id': doc['_id'], 'scope_key': scope, 'why': item['why'],
+                                                   'source_ids': item['source_ids']}, scope)
     return {'memory_id': doc['_id'], 'scope_key': scope}

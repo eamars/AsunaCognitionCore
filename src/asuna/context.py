@@ -401,9 +401,13 @@ class ContextBuilder:
             allowed = {scene['_id']}
             for channel in self.store.config.get('channels', {}).values():
                 allowed.update(route['scene_id'] for route in channel.get('routes', {}).values())
+            # Owner 2026-10-06 (ADR-017): what other people say in public reaches home only through her own review
+            # (ideas notebook, nightly settlement), never live. Here: everything from her private conversations,
+            # and from the others only her own delivered lines; how the groups are going is in places_from_program.
+            private = (visibility.owner_private_scenes(self.store.config) | {scene['_id']}) & allowed
             recent = list(self.store.db.messages.find({
-                'scene_id': {'$in': list(allowed)},
-                '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
+                '$or': [{'scene_id': {'$in': list(private)}, 'direction': 'inbound'},
+                        {'scene_id': {'$in': list(allowed)}, 'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
                  'delivery_state':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
             for row in recent:
@@ -418,7 +422,8 @@ class ContextBuilder:
                 elif item.get('goal'):
                     item['goal']=excerpt(item['goal'],EXPERIENCE_TASK_CHARS)
                 result=item.pop('result',None)
-                if isinstance(result,dict) and result.get('text'):
+                # A report of work from a public conversation may quote people there: home sees its headline only.
+                if isinstance(result,dict) and result.get('text') and item.get('scene_id') in private:
                     item['report_start']=excerpt(result['text'],EXPERIENCE_TASK_CHARS)
             lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
                 {'project':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
@@ -429,7 +434,8 @@ class ContextBuilder:
                 row['deleted_files']=len(row.get('deleted_files') or [])
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
-                'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
+                'note': ('真实历史片段与行动结果；每条保留来源场景。别人的原话只列你私人的对话；群和别人的私聊里只列你自己'
+                         '说过的话，那边的情况心跳时看 places_from_program。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')}
         if event.get('episode_kind') == 'presence' or (event.get('episode_kind') == 'scheduled'
                                                         and session_class == visibility.OWNER_PRIVATE):
             # ADR-012 §4.4: her groups in words, and what her recent visits came to. A plan of her own that

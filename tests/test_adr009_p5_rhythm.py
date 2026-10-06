@@ -210,7 +210,7 @@ def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store
 
     ep = {'_id': 'ep-settle', 'persona': 'P1', 'episode_kind': 'presence', 'tool_calls': {}}
     item = {'fact': '他周末爱去河边走走', 'appraisal': '是他放松的方式', 'signal': '他提到累时可以问问',
-            'source_ids': ['ep-1', 'ep-2']}
+            'why': '两次都在他说累的时候提起', 'source_ids': ['ep-1', 'ep-2']}
     with pytest.raises(Denied, match='PROMOTE_ONLY_IN_SETTLEMENT'):
         promote(store, ep, item, key='k0')
     ep['episode_kind'] = 'settlement'
@@ -225,6 +225,9 @@ def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store
     store.db.audit_events.update_one({'_id': 'ctx-2'}, {'$set': {'occurred_at': '2026-10-02T12:00:00+00:00'}})
     kept = store.db.memory_units.find_one({'_id': promote(store, ep, item, key='k2')['memory_id']})
     assert kept['status'] == 'active' and kept['source_ids'] == ['ep-1', 'ep-2'] and kept['episode_id'] == 'ep-settle'
+    # ADR-017: why she brought it home is kept with it and in her audited record.
+    assert kept['why'] == item['why'] and store.db.audit_events.find_one(
+        {'stream_id': 'ep-settle', 'type': 'memory.promoted'})
     ep['tool_calls'] = {call: {'tool': 'promote_memory', 'result': {}} for call in ('c1', 'c2')}
     with pytest.raises(Denied, match='PROMOTION_QUOTA: 2'):
         promote(store, ep, item, key='k3')                              # two a night

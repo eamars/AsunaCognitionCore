@@ -127,6 +127,24 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
         service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
 
 
+def test_at_home_other_peoples_group_lines_do_not_arrive_live(store):
+    """ADR-017 (owner 2026-10-06): public words reach home only through her own review, never in a heartbeat."""
+    from asuna.config import character_id
+    service = group_world(store)
+    line(store, 'g1', 'm-theirs', 'GROUP_MEMBER_LINE', minutes_ago=5)
+    store.db.messages.insert_one({'_id': 'm-mine', 'schema_version': 1, 'scene_id': 'g1', 'policy_epoch': 1, 'scene_seq': 998,
+        'direction': 'outbound', 'author': character_id(store.config), 'text': 'HER_OWN_GROUP_LINE',
+        'delivery_state': 'DELIVERED', 'received_at': now()})
+    store.db.messages.insert_one({'_id': 'home-line', 'schema_version': 1, 'scene_id': 'dm-a', 'policy_epoch': 1,
+        'scene_seq': 999, 'direction': 'inbound', 'author': 'A', 'text': 'OWNER_HOME_LINE', 'received_at': now()})
+    home = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '看看'})], '')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    ep = coordinator.ingest(home_beat(store, 'presence:s-p5:21'))
+    texts = [row['text'] for row in ep['context']['recent_experience_from_program']['messages']]
+    assert 'OWNER_HOME_LINE' in texts and 'HER_OWN_GROUP_LINE' in texts and 'GROUP_MEMBER_LINE' not in texts
+
+
 def test_a_plan_of_hers_due_at_home_may_send_her_out_but_one_due_in_a_group_may_not(store):
     service = group_world(store)
     line(store, 'g1', 'm-old', '周末大家都在干嘛', minutes_ago=120)

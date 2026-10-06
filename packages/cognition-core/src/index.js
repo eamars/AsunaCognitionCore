@@ -9,6 +9,7 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
+import { holdSteeredInput } from './steer.js';
 import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
@@ -629,6 +630,10 @@ export class CognitionCore {
     scope.systemPrompt.suppressRuntimeContext();
     scope.systemPrompt.section({ name: 'harness:identity',
       order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY'), text: '' });
+    // Steer into her running turn waits as the next turn instead of failing it (steer.js).
+    if (lane === 'character') scope.on('agent/inbox/inserted', ({ agent, message }) => {
+      if (agent) queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));
+    });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {
       if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);

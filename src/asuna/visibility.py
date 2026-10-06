@@ -64,12 +64,12 @@ def owner_private_scenes(config) -> set:
     mapping = scene_links.canonical_map(config)
     for channel in (config.get('channels') or {}).values():
         for route in (channel.get('routes') or {}).values() if isinstance(channel, dict) else ():
-            if not isinstance(route, dict) or (route.get('target') or {}).get('type') != 'dm':
+            if not isinstance(route, dict) or not route.get('scene_id'):
                 continue
             person = route.get('person_id')
-            if route.get('scene_id') and ((person and mapping.get(person, person) == owner)
-                                          or channel_kinds.home(route['scene_id'])):
-                scenes.add(route['scene_id'])
+            if channel_kinds.home(route['scene_id']) or ((route.get('target') or {}).get('type') == 'dm'
+                                                         and person and mapping.get(person, person) == owner):
+                scenes.add(route['scene_id'])      # same answer as session_class: any scene of a home kind
     return scenes
 
 

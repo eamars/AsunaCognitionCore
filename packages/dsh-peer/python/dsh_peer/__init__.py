@@ -9,6 +9,7 @@ import re
 KIND = 'dsh'                      # scene ids dsh:<home>:dm:<peer>; person ids dsh:<peer>
 TITLE = 'DSH'                     # the sidebar workspace its conversations live in
 IMAGE_HOSTS = ()                  # the bridge carries text only
+TEXT_ONLY = True                  # so no picture is offered to send here
 PEER_LINE = True                  # she can open/close this line herself (asuna/lines.py)
 # Owner 2026-10-06 (ADR-017): a peer line is the owner's own agents talking -- a trusted home conversation
 # (owner_private), like her local chat and the owner's DM. Platform channels such as QQ stay public.

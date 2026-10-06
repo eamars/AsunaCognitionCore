@@ -169,6 +169,38 @@ def test_the_owner_sends_her_on_an_errand_and_only_its_status_comes_home(store):
     states = {item['state'] for item in back['context']['errands_from_program']['items']}
     assert states == {'发出去了，那边有人接'}                         # the DM errand was never queued in this fake
     assert 'REPLY_FROM_THE_GROUP' not in json.dumps(back['context'], ensure_ascii=False)
+    assert envelope['visit']['by'] is None and envelope['visit']['author'] == 'A'      # the owner asked: named 主人
+
+
+def test_two_errands_to_one_place_in_one_turn_both_go(store):
+    service = group_world(store)
+    home = FakeLane(store, [FakeTurn([THINK, ('errand', {'place': PLACE, 'request': '同一句', 'exactly': True}),
+                                      ('errand', {'place': PLACE, 'request': '同一句', 'exactly': True})], '好')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    ep = coordinator.ingest({'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '去说两遍'})
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    events = [offer[1] for offer in service.controller.offers[-2:]]
+    assert len(set(events)) == 2 and all(event.startswith('visit:errand:g1:') for event in events)
+
+
+def test_errands_are_taken_only_when_someone_at_home_asks(store):
+    """Her own heartbeat turn has visit, not errand: an errand always has an asker, and goes out in their name."""
+    from asuna.role_tools import exposed
+    group_world(store)
+    context = {'errand_places_from_program': [{'place': PLACE}]}
+    asked = {'turn_kind': 'external', 'scene_id': 'dm-a', 'context': context, 'manifest': {'session_class': 'owner_private'}}
+    beat = {**asked, 'turn_kind': 'presence'}
+    assert 'errand' in exposed(store, asked) and 'errand' not in exposed(store, beat)
+
+
+def test_an_errand_from_someone_else_at_home_goes_out_in_their_name(store):
+    from asuna import places
+    text = places.errand_text(True, '旧居的小满')
+    assert '旧居的小满让我转告' in text and '主人' not in text
+    block = places.visit_block(store, {'_id': 'g1', 'kind': 'group', 'policy_epoch': 1}, {'intent': 'errand', 'request': 'x', 'exactly': True,
+                                                                       'by': '旧居的小满'}, datetime.now(timezone.utc))
+    assert '旧居的小满' in block['how'] and '主人' not in json.dumps(block, ensure_ascii=False)
 
 
 def test_the_old_home_line_is_a_trusted_home_conversation(store):

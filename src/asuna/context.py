@@ -480,9 +480,9 @@ class ContextBuilder:
                 from .vision import vision_capability as _vision
                 mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
-        # ADR-017: at home the owner may send her on an errand; where it can go, and what came of the last ones
+        # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).
-        if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind')!='settlement':
+        if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external')=='external':
             from . import places as _places
             targets=_places.errand_places(self.store,persona)
             if targets:

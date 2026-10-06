@@ -174,6 +174,12 @@ def target_allowed(config, scene, session_class):
     target = route_target(config, scene)
     if target is None:
         return False, 'scene_has_no_channel_route' if not (scene or {}).get('channel_id') else 'channel_route_not_authorized'
+    try:
+        from . import channel_kinds
+    except Exception:
+        import channel_kinds
+    if not channel_kinds.sends_images((scene or {}).get('_id')):
+        return False, 'channel_carries_text_only'
     if target == 'group' and (scene or {}).get('kind') == 'group':
         return True, ''
     if session_class != OWNER_PRIVATE:

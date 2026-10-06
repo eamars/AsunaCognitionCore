@@ -10,6 +10,7 @@ A kind module knows one platform's id formats and adapter conventions:
   adapter_config(adapter, channel), strip_derived(adapter)
   FACES, STICKERS (optional)                   the platform's own faces by name -> id; whether it sends stickers
   HOME (optional)                              its conversations are trusted home ones (owner_private); default public
+  TEXT_ONLY (optional)                         it carries text only, no pictures; default False
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).
@@ -69,6 +70,10 @@ def faces_of(identifier):
 def home(identifier):
     """A scene or person of a kind whose conversations are trusted home ones (ADR-017)."""
     return bool(getattr(of(identifier), 'HOME', False))
+
+
+def sends_images(identifier):
+    return not getattr(of(identifier), 'TEXT_ONLY', False)
 
 
 def sends_stickers(identifier):

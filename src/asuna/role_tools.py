@@ -204,13 +204,14 @@ TOOLS = {
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
     'errand': {
-        'description': ('替主人去别处说一句：去 errand_places_from_program 里的某个群或私聊。只在主人让你办的时候用。'
-                        'request 照抄主人要你带过去的话（或他交代的事）；exactly=true 是他要你原样转达。'
+        'description': ('替家里托你的人（主人，或家里那几条线上跟你说话的）去别处说一句：去 errand_places_from_program 里的某个群或私聊。'
+                        '只在这一轮跟你说话的人让你办的时候用。'
+                        'request 照抄要你带过去的话（或交代的事）；exactly=true 是要你原样转达。'
                         '程序会在那边开一轮，那一轮只看得到那边和这句话，家里的事带不过去；你在那边再决定怎么说，'
                         '不合适就不发。办没办成之后在家里的 errands_from_program 看，那边的人怎么回的不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
-                       'request': _s('主人要带过去的话或交代的事，500 字以内', required=True),
-                       'exactly': {'type': 'boolean', 'description': '主人要原样转达时为 true'}},
+                       'request': _s('要带过去的话或交代的事，500 字以内', required=True),
+                       'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'}},
     },
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
@@ -315,8 +316,8 @@ def exposed(store, ep):
         names.append('promote_memory')
     if (context.get('lines_from_program') or {}).get('items'):
         names.append('peer_line')
-    # ADR-017: in a home conversation the owner may send her on an errand to another chat.
-    if cls == visibility.OWNER_PRIVATE and context.get('errand_places_from_program'):
+    # ADR-017: in a home conversation, whoever is talking to her may send her on an errand to another chat.
+    if cls == visibility.OWNER_PRIVATE and kind == 'external' and context.get('errand_places_from_program'):
         names.append('errand')
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
@@ -347,7 +348,7 @@ def her_pictures(store, ep):
 
 # Words for the refusals she is most likely to meet; any other code is passed on as it is.
 WORDS = {
-    'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在本机或 owner 私聊里改。',
+    'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（本机、主人私聊这类可信的对话）改。',
     'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节；先用 recall 看清 sid。',
@@ -359,10 +360,10 @@ WORDS = {
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
     'BASE_REVISION_STALE': '这份文档在这回合里被改过了；先 recall 读最新的那一节再改。',
     'PERSONA_RENDER_OVER_BUDGET': '人格渲染会超出预算；先精简别的节。',
-    'PIN_REQUIRES_OWNER_PRIVATE': '置顶记忆只能在本机或 owner 私聊里做。',
+    'PIN_REQUIRES_OWNER_PRIVATE': '置顶记忆只能在家里（本机、主人私聊这类可信的对话）做。',
     'PIN_MEMORY_NOT_READABLE': '这条记忆读不到或已经不在了。',
     'PIN_MEMORY_NOT_IN_CONTEXT': '只能置顶这回合上下文 ref_index 里的记忆。',
-    'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在本机或 owner 私聊里改。',
+    'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（本机、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
     'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同回合和日期。',
@@ -389,7 +390,8 @@ WORDS = {
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
     'ERRAND_PLACE_UNKNOWN': '没有这个地方；照抄 errand_places_from_program 里的 place。',
     'ERRAND_LIMIT': '今天替人跑腿的次数用完了，明天再办。',
-    'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊、旧居那条线）才能接主人的差事。',
+    'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊这类可信的对话）才能接差事。',
+    'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一轮接；自己想去，用 visit。',
     'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
     'IMAGE_NOT_PULLABLE': '这张图拉不到。',
     'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
@@ -828,11 +830,13 @@ class RoleTools:
         from .places import ERRAND_CHARS
         if self._cls(ep) != visibility.OWNER_PRIVATE:
             raise Denied('ERRAND_ONLY_AT_HOME')
+        if turn_kind(ep) != 'external':
+            raise Denied('ERRAND_ONLY_WHEN_ASKED')
         place = self._text(args, 'place', 40)
         request = self._text(args, 'request', ERRAND_CHARS)
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，办不了。')
-        return self.coordinator.scheduler.errand(ep, place, request, bool(args.get('exactly'))), False
+        return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly'))), False
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_peer_line(self, ep, call_id, args):

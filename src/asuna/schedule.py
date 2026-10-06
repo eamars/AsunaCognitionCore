@@ -410,9 +410,10 @@ class ScheduleService:
         return {'going_to': People(self.store, persona).scene_title(scene), 'for': places.INTENTS[intent],
                 'note': '程序会在那个群里给你开一个回合；你在那儿看了现场再决定说不说、说什么。结果下次心跳带回来。'}
 
-    def errand(self, ep, place, request, exactly):
-        """An errand the owner gave her at home (ADR-017): a turn in that chat sees only that chat and the owner's
-        words. No visit limits (the owner asked), a daily cap; what comes home is the program's status only."""
+    def errand(self, ep, call_id, place, request, exactly):
+        """An errand someone at home gave her (ADR-017): a turn in that chat sees only that chat and the words she
+        was given, named as whose they are. No visit limits (she was asked), a daily cap; what comes home is the
+        program's status only."""
         from . import places
         found = places.find_errand(self.app.config, place)
         scene = found and self.store.db.scenes.find_one({'_id': found[0]})
@@ -424,21 +425,26 @@ class ScheduleService:
         person = places.visitor(route, channel)
         if not person:
             raise ValueError('ERRAND_PLACE_UNKNOWN: 那边没有可以接待你的成员授权')
-        event_id = 'visit:errand:%s:%s' % (scene['_id'], ep['source_event_id'])
+        from .evidence import canonical, sha
+        from .people import People
+        persona, _, _ = self._persona()
+        people = People(self.store, persona)
+        author = people.person(ep.get('person_id'))
+        by = None if author == (self.app.config.get('chat') or {}).get('person_id') else (people.named(author) or author)
+        event_id = 'visit:errand:%s:%s:%s' % (scene['_id'], ep['source_event_id'], sha(canonical([ep['_id'], call_id]))[:12])
         topic = 'errand:' + event_id
-        self.controller.offer_internal('visit', event_id, scene['_id'], person, places.errand_text(exactly),
+        self.controller.offer_internal('visit', event_id, scene['_id'], person, places.errand_text(exactly, by),
             scene_tick=True,
             group_context={'wake_reason': places.WAKE_REASON, 'topic_id': topic, 'reply_to': None,
                            'reply_message_id': None, 'mentioned_account_ids': []},
             visit={'intent': 'errand', 'topic': None, 'artifact_id': None, 'request': request,
-                   'exactly': bool(exactly), 'from': ep['_id']})
+                   'exactly': bool(exactly), 'from': ep['_id'], 'by': by, 'author': author})
         self.store.audit(ep['_id'], 'errand.offered', {'scene_id': scene['_id'], 'event_id': event_id,
-                                                       'exactly': bool(exactly), 'chars': len(request)},
+                                                       'exactly': bool(exactly), 'chars': len(request),
+                                                       'author': author},
                          scene['scope_key'])
-        from .people import People
-        persona, _, _ = self._persona()
-        return {'going_to': People(self.store, persona).scene_title(scene),
-                'note': '程序会在那边开一轮，那一轮只看得到那边和主人的原话；办没办成，下次在家会看到。'}
+        return {'going_to': people.scene_title(scene),
+                'note': '程序会在那边开一轮，那一轮只看得到那边和这句话；办没办成，下次在家会看到。'}
 
     def _last_home_beat(self, plan):
         """Her last internal turn at home: a heartbeat, or a settlement or self-improvement turn."""

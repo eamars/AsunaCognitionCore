@@ -19,7 +19,7 @@ TABLES_VERSION = 1
 ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊'), (None, '很热闹'))
 # Different people who spoke over the last hour.
 VOICES = ((0, '没有人'), (1, '一个人'), (3, '两三个人'), (None, '好几个人'))
-INTENTS = {'errand': '主人交代的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
+INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
            'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记'}
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
@@ -120,9 +120,11 @@ def errands_lately(store, moment):
     return store.db.messages.count_documents({'event.visit.intent': 'errand', 'received_at': {'$gte': since}})
 
 
-def errand_text(exactly):
-    return ('这是主人在家里交代你来这里办的一件事，不是这里有人叫你。他的原话在 visit_from_program.request。'
-            + ('他要你原样转达：照原话发，前面带一句「主人让我转告」。' if exactly else '用适合这里的话把事办了。')
+def errand_text(exactly, by=None):
+    """by: who at home asked, when it was not the owner (the program names them; it is never assumed)."""
+    who = by or '主人'
+    return ('这是%s在家里托你来这里办的一件事，不是这里有人叫你。原话在 visit_from_program.request。' % who
+            + (('原样转达：照原话发，前面带一句「%s让我转告」。' % who) if exactly else '用适合这里的话把事办了。')
             + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。家里的事这一轮看不到，也别提。')
 
 
@@ -140,7 +142,7 @@ def errands_block(store, persona, moment):
         state = outcome(store, {'scene_id': row['scene_id'], 'event_id': row['event']['event_id']})
         items.append({'to': people.scene_title(scene), 'asked': excerpt(row['event']['visit'].get('request'), 60),
                       'state': ERRAND_STATES.get(state, state), 'when': _ago(moment, _at(row.get('received_at')))})
-    return {'items': items, 'note': '你最近替主人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'}         if items else None
+    return {'items': items, 'note': '你最近替家里的人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'}         if items else None
 
 
 def visitor(route, channel):
@@ -375,9 +377,10 @@ def visit_block(store, scene, visit, moment):
              'note': ('这是你自己出门来的。先读懂这里在聊什么、是谁在说，再决定要不要开口；接不上就别硬接，'
                       '沉默也是正常结果。看到值得记的（谁是谁、聊什么、什么话题和图合适），可以写进群笔记。')}
     if visit.get('intent') == 'errand':
-        block.update(basis='主人交代的：不是这里有人叫你', request=visit.get('request') or '',
-                     how='原样转达，前面带「主人让我转告」' if visit.get('exactly') else '用适合这里的话说',
-                     note='这是主人交代你来办的事。先读懂这里在聊什么，再用合适的方式把话带到；不合适就不发。')
+        who = visit.get('by') or '主人'
+        block.update(basis='%s托你办的：不是这里有人叫你' % who, request=visit.get('request') or '',
+                     how=('原样转达，前面带「%s让我转告」' % who) if visit.get('exactly') else '用适合这里的话说',
+                     note='这是%s托你来办的事。先读懂这里在聊什么，再用合适的方式把话带到；不合适就不发。' % who)
     if visit.get('topic'):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):

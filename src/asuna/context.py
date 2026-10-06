@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 import traceback
-from .config import excerpt, redact_text
+from .config import character_id, excerpt, redact_text
 from . import visibility
 from .render import render_system, readable_sections, model_and_policy
 from .documents import DocumentStore, render_markdown
@@ -570,6 +570,14 @@ class ContextBuilder:
                     'what': '同一张表情包或图' if chain.get('media') else excerpt(chain.get('what'), 60),
                     'people': '%d 个人接连发了这个' % int(chain.get('people') or 0),
                     'note': CHAIN_NOTE}
+            elif group.get('wake_reason') == 'awaited_answer':
+                # Her own await_answer on her last line here: what she said she was waiting for, in her words.
+                mine = self.store.db.messages.find_one({'scene_id':scene['_id'],'direction':'outbound',
+                    'delivery_state':'DELIVERED','author':character_id(self.store.config)},{'episode_id':1},sort=[('scene_seq',-1)])
+                waiting = ((self.store.db.episodes.find_one({'_id':(mine or {}).get('episode_id')},{'await_answer':1}) or {})
+                           .get('await_answer') or {}).get('why')
+                continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
+                    'note': '你上一句说了在等回话；这句没 @ 你也没引用你，是不是在回你由你判断。'}
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}

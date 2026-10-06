@@ -66,7 +66,39 @@ def called_by_name(store, text):
     return any(len(name) >= 2 and name in text for name in People(store).self_names)
 
 
-def group_context(store, route, body, event_id):
+# A line of hers that waits for an answer (role_tools.await_answer): the asked person's next unaddressed line
+# within this long gets her one look. Human answers in her groups: median 40 s, 90% within ~3 min (2026-10-06).
+AWAIT_SECONDS = 180
+
+
+def awaited_answer(store, scene, person_id, mentions, reply):
+    """Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line
+    in this group asked for one, it was under AWAIT_SECONDS ago, this is the person it answered (anyone, when her
+    line answered nobody), the line @s or quotes no one else, and that line has not had its look yet."""
+    if mentions or reply:
+        return False                   # addressed to someone: an @ or quote of her is already its own wake
+    mine = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+                                       'direction': 'outbound', 'delivery_state': 'DELIVERED',
+                                       'author': character_id(store.config)}, sort=[('scene_seq', -1)])
+    if not mine or not mine.get('receipt_at'):
+        return False
+    try:
+        since = datetime.now(timezone.utc) - datetime.fromisoformat(str(mine['receipt_at']).replace('Z', '+00:00'))
+    except ValueError:
+        return False
+    if since.total_seconds() > AWAIT_SECONDS:
+        return False
+    ep = store.db.episodes.find_one({'_id': mine.get('episode_id')}, {'await_answer': 1}) or {}
+    if not ep.get('await_answer'):
+        return False
+    asked = (store.db.messages.find_one({'_id': mine.get('reply_to')}, {'author': 1, 'direction': 1}) or {})
+    if asked.get('direction') == 'inbound' and asked.get('author') and asked['author'] != person_id:
+        return False
+    return not store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': {'$gt': mine.get('scene_seq', 0)},
+                                           'event.group_context.wake_reason': 'awaited_answer'}, {'_id': 1})
+
+
+def group_context(store, route, body, event_id, person_id=None):
     """Bind a normalized reply to an actual record in this group and epoch."""
     mentions = body.get('mentioned_account_ids', [])
     if not isinstance(mentions, list) or len(mentions) > 100 or any(not isinstance(v, str) for v in mentions):
@@ -100,6 +132,8 @@ def group_context(store, route, body, event_id):
     if not reason and called_by_name(store, body.get('text')):
         # Her name without an @: the relevance gate decides whether that was meant for her (attend.py).
         reason = 'name_called'
+    if not reason and person_id and awaited_answer(store, scene, person_id, mentions, reply):
+        reason = 'awaited_answer'          # one look, through the relevance gate (attend.py)
     if topic is None:
         topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
     return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,
@@ -169,7 +203,7 @@ class Channels:
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
         event['raw'] = kept_raw(event, body.get('raw'))
         if route['target']['type'] == 'group':
-            event['group_context'] = group_context(self.store, route, body, event_id)
+            event['group_context'] = group_context(self.store, route, body, event_id, member['person_id'])
         if 'occurred_at' in body:
             event['occurred_at'] = body['occurred_at']
         from . import lines

@@ -20,6 +20,7 @@ GATED = {
     'reply_in_active_topic': '有人在你说过话的那条线里接话，不是回你',
     'name_called': '有人提到了你的名字，但没有 @ 你',
     'chain': '群里在跟队形：好几个人接连发了同一句或同一张，没人叫你',
+    'awaited_answer': '你刚在这里问了人、说了在等回话；这句没 @ 你也没引用你，可能是在回你，也可能不是',
 }
 CHOICES = {'接话': 'join', '不理': 'quiet'}
 # Catch-up: the lines since she last spoke here, reaching back at least 10 and at most 60 minutes.

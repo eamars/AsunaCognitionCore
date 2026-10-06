@@ -111,3 +111,40 @@ def test_catch_up_reaches_back_to_her_last_words_within_an_hour(store):
     assert [row['_id'] for row in kept] == ['r%d' % n for n in range(30)]
     quiet = [{'_id': 'q%d' % n, 'scene_seq': 4 - n, 'received_at': stamp(90 + n)} for n in range(20)]
     assert len(catch_up(store, {'_id': SCENE}, quiet, now_ts=now)) == 12      # never fewer than the last 12
+
+
+def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store):
+    """Owner 2026-10-06 + her own rule: only lines she marked with await_answer; the person she answered; once;
+    within AWAIT_SECONDS. Anything addressed to someone else is not hers to look at."""
+    from datetime import datetime, timedelta, timezone
+    from asuna.channels import AWAIT_SECONDS, awaited_answer
+    from asuna.config import character_id
+    scene = setup(store)
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    me = character_id(store.config)
+    store.db.messages.insert_one({'_id': 'in-ep-ask', 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
+                                  'scene_seq': 900, 'direction': 'inbound', 'author': 'qq:20002', 'text': '嗨'})
+
+    def said(seconds_ago, waits=True, seq=901):
+        store.db.messages.delete_many({'direction': 'outbound', 'scene_id': SCENE})
+        store.db.messages.insert_one({'_id': 'out-%d' % seq, 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
+            'scene_seq': seq, 'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
+            'reply_to': 'in-ep-ask', 'episode_id': 'ep-ask',
+            'receipt_at': (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).isoformat()})
+        store.db.episodes.delete_many({'_id': 'ep-ask'})
+        store.db.episodes.insert_one({'_id': 'ep-ask', 'schema_version': 1, **({'await_answer': {'why': '问他怎么有空'}} if waits else {})})
+
+    said(30)
+    assert awaited_answer(store, scene, 'qq:20002', [], None)                   # the asked person, unaddressed
+    assert not awaited_answer(store, scene, 'qq:20003', [], None)               # someone else
+    assert not awaited_answer(store, scene, 'qq:20002', ['20003'], None)        # @s someone else
+    assert not awaited_answer(store, scene, 'qq:20002', [], 'm-other')          # quotes something
+    said(AWAIT_SECONDS + 5)
+    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # too late: people moved on
+    said(30, waits=False)
+    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # a remark of hers, not a question
+    said(30)
+    store.db.messages.insert_one({'_id': 'in-look', 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': 902, 'direction': 'inbound',
+                                  'author': 'qq:20002', 'event': {'group_context': {'wake_reason': 'awaited_answer'}}})
+    assert not awaited_answer(store, scene, 'qq:20002', [], None)               # one look per line of hers
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})

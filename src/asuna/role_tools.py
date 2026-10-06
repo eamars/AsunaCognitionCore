@@ -98,6 +98,12 @@ TOOLS = {
         'description': '这回合不说话，直接结束回合。只在确实不用回应时用，不代表出错。',
         'parameters': {'reason': _s('为什么不说', required=True)},
     },
+    'await_answer': {
+        'description': ('群里这句是在问某个人、或跟人要个东西，想等对方回：调用它，这句发出去后大约三分钟里，'
+                        '对方下一句哪怕没 @ 你、没引用你，你也会被叫来看一眼（接话／不理）。一句话只看一次；'
+                        '这句不是在等回话就不用调。'),
+        'parameters': {'why': _s('在等什么回话，一句话', required=True)},
+    },
     'attach_image': {
         'description': ('给这回合要说的话配一张图，随话一起发出去。artifact_id 只能照抄 image_artifacts_from_program '
                         '里列出的值；正文里不要写文件名、路径或「见图」。一回合最多一张，再调用就换成新的那张。'),
@@ -305,6 +311,8 @@ def exposed(store, ep):
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
+    if scene_kind == 'group':
+        names.append('await_answer')          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         names += ['update_self', 'set_policy', 'pin_memory']
     if kind not in ('presence', 'settlement', 'self_development', 'visit') and (
@@ -533,6 +541,11 @@ class RoleTools:
         reason = self._text(args, 'reason', 1000)
         self.coordinator._update(self._fresh(ep), silent={'reason': reason})
         return {'silent': True}, True
+
+    def tool_await_answer(self, ep, call_id, args):
+        why = self._text(args, 'why', 200)
+        self.coordinator._update(self._fresh(ep), await_answer={'why': why})
+        return {'note': '这句发出去后约三分钟里，对方下一句没 @ 你也会叫你看一眼。'}, False
 
     def tool_answer_action(self, ep, call_id, args):
         answer = self._text(args, 'answer', 20000)

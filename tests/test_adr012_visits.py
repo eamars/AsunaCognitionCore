@@ -127,6 +127,32 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
         service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
 
 
+def test_a_plan_of_hers_due_at_home_may_send_her_out_but_one_due_in_a_group_may_not(store):
+    service = group_world(store)
+    line(store, 'g1', 'm-old', '周末大家都在干嘛', minutes_ago=120)
+    due = []
+    service.controller.receive = due.append
+    for scene in ('dm-a', 'g1'):
+        ep = {'_id': 'ep-plan-' + scene, 'scene_id': scene, 'person_id': 'A', 'scope_key': 'scene:' + scene,
+              'policy_epoch': store.db.scenes.find_one({'_id': scene})['policy_epoch']}
+        fire(service, service.create(ep, {'intent': '过二十分钟去群里答那三问', 'after_seconds': 60}))
+    home_due, group_due = due
+    home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
+                                      ('stay_silent', {'reason': '出门了'})], '')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    ep = coordinator.ingest(home_due)
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'visit' in home.calls[0]['tools'] and ep['context']['places_from_program']['items'][0]['place'] == PLACE
+    [result] = [row for row in home.tool_results if row[2] == 'visit']
+    assert result[5], result[4]
+    kind, event_id, scene_id, _ = service.controller.offers[-1]
+    assert (kind, scene_id, event_id) == ('visit', 'g1', 'visit:g1:' + home_due['event_id'])
+    group = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '没什么要说'})], '')])
+    ep = Coordinator(store, group).ingest(group_due)
+    assert 'visit' not in group.calls[0]['tools'] and 'places_from_program' not in ep['context']
+
+
 def test_a_visit_belongs_to_a_group_and_a_heartbeat_to_home(store):
     group_world(store)
     with pytest.raises(Denied, match='INTERNAL_SOURCE_DENIED'):

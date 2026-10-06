@@ -426,8 +426,10 @@ class ContextBuilder:
             context['recent_experience_from_program'] = {
                 'messages': list(reversed(recent)), 'tasks': tasks, 'publish_lineage':lineage,
                 'note': '真实历史片段与行动结果；每条保留来源场景。未列出的历史仍可按原有授权查询。'}
-        if event.get('episode_kind') == 'presence':
-            # ADR-012 §4.4: her groups in words, and what her recent visits came to.
+        if event.get('episode_kind') == 'presence' or (event.get('episode_kind') == 'scheduled'
+                                                        and session_class == visibility.OWNER_PRIVATE):
+            # ADR-012 §4.4: her groups in words, and what her recent visits came to. A plan of her own that
+            # comes due at home may send her out too (2026-10-06): the same places, the same limits.
             from . import places
             from .render import model_and_policy as _places_model
             plan=self.store.db.plans.find_one({'_id':'plan-asuna-presence'}) or {}

@@ -32,6 +32,7 @@ CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
+VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
 
@@ -184,7 +185,8 @@ TOOLS = {
         'description': ('出门：去你在的某个群看看。place 照抄 places_from_program 里的 place，intent 是你去做什么。'
                         '程序会在那个群里给你开一个回合，你在那儿看了现场再决定说不说、说什么；这回合在家里照常结束，'
                         '结果下次心跳带回来。topic 是你想聊的话头，会原样带进群里的那个回合：只写你愿意在那儿说的，'
-                        '不写家里的私事。每次心跳最多出门一次。'),
+                        '不写家里的私事。家里的心跳或你自己定的计划到期时可以出门，每次最多一次；'
+                        '想过一会儿再去，就用 plan 定个时间，到时候再走这一步。'),
         'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
                        'topic': _s('想聊的话头，80 字以内，可省略'),
@@ -289,8 +291,8 @@ def exposed(store, ep):
         names.append('promote_memory')
     if (context.get('lines_from_program') or {}).get('items'):
         names.append('peer_line')
-    # ADR-012 §4.2: from a heartbeat at home she may go and see one of her groups.
-    if kind == 'presence' and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
+    # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
+    if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
         names.append('visit')
     return names
 
@@ -753,10 +755,10 @@ class RoleTools:
 
     def tool_visit(self, ep, call_id, args):
         from . import places
-        if turn_kind(ep) != 'presence' or self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('只有在家里的心跳时间才能出门。')
+        if turn_kind(ep) not in VISIT_FROM or self._cls(ep) != visibility.OWNER_PRIVATE:
+            raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门。')
         if any(call.get('tool') == 'visit' and 'result' in call for call in (ep.get('tool_calls') or {}).values()):
-            raise Refused('这次心跳已经出过一次门了；下次心跳再去别处。')
+            raise Refused('这一拍已经出过一次门了；下一拍再去别处。')
         place = self._text(args, 'place', 40)
         intent = args.get('intent')
         if intent not in places.INTENTS:

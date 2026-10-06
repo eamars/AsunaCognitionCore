@@ -131,7 +131,7 @@ TOOLS = {
     'write_document': {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。正文直接写在 body 里：'
                         'replace_section 写修订后的整节，append_section 写新的一节，correction 写更正说明（原条目不改）；'
-                        'set_tags 只改 visibility/inject/tags；adopt_seed 接收人格包里更新的种子。'
+                        'set_tags 只改 visibility/inject/tags（replace_section 同时给了这些也会照改）；adopt_seed 接收人格包里更新的种子。'
                         '没写 visibility 的新节按 owner_private 保存。visibility 也决定你哪些回合用得上这一节：public 的节群里和别人私聊里的'
                         '回合也读得到，owner_private 的只在家里的回合读得到。每回合自动带上的只有 persona 和 voice 里 inject=always 的节'
                         '（其他文档要 recall 才读得到），有上限：'
@@ -686,8 +686,15 @@ class RoleTools:
         body = args.get('body') if item.get('op') in WRITE_STAGE_OPS else None
         revision = docs.apply(slug, item, body, base_revision_id=base, author='character', mutation_id=mutation_id,
                               budget=budget_gate(self.store, ep['persona']))
-        return {'doc': slug, 'op': item['op'], 'revision_id': revision['_id'], 'sid': item.get('sid'),
-                'heading': item.get('heading'), 'note': '已写下。'}, False
+        result = {'doc': slug, 'op': item['op'], 'revision_id': revision['_id'], 'sid': item.get('sid'),
+                  'heading': item.get('heading'), 'note': '已写下。'}
+        sections = (docs.read(slug)[1] or {}).get('sections', [])
+        if item['op'] in ('append_section', 'correction') and sections:
+            result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
+        written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
+        if written:
+            result['now'] = {'visibility': written['visibility'], 'inject': written['inject']}   # what the section is now
+        return result, False
 
     def tool_update_self(self, ep, call_id, args):
         from .self_state import SelfState

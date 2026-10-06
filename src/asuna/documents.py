@@ -204,6 +204,15 @@ class DocumentStore:
             if intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
                 raise Conflict('BASE_REVISION_STALE')
             target.update(body=body, body_sha256=sha(body.encode()))
+            # Tags given with a rewrite are meant (owner 2026-10-06: she passed visibility here twice and the receipt
+            # said written while the tags stayed); they apply as set_tags would.
+            for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):
+                if intent.get(field) is not None:
+                    if intent[field] not in allowed:
+                        raise DocumentError('DOC_TAGS_INVALID', field)
+                    target[field] = intent[field]
+            if intent.get('tags') is not None:
+                target['tags'] = list(intent['tags'])
         elif op in ('append_section', 'correction'):
             heading = intent.get('heading') or ''
             if op == 'correction':

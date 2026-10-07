@@ -303,7 +303,8 @@ def settings(model, policy):
     from .persona_model import effective
     return {'per_day': int(effective(model, 'heartbeat.visits_per_day', policy) or 0),
             'after_own_min': int(effective(model, 'heartbeat.after_own_min', policy) or 0),
-            'quiet_min': int(effective(model, 'heartbeat.quiet_min', policy) or 0)}
+            'quiet_min': int(effective(model, 'heartbeat.quiet_min', policy) or 0),
+            'per_beat': int(effective(model, 'heartbeat.visits_per_beat', policy) or 1)}
 
 
 def places_block(store, persona, model, policy, plan, moment, date):
@@ -340,6 +341,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
         return None
     return {'items': [row for _, row in sorted(items, key=lambda item: item[0])],
             'left_today': max(0, rule['per_day'] - today(store, plan, date)),
+            'this_beat': '这一拍最多去 %d 个群' % rule['per_beat'],
             'note': ('你在的群，只有概况，没有原话（新鲜的内容要去了才看得到）。想去哪个看看，就用 visit：'
                      '程序会在那个群里给你开一个回合，你在那儿再决定说不说、说什么。不去也完全正常。'
                      'left_today 是今天还能出门几次。')}

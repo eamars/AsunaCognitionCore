@@ -90,7 +90,7 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     assert 'visit' in home.calls[0]['tools'] and ep['context']['places_from_program']['items'][0]['place'] == PLACE
     results = [row for row in home.tool_results if row[2] == 'visit']
-    assert results[0][5] and not results[1][5] and '已经出过一次门' in results[1][4]
+    assert results[0][5] and not results[1][5] and '已经出过 1 次门' in results[1][4]
     kind, event_id, scene_id, person = service.controller.offers[-1]
     envelope = service.controller.envelopes[-1]
     assert (kind, scene_id) == ('visit', 'g1') and event_id == 'visit:g1:presence:s-p5:9'
@@ -354,3 +354,24 @@ def test_at_home_she_sees_what_she_herself_did_elsewhere_and_nothing_anyone_said
     assert any(item['where'].endswith('（家里）') for item in again['items'])
     text = json.dumps(block, ensure_ascii=False)
     assert 'SOMEONE_ELSES_LINE' not in text and 'MY_OWN_LINE' not in text
+
+
+def test_her_own_setting_lets_one_beat_go_to_two_groups(store):
+    """Owner 2026-10-07: she chose two groups a beat (heartbeat.visits_per_beat, hers, at most 3)."""
+    service = group_world(store)
+    store.config['channels']['qq']['blocked_groups'] = []
+    store.db.scenes.update_one({'_id': 'g2'}, {'$set': {'channel_id': 'qq', 'channel_account_id': 'acct'}})
+    PolicyStore(store, 'P1', store.config['persona_model']).set(
+        [{'key': 'heartbeat.visits_per_beat', 'value': 2, 'what': 'x'}], base_revision_id=None, reason='想多去一个',
+        author='character', mutation_id='per-beat')
+    g2 = places.place_id('g2')
+    home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
+                                      ('visit', {'place': g2, 'intent': 'write_notes'}),
+                                      ('visit', {'place': PLACE, 'intent': 'write_notes'}),
+                                      ('stay_silent', {'reason': '出门了'})], '')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    ep = coordinator.ingest(home_beat(store, 'presence:s-p5:30'))
+    assert ep['context']['places_from_program']['this_beat'] == '这一拍最多去 2 个群'
+    assert [row[5] for row in home.tool_results if row[2] == 'visit'] == [True, True, False]
+    assert [offer[2] for offer in service.controller.offers] == ['g1', 'g2']

@@ -249,7 +249,7 @@ TOOLS = {
         'description': ('出门：去你在的某个群看看。place 照抄 places_from_program 里的 place，intent 是你去做什么。'
                         '程序会在那个群里给你开一个回合，你在那儿看了现场再决定说不说、说什么；这回合在家里照常结束，'
                         '结果下次心跳带回来。topic 是你想聊的话头，会原样带进群里的那个回合：只写你愿意在那儿说的，'
-                        '不写家里的私事。家里的心跳或你自己定的计划到期时可以出门，每次最多一次；'
+                        '不写家里的私事。家里的心跳或你自己定的计划到期时可以出门，一拍能去几个群看 places_from_program.this_beat；'
                         '想过一会儿再去，就用 plan 定个时间，到时候再走这一步。'),
         'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
@@ -1003,8 +1003,13 @@ class RoleTools:
         from . import places
         if turn_kind(ep) not in VISIT_FROM or self._cls(ep) != visibility.OWNER_PRIVATE:
             raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门。')
-        if any(call.get('tool') == 'visit' and 'result' in call for call in (ep.get('tool_calls') or {}).values()):
-            raise Refused('这一拍已经出过一次门了；下一拍再去别处。')
+        from .persona_model import effective
+        from .render import model_and_policy
+        model, policy = model_and_policy(self.store, ep['persona'])
+        per_beat = int(effective(model, 'heartbeat.visits_per_beat', policy) or 1)
+        went = sum(1 for call in (ep.get('tool_calls') or {}).values() if call.get('tool') == 'visit' and 'result' in call)
+        if went >= per_beat:
+            raise Refused('这一拍已经出过 %d 次门了（heartbeat.visits_per_beat）；下一拍再去别处。' % went)
         place = self._text(args, 'place', 40)
         intent = args.get('intent')
         if intent not in places.VISIT_INTENTS:

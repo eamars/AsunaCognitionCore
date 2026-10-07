@@ -11,6 +11,7 @@ ADR-019 §3.3. Docker is one deployment layer on top of DSH. The cognition core 
   4. builds the reviewed native rendering extension (`tools/dsh-inline`) once, from DSH's public release tag;
   5. installs the profile the first time;
   6. starts `start-asuna.sh`, the same launcher every install uses. Every later start installs the checkout when it changed.
+- **`mongo`** is the stack's own MongoDB on `127.0.0.1:27099`, with the 64000 open-file limit MongoDB needs (the default 1024 crashed it under the test suite). To use an existing MongoDB instead, point the config at it and remove this service.
 - **`caddy`** serves HTTPS on the LAN with Caddy's internal certificate authority, and proxies to Asuna on loopback. It rewrites `Host` and `Origin` to that loopback address, so DSH's server-side fence accepts the request. This is how the owner's existing DSH container works. Both containers use host networking, so Asuna reaches MongoDB and NapCat as any process on that host would.
 - **Sandbox:** DSH's defaults. The image installs no sandbox tool and the stack adds no privileges. DSH picks its runner (Landlock on a kernel that has it), and Asuna reports the enforcement level DSH gives it.
 - **No login token on the LAN** (owner, 2026-10-07). `lan-login.mjs` patches DSH's client connection the way the owner's DSH container does: the browser reports loopback, so Settings works from the LAN address, and page and RPC authentication accept every request. The LAN and the host's firewall are the boundary. The patch fails loudly if DSH's code no longer matches it.
@@ -27,6 +28,8 @@ ADR-019 §3.3. Docker is one deployment layer on top of DSH. The cognition core 
 | `ASUNA_SHARED_ACTION_MODEL` | `0` | `1` routes both brains to the action model |
 | `ASUNA_PORT`, `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8780, 8443, 8781 | Asuna's loopback port, Caddy's HTTPS port, and the plain-HTTP port that serves Caddy's root certificate. Pick ports that are free on the host |
 | `TZ` | `UTC` | The container's local time zone (an IANA name). Default quiet hours follow local time, as on any host, so set it to where she lives |
+| `ASUNA_NAME` | `asuna` | Container name prefix (`<name>`, `<name>-https`, `<name>-mongo`), so several stacks can run side by side |
+| `ASUNA_MONGO_PORT` | 27099 | The stack MongoDB's loopback port; keep `ASUNA_MONGO_URI` in step |
 | `ASUNA_REPO`, `ASUNA_REF` | this repository, `main` | What the first start clones |
 
 ## Deploy

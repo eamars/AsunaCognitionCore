@@ -265,7 +265,8 @@ def main():
                   'channel_packages': [relative(directory) for directory in args.channel_package]},
         'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}}, indent=2), encoding='utf-8')
     suffix = '' if args.profile == 'asuna-native' else ' --profile %s --config %s' % (args.profile, args.config)
-    print('Installed native profile. Start with start-asuna.cmd (Windows) or ./start-asuna.sh' + suffix + ' --port 8780')
+    print('Installed native profile. Start with start-asuna.cmd (Windows) or ./start-asuna.sh' + suffix
+          + ' (add --port to choose the Web port; 8780 by default)')
 
 
 if __name__ == '__main__':

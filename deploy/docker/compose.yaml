@@ -1,21 +1,36 @@
 # Asuna as a Portainer stack (ADR-019 §3.3). Web access follows the owner's existing DSH container: host networking,
-# Asuna's launcher on 127.0.0.1, and a Caddy container that serves HTTPS on the LAN with its internal CA.
+# Asuna's launcher on 127.0.0.1, and a Caddy container that serves HTTPS on the LAN with its internal CA. The stack
+# brings its own MongoDB on loopback (with the open-file limit MongoDB needs); point ASUNA_MONGO_URI or the config
+# elsewhere and remove that service to use an existing one. Container names follow ASUNA_NAME, so stacks can coexist.
 # Defaults run the synthetic demo persona against its own database: a new stack cannot reach the live persona or QQ.
 services:
+  mongo:
+    image: mongo:8.0
+    container_name: ${ASUNA_NAME:-asuna}-mongo
+    ulimits:
+      nofile: {soft: 64000, hard: 64000}
+    ports:
+      - 127.0.0.1:${ASUNA_MONGO_PORT:-27099}:27017
+    volumes:
+      - asuna-mongo-data:/data/db
+    restart: unless-stopped
+
   asuna:
     build:
       context: .
       dockerfile: Dockerfile
     image: asuna:local
     pull_policy: build
-    container_name: asuna
+    container_name: ${ASUNA_NAME:-asuna}
+    depends_on:
+      - mongo
     environment:
       ASUNA_REPO: ${ASUNA_REPO:-https://github.com/eamars/AsunaCognitionCore.git}
       ASUNA_REF: ${ASUNA_REF:-main}
       ASUNA_PROFILE: ${ASUNA_PROFILE:-asuna-demo}
       ASUNA_CONFIG: ${ASUNA_CONFIG:-config/demo.local.json}
       ASUNA_CONFIG_JSON: ${ASUNA_CONFIG_JSON:-}
-      ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-}
+      ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-mongodb://127.0.0.1:27099/?directConnection=true}
       ASUNA_PERSONA_PACKAGE: ${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}
       ASUNA_CHANNEL_PACKAGES: ${ASUNA_CHANNEL_PACKAGES:-}
       ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
@@ -38,7 +53,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: asuna-https
+    container_name: ${ASUNA_NAME:-asuna}-https
     init: true
     depends_on:
       asuna:
@@ -86,6 +101,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  asuna-mongo-data:
   asuna-checkout:
   asuna-caddy-data:
   asuna-caddy-config:

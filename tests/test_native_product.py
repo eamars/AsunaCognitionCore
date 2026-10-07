@@ -16,7 +16,7 @@ from asuna.state import Store, Denied
 
 @pytest.fixture
 def product(tmp_path, monkeypatch):
-    for module in (asuna_config, host, channel_admission, native_worker):
+    for module in (asuna_config, host, channel_admission, native_worker, native_settings):
         monkeypatch.setattr(module, 'DATA', tmp_path / '.runtime')
     config = {'chat': {'scene_id': 'local', 'person_id': 'owner', 'persona': 'xiaoman',
                       'workspace': str(tmp_path / 'local')}, 'workflow_timeout_seconds': 1,
@@ -148,6 +148,24 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert 'character' not in exported['deployment']
     assert 'dsh_home' not in exported['deployment'] and 'workspace' not in exported['deployment']['chat']
     assert resolved['chat']['workspace'] == str(p.root / '.runtime' / 'work' / 'local-user')
+
+
+def test_a_configured_route_without_a_workspace_gets_one_in_the_data_folder(product):
+    p = product
+    channels = {'qq': {'account_id': '10001', 'token': 'x' * 24, 'routes': {
+        'owner-dm': {'sender_id': '20001', 'person_id': 'qq:20001', 'scene_id': 'qq:10001:dm:20001',
+                     'target': {'type': 'dm', 'id': '20001'}},
+        'g': {'scene_id': 'qq:10001:group:30001', 'target': {'type': 'group', 'id': '30001'},
+              'members': {'20002': {'person_id': 'qq:20002'}, '20003': {'person_id': 'qq:20003', 'workspace': '/kept'}}}}}}
+    config = {**p.config, 'database': 'existing', 'allowed_databases': ['existing'], 'mongo_uri': 'mongodb://127.0.0.1',
+              'embedding': {'base_url': 'http://127.0.0.1:9999/v1', 'model': 'fixture'}, 'channels': channels}
+    exported = native_settings.export_settings(config)
+    models = {'character': {'model': 'm'}, 'action': {'model': 'm'}}
+    routes = native_settings.runtime_settings(**exported, models=models)['channels']['qq']['routes']
+    data = p.root / '.runtime' / 'channels'
+    assert routes['owner-dm']['workspace'] == str(data / 'qq-owner-dm') and routes['owner-dm']['read_only_paths'] == []
+    assert routes['g']['members']['20002']['workspace'] == str(data / 'qq-g' / '20002')
+    assert routes['g']['members']['20003']['workspace'] == '/kept'
 
 
 def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(product):

@@ -3,7 +3,7 @@ from copy import deepcopy
 import re
 
 from . import channel_kinds
-from .config import local_workspace, validate_database, validate_endpoint
+from .config import DATA, local_workspace, validate_database, validate_endpoint
 
 # A secret's key, by substring (settings.js uses the same pattern): its value goes to DSH's credential store and the
 # settings keep a reference named like an environment variable (ADR-010 D6).
@@ -107,6 +107,15 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     for channel_id, channel in value.get('channels', {}).items():
         kind = channel_kinds.of_channel(channel_id)
         channel['admission'] = admission
+        # A route that names no workspace gets one in this profile's data folder, as an admitted one does: a
+        # configuration written elsewhere cannot know where that folder is.
+        for route_id, route in channel.get('routes', {}).items():
+            folder = DATA / 'channels' / (channel_id + '-' + route_id)
+            grants = route.get('members', {}).items() if route.get('target', {}).get('type') == 'group' else [(None, route)]
+            for sender, grant in grants:
+                if isinstance(grant, dict) and not grant.get('workspace'):
+                    grant['workspace'] = str(folder / sender if sender else folder)
+                    grant.setdefault('read_only_paths', [])
         for key in ('blocked_senders', 'blocked_groups'):
             if not isinstance(channel.get(key, []), list) or any(not isinstance(v, str) or not kind.ACCOUNT.fullmatch(v)
                     for v in channel.get(key, [])):

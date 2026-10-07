@@ -33,7 +33,8 @@ time: never let two instances consume the same account or routes.
    - `token`: a random string of at least 24 characters, shared by the adapter and Core's channel API;
    - `routes`: at least the owner's DM, `{"sender_id", "person_id": "qq:<id>", "scene_id": "qq:<bot>:dm:<id>",
      "target": {"type": "dm", "id": "<id>"}}`. A group route has `"target": {"type": "group", "id": "<group>"}` and
-     `members` (`{"<qq id>": {"person_id": "qq:<qq id>"}}`). With **QQ 接入策略** `automatic` (or `--channel-admission
+     `members` (`{"<qq id>": {"person_id": "qq:<qq id>"}}`). Each person's workspace is a folder in the profile's data
+     folder unless the route or member names an absolute `workspace` there. With **QQ 接入策略** `automatic` (or `--channel-admission
      automatic` at install), new DMs and groups get routes on their first valid message, so only the owner's DM
      needs configuring;
    - optional `blocked_senders` / `blocked_groups`.

@@ -48,6 +48,28 @@ def _error_detail(body):
     return re.sub(r'(rkey"?\s*[:=]\s*"?)[^&\s"]*', r'\1[已隐藏]', text)
 
 
+# What to do when no retry can bring this picture back (both brains read it).
+GIVE_UP = '重试也一样：不看这张，照实说没看到'
+TRY_LATER = '可以过一会儿再试一次；还不行就不看这张，照实说没看到'
+
+
+def _too_large(cap):
+    return ValueError('IMAGE_TOO_LARGE: 图片超过程序上限 %.1f MiB（%d 字节）；%s' % (cap / 1048576, cap, GIVE_UP))
+
+
+def _not_a_picture(declared=''):
+    return ValueError('IMAGE_TYPE_UNSUPPORTED: 拿到的内容不是 png/jpeg/webp/gif（按文件头判断%s）；%s'
+                      % ('，主机声明的是 ' + declared if declared else '', GIVE_UP))
+
+
+def _fetch_failed(status, detail=''):
+    """An HTTP refusal: a 4xx (an expired platform link among them) stays one; a 5xx or 408/429 may pass."""
+    said = 'IMAGE_FETCH_FAILED: 图片主机回了 HTTP %s%s' % (status, '（' + detail + '）' if detail else '')
+    if status in (408, 425, 429) or status >= 500:
+        return ValueError(said + '，是那边暂时的问题；' + TRY_LATER)
+    return ValueError(said + '，这个链接已经拉不到了（平台的下载链接会过期）；' + GIVE_UP + '，真需要就请对方重发')
+
+
 def _clean(value, limit):
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         return ''
@@ -251,7 +273,8 @@ def readable_image_scenes(store, task, config):
     scene = store.db.scenes.find_one({'_id': task['scene_id']})
     if (not isinstance(scene, dict) or scene.get('scope_key') != task['scope_key']
             or scene.get('policy_epoch') != task['policy_epoch']):
-        raise Denied('VISION_SCENE_FENCE_MISMATCH')
+        raise Denied('VISION_SCENE_FENCE_MISMATCH: 这个对话和任务记录对不上了（换了纪元或范围）；不是参数的问题，'
+                     '重试也一样：停下这一步，把没看成写进结果')
     out = [{'scene_id': scene.get('_id'), 'linked': False}]
     for scene_id in read_scope(config, scene)['linked_scenes']:
         doc = store.db.scenes.find_one({'_id': scene_id})
@@ -325,17 +348,17 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
     if entry.get('pull_via') == 'url':
         url = _clean(entry.get('url'), URL_LIMIT)
         if not url:
-            raise ValueError('IMAGE_URL_MISSING')
+            raise ValueError('IMAGE_URL_MISSING: 原消息里已经没有这张图的链接；' + GIVE_UP)
         parsed = urlsplit(url)
         if parsed.scheme != 'https' and not config.get('vision', {}).get('allow_insecure_http'):
-            raise ValueError('IMAGE_INSECURE_URL_DENIED')
+            raise ValueError('IMAGE_INSECURE_URL_DENIED: 这张图的链接是 %s，程序只拉 https；%s' % (parsed.scheme or '空', GIVE_UP))
         request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
         opener = urllib.request.build_opener(_KeepInsideAllowList(vision['image_hosts']))
         try:
             with opener.open(request, timeout=timeout or vision['timeout_seconds']) as response:
                 status = getattr(response, 'status', None) or 200
                 if status != 200:
-                    raise ValueError(f'IMAGE_FETCH_FAILED:HTTP_{status}')
+                    raise _fetch_failed(status)
                 final_host = (urlsplit(response.geturl()).hostname or '').lower()
                 content_type = response.headers.get('content-type', '') or ''
                 chunks = []
@@ -346,25 +369,28 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
                         break
                     total += len(part)
                     if total > cap:
-                        raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+                        raise _too_large(cap)
                     chunks.append(part)
                 data = b''.join(chunks)
         except _RedirectDenied as exc:
-            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED:{exc}') from exc
+            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {exc}，不在 vision.image_hosts 白名单里；{GIVE_UP}') from exc
         except urllib.error.HTTPError as exc:
             try:
                 detail = _error_detail(exc.read(512) or b'')
             except Exception:  # noqa: BLE001 读不到原因也要报状态码
                 detail = ''
-            raise ValueError(f'IMAGE_FETCH_FAILED:HTTP_{exc.code}' + (f':{detail}' if detail else '')) from exc
+            raise _fetch_failed(exc.code, detail) from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
-            raise ValueError(f'IMAGE_FETCH_FAILED:{type(exc).__name__}') from exc
+            raise ValueError(f'IMAGE_FETCH_FAILED: 连不上图片主机（{type(exc).__name__}，限时 '
+                             f'{timeout or vision["timeout_seconds"]:g} 秒）；{TRY_LATER}') from exc
         if not host_allowed(final_host, vision['image_hosts']):
-            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED:{final_host or '未知主机'}')
+            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {final_host or '未知主机'}，'
+                             f'不在 vision.image_hosts 白名单里；{GIVE_UP}')
     elif entry.get('pull_via') == 'local_file':
         name = _clean(entry.get('file'), 120)
         if not name or '/' in name or '\\' in name:
-            raise ValueError('IMAGE_FILE_NAME_DENIED')
+            raise ValueError('IMAGE_FILE_NAME_DENIED: 附件的文件名 %r 是空的或带路径分隔符，程序不按它找本机文件；%s'
+                             % (name, GIVE_UP))
         data = None
         for directory in vision['image_dirs']:
             base = Path(directory)
@@ -376,20 +402,20 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
             if not resolved.is_relative_to(base.resolve()) or not resolved.is_file():
                 continue
             if resolved.stat().st_size > cap:
-                raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+                raise _too_large(cap)
             data = resolved.read_bytes()
             break
         if data is None:
-            raise ValueError('IMAGE_FILE_NOT_AVAILABLE')
+            raise ValueError('IMAGE_FILE_NOT_AVAILABLE: 本机图片目录里没有 %s（可能已被清理）；%s' % (name, GIVE_UP))
         content_type = ''
         final_host = ''
     else:
-        raise ValueError('IMAGE_SOURCE_UNAVAILABLE')
+        raise ValueError('IMAGE_SOURCE_UNAVAILABLE: 这张图没有能拉的来源（没有可用的链接，也没有本机文件）；' + GIVE_UP)
     media_type = sniff_media_type(data)
     if media_type is None:
-        raise ValueError('IMAGE_TYPE_UNSUPPORTED:只支持 png/jpeg/webp/gif（按魔数判定）')
+        raise _not_a_picture(_clean(content_type, 80))
     if not data:
-        raise ValueError('IMAGE_EMPTY')
+        raise ValueError('IMAGE_EMPTY: 拉回来是空的（0 字节）；' + TRY_LATER)
     return data, media_type, entry.get('pull_via'), {'host': final_host, 'content_type': _clean(content_type, 80)}
 
 
@@ -405,26 +431,34 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
-        raise ValueError('READ_IMAGE_ARGUMENT_DENIED:' + ','.join(sorted(unknown)))
+        raise ValueError('READ_IMAGE_ARGUMENT_DENIED: 不认识的参数 %s；只收 ref' % '、'.join(sorted(unknown)))
     ref = args.get('ref')
     if not isinstance(ref, str) or not 4 <= len(ref) <= 80:
-        raise ValueError('INVALID_READ_IMAGE_REF')
+        raise ValueError('INVALID_READ_IMAGE_REF: ref 要是 4..80 字的字符串，给的是 %s；照抄图旁标的 ref（att-…），'
+                         '或一张存好的图的 artifact_id（blob-…）'
+                         % ('%d 字' % len(ref) if isinstance(ref, str) else '没给' if ref is None else type(ref).__name__))
     # The size cap is the program's (vision.max_bytes); DSH scales every picture for the model. A caller's own
     # max_bytes only refused pictures over its guess (2026-10-06: 20 KB-200 KB guesses on stickers), so an old
     # call that still sends one is read with the program's cap.
     max_bytes = None
     capability = vision_capability(config, route)
     if not capability['supported']:
-        raise ValueError('VISION_ROUTE_UNSUPPORTED:' + ';'.join(capability['unsupported_because']))
+        raise ValueError('VISION_ROUTE_UNSUPPORTED: 这条模型路由收不了图（%s）；重试也一样%s'
+                         % ('；'.join(capability['unsupported_because']),
+                            '' if route == 'character' else '：不看图能做的先做，看不了的写进结果'))
     if ARTIFACT_REF.fullmatch(ref):
         return stored_image(store, blobs, task, config, ref, max_bytes, offered)
     listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if not entry:
-        # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。
-        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
+        # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
+        recent = [item['ref'] for item in listing['attachments']]
+        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近的图里；%s'
+                         % (ref, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
+                            else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
     if not entry.get('pullable'):
-        raise ValueError('IMAGE_NOT_PULLABLE:' + str(entry.get('not_pullable_because') or ''))
+        raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'
+                         % (entry.get('not_pullable_because') or '原因不明', GIVE_UP))
     if entry.get('pull_via') == 'blob':
         # A picture from the owner's local chat: already stored when it arrived; read it back, store nothing new.
         data, blob = local_upload_bytes(store, blobs, task, config, entry, max_bytes)
@@ -464,14 +498,15 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
     if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
                                      or artifact_id in (offered or ()))):
-        raise ValueError('IMAGE_ARTIFACT_NOT_READABLE')
+        raise ValueError('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
+                         '也不是这一轮可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id' % artifact_id)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:
-        raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+        raise _too_large(cap)
     media_type = sniff_media_type(data)
     if media_type is None:
-        raise ValueError('IMAGE_TYPE_UNSUPPORTED:只支持 png/jpeg/webp/gif（按魔数判定）')
+        raise _not_a_picture()
     return {'ref': artifact_id, 'artifact_id': artifact_id, 'scene_id': task['scene_id'],
             'media_type': media_type, 'bytes': len(data), 'sha256': sha(data), 'pulled_via': 'artifact',
             'produced': produced(row),
@@ -480,30 +515,33 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
             'note': '这是存好的那张图本身；看完再判断它是不是要的样子。'}
 
 
+LOCAL_NOT_IN_SCENE = 'IMAGE_ATTACHMENT_NOT_IN_SCENE: 这张图的原消息已经不在这个对话可读的范围里；' + GIVE_UP
+
+
 def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     """A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the
     program's own local input (no platform envelope), and the artifact must be in that row's scope with that
     input as its source — a platform message naming an artifact id gets nothing."""
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
     if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
-        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
+        raise ValueError(LOCAL_NOT_IN_SCENE)
     row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
                                       'policy_epoch': task['policy_epoch']})
     items = (media_block(row) or {}).get('items') or [] if row else []
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
-        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE')
+        raise ValueError(LOCAL_NOT_IN_SCENE)
     artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE',
                                             'storage': 'gridfs'})
     if (not blobs or not artifact or artifact.get('scope_key') != row.get('scope_key')
             or LOCAL_UPLOAD + str(row['event'].get('event_id')) not in (artifact.get('source_ids') or [])):
-        raise ValueError('IMAGE_SOURCE_UNAVAILABLE')
+        raise ValueError('IMAGE_SOURCE_UNAVAILABLE: 这张本机聊天里的图已经不在存储里了；' + GIVE_UP)
     data = blobs.get(artifact['_id'], artifact['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:
-        raise ValueError(f'IMAGE_TOO_LARGE:>{cap}')
+        raise _too_large(cap)
     if sniff_media_type(data) is None:
-        raise ValueError('IMAGE_TYPE_UNSUPPORTED:只支持 png/jpeg/webp/gif（按魔数判定）')
+        raise _not_a_picture()
     return data, {'artifact_id': artifact['_id'], 'sha256': artifact['sha256']}
 
 

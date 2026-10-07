@@ -28,7 +28,7 @@ class Application:
                 from .persona_jobs import JobRunner
                 # Always a dry run: the action brain reads and analyses; identity writes are the character's.
                 result=JobRunner(self.store,self.config['chat']['persona'],retrieval=self.retrieval).run(
-                    args['job'],dry_run=True,args=args.get('args') or {})
+                    args.get('job'),dry_run=True,args=args.get('args') or {})
                 from .persona_jobs import tool_result
                 return tool_result(result)          # status, counts and artifact ids only (§7.4)
             self.broker.persona_jobs=persona_jobs

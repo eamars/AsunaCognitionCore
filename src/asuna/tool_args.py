@@ -30,7 +30,8 @@ def as_list(value):
             continue
         if isinstance(parsed, (list, tuple)) and parsed and all(isinstance(item, str) for item in parsed):
             return list(parsed)
-    raise ValueError('ARGV_NOT_A_LIST: write argv as a list of strings, e.g. ["python3", "-c", "print(1)"]')
+    raise ValueError('ARGV_NOT_A_LIST: argv 给的是一条字符串（%d 字），读不出列表；拆成字符串列表再跑，'
+                     '例如 ["python3", "-c", "print(1)"]（不经过 shell，程序不替你按空格切）' % len(value))
 
 
 def as_flag(value):

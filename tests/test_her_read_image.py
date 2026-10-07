@@ -56,7 +56,7 @@ def test_no_tool_without_a_picture_and_an_unknown_ref_is_refused_in_words(store,
     ep = coordinator.ingest({'event_id': 'm2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
     assert 'read_image' not in lane.calls[0]['tools']
     store.db.episodes.update_one({'_id': ep['_id']}, {'$set': {'turn_tools': ['think', 'read_image']}})
-    with pytest.raises(Refused, match='照抄图旁标的 ref'):
+    with pytest.raises(Refused, match='IMAGE_ATTACHMENT_NOT_IN_SCENE: att-unknownpicture'):
         coordinator.tools.call(ep['_id'], 'x', 'read_image', {'ref': 'att-unknownpicture'})
 
 
@@ -142,3 +142,10 @@ def test_at_home_where_nothing_can_be_sent_she_still_sees_and_looks_at_her_own_p
     assert [item['artifact_id'] for item in listed['items']] == [mine] and 'read_image' in listed['note']
     assert 'image_artifacts_from_program' not in ep['context']                # nothing here can be sent
     assert 'read_image' in lane.calls[0]['tools'] and lane.tool_results[1][5], lane.tool_results
+
+
+def test_an_expired_link_says_retrying_cannot_help_and_a_server_error_may_pass():
+    from asuna.vision import _fetch_failed
+    expired = str(_fetch_failed(400, '{"retcode":-5503007,"retmsg":"download url has expired"}'))
+    assert expired.startswith('IMAGE_FETCH_FAILED: 图片主机回了 HTTP 400') and '重试也一样' in expired
+    assert '过一会儿再试一次' in str(_fetch_failed(503))

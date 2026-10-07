@@ -25,7 +25,8 @@ export class BusinessWorker {
           const pending = this.pending.get(message.id);
           if (!pending) return;
           this.pending.delete(message.id);
-          if (message.error) pending.reject(new Error(message.error));
+          // `reply`: the worker's own answer, written for its caller (index.js toolReply), not a lost connection.
+          if (message.error) pending.reject(Object.assign(new Error(message.error), { reply: true }));
           else pending.resolve(message.value);
         } else Promise.resolve(onEvent(message)).catch(error => logger.warn(String(error)));
       } catch (error) {

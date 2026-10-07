@@ -14,6 +14,7 @@ DST：每日／每周当日遇到不存在的钟点，顺延到该日之后第�
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, time as wall_time, timedelta, timezone
 
 try:
@@ -134,35 +135,41 @@ def wall_to_utc(wall, tz):
 # ── 规则：DECIDE 里的 schedule → plans.rule 的规范形状 ─────────────
 def _clock_shape(value):
     if not isinstance(value, dict) or set(value) - {'time', 'weekdays'}:
-        raise ValueError('SCHEDULE_CLOCK_SHAPE: 只接受 {time:"HH:MM", weekdays:[0-6]?}')
+        raise ValueError('SCHEDULE_CLOCK_SHAPE: clock 只接受 {time:"HH:MM", weekdays:[0-6]（可省）}%s'
+                         % ('，多了 ' + '、'.join(sorted(map(str, set(value) - {'time', 'weekdays'})))
+                            if isinstance(value, dict) else '，给的不是对象'))
     parts = str(value.get('time', '')).strip().split(':')
     try:
         hour, minute = int(parts[0]), int(parts[1])
     except (IndexError, ValueError):
-        raise ValueError('SCHEDULE_CLOCK_TIME_INVALID: 要给 24 小时制的 HH:MM') from None
+        raise ValueError('SCHEDULE_CLOCK_TIME_INVALID: time「%s」不对，要给 24 小时制的 HH:MM，如 08:30'
+                         % value.get('time', '')) from None
     if not (0 <= hour < 24 and 0 <= minute < 60):
-        raise ValueError('SCHEDULE_CLOCK_TIME_INVALID: 钟点超出 00:00–23:59')
+        raise ValueError('SCHEDULE_CLOCK_TIME_INVALID: time「%s」超出 00:00–23:59' % value.get('time'))
     rule = {'time': '%02d:%02d' % (hour, minute)}
     if 'weekdays' in value:
         days = value['weekdays']
         if not isinstance(days, list) or not 1 <= len(days) <= 7 or any(type(d) is not int or not 0 <= d <= 6 for d in days):
-            raise ValueError('SCHEDULE_CLOCK_WEEKDAYS_INVALID: weekdays 用 0=周一…6=周日的整数数组')
+            raise ValueError('SCHEDULE_CLOCK_WEEKDAYS_INVALID: weekdays 给的是 %s；要 1–7 个 0=周一…6=周日的整数，'
+                             '每天就不写' % json.dumps(days, ensure_ascii=False)[:80])
         rule['weekdays'] = sorted(set(days))
     return rule
 
 
 def _wall_shape(value):
     if not isinstance(value, str) or not 10 <= len(value.strip()) <= 40:
-        raise ValueError('SCHEDULE_AT_INVALID: 要给 YYYY-MM-DDTHH:MM（可带偏移）')
+        raise ValueError('SCHEDULE_AT_INVALID: at 给的是 %s；要给 YYYY-MM-DDTHH:MM（可带偏移）'
+                         % json.dumps(value, ensure_ascii=False)[:60])
     text = value.strip().replace(' ', 'T')
     try:
         moment = datetime.fromisoformat(text.replace('Z', '+00:00'))
     except ValueError:
-        raise ValueError('SCHEDULE_AT_INVALID: 认不出这个日期时间：%s' % value) from None
+        raise ValueError('SCHEDULE_AT_INVALID: 认不出这个日期时间：%s；要给 YYYY-MM-DDTHH:MM' % value) from None
     if moment.tzinfo is not None:
         return {'at': moment.astimezone(timezone.utc).isoformat(timespec='minutes'), 'at_utc': True}
     if not 2000 <= moment.year <= 2100:
-        raise ValueError('SCHEDULE_AT_OUT_OF_RANGE: 年份在 2000–2100 之外，先确认日期')
+        raise ValueError('SCHEDULE_AT_OUT_OF_RANGE: 年份 %d 在 2000–2100 之外；对一下 clock_from_program 里今天的日期'
+                         % moment.year)
     return {'at': moment.isoformat(timespec='minutes')}
 
 
@@ -171,17 +178,22 @@ def normalize_rule(spec):
     if not isinstance(spec, dict):
         raise ValueError('INVALID_SCHEDULE_SPEC: 要一个对象')
     timing = [key for key in TIMING_KEYS if key in spec]
-    if set(spec) - set(TIMING_KEYS) - {'intent'} or len(timing) != 1:
-        raise ValueError('INVALID_SCHEDULE_SPEC: intent 之外，after_seconds/every_seconds/at/clock 里恰好给一个')
+    extra = sorted(map(str, set(spec) - set(TIMING_KEYS) - {'intent'}))
+    if extra or len(timing) != 1:
+        given = ('多了 ' + '、'.join(extra) if extra else '给了 ' + '、'.join(timing) if timing else '一种计时都没给')
+        raise ValueError('INVALID_SCHEDULE_SPEC: %s；intent 之外，after_seconds/every_seconds/at/clock 里恰好给一个' % given)
     key = timing[0]
     value = spec[key]
     if key == 'after_seconds':
         if type(value) is not int or not 1 <= value <= MAX_INTERVAL_SECONDS:
-            raise ValueError('INVALID_SCHEDULE_INTERVAL: after_seconds 是 1…%d 的整数秒' % MAX_INTERVAL_SECONDS)
+            raise ValueError('INVALID_SCHEDULE_INTERVAL: after_seconds 给的是 %s；要 1…%d 的整数秒'
+                             % (json.dumps(value, ensure_ascii=False)[:40], MAX_INTERVAL_SECONDS))
         return {'after_seconds': value}
     if key == 'every_seconds':
         if type(value) is not int or not MIN_INTERVAL_SECONDS <= value <= MAX_INTERVAL_SECONDS:
-            raise ValueError('INVALID_SCHEDULE_INTERVAL: 固定间隔最小 %d 秒（原生限制）' % MIN_INTERVAL_SECONDS)
+            raise ValueError('INVALID_SCHEDULE_INTERVAL: every_seconds 给的是 %s；要 %d…%d 的整数秒（最小 %d 秒是原生限制）'
+                             % (json.dumps(value, ensure_ascii=False)[:40], MIN_INTERVAL_SECONDS,
+                                MAX_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS))
         return {'every_seconds': value}
     if key == 'at':
         return _wall_shape(value)
@@ -217,7 +229,7 @@ def next_fire(rule, tz, moment=None):
                 raise ValueError('SCHEDULE_LOCAL_TIME_MISSING: %s 在这个时区不存在（拨快跳过），顺延的话是 %s'
                                  % (rule['at'], fire.astimezone(tz).isoformat(timespec='minutes')))
         if fire <= moment:
-            raise ValueError('SCHEDULE_TIME_ALREADY_PAST: %s 已经过了（当时是 %s），要定在什么时候？'
+            raise ValueError('SCHEDULE_TIME_ALREADY_PAST: %s 已经过了（当时是 %s）；改成之后的时刻'
                              % (rule['at'], moment.astimezone(tz).isoformat(timespec='minutes')))
         return fire
     clock = rule['clock']

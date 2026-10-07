@@ -54,7 +54,7 @@ def available():
 
 def _call(**args):
     if _host is None:
-        raise Denied('CREDENTIALS_UNAVAILABLE')
+        raise Denied('CREDENTIALS_UNAVAILABLE: 宿主没有提供凭据存储（不是你的错）；重试也一样')
     return _host(args)
 
 
@@ -87,29 +87,37 @@ def keep(name, note, env):
     """File a credential (a new one, or new values for a name already filed)."""
     name = str(name or '').strip()
     if not NAME.fullmatch(name):
-        raise Denied('CREDENTIAL_NAME_INVALID')
+        raise Denied('CREDENTIAL_NAME_INVALID: ' + ('没写 name' if not name else 'name %d 个字符，不合规则' % len(name)))
     note = ' '.join(str(note or '').split())
     if not 1 <= len(note) <= NOTE_CHARS:
-        raise Denied('CREDENTIAL_NOTE_INVALID')
+        raise Denied('CREDENTIAL_NOTE_INVALID: ' + ('没写 note' if not note else 'note %d 字' % len(note)))
     if not isinstance(env, dict) or not 1 <= len(env) <= MAX_VARIABLES:
-        raise Denied('CREDENTIAL_ENV_INVALID')
+        raise Denied('CREDENTIAL_ENV_INVALID: ' + ('env 有 %d 个变量' % len(env) if isinstance(env, dict)
+                                                   else 'env 要是一个对象：{"变量名": "值"}'))
     clean = {}
     for key, value in env.items():
         key = str(key).strip()
         if not ENV_NAME.fullmatch(key) or key in RESERVED or key.startswith('PYTHON'):
-            raise Denied('CREDENTIAL_ENV_INVALID: ' + key)
+            raise Denied('CREDENTIAL_ENV_INVALID: 变量名「%s」%s' % (key[:48], '是系统要用的，换一个名字'
+                         if key in RESERVED or key.startswith('PYTHON') else '要大写字母开头，只含大写字母、数字、下划线，2–48 个'))
         if not isinstance(value, str) or not value or len(value) > VALUE_CHARS:
-            raise Denied('CREDENTIAL_ENV_INVALID: ' + key)
+            raise Denied('CREDENTIAL_ENV_INVALID: %s 的值要是 1–%d 字的字符串' % (key, VALUE_CHARS))
         clean[key] = value
     _call(op='write', name=name, note=note, env=clean)
     _refresh(force=True)
     return {'kept': name, 'env': sorted(clean), 'note': '收进保险箱了。值不会再出现在任何地方；用的时候只写名字。'}
 
 
+def _names_hint(names):
+    """The vault's names (never values), for a refusal."""
+    return '有的是：%s，照抄其中一个' % '、'.join(names) if names else '保险箱是空的'
+
+
 def drop(name):
     name = str(name or '').strip()
-    if name not in {item['name'] for item in listing()}:
-        raise Denied('CREDENTIAL_NOT_FOUND')
+    names = sorted(item['name'] for item in listing())
+    if name not in names:
+        raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s' % (name[:40], _names_hint(names)))
     _call(op='delete', name=name)
     _refresh(force=True)
     return {'dropped': name}
@@ -120,12 +128,13 @@ def environment(names):
     if isinstance(names, str):
         names = [part.strip() for part in names.split(',') if part.strip()]
     if not isinstance(names, list) or not names or len(names) > 4:
-        raise Denied('CREDENTIALS_INVALID')
+        raise Denied('CREDENTIALS_INVALID: credentials 写 1–4 个凭据名（列表，或逗号分隔）；照抄程序附注 credentials 里的 name')
     env = {}
     for name in names:
         payload = _call(op='read', name=str(name)) if NAME.fullmatch(str(name)) else None
         if not payload or not payload.get('env'):
-            raise Denied('CREDENTIAL_NOT_FOUND: ' + str(name))
+            raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s'
+                         % (str(name)[:40], _names_hint(sorted(item['name'] for item in listing()))))
         env.update({str(k): str(v) for k, v in payload['env'].items()})
         with _lock:
             _cache['values'].update(str(v) for v in payload['env'].values() if len(str(v)) >= 4)

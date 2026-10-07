@@ -66,36 +66,46 @@ def queue(store, ep, index, item, key=None):
     from .people import People
     scene = store.authorize(ep['scene_id'], ep['person_id'])
     if scene.get('kind') != 'group':
-        raise Denied('GROUP_ACTION_NOT_A_GROUP')
+        raise Denied('GROUP_ACTION_NOT_A_GROUP: 管理动作只在群里用；重试也一样')
     if not enabled(store.config, scene):
-        raise Denied('GROUP_ACTION_DISABLED')
+        raise Denied('GROUP_ACTION_DISABLED: 这个群的路由关了 admin_actions；重试也一样，不做就是了')
     people = People(store, ep['persona'])
-    if people.self_role(scene) not in ('owner', 'admin'):
-        raise Denied('GROUP_ACTION_NOT_AN_ADMIN')
-    kind = item['kind']
+    role = people.self_role(scene)
+    if role not in ('owner', 'admin'):
+        raise Denied('GROUP_ACTION_NOT_AN_ADMIN: %s；重试也一样' % ('平台报的你在这里是' + ROLE_WORDS[role] if role in ROLE_WORDS
+                     else '平台还没报过你在这里的身份'))
+    kind = item.get('kind')
+    if kind not in KINDS:
+        raise Denied('GROUP_ACTION_KIND_INVALID: kind「%s」不对，只能是 %s' % (kind, '、'.join(KINDS)))
     since = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    if store.db.artifacts.count_documents({'kind': 'group_action', 'scene_id': scene['_id'],
-                                           'created_at': {'$gte': since}}) >= PER_HOUR:
-        raise Denied('GROUP_ACTION_HOURLY_LIMIT')
-    found = people.resolve(scene, item['who'])
+    done = store.db.artifacts.count_documents({'kind': 'group_action', 'scene_id': scene['_id'], 'created_at': {'$gte': since}})
+    if done >= PER_HOUR:
+        raise Denied('GROUP_ACTION_HOURLY_LIMIT: 这个群一小时里已经做了 %d 次管理动作，上限 %d 次；过一阵再做，或这次不做'
+                     % (done, PER_HOUR))
+    found = people.resolve(scene, item.get('who'))
     if len(found) != 1:
-        raise Denied('GROUP_ACTION_TARGET_UNCLEAR' if found else 'GROUP_ACTION_TARGET_NOT_FOUND')
+        raise Denied('GROUP_ACTION_TARGET_UNCLEAR: 「%s」对得上 %s；who 用标签里的 #编号' % (
+            item.get('who'), '、'.join(people.label(d) for d in found[:5])) if found else
+            'GROUP_ACTION_TARGET_NOT_FOUND: 这个群里找不到「%s」；who 照抄他的标签，如 [名字 #4] 或 #4' % item.get('who'))
     doc = found[0]
     if doc.get('person') == people.self_id or people.is_owner(doc):
-        raise Denied('GROUP_ACTION_TARGET_PROTECTED')
+        raise Denied('GROUP_ACTION_TARGET_PROTECTED: %s 是主人或你自己，管理动作不能对他用；重试也一样' % people.label(doc))
     if doc.get('role') in ('owner', 'admin'):
-        raise Denied('GROUP_ACTION_TARGET_IS_ADMIN')
+        raise Denied('GROUP_ACTION_TARGET_IS_ADMIN: %s 是%s，只能动普通成员；重试也一样'
+                     % (people.label(doc), ROLE_WORDS[doc['role']]))
     admin = {'kind': kind}
     if kind == 'recall':
         admin['message_id'] = _message_to_recall(store, scene, ep, people, doc, item.get('which') or '这条')
     else:
         account = people.account_of(scene, doc)
         if not account:
-            raise Denied('GROUP_ACTION_ACCOUNT_UNKNOWN')
+            raise Denied('GROUP_ACTION_ACCOUNT_UNKNOWN: 程序还不知道 %s 在平台上的账号（不是你的错）；这次做不了，重试也一样'
+                         % people.label(doc))
         admin['account'] = account
         if kind == 'mute':
             if item.get('duration') not in DURATIONS:
-                raise Denied('GROUP_ACTION_DURATION_REQUIRED')
+                raise Denied('GROUP_ACTION_DURATION_REQUIRED: 禁言要选 duration：%s%s' % (
+                    '、'.join(DURATIONS), '（给的是「%s」）' % item['duration'] if item.get('duration') else ''))
             admin['seconds'] = DURATIONS[item['duration']]
     route = _route(store.config, scene)
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key if key is not None else index]))[:24]
@@ -124,7 +134,8 @@ def _message_to_recall(store, scene, ep, people, doc, which):
                                           'received_at': {'$gte': since}}, sort=[('scene_seq', -1)])
     message_id = ((row or {}).get('event') or {}).get('channel', {}).get('platform_event_id')
     if not message_id:
-        raise Denied('GROUP_ACTION_NO_RECENT_MESSAGE')
+        raise Denied('GROUP_ACTION_NO_RECENT_MESSAGE: %s 在这个群 %d 分钟内没有能撤回的消息；撤回不了，重试也一样'
+                     % (people.label(doc), RECALL_MINUTES))
     return str(message_id)
 
 

@@ -36,7 +36,7 @@ def test_T2_1_concurrent_writes_on_one_base(store):
                        f'第{i}件事', base_revision_id=base, author='character', mutation_id=f't21-{i}')
             return 'ok'
         except Conflict as exc:
-            return str(exc)
+            return str(exc).split(':', 1)[0]
 
     with ThreadPoolExecutor(2) as pool:
         assert sorted(pool.map(write, (1, 2))) == ['BASE_REVISION_STALE', 'ok']

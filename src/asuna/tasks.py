@@ -64,7 +64,8 @@ def require_current_feedback(store, episode):
             or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
                (episode['scene_id'], episode['person_id'], episode['scope_key'], episode['policy_epoch'])
             or scene['policy_epoch'] != episode['policy_epoch']):
-        raise FeedbackStale('FEEDBACK_TASK_STALE')
+        raise FeedbackStale('FEEDBACK_TASK_STALE: 这回合依据的那件事已经变了（被叫停、暂停或改过交代），不是你出错；重试也一样：'
+                            '把现在的情况照实说给对方')
 
 # ADR-011 §4: the action brain's two ways to reach her. ask_character waits for her answer; report_progress
 # only leaves a note she reads on her next turn (and it shows in their thread).
@@ -83,11 +84,13 @@ def workspace_file(root, protected, op, args):
     failed operation is a result she reads (TASK_OPERATION_FAILED with the reason), not an exception."""
     import traceback
     root = Path(root).resolve()
+    given = str((args or {}).get('path', ''))[:200]
 
     def path(name):
         target = (root / str(name)).resolve()
         if not target.is_relative_to(root):
-            raise PermissionError('PATH_DENIED: outside the task folder')
+            raise PermissionError('PATH_DENIED: path %r 在任务文件夹外；写 /task 里的相对路径，例如 notes.txt 或 '
+                                  'out/result.json（不带 /task/ 前缀，不用 ..）' % given)
         return target
     try:
         if op == 'list_files':
@@ -96,16 +99,40 @@ def workspace_file(root, protected, op, args):
         target = path(args['path'])
         if op == 'read_file':
             if target.stat().st_size > 32768:
-                raise ValueError('READ_LIMIT: larger than 32 KiB')
+                raise ValueError('READ_LIMIT: %s 有 %d 字节，read_file 一次最多 32768 字节（32 KiB）；用 sandbox_run 跑 '
+                                 'python3 脚本只打印要的那一段（文件路径作为单独的参数 /task/… 传入）'
+                                 % (given, target.stat().st_size))
             return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8')}
         if any(target == p or target.is_relative_to(p) for p in protected):
-            raise PermissionError('PROTECTED_PATH: %s is a read-only source' % target.relative_to(root).as_posix())
+            raise PermissionError('PROTECTED_PATH: %s 是只读的原始资料，不能写；写到别的路径，例如 out/%s'
+                                  % (target.relative_to(root).as_posix(), target.name))
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('w' if args.get('overwrite', False) else 'x', encoding='utf-8') as handle:
             handle.write(args['text'])
         return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8'), 'written': True}
-    except Exception:
-        return {'error': 'TASK_OPERATION_FAILED', 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
+    except Exception as exc:
+        return {'error': 'TASK_OPERATION_FAILED: ' + workspace_reason(exc, op, given),
+                'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
+
+
+def workspace_reason(exc, op, given):
+    """Why a file operation failed and what to do, in her words (the traceback stays in stderr)."""
+    if isinstance(exc, KeyError):
+        return '%s 缺参数 %s；照工具说明补上' % (op, exc.args[0] if exc.args else '')
+    if isinstance(exc, FileExistsError):
+        return '%s 已经存在；要替换就加 overwrite=true，要保留就换个文件名' % given
+    if isinstance(exc, FileNotFoundError):
+        return '没有 %s；先用 list_files 看 /task 里有哪些文件，path 照抄' % given
+    if isinstance(exc, IsADirectoryError) or isinstance(exc, PermissionError) and getattr(exc, 'errno', None):
+        return '%s 是文件夹或打不开的文件；path 要指向一个文件，用 list_files 看有哪些' % given
+    if isinstance(exc, UnicodeDecodeError):
+        return '%s 不是 UTF-8 文本，read_file 读不了；用 sandbox_run 跑 python3 脚本按二进制处理' % given
+    if isinstance(exc, TypeError) and op == 'write_file':
+        return 'text 要是字符串；把内容写成一段字符串（JSON 先自己序列化）'
+    message = str(exc)
+    if message[:1].isupper() and '_' in message.split(':', 1)[0]:
+        return message
+    return '%s（%s: %s）；换个做法，或把这一步没做成写进结果' % (op, type(exc).__name__, message[:200])
 
 
 SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12). An argument /task or /task/… names the task folder. Max 30 seconds, 256 KiB output. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'}}}
@@ -131,6 +158,17 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
+
+
+def stale_reason(task,current,scene):
+    """Why a call's task no longer holds its authority, as the program sees it."""
+    if not current:return '这个任务已经不在了'
+    if current['state']=='CANCELLED':return '这个任务已经被取消了'
+    if current['state']=='PAUSED':return '这个任务因宿主重启暂停了'
+    if current['intent_revision']!=task['intent_revision']:return '她改了这个任务的交代（新的交代取代了这一版）'
+    if scene and scene['policy_epoch']!=task['policy_epoch']:return '这个对话的权限换了一版'
+    if current['state']!='RUNNING':return '这个任务已经结束了（%s）'%current['state']
+    return '这个任务已经由另一次执行接手'
 
 
 class TaskService:
@@ -164,8 +202,11 @@ class TaskService:
         current=self.store.db.tasks.find_one({'_id':task['_id']})
         scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
         if not current or current['state']!=state or current['intent_revision']!=task['intent_revision'] or current['fencing_token']!=task['fencing_token'] or scene['policy_epoch']!=task['policy_epoch']:
-            raise Denied('STALE_TASK_FENCE')
-        if state=='RUNNING' and current.get('lease_expires_at',0)<=__import__('time').time():raise Denied('TASK_LEASE_EXPIRED')
+            raise Denied('STALE_TASK_FENCE: '+stale_reason(task,current,scene)+'，这次调用不算数，也没有执行；不是你出错，重试也一样：'
+                         '停下，不再调工具，在报告里写做到了哪里')
+        if state=='RUNNING' and current.get('lease_expires_at',0)<=__import__('time').time():
+            raise Denied('TASK_LEASE_EXPIRED: 这个任务的执行租约过期了（10 分钟没有续上），这次调用没有执行；不是参数的问题，'
+                         '重试也一样：停下，在报告里写做到了哪里')
         return current
 
     def cancel(self,task_id,reason='user_cancelled',*,person_id=None,operator=False):
@@ -257,6 +298,16 @@ class TaskService:
         return ep
 
 
+DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'
+                   '重试也一样，需要改代码就在报告里说明')
+UNAVAILABLE='不是参数的问题，重试也一样：不用它能做的先做，没做成的写进报告'
+
+
+def given_text(value):
+    if isinstance(value,str):return '给的是 %d 字' % len(value) if value.strip() else '给的是空的'
+    return '没给' if value is None else '给的是 %s' % type(value).__name__
+
+
 class ToolBroker:
     """Trusted host process; no DB/publication credentials enter model or child tools."""
     def __init__(self, service:TaskService):
@@ -280,22 +331,33 @@ class ToolBroker:
         from .tool_args import normalize
         args,adjusted=normalize(tool,args)          # what she plainly meant; said back in the result (tool_args.py)
         with self.service.lock:
-            if session not in self.bindings:raise Denied('UNBOUND_EXECUTOR')
+            if session not in self.bindings:
+                raise Denied('UNBOUND_EXECUTOR: 这个行动会话没有绑定到任务（任务已结束或宿主重启过）；不是参数的问题，'
+                             '重试也一样：停下，在报告里写做到了哪里')
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
-            if tool not in current['allowed_capabilities']:raise Denied('CAPABILITY_DENIED')
+            if tool not in current['allowed_capabilities']:
+                raise Denied('CAPABILITY_DENIED: 这个任务没有 %s 这个工具；能用的是 %s'
+                             % (str(tool)[:60],'、'.join(current['allowed_capabilities'])))
             if tool in DEVELOPMENT_NAMES and not current.get('development_grant'):
-                raise Denied('DEVELOPMENT_GRANT_REQUIRED')
+                raise Denied(DEVELOPMENT_GRANT)
             if integration_gated(tool):
-                if current.get('integration_profile') != 'owner': raise Denied('INTEGRATION_TASK_GRANT_REQUIRED')
+                if current.get('integration_profile') != 'owner':
+                    raise Denied('INTEGRATION_TASK_GRANT_REQUIRED: %s 只给继承 owner 工作域的任务用，这个任务不是；'
+                                 '重试也一样，在报告里写明需要它' % tool)
                 owner_profile(self.store.config, current['scene_id'], current['requester_id'])
-                if not getattr(self, 'integration', None): raise Denied('INTEGRATION_RUNNER_UNAVAILABLE')
+                if not getattr(self, 'integration', None):
+                    raise Denied('INTEGRATION_RUNNER_UNAVAILABLE: 集成运行器这会儿没启动（宿主没有沙箱或没装配它）；'+UNAVAILABLE)
             key='tool-'+sha(canonical([task['_id'],task['intent_revision'],call_id]))
             input_hash=sha(canonical([tool,args]))
             old=self.store.db.artifacts.find_one({'_id':key})
             if old:
-                if old['input_hash']!=input_hash:raise Denied('CALL_ID_REUSED')
-                if old['state']!='DONE':raise Denied('TOOL_DELIVERY_UNKNOWN')
+                if old['input_hash']!=input_hash:
+                    raise Denied('CALL_ID_REUSED: 这个调用编号已经用在另一组参数的 %s 调用上；不是参数写错，'
+                                 '重新发起一次调用（会换新编号）' % old.get('tool'))
+                if old['state']!='DONE':
+                    raise Denied('TOOL_DELIVERY_UNKNOWN: 同一个调用之前开始过但还没有回执（可能还在进行，或中途断过），不知道做没做成；'
+                                 '不要盲目重做：先查看它该留下的结果（list_files、读文件等）再决定')
                 return old['result']
             self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
@@ -308,15 +370,17 @@ class ToolBroker:
                   or tool=='generate_image' or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
-                if not task.get('development_grant'):raise Denied('DEVELOPMENT_GRANT_REQUIRED')
+                if not task.get('development_grant'):raise Denied(DEVELOPMENT_GRANT)
                 result=self.persona_jobs(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool in DEVELOPMENT_NAMES:
-                if not getattr(self,'development',None):raise Denied('DEVELOPMENT_UNAVAILABLE')
+                if not getattr(self,'development',None):raise Denied('DEVELOPMENT_UNAVAILABLE: 自我开发服务这会儿没接上；'+UNAVAILABLE)
                 result=self.development.call(task,tool,args)
                 with self.service.lock:self.service.valid(task)
             elif tool=='ask_character':
-                if not getattr(self, 'consult_character', None):raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE')
+                if not getattr(self, 'consult_character', None):
+                    raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE: 这会儿问不了她（角色脑没接上）；不是参数的问题，重试也一样：'
+                                       '按你的判断做，把要她定的事写进报告')
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
                 with self.service.lock:self.service.valid(task)
@@ -324,13 +388,15 @@ class ToolBroker:
                 from .role_tools import note_idea, IDEA_CHARS
                 for field in ('idea','why'):
                     if not isinstance(args.get(field),str) or not args[field].strip() or len(args[field])>IDEA_CHARS:
-                        raise ValueError('NOTE_IDEA_'+field.upper()+'_REQUIRED')
+                        raise ValueError('NOTE_IDEA_%s_REQUIRED: %s 要写一段 1..%d 字的文字，%s；改好再记'
+                                         % (field.upper(),field,IDEA_CHARS,given_text(args.get(field))))
                 row=note_idea(self.store,self.store.config['chat']['persona'],args['idea'].strip(),args['why'].strip(),
                     key=[task['_id'],key],source={'by':'action','task_id':task['_id'],'scene_id':task['scene_id']})
                 result={'noted':row['_id'],'note':'记下了；她会在自我改进时间里决定做不做。'}
             elif tool=='report_progress':
                 note=args.get('note')
-                if not isinstance(note,str) or not note.strip() or len(note)>4000:raise ValueError('PROGRESS_NOTE_REQUIRED')
+                if not isinstance(note,str) or not note.strip() or len(note)>4000:
+                    raise ValueError('PROGRESS_NOTE_REQUIRED: note 要写一段 1..4000 字的文字，%s；改好再留' % given_text(note))
                 if not self.store.db.task_messages.find_one({'_id':'progress-'+key}):
                     self.store.put('task_messages',{'_id':'progress-'+key,'task_id':task['_id'],
                         'thread':task.get('thread') or task['_id'],'from':'action','text':note.strip(),
@@ -341,25 +407,25 @@ class ToolBroker:
                 # Read-only scoped history: the scene comes from the task binding, never
                 # from arguments. The effects lock stays released during the query so a
                 # cancellation or lease renewal cannot queue behind a Mongo read.
-                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE')
+                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE: 历史查询服务这会儿没接上；'+UNAVAILABLE)
                 result=self.history.query_for_task(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool==DIGEST_TOOL_NAME:
                 # P1-c read-only discussion digest: same rule as history — scene from the
                 # task binding, no effects lock held across the Mongo reads.
-                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE')
+                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE: 群讨论整理服务这会儿没接上；'+UNAVAILABLE)
                 result=self.digest.digest_for_task(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
                 # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
-                if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE')
+                if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                 result=self.vision.read_image(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。
                 # 图登记到任务绑定的 scope，来源是 integration:image:…，算她自己做的图。
-                if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE')
+                if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE: 本机生图服务这会儿没接上（集成运行器没启动）；'+UNAVAILABLE)
                 from .image_generation import generate
                 result=generate(args,runner=self.integration,workspace=sandbox.task_dir,
                                 protected=sandbox.protected_paths,register=outbound_media.import_register(self.store,task))
@@ -379,12 +445,14 @@ class ToolBroker:
                 if args.get('credentials'):
                     # Owner 2026-10-07: a credential's variables reach one sandboxed command of a home task, nothing else.
                     from . import credentials
-                    if not credentials.home_task(self.store,task):raise Denied('CREDENTIALS_HOME_ONLY')
+                    if not credentials.home_task(self.store,task):
+                        raise Denied('CREDENTIALS_HOME_ONLY: credentials 只能用在 owner 私聊里交代的任务，这个任务不是；'
+                                     '去掉 credentials 再跑，需要凭据的那一步写进报告')
                     result=sandbox.run(args['argv'],env=credentials.environment(args['credentials']))
                 else:
                     result=sandbox.run(args['argv'])
             else:
-                raise Denied('UNKNOWN_TOOL')
+                raise Denied('UNKNOWN_TOOL: %s 不是这里能执行的工具；重试也一样，换用工具清单里的工具' % str(tool)[:60])
             if tool!=READ_IMAGE_TOOL_NAME:
                 from . import credentials
                 result=credentials.scrub(result)          # no stored credential value reaches her or a receipt

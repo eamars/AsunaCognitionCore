@@ -51,9 +51,11 @@ def owner_profile(config, scene, person):
     local = config.get('chat', {})
     here = (scene, person) == (local.get('scene_id'), local.get('person_id')) or owner_dm(config, scene, person)
     if profile.get('enabled') is not True or not here:
-        raise Denied('INTEGRATION_OWNER_REQUIRED')
+        raise Denied('INTEGRATION_OWNER_REQUIRED: 集成工具只给 owner 在本机聊天或自己私聊里交代的任务用，而且集成要开着；'
+                     '这个任务不满足，重试也一样：在报告里写明需要它')
     if (local.get('scene_id'), local.get('person_id')) != (profile.get('scene_id'), profile.get('person_id')):
-        raise Denied('INTEGRATION_PROFILE_BINDING_MISMATCH')
+        raise Denied('INTEGRATION_PROFILE_BINDING_MISMATCH: 集成配置绑定的对话和本机聊天对不上（配置问题，不是参数的问题）；'
+                     '重试也一样：在报告里写明')
     return profile
 
 
@@ -102,10 +104,10 @@ def direct(adapter, endpoints):
 
 
 def valid_argv(argv):
-    if (not isinstance(argv, list) or not argv or len(argv) > 40
-            or any(not isinstance(arg, str) or '\x00' in arg for arg in argv)
-            or sum(map(len, argv)) > 16000):
-        raise ValueError('INVALID_INTEGRATION_ARGV')
+    from .sandbox import command_problem
+    problem = 'argv 要是字符串列表' if not isinstance(argv, list) else command_problem(argv, '/app/run.py')
+    if problem:
+        raise ValueError('INVALID_INTEGRATION_ARGV: ' + problem)
     return argv
 
 
@@ -191,7 +193,8 @@ class ManagedProcess:
         try:
             self.process.wait(timeout=12)
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError('INTEGRATION_STOP_UNCONFIRMED') from exc
+            raise RuntimeError('INTEGRATION_STOP_UNCONFIRMED: 停止 12 秒后进程还没退出，不确定停没停；'
+                               '过一会儿用 integration_status 看 state') from exc
         self.finished.wait(5)
         return self.snapshot()
 
@@ -271,7 +274,8 @@ class IntegrationRunner:
             if argv:
                 try:
                     if self.call('integration_start', {'argv': argv})['state'] != 'RUNNING':
-                        self.restoration_error = 'INTEGRATION_AUTOSTART_NOT_RUNNING'
+                        self.restoration_error = ('INTEGRATION_AUTOSTART_NOT_RUNNING: 适配器自动启动后没在运行；'
+                                                  '看 integration_status 的 logs 找原因，修好后 integration_start')
                 except Exception as exc:
                     self.restoration_error = 'INTEGRATION_AUTOSTART_FAILED: ' + str(exc)
             return
@@ -280,7 +284,8 @@ class IntegrationRunner:
             return
         applying = self.config.get('_native_apply_integrations', False)
         if saved.get('profile') != self.fingerprint and not applying:
-            self.restoration_error = 'PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START'
+            self.restoration_error = ('PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START: 集成配置改过了，宿主重启时没有自动恢复'
+                                      '服务；要运行就 integration_start')
             return
         try:
             # The published adapter as of this start, never unpublished files in the development tree.
@@ -312,7 +317,8 @@ class IntegrationRunner:
         """The published adapter: the only code a managed service runs (ADR-011 §5.2, one publish path)."""
         value = self.config.get('_native_integration_release')
         if not value or not Path(value).is_dir():
-            raise Denied('INTEGRATION_RELEASE_UNAVAILABLE: publish the channel project first')
+            raise Denied('INTEGRATION_RELEASE_UNAVAILABLE: 还没有发布过的适配器版本；先用 development_publish 发布通道包，'
+                         '发布生效后再 integration_start')
         return Path(value)
 
     def _enable(self, argv, snapshot, previous=None):
@@ -331,17 +337,20 @@ class IntegrationRunner:
         for source in source_root.rglob('*'):
             # The development namespace cannot mutate files during this locked copy.
             if source.is_symlink() or source.is_junction() or not source.resolve().is_relative_to(source_root.resolve()):
-                raise Denied('INTEGRATION_SNAPSHOT_LINK_DENIED')
+                raise Denied('INTEGRATION_SNAPSHOT_LINK_DENIED: 适配器目录里的 %s 是链接或指向目录外；删掉它再试'
+                             % source.relative_to(source_root).as_posix())
             target = destination/source.relative_to(source_root)
             if source.is_dir():
                 target.mkdir()
             elif source.is_file():
                 count += 1; total += source.stat().st_size
                 if count > 2000 or total > 64*1024*1024:
-                    raise ValueError('INTEGRATION_SNAPSHOT_LIMIT')
+                    raise ValueError('INTEGRATION_SNAPSHOT_LIMIT: 适配器目录超过上限（2000 个文件、64 MiB），已数到 %d 个、'
+                                     '%.1f MiB；删掉缓存、数据等不需要的文件再试' % (count, total / 1048576))
                 shutil.copyfile(source, target)
             else:
-                raise Denied('INTEGRATION_SNAPSHOT_SPECIAL_FILE_DENIED')
+                raise Denied('INTEGRATION_SNAPSHOT_SPECIAL_FILE_DENIED: 适配器目录里的 %s 不是普通文件或文件夹；删掉它再试'
+                             % source.relative_to(source_root).as_posix())
         return destination
 
     def _launch(self, snapshot, argv, mode, only=None):
@@ -368,7 +377,8 @@ class IntegrationRunner:
             if tool == 'integration_test':
                 timeout = args.get('timeout', 30)
                 if type(timeout) is not int or not 1 <= timeout <= 60:
-                    raise ValueError('INTEGRATION_TEST_TIMEOUT_RANGE_1_60')
+                    raise ValueError('INTEGRATION_TEST_TIMEOUT_RANGE_1_60: timeout 只能是 1..60 的整数（秒），给的是 %s；'
+                                     '不写就是 30' % str(timeout)[:40])
                 try:
                     process = self._launch(self._snapshot(), args['argv'], 'test')
                     expired = not process.finished.wait(timeout)
@@ -378,7 +388,8 @@ class IntegrationRunner:
                     self._sweep_snapshots()
             if tool == 'integration_start':
                 if self.active and not self.active.finished.is_set():
-                    raise Denied('INTEGRATION_ALREADY_RUNNING_STOP_BEFORE_REPLACE')
+                    raise Denied('INTEGRATION_ALREADY_RUNNING_STOP_BEFORE_REPLACE: 已经有一个集成服务在运行；'
+                                 '要换就先 integration_stop，再 integration_start')
                 snapshot = self._snapshot(self.release())
                 self.active, self.active_snapshot = self._launch(snapshot, args['argv'], 'service'), snapshot.name
                 value = self.active.snapshot()
@@ -415,7 +426,7 @@ class IntegrationRunner:
         if report.get('status') != 200 or report.get('transport_error'):
             body = b''
         if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
-            return {'transport_error': 'IMPORT_ARTIFACT_VERIFY_FAILED: reported %s bytes, read %s'
+            return {'transport_error': 'IMPORT_ARTIFACT_VERIFY_FAILED: 取回的脚本报告 %s 字节，实际读到 %s 字节；可以再取一次'
                     % (report.get('bytes'), len(body))}
         return {'status': report.get('status'), 'declared': report.get('declared'), 'body': body,
                 'content_type': report.get('content_type'), 'location': report.get('location'),
@@ -429,14 +440,14 @@ class IntegrationRunner:
         """
         from .image_generation import IMAGE_ENDPOINT
         if not any(e['name'] == IMAGE_ENDPOINT for e in self.endpoints):
-            return {'transport_error': 'IMAGE_ENDPOINT_NOT_CONFIGURED'}
+            return {'transport_error': 'IMAGE_ENDPOINT_NOT_CONFIGURED: 集成配置里没有 image 端点，本机生图用不了；重试也一样'}
         report, body, failure = self._trusted_run('integration_image.py', {**request, 'endpoint': IMAGE_ENDPOINT},
                                                   request['timeout'] + 30, 'IMAGE', only=IMAGE_ENDPOINT)
         if failure:
             return {'transport_error': failure}
         if report.get('generated'):
             if len(body) != report.get('bytes') or hashlib.sha256(body).hexdigest() != report.get('sha256'):
-                return {'transport_error': 'IMAGE_VERIFY_FAILED: reported %s bytes, read %s'
+                return {'transport_error': 'IMAGE_VERIFY_FAILED: 生图脚本报告 %s 字节，实际读到 %s 字节'
                         % (report.get('bytes'), len(body))}
         return {'report': report, 'body': body if report.get('generated') else b''}
 
@@ -459,7 +470,7 @@ class IntegrationRunner:
                     process.stop()
                 except BaseException:
                     pass
-                return None, b'', '%s_TIMEOUT: %ss' % (label, wait)
+                return None, b'', '%s_TIMEOUT: 等了 %s 秒没有结果，已停下' % (label, wait)
             streams = {}
             for entry in value['logs']:
                 streams.setdefault(entry['stream'], []).append(entry['text'])
@@ -471,12 +482,12 @@ class IntegrationRunner:
                 except ValueError:
                     continue
             if not isinstance(report, dict):
-                return None, b'', '%s_REPORT_MISSING (exit %s): %s' % (label, value.get('exit_code'), (stdout + stderr)[-300:])
+                return None, b'', '%s_REPORT_MISSING: 脚本没有给出结果（exit %s）：%s' % (label, value.get('exit_code'), (stdout + stderr)[-300:])
             artifact = process.directory/'data'/'artifact.bin'
             try:
                 body = artifact.read_bytes() if artifact.exists() else b''
             except OSError as exc:
-                return None, b'', '%s_ARTIFACT_READ_FAILED: %s' % (label, str(exc)[:200])
+                return None, b'', '%s_ARTIFACT_READ_FAILED: 结果文件读不出来（%s）' % (label, exc.strerror or type(exc).__name__)
             return report, body, None
         except Exception as exc:
             return None, b'', (type(exc).__name__ + ': ' + str(exc))[:300]

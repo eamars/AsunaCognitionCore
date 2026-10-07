@@ -132,6 +132,23 @@ def key_spec(model: dict, key: str):
     return PRIVATE_KEYS.get(key) or CORE_WRITABLE_KEYS.get(key) or (model.get('policy_keys') or {}).get(key)
 
 
+def writable_keys(model: dict):
+    """Every key set_policy accepts for this model, sorted."""
+    return sorted(key for key in {*PRIVATE_KEYS, *CORE_WRITABLE_KEYS, *((model or {}).get('policy_keys') or {})}
+                  if key not in OWNER_KEYS)
+
+
+def value_words(spec: dict):
+    """What a key takes, in words: its type and its bounds or choices."""
+    kind = {'boolean': 'true 或 false', 'integer': '整数', 'number': '数字', 'string': '文字',
+            'object': '对象'}.get(spec['type'], spec['type'])
+    if 'enum' in spec:
+        return '其中之一：' + '、'.join(json.dumps(item, ensure_ascii=False) for item in spec['enum'])
+    if spec['type'] in ('integer', 'number') and ('min' in spec or 'max' in spec):
+        return '%s，%s–%s' % (kind, spec.get('min', '…'), spec.get('max', '…'))
+    return kind
+
+
 def check_value(spec: dict, value):
     kind = spec['type']
     ok = {'boolean': lambda v: isinstance(v, bool),

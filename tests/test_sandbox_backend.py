@@ -79,5 +79,15 @@ def test_a_sandbox_without_a_backend_refuses_to_run(tmp_path, monkeypatch):
     from asuna import sandbox as sandbox_module
     monkeypatch.setattr(sandbox_module, 'DATA', tmp_path)
     box = Sandbox(tmp_path / 'work' / 't1', config={'sandbox': {'backend': 'none'}})
-    with pytest.raises(PermissionError, match='SANDBOX_UNAVAILABLE: turned off'):
+    with pytest.raises(PermissionError, match='SANDBOX_UNAVAILABLE: .*turned off'):
         box.run(['python3', '-c', 'print(1)'])
+
+
+def test_a_refused_command_says_which_limit_and_what_to_do():
+    from asuna.sandbox import command_problem, launch_problem
+    assert command_problem(['python3', '-c', 'print(1)']) is None
+    assert 'argv 有 41 项，上限 40 项' in command_problem(['python3'] + ['x'] * 40)
+    assert 'argv 一共 16001 字，上限 16000 字' in command_problem(['python3', '-c', 'x' * 15992])
+    assert 'argv 第 2 项是 int' in command_problem(['python3', 7])
+    said = launch_problem(['pwd'], 127, 'windows-acl-run: CreateProcessAsUserW failed (Win32 2): command: pwd')
+    assert "没有叫 'pwd' 的程序" in said and '不经过 shell' in said and 'python3' in said

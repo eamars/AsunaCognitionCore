@@ -1005,20 +1005,40 @@ _STREAM_BY_FIELD = {INBOUND_TIME_FIELD: INBOUND, OUTBOUND_TIME_FIELD: OUTBOUND,
                     SINK_TIME_FIELD: OUTBOUND_VIA_RECEIPT}
 
 
-def _bounded_text(value, limit, name):
+def _given(value):
+    """她给的值，报错时照实说出来（有界）。"""
+    if isinstance(value, str):
+        return "%d 字" % len(value)
+    return "%s %s" % (type(value).__name__, _json.dumps(value, ensure_ascii=False, default=str)[:60])
+
+
+def _bounded_text(value, limit, name, prefix="INVALID_HISTORY_"):
     if value is None:
         return ""
     if not isinstance(value, str) or len(value) > 4 * limit:
-        raise ValueError("INVALID_HISTORY_" + name)
+        raise ValueError("%s%s: %s 要是字符串，最长 %d 字，给的是 %s；改短或换成字符串再查"
+                         % (prefix, name, name.lower(), 4 * limit, _given(value)))
     return value
 
 
-def _bounded_int(value, low, high, name):
+def _bounded_int(value, low, high, name, prefix="INVALID_HISTORY_"):
     if value is None:
         return None
     if type(value) is not int or not low <= value <= high:
-        raise ValueError("INVALID_HISTORY_" + name)
+        raise ValueError("%s%s: %s 只能是 %d..%d 的整数，给的是 %s；改成范围内的整数，或不写用默认"
+                         % (prefix, name, name.lower(), low, high,
+                            value if type(value) is int else _given(value)))
     return value
+
+
+def _bad_stamp(prefix, name, value):
+    return ValueError("%s%s: %s %r 不是日期；写成 2026-09-22 或 2026-09-22T12:00:00Z 这样的 ISO 时间"
+                      % (prefix, name, name.lower(), value[:40]))
+
+
+def _bad_flag(prefix, name, value):
+    return ValueError("%s%s: %s 要写 true 或 false，给的是 %s"
+                      % (prefix, name, name.lower(), _given(value)))
 
 
 def _fingerprint(scene, query, person, since, until, window_days, case_sensitive, include_semantic):
@@ -1043,10 +1063,14 @@ def _unwrap_cursor(value):
     try:
         raw = _json.loads(base64.urlsafe_b64decode(str(value).encode("ascii")).decode("utf-8"))
     except Exception:
-        raise ValueError("HISTORY_CURSOR_INVALID")
+        raise ValueError(CURSOR_INVALID)
     if not isinstance(raw, dict) or "f" not in raw:
-        raise ValueError("HISTORY_CURSOR_INVALID")
+        raise ValueError(CURSOR_INVALID)
     return raw.get("i"), _text(raw.get("f"), 64)
+
+
+CURSOR_INVALID = ("HISTORY_CURSOR_INVALID: 这个 cursor 不是上一页结果的 next_cursor（抄错、截断，或来自别的工具）；"
+                  "照抄上一页的 next_cursor，或去掉 cursor 从第一页查")
 
 
 def _cursor_after_delivered(delivered, inner_cursor):
@@ -1098,27 +1122,30 @@ class HistoryQueryService:
         args = args if isinstance(args, dict) else {}
         unknown = set(args) - HISTORY_ARGUMENTS
         if unknown:
-            raise ValueError("HISTORY_ARGUMENT_DENIED:" + ",".join(sorted(unknown)))
+            raise ValueError("HISTORY_ARGUMENT_DENIED: 不认识的参数 %s；只收 %s"
+                             % ("、".join(sorted(unknown)), "、".join(HISTORY_TOOL["parameters"])))
         scene = self.store.db.scenes.find_one({"_id": task["scene_id"]})
         if (not isinstance(scene, dict) or scene.get("scope_key") != task["scope_key"]
                 or scene.get("policy_epoch") != task["policy_epoch"]):
-            raise Denied("HISTORY_SCENE_FENCE_MISMATCH")   # 场景与任务不同步就拒查，不猜
+            # 场景与任务不同步就拒查，不猜
+            raise Denied("HISTORY_SCENE_FENCE_MISMATCH: 这个任务的对话已经变了（换了纪元或范围），"
+                         "不是参数的问题，重试也一样；停下这一步，把没查成写进结果")
         query = _bounded_text(args.get("query"), 300, "QUERY")
         person = _bounded_text(args.get("person"), 60, "PERSON")
         since = _bounded_text(args.get("since"), 40, "SINCE")
         until = _bounded_text(args.get("until"), 40, "UNTIL")
         for name, value in (("SINCE", since), ("UNTIL", until)):
             if value and not _STAMP_SHAPE.match(value):
-                raise ValueError("INVALID_HISTORY_" + name)
+                raise _bad_stamp("INVALID_HISTORY_", name, value)
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
         cursor = _bounded_text(args.get("cursor"), 1024, "CURSOR")
         case_sensitive = args.get("case_sensitive", True)
         if not isinstance(case_sensitive, bool):
-            raise ValueError("INVALID_HISTORY_CASE_SENSITIVE")
+            raise _bad_flag("INVALID_HISTORY_", "CASE_SENSITIVE", case_sensitive)
         include_semantic = args.get("include_semantic", True)
         if not isinstance(include_semantic, bool):
-            raise ValueError("INVALID_HISTORY_INCLUDE_SEMANTIC")
+            raise _bad_flag("INVALID_HISTORY_", "INCLUDE_SEMANTIC", include_semantic)
         # 围栏比对的是「任务场景 + 它按配置能只读的那些场景」：联动集合现算自配置（不是工具参数），
         # 所以工具既不能把范围换宽，也不能把游标借到另一条边上去。
         scene_doc = {"scene_id": scene["_id"], "scope_key": scene["scope_key"],
@@ -1129,7 +1156,9 @@ class HistoryQueryService:
         inner, stored = _unwrap_cursor(cursor or None)
         if cursor and stored != mark:
             # 游标绑定发放它的筛选：换筛选或指纹对不上就拒查，不给「看似连续」的错页。
-            raise ValueError("HISTORY_CURSOR_FILTER_MISMATCH")
+            raise ValueError("HISTORY_CURSOR_FILTER_MISMATCH: 这个 cursor 属于另一组筛选（query、person、since、until、"
+                             "window_days、case_sensitive、include_semantic 有一项变了）；续页时其余参数照上一页原样写，"
+                             "换筛选就去掉 cursor 从第一页查")
         notice = bind_people(self.store, scene, scene_doc, person)
         if notice:
             return {"degraded": False, "why": "person_unclear", "text": notice, "hits": [], "hits_trimmed": 0,

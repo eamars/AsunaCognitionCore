@@ -72,15 +72,15 @@ def main(argv):
         timeout = request.get('timeout', 15)
         if not isinstance(endpoint, str) or not isinstance(path, str) or not path.startswith('/') \
                 or type(limit) is not int or not 1 <= limit <= 8 * 1024 * 1024:
-            raise ValueError('INVALID_FETCH_REQUEST')
+            raise ValueError('INVALID_FETCH_REQUEST: 取件请求要有端点别名、以 / 开头的路径和 1..8 MiB 的大小上限')
         timeout = float(timeout)
         if not 0 < timeout <= 60:
-            raise ValueError('INVALID_FETCH_TIMEOUT')
+            raise ValueError('INVALID_FETCH_TIMEOUT: 限时要在 0..60 秒之间，给的是 %s' % timeout)
         configured = json.loads(Path(CONFIG_PATH).read_text(encoding='utf-8')).get('endpoints') or {}
         entry = configured.get(endpoint)
         if not isinstance(entry, dict) or type(entry.get('port')) is not int:
             # Second fence: even a wrong alias cannot turn this into a URL fetch.
-            raise ValueError('ENDPOINT_NOT_CONFIGURED: ' + str(endpoint)[:80])
+            raise ValueError('ENDPOINT_NOT_CONFIGURED: 配置里没有端点 %r；端点名照抄 /integration/config.json 里的 endpoints' % str(endpoint)[:80])
         connect = None
         if entry.get('tls'):
             # A LAN device behind its own local CA: TLS, but its certificate is not verified.

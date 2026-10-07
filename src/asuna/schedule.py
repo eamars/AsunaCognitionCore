@@ -25,6 +25,18 @@ RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
 # ADR-021: night self-development stages ride one native tick; each tick decides whether a stage is due.
 NIGHT_PLAN = 'plan-asuna-self-development-night'
 NIGHT_TICK_SECONDS = 600
+INTENT_CHARS = 1000
+NOT_IN_SCOPE = 'SCHEDULE_PLAN_NOT_IN_SCOPE: 「%s」不是这个对话里的安排（别处建的要在那里改）；照抄 plans_from_program 里的 plan_id'
+SOURCE_STALE = 'SCHEDULE_SOURCE_STALE: 这个对话的授权刚变过（不是你的错），这回合安排不了；重试也一样，下回合再安排'
+NATIVE_INCOMPLETE = ('NATIVE_SCHEDULE_CREATE_INCOMPLETE: 定时服务没有确认这条提醒（不是你的错）；再试一次，'
+                     '还不行就在回话里说没安排上')
+
+
+def intent_problem(intent):
+    """What is wrong with a plan's intent, with its length and the limit."""
+    if not isinstance(intent, str) or not intent.strip():
+        return 'intent 要写届时要重新考虑的事（文字，不能空）'
+    return 'intent %d 字，上限 %d 字；精简到 %d 字以内' % (len(intent.strip()), INTENT_CHARS, INTENT_CHARS)
 
 
 def night_stage_busy(store):
@@ -436,26 +448,27 @@ class ScheduleService:
         from .persona_model import effective
         persona, model, policy = self._persona()
         if not effective(model, 'heartbeat.visits', policy):
-            raise ValueError('VISIT_OFF')
+            raise ValueError('VISIT_OFF: heartbeat.visits 关着；想出门先用 set_policy 把它设成 true，不然这回就不去')
         found = places.find(self.app.config, place)
         scene = found and self.store.db.scenes.find_one({'_id': found[0]})
         if not scene:
-            raise ValueError('VISIT_PLACE_UNKNOWN: ' + place)
+            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」不在 places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
         if not scene.get('channel_id'):
-            raise ValueError('VISIT_PLACE_UNKNOWN: ' + place)
+            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」没接到平台，去不了（不是你的错）；挑 places_from_program 里别的' % place)
         moment = schedule_rules._aware(now())
         date = places.local_date(self.app.config, model, policy, moment)
         plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
         can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
                                       intent=intent)
         if not can:
-            raise ValueError('VISIT_NOT_NOW: ' + why)
+            raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看 places_from_program 里的 can_visit，想晚点再去就用 plan 定个时间' % why)
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('VISIT_PICTURE_NOT_HERS')
+            raise ValueError('VISIT_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄 your_pictures_from_program 里的，或不写 artifact_id'
+                             % artifact_id)
         person = places.visitor(route, channel)
         if not person:
-            raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权')
+            raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权（不是你的错）；重试也一样，挑 places_from_program 里别的群')
         event_id = 'visit:%s:%s' % (scene['_id'], ep['source_event_id'])
         # Her own moment in the group, not a platform input: no channel envelope (that would be shown in the
         # group's session as a member's message). It wakes as a scene tick; publishing targets the group's route.
@@ -482,16 +495,19 @@ class ScheduleService:
         found = places.find_errand(self.app.config, place)
         scene = found and self.store.db.scenes.find_one({'_id': found[0]})
         if not scene or not scene.get('channel_id'):
-            raise ValueError('ERRAND_PLACE_UNKNOWN: ' + place)
+            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在 errand_places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
-        if places.errands_lately(self.store, datetime.now(timezone.utc)) >= places.ERRANDS_PER_DAY:
-            raise ValueError('ERRAND_LIMIT: %d a day' % places.ERRANDS_PER_DAY)
+        done = places.errands_lately(self.store, datetime.now(timezone.utc))
+        if done >= places.ERRANDS_PER_DAY:
+            raise ValueError('ERRAND_LIMIT: 最近一天已经跑了 %d 趟，上限 %d 趟；跟托你的人说明天再办'
+                             % (done, places.ERRANDS_PER_DAY))
         person = places.visitor(route, channel)
         if not person:
-            raise ValueError('ERRAND_PLACE_UNKNOWN: 那边没有可以接待你的成员授权')
+            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」那边没有可以接待你的成员授权（不是你的错），这趟去不了；跟托你的人说清楚' % place)
         from . import outbound_media
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('ERRAND_PICTURE_NOT_HERS')     # outside home only her own pictures go (any of hers may)
+            raise ValueError('ERRAND_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄 image_artifacts_from_program 或 your_pictures_from_program 里的，或不带图'
+                             % artifact_id)     # outside home only her own pictures go (any of hers may)
         from .evidence import canonical, sha
         from .people import People
         persona, _, _ = self._persona()
@@ -642,11 +658,11 @@ class ScheduleService:
         the turn is home); the plan then lives, fires and is changed in that line."""
         intent = spec.get('intent') if isinstance(spec, dict) else None
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
-            raise ValueError('INVALID_SCHEDULE_SPEC')
+            raise ValueError('INVALID_SCHEDULE_SPEC: ' + intent_problem(intent))
         rule = schedule_rules.normalize_rule(spec)          # 形状/间隔/钟点先判完，不碰库
         scene = self.store.authorize(ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
-            raise Denied('SCHEDULE_SOURCE_STALE')
+            raise Denied(SOURCE_STALE)
         target = {'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'scope_key': ep['scope_key'],
                   'policy_epoch': ep['policy_epoch']}
         if where:
@@ -676,7 +692,7 @@ class ScheduleService:
         native = existing or self._create_native(plan_id,
             recurring or schedule_rules.native_payload(rule, fire_at, now()))
         if not isinstance(native, dict) or not native.get('id'):
-            raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
+            raise ValueError(NATIVE_INCOMPLETE)
         current = self.store.db.plans.find_one({'_id': plan_id})
         return self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'native_recurring': native.get('kind') in ('daily', 'weekly'),
@@ -694,20 +710,21 @@ class ScheduleService:
         plan = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id'],
             'person_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
         if not plan:
-            raise Denied('SCHEDULE_PLAN_NOT_IN_SCOPE')
+            raise Denied(NOT_IN_SCOPE % plan_id)
         if plan['status'] not in ('CREATING', 'ACTIVE'):
-            raise Denied('SCHEDULE_PLAN_NOT_ACTIVE')
+            raise Denied('SCHEDULE_PLAN_NOT_ACTIVE: 「%s」已经是 %s，改不了；要再安排就新建一条' % (plan_id, plan['status']))
         scene = self.store.authorize(ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
-            raise Denied('SCHEDULE_SOURCE_STALE')
+            raise Denied(SOURCE_STALE)
         zone = self.zone_of(scene, plan)
         timing = spec.get('schedule') if isinstance(spec.get('schedule'), dict) else \
             {key: value for key, value in spec.items() if key not in ('plan_id', 'intent')}
         # Only new wording: the plan keeps its timing (her plan tool, op=update with an intent alone).
         rule = schedule_rules.normalize_rule(timing) if timing else plan['rule']
-        intent = (spec.get('intent') or plan['intent']).strip()
-        if not 1 <= len(intent) <= 1000:
-            raise ValueError('INVALID_SCHEDULE_SPEC')
+        intent = spec.get('intent') or plan['intent']
+        if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
+            raise ValueError('INVALID_SCHEDULE_SPEC: ' + intent_problem(intent))
+        intent = intent.strip()
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())
         current = self.store.db.plans.find_one({'_id': plan_id})
         if current['rule'] == rule and current['intent'] == intent:
@@ -724,7 +741,7 @@ class ScheduleService:
         native = native or self._create_native(plan_id,
             recurring or schedule_rules.native_payload(rule, fire_at, now()))
         if not isinstance(native, dict) or not native.get('id'):
-            raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
+            raise ValueError(NATIVE_INCOMPLETE)
         stale, note = current.get('schedule_id'), None
         if stale and stale != native['id']:
             try:
@@ -749,7 +766,7 @@ class ScheduleService:
         plan = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': scene_id,
             'person_id': person_id, 'policy_epoch': policy_epoch})
         if not plan:
-            raise Denied('SCHEDULE_PLAN_NOT_IN_SCOPE')
+            raise Denied(NOT_IN_SCOPE % plan_id)
         if plan['status'] == 'CANCELLED':
             return plan
         if plan.get('schedule_id'):

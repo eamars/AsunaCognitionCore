@@ -23,13 +23,16 @@ class SelfState:
     def commit(self, episode, target, body, mutation=None):
         """Her own update_self call (ADR-011 §6.1): in an owner-private turn, like her documents."""
         from . import visibility
-        if target not in ('character_core', 'current_self') or not isinstance(body, str) or not body.strip():
-            raise ValueError('INVALID_SELF_STATE_UPDATE')
+        if target not in ('character_core', 'current_self'):
+            raise ValueError('INVALID_SELF_STATE_UPDATE: target「%s」不对，只能是 character_core 或 current_self' % target)
+        if not isinstance(body, str) or not body.strip():
+            raise ValueError('INVALID_SELF_STATE_UPDATE: body 是空的；写完整的新正文')
         if (episode.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE:
-            raise Denied('SELF_STATE_REQUIRES_OWNER_PRIVATE')
+            raise Denied('SELF_STATE_REQUIRES_OWNER_PRIVATE: 自我描述只能在家里改；重试也一样')
         from .context_budget import SINGLE_BODY_CHARS
         if len(body) > SINGLE_BODY_CHARS:
-            raise ValueError('SELF_STATE_TOO_LARGE')
+            raise ValueError('SELF_STATE_TOO_LARGE: body %d 字，上限 %d 字；精简到 %d 字以内'
+                             % (len(body), SINGLE_BODY_CHARS, SINGLE_BODY_CHARS))
         scope = 'global-safe'
         entity = target + ':' + episode['persona']
         key = entity + '|' + scope
@@ -58,5 +61,5 @@ class SelfState:
             self.store.put('state_heads', document, expected=head['revision'] if head else None,
                            stream=episode['_id'])
         except Conflict:
-            raise Conflict('SELF_STATE_BASE_REVISION_STALE')
+            raise Conflict('SELF_STATE_BASE_REVISION_STALE: %s 刚被别处改过（不是你的错）；再调用一次 update_self' % target)
         return {'target': target, 'revision_id': revision['_id'], 'committed': True}

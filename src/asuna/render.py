@@ -172,8 +172,20 @@ def budget_gate(store, persona):
         before = estimate_tokens(compose(common, current['persona'], current['voice'], visibility.OWNER_PRIVATE))
         after = estimate_tokens(compose(common, proposed['persona'], proposed['voice'], visibility.OWNER_PRIVATE))
         if after > before and after > limit:
-            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', f'estimate {after} > limit {limit}')
+            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_budget_words(proposed, before, after, limit))
     return check
+
+
+def over_budget_words(proposed, before, after, limit):
+    """By how much a write overshoots, and the largest always-injected sections she could tuck away or trim."""
+    sizes = sorted(((estimate_tokens(s['heading'] + s['body']), slug, s['sid'])
+                    for slug in ('persona', 'voice')
+                    for s in readable_sections((proposed[slug] or {}).get('sections') and proposed[slug],
+                                               visibility.OWNER_PRIVATE)), reverse=True)[:3]
+    largest = '、'.join('%s#%s（约 %d）' % (slug, sid, tokens) for tokens, slug, sid in sizes)
+    return ('写完约 %d token，上限 %d，超出 %d（写之前是 %d）；%s先把不常用的 always 节用 set_tags 改成 inject=on_demand '
+            '收起来（recall 还读得到），或把这次写的改短' % (after, limit, after - limit, before,
+                                                       '最大的 always 节：%s。' % largest if largest else ''))
 
 
 def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'operator') -> str:

@@ -150,3 +150,18 @@ def test_a_newer_publication_supersedes_one_still_waiting_and_only_core_restarts
     assert store.db.sink_receipts.find_one({'_id': 'self-publish-b'})['state'] == 'APPLIED', 'another project is not superseded'
     host._maybe_restart_after_publish()
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
+
+
+def test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply(store):
+    import pytest
+    from types import SimpleNamespace
+    from asuna.native_worker import NativeDevelopmentBridge
+    owner(store)
+    bridge = NativeDevelopmentBridge(SimpleNamespace(), store.config, store)
+    task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
+            'scope_key': 'scene:dm-a', 'intent_revision': 1}
+    with pytest.raises(ValueError, match='DEVELOPMENT_QUERY_INVALID: Mongo 拒绝了这个查询') as refused:
+        bridge.call(task, 'development_database_read', {'collection': 'scenes', 'projection': {'a': 1, 'b': 0}})
+    assert 'clusterTime' not in str(refused.value)
+    with pytest.raises(ValueError, match='DEVELOPMENT_PAGE_INVALID: .*skip=-1，limit=20'):
+        bridge.call(task, 'development_database_read', {'collection': 'scenes', 'skip': -1})

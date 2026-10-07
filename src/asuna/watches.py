@@ -74,22 +74,24 @@ def _why(row, cls, store=None):
 def add(store, ep, persona, cls, args):
     """Watch someone she can see in this conversation (a label, #number or name that names exactly one person)."""
     from .people import People
-    hours = args.get('hours')
+    given = args.get('hours')
     try:
-        hours = int(hours)
+        hours = int(given)
     except (TypeError, ValueError):
-        raise Denied('WATCH_HOURS_INVALID')
+        raise Denied('WATCH_HOURS_INVALID: ' + ('没写 hours' if given is None else 'hours 给的是「%s」' % given)) from None
     if not 1 <= hours <= WATCH_MAX_HOURS:
-        raise Denied('WATCH_HOURS_INVALID')
+        raise Denied('WATCH_HOURS_INVALID: hours 给的是 %d' % hours)
     mode = args.get('mode') or 'once'
     if mode not in MODES:
-        raise Denied('WATCH_MODE_INVALID')
+        raise Denied('WATCH_MODE_INVALID: mode 给的是「%s」' % mode)
     why = excerpt(' '.join(str(args.get('why') or '').split()), 100) or None
     scene = store.db.scenes.find_one({'_id': ep['scene_id']})
     people = People(store)
     found = people.resolve(scene, args.get('person'))
     if len(found) != 1:
-        raise Denied('WATCH_PERSON_UNCLEAR' if found else 'WATCH_PERSON_NOT_HERE')
+        raise Denied('WATCH_PERSON_UNCLEAR: 「%s」对得上 %s' % (args.get('person'), '、'.join(people.label(d) for d in found[:5]))
+                     if found else 'WATCH_PERSON_NOT_HERE: ' + ('没写 person' if not args.get('person')
+                                                               else '这里没有「%s」' % args.get('person')))
     person = found[0]['person']
     _id = 'watch-' + sha((persona + '|' + person).encode())[:12]
     current = store.db.watches.find_one({'_id': _id})
@@ -97,7 +99,7 @@ def add(store, ep, persona, cls, args):
     active = store.db.watches.count_documents({'persona': persona, 'state': 'on', 'until': {'$gt': moment.isoformat()},
                                                '_id': {'$ne': _id}})
     if active >= WATCH_MAX:
-        raise Denied('WATCH_LIST_FULL')
+        raise Denied('WATCH_LIST_FULL: 正在盯 %d 个，上限 %d 个' % (active, WATCH_MAX))
     doc = {'_id': _id, 'persona': persona, 'person': person, 'name': people.shown(found[0]) or people.label(found[0]),
            'set_in': scene['_id'], 'set_class': cls, 'why': why, 'mode': mode, 'state': 'on',
            'created_at': now(), 'until': (moment + timedelta(hours=hours)).isoformat(),
@@ -109,7 +111,7 @@ def add(store, ep, persona, cls, args):
 def stop(store, persona, watch_id):
     row = store.db.watches.find_one({'_id': str(watch_id or '').strip(), 'persona': persona, 'state': 'on'})
     if not row:
-        raise Denied('WATCH_NOT_FOUND')
+        raise Denied('WATCH_NOT_FOUND: ' + ('没写 id' if not watch_id else 'id「%s」不在名单上（可能已经到期停了）' % watch_id))
     store.put('watches', {**row, 'state': 'ended', 'ended_at': now()},
               expected=row['revision'], stream='watches:' + persona)
     return {'stopped': row['name']}

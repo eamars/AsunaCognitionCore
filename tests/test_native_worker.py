@@ -198,3 +198,14 @@ def test_T7_2_single_dispatch_thread_two_scenes_alternate_without_deadlock(monke
     assert waits and not any(name.startswith('asuna-dispatch') for name in waits), waits
 
 
+
+
+def test_a_tool_error_is_its_own_words_and_a_fault_says_it_is_not_hers():
+    from asuna.native_worker import error_text
+    refusal = ValueError('INVALID_COMMAND: argv 有 41 项，上限 40；合并参数或写成脚本再跑')
+    assert error_text('tool', refusal) == str(refusal)                       # no class name before her words
+    assert error_text('role_tool', Denied('STALE_TASK_FENCE')) == 'STALE_TASK_FENCE'
+    fault = error_text('tool', KeyError('scene_id'))
+    assert fault.startswith('TOOL_FAULT: ') and "KeyError: 'scene_id'" in fault and '不是参数写错' in fault
+    assert error_text('tool', RuntimeError('ENOENT: no such file')).startswith('TOOL_FAULT: ')   # not a code
+    assert error_text('status', KeyError('x')) == "KeyError: 'x'"            # only tool calls are told how to act

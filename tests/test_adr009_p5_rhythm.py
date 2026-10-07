@@ -220,7 +220,7 @@ def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store
         store.db.audit_events.insert_one({'_id': 'ctx-%d' % i, 'schema_version': 1, 'type': 'context.prepared',
                                           'stream_id': 'ep-%d' % i,
                                           'occurred_at': '2026-10-01T1%d:00:00+00:00' % i})
-    with pytest.raises(Denied, match='PROMOTION_SOURCES_INSUFFICIENT: 2 turns / 1 dates'):
+    with pytest.raises(Denied, match='PROMOTION_SOURCES_INSUFFICIENT: 这些来源只来自 2 个回合、1 个日期，要至少 2 个回合、2 个日期'):
         promote(store, ep, item, key='k1')                              # two turns, but one day
     store.db.audit_events.update_one({'_id': 'ctx-2'}, {'$set': {'occurred_at': '2026-10-02T12:00:00+00:00'}})
     kept = store.db.memory_units.find_one({'_id': promote(store, ep, item, key='k2')['memory_id']})
@@ -229,7 +229,7 @@ def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store
     assert kept['why'] == item['why'] and store.db.audit_events.find_one(
         {'stream_id': 'ep-settle', 'type': 'memory.promoted'})
     ep['tool_calls'] = {call: {'tool': 'promote_memory', 'result': {}} for call in ('c1', 'c2')}
-    with pytest.raises(Denied, match='PROMOTION_QUOTA: 2'):
+    with pytest.raises(Denied, match='PROMOTION_QUOTA: 已经提升了 2 条，配额 2 条'):
         promote(store, ep, item, key='k3')                              # two a night
 
 

@@ -76,15 +76,25 @@ def _hours(moment, when):
 def _name(value, what='name'):
     text = ' '.join(str(value or '').split())
     if not 1 <= len(text) <= NAME_CHARS or re.search(r'[\[\]:]', text):
-        raise Denied('STICKER_NAME_INVALID: %s 是 1–%d 个字，不含 [ ] :' % (what, NAME_CHARS))
+        raise Denied('STICKER_NAME_INVALID: %s 是 1–%d 个字，不含 [ ] :；%s' % (
+            what, NAME_CHARS, '给的「%s」%d 个字' % (text[:20], len(text)) if text else '没写 ' + what))
     return text
 
 
 def _when(value):
     text = ' '.join(str(value or '').split())
     if not 1 <= len(text) <= WHEN_CHARS:
-        raise Denied('STICKER_WHEN_INVALID: when 是 1–%d 个字' % WHEN_CHARS)
+        raise Denied('STICKER_WHEN_INVALID: when 是 1–%d 个字；%s' % (
+            WHEN_CHARS, '给的 %d 个字，写短一点' % len(text) if text else '没写 when'))
     return text
+
+
+ALREADY_KEPT = 'STICKER_ALREADY_KEPT: 在架子上叫「%s」；想改名字或用法用 rename'
+CANDIDATE_GONE = 'STICKER_CANDIDATE_GONE: 「%s」；照抄 sticker_candidates_from_program 里现在还在的 candidate'
+
+
+def _ref_problem(ref):
+    return '「%s」' % ref if ref else '没写 ref（也没写 candidate）'
 
 
 def fullness(count):
@@ -100,7 +110,7 @@ def keep(store, blobs, ep, persona, args, config):
     name, when = _name(args.get('name')), _when(args.get('when'))
     ref = str(args.get('ref') or '').strip()
     if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
-        raise Denied('STICKER_SHELF_FULL')
+        raise Denied('STICKER_SHELF_FULL: 上限 %d 个' % STICKER_SHELF)
     if find(store, persona, name):
         raise Denied('STICKER_NAME_TAKEN: ' + name)
     doc = {'persona': persona, 'name': name, 'when': when, 'kept_at': now(), 'kept_in': ep['scene_id'],
@@ -108,7 +118,7 @@ def keep(store, blobs, ep, persona, args, config):
     if ARTIFACT_REF.fullmatch(ref):
         row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
         if not row or not produced(row):
-            raise Denied('STICKER_NOT_YOURS')
+            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],
                    picture=_picture_of(store, ref))
@@ -117,16 +127,16 @@ def keep(store, blobs, ep, persona, args, config):
         listing = scene_attachments(store, scene, config)
         entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
         if not entry:
-            raise Denied('STICKER_REF_NOT_HERE')
+            raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
         if not entry.get('sticker'):
-            raise Denied('STICKER_IS_A_PHOTO')
+            raise Denied('STICKER_IS_A_PHOTO: 「%s」' % ref)
         doc['origin'] = 'collected'
         if entry['sticker'] == 'market':
             doc.update(kind='market', market={**entry['market'], 'summary': entry.get('summary') or '[商城表情]'},
                        identity='market:' + entry['market']['emoji_id'])
         else:
             if not entry.get('pullable'):
-                raise Denied('STICKER_NOT_REACHABLE: ' + str(entry.get('not_pullable_because') or ''))
+                raise Denied('STICKER_NOT_REACHABLE: %s；重试也一样' % (entry.get('not_pullable_because') or '「%s」' % ref))
             data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, scene, config, entry)}, config)
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
@@ -135,7 +145,7 @@ def keep(store, blobs, ep, persona, args, config):
     same = store.db.stickers.find_one({'persona': persona, '$or': [{'identity': doc['identity']},
                                        *([{'picture': doc['picture']}] if doc.get('picture') else [])]})
     if same:
-        raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
+        raise Denied(ALREADY_KEPT % same['name'])
     doc['_id'] = 'stk-' + sha((persona + '|' + doc['identity']).encode())[:20]
     store.put('stickers', doc, stream='stickers:' + persona)
     _kept(store, persona, doc)
@@ -147,7 +157,7 @@ def keep(store, blobs, ep, persona, args, config):
 def drop(store, persona, name):
     row = find(store, persona, _name(name))
     if not row:
-        raise Denied('STICKER_NOT_ON_SHELF: ' + name)
+        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % name)
     store.db.stickers.delete_one({'_id': row['_id'], 'revision': row['revision']})
     store.audit('stickers:' + persona, 'sticker.dropped', {'name': row['name'], 'identity': row['identity']})
     return {'dropped': row['name']}
@@ -156,7 +166,7 @@ def drop(store, persona, name):
 def rename(store, persona, name, new_name=None, when=None):
     row = find(store, persona, _name(name))
     if not row:
-        raise Denied('STICKER_NOT_ON_SHELF: ' + name)
+        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % name)
     changes = {}
     if new_name:
         new_name = _name(new_name, 'new_name')
@@ -419,17 +429,17 @@ def keep_candidate(store, ep, persona, args):
     candidate = str(args.get('candidate') or '').strip()
     row = store.db.sticker_pool.find_one({'artifact_id': candidate})
     if not row:
-        raise Denied('STICKER_CANDIDATE_GONE')
+        raise Denied(CANDIDATE_GONE % candidate)
     if candidate not in (ep.get('looked') or []) and not known(store, persona, _pool_key(store, row)):
         raise Denied('STICKER_CANDIDATE_NOT_LOOKED')       # one she knows from before counts as looked
     if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
-        raise Denied('STICKER_SHELF_FULL')
+        raise Denied('STICKER_SHELF_FULL: 上限 %d 个' % STICKER_SHELF)
     if find(store, persona, name):
         raise Denied('STICKER_NAME_TAKEN: ' + name)
     same = store.db.stickers.find_one({'persona': persona, '$or': [{'identity': row['identity']},
                                        *([{'picture': row['picture']}] if row.get('picture') else [])]})
     if same:
-        raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
+        raise Denied(ALREADY_KEPT % same['name'])
     doc = {'_id': 'stk-' + sha((persona + '|' + row['identity']).encode())[:20], 'persona': persona, 'name': name,
            'when': when, 'kept_at': now(), 'kept_in': ep['scene_id'], 'sent': 0, 'last_sent_at': None,
            'origin': 'collected', 'kind': row['kind'], 'identity': row['identity']}
@@ -648,7 +658,7 @@ def remember(store, ep, persona, args, config):
     if candidate:
         row = store.db.sticker_pool.find_one({'artifact_id': candidate})
         if not row:
-            raise Denied('STICKER_CANDIDATE_GONE')
+            raise Denied(CANDIDATE_GONE % candidate)
         if candidate not in looked:
             raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
         _know(store, persona, _pool_key(store, row), name, when, 'looked',
@@ -659,9 +669,9 @@ def remember(store, ep, persona, args, config):
     scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
     entry = next((item for item in scene_attachments(store, scene, config)['attachments'] if item['ref'] == ref), None)
     if not entry:
-        raise Denied('STICKER_REF_NOT_HERE')
+        raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
     if not entry.get('sticker'):
-        raise Denied('STICKER_IS_A_PHOTO')
+        raise Denied('STICKER_IS_A_PHOTO: 「%s」' % ref)
     if ref not in looked:
         raise Denied('STICKER_NOT_LOOKED')
     key = memory_key(entry)

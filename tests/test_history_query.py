@@ -257,7 +257,7 @@ def test_broker_call_is_task_bound_and_idempotent(broker_env):
     assert artifact['state'] == 'DONE' and artifact['tool'] == HISTORY_TOOL_NAME
     again = broker.call('s1', 'c1', HISTORY_TOOL_NAME, dict(window))
     assert again == result                                   # 同 call_id 只回放，不重跑
-    with pytest.raises(ValueError, match='HISTORY_ARGUMENT_DENIED:scene_id'):
+    with pytest.raises(ValueError, match='HISTORY_ARGUMENT_DENIED: 不认识的参数 scene_id'):
         broker.call('s1', 'c2', HISTORY_TOOL_NAME, dict(FULL_WINDOW, query='雾灯', scene_id=OTHER_SCENE))
     other = query_history(store, {'scene_id': OTHER_SCENE, 'scope_key': 'scene:' + OTHER_SCENE,
                                   'policy_epoch': EPOCH}, '雾灯', limit=1,

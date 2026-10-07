@@ -446,41 +446,50 @@ def her_pictures(store, ep):
     return any(item.get('pullable') for item in listing['attachments'])
 
 
-# Words for the refusals she is most likely to meet; any other code is passed on as it is.
+# Words for the refusals she is most likely to meet: the gist. The detail after the code carries the values and the
+# fix; a code not listed here is passed on as it is (its own message says both).
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（本机、主人私聊这类可信的对话）改。',
     'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
-    'DOC_SECTION_NOT_FOUND': '没有这一节；先用 recall 看清 sid。',
+    'DOC_SECTION_NOT_FOUND': '没有这一节。',
     'DOC_BODY_REQUIRED': '这个操作要在 body 里写正文。',
-    'DOC_HEADING_REQUIRED': '新的一节要有 heading。',
-    'DOC_REASON_REQUIRED': '要写 reason：为什么改。',
+    'DOC_HEADING_REQUIRED': '新的一节要有标题。',
+    'DOC_REASON_REQUIRED': '要写 reason：为什么改，2000 字以内。',
     'DOC_OP_NOT_ALLOWED': '这份文档不能这样改。',
+    'DOC_OP_UNKNOWN': '没有这种文档操作。',
+    'DOC_TAGS_INVALID': 'visibility 或 inject 的值不对。',
+    'DOC_REVISION_TOO_LARGE': '这份文档写完太大了。',
     'DOC_NOT_FOUND': '没有这份文档；新文档只能用 append_section 开始。',
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
-    'BASE_REVISION_STALE': '这份文档在这回合里被改过了；先 recall 读最新的那一节再改。',
-    'PERSONA_RENDER_OVER_BUDGET': '人格渲染会超出预算；先精简别的节。',
+    'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
+    'PERSONA_RENDER_OVER_BUDGET': '这样写完，每回合自动带上的人格和口吻会超出上限。',
     'PIN_REQUIRES_OWNER_PRIVATE': '置顶记忆只能在家里（本机、主人私聊这类可信的对话）做。',
-    'PIN_MEMORY_NOT_READABLE': '这条记忆读不到或已经不在了。',
-    'PIN_MEMORY_NOT_IN_CONTEXT': '只能置顶这回合上下文 ref_index 里的记忆。',
+    'PIN_MEMORY_NOT_READABLE': '这条记忆读不到或已经不在了；照抄 ref_index 里还在的记忆 id。',
+    'PIN_MEMORY_NOT_IN_CONTEXT': '只能置顶这回合 ref_index 里的记忆，或这回合 recall 想起来的。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（本机、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
     'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同回合和日期。',
     'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：私聊和你在的群能带（群和别人的私聊只发你自己做的图）。',
     'ATTACH_ARTIFACT_NOT_IN_CONTEXT': '只能用 image_artifacts_from_program 里列出的 artifact_id。',
-    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图。',
+    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图；换一张你做的，或这回合不带图。',
+    'ATTACHMENT_ARTIFACT_UNAVAILABLE': '这张图还没做好或已经不在了；换 image_artifacts_from_program 里别的，或这回合不带图。',
+    'ATTACHMENT_SCOPE_DENIED': '这张图不是这个对话能用的；换一张，或这回合不带图。',
+    'ATTACHMENT_NOT_AN_IMAGE': '这不是一张能发的图片；换一张，或这回合不带图。',
+    'ATTACHMENT_OVER_LIMIT': '这张图超过 8 MiB，发不了；换一张，或这回合不带图。',
+    'ATTACHMENT_HASH_MISMATCH': '这张图的存档对不上（不是你的错），发不了；换一张，或这回合不带图。',
     'GROUP_ACTION_NOT_A_GROUP': '这里不是群。',
     'GROUP_ACTION_DISABLED': '这个群关掉了管理动作。',
     'GROUP_ACTION_NOT_AN_ADMIN': '你在这个群不是管理员。',
-    'VISIT_PLACE_UNKNOWN': '没有这个地方；照抄 places_from_program 里的 place。',
+    'VISIT_PLACE_UNKNOWN': '这个地方去不了。',
     'VISIT_NOT_NOW': '现在去不了那里。',
     'VISIT_OFF': '出门现在没开。',
     'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里那个回合再挑也行。',
     'STICKER_SHELF_FULL': '表情包架子满了：先用 drop 放下一个不想要的，再收。',
     'STICKER_NAME_TAKEN': '架子上已经有这个名字了：换一个名字。',
     'STICKER_NAME_INVALID': '名字不合适。',
-    'STICKER_WHEN_INVALID': '要写一句什么时候用它。',
+    'STICKER_WHEN_INVALID': 'when 要写一句什么时候用它（或它在说什么）。',
     'STICKER_NOT_YOURS': '只有你自己画的图能直接放上架子；别人的要用群里表情包下面的 ref 收。',
     'STICKER_REF_NOT_HERE': '这个对话最近的消息里没有这个 ref：照抄表情包下面标的 ref；太早的收不到了。',
     'STICKER_IS_A_PHOTO': '这是一张照片，不是表情包：照片不能收。',
@@ -492,26 +501,31 @@ WORDS = {
     'CREDENTIAL_NOTE_INVALID': 'note 写一句它是干什么的（80 字以内），不写值。',
     'CREDENTIAL_ENV_INVALID': 'env 是 1–6 个「大写环境变量名 → 值」，名字不能是系统要用的（PATH 之类）。',
     'CREDENTIAL_NOT_FOUND': '保险箱里没有这个名字。',
-    'CREDENTIALS_UNAVAILABLE': '这会儿保险箱连不上（宿主没提供凭据存储）。',
+    'CREDENTIALS_UNAVAILABLE': '这会儿保险箱用不了：跟对方说现在收不了，值不要写进别处。',
     'WATCH_HOURS_INVALID': 'hours 是 1 到 72 之间的整数。',
     'WATCH_MODE_INVALID': 'mode 是 once 或 burst。',
     'WATCH_PERSON_NOT_HERE': '这个对话里找不到这个人：照抄他的标签或 #编号。',
     'WATCH_PERSON_UNCLEAR': '这个名字对得上不止一个人：用标签里的 #编号。',
-    'WATCH_LIST_FULL': 'watch 名单满了（最多 5 个）：先 off 一个。',
+    'WATCH_LIST_FULL': 'watch 名单满了：先 off 一个（id 照抄 watching_from_program）。',
     'WATCH_NOT_FOUND': '名单上没有这个 id：照抄 watching_from_program 里的 id。',
     'STICKER_NO_FINGERPRINT': '这个表情包平台没给能认出它的标记，记不住；想留着就 keep。',
     'STICKER_CANDIDATE_GONE': '这个候选已经不在池子里了（挤掉了或收过了）。',
     'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
-    'ERRAND_PLACE_UNKNOWN': '没有这个地方；照抄 errand_places_from_program 里的 place。',
-    'ERRAND_LIMIT': '今天替人跑腿的次数用完了，明天再办。',
+    'ERRAND_PLACE_UNKNOWN': '这个地方去不了。',
+    'ERRAND_LIMIT': '替人跑腿的次数用完了。',
     'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊这类可信的对话）才能接差事。',
     'ERRAND_PICTURE_NOT_HERS': '差事只能带你自己做的图。',
     'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一轮接；自己想去，用 visit。',
-    'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个对话最近的图里没有这个 ref：照抄图旁标的 ref；太早的图看不到了。',
-    'IMAGE_NOT_PULLABLE': '这张图拉不到。',
+    'FEEDBACK_TASK_STALE': '这一步做不了。',
+    'WORKSPACE_NOT_AUTHORIZED': '这个对话不能交给行动脑做事；能直接答的就直接答。',
+    'SCENE_MEMBERSHIP_DENIED': '这一步做不了。',
+    'STALE_REVISION': '没写进去。',
+    'UNDERSTANDING_UPDATE_NOT_AVAILABLE': '这回合不能更新对这个人的理解；重试也一样。',
+    'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个 ref 对不上。',
+    'IMAGE_NOT_PULLABLE': '这张图看不了。',
     'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
-    'IMAGE_FETCH_FAILED': '这张图没拉下来（链接可能过期了）。',
+    'IMAGE_FETCH_FAILED': '这张图没拉下来。',
     'IMAGE_TOO_LARGE': '这张图太大，看不了。',
     'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
     'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就交给行动脑，把 ref 一起交代。',
@@ -524,6 +538,24 @@ def words(exc):
     said = WORDS.get(code)
     return (said + (' （' + code + (': ' + detail if detail else '') + '）') if said
             else code + (': ' + detail if detail else ''))
+
+
+def _given(args, field):
+    """What she gave for an enum field, for a refusal: '（给的是「x」）' or '（没写 x）'."""
+    value = (args or {}).get(field) if isinstance(args, dict) else None
+    return '（没写 %s）' % field if value is None else '（给的是「%s」）' % str(value)[:40]
+
+
+# Why her understanding of someone was not saved (MemoryService.commit_understanding: NOT_COMMITTED), in words.
+UNDERSTANDING_NOT_SAVED = {
+    'NO_NEW_SOURCE_EVENTS': '这次没有新的对话可以作依据，理解没存；有了新的对话再更新。',
+    'BASE_REVISION_STALE': '对这个人的理解刚被更新过，这次没存；下回合看了最新的再改。',
+}
+
+
+# Why a conversation takes no picture (outbound_media.target_allowed), in words.
+ATTACH_REASONS = {'scene_has_no_channel_route': '这个对话没接到平台', 'channel_route_not_authorized': '这个对话的平台路由没授权',
+                  'channel_carries_text_only': '这个平台只能发文字', 'target_not_dm': '这里既不是私聊，也不是你在的群'}
 
 
 class RoleTools:
@@ -541,7 +573,7 @@ class RoleTools:
         done = (ep.get('tool_calls') or {}).get(call_id)
         if done:
             if done['tool'] != name or done['args_sha256'] != sha(canonical(args)):
-                raise Refused('CALL_ID_REUSED')
+                raise Refused('CALL_ID_REUSED: 这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。')
             if done.get('refused'):
                 raise Refused(done['refused'])
             return done['result'], bool(done.get('conclude'))
@@ -549,7 +581,7 @@ class RoleTools:
             if name not in TOOLS or name not in (ep.get('turn_tools') or ()):
                 raise Refused('这回合没有 %s 这个工具。能用的是：%s。' % (name, '、'.join(ep.get('turn_tools') or ())))
             if not isinstance(args, dict):
-                raise Refused('参数要是一个对象。')
+                raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
             if name != 'think' and not ep.get('turn_thought'):
                 raise Refused('先用 think 写下这回合的心里话，再做别的。')
             if len(ep.get('tool_calls') or {}) >= CALLS_PER_TURN:
@@ -590,10 +622,14 @@ class RoleTools:
         value = args.get(field)
         if value is None and not required:
             return None
-        if not isinstance(value, str) or not value.strip():
-            raise Refused('%s 要写内容。' % field)
+        if value is not None and not isinstance(value, str):
+            raise Refused('%s 要是一段文字（%d 字以内），给的是%s。' % (field, limit, {
+                bool: ' true/false', int: '数字', float: '数字', list: '列表', dict: '对象'}.get(type(value), '别的类型')))
+        if not value or not value.strip():
+            raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
+                          % (field, limit))
         if len(value) > limit:
-            raise Refused('%s 太长了（%d 字），%d 字以内。' % (field, len(value), limit))
+            raise Refused('%s 太长了（%d 字），%d 字以内：精简后再调用。' % (field, len(value), limit))
         return value.strip()
 
     # ── mind ────────────────────────────────────────────────────────
@@ -624,7 +660,8 @@ class RoleTools:
         if not isinstance(sections, list) or len(sections) > 3 or any(
                 not isinstance(item, dict) or not isinstance(item.get('doc'), str) or not isinstance(item.get('sid'), str)
                 for item in sections):
-            raise Refused('sections 是至多 3 条 {doc, sid}。')
+            raise Refused('sections 是至多 3 条 {doc, sid}（doc、sid 都是文字，sid 照抄 recall 或文档里的）%s。'
+                          % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
         _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True)
@@ -649,7 +686,7 @@ class RoleTools:
     def tool_quote(self, ep, call_id, args):
         how = args.get('how')
         if how not in ('source', 'none'):
-            raise Refused('how 是 source（引用叫你的那条）或 none（不引用）。')
+            raise Refused('how 是 source（引用叫你的那条）或 none（不引用）%s。' % _given(args, 'how'))
         self.coordinator._update(self._fresh(ep), quote=how)
         return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
 
@@ -659,23 +696,23 @@ class RoleTools:
             return credentials.keep(args.get('name'), args.get('note'), args.get('env')), False
         if args.get('op') == 'drop':
             return credentials.drop(args.get('name')), False
-        raise Refused('op 是 keep 或 drop。')
+        raise Refused('op 是 keep 或 drop%s。' % _given(args, 'op'))
 
     def tool_watch(self, ep, call_id, args):
         from . import watches
         op = args.get('op')
         if op == 'on':
             if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
-                raise Refused('只能在看得到这个人的对话里盯他（群或私聊）。')
+                raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
             return watches.add(self.store, ep, ep['persona'], self._cls(ep), args), False
         if op == 'off':
             return watches.stop(self.store, ep['persona'], args.get('id')), False
-        raise Refused('op 是 on 或 off。')
+        raise Refused('op 是 on 或 off%s。' % _given(args, 'op'))
 
     def tool_await_answer(self, ep, call_id, args):
         wait = args.get('wait', 'yes')
         if wait not in ('yes', 'no'):
-            raise Refused('wait 是 yes 或 no。')
+            raise Refused('wait 是 yes 或 no%s。' % _given(args, 'wait'))
         if wait == 'no':
             self.coordinator._update(self._fresh(ep), await_answer={'off': True})
             return {'note': '这回合不等回话。'}, False
@@ -759,7 +796,8 @@ class RoleTools:
                                               {'_id': 1, 'channel_id': 1, 'kind': 1, 'scope_key': 1, 'members': 1})
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
-            raise Denied('ATTACH_TARGET_NOT_ALLOWED: ' + reason)
+            raise Denied('ATTACH_TARGET_NOT_ALLOWED: %s；重试也一样，这回合只说话不带图'
+                         % ATTACH_REASONS.get(reason, reason))
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + artifact)
@@ -784,28 +822,29 @@ class RoleTools:
             return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when')), False
         if op == 'remember':
             return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
-        raise Refused('op 是 keep、drop、rename 或 remember。')
+        raise Refused('op 是 keep、drop、rename 或 remember%s。' % _given(args, 'op'))
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):
         from .render import budget_gate
         item = {k: v for k, v in args.items() if k != 'body' and v is not None}
         if not isinstance(item.get('doc'), str) or not item['doc']:
-            raise Refused('doc 要写文档名。')
+            raise Refused('doc 要写文档名，如 persona、voice、group_notes。')
         cls = self._cls(ep)
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
             scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
             if (scene or {}).get('kind') != 'group' or item.get('op') not in GROUP_NOTE_OPS:
-                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP')
+                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
+                                                                  else 'op「%s」不行' % item.get('op')))
             item = {**item, 'doc': notes_slug(ep['scene_id'])}
         elif cls != visibility.OWNER_PRIVATE:
-            raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE')
+            raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % item['doc'])
         if item['doc'].startswith('group:'):
             # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
             # tidy them by name from her nightly settlement (context_budget.review_block).
             if item.get('op') not in GROUP_NOTE_OPS:
-                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP')
+                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: op「%s」不行' % item.get('op'))
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
@@ -816,7 +855,9 @@ class RoleTools:
         if item.get('op') == 'adopt_seed':
             kind, text = _seed_text(self.store, slug)
             if text is None:
-                raise DocumentError('DOC_SEED_NOT_FOUND', slug)
+                seeds = [seed.get('slug') for seed in (self.store.config.get('persona_contribution') or {}).get('seeds', [])]
+                raise DocumentError('DOC_SEED_NOT_FOUND', '「%s」没有种子；有种子的文档：%s'
+                                    % (slug, '、'.join(filter(None, seeds)) or '（人格包没带种子）'))
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
                                       mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed')
             return {'doc': slug, 'op': 'adopt_seed', **{k: v for k, v in outcome.items() if k != 'revision'}}, False
@@ -849,7 +890,7 @@ class RoleTools:
         if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
             raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
         if (ep.get('understanding_update') or {}).get('state') == 'COMMITTED':
-            raise Refused('这回合已经更新过一次对这个人的理解了。')
+            raise Refused('这回合已经更新过一次对这个人的理解了，一回合只更新一次；还有要补的，下回合再写。')
         saved = self.store.db.state_revisions.find_one({'mutation_id': ep['_id'] + ':understanding'}, {'_id': 1})
         if saved:
             # Saved before this turn was interrupted: once per episode, never a second revision.
@@ -860,7 +901,11 @@ class RoleTools:
             require_current_feedback(self.store, ep)
             update = MemoryService(self.store).commit_understanding(self._fresh(ep), body)
         self.coordinator._update(self._fresh(ep), understanding_update=update)
-        return {k: update.get(k) for k in ('state', 'reason') if update.get(k)}, False
+        result = {k: update.get(k) for k in ('state', 'reason') if update.get(k)}
+        if update.get('state') == 'NOT_COMMITTED':
+            result['note'] = UNDERSTANDING_NOT_SAVED.get(str(update.get('reason')).split(':', 1)[0],
+                                                         '这次理解没存上（不是你的错）；重试也一样，下回合再更新。')
+        return result, False
 
     def tool_set_policy(self, ep, call_id, args):
         from .policy import PolicyStore
@@ -870,7 +915,7 @@ class RoleTools:
         key = self._text(args, 'key', 200)
         reason = self._text(args, 'reason', 2000)
         if 'value' not in args:
-            raise Refused('要写 value。')
+            raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。')
         model, _ = model_and_policy(self.store, ep['persona'])
         policy = PolicyStore(self.store, ep['persona'], model)
         spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': reason[:300]}])
@@ -900,13 +945,13 @@ class RoleTools:
         memory_id = self._text(args, 'memory_id', 300)
         pinned = args.get('pinned')
         if not isinstance(pinned, bool):
-            raise Refused('pinned 是 true 或 false。')
+            raise Refused('pinned 是 true（置顶）或 false（取消）%s。' % _given(args, 'pinned'))
         memory = self.store.db.memory_units.find_one({'_id': memory_id})
         readable = {ep['scope_key'], 'global-safe', visibility.owner_private_scope(ep['persona'])}
         if not memory or memory.get('status') != 'active' or memory.get('scope_key') not in readable:
-            raise Denied('PIN_MEMORY_NOT_READABLE: ' + memory_id)
+            raise Denied('PIN_MEMORY_NOT_READABLE: 「%s」' % memory_id)
         if memory_id not in {*((ep.get('context') or {}).get('ref_index') or []), *(ep.get('recalled') or [])}:
-            raise Denied('PIN_MEMORY_NOT_IN_CONTEXT: ' + memory_id)
+            raise Denied('PIN_MEMORY_NOT_IN_CONTEXT: 「%s」' % memory_id)
         self.store.put('memory_units', {**memory, 'pinned': pinned}, expected=memory['revision'], stream=ep['_id'])
         return {'memory_id': memory_id, 'pinned': pinned}, False
 
@@ -915,7 +960,7 @@ class RoleTools:
         from .render import model_and_policy
         ledger = AffectLedger(self.store, ep['persona'], *model_and_policy(self.store, ep['persona']))
         if not ledger.enabled:
-            raise Refused('你没有情感账。')
+            raise Refused('你没有情感账（affect 没开），feel 用不了；重试也一样。')
         op, cls, key = args.get('op') or ('record' if args.get('kind') else None), self._cls(ep), 'feel:' + call_id
         fields = {k: v for k, v in args.items() if k in AFFECT_FIELDS and v is not None}
         if op == 'record':
@@ -930,15 +975,15 @@ class RoleTools:
             item = {'proposal_id': self._text(args, 'proposal_id', 300), 'decision': args.get('decision'),
                     'why': self._text(args, 'why', 300)}
             if item['decision'] not in ('accept', 'decline', 'edit'):
-                raise Refused('decision 是 accept、decline 或 edit。')
+                raise Refused('decision 是 accept、decline 或 edit%s。' % _given(args, 'decision'))
             if item['decision'] == 'edit':
                 if not isinstance(args.get('edit'), dict):
-                    raise Refused('decision=edit 时要写 edit。')
+                    raise Refused('decision=edit 时要写 edit：改成的样子（kind、intensity、ref、why 这些字段）。')
                 item['edit'] = args['edit']
             row = ledger.adopt(ep, 0, item, cls, key=key)
             return {'proposal_id': item['proposal_id'], 'decision': item['decision'],
                     'event_id': row['_id'] if row else None}, False
-        raise Refused('op 是 record、close、void 或 adopt。')
+        raise Refused('op 是 record、close、void 或 adopt%s；只记一笔心情时写 kind 和 intensity 就行。' % _given(args, 'op'))
 
     def tool_plan(self, ep, call_id, args):
         from . import schedule_rules
@@ -946,7 +991,7 @@ class RoleTools:
         from .tasks import require_current_feedback
         c = self.coordinator
         if not c.scheduler:
-            raise Refused('现在没有定时服务，安排不了。')
+            raise Refused('现在没有定时服务，安排不了（不是你的错）；重试也一样，要记着的事写进回话或文档。')
         timing = {k: args[k] for k in ('after_seconds', 'every_seconds', 'at', 'clock') if args.get(k) is not None}
         op = args.get('op') or ('create' if args.get('intent') and timing and not args.get('plan_id') else None)
         planned = {row.get('_id'): row for row in (ep.get('context') or {}).get('plans_from_program') or []}
@@ -963,7 +1008,7 @@ class RoleTools:
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
                     from . import lines
                     if self._cls(ep) != visibility.OWNER_PRIVATE:
-                        raise Refused('只有在家里才能把安排挂到一条线上。')
+                        raise Refused('只有在家里才能把安排挂到一条线上：去掉 line，就安排在这里。')
                     wanted = self._text(args, 'line', 80)
                     where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
                     if not where:
@@ -983,7 +1028,8 @@ class RoleTools:
                     spec = {**({'intent': args['intent']} if args.get('intent') else {}), **({'schedule': timing} if timing else {})}
                     plan = run(lambda: c.scheduler.update(ep, plan_id, spec))
             else:
-                raise Refused('op 是 create、update 或 cancel。')
+                raise Refused('op 是 create、update 或 cancel%s；新建要写 intent 和一种计时，改或取消要写 plan_id。'
+                              % _given(args, 'op'))
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
             clock = schedule_rules.local_clock(schedule_rules.scene_timezone(
@@ -1002,7 +1048,7 @@ class RoleTools:
     def tool_visit(self, ep, call_id, args):
         from . import places
         if turn_kind(ep) not in VISIT_FROM or self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门。')
+            raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门：想去就用 plan 定个时间。')
         from .persona_model import effective
         from .render import model_and_policy
         model, policy = model_and_policy(self.store, ep['persona'])
@@ -1013,13 +1059,13 @@ class RoleTools:
         place = self._text(args, 'place', 40)
         intent = args.get('intent')
         if intent not in places.VISIT_INTENTS:
-            raise Refused('intent 是 %s 之一。' % '、'.join(places.VISIT_INTENTS))
+            raise Refused('intent 是 %s 之一%s。' % ('、'.join(places.VISIT_INTENTS), _given(args, 'intent')))
         topic = self._text(args, 'topic', places.TOPIC_CHARS, required=False)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if artifact and intent != 'share_picture':
             raise Refused('只有 intent=share_picture 才带 artifact_id。')
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，出不了门。')
+            raise Refused('现在没有定时服务，出不了门（不是你的错）；重试也一样。')
         return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
 
     def tool_errand(self, ep, call_id, args):
@@ -1032,14 +1078,14 @@ class RoleTools:
         request = self._text(args, 'request', ERRAND_CHARS)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，办不了。')
+            raise Refused('现在没有定时服务，办不了（不是你的错）；重试也一样，跟托你的人说一声。')
         return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly')), artifact), False
 
     # ── notes between her conversations (ADR-018) ───────────────────
     def _note(self, ep, call_id, args, cls):
         from . import credentials, notes
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，便条送不出去。')
+            raise Refused('现在没有定时服务，便条送不出去（不是你的错）；重试也一样。')
         args = {**args, 'text': credentials.scrub(str(args.get('text') or ''))}     # never a credential value
         try:
             return self.coordinator.scheduler.note(ep, cls, args, call_id), False
@@ -1069,9 +1115,9 @@ class RoleTools:
             raise Refused('没有这条线；照抄 lines_from_program 里的 line。')
         op = args.get('op')
         if op not in ('open', 'close'):
-            raise Refused('op 是 open 或 close。')
+            raise Refused('op 是 open 或 close%s。' % _given(args, 'op'))
         if op == 'close' and args.get('close_for') not in lines.CLOSE_FOR:
-            raise Refused('关的时候要选 close_for：%s。' % '、'.join(lines.CLOSE_FOR))
+            raise Refused('关的时候要选 close_for：%s%s。' % ('、'.join(lines.CLOSE_FOR), _given(args, 'close_for')))
         model, policy = model_and_policy(self.store, ep['persona'])
         zone = persona_zone(model, policy, self.store.config)[0]
         lines.set_line(self.store, line['scene_id'], closed=op == 'close', choice=args.get('close_for'), zone=zone,
@@ -1084,7 +1130,7 @@ class RoleTools:
         why = self._text(args, 'why', IDEA_CHARS)
         noted = [call for call in (ep.get('tool_calls') or {}).values() if call.get('tool') == 'note_idea' and 'result' in call]
         if len(noted) >= IDEAS_PER_TURN:
-            raise Refused('这回合已经记了 %d 条想法，先到这里。' % IDEAS_PER_TURN)
+            raise Refused('这回合已经记了 %d 条想法（上限 %d 条），先到这里；别的下回合再记。' % (len(noted), IDEAS_PER_TURN))
         row = note_idea(self.store, ep['persona'], idea, why, key=[ep['_id'], call_id],
                         source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
                                 'turn': turn_kind(ep)})
@@ -1095,12 +1141,12 @@ class RoleTools:
         try:
             page = int(args.get('page') or 1)
         except (TypeError, ValueError):
-            raise Refused('page 是从 1 开始的整数。') from None
+            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page')) from None
         search = self._text(args, 'search', 40, required=False)
         total = len(idea_rows(self.store, ep['persona'], search))
         pages = max(1, -(-total // IDEAS_PAGE))
         if page < 1 or page > pages:
-            raise Refused('只有 %d 页（%d 条）。' % (pages, total))
+            raise Refused('只有 %d 页（%d 条）：page 写 1–%d。' % (pages, total, pages))
         items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc(), page=page, search=search)
         after = total - (page - 1) * IDEAS_PAGE - len(items)
         if not items:
@@ -1117,7 +1163,7 @@ class RoleTools:
         decision = args.get('decision')
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
-            raise Refused('decision 是 adopt、defer 或 drop。')
+            raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
         row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
         if not row or row.get('state') not in ('open', 'deferred'):
             raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 read_ideas 里的原样抄 _id。' % idea_id)
@@ -1136,7 +1182,7 @@ class RoleTools:
             self._text(item, field, 2000)
         if not isinstance(item.get('source_ids'), list) or not item['source_ids'] or not all(
                 isinstance(x, str) for x in item['source_ids']):
-            raise Refused('source_ids 是来源 id 的列表。')
+            raise Refused('source_ids 是来源 id 的列表（至少一条，都是文字）：照抄 promotion_candidates 里的 id。')
         return promote(self.store, ep, item, key='promote:' + call_id), False
 
 
@@ -1230,7 +1276,8 @@ def promote(store, ep, item, *, key):
     promoted = [call for call in (ep.get('tool_calls') or {}).values()
                 if call.get('tool') == 'promote_memory' and 'result' in call]
     if len(promoted) >= quota:
-        raise Denied('PROMOTION_QUOTA: %d' % quota)
+        raise Denied('PROMOTION_QUOTA: ' + ('已经提升了 %d 条，配额 %d 条；剩下的留到下次沉淀' % (len(promoted), quota) if quota
+                                           else '配额是 0（没开记忆提升）；重试也一样'))
     picked = selections(store, effective(model, 'memory.promotion.window_days', policy) or 7)
     episodes = set()
     for source in item['source_ids']:
@@ -1246,7 +1293,8 @@ def promote(store, ep, item, *, key):
     need_roots = int(effective(model, 'memory.promotion.min_roots', policy) or 2)
     need_dates = int(effective(model, 'memory.promotion.min_dates', policy) or 2)
     if len(episodes) < need_roots or len(dates) < need_dates:
-        raise Denied('PROMOTION_SOURCES_INSUFFICIENT: %d turns / %d dates; need %d / %d'
+        raise Denied('PROMOTION_SOURCES_INSUFFICIENT: 这些来源只来自 %d 个回合、%d 个日期，要至少 %d 个回合、%d 个日期；'
+                     '在 promotion_candidates 里再加别的回合、别的日子的 id，凑不够就先不提升'
                      % (len(episodes), len(dates), need_roots, need_dates))
     scope = 'global-safe' if item.get('visibility') == 'public' else visibility.owner_private_scope(ep['persona'])
     body = f"事实：{item['fact']}\n评价：{item['appraisal']}\n信号：{item['signal']}"

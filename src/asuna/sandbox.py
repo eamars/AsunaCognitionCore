@@ -12,6 +12,39 @@ from . import sandbox_backend
 
 OUTPUT_LIMIT = 262144
 PYTHONS = ('python3', 'python', 'python3.exe', 'python.exe')
+ARGV_ITEMS = 40
+ARGV_CHARS = 16000
+# A runner that could not find argv[0]: Windows error 2/3 (file/path not found), bwrap's execvp ENOENT.
+NOT_FOUND = ('(Win32 2)', '(Win32 3)', 'No such file or directory')
+
+
+def command_problem(argv, script='/task/run.py'):
+    """What is wrong with this argv, in her words, or None. ``script``: how the example names a script."""
+    if not argv:
+        return 'argv 是空的；写成列表，例如 ["python3", "%s"]' % script
+    if len(argv) > ARGV_ITEMS:
+        return ('argv 有 %d 项，上限 %d 项；把参数写进脚本或数据文件，argv 只留 ["python3", "%s"]'
+                % (len(argv), ARGV_ITEMS, script))
+    for index, arg in enumerate(argv):
+        if not isinstance(arg, str):
+            return 'argv 第 %d 项是 %s，每一项都要是字符串' % (index + 1, type(arg).__name__)
+        if '\0' in arg:
+            return 'argv 第 %d 项含 NUL 字符；去掉它' % (index + 1)
+    total = sum(map(len, argv))
+    if total > ARGV_CHARS:
+        return ('argv 一共 %d 字，上限 %d 字；长内容先写成脚本或数据文件，argv 只写 ["python3", "%s"] 去读它'
+                % (total, ARGV_CHARS, script))
+    return None
+
+
+def launch_problem(argv, exit_code, stderr):
+    """Why the sandbox could not start her command, and what to do."""
+    if any(mark in stderr for mark in NOT_FOUND):
+        return ('没有叫 %r 的程序：argv[0] 要是本机上的程序，argv 不经过 shell 运行（没有 sh，也没有 pwd、ls、cd、'
+                'echo 这类 shell 命令和管道）；把要做的写成 python3，例如 ["python3", "-c", "import os; print(os.listdir())"]'
+                '（exit %s）' % (str(argv[0])[:80], exit_code))
+    return ('沙箱没能启动这个命令（exit %s）：%s；这不是命令自己的输出，重试也一样：检查 argv[0] 是不是本机程序，'
+            '或改用 python3 脚本' % (exit_code, ' '.join(stderr.split())[:400]))
 
 
 class Sandbox:
@@ -40,14 +73,21 @@ class Sandbox:
 
     def run(self, argv: list[str], timeout: int = 30, env=None) -> dict:
         """``env``: extra variables for this one command (her credentials, credentials.environment)."""
-        if not argv or len(argv) > 40 or sum(map(len, argv)) > 16000 or any(not isinstance(a, str) or '\0' in a for a in argv):
-            raise ValueError('INVALID_COMMAND')
+        problem = command_problem(argv)
+        if problem:
+            raise ValueError('INVALID_COMMAND: ' + problem)
         command = sandbox_backend.confine(self.config, self.native(argv), self.task_dir)
         value = run_bounded(command, self.task_dir, timeout, env=env)
         if value['launch_failed']:
-            raise RuntimeError('SANDBOX_LAUNCH_FAILED (exit %s)\nstderr:\n%s' % (value['exit_code'], value['stderr']))
-        if value['output_limit']:raise RuntimeError('TOOL_OUTPUT_LIMIT')
-        if value['timed_out']:raise TimeoutError('TOOL_TIMEOUT')
+            raise RuntimeError('SANDBOX_LAUNCH_FAILED: ' + launch_problem(argv, value['exit_code'], value['stderr']))
+        if value['output_limit']:
+            raise RuntimeError('TOOL_OUTPUT_LIMIT: 输出超过 %d 字节（256 KiB），命令被停下，输出没有保留；同样的命令重试也一样：'
+                               '让脚本把结果写进 /task 里的文件（每个 32 KiB 以内，read_file 一次读一个），'
+                               '或只打印过滤后需要的部分' % OUTPUT_LIMIT)
+        if value['timed_out']:
+            raise TimeoutError('TOOL_TIMEOUT: 命令跑满 %d 秒还没结束，被停下，输出没有保留；同样的命令重试也一样：'
+                               '把活拆小（每次只处理一部分，进度写进 /task 的文件，下一次接着做），'
+                               '或让脚本在时限内自己收尾' % timeout)
         return {'argv': argv, 'exit_code': value['exit_code'], 'stdout': value['stdout'], 'stderr': value['stderr'],
                 'output_limit': False, 'timed_out': False, 'sandbox': 'dsh', 'writes': 'task folder only'}
 

@@ -77,7 +77,7 @@ def test_a_call_with_a_missing_field_is_told_which_and_fixed_in_the_same_turn(st
                                      '我让行动脑去查了。')])
     ep = Coordinator(store, lane).ingest(event(text='明天要带伞吗'))
     refused, fixed = lane.tool_results[1], lane.tool_results[2]
-    assert not refused[5] and refused[4] == 'brief 要写内容。'
+    assert not refused[5] and refused[4] == 'brief 要写内容（20000 字以内）。'
     assert fixed[5] and ep['task_ids'] == [fixed[4]['task']]
     assert store.db.tasks.count_documents({'episode_id': ep['_id']}) == 1
     assert ep['state'] == 'WAITING_TASK' and ep['speech'] == '我让行动脑去查了。'

@@ -8,6 +8,7 @@ import { PublicationFloor } from '../src/floor.js';
 import { readSpill } from '../src/spill.js';
 
 test('actual npm artifact freezes a bounded candidate; edits do not change active resources', async () => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-probe-'));
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
@@ -46,7 +47,7 @@ test('ADR-010 D9: a file she changed whose source moved after her baseline is ma
   assert.equal(byPath['a.md'].stale, true);
   assert.equal(byPath['b.md'].stale, undefined);
   assert.equal(byPath['c.md'].changed, false, 'an untouched file simply follows the source');
-  assert.match(listing.stale_note, /publish refuses/);
+  assert.match(listing.stale_note, /EFFECTIVE_PROJECT_CHANGED/);
   await assert.rejects(floor.call('development_publish', { reason: 'stale' }).then(r => { throw new Error(r.state); }),
     /EFFECTIVE_PROJECT_CHANGED: a\.md/);
 });
@@ -100,4 +101,31 @@ test('ADR-011 §6.4: publication imports the plugin entry and reads its structur
     await assert.rejects(floor.call('development_write', { path: name, text: '// replaced', overwrite: true }), /PATH_DENIED/);
   const selected = await floor.selected();
   assert.equal(selected.projects.persona.candidate, good.candidate, 'a failed probe never replaces the selection');
+});
+
+test('a refused development call says what was wrong, with the values, and what to do', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/refusal-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'docs'), { recursive: true });
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module' }));
+  await fs.writeFile(path.join(source, 'big.txt'), 'x'.repeat(262145));
+  await fs.writeFile(path.join(source, 'docs/a.md'), 'a');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [
+    { id: 'persona', root: source, format: 'package' }, { id: 'adapter', root: path.join(workspace, 'missing'), format: 'package' }] });
+  await assert.rejects(floor.call('development_files', { project: 'qq-adapter' }),
+    /^Error: DEVELOPMENT_PROJECT_NOT_AUTHORIZED: 没有项目 'qq-adapter'；有的是 persona、adapter，project 写其中一个（不写就是 persona）$/);
+  await assert.rejects(floor.call('development_files', { project: 'adapter' }), /^Error: DEVELOPMENT_PROJECT_ROOT_MISSING: 项目 adapter .*不是参数的问题/);
+  await assert.rejects(floor.call('development_files', { offset: -1, limit: 200 }),
+    /DEVELOPMENT_PAGE_INVALID: offset 是 -1，只能是 0 或更大的整数，limit 是 200，只能 1\.\.100；/);
+  await assert.rejects(floor.call('development_read', { path: 'big.txt' }), /DEVELOPMENT_READ_LIMIT: 'big\.txt' 有 262145 字节.*256 KiB/);
+  await assert.rejects(floor.call('development_read', { path: 'nope.md' }), /^Error: DEVELOPMENT_FILE_NOT_FOUND: 项目 persona 的候选里没有 'nope\.md'；/);
+  await assert.rejects(floor.call('development_read', { path: 'docs' }), /^Error: DEVELOPMENT_NOT_A_FILE: 'docs' 是目录.*prefix 'docs\/'/);
+  await assert.rejects(floor.call('development_write', { path: 'docs/a.md/b.md', text: 'x' }), /^Error: DEVELOPMENT_PARENT_NOT_DIRECTORY: /);
+  await assert.rejects(floor.call('development_write', { path: 'docs', text: 'x', overwrite: true }), /^Error: DEVELOPMENT_NOT_A_FILE: 'docs' 是目录.*写到它下面/);
+  await assert.rejects(floor.call('development_write', { path: 'docs/a.md', text: 'x' }), /EEXIST/, 'the worker names an existing file');
+  await assert.rejects(floor.call('development_read', { path: 'docs\\a.md' }), /DEVELOPMENT_PATH_DENIED: 'docs\\a\.md' 用了反斜杠/);
+  await assert.rejects(floor.call('development_read', { path: '../x' }), /DEVELOPMENT_PATH_DENIED: '\.\.\/x' 落在项目候选外面/);
+  await assert.rejects(floor.call('development_read', { path: '.env' }), /DEVELOPMENT_PATH_DENIED: '\.env' 是私密文件/);
+  await assert.rejects(floor.call('development_run', { argv: Array(41).fill('a') }), /DEVELOPMENT_ARGV_INVALID: argv 有 41 项，最多 40 项/);
 });

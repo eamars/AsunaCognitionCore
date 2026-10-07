@@ -521,7 +521,7 @@ class Coordinator:
         local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
         source=(self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}).get('event',{})
         if task['state']=='STALE':
-            raise role_tools.Refused('这件事正在被改，等它的新版本。')
+            raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。')
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':
             raise role_tools.Refused('这件事已经叫停了，不能接着做；要再做就用 delegate 交一件新的。')
         if task['state']=='PAUSED' and not (ep.get('episode_kind')=='external' and local and not source.get('channel')):

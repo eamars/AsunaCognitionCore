@@ -195,15 +195,19 @@ def from_words(model, item):
     """A feeling recorded in words → the numeric event the ledger stores."""
     scale = model.get('scale') or CORE['scale']
     kind = kind_key(model, item.get('kind'))
-    if item['intensity'] not in scale['val']:
-        raise AffectError('AFFECT_INTENSITY_UNKNOWN', item['intensity'])
+    if item.get('intensity') not in scale['val']:
+        raise AffectError('AFFECT_INTENSITY_UNKNOWN', '%s；intensity 只能是 %s（how_to_record_from_program.intensity）'
+                          % ('没写 intensity' if item.get('intensity') is None else '「%s」不在词表里' % item['intensity'],
+                             '、'.join(scale['val'])))
     arousal = item.get('arousal') or min(scale['arl'], key=scale['arl'].get)
     if arousal not in scale['arl']:
-        raise AffectError('AFFECT_AROUSAL_UNKNOWN', arousal)
+        raise AffectError('AFFECT_AROUSAL_UNKNOWN', '「%s」不在词表里；arousal 只能是 %s（how_to_record_from_program.arousal），'
+                          '也可以不写' % (arousal, '、'.join(scale['arl'])))
     valence = (model.get('kinds', {}).get(kind) or {}).get('valence')
     direction = item.get('direction') or {'positive': '好', 'negative': '坏'}.get(valence)
     if direction not in ('好', '坏'):
-        raise AffectError('AFFECT_DIRECTION_REQUIRED', kind or '未分类')
+        raise AffectError('AFFECT_DIRECTION_REQUIRED', '「%s」本身不带好坏：写 direction（好 或 坏）'
+                          % kind_label(model, kind))
     value = {k: item[k] for k in ('ref', 'why', 'cost', 'open', 'who') if k in item}
     if kind:
         value['kind'] = kind
@@ -327,23 +331,30 @@ class AffectLedger:
             return True          # home is shown every reason, so it may settle one written outside (ADR-018 §3.3)
         return source_scope in ('global-safe', ep_scope)
 
-    def check(self, item, refs):
+    def _kinds(self):
+        return '、'.join(spec.get('label') or key for key, spec in self.model.get('kinds', {}).items()) or '（种类表是空的）'
+
+    def check(self, item, refs, where='这回合的 ref_index'):
         """Program gates for a committed event (§6.4): any failure refuses only this item."""
         if not self.enabled:
-            raise AffectError('AFFECT_DISABLED')
+            raise AffectError('AFFECT_DISABLED', '情感账没开；重试也一样')
         if item.get('ref') not in refs:
-            raise AffectError('AFFECT_REF_NOT_IN_INDEX', item.get('ref'))
+            raise AffectError('AFFECT_REF_NOT_IN_INDEX', '%s不在%s里；ref 照抄%s里触动你的那条（消息或记忆）的 id'
+                              % ('没写 ref，' if not item.get('ref') else 'ref「%s」' % item['ref'], where, where))
         if self.model.get('require_cost') and not str(item.get('cost') or '').strip():
-            raise AffectError('AFFECT_COST_REQUIRED')
+            raise AffectError('AFFECT_COST_REQUIRED', '这份情感账每一笔都要写 cost：这件事让你付出了什么')
         limit = self.model.get('max_delta') or {}
         for axis in ('val', 'arl'):
             if abs(float(item.get(axis, 0))) > float(limit.get(axis, 100)):
-                raise AffectError('AFFECT_DELTA_TOO_LARGE', axis)
+                raise AffectError('AFFECT_DELTA_TOO_LARGE', '%s 超出这份情感账一笔能记的上限；选弱一级的词'
+                                  % ('intensity' if axis == 'val' else 'arousal'))
         kind = item.get('kind') or ''
         if kind and kind not in self.model.get('kinds', {}):
-            raise AffectError('AFFECT_KIND_UNKNOWN', kind)
+            raise AffectError('AFFECT_KIND_UNKNOWN', 'kind「%s」不在种类表里；照抄 how_to_record_from_program.kinds 里的一个：%s%s'
+                              % (kind, self._kinds(), '，或者不写 kind、写 direction' if self.model.get('allow_untyped', True) else ''))
         if not kind and not self.model.get('allow_untyped', True):
-            raise AffectError('AFFECT_KIND_REQUIRED')
+            raise AffectError('AFFECT_KIND_REQUIRED', '这份情感账要写 kind：how_to_record_from_program.kinds 里的一个：%s'
+                              % self._kinds())
         for field in ('half', 'half_arl'):
             if item.get(field) is not None and float(item[field]) < 0:
                 raise AffectError('HALF_LIFE_MUST_BE_POSITIVE', field)
@@ -356,7 +367,10 @@ class AffectLedger:
         position no longer collides with the earlier one, and replaying the same item hits the same
         row instead of raising EVENT_IMMUTABLE.
         """
-        self.check(item, refs if refs is not None else ep['context'].get('ref_index', []))
+        if refs is None:
+            self.check(item, ep['context'].get('ref_index', []))
+        else:
+            self.check(item, refs, '这条提案当时的 ref_index（照抄提案里的 ref）')
         source_scope = visibility.owner_private_scope(self.persona) if cls == visibility.OWNER_PRIVATE else ep['scope_key']
         doc = {'_id': sha(canonical([ep['_id'], 'affect', key if key is not None else index, proposal_id])),
                'persona': self.persona,
@@ -371,7 +385,7 @@ class AffectLedger:
     def record(self, ep, index, item, cls, *, key=None):
         """A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates."""
         if not self.enabled:
-            raise AffectError('AFFECT_DISABLED')
+            raise AffectError('AFFECT_DISABLED', '情感账没开；重试也一样')
         return self.commit(ep, index, from_words(self.model, item), cls, key=key)
 
     def amend(self, ep, index, item, cls, *, key=None):
@@ -381,7 +395,7 @@ class AffectLedger:
         event at the same position does not collide with this one, and replaying the same item
         returns the amendment already made instead of reporting it as a second, impossible change.
         """
-        target = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona})
+        target, found = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona}), []
         if not target and len(str(item['event_id'])) >= 8:
             # She reads short ids (interpret): a prefix that names exactly one of her events is that event.
             import re
@@ -389,20 +403,23 @@ class AffectLedger:
                                                            'persona': self.persona}).limit(2))
             target = found[0] if len(found) == 1 else None
         if not target:
-            raise AffectError('AFFECT_EVENT_UNKNOWN', item['event_id'])
+            raise AffectError('AFFECT_EVENT_UNKNOWN', 'event_id「%s」%s；照抄 affect_from_program.reasons 里那一笔的 event_id'
+                              % (item['event_id'], '对得上不止一笔' if len(found) > 1 else '不是你记过的一笔'))
         if not self.readable(target.get('source_scope'), ep['scope_key'], cls):
-            raise AffectError('AFFECT_EVENT_NOT_READABLE', item['event_id'])
+            raise AffectError('AFFECT_EVENT_NOT_READABLE', '「%s」是在别的对话里记的，这里改不了；回到记它的地方或家里再 %s'
+                              % (item['event_id'], item['op']))
         if item['op'] == 'void' and not str(item.get('why') or '').strip():
-            raise AffectError('VOID_REQUIRES_WHY')
+            raise AffectError('VOID_REQUIRES_WHY', 'void 要写 why：为什么这一笔的前提不成立')
         key = [ep['_id'], 'affect_ops', key if key is not None else index]
         made = self.store.db.affect_amendments.find_one({'_id': sha(canonical(['amendment', self.persona, *key]))})
         if made:
             return made          # 这一处修订已经记过了：同一轮重复、回想那一轮之前记过、崩溃重放
         if item['op'] == 'close':
             if not target.get('open'):
-                raise AffectError('CLOSE_REQUIRES_OPEN')
+                raise AffectError('CLOSE_REQUIRES_OPEN', '「%s」记的时候没挂着（open 不是 true），没有可了结的；'
+                                  '它会自己淡下去，不用管；前提不成立就用 void' % item['event_id'])
             if self.store.db.affect_amendments.find_one({'target': target['_id'], 'op': 'close'}):
-                raise AffectError('ALREADY_CLOSED')
+                raise AffectError('ALREADY_CLOSED', '「%s」已经了结过了，不用再 close' % item['event_id'])
         return self.amendment(target['_id'], item['op'], why=item.get('why', ''), by='character',
                               key=key, scope=target.get('source_scope'))
 
@@ -465,7 +482,8 @@ class AffectLedger:
         proposal = self.store.db.affect_proposals.find_one({'_id': item['proposal_id'], 'persona': self.persona,
                                                             'kind_row': 'proposal'})
         if not proposal or not self.readable(proposal['source_scope'], ep['scope_key'], cls):
-            raise AffectError('AFFECT_PROPOSAL_UNKNOWN', item['proposal_id'])
+            raise AffectError('AFFECT_PROPOSAL_UNKNOWN', '没有 proposal_id「%s」；照抄 affect_proposals_from_program 里的 '
+                              'proposal_id' % item['proposal_id'])
         word = 'accepted_edited' if item['decision'] == 'edit' else item['decision']
         decided = self.store.db.affect_proposals.find_one({'_id': 'decision:' + proposal['_id']})
         if decided and decided.get('episode_id') == ep['_id'] and decided.get('decision') == word:
@@ -473,7 +491,10 @@ class AffectLedger:
             # 不再插一条决定，也不把它当成「已经不是待定」而退回。
             return self.store.db.affect_events.find_one({'_id': decided['event_id']}) if decided.get('event_id') else None
         if self.proposal_state(proposal) != 'pending':
-            raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', self.proposal_state(proposal))
+            state = self.proposal_state(proposal)
+            raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', '这条提案已经%s，不能再决定；想记这份心情就用 op=record 自己记一笔'
+                              % {'expired': '过期了', 'accept': '接受了', 'decline': '拒绝了',
+                                 'accepted_edited': '改过后接受了'}.get(state, '是 ' + str(state)))
         event = None
         if item['decision'] in ('accept', 'edit'):
             fields = (from_words(self.model, item['edit']) if item['decision'] == 'edit'

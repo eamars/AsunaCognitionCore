@@ -47,6 +47,13 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
 const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
 // Her credentials' records in DSH's credential store: <scope>/<name> (credentialRecords).
 const CREDENTIAL_SCOPE = 'asuna-cognition-core';
+// A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
+// (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
+const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
+  + '这回合别再重试，没做成的事照实说（行动里写进报告）';
+async function toolReply(call) {
+  try { return await call(); } catch (error) { throw error?.reply ? error : new Error(WORKER_DOWN); }
+}
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
@@ -305,7 +312,8 @@ export class CognitionCore {
    * carries names, notes and variable names, never values. */
   async credentialRecords({ op, name, note, env }) {
     const store = this.credentialStore();
-    if (!store) throw new Error('CREDENTIAL_STORE_MISSING: this Host mounts no credential provider');
+    if (!store) throw new Error('CREDENTIAL_STORE_MISSING: 这个 Host 没装凭据存储，凭据用不了——不是参数的问题；'
+      + '重试也一样：不用凭据能做的先做，要用凭据的那一步写进报告');
     if (op === 'list') {
       const out = [];
       for (const { key } of await store.listRecords()) {
@@ -334,7 +342,7 @@ export class CognitionCore {
    * probe argv selects the platform's runner without running anything or touching any folder. */
   async sandboxStatus() {
     const sandbox = this.sandboxProvider();
-    if (!sandbox) return { available: false, reason: 'this Host mounts no sandbox provider' };
+    if (!sandbox) return { available: false, reason: '这个 Host 没装沙箱提供者' };
     try {
       const probe = await sandbox.confine(['probe'], { mode: 'workspace-write', workspaceRoot: this.ctx.asunaFloor.dataRoot });
       return { available: true, enforcement: probe.enforcement };
@@ -344,7 +352,8 @@ export class CognitionCore {
   /** One command wrapped by DSH's sandbox: writes confined to `root` (owner 2026-10-06: no read or network rule). */
   async confine({ argv, root }) {
     const sandbox = this.sandboxProvider();
-    if (!sandbox) throw new Error('SANDBOX_UNAVAILABLE: this Host mounts no sandbox provider');
+    if (!sandbox) throw new Error('SANDBOX_UNAVAILABLE: 这个 Host 没装沙箱提供者，命令跑不了——不是参数的问题；'
+      + '重试也一样：不跑命令能做的先做，要跑命令的那一步写进报告');
     const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: root });
     return { argv: confined.argv, enforcement: confined.enforcement };
   }
@@ -484,7 +493,7 @@ export class CognitionCore {
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
       } catch (error) {
-        await this.worker.call('host_result', { request_id: event.request_id, error: String(error) });
+        await this.worker.call('host_result', { request_id: event.request_id, error: error?.message ?? String(error) });
       }
       return;
     }
@@ -630,17 +639,23 @@ export class CognitionCore {
     // DSH 0.2 mounts a standing preset once and routes each member Agent's
     // events through it. Keep registrations here and state on session IDs.
     if (lane === 'character') scope.tools.restrict({ allow: [] });
-    scope.tools.guard(exec => !this.exposed(lane, exec.agent.session.id)?.has(exec.name)
-      ? (lane === 'character' ? 'Not available in this turn' : 'Asuna capability not granted') : undefined);
+    scope.tools.guard(exec => {
+      const exposed = this.exposed(lane, exec.agent.session.id) ?? new Set();
+      if (exposed.has(exec.name)) return undefined;
+      const usable = [...exposed].join('、') || '（没有）';
+      return lane === 'character' ? `这回合没有 ${exec.name} 这个工具；能用的是：${usable}。用其中一个，或者不用工具接着说。`
+        : `CAPABILITY_DENIED: 这个任务没有 ${exec.name} 这个工具；能用的是：${usable}。要用它，在报告里写明，让她另交一件授予它的任务。`;
+    });
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();
-      await this.worker.call('session', { session_id: exec.agent.session.id });
+      await toolReply(() => this.worker.call('session', { session_id: exec.agent.session.id }));
       if (lane === 'executor') {
         const stage = this.state(exec.agent.session.id).current;
-        const admission = await this.worker.call('stage.valid', {
+        const admission = await toolReply(() => this.worker.call('stage.valid', {
           token: stage?.token, session_id: exec.agent.session.id,
-        });
-        if (admission.valid !== true) throw new Error('ASUNA_ACTION_STAGE_SUPPRESSED');
+        }));
+        if (admission.valid !== true) throw new Error('ASUNA_ACTION_STAGE_SUPPRESSED: 这一步所属的任务已经结束、被取消或被接替，'
+          + '这次调用没有执行——不是参数的问题；重试也一样：别再调用工具，直接结束这一步');
         exec.signal.throwIfAborted();
       }
       return next();
@@ -798,8 +813,8 @@ export class CognitionCore {
         execute: async (args, exec) => {
           exec.signal.throwIfAborted();
           const operation = this.state(agent.session.id).current?.token;
-          const reply = await this.worker.call('role_tool', {
-            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args });
+          const reply = await toolReply(() => this.worker.call('role_tool', {
+            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args }));
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
@@ -842,9 +857,9 @@ export class CognitionCore {
           }
           // The action plugin owns the declared attachment injection. An
           // Agent's context does not inherit that plugin's service grants.
-          return attachImage({ attachments }, await this.worker.call('tool', {
+          return attachImage({ attachments }, await toolReply(() => this.worker.call('tool', {
             session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args,
-          }));
+          })));
         },
       }));
     }

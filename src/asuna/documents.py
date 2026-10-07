@@ -34,6 +34,22 @@ class DocumentError(ValueError):
         self.code, self.detail = code, detail
 
 
+def stale(slug):
+    """A Conflict message for a document someone else wrote between her read and her write."""
+    return 'BASE_REVISION_STALE: 「%s」刚被改过（不是你的错）；先 recall 读最新的那一节，再改一次' % slug
+
+
+def _missing_sid(slug, sid, sections):
+    sids = [s['sid'] for s in sections]
+    listed = '、'.join(sids[:30]) + ('…' if len(sids) > 30 else '')
+    return ('「%s」里没有 sid「%s」' % (slug, sid) if sid else '没写 sid') + (
+        '；有的是：%s，照抄一个' % listed if sids else '；这份文档还没有节，用 append_section 开第一节')
+
+
+def _bad_tag(field, value, allowed):
+    return '%s「%s」不行，只能是 %s' % (field, value, ' 或 '.join(allowed))
+
+
 def slugify(heading: str) -> str:
     """GitHub-style: lowercase, drop punctuation, spaces to hyphens (CJK kept)."""
     text = unicodedata.normalize('NFKC', heading).strip().lower()
@@ -122,11 +138,17 @@ class DocumentStore:
         rows = self.store.db.state_heads.find({'_id': {'$regex': '^' + re.escape(f'doc:{self.persona}:' + prefix)}}, {'_id': 1})
         return sorted(row['_id'][len(f'doc:{self.persona}:'):-len('|' + SCOPE)] for row in rows)
 
+    def _own_slugs(self):
+        """Her documents by name, for a refusal (a group's notes are written as group_notes there)."""
+        names = [slug for slug in self.slugs() if not slug.startswith(('group:', 'dossier:'))]
+        return '、'.join(names[:30]) + ('…' if len(names) > 30 else '') if names else '还没有'
+
     # ── writes ─────────────────────────────────────────────────────
     def _commit(self, slug, content, *, base_revision_id, reason, author, mutation_id, sources=(), extra=None):
         size = len(json.dumps(content, ensure_ascii=False).encode())
         if size > MAX_REVISION_BYTES:
-            raise DocumentError('DOC_REVISION_TOO_LARGE', str(size))
+            raise DocumentError('DOC_REVISION_TOO_LARGE', '「%s」写完有 %d 字节，上限 %d 字节；精简，或把一部分写进另一份文档'
+                                % (slug, size, MAX_REVISION_BYTES))
         existing = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
         if existing:
             if existing.get('entity_key') != self.key(slug) or existing['content'] != content:
@@ -137,7 +159,7 @@ class DocumentStore:
         if current != base_revision_id:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
-            raise Conflict('BASE_REVISION_STALE')
+            raise Conflict(stale(slug))
         revision_id = sha(canonical({'mutation_id': mutation_id, 'entity': self.entity(slug)}))
         revision = self.store.put('state_revisions', {
             '_id': revision_id, 'mutation_id': mutation_id, 'entity_key': self.key(slug), 'scope_key': SCOPE,
@@ -153,7 +175,7 @@ class DocumentStore:
         except Conflict:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
-            raise Conflict('BASE_REVISION_STALE') from None
+            raise Conflict(stale(slug)) from None
         return revision
 
     def seed(self, slug, kind, text, *, path=None, title=None, subject=None):
@@ -173,43 +195,45 @@ class DocumentStore:
         """One write intent. ``budget(slug, new_content)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET)."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
-            raise DocumentError('DOC_OP_UNKNOWN', str(op))
+            raise DocumentError('DOC_OP_UNKNOWN', ('没写 op' if op is None else 'op「%s」不认识' % op)
+                                + '；op 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
         reason = intent.get('reason')
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:
-            raise DocumentError('DOC_REASON_REQUIRED')
+            raise DocumentError('DOC_REASON_REQUIRED', 'reason %d 字，上限 2000 字' % len(reason)
+                                if isinstance(reason, str) and reason else 'reason 没写')
         replay = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
         if replay and replay.get('entity_key') == self.key(slug):
             return replay                      # the same intent already committed (crash recovery)
         revision_id, content = self.read(slug)
         if revision_id != base_revision_id:
-            raise Conflict('BASE_REVISION_STALE')
+            raise Conflict(stale(slug))
         if content is None:
             if op != 'append_section':
-                raise DocumentError('DOC_NOT_FOUND', slug)
+                raise DocumentError('DOC_NOT_FOUND', '「%s」不存在；已有的文档：%s' % (slug, self._own_slugs()))
             if slug.startswith('dossier:'):
                 # Person files are retired: what she knows about someone lives with that person (understand_person).
-                raise DocumentError('DOC_OP_NOT_ALLOWED', 'person files are retired; use understand_person')
+                raise DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写')
             content = {'kind': 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
         content = copy.deepcopy(content)
         kind, sections = content['kind'], content['sections']
         if kind == 'contract':
-            raise DocumentError('DOC_OP_NOT_ALLOWED', 'contract documents are read-only')
+            raise DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是只读的约定文档，哪种操作都改不了；重试也一样' % slug)
         by_sid = {s['sid']: s for s in sections}
         if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
-            raise DocumentError('DOC_BODY_REQUIRED')
+            raise DocumentError('DOC_BODY_REQUIRED', '%s 的 body 是空的' % op)
         if op == 'replace_section':
             target = by_sid.get(intent.get('sid'))
             if not target:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', str(intent.get('sid')))
+                raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
             if intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
-                raise Conflict('BASE_REVISION_STALE')
+                raise Conflict(stale(slug))
             target.update(body=body, body_sha256=sha(body.encode()))
             # Tags given with a rewrite are meant (owner 2026-10-06: she passed visibility here twice and the receipt
             # said written while the tags stayed); they apply as set_tags would.
             for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):
                 if intent.get(field) is not None:
                     if intent[field] not in allowed:
-                        raise DocumentError('DOC_TAGS_INVALID', field)
+                        raise DocumentError('DOC_TAGS_INVALID', _bad_tag(field, intent[field], allowed))
                     target[field] = intent[field]
             if intent.get('tags') is not None:
                 target['tags'] = list(intent['tags'])
@@ -217,20 +241,23 @@ class DocumentStore:
             heading = intent.get('heading') or ''
             if op == 'correction':
                 if kind != 'ledger':
-                    raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction applies to ledgers')
+                    raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
+                                        '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, kind))
                 original = by_sid.get(intent.get('sid'))
                 if not original:
-                    raise DocumentError('DOC_SECTION_NOT_FOUND', str(intent.get('sid')))
+                    raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
                 heading = heading or '更正：' + (original['heading'] or original['sid'])
             if not heading.strip():
-                raise DocumentError('DOC_HEADING_REQUIRED')
+                raise DocumentError('DOC_HEADING_REQUIRED', 'append_section 要写 heading（新节的标题）')
             tags = list(intent.get('tags') or [])
             if op == 'correction':
                 tags = [*dict.fromkeys([*tags, 'correction'])]
             visibility = intent.get('visibility') or 'owner_private'
             inject = intent.get('inject') or ('always' if kind in ALWAYS_KINDS else 'on_demand')
-            if visibility not in VISIBILITIES or inject not in INJECTS:
-                raise DocumentError('DOC_TAGS_INVALID')
+            if visibility not in VISIBILITIES:
+                raise DocumentError('DOC_TAGS_INVALID', _bad_tag('visibility', visibility, VISIBILITIES))
+            if inject not in INJECTS:
+                raise DocumentError('DOC_TAGS_INVALID', _bad_tag('inject', inject, INJECTS))
             section = _section(unique_sid(slugify(heading), by_sid), heading, body, visibility=visibility,
                                inject=inject, tags=tags, entry_date=intent.get('entry_date'))
             if op == 'correction':
@@ -239,11 +266,11 @@ class DocumentStore:
         elif op == 'set_tags':
             target = by_sid.get(intent.get('sid'))
             if not target:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', str(intent.get('sid')))
+                raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
             for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):
                 if field in intent:
                     if intent[field] not in allowed:
-                        raise DocumentError('DOC_TAGS_INVALID', field)
+                        raise DocumentError('DOC_TAGS_INVALID', _bad_tag(field, intent[field], allowed))
                     target[field] = intent[field]
             if 'tags' in intent:
                 target['tags'] = list(intent['tags'])
@@ -258,7 +285,7 @@ class DocumentStore:
         if content is None:
             return {'state': 'seeded', 'revision': self.seed(slug, kind, text)}
         if revision_id != base_revision_id:
-            raise Conflict('BASE_REVISION_STALE')
+            raise Conflict(stale(slug))
         seed_rev = self.store.db.state_revisions.find_one({'mutation_id': f'seed:{self.persona}:{slug}'})
         seeded = {s['sid']: s for s in (seed_rev['content']['sections'] if seed_rev else [])}
         _, incoming, _ = parse_markdown(text, kind)

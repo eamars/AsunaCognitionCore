@@ -924,6 +924,8 @@ class NativeScheduleLane:
 
 class NativeDevelopmentBridge:
     """Keep source publication available even when this worker cannot import."""
+    PAGE_BYTES = 262144
+
     def __init__(self, worker, config, store):
         self.worker, self.config, self.store = worker, config, store
 
@@ -932,34 +934,53 @@ class NativeDevelopmentBridge:
         scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
         if not task.get('development_grant') or visibility.session_class(
                 self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
-            raise Denied('DEVELOPMENT_GRANT_REQUIRED')
+            raise Denied('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权（只有 owner 私聊里交代、带开发授权的任务能用 '
+                         'development_*）；重试也一样，需要改代码就在报告里说明')
         if tool == 'development_database_read':
             from .state import COLLECTIONS
+            from bson.errors import BSONError
+            from pymongo.errors import OperationFailure
             collection=args.get('collection')
             query=args.get('filter',{}); projection=args.get('projection')
             skip=args.get('skip',0);limit=args.get('limit',20);sort=args.get('sort')
             if collection not in COLLECTIONS:
                 # Not a permission: the name does not exist. Say which do, and where the common guesses live.
-                raise Denied('DEVELOPMENT_COLLECTION_DENIED: no collection %r; there are %s. Relationships, documents '
-                             'and self descriptions are state_heads/state_revisions rows.' % (collection, ', '.join(COLLECTIONS)))
+                raise Denied('DEVELOPMENT_COLLECTION_DENIED: 没有集合 %r；有的是 %s。关系、文档和自我描述都是 '
+                             'state_heads/state_revisions 里的行；collection 照抄其中一个' % (collection, ', '.join(COLLECTIONS)))
             if not isinstance(query,dict) or projection is not None and not isinstance(projection,dict):
-                raise ValueError('DEVELOPMENT_QUERY_INVALID')
+                raise ValueError('DEVELOPMENT_QUERY_INVALID: filter 要是对象（给的是 %s），projection 要是对象或不写（给的是 %s）；'
+                                 '例如 filter {"kind": "x"}，projection {"text": 1}'
+                                 % (type(query).__name__, type(projection).__name__))
             if type(skip) is not int or skip<0 or type(limit) is not int or not 1<=limit<=50:
-                raise ValueError('DEVELOPMENT_PAGE_INVALID: skip >= 0, limit 1..50')
+                raise ValueError('DEVELOPMENT_PAGE_INVALID: skip 要是 0 或更大的整数，limit 要是 1..50 的整数；给的是 skip=%s，limit=%s'
+                                 % (str(skip)[:20], str(limit)[:20]))
             if sort is not None and (not isinstance(sort,dict) or any(v not in (1,-1) for v in sort.values())):
-                raise ValueError('DEVELOPMENT_SORT_INVALID: {field: 1 or -1}')
-            cursor=self.store.db[collection].find(query,projection)
-            if sort:cursor=cursor.sort(list(sort.items()))
-            rows=list(cursor.skip(skip).limit(limit))
-            if len(json.dumps(rows,ensure_ascii=False,default=str).encode())>262144:
-                raise ValueError('DEVELOPMENT_PAGE_TOO_LARGE')
+                raise ValueError('DEVELOPMENT_SORT_INVALID: sort 要写成 {字段: 1 或 -1}，例如 {"created_at": -1}；给的是 %s'
+                                 % json.dumps(sort, ensure_ascii=False, default=str)[:120])
+            try:
+                cursor=self.store.db[collection].find(query,projection)
+                if sort:cursor=cursor.sort(list(sort.items()))
+                rows=list(cursor.skip(skip).limit(limit))
+            except OperationFailure as exc:
+                # Her own filter/projection/sort, refused by Mongo: its short reason, never the server's full reply.
+                said=(exc.details or {}).get('errmsg') or str(exc).split(', full error:')[0]
+                raise ValueError('DEVELOPMENT_QUERY_INVALID: Mongo 拒绝了这个查询：%s；改 filter/projection/sort 再查'
+                                 % ' '.join(str(said).split())[:300]) from None
+            except BSONError as exc:
+                raise ValueError('DEVELOPMENT_QUERY_INVALID: 查询写不成 Mongo 文档（%s）；改 filter/projection/sort 再查'
+                                 % ' '.join(str(exc).split())[:200]) from None
+            size=len(json.dumps(rows,ensure_ascii=False,default=str).encode())
+            if size>self.PAGE_BYTES:
+                raise ValueError('DEVELOPMENT_PAGE_TOO_LARGE: 这一页 %d 行有 %.1f KiB，上限 %d KiB；limit 改小（比如 %d），'
+                                 '或用 projection 只取要的字段' % (len(rows), size/1024, self.PAGE_BYTES//1024,
+                                                             max(1, limit*self.PAGE_BYTES//size)))
             return {'database':self.store.name,'collection':collection,'skip':skip,'limit':limit,'rows':rows}
         try:
             result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
                 'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision']}})
         except RuntimeError as exc:
             if tool == 'development_write' and 'EEXIST' in str(exc):
-                raise ValueError('DEVELOPMENT_FILE_EXISTS: %s already exists; pass overwrite: true to replace it'
+                raise ValueError('DEVELOPMENT_FILE_EXISTS: %s 已经存在；要替换就加 overwrite: true，要保留就换个路径'
                                  % str(args.get('path'))[:200]) from None
             raise
         if tool == 'development_publish' and result.get('receipt_id'):
@@ -978,6 +999,24 @@ class NativeDevelopmentBridge:
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()
         return result
+
+
+# A coded refusal ("CODE: cause; what to do") is written for whoever reads it and goes out as it is.
+# Anything else is a fault in the program, named by its class; a brain calling a tool is told so,
+# because its arguments are not the cause and the same call will fail the same way.
+CODED = re.compile(r'[A-Z][A-Z0-9]*_[A-Z0-9_]+(?::|$)')
+TOOL_METHODS = frozenset({'tool', 'role_tool'})
+
+
+def error_text(method, exc, message=None):
+    message = str(exc) if message is None else message
+    if CODED.match(message):
+        return message
+    fault = type(exc).__name__ + (': ' + message if message else '')
+    if method in TOOL_METHODS:
+        return ('TOOL_FAULT: 程序内部出错（%s），不是参数写错；同样的调用会一样失败：'
+                '换个做法，或者把这一步没做成写进结果。' % fault[:600])
+    return fault
 
 
 # Host replies only complete a waiting Future: handled on the reader thread, never queued behind
@@ -1007,7 +1046,7 @@ class Dispatcher:
             for value in request.get('args', {}).get('secrets', {}).values():
                 if isinstance(value, str) and value:
                     message = message.replace(value, '[凭据已隐藏]')
-            worker.emit({'id': request['id'], 'error': type(exc).__name__ + ': ' + message})
+            worker.emit({'id': request['id'], 'error': error_text(request.get('method'), exc, message)})
 
     def handle(self, request):
         method = request.get('method')

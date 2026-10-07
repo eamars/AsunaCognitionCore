@@ -342,7 +342,7 @@ def test_a_known_sticker_resent_with_rewritten_metadata_is_still_known(store, mo
     # That md5 is known now: the next copy needs no download.
     assert '你认得：「白吃」' in vision.line_refs(row, store.config, known)
     # The same picture cannot go on her shelf twice.
-    with pytest.raises(Exception, match='STICKER_ALREADY_KEPT: 白吃'):
+    with pytest.raises(Exception, match='STICKER_ALREADY_KEPT: 在架子上叫「白吃」'):
         stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': copy, 'name': '又白吃', 'when': '同一张'}, store.config)
     # A shelf sticker kept before pictures were known gets its picture at startup.
     store.db.stickers.update_many({}, {'$unset': {'picture': 1}})

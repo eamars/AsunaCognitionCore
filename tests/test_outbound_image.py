@@ -15,7 +15,7 @@ import threading
 
 import pytest
 
-from asuna import outbound_media
+from asuna import outbound_media, role_tools
 from asuna.blobs import BlobStore
 from asuna.channels import Channels
 from asuna.coordinator import Coordinator
@@ -254,7 +254,7 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     # 主人自己的 dm 场景却把路由目标配成群：确定性撞 target_not_dm（配置错了也不静默发）
     channel_scene(store, QQ, person='A', target='group', kind='dm')
     link(store, QQ, LOCAL)
-    assert refused_turn(key='misroute', target='group') == {'ATTACH_TARGET_NOT_ALLOWED': 'target_not_dm'}
+    assert refused_turn(key='misroute', target='group') == {'ATTACH_TARGET_NOT_ALLOWED': role_tools.ATTACH_REASONS['target_not_dm'] + '；重试也一样，这回合只说话不带图'}
 
 
 def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_path):

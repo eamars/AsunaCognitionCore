@@ -197,7 +197,7 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     persona, trust = ep['persona'], trust_of(cls)
     first = opening(store, ep)
     if not can_send(first):
-        raise NoteRefused('NOTE_HOP_LIMIT', '这一轮是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）。')
+        raise NoteRefused('NOTE_HOP_LIMIT', '这一轮是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）；想说的就在这一轮里说。')
     found = allowed(store, ep['scene_id'], cls, first)
     place = _resolve(store, persona, found, args.get('to'), cls)
     if not place:
@@ -215,7 +215,8 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:
-        raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s。' % (KIND_WORDS[kind], MODE_WORDS[choices[0]]))
+        raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：mode 写 %s，或不写。'
+                          % (KIND_WORDS[kind], MODE_WORDS[choices[0]], choices[0]))
     if trust == UNTRUSTED:
         who = borrowed(store, ep['scene_id'], text, moment)
         if who:
@@ -223,27 +224,28 @@ def prepare(store, ep, cls, args, call_id, moment=None):
                                                     '要是别人托你的，写清是谁的意思。')
     sent_here = store.db.notes.count_documents({'from_episode': ep['_id']})
     if sent_here >= PER_TURN:
-        raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条，先到这里。' % PER_TURN)
+        raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
+                          % (sent_here, PER_TURN))
     since = (moment - timedelta(days=1)).isoformat()
     day = {'persona': persona, 'created_at': {'$gte': since}}
     if store.db.notes.count_documents(day) >= PER_DAY:
         raise NoteRefused('NOTE_DAY_LIMIT', '今天的便条（%d 张）写满了，明天再写。' % PER_DAY)
     if trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
             {**day, 'from_scene': ep['scene_id'], 'kind': 'home'}) >= PUBLIC_HOME_PER_SCENE:
-        raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往家里写的便条（%d 张）写满了。' % PUBLIC_HOME_PER_SCENE)
+        raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往家里写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)
     if trust == UNTRUSTED and kind == 'group':
         outside = {**day, 'trust': UNTRUSTED, 'kind': 'group'}
         if store.db.notes.count_documents(outside) >= PUBLIC_TOTAL:
-            raise NoteRefused('NOTE_OUTSIDE_LIMIT', '今天群和群之间的便条（%d 张）写满了。' % PUBLIC_TOTAL)
+            raise NoteRefused('NOTE_OUTSIDE_LIMIT', '今天群和群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_TOTAL)
         pair = {'$or': [{'from_scene': ep['scene_id'], 'to_scene': to_scene},
                         {'from_scene': to_scene, 'to_scene': ep['scene_id']}]}
         if store.db.notes.count_documents({**outside, **pair}) >= PUBLIC_PAIR:
-            raise NoteRefused('NOTE_PAIR_LIMIT', '今天这两个群之间的便条（%d 张）写满了。' % PUBLIC_PAIR)
+            raise NoteRefused('NOTE_PAIR_LIMIT', '今天这两个群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_PAIR)
     reply = first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
         {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
     hop = (reply.get('hop', 1) + 1) if reply else 1
     if hop > MAX_HOP:
-        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）。')
+        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一轮里说。')
     return {'_id': note_id, 'persona': persona, 'from_scene': ep['scene_id'], 'from_class': cls,
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,
             'trust': trust, 'mode': mode, 'hop': hop, 'reply_to': (reply or {}).get('_id'),

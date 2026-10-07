@@ -47,7 +47,8 @@ def available(config):
 def require(config):
     sandbox = chosen(config)
     if sandbox['backend'] == 'none':
-        raise PermissionError('SANDBOX_UNAVAILABLE: ' + sandbox['reason'])
+        raise PermissionError('SANDBOX_UNAVAILABLE: 这台宿主没有可用的沙箱（%s），命令跑不了；重试也一样：'
+                              '不跑命令能做的先做，要跑命令的那一步写进报告' % sandbox['reason'])
     return sandbox
 
 
@@ -56,7 +57,8 @@ def confine(config, argv, root):
     require(config)
     wrapped = _CONFINE['call'](list(argv), str(root))
     if not isinstance(wrapped, list) or not wrapped or not all(isinstance(arg, str) for arg in wrapped):
-        raise RuntimeError('SANDBOX_CONFINE_FAILED')
+        raise RuntimeError('SANDBOX_CONFINE_FAILED: 宿主没能给这个命令套上沙箱，命令没有运行；不是参数的问题，'
+                           '重试也一样：要跑命令的那一步写进报告')
     return wrapped
 
 

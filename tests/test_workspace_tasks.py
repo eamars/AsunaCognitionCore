@@ -45,7 +45,7 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         task = service.claim(ep['task_ids'][0])
         broker.bind('workspace', task, work)
         failed = broker.call('workspace', 'protected', 'write_file', {'path': 'notes/source.txt', 'text': '不应写入', 'overwrite': True})
-        assert failed['error'] == 'TASK_OPERATION_FAILED'
+        assert failed['error'].startswith('TASK_OPERATION_FAILED: PROTECTED_PATH: notes/source.txt 是只读的原始资料')
         assert 'PROTECTED_PATH' in failed['execution']['stderr']
         assert 'Traceback' in failed['execution']['stderr']
         assert (work / 'notes/source.txt').read_text(encoding='utf-8') == '原文保持不变'
@@ -213,3 +213,14 @@ def test_her_message_reaches_a_live_task_in_place_without_a_new_revision(store, 
         assert store.db.task_messages.count_documents({'task_id': task['_id']}) == 1 and len(steered) == 1
     finally:
         broker.close()
+
+
+def test_a_failed_file_operation_says_why_and_what_to_do(tmp_path):
+    from asuna.tasks import workspace_file
+    (tmp_path / 'big.txt').write_text('x' * 40000, encoding='utf-8')
+    (tmp_path / 'kept.txt').write_text('原文', encoding='utf-8')
+    big = workspace_file(tmp_path, [], 'read_file', {'path': 'big.txt'})['error']
+    assert big.startswith('TASK_OPERATION_FAILED: READ_LIMIT: big.txt 有 40000 字节') and 'sandbox_run' in big
+    assert 'overwrite=true' in workspace_file(tmp_path, [], 'write_file', {'path': 'kept.txt', 'text': '新'})['error']
+    assert 'list_files' in workspace_file(tmp_path, [], 'read_file', {'path': 'none.txt'})['error']
+    assert '相对路径' in workspace_file(tmp_path, [], 'read_file', {'path': '../outside.txt'})['error']

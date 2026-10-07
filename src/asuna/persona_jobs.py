@@ -72,21 +72,27 @@ class JobRunner:
         self.launcher = launcher or SandboxLauncher(store.config)
 
     def job(self, job_id):
-        for job in (self.store.config.get('persona_contribution') or {}).get('jobs') or []:
+        jobs = (self.store.config.get('persona_contribution') or {}).get('jobs') or []
+        for job in jobs:
             if job['id'] == job_id:
                 return job
-        raise DataError('JOB_UNKNOWN', job_id)
+        names = '、'.join(job['id'] for job in jobs)
+        raise DataError('JOB_UNKNOWN', '没有 job %r；%s' % (str(job_id)[:60], '有的是 ' + names + '，照抄其中一个' if names
+                                                          else '角色包没有声明任何 job，重试也一样'))
 
     def run(self, job_id, *, dry_run=True, args=None):
         """Returns status, exit code, counts and the report artifact id — never an excerpt."""
         job = self.job(job_id)
         if not self.launcher.available():
             from . import sandbox_backend
-            return {'status': 'unavailable', 'job': job_id, 'reason': 'no sandbox: ' + str(sandbox_backend.chosen(self.store.config)['reason'])}
+            return {'status': 'unavailable', 'job': job_id,
+                    'reason': '这台宿主没有可用的沙箱（%s），job 跑不了；重试也一样，写进报告'
+                              % sandbox_backend.chosen(self.store.config)['reason']}
         configured = persona_sources(self.store.config, self.persona)
         missing = [root for root in job['sources'] if root not in configured]
         if missing:
-            raise DataError('SOURCE_NOT_AUTHORIZED', ','.join(missing))
+            raise DataError('SOURCE_NOT_AUTHORIZED', '这个 job 要读的来源 %s 没有在本机配置里授权；重试也一样，写进报告'
+                            % '、'.join(missing))
         run_id = 'job-' + uuid.uuid4().hex[:16]
         out = (DATA / 'persona-jobs' / run_id / 'out').resolve()
         out.mkdir(parents=True)

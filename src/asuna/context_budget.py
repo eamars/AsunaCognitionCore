@@ -113,7 +113,9 @@ def note_gate(slug, before, after):
         return
     old, new = note_chars((before or {}).get('sections') or []), note_chars(after.get('sections') or [])
     if new > old and new > limit * NOTE_HARD_FACTOR:
-        raise DocumentError('NOTE_OVER_LIMIT', '%d 字，上限 %d 字' % (new, limit))
+        raise DocumentError('NOTE_OVER_LIMIT', '%s写完 %d 字，上限 %d 字，超过 %d 字就不能再加长'
+                            % ('群笔记' if slug.startswith('group:') else '「%s」' % slug, new, limit,
+                               int(limit * NOTE_HARD_FACTOR)))
 
 
 # ---- the whole turn -----------------------------------------------------------

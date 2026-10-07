@@ -163,7 +163,7 @@ class Store:
                 result = self.db[collection].replace_one({'_id':doc['_id'],'revision':expected},doc)
                 if result.modified_count != 1:
                     self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'STALE_REVISION'},doc.get('scope_key','operator'))
-                    raise Conflict('STALE_REVISION')
+                    raise Conflict('STALE_REVISION: 这条记录刚被别处改过，这次没有写进去；不是参数的问题：读一次最新的再做')
         except DuplicateKeyError as exc:
             self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
@@ -197,7 +197,7 @@ class Store:
     def authorize(self, scene_id: str, person_id: str) -> dict:
         scene = self.db.scenes.find_one({'_id':scene_id})
         if not scene or person_id not in scene['members']:
-            raise Denied('SCENE_MEMBERSHIP_DENIED')
+            raise Denied('SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代他做；重试也一样')
         return scene
 
     def identity(self, platform: str, account_id: str):

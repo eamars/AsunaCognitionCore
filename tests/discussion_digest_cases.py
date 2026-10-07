@@ -346,7 +346,7 @@ def case_cursor_and_argument_fences():
         raise AssertionError("P1-b 游标拿到 P1-c 应该被拒")
     except ValueError as exc:
         assert "DIGEST_CURSOR_INVALID" in str(exc), exc
-    for args, wanted in ((dict(FULL, scene_id=OTHER_SCENE), "DIGEST_ARGUMENT_DENIED:scene_id"),
+    for args, wanted in ((dict(FULL, scene_id=OTHER_SCENE), "DIGEST_ARGUMENT_DENIED: 不认识的参数 scene_id"),
                          (dict(FULL, topic="雾灯", query="周三"), "DIGEST_ARGUMENT_CONFLICT"),
                          (dict(FULL, since="昨天"), "INVALID_DIGEST_SINCE"),
                          (dict(FULL, limit=0), "INVALID_DIGEST_LIMIT"),

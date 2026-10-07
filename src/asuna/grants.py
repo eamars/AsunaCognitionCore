@@ -17,7 +17,7 @@ def workspace_grant(config, scene_id, person_id, *, required=True):
                         continue
                     if person_id == grant['person_id']: return grant
     if required:
-        raise Denied('WORKSPACE_NOT_AUTHORIZED')
+        raise Denied('WORKSPACE_NOT_AUTHORIZED: 这个人在这里没有授权的工作区，任务用不了工作区；重试也一样：不用工作区能做的先做，没做成的照实说')
     return {}
 
 

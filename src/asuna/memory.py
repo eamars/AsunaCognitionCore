@@ -15,6 +15,9 @@ except Exception:
 
 
 
+NOT_THIS_SCENE = 'UNDERSTANDING_SCOPE_PROMOTION_DENIED: 这份理解不属于这个对话（不是你的错）；重试也一样，下回合再更新'
+
+
 class MemoryService:
     def __init__(self,store:Store):self.store=store
 
@@ -27,7 +30,7 @@ class MemoryService:
         scope=episode['scope_key'];operation=episode['_id']+':understanding'
         scene=self.store.authorize(episode['scene_id'],episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
-            raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED')
+            raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
         if body.strip()=='不更新':
             result={'state':'NO_CHANGE'}
         else:
@@ -40,15 +43,15 @@ class MemoryService:
             # 那一份，或配置认定同一个人时的那一份——别的都算越权，不给「看起来连着」的错写。
             key=episode['manifest'].get('relationship_entity_key') or (entity+'|'+target_scope)
             if key not in {entity+'|'+target_scope,'relationship:'+episode['person_id']+'|'+scope}:
-                raise Denied('UNDERSTANDING_SCOPE_PROMOTION_DENIED')
+                raise Denied(NOT_THIS_SCENE)
             entity,_,target_scope=key.rpartition('|')
             if target_scope!=scope and (not linked or scope not in linked
                                         or not entity.startswith('relationship:')):
-                raise Denied('UNDERSTANDING_SCOPE_PROMOTION_DENIED')
+                raise Denied(NOT_THIS_SCENE)
             base_id=episode['manifest']['relationship_revision']
             base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
             # No record yet (everyone starts with none): her first understanding creates it.
-            if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT')
+            if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
             if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
             if base and body==base['content'].get('body'):
                 result={'state':'NO_CHANGE'}
@@ -91,7 +94,7 @@ class MemoryService:
         for key in monologue:
             if not self.store.db.memory_units.find_one({'_id':key,'episode_id':episode['_id'],
                     'scope_key':scope,'policy_epoch':episode['policy_epoch'],'status':'active'}):
-                raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT')
+                raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT: 这回合的心里话没对上这个对话（不是你的错）；重试也一样，下回合再更新')
         auto,skipped,stale=[],[],[]
         for key in episode.get('manifest',{}).get('selected',[]):
             if key in monologue:continue

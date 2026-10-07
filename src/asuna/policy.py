@@ -6,12 +6,15 @@ reason, sources and author. Credentials and run counters are not policy.
 """
 from __future__ import annotations
 
+import json
+
 from .evidence import canonical, sha
-from .persona_model import check_value, key_spec
+from .persona_model import check_value, key_spec, value_words, writable_keys
 from .state import Conflict, Denied, now
 
 SCOPE = 'global-safe'
 REFUSED_CLASSES = ('secret', 'counter')
+STALE = 'BASE_REVISION_STALE: 参数刚被别处改过（不是你的错）；再改一次就行'
 
 
 class PolicyStore:
@@ -48,11 +51,15 @@ class PolicyStore:
                 raise ValueError(f"POLICY_WHAT_REQUIRED: {item['key']}")
             spec = key_spec(self.model, item['key'])
             if spec is None:
-                raise Denied(f"POLICY_KEY_UNDECLARED: {item['key']}")
+                raise Denied("POLICY_KEY_UNDECLARED: 没有可以改的参数「%s」；能改的是：%s，照抄一个"
+                             % (item['key'], '、'.join(writable_keys(self.model))))
             try:
                 check_value(spec, item.get('value'))
             except ValueError as exc:
-                raise ValueError(f"{exc}: {item['key']}") from None
+                code = str(exc).split(':', 1)[0]
+                raise ValueError('%s: %s 给的是 %s，要的是%s；改成合适的值再写' % (
+                    code, item['key'], json.dumps(item.get('value'), ensure_ascii=False)[:80],
+                    value_words(spec))) from None
             out[item['key']] = {'value': item['value'], 'what': what, 'class': 'param'}
         return out
 
@@ -71,7 +78,7 @@ class PolicyStore:
         if current != base_revision_id:
             self.store.audit('policy:' + mutation_id, 'state.conflict', {'entity': self.entity,
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
-            raise Conflict('BASE_REVISION_STALE')
+            raise Conflict(STALE)
         params = self.read()[1] if head else {}
         params.update(changes)
         revision_id = sha(canonical({'mutation_id': mutation_id, 'entity': self.entity}))
@@ -91,5 +98,5 @@ class PolicyStore:
             # A concurrent writer moved the head first; this revision stays unreferenced.
             self.store.audit('policy:' + mutation_id, 'state.conflict', {'entity': self.entity,
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
-            raise Conflict('BASE_REVISION_STALE') from None
+            raise Conflict(STALE) from None
         return revision

@@ -123,6 +123,23 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 
 Core code, core prompts and example configs never name a persona or a platform.
 
+## Writing tool errors
+
+Every error a tool call can return is read by a model that has to act on it, so it says the cause and the fix:
+
+- Form: `CODE: 原因（带实际值）；怎么办`, in Chinese. The code comes first and stays stable; tests, logs and the
+  character brain's `WORDS` table (`role_tools.py`) key on it. A code has an underscore.
+- The cause carries the values the raise site knows: what was given, the limit, the allowed set.
+- The fix is concrete: the correction, the program list that holds the valid values (named as her context names
+  it), or, when no retry can help, `重试也一样` and what to do instead.
+- A condition that is not the caller's fault (a service missing, a task fenced off) says so.
+- A library error on a path driven by the caller's input is caught at that site and raised as a coded error with
+  the library's short message.
+- The worker sends a coded message as it is. Any other exception reaching a tool result is a program fault and
+  arrives as `TOOL_FAULT: 程序内部出错（Class: message）…`, which tells the caller its arguments are not the cause.
+- The character brain sees `WORDS[code] （CODE: detail）` for a code in the table, otherwise the message itself; a
+  `Refused` raised in `role_tools.py` is shown as written.
+
 ## Writing docs and recording decisions
 
 - Reference docs (`README*`, `INSTALL.md`, `RUN_ASUNA.md`, `NATIVE_PLUGIN.md`, `RUNTIME_API.md`, package and tool

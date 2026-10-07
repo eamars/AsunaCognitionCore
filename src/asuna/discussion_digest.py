@@ -39,7 +39,9 @@ try:                                  # 宿主内：按包加载
                                 query_history, _parse as _parse_stamp, _text as _norm,
                                 _scene_parts, _row_allowed, _outbound_time, _sink_times,
                                 _stamp, _hit as _history_hit, person_clause,
-                                scene_id_clause, _link_fields, bind_people)
+                                scene_id_clause, _link_fields, bind_people,
+                                _bounded_text as _checked_text, _bounded_int as _checked_int,
+                                _bad_stamp, _bad_flag)
 except Exception:                     # 同目录平铺加载（离线自检）也认
     try:
         from history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT,
@@ -47,7 +49,9 @@ except Exception:                     # 同目录平铺加载（离线自检）�
                                    TIME_SOURCE_SINK, query_history, _parse as _parse_stamp,
                                    _text as _norm, _scene_parts, _row_allowed, _outbound_time,
                                    _sink_times, _stamp, _hit as _history_hit, person_clause,
-                                   scene_id_clause, _link_fields, bind_people)
+                                   scene_id_clause, _link_fields, bind_people,
+                                   _bounded_text as _checked_text, _bounded_int as _checked_int,
+                                   _bad_stamp, _bad_flag)
     except Exception as exc:
         raise ImportError("discussion_digest needs the P1-b history_query module: %s" % exc)
 
@@ -805,19 +809,15 @@ _STAMP_SHAPE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9:.+Z-]{0,24})?$"
 
 
 def _bounded_text(value, limit, name):
-    if value is None:
-        return ""
-    if not isinstance(value, str) or len(value) > 4 * limit:
-        raise ValueError("INVALID_DIGEST_" + name)
-    return value
+    return _checked_text(value, limit, name, "INVALID_DIGEST_")
 
 
 def _bounded_int(value, low, high, name):
-    if value is None:
-        return None
-    if type(value) is not int or not low <= value <= high:
-        raise ValueError("INVALID_DIGEST_" + name)
-    return value
+    return _checked_int(value, low, high, name, "INVALID_DIGEST_")
+
+
+CURSOR_INVALID = ("DIGEST_CURSOR_INVALID: 这个 cursor 不是上一页整理结果的 next_cursor（抄错、截断，或是 "
+                  "query_authorized_history 的 cursor）；照抄上一页的 next_cursor，或去掉 cursor 从第一页整理")
 
 
 def _fingerprint(scene, topic, person, since, until, window_days, case_sensitive, include_semantic):
@@ -850,16 +850,16 @@ def _unwrap_cursor(value):
     try:
         raw = json.loads(base64.urlsafe_b64decode(str(value).encode("ascii")).decode("utf-8"))
     except Exception:
-        raise ValueError("DIGEST_CURSOR_INVALID")
+        raise ValueError(CURSOR_INVALID)
     if not isinstance(raw, dict) or raw.get("k") != "digest" or "f" not in raw:
-        raise ValueError("DIGEST_CURSOR_INVALID")
+        raise ValueError(CURSOR_INVALID)
     delivered = raw.get("d") or []
     state = raw.get("t") or {}
     if not isinstance(delivered, list) or not isinstance(state, dict):
-        raise ValueError("DIGEST_CURSOR_INVALID")
+        raise ValueError(CURSOR_INVALID)
     for key in ("frontier", "wanted", "window"):
         if key in state and not isinstance(state[key], list):
-            raise ValueError("DIGEST_CURSOR_INVALID")
+            raise ValueError(CURSOR_INVALID)
     return (raw.get("i"), _norm(raw.get("f"), 64),
             [_norm(mid, 80) for mid in delivered if mid], state)
 
@@ -900,30 +900,34 @@ class DiscussionDigestService:
         args = args if isinstance(args, dict) else {}
         unknown = set(args) - DIGEST_ARGUMENTS
         if unknown:
-            raise ValueError("DIGEST_ARGUMENT_DENIED:" + ",".join(sorted(unknown)))
+            raise ValueError("DIGEST_ARGUMENT_DENIED: 不认识的参数 %s；只收 %s"
+                             % ("、".join(sorted(unknown)), "、".join(DIGEST_TOOL["parameters"])))
         scene = self.store.db.scenes.find_one({"_id": task["scene_id"]})
         if (not isinstance(scene, dict) or scene.get("scope_key") != task["scope_key"]
                 or scene.get("policy_epoch") != task["policy_epoch"]):
-            raise Denied("DIGEST_SCENE_FENCE_MISMATCH")     # 场景与任务不同步就拒查，不猜
+            # 场景与任务不同步就拒查，不猜
+            raise Denied("DIGEST_SCENE_FENCE_MISMATCH: 这个任务的对话已经变了（换了纪元或范围），"
+                         "不是参数的问题，重试也一样；停下这一步，把没整理成写进结果")
         topic_arg, query_arg = args.get("topic"), args.get("query")
         if topic_arg is not None and query_arg is not None and topic_arg != query_arg:
-            raise ValueError("DIGEST_ARGUMENT_CONFLICT:topic/query")
+            raise ValueError("DIGEST_ARGUMENT_CONFLICT: topic %r 和 query %r 不一样，二者是同一个参数；"
+                             "只写 topic 一个（或两个写成同一个词）" % (str(topic_arg)[:60], str(query_arg)[:60]))
         topic = _bounded_text(topic_arg if topic_arg is not None else query_arg, 300, "TOPIC")
         person = _bounded_text(args.get("person"), 60, "PERSON")
         since = _bounded_text(args.get("since"), 40, "SINCE")
         until = _bounded_text(args.get("until"), 40, "UNTIL")
         for name, value in (("SINCE", since), ("UNTIL", until)):
             if value and not _STAMP_SHAPE.match(value):
-                raise ValueError("INVALID_DIGEST_" + name)
+                raise _bad_stamp("INVALID_DIGEST_", name, value)
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
         cursor = _bounded_text(args.get("cursor"), 1024, "CURSOR")
         case_sensitive = args.get("case_sensitive", True)
         if not isinstance(case_sensitive, bool):
-            raise ValueError("INVALID_DIGEST_CASE_SENSITIVE")
+            raise _bad_flag("INVALID_DIGEST_", "CASE_SENSITIVE", case_sensitive)
         include_semantic = args.get("include_semantic", True)
         if not isinstance(include_semantic, bool):
-            raise ValueError("INVALID_DIGEST_INCLUDE_SEMANTIC")
+            raise _bad_flag("INVALID_DIGEST_", "INCLUDE_SEMANTIC", include_semantic)
         # 围栏比对的是「任务场景 + 它按配置能只读的那些场景」：联动集合来自配置，不是工具参数。
         scene_doc = {"scene_id": scene["_id"], "scope_key": scene["scope_key"],
                      "policy_epoch": scene["policy_epoch"], "person": person}
@@ -932,7 +936,9 @@ class DiscussionDigestService:
                             window_days or DEFAULT_WINDOW_DAYS, case_sensitive, include_semantic)
         inner, stored, carried, state = _unwrap_cursor(cursor or None)
         if cursor and stored != mark:
-            raise ValueError("DIGEST_CURSOR_FILTER_MISMATCH")
+            raise ValueError("DIGEST_CURSOR_FILTER_MISMATCH: 这个 cursor 属于另一组筛选（topic、person、since、until、"
+                             "window_days、case_sensitive、include_semantic 有一项变了）；续页时其余参数照上一页原样写，"
+                             "换筛选就去掉 cursor 从第一页整理")
         notice = bind_people(self.store, scene, scene_doc, person)
         if notice:
             return {"degraded": False, "why": "person_unclear", "text": "[群讨论整理] " + notice,

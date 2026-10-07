@@ -215,3 +215,15 @@ test('T6.4 the action brain question runs as her turn in the idle role session w
   await actionTool;
 });
 
+
+test('a picture that cannot become an attachment says why, in a result the tool host accepts', async () => {
+  const value = { ref: 'att-1', image: { media_type: 'image/gif', data: Buffer.from('GIF89a').toString('base64') } };
+  const refused = Object.assign(new Error('unsupported'), { code: 'ATTACHMENT_TYPE_UNSUPPORTED' });
+  for (const ctx of [{ attachments: { saveImage: async () => { throw refused; } } }, {}]) {
+    const result = await attachImage(ctx, value);
+    assert.equal('image' in result, false, 'the inline bytes are dropped, not set to undefined');
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+    assert.match(result.visual, /^unavailable:(ATTACHMENT_TYPE_UNSUPPORTED|ATTACHMENT_SERVICE_MISSING)$/);
+    assert.match(result.note, /重试也一样/);
+  }
+});

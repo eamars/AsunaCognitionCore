@@ -2,7 +2,7 @@
 
 | Item | Content |
 | --- | --- |
-| Status | **Proposed (2026-10-07).** §2 is a survey of the code as it is. The launcher items marked *done* were built the same day. The owner decided §6.1 the same day; §6.2 is still open. |
+| Status | **Accepted (2026-10-07); not yet implemented beyond §2.2.** §2 is a survey of the code as it is. The owner decided every question in §6 the same day. |
 | Date | 2026-10-07 |
 | Author | The implementer (Claude), at the owner's request |
 | Relation | Builds on ADR-010 (distributable plugin, data folder) and ADR-015 (DSH's sandbox replaces WSL). Amends neither. |
@@ -113,7 +113,7 @@ The container uses the same launcher path, so there is one way to run Asuna:
   - A Caddy container, also on host networking, terminates HTTPS with Caddy's internal certificate authority. It serves the root certificate once over plain HTTP, and certificates are issued per connection, so no LAN address is written into the stack.
   - Caddy reverse-proxies to `localhost:8780` and rewrites `Host` and `Origin` to that loopback authority, so DSH's server-side fence accepts the request.
   - Ports 80 and 443 are already the existing DSH stack's. Asuna's Caddy takes a free HTTPS port (proposed: 8443; checked on the host with `ss` before deploying).
-  - Whether the DSH token gate is also removed is §6.2 Q6.
+  - The DSH token gate is removed on the LAN, as in that container (§6.1 Q6).
 - **The rest also follows that container:**
   - a non-root user;
   - `init`, a health check against the web port, and `restart: unless-stopped`;
@@ -152,11 +152,12 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 4. **Web access: as the owner's existing DSH container does it** (§3.3).
 5. **NapCat** already runs on that host; Asuna only needs its address.
 
-### 6.2 Still open
+6. **No login token on the LAN, as in the owner's existing DSH container.** The Asuna image applies the same build-time patch to DSH's client connection:
+   - the browser reports loopback;
+   - the page and RPC authentication checks accept every request;
+   - the build fails loudly if DSH's code no longer matches the patch.
 
-6. **The login token on the LAN.** The owner's DSH container patches DSH's client connection so the page needs no token and the browser reports loopback, which makes Settings → Models usable from the LAN HTTPS address. The LAN is then the access boundary.
-   - *Keep DSH's token (recommended for Asuna):* her page holds her private home chat and the owner's settings. No DSH patch, in line with §1 rule 1. Settings that DSH only allows from loopback are changed through an SSH tunnel to `localhost:8780`.
-   - *Same as the existing container:* no token on the LAN. Settings work from the LAN address. Asuna then carries a second DSH patch.
+   The LAN, and the host's firewall, are the access boundary. The owner chose this knowing her page holds her private home chat and their settings. It is the second DSH patch Asuna carries, after the reviewed rendering extension. Both are deployment patches, not changes to the plugin, so §1 rule 1 holds for the plugin itself.
 
 ### 6.3 The original questions (for the record)
 

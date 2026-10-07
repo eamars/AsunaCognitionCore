@@ -29,8 +29,13 @@ PREVIOUS_NAMES = 4
 LOOKALIKE_NOTES = 2
 ROLE_NOTES = {'owner': '群主', 'admin': '管理员'}
 ROLES = ('owner', 'admin', 'member')
-# What she writes to @ someone: their label, e.g. @[name #4] (the owner's may start with the owner word), or @#4.
-LABEL_MENTION = re.compile(r'@\s*(?:[^\s@\[\]#]{1,12}\s*)?\[([^\[\]#\n]*)#\s*(\d{1,6})\s*\]|@#(\d{1,6})')
+# A label as she sees it: [name #4].
+LABEL = r'\[(?P<name>[^\[\]#\n]*)#\s*(?P<handle>\d{1,6})\s*\]'
+# What she writes to @ someone: @ and their label, e.g. @[name #4] (the owner's may start with the owner word, and
+# the whole label may sit in one more pair of brackets), or @#4.
+LABEL_MENTION = re.compile(r'@\s*(?P<open>\[\s*)?(?:[^\s@\[\]#]{1,12}\s*)?' + LABEL + r'(?(open)(?:\s*\])?)'
+                           r'|@#(?P<bare>\d{1,6})')
+BARE_LABEL = re.compile(LABEL)
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
 
@@ -331,20 +336,38 @@ class People:
         return None
 
     def outbound(self, scene, text):
-        """Her @ of a label becomes the adapter's @ marker (@qq:<account>); the stored text keeps the label she wrote.
+        """Labels never leave the program; the stored text keeps what she wrote.
 
-        A label that names nobody here is sent as a plain @name, never as a number she guessed.
+        Her @ of a label becomes the adapter's @ marker (@qq:<account>); one that names nobody here is sent as a plain
+        @name, never as a number she guessed. A label without @ whose number is someone here becomes their name (the
+        name she wrote when the platform gives none, a real @ when neither is known); bracketed text with a number
+        that is nobody here is not a label and stays as it is.
         """
         by_handle = {str(d.get('handle')): d for d in self.roster(scene['_id']).values() if d.get('person') != self.self_id}
+        kind = channel_kinds.of(scene['_id'])
 
-        def swap(match):
-            doc = by_handle.get(match.group(2) or match.group(3))
+        def written(match):
+            name = ' '.join((match.group('name') or '').split())
+            return '' if name == UNKNOWN_NAME else name
+
+        def mention(match):
+            doc = by_handle.get(match.group('handle') or match.group('bare'))
             account = self.account_of(scene, doc) if doc else None
             if account:
-                return channel_kinds.of(scene['_id']).outbound_mention(account)
-            name = ' '.join((match.group(1) or '').split())
+                return kind.outbound_mention(account)
+            name = written(match) if match.group('handle') else ''
             return '@' + name if name else match.group(0).replace('#', '')
-        return LABEL_MENTION.sub(swap, text or '')
+
+        def name(match):
+            doc = by_handle.get(match.group('handle'))
+            if not doc:
+                return match.group(0)
+            shown = self.shown(doc) or written(match)
+            if shown:
+                return shown
+            account = self.account_of(scene, doc)
+            return kind.outbound_mention(account) if account else match.group(0).replace('#', '')
+        return BARE_LABEL.sub(name, LABEL_MENTION.sub(mention, text or ''))
 
     def authors_of(self, person, scene_ids):
         """Every stored author id in these scenes that is this person (aliases by configuration)."""

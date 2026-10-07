@@ -76,7 +76,7 @@ def addressees(store, scene, line):
     """The people her line is addressed to: whoever she @-tagged by label, and the author of the line she answered."""
     from .people import LABEL_MENTION
     people = People(store)
-    handles = {match.group(2) or match.group(3) for match in LABEL_MENTION.finditer(line.get('text') or '')}
+    handles = {match.group('handle') or match.group('bare') for match in LABEL_MENTION.finditer(line.get('text') or '')}
     found = {people.person(doc.get('person')) for doc in people.roster(scene['_id']).values()
              if str(doc.get('handle')) in handles and doc.get('person')}
     answered = store.db.messages.find_one({'_id': line.get('reply_to')}, {'author': 1, 'direction': 1}) or {}

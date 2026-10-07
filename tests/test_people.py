@@ -142,6 +142,19 @@ def test_her_label_mentions_reach_the_adapter_as_accounts(store):
     assert out == '@qq:20002 你来，@qq:20001 也看看，@qq:20002 再说一次，@没人 呢'
 
 
+def test_no_label_leaves_the_program(store):
+    """Owner 2026-10-08: her label for someone is hers; the group sees a real @ or a name, never [name #n]."""
+    scene = setup(store)
+    people = People(store)
+    head(people, scene, row(20001, 'hi', card='小林'))
+    head(people, scene, row(20002, 'hi'))                              # nothing known of their name yet
+    out = people.outbound(scene, '@[本机用户 [小林 #1]] 看看')        # the whole label in one more pair of brackets
+    assert out == '@qq:20001 看看'
+    out = people.outbound(scene, '[小林 #1] 说得对，[还不知道名字 #2] 也在，[v2 #9] 是版本号，[没人 #3]')
+    assert out == '小林 说得对，@qq:20002 也在，[v2 #9] 是版本号，[没人 #3]'
+    assert people.outbound(scene, '@[Ghost #999] 你好') == '@Ghost 你好'
+
+
 def test_only_the_verified_profile_media_and_group_name_are_kept():
     from asuna.channels import kept_raw
     event = {'person_id': 'qq:20002', 'channel': {'id': 'qq', 'sender_id': '20002', 'target': {'type': 'group', 'id': GROUP}}}

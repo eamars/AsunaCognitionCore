@@ -47,9 +47,9 @@ Asuna has only ever run on the owner's Windows machine. The owner wants it to ru
 
 | Item | Where | What changes |
 | --- | --- | --- |
-| Tests confine commands only with DSH's Windows ACL runner, so on Linux the sandboxed tests are skipped | `tests/conftest.py` (`ACL_RUNNER`, `HOST_SANDBOX`) | Ask DSH's sandbox provider (`dsh-sandbox-local`) for the wrapped argv through a small Node helper, the same way the host does. This works with any runner DSH picks. |
+| Tests confined commands only with DSH's Windows ACL runner, so on Linux the sandboxed tests were skipped | `tests/conftest.py` | **Done (M1):** `tests/dsh_sandbox.mjs` mounts DSH's own provider (`dsh-sandbox-local`) and returns the wrapping for a write root, once per root. It works with any runner DSH picks. On Windows it is the same ACL runner as before |
 | The launcher always binds `127.0.0.1` | `tools/asuna-launch.mjs` | Nothing to change. In a host-network container, a reverse proxy on the host reaches `127.0.0.1` (§3.3). |
-| `check_dsh_release.py` calls `npm.cmd` | operator tool | Use `npm` off Windows. |
+| `check_dsh_release.py` called `npm.cmd` | operator tool | **Done (M1):** `npm` off Windows |
 | `fingerprint_models.py` reads model weights through WSL | operator tool, for the owner's independent model server | Leave as it is. It is not part of Asuna's runtime, and the model server is the owner's. |
 | `build_dsh_inline.mjs` goes through PowerShell on Windows | builds the pinned rendering extension from a dedicated DSH checkout | It already has a non-Windows branch. Check it on Linux once, or take the built artifacts from the GitHub Release (ADR-010). |
 | The note that `.runtime` needs full control | RUN_ASUNA, ADR-015 | This is Windows-only (the ACL runner). On Linux the runner needs user namespaces (§3.3). |
@@ -143,7 +143,7 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | Step | Content | Evidence |
 | --- | --- | --- |
 | M0 | The owner answers §6. Update this ADR | — |
-| M1 | Portability fixes from §2.3: tests confine through DSH's sandbox provider, launcher `--host`, `check_dsh_release.py`, the contract test that lists platform branches | Full test suite on Windows, unchanged |
+| M1 | **Done 2026-10-07.** Portability fixes from §2.3: tests confine through DSH's sandbox provider, `check_dsh_release.py`, the contract test that lists the files allowed to branch on the OS (`tests/test_platform_branches.py`), and the no-Docker-in-core test | Windows: 376 Python and 50 native tests pass; the sandbox test that was skipped now runs |
 | M2 | A Linux machine (§6 Q1): install by §3.2, the sandbox probe's enforcement level, the full Python and native test suites, one start with synthetic inference (AGENTS.md: no real model unless authorized) | Test reports, the probe result, the Web page loading |
 | M3 | Docker image and compose file in `deploy/docker/` by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint. The Windows install is checked again without Docker | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
 | M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |

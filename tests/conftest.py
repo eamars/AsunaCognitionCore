@@ -12,16 +12,35 @@ from asuna import channel_kinds
 QQ_CHANNEL={'python':ROOT/'packages'/'napcat-qq'/'python','module':'napcat_qq'}
 channel_kinds.load([QQ_CHANNEL])
 
-# Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does
-# on this machine: DSH's Windows runner, writes confined to the given root. Without it, sandboxed features are off.
-ACL_RUNNER=ROOT/'node_modules'/'@deepseek-ai'/'dsh-sandbox-windows-acl'/'lib'/'runner.js'
-HOST_SANDBOX=os.name=='nt' and ACL_RUNNER.exists() and bool(shutil.which('node'))
+# Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does:
+# DSH's own provider (tests/dsh_sandbox.mjs) picks this OS's runner, writes confined to the given root (ADR-019: the
+# plugin inherits DSH's platform layer). Without a usable runner, sandboxed features are off. One wrap per root.
+_WRAPS={}
+
+
+def _dsh_wrap(root):
+    import json,subprocess
+    if root not in _WRAPS:
+        node=shutil.which('node')
+        out=subprocess.run([node,str(Path(__file__).with_name('dsh_sandbox.mjs')),root],cwd=ROOT,capture_output=True,
+                           text=True,timeout=60).stdout if node else ''
+        try:_WRAPS[root]=json.loads(out or '{}')
+        except ValueError:_WRAPS[root]={'error':out[-300:]}
+    return _WRAPS[root]
+
+
+def _probe():
+    import tempfile
+    return 'prefix' in _dsh_wrap(tempfile.gettempdir())
+
+
+HOST_SANDBOX=_probe()
 
 
 def host_confine(argv,root):
-    import tempfile
-    return [shutil.which('node'),str(ACL_RUNNER),'--workspace',str(root),'--temp',tempfile.gettempdir(),
-            '--mode','workspace-write','--',*argv]
+    wrap=_dsh_wrap(str(root))
+    if 'prefix' not in wrap:raise RuntimeError('SANDBOX_UNAVAILABLE: '+wrap.get('error',''))
+    return [*wrap['prefix'],*argv,*wrap['suffix']]
 
 
 @pytest.fixture(autouse=True)

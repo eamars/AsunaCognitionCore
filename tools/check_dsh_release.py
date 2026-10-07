@@ -1,9 +1,9 @@
 """Read the public release tag without changing the project or global runtime."""
-import json,subprocess,uuid
+import json,os,subprocess,uuid
 from asuna.config import ROOT
 from asuna.evidence import Evidence,write_json
 ev=Evidence(ROOT/'reports'/('dsh-release-check-'+uuid.uuid4().hex[:10]))
-command=['npm.cmd','view','@deepseek-ai/dsh','dist-tags','--registry=https://registry.npmjs.org','--json']
+command=['npm.cmd' if os.name=='nt' else 'npm','view','@deepseek-ai/dsh','dist-tags','--registry=https://registry.npmjs.org','--json']
 p=subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=60)
 tags=json.loads(p.stdout) if p.returncode==0 else {}
 installed=json.loads((ROOT/'node_modules/@deepseek-ai/dsh/package.json').read_text())['version']

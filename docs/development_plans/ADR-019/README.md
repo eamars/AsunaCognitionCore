@@ -2,7 +2,7 @@
 
 | Item | Content |
 | --- | --- |
-| Status | **Implemented through M3 (2026-10-07); M4 docs and M5 owner review open.** 一之瀬アスナ runs as a Portainer stack on the owner's Docker host, and the owner tested that she answers. The owner decided every question in §6. |
+| Status | **Implemented (2026-10-07).** M5: the owner reviewed her on the real page and found her working. 一之瀬アスナ runs as a Portainer stack on the owner's Docker host, and the owner tested that she answers. The owner decided every question in §6. |
 | Date | 2026-10-07 |
 | Author | The implementer (Claude), at the owner's request |
 | Relation | Builds on ADR-010 (distributable plugin, data folder) and ADR-015 (DSH's sandbox replaces WSL). Amends neither. |
@@ -146,7 +146,7 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | M1 | **Done 2026-10-07.** Portability fixes from §2.3: tests confine through DSH's sandbox provider, `check_dsh_release.py`, the contract test that lists the files allowed to branch on the OS (`tests/test_platform_branches.py`), and the no-Docker-in-core test | Windows: 376 Python and 50 native tests pass; the sandbox test that was skipped now runs |
 | M2 | **Done 2026-10-07.** On the owner's Docker host (§6.1), in the image of `deploy/docker/` (written 2026-10-07): the full Python and native test suites against a throwaway MongoDB container (never the live one, §2.4), the sandbox probe's enforcement level, and one start of the demo profile with every model route on a closed port (AGENTS.md: synthetic inference) | Linux: 375 passed and 1 skipped (pytest), 50/50 native. DSH picked Landlock (partial). Found and fixed on the way: `lockf` → `flock`, time-zone-dependent tests, missing data folder in two native tests, two lockfiles out of step (npm workspaces, `tzdata` in `uv.lock`, now guarded by `test_lock_files`), and the shallow-clone hash length in the inline extension check |
 | M3 | **Done 2026-10-07.** Docker image and compose file in `deploy/docker/` by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint. The Windows install is checked again without Docker | Stack `asuna-ichinose`: her own MongoDB, her container (healthy) and Caddy. 8790 on loopback only; HTTPS 8443 answers 200 on the LAN with no token. Persona 一之瀬アスナ (`packages/ichinose-asuna`, a new persona package) on the owner's model server, local chat only; the owner tested that she answers |
-| M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
+| M4 | **Done 2026-10-07.** RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
 | M5 | The owner's review on the real page, on Linux | — |
 
 ## 6. Decisions

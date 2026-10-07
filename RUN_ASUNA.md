@@ -31,6 +31,37 @@ node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
 .\start-asuna.cmd
 ```
 
+On Linux or macOS the steps are the same; only the shell differs (ADR-019: Asuna inherits DSH's platform layer and assumes no OS). DSH's sandbox needs unprivileged user namespaces for bubblewrap, or Landlock (Linux 5.13+), which it falls back to; Ubuntu 23.10 and later restrict user namespaces through AppArmor, so DSH uses Landlock there unless `bwrap` is allowed.
+
+```bash
+npm ci
+uv sync
+node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
+.venv/bin/python tools/pack_plugins.py --persona packages/xiaoman --channel packages/napcat-qq --channel packages/dsh-peer
+.venv/bin/python tools/setup_native_profile.py --persona-package packages/xiaoman --channel-package packages/napcat-qq --channel-package packages/dsh-peer --shared-action-model
+./start-asuna.sh
+```
+
+As a service on a Linux machine, a systemd unit runs the same entry under an unprivileged user (adjust the user and the checkout path):
+
+```ini
+[Unit]
+Description=Asuna (native DSH Web host)
+After=network-online.target
+
+[Service]
+User=<user>
+WorkingDirectory=<checkout>
+Environment=TZ=<IANA time zone>
+ExecStart=<checkout>/start-asuna.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+In Docker, deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): the image holds the toolchain, the checkout lives on a volume, and the container starts through the same launcher. Docker is one deployment layer on top of DSH; nothing above needs it.
+
 Pack and install once by hand (the commands above); after that, each start installs the checkout when it changed (below). The core names no persona and no platform: pass the persona package and each channel package to both the packer and the installer. A configured channel (`channels.qq`) needs its channel package installed; Core reports `CHANNEL_PLUGIN_NOT_INSTALLED` otherwise.
 
 The installer does not initialize, reset, copy or replace Mongo. `--shared-action-model` seeds independent character/action references pointing to the available action model. Omit it on a new profile to seed separate routes. Reinstallation preserves saved profile settings; change routes in the native settings card after initial installation.

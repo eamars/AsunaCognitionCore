@@ -28,4 +28,4 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 016 | QQ faces and her own sticker shelf | Implemented 2026-10-06 (`stickers.py`, napcat-qq 0.6.0). |
 | 017 | Home and public: what crosses the boundary (public words reach home only through her own review) | Rule and tightening implemented 2026-10-06; owner errand proposed. |
 | 018 | Notes between her own conversations (trusted from home, cautioned and tool-limited from public) | Implemented 2026-10-07 (M1–M4); live review on the Web page pending. |
-| 019 | Linux deployment, with the plugin inheriting DSH's platform layer (and Docker) | Implemented through M3 2026-10-07: launcher sync, portability fixes, `deploy/docker/`; 一之瀬アスナ runs as a Portainer stack on Linux. M4 docs and M5 review open. |
+| 019 | Linux deployment, with the plugin inheriting DSH's platform layer (and Docker) | Implemented 2026-10-07: launcher sync, portability fixes, `deploy/docker/`, Linux docs; 一之瀬アスナ runs as a Portainer stack on Linux, reviewed by the owner. |

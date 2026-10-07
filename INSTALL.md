@@ -12,8 +12,10 @@ order; every step says how to check it worked.
 - **A persona package.** Asuna is persona-agnostic: the persona (who she is, her voice, her seeds) is a separate
   package the owner provides. None is published with the release.
 - **An embedding endpoint** on the local machine or network (an OpenAI-compatible `/embeddings`), for memory recall.
-- Nothing extra for the sandbox: commands run under DSH's own sandbox (on Windows the account running DSH needs
-  full control of the data folder, which the default location under the DSH home already has). Without a usable
+- Nothing extra for the sandbox: commands run under DSH's own sandbox. On Windows the account running DSH needs
+  full control of the data folder, which the default location under the DSH home already has. On Linux DSH uses
+  bubblewrap where unprivileged user namespaces are allowed, else Landlock (Linux 5.13+); in a container, Landlock
+  needs no extra privileges. Without a usable
   Host sandbox, running code, self-development and channel adapters are off, and Asuna says so.
 
 ## 1. Install the plugins

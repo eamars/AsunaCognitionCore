@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from .caught_up import said_at
 from .config import ago, character_id, excerpt, prompt_path
 
 # Why she is being asked, in words; any other wake reason runs the full turn as before.
@@ -22,6 +23,7 @@ GATED = {
     'chain': '群里在跟队形：好几个人接连发了同一句或同一张，没人叫你',
     'awaited_answer': '你刚在这里问了人、说了在等回话；这句没 @ 你也没引用你，可能是在回你，也可能不是',
     'watched': '这个人在你的 watch 名单上，他在这里说话了；这句没 @ 你，不一定是对你说的',
+    'catchup_mention': '这句是断线时漏收、恢复后补读进来的旧话，当时 @ 了你或回了你；那会儿你没看到，现在接不接由你定',
 }
 CHOICES = {'接话': 'join', '不理': 'quiet'}
 # Catch-up: the lines since she last spoke here, reaching back at least 10 and at most 60 minutes.
@@ -57,13 +59,13 @@ def recent(store, scene, until_seq, now_ts=None):
         {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'], 'scene_seq': {'$lte': until_seq},
          '$or': [{'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]},
         {'_id': 1, 'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'received_at': 1, 'receipt_at': 1,
-         'scene_id': 1, 'event': 1}).sort('scene_seq', -1).limit(MAX_LINES))
+         'occurred_at': 1, 'scene_id': 1, 'event': 1}).sort('scene_seq', -1).limit(MAX_LINES))
     floor = now_ts - WINDOW_MAX_MINUTES * 60
     always = now_ts - WINDOW_MIN_MINUTES * 60
     since = (mine or {}).get('scene_seq') or 0
     people, kept, used = People(store), [], 0
     for row in rows:                                         # newest first, then put back in order
-        at = _seconds(row.get('received_at') or row.get('receipt_at'))
+        at = _seconds(said_at(row))
         if at is None or at < floor or (row['scene_seq'] <= since and at < always):
             break
         if row['direction'] == 'outbound':

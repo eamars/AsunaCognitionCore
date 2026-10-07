@@ -13,6 +13,11 @@ with Core (`registerChannel`).
 - `skills/qq-napcat-adapter/` is the adapter's skill; it joins her skill directories.
 - The people a group message @-mentions are looked up like its sender (`get_group_member_info`, the same refresh and
   cache windows, at most three lookups per message) and ride on the event as `raw.asuna_mentioned`.
+- After a gap (the adapter starting, or its event socket coming back) the messages missed on the routes
+  `adapter_config.catchup.routes` names are fetched from history (`get_group_msg_history` /
+  `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder, at most
+  `lookback_hours` back, 1–6) and fed oldest first through the usual inbound path, marked `raw.asuna_catchup`.
+  Off by default.
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.
@@ -50,7 +55,9 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      Core's channel API (`127.0.0.1`, `channel_port`, default 8766);
    - `adapter_config.napcat`: `{"transport": "websocket_forward", "url": "ws://<ip>:<alias port>", "token": "<NapCat
      access token>"}`;
-   - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`.
+   - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
+   - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
+     catch-up after a gap for those routes (the route ids are the keys of `channels.qq.routes`).
    With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
    restarts with her from then on; after an `integration_stop` it stays stopped until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.

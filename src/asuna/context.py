@@ -10,7 +10,7 @@ from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
 from .familiarity import NO_UNDERSTANDING, words as familiarity_words
-from . import attend
+from . import attend, caught_up
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -91,7 +91,7 @@ def catch_up(store, scene, rows, now_ts=None):
     floor, always = now_ts - attend.WINDOW_MAX_MINUTES * 60, now_ts - attend.WINDOW_MIN_MINUTES * 60
     kept = []
     for index, row in enumerate(rows):
-        at = attend._seconds(row.get('received_at') or row.get('receipt_at'))
+        at = attend._seconds(caught_up.said_at(row))
         recent = at is not None and at >= floor and (row.get('scene_seq', 0) > since or at >= always)
         if index >= 12 and not recent:
             break
@@ -229,7 +229,8 @@ class ContextBuilder:
             history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
-            'attachment':1,'attachment_skipped':1}   # 附件位：只多带这两个小字段，字节仍在 BlobStore
+            'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
+            'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1}   # a caught-up line shows when it was said
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -243,9 +244,10 @@ class ContextBuilder:
         else:
             zone=schedule_rules.scene_timezone(self.store.config,scene)
             for row in history:                  # no raw times: when it was said, on her clock face
-                said=row.pop('received_at',None); delivered=row.pop('receipt_at',None)
-                stamp=schedule_rules.line_stamp(zone,said or delivered)
-                if stamp:row['at']=stamp
+                said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
+                for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
+                stamp=schedule_rules.line_stamp(zone,said)
+                if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
         self._reply_context(history, scene)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
@@ -619,6 +621,9 @@ class ContextBuilder:
                     'what': '同一张表情包或图' if chain.get('media') else excerpt(chain.get('what'), 60),
                     'people': '%d 个人接连发了这个' % int(chain.get('people') or 0),
                     'note': CHAIN_NOTE}
+            elif group.get('wake_reason') == 'catchup_mention':
+                continuity['caught_up_from_program'] = ('这句是断线时漏收、恢复后补读进来的旧话，当时 @ 了你或回了你；'
+                    '它是什么时候说的看行上的时间。答之前先看群里后来怎么样了，现在还用不用答。')
             elif group.get('wake_reason') == 'awaited_answer':
                 # Her own await_answer on her last line here: what she said she was waiting for, in her words.
                 mine = self.store.db.messages.find_one({'scene_id':scene['_id'],'direction':'outbound',

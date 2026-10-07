@@ -57,6 +57,9 @@ def kept_raw(event, raw, mentioned=None):
         kept[MEDIA_KEY] = raw[MEDIA_KEY]
     if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
         kept['group_name'] = ' '.join(raw['group_name'].split())[:60]
+    from .caught_up import CATCHUP_KEY, mark
+    if mark(raw):
+        kept[CATCHUP_KEY] = mark(raw)                         # a line fetched from history after a gap (caught_up.py)
     own = raw.get('asuna_self')
     if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
             and own.get('role') in ('owner', 'admin', 'member'):
@@ -135,6 +138,8 @@ def group_context(store, route, body, event_id, person_id=None):
             '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
                     {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': character_id(store.config)}]})
     reason = 'mentioned_account' if body['account_id'] in mentions else None
+    from .caught_up import stale as _stale
+    late = _stale(body.get('raw'), body.get('occurred_at'))     # caught up after a gap and no longer fresh
     topic = topic_via = None
     if parent:
         previous = parent.get('event', {}).get('group_context', {})
@@ -154,8 +159,10 @@ def group_context(store, route, body, event_id, person_id=None):
     if not reason and called_by_name(store, body.get('text')):
         # Her name without an @: the relevance gate decides whether that was meant for her (attend.py).
         reason = 'name_called'
-    if not reason and person_id and awaited_answer(store, scene, person_id, mentions, reply):
+    if not reason and person_id and not late and awaited_answer(store, scene, person_id, mentions, reply):
         reason = 'awaited_answer'          # one look, through the relevance gate (attend.py)
+    if late and reason in ('mentioned_account', 'reply_to_character'):
+        reason = 'catchup_mention'         # an old @ or reply to her asks her first (attend.GATED)
     if topic is None:
         topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
     return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,

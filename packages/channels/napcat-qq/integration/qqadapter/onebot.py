@@ -52,6 +52,7 @@ class OneBot:
         self.counters = counters
         self.on_event = on_event
         self.on_late_ack = on_late_ack
+        self.on_up = None             # (path, gap seconds or None the first time): the adapter's catch-up trigger
         self.log = log
         self.late_ttl = late_ttl
         self._pending = {}
@@ -131,6 +132,11 @@ class OneBot:
         self.counters.set("ws_%s_up" % path.strip("/"), 1)
         self.counters.inc("ws_%s_reconnects" % path.strip("/"))
         self.log("WS_UP path=%s gap_seconds=%s" % (path, gap if gap is not None else "first"))
+        if self.on_up is not None:
+            try:
+                self.on_up(path, gap)
+            except Exception as exc:
+                self.log("WS_UP_HOOK_ERROR type=%s" % type(exc).__name__)
 
     def _on_down(self, path, code):
         if self._up[path]:

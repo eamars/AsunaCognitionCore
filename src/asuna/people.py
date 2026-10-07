@@ -419,7 +419,10 @@ class People:
         doc = self.entry(scene, row['author'], row)
         # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
         from .schedule_rules import line_stamp, scene_timezone
-        stamp = line_stamp(scene_timezone(self.config, scene), row.get('received_at'))
+        from .caught_up import CAUGHT_UP_WORD, is_caught_up, said_at
+        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
+        if stamp and is_caught_up(row):
+            stamp += '（%s）' % CAUGHT_UP_WORD
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')]
         parent_id = group.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},

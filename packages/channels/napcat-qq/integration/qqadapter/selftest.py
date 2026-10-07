@@ -1364,6 +1364,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_peer_timekeeping(rep, gcfg, root)
     _check_peers(rep, gcfg, root)
     _check_lock_and_spool(rep, gcfg, root)
+    _check_catchup(rep, gcfg, root)
     if live:
         adapter = Adapter(cfg, root)
         _check_live(rep, adapter)
@@ -1375,6 +1376,43 @@ def run(cfg, data_dir, live=True, live_config=True):
     observer.journal.write_health(observer.health_snapshot())
     print("SELFTEST_SUMMARY pass=%d fail=%d skip=%d" % (rep.passed, rep.failed, rep.skipped), flush=True)
     return 0 if rep.failed == 0 else 1
+
+
+def _check_catchup(rep, gcfg, root):
+    """Catch-up (catchup.py) over a recorded history page: only a named route is fetched, rows reach the spool
+    through the usual gate oldest first and marked, her own line and a non-member's are dropped, and a
+    second run spools nothing new (the local dedup)."""
+    from .catchup import CATCHUP_KEY
+    adapter = Adapter(gcfg, os.path.join(root, "catchup"), peer_mode="off")
+    group = fixtures.GROUPS[0]
+    route = gcfg.route_for_group(group).route_id
+    now = int(time.time())
+    page = [_group_event(gcfg, group, "900000101", 9003, time=now - 300),
+            _group_event(gcfg, group, "900000102", 9001, time=now - 900),
+            _group_event(gcfg, group, gcfg.napcat["account_id"], 9002, time=now - 600),
+            _group_event(gcfg, group, OUTSIDER, 9004, time=now - 200)]
+    for row in page:
+        row["message_seq"] = row["message_id"]
+    calls = []
+
+    def history(action, params=None, timeout=15.0, meta=None):
+        calls.append((action, dict(params or {})))
+        return {"retcode": 0, "data": {"messages": [dict(r) for r in sorted(page, key=lambda r: r["message_seq"])]}}
+    adapter.onebot.api_call = history
+    adapter.catchup.routes = frozenset([route])
+    adapter.catchup.run("startup")
+    spooled = [adapter.journal.read_json(p)["envelope"] for p in adapter.journal.spool_list("inbound")]
+    rep.check("catchup_named_route_only", [c[0] for c in calls] == ["get_group_msg_history"]
+              and calls[0][1].get("group_id") == int(group) and calls[0][1].get("disable_get_url") is True,
+              json.dumps(calls, sort_keys=True)[:300])
+    rep.check("catchup_oldest_first_marked_gate_kept",
+              [e["event_id"] for e in spooled] == ["9001", "9003"]
+              and all(e["raw"].get(CATCHUP_KEY, {}).get("reason") == "startup" for e in spooled),
+              json.dumps([e["event_id"] for e in spooled]))
+    rep.check("catchup_cursor_moves_with_accepted_lines",
+              adapter.catchup.cursor(route).get("seq") == 9003, json.dumps(adapter.catchup.cursor(route)))
+    adapter.catchup.run("reconnect")
+    rep.check("catchup_second_run_adds_nothing", len(adapter.journal.spool_list("inbound")) == len(spooled))
 
 
 def _check_lock_and_spool(rep, cfg, root):
@@ -1524,7 +1562,8 @@ def _restore_tz(previous):
         os.environ.pop("TZ", None)
     else:
         os.environ["TZ"] = previous
-    time.tzset()
+    if hasattr(time, "tzset"):                # Windows has none: _force_tz changed nothing there
+        time.tzset()
 
 
 def _rename_needs_fresh_lookup(cfg, store):

@@ -126,6 +126,7 @@ class Config:
         self.host = self._host(adapter.get("host"))
         self.routes = self._routes(adapter.get("routes"))
         self.media_mode = self._media_mode(adapter.get("media_mode"))
+        self.catchup_routes, self.catchup_lookback_hours = self._catchup(adapter.get("catchup"), self.routes)
         self._cross_check()
 
     # ---- sections -------------------------------------------------------
@@ -137,6 +138,29 @@ class Config:
         if value not in ("full", "annotate", "off"):
             raise ConfigError("adapter.media_mode %r unsupported (need full|annotate|off)" % (value,))
         return value
+
+    @staticmethod
+    def _catchup(node, routes):
+        """(route ids caught up after a gap, look-back hours); absent means off (catchup.py)."""
+        if node is None:
+            return frozenset(), 6
+        if not isinstance(node, dict):
+            raise ConfigError("adapter.catchup must be an object {routes, lookback_hours}")
+        wanted = node.get("routes", [])
+        if wanted == "all":
+            chosen = frozenset(routes)
+        elif isinstance(wanted, list) and all(isinstance(r, str) for r in wanted):
+            unknown = sorted(set(wanted) - set(routes))
+            if unknown:
+                raise ConfigError("adapter.catchup.routes names unknown routes %s (routes are %s)"
+                                  % (",".join(unknown), ",".join(sorted(routes))))
+            chosen = frozenset(wanted)
+        else:
+            raise ConfigError('adapter.catchup.routes must be "all" or a list of route ids')
+        hours = node.get("lookback_hours", 6)
+        if isinstance(hours, bool) or not isinstance(hours, int) or not 1 <= hours <= 6:
+            raise ConfigError("adapter.catchup.lookback_hours %r unsupported (need an integer 1..6)" % (hours,))
+        return chosen, hours
 
     @staticmethod
     def _endpoints(node):
@@ -294,7 +318,7 @@ class Config:
         group_routes = [r for r in self.routes.values() if r.message_type == "group"]
         return (
             "account=%s shared_account=%s napcat=%s(%s) host=%s(%s) channel=%s "
-            "routes=%s allowed_private=%s allowed_groups=%s group_members=%s media_mode=%s"
+            "routes=%s allowed_private=%s allowed_groups=%s group_members=%s media_mode=%s catchup=%s"
             % (
                 self.napcat["account_id"],
                 self.napcat["shared_account"],
@@ -308,6 +332,8 @@ class Config:
                 ",".join(self.allowed_groups) or "-",
                 ",".join("%s:%d" % (r.route_id, r.member_count) for r in sorted(group_routes, key=lambda r: r.route_id)) or "-",
                 self.media_mode,
+                ("%s/%dh" % (",".join(sorted(self.catchup_routes)), self.catchup_lookback_hours)
+                 if self.catchup_routes else "off"),
             )
         )
 

@@ -109,7 +109,8 @@ def move_secrets(core):
     return moved
 
 
-def profile_patch(config, config_path, persona, shared_action_model=False, profile='asuna-native', channels=()):
+def profile_patch(config, config_path, persona, shared_action_model=False, profile='asuna-native', channels=(),
+                  channel_admission=None):
     providers, routes = {}, {}
     for lane, source in (('character', 'executor' if shared_action_model else 'character'), ('action', 'executor')):
         model = config[source]
@@ -141,7 +142,9 @@ def profile_patch(config, config_path, persona, shared_action_model=False, profi
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
             'python': sys.executable, 'persona': config['chat']['persona'], 'routes': routes,
-            'deployment': export_settings(config)['deployment']}},
+            'deployment': export_settings(config)['deployment'],
+            # A first choice only: a value saved on the settings card wins over these defaults.
+            **({'channelAdmission': channel_admission} if channel_admission else {})}},
     ]
 
 
@@ -154,6 +157,8 @@ def main():
                         help='channel package directory, e.g. packages/channels/napcat-qq (repeatable; packed like the persona)')
     parser.add_argument('--profile', default='asuna-native', help='DSH profile name (asuna-demo for the demo environment)')
     parser.add_argument('--shared-action-model', action='store_true', help='Route both brains to the configured action model')
+    parser.add_argument('--channel-admission', choices=('explicit', 'automatic'),
+                        help='channel admission for a profile that has not saved one (default explicit)')
     args = parser.parse_args()
     if not args.profile.replace('-', '').isalnum():
         raise ValueError('INVALID_PROFILE_NAME')
@@ -190,7 +195,8 @@ def main():
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
     prior = yaml.safe_load(editable.read_text(encoding='utf-8')) if editable.exists() else []
-    defaults = profile_patch(config, args.config, persona, args.shared_action_model, args.profile, channels)
+    defaults = profile_patch(config, args.config, persona, args.shared_action_model, args.profile, channels,
+                             args.channel_admission)
     stored = {}
     def merge(base, override):
         if isinstance(base, dict) and isinstance(override, dict):

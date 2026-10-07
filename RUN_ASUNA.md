@@ -79,6 +79,7 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 - It installs through DSH's official plugin installer, then checks every installed file against its content-addressed tarball. Artifacts and hashes are in `.runtime/adr008/packages/manifest.json`. Nothing is published to npm.
 - It does not initialize, reset, copy or replace Mongo.
 - `--shared-action-model` routes both brains to the configured action model. Omit it on a new profile to seed separate routes.
+- `--channel-admission automatic` admits new DMs, groups and members on a profile that has not saved its own choice (the default is `explicit`).
 - Reinstalling keeps the profile's saved settings; after the first install, change routes on the settings card.
 - It records the package list in `.runtime/adr008/launch.json` (`setup`), which later starts reuse (below).
 - A configured channel (`channels.qq`) needs its channel package installed; Core reports `CHANNEL_PLUGIN_NOT_INSTALLED` otherwise.

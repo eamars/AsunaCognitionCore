@@ -33,8 +33,9 @@ time: never let two instances consume the same account or routes.
    - `token`: a random string of at least 24 characters, shared by the adapter and Core's channel API;
    - `routes`: at least the owner's DM, `{"sender_id", "person_id": "qq:<id>", "scene_id": "qq:<bot>:dm:<id>",
      "target": {"type": "dm", "id": "<id>"}}`. A group route has `"target": {"type": "group", "id": "<group>"}` and
-     `members` (`{"<qq id>": {"person_id": "qq:<qq id>"}}`). With **QQ 接入策略** `automatic`, new DMs and groups
-     get routes on their first valid message, so only the owner's DM needs configuring;
+     `members` (`{"<qq id>": {"person_id": "qq:<qq id>"}}`). With **QQ 接入策略** `automatic` (or `--channel-admission
+     automatic` at install), new DMs and groups get routes on their first valid message, so only the owner's DM
+     needs configuring;
    - optional `blocked_senders` / `blocked_groups`.
 3. **Link the owner** at the top level: `canonical_persons` maps `qq:<owner id>` to the local chat's person, so her
    owner in QQ and at home is one person; `context_links` (`{"<local scene>": ["<QQ DM scene>"]}`) lets the local chat read the owner's DM.

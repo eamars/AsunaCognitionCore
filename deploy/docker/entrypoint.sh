@@ -126,6 +126,7 @@ if ! installed_as_configured; then
     install+=(--channel-package "$channel")
   done
   [[ "${ASUNA_SHARED_ACTION_MODEL:-0}" == 1 ]] && install+=(--shared-action-model)
+  [[ -n "${ASUNA_CHANNEL_ADMISSION:-}" ]] && install+=(--channel-admission "$ASUNA_CHANNEL_ADMISSION")
   .venv/bin/python tools/pack_plugins.py "${pack[@]}"
   .venv/bin/python tools/setup_native_profile.py "${install[@]}"
 fi

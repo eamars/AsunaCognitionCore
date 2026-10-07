@@ -1,6 +1,6 @@
 # ADR-020: Several characters at once
 
-Status: **Proposed** 2026-10-07. Decisions for the owner are in §7; nothing is built yet.
+Status: **Accepted** 2026-10-07 (owner decisions D1–D4 in §7). Not built yet; the owner will test it on another day.
 
 ## 1. Context
 
@@ -75,7 +75,7 @@ A Host holds two leases while it runs, renewed every 30 s and expiring after 90 
 
 - **The database lease** replaces the machine-local file lock: a second Host on the same database, from any
   machine, refuses to start (`DATABASE_IN_USE_BY <host, profile, since>`).
-- **A channel account lease** per configured platform account (`qq:<account>`). It needs a place every Host using
+- **A channel account lease** (dropped by D2; kept here as the record of what was weighed) per configured platform account (`qq:<account>`). It needs a place every Host using
   that account can see. Options (decision D2):
   - **A.** A small shared registry database on the shared MongoDB server (`asuna_registry.leases`), named in each
     profile's config. Works across machines when the profiles share a server; profiles on separate servers are not
@@ -94,12 +94,12 @@ A Host holds two leases while it runs, renewed every 30 s and expiring after 90 
 - The same for `channel_port`, chosen at install when the profile configures a channel.
 - Docker stacks keep publishing their own ports (ADR-019); the stack README lists them.
 
-### 4.4 Core self-development on a shared checkout
+### 4.4 Self-development stays inside one character
 
-Persona and channel projects are per package, so characters do not touch each other's. The core project is shared.
-Recommended: a checkout records which profile may publish core changes (`self_development.core` in that profile's
-settings, at most one per checkout, refused for the rest); the others keep persona and channel development.
-Docker stacks have their own checkout and are unaffected.
+Persona and channel projects are per package; the core project is the checkout's. Per D4 a self-developing
+character has a checkout of its own, so nothing she publishes reaches another character. The launcher refuses to
+start a profile with `self_development.enabled` on a checkout that another installed profile also self-develops on
+(`CHECKOUT_SHARED_BY_SELF_DEVELOPING_PROFILES`), naming the other profile and how to give each its own checkout.
 
 ### 4.5 Web UI
 
@@ -116,7 +116,8 @@ Options (decision D3):
 - **D.** One DSH Web server showing every profile with a switcher. DSH 0.2 does not support it, and one core runs
   one persona; it would mean changing DSH. Rejected.
 
-Recommended: **A** now, **B** next; **C** only if one bookmark for all characters matters.
+Recommended: **A** now, **B** next; **C** only if one bookmark for all characters matters. Decided (D3): a
+prefix in existing text only; see §7.
 
 ## 5. Configuration per profile
 
@@ -134,21 +135,29 @@ same `mongo_uri`.
 
 ## 6. Milestones
 
-- **M1** Leases: database lease in the profile's database; channel account lease in the registry; status line shows
-  the holder when refused. Tests: two Hosts on one database, two on one account, a lease expiring after a crash.
-- **M2** Ports: recorded per profile; `--list`; channel port per profile outside Docker.
-- **M3** Core self-development owner per checkout.
-- **M4** Manuals: "Running several characters" in RUN_ASUNA (owns / may share table, one account per profile), the
-  Docker README, the QQ README; `docs/DEVELOPMENT.md`.
-- **M5** (if approved) browser tab title and icon per persona.
+- **M1** Database lease in the profile's database (replaces the machine-local lock); the status line names the holder
+  when refused. Tests: two Hosts on one database, a lease expiring after a crash.
+- **M2** Ports recorded per profile; `--list`; channel port per profile outside Docker.
+- **M3** The launcher's refusal of two self-developing profiles on one checkout (§4.4).
+- **M4** The persona's name as a prefix in the browser tab title, if DSH allows it without a new element (D3).
+- **M5** Manuals: "Running several characters" in RUN_ASUNA (owns / may share table, one platform account per
+  running character and what happens otherwise, one checkout per self-developing character), the Docker README,
+  the QQ README; `docs/DEVELOPMENT.md`.
 - **M6** Owner review: 小满 on Windows and Kazusa in Docker on separate QQ accounts at the same time.
 
-## 7. Decisions for the owner
+## 7. Owner decisions (2026-10-07)
 
-- **D1** Database per profile on a shared server (recommended), or collection prefixes in one database.
-- **D2** Channel account guard: shared registry lease (recommended, with the adapter's warning), adapter detection
-  only, or documentation only.
-- **D3** Web UI: one address per profile with a list (recommended now), plus tab title and icon per persona (next),
-  or a landing page.
-- **D4** Core self-development on a shared checkout: one owning profile per checkout (recommended), or off for all
-  but the default profile, or unrestricted.
+- **D1 — database per profile** on a shared server, as §4.1 recommends.
+- **D2 — documentation only** for platform accounts. No registry and no adapter detection: the manuals say one
+  account per running character, and what happens otherwise (both answer everything). The database lease of §4.2
+  is a separate matter and stays proposed for M1; the channel account lease is dropped.
+- **D3 — minimum design, no new UI element.** Profiles are told apart by a prefix in text DSH already shows: the
+  persona's name leads the role preset (`<persona> · 角色脑`, as today), the local conversation and the browser tab
+  title, where DSH lets the plugin set it without adding an element. No landing page, no switcher, no list in the
+  page. Listing profiles stays a command (`--list`), which is not UI.
+- **D4 — each persona is separate.** Characters have their own growth profile and pace, and never touch each other
+  except through an external channel (a platform, or a peer line) or, later, a dedicated internal agent-teams
+  channel of their own (a future ADR). So a character's self-development, core changes included, never reaches
+  another character: each self-developing character runs from **its own checkout** (a Docker stack's volume
+  already is one; on one machine, a separate clone or `git worktree` per character). §4.4's "one owning profile per
+  checkout" is replaced by this; a shared checkout is for characters whose self-development is off.

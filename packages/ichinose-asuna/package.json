@@ -1,0 +1,33 @@
+{
+  "name": "@asuna/ichinose-asuna",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "一之瀬アスナ: an original persona inspired by the Blue Archive character, on the Asuna core",
+  "icon": "icon.svg",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": [
+    "src",
+    "skills",
+    "seeds",
+    "persona-model.json",
+    "cordis.patch.yml",
+    "README.md",
+    "icon.svg",
+    "locale"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-command-compact": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.2.0-rc.2"
+  }
+}

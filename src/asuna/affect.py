@@ -2,8 +2,7 @@
 
 Events and amendments are append-only (insert only, never replaced, updated or
 deleted). The projection is a pure function of the persona model parameters,
-the folded events and a moment; it must agree point by point with
-examples/affect_reference.py. Only the character commits events; the optional
+the folded events and a moment. Only the character commits events; the optional
 appraiser route only proposes; persona jobs only import under their origin.
 The projection yields bands and behaviour slots, never a line of dialogue.
 """

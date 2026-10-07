@@ -1,19 +1,37 @@
 # Asuna Cognition Core
 
-A native DSH **0.2.0-rc.2** plugin. Install its `.tgz` with `dsh plugin --profile <web-profile> add <artifact>`. The artifact includes the Python worker and generic prompts/schemas; it does not import the old SDK/Web runtime or depend on `src/asuna` in the development checkout.
+The home of an Asuna character: a native DSH **0.2.0-rc.2** plugin with its Python business worker. It names no
+persona and no platform; a persona package and any channel packages register with it.
 
-The worker needs `uv` or Python **3.12+** on the machine: with the `python` setting empty, Core builds its environment on first start in the data folder from the included `python/requirements.lock` (uv when on PATH, otherwise `python -m venv` and pip) and reuses it until the lock changes; set `python` to use an interpreter of your own. Configure `asuna-cognition-core` with `persona`, `deployment`, and independent `routes.character` / `routes.action` native provider/model references. Optional `mountSchedule` (default `true`) lets Core mount DSH Schedule when the Host has none. Configure the `asuna-publication-floor` with the authorized writable source projects, Python path and recovery route. Everything Asuna writes for a profile goes to its data folder: the floor's `dataRoot` setting, by default `$DSH_HOME/asuna/<profile>/`; the installed package is never written. Keep source candidates separate from installed artifacts. Providers, credentials, existing Mongo state, workspaces and model services are local deployment inputs; none are bundled.
+Install its `.tgz` with `dsh plugin --profile <web-profile> add <artifact>` (see [INSTALL.md](../../INSTALL.md)). The
+artifact includes the Python worker and the neutral prompts and schemas; it does not depend on `src/asuna` in the
+development checkout. No credentials, `.runtime`, private chats or memory, model weights, virtual environment,
+bytecode or Node dependencies are distributed.
 
-Core without a selected persona is inert. A persona plugin injects `asuna` and calls `registerPersona({id, character_id, display_name, version, resource_root, model, seeds, jobs, skill_directories, preset})` (contract v2; one seed must have kind `persona`); its thin role preset loads `@asuna/cognition-core/role`. Seeds fill only missing persona documents.
+## Configuration
 
-Core names no platform. A channel plugin injects `asuna` and calls `registerChannel({kind, title, project, resource_root, python, module, integration_directory, skill_directories})`. The worker imports its kind module for the platform's id and mention formats; its adapter is the managed integration; its skills join the persona's. Core waits for the plugins of the channels the deployment configures before the worker reads a route.
+- **Python:** the worker needs `uv` or Python **3.12+**. With the `python` setting empty, Core builds its environment
+  on first start in the data folder from the included `python/requirements.lock` (uv when on PATH, otherwise
+  `python -m venv` and pip) and reuses it until the lock changes. Set `python` to use an interpreter of your own.
+- **`asuna-cognition-core`:** `persona`, `deployment`, and independent `routes.character` / `routes.action` native
+  provider/model references. Optional `mountSchedule` (default `true`) lets Core mount DSH Schedule when the Host
+  has none.
+- **`asuna-publication-floor`:** the authorized writable source projects, Python path and recovery route.
+- **Data folder:** everything Asuna writes for a profile goes to the floor's `dataRoot`, by default
+  `$DSH_HOME/asuna/<profile>/`. The installed package is never written.
 
-One native Host owns agents, sessions, model requests, streaming, tool loops, attachments and schedules. The private stdio worker retains existing business queues, memory, authorization, channel publication and integration supervision. Role/action/recovery are real native sessions. Ordinary DSH sessions retain their own behavior. Install the two native rendering dependencies from the delivery manifest alongside the two Asuna plugins. Main Chat references actual action logs through the approved native factory; their model contexts remain separate. Durable `asuna/action-linked` / `asuna/action-range` events contain parent/source identities and sequence bounds, with no copied messages. Consultation splits the displayed ranges; reloading or reading them never resumes tasks.
+Providers, credentials, Mongo state, workspaces and model services are local deployment inputs. After migration the
+native profile owns `deployment`, channel admission and lane routes; business and provider credentials both live in
+DSH's credential store, referenced from the settings by name.
 
-The Client contributes a bounded memory right tab and a Plugins settings card using DSH's shipped form controls. New actions/summaries use genuine native child sessions; historical action links remain readable. Settings save and apply separately. The native profile owns `deployment`, channel admission and lane routes after migration; business and provider credentials both live in DSH's credential store, referenced from the settings by name. Automatic admission preserves one main conversation per target, with isolated member grants and configurable blocks. Memory queries recheck session binding, policy epoch and A2 access; the tab is read-only.
+## Contracts
 
-Authorized development tools use persistent project candidates and immutable built artifacts. Persona resource updates apply without Host restart. Python updates replace the worker at an idle boundary. JS/dependency/composition updates require Host restart. Failed candidates remain available for forward repair. The native **Asuna recovery** preset and publication floor remain available when Python cannot import; the minimum floor cannot be rewritten by these tools.
+- **Persona:** a persona plugin injects `asuna` and calls `registerPersona({id, character_id, display_name, version,
+  resource_root, model, seeds, jobs, skill_directories, preset})` (contract v2; one seed has kind `persona`). Its
+  thin role preset loads `@asuna/cognition-core/role`. Core without a selected persona is inert.
+- **Channel:** a channel plugin injects `asuna` and calls `registerChannel({kind, title, project, resource_root,
+  python, module, integration_directory, skill_directories})`. The worker imports its kind module; its adapter is
+  the managed integration; its skills join the persona's.
 
-DSH 0.2's `Session.append` cannot mark external informational events `ignorable`. This package disables the stock JSONL entry and inserts a thin public `SessionPersistence` adapter that marks the five Asuna event types, delegating leases, storage, compression and reads to the native backend. It does not rewrite history or patch DSH files. Uninstalling the bundle restores the stock profile composition; retained marked events are safely ignorable.
-
-No credentials, `.runtime`, private chats/memory, model weights, virtual environment, generated bytecode or Node dependencies are distributed.
+What the package adds to DSH, how execution and persistence work, and the publication lifecycle are described in
+[NATIVE_PLUGIN.md](../../NATIVE_PLUGIN.md). The channel API and tools are in [RUNTIME_API.md](../../RUNTIME_API.md).

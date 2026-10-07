@@ -183,7 +183,7 @@ export class PublicationFloor {
       }
     }
     for (const [relative, file] of sourceFiles) {
-      if (project.format === 'repository' && !/^(src\/|packages\/cognition-core\/|config\/prompts\/|docs\/|tests\/|tools\/|migrations\/|examples\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|RUN_ASUNA.md|RUNTIME_API.md)$)/.test(relative)) continue;
+      if (project.format === 'repository' && !/^(src\/|packages\/cognition-core\/|docs\/|tests\/|tools\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|AGENTS.md|INSTALL.md|RUN_ASUNA.md|NATIVE_PLUGIN.md|RUNTIME_API.md)$)/.test(relative)) continue;
       const target = path.join(candidate, relative), prior = baseline[relative];
       const present = await exists(target), current = present ? hash(await fs.readFile(target)) : null;
       if (present && current !== prior || !present && prior) continue;

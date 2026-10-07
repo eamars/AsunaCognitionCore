@@ -113,11 +113,12 @@ def main():
     parser.add_argument('--persona', action='append', default=[], type=Path,
                         help='persona package directory to pack alongside the core (repeatable)')
     parser.add_argument('--channel', action='append', default=[], type=Path,
-                        help='channel package directory (e.g. packages/napcat-qq) to pack alongside the core (repeatable)')
+                        help='channel package directory (e.g. packages/channels/napcat-qq) to pack alongside the core (repeatable)')
     args = parser.parse_args()
     DESTINATION.mkdir(parents=True, exist_ok=True)
-    # The native inline extension (tools/dsh-inline) is built separately; pack only a current build.
-    native = json.loads((DESTINATION / 'native-inline-manifest.json').read_text(encoding='utf-8'))
+    # The native inline extension (tools/dsh-inline) is optional and built separately; pack only a current build.
+    built = DESTINATION / 'native-inline-manifest.json'
+    native = json.loads(built.read_text(encoding='utf-8')) if built.exists() else []
     patch_digest = hashlib.sha256((ROOT / 'tools/dsh-inline/rc2-inline.patch').read_bytes()).hexdigest()
     for artifact in native:
         if artifact['patchSha256'] != patch_digest or hashlib.sha256(Path(artifact['path']).read_bytes()).hexdigest() != artifact['sha256']:

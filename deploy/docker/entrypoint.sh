@@ -55,18 +55,32 @@ if ! inline_current; then
   rm -rf "$source"
 fi
 
-# 6. The first install of this profile. Later starts install changes by themselves (the launcher's sync).
+# 6. Install the profile: the first time, and whenever the stack names other packages than the ones recorded.
+#    Every other change to the checkout is installed by the launcher's own sync.
 base=.runtime/adr008
 [[ "$profile" == asuna-native ]] || base=".runtime/adr008/profiles/$profile"
-if ! grep -q '"setup"' "$base/launch.json" 2>/dev/null; then
-  if [[ ! -f "$config" && -n "${ASUNA_CONFIG_JSON:-}" ]]; then
-    mkdir -p "$(dirname "$config")" && printf '%s' "$ASUNA_CONFIG_JSON" > "$config"
-  fi
-  # The demo profile (the default) needs only MongoDB's address. Its config is made the usual way
-  # (tools/make_demo_config.py, its own database, no channels) from the tracked example, with every model route on a
-  # closed local port: this stack never calls a model until a real config is given (AGENTS.md: synthetic inference).
-  if [[ ! -f "$config" && "$profile" == asuna-demo && -n "${ASUNA_MONGO_URI:-}" ]]; then
-    .venv/bin/python - "$state/demo-source.json" <<'PY'
+persona="${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}"
+read -r -a channels <<< "${ASUNA_CHANNEL_PACKAGES:-}"
+installed_as_configured() {
+  .venv/bin/python - "$base/launch.json" "$persona" "${channels[@]}" <<'PY'
+import json, os, sys
+try:
+    setup = json.load(open(sys.argv[1], encoding='utf-8'))['setup']
+except (OSError, ValueError, KeyError):
+    sys.exit(1)
+norm = lambda path: os.path.normpath(path).replace(os.sep, '/')
+wanted = [norm(sys.argv[2]), sorted(map(norm, sys.argv[3:]))]
+sys.exit(0 if [norm(setup['persona_package']), sorted(map(norm, setup['channel_packages']))] == wanted else 1)
+PY
+}
+if [[ ! -f "$config" && -n "${ASUNA_CONFIG_JSON:-}" ]]; then
+  mkdir -p "$(dirname "$config")" && printf '%s' "$ASUNA_CONFIG_JSON" > "$config"
+fi
+# The demo profile (the default) needs only MongoDB's address. Its config is made the usual way
+# (tools/make_demo_config.py, its own database, no channels) from the tracked example, with every model route on a
+# closed local port: this stack never calls a model until a real config is given (AGENTS.md: synthetic inference).
+if [[ ! -f "$config" && "$profile" == asuna-demo && -n "${ASUNA_MONGO_URI:-}" ]]; then
+  .venv/bin/python - "$state/demo-source.json" <<'PY'
 import json, os, sys
 value = json.load(open('config/local.example.json', encoding='utf-8'))
 value['mongo_uri'] = os.environ['ASUNA_MONGO_URI']
@@ -74,17 +88,40 @@ for lane in ('character', 'executor', 'embedding'):
     value[lane]['base_url'] = 'http://127.0.0.1:9/v1'          # the discard port: nothing answers
 json.dump(value, open(sys.argv[1], 'w', encoding='utf-8'), indent=2)
 PY
-    .venv/bin/python tools/make_demo_config.py --local "$state/demo-source.json" --out "$config"
-  fi
-  if [[ ! -f "$config" ]]; then
-    echo "Asuna: $config is missing in the checkout volume; place it, or set ASUNA_CONFIG_JSON" \
-         "(or ASUNA_MONGO_URI for the demo profile)" >&2
-    exit 1
-  fi
-  persona="${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}"
+  .venv/bin/python tools/make_demo_config.py --local "$state/demo-source.json" --out "$config"
+fi
+if [[ ! -f "$config" ]]; then
+  echo "Asuna: $config is missing in the checkout volume; place it, or set ASUNA_CONFIG_JSON" \
+       "(or ASUNA_MONGO_URI for the demo profile)" >&2
+  exit 1
+fi
+# Channel and integration settings for the installer, beside the config and named by it. The installer reads them
+# into a profile that has none yet; afterwards the settings card owns them.
+.venv/bin/python - "$config" "$profile" <<'PY'
+import json, os, sys
+from pathlib import Path
+config, profile = Path(sys.argv[1]), sys.argv[2]
+value = json.loads(config.read_text(encoding='utf-8'))
+changed = False
+for key, variable, name in (('channel_config', 'ASUNA_CHANNEL_CONFIG_JSON', 'asuna-channel.%s.local.json'),
+                            ('integration_config', 'ASUNA_INTEGRATION_CONFIG_JSON', 'integration.%s.local.json')):
+    given = os.environ.get(variable, '').strip()
+    if not given:
+        continue
+    target = config.parent / (value.get(key) or name % profile)
+    if not target.exists():
+        json.loads(given)                                       # refuse a malformed value before writing it
+        target.write_text(given, encoding='utf-8')
+    if not value.get(key):
+        value[key], changed = target.name, True
+if changed:
+    config.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+PY
+if ! installed_as_configured; then
+  echo "Asuna: installing $persona${channels[*]:+ with ${channels[*]}} into profile $profile"
   pack=(--persona "$persona")
   install=(--profile "$profile" --config "$config" --persona-package "$persona")
-  for channel in ${ASUNA_CHANNEL_PACKAGES:-}; do
+  for channel in "${channels[@]}"; do
     pack+=(--channel "$channel")
     install+=(--channel-package "$channel")
   done

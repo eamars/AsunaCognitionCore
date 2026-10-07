@@ -92,18 +92,19 @@ Asuna 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（
 | 目录 | 内容 |
 |---|---|
 | `packages/cognition-core` | 家本身：认知、记忆、两个脑子、隐私与安全。不绑定任何角色，也不绑定任何平台。 |
-| `packages/napcat-qq` | 通过 NapCat 接入 QQ 的通道。 |
-| `packages/dsh-peer` | 连接另一个 DeepSeek Harness 中智能体的通道（对端线）。 |
+| `packages/channels/napcat-qq` | 通过 NapCat 接入 QQ 的通道。 |
+| `packages/channels/dsh-peer` | 连接另一个 DeepSeek Harness 中智能体的通道（对端线）。 |
+| `packages/personas/` | 人格包：作者自用的 `xiaoman`，以及 `ichinose-asuna`。 |
 | `tests/fixtures/personas/demo` | 一个小型的合成人格，供测试和试用。 |
-| `packages/xiaoman` | 作者的第一个人格，仅供个人使用，之后会替换成一个通用示例。 |
+| `deploy/docker` | 在 Linux 主机上用 Docker 运行同一套安装。 |
 
 ## 快速开始
 
-你需要准备 DeepSeek Harness 0.2.0-rc.2、Python 3.12+、MongoDB、给两个脑子用的模型服务（两个脑子也可以共用同一个模型），以及一个人格包。可选组件有：用于沙箱的 WSL 和 bubblewrap，以及接入 QQ 用的 NapCat。
+你需要准备 DeepSeek Harness 0.2.0-rc.2、Python 3.12+、MongoDB、给两个脑子用的模型服务（两个脑子也可以共用同一个模型），以及一个人格包。可选组件：接入 QQ 用的 NapCat。命令在 DSH 自带的沙箱里运行，支持 Windows、Linux 和 macOS。
 
-- **安装到 DSH**：按照 [INSTALL.md](INSTALL.md) 操作即可。这份说明写得足够具体，人或者编程智能体都能照着完成安装。
-- **运行与日常使用**：参见 [RUN_ASUNA.md](RUN_ASUNA.md)。在 Windows 上运行 `start-asuna.cmd` 启动，然后打开它输出的网址。
-- **开发者**：通道和工具的接口约定见 [RUNTIME_API.md](RUNTIME_API.md)，历次设计决策记录在 [docs/development_plans](docs/development_plans/README.md)。
+- **把发布的插件装进 DSH**：按照 [INSTALL.md](INSTALL.md) 操作即可。这份说明写得足够具体，人或者编程智能体都能照着完成安装。
+- **从本仓库运行**：参见 [RUN_ASUNA.md](RUN_ASUNA.md)。运行 `start-asuna.cmd`（Windows）或 `./start-asuna.sh`（Linux、macOS）启动，然后打开它输出的网址。Docker 部署见 [deploy/docker](deploy/docker/README.md)。
+- **开发者与编程智能体**：从 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) 开始。各个包在 DSH 里如何组合见 [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md)，通道和工具的接口约定见 [RUNTIME_API.md](RUNTIME_API.md)，设计决策记录在 [docs/development_plans](docs/development_plans/README.md)。
 
 ## 许可证
 

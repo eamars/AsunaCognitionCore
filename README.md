@@ -117,21 +117,27 @@ The repository is split the same way:
 | Part | What it is |
 |---|---|
 | `packages/cognition-core` | The home itself: cognition, memory, the two brains, privacy and safety. It names no character and no platform. |
-| `packages/napcat-qq` | A channel for QQ, through NapCat. |
-| `packages/dsh-peer` | A channel to an agent in another DeepSeek Harness (the peer line). |
+| `packages/channels/napcat-qq` | A channel for QQ, through NapCat. |
+| `packages/channels/dsh-peer` | A channel to an agent in another DeepSeek Harness (the peer line). |
+| `packages/personas/` | Persona packages: `xiaoman`, the author's personal one, and `ichinose-asuna`. |
 | `tests/fixtures/personas/demo` | A small synthetic persona, used by the tests and for trying things out. |
-| `packages/xiaoman` | The author's first persona, a personal one. It will be replaced by a generic example. |
+| `deploy/docker` | A Docker stack that runs the same install on a Linux host. |
 
 ## Getting started
 
 You need DeepSeek Harness 0.2.0-rc.2, Python 3.12+, MongoDB, a model server for each brain (both brains may share
-one), and a persona package. Optional: NapCat for QQ. Commands run under DSH's own sandbox.
+one), and a persona package. Optional: NapCat for QQ. Commands run under DSH's own sandbox, on Windows, Linux or
+macOS.
 
-- **Installing into DSH:** follow [INSTALL.md](INSTALL.md). It is written so a person or a coding agent can follow it.
-- **Running and day-to-day use:** see [RUN_ASUNA.md](RUN_ASUNA.md). On Windows, `start-asuna.cmd` opens the home;
-  then visit the address it prints.
-- **For developers:** [RUNTIME_API.md](RUNTIME_API.md) describes the channel and tool contracts. Design decisions
-  are kept in [docs/development_plans](docs/development_plans/README.md).
+- **Installing the released plugins into DSH:** follow [INSTALL.md](INSTALL.md). It is written so a person or a
+  coding agent can follow it.
+- **Running from this repository:** see [RUN_ASUNA.md](RUN_ASUNA.md). `start-asuna.cmd` (Windows) or
+  `./start-asuna.sh` (Linux, macOS) opens the home; then visit the address it prints. For Docker, see
+  [deploy/docker](deploy/docker/README.md).
+- **For developers and coding agents:** start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+  [NATIVE_PLUGIN.md](NATIVE_PLUGIN.md) explains how the packages compose inside DSH and
+  [RUNTIME_API.md](RUNTIME_API.md) describes the channel and tool contracts. Design decisions are kept in
+  [docs/development_plans](docs/development_plans/README.md).
 
 ## License
 

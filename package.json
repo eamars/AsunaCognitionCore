@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:native": "node --test packages/cognition-core/test/*.test.js"
+    "test:native": "node --test packages/cognition-core/test/*.test.js packages/channels/*/test/*.test.js"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.0-rc.2"
   },
   "workspaces": [
-    "packages/*"
+    "packages/cognition-core",
+    "packages/channels/*",
+    "packages/personas/*"
   ]
 }

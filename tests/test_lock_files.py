@@ -13,7 +13,9 @@ from asuna.config import ROOT
 
 def test_every_npm_workspace_is_in_the_lock():
     lock = json.loads((ROOT / 'package-lock.json').read_text(encoding='utf-8'))['packages']
-    workspaces = {path.parent.relative_to(ROOT).as_posix() for path in (ROOT / 'packages').glob('*/package.json')}
+    patterns = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['workspaces']
+    workspaces = {path.parent.relative_to(ROOT).as_posix() for pattern in patterns for path in ROOT.glob(pattern + '/package.json')}
+    assert {'packages/cognition-core', 'packages/channels/napcat-qq'} <= workspaces
     missing = sorted(workspace for workspace in workspaces if workspace not in lock)
     assert not missing, 'run npm install --package-lock-only: %s' % missing
 

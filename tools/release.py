@@ -11,7 +11,7 @@ Output: `.runtime/release/<tag>/` with the tarballs, SHA256SUMS and NOTES.md. Pu
 step done by the owner (or with their go-ahead): create the GitHub Release <tag> on this repository and attach the
 files from that folder.
 
-    python tools/release.py --channel packages/napcat-qq [--tag v0.2.0]
+    python tools/release.py --channel packages/channels/napcat-qq [--tag v0.2.0]
 """
 import argparse
 import hashlib
@@ -30,7 +30,7 @@ PACKAGES = ROOT / '.runtime/adr008/packages'
 
 def persona_names():
     names = set()
-    for model in ROOT.glob('packages/*/persona-model.json'):
+    for model in ROOT.glob('packages/personas/*/persona-model.json'):
         persona = json.loads(model.read_text(encoding='utf-8')).get('persona') or {}
         names |= {str(value) for key, value in persona.items() if key in ('id', 'display_name', 'name') and value}
     return {name for name in names if len(name) >= 2}

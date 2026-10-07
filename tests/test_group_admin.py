@@ -11,7 +11,7 @@ from asuna.people import People
 from asuna.state import Denied
 from test_people import BOT, GROUP, SCENE, row, setup as people_setup
 
-ADAPTER = ROOT / 'packages' / 'napcat-qq' / 'integration'
+ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
 from qqadapter.outbound import Outbound            # noqa: E402
 from qqadapter.selfrole import SelfRoles           # noqa: E402

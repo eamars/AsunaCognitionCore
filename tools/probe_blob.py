@@ -4,6 +4,7 @@ from asuna.state import Store,Denied
 from asuna.blobs import BlobStore
 from asuna.privacy import PrivacyService
 from asuna.evidence import Evidence,write_json,sha
+from asuna.testing import dispose_test_store
 
 name='blob-probe-'+uuid.uuid4().hex[:12];ev=Evidence(ROOT/'reports'/name);store=Store(load(),'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed(ROOT/'tests/fixtures/world.json')
 status='FAIL'
@@ -19,6 +20,6 @@ try:
     assert deletion['gridfs_blobs_removed']==1 and store.db.artifact_blobs.files.count_documents({})==0 and store.db.artifact_blobs.chunks.count_documents({})==0
     status='PASS';ev.record('blob.probe',{'input_size':len(data),'input_sha256':sha(data),'reference':ref,'deletion_id':deletion['deletion_id']})
 except Exception as exc:ev.record('probe.error',{'type':type(exc).__name__,'message':str(exc)})
-finally:store.client.close()
+finally:dispose_test_store(store)
 write_json(ev.root/'result.json',{'test_id':'PROBE-E06-blob','status':status,'mode':'real_Mongo_GridFS','commands':[{'argv':['python','tools/probe_blob.py'],'exit_code':0 if status=='PASS' else 1}]})
 print(json.dumps({'run':name,'status':status}));raise SystemExit(0 if status=='PASS' else 1)

@@ -62,7 +62,7 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     const python = path.join(dir, 'python'), manifest = path.join(dir, 'manifest.json');
     await fs.writeFile(python, '');
     const launch = { config: 'config/local.json', profile: 'asuna-native', sharedActionModel: true,
-      setup: { persona_package: 'packages/xiaoman', channel_packages: ['packages/napcat-qq'] },
+      setup: { persona_package: 'packages/personas/xiaoman', channel_packages: ['packages/channels/napcat-qq'] },
       installed: { '@asuna/cognition-core': 'aa', '@asuna/xiaoman': 'bb' } };
     const calls = [], notes = [];
     const exec = async (command, args) => { calls.push(args[0]); return 0; };
@@ -75,7 +75,7 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     assert.equal(await syncCheckout(launch, record, note => notes.push(note), { python, manifest }), 'INSTALLED');
     assert.match(notes.at(-1), /installing the checkout \(@asuna\/cognition-core\)/);
     assert.deepEqual(installArgs, ['tools/setup_native_profile.py', '--config', 'config/local.json', '--profile', 'asuna-native',
-      '--persona-package', 'packages/xiaoman', '--channel-package', 'packages/napcat-qq', '--shared-action-model']);
+      '--persona-package', 'packages/personas/xiaoman', '--channel-package', 'packages/channels/napcat-qq', '--shared-action-model']);
     assert.equal(await syncCheckout({ ...launch, setup: undefined }, exec, note => notes.push(note), { python, manifest }), 'UNKNOWN');
     assert.equal(await syncCheckout(launch, exec, note => notes.push(note), { python: path.join(dir, 'none'), manifest }), 'NO_PYTHON');
     await assert.rejects(syncCheckout(launch, async () => 1, () => {}, { python, manifest }), /--no-sync/);

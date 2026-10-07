@@ -71,7 +71,26 @@ Showing it inline in the main conversation needs two patched DSH UI packages, bu
 Check: an action brain's work row expands to its tool calls in place. Asuna detects the patched Chat by itself;
 removing the packages returns it to the subagent view without errors.
 
-## Channels
+## 5. Optional: a channel
 
-A channel package (e.g. QQ through NapCat) needs its own settings in the deployment (`channels`, `integration`) and
-runs its adapter in the sandbox. See the channel package's README and `RUNTIME_API.md`.
+A channel package connects her to a platform: `@asuna/napcat-qq` for QQ through NapCat, `@asuna/dsh-peer` for an
+agent in another DSH. Install the package first, then configure it; a configured channel without its package stops
+the worker (`CHANNEL_PLUGIN_NOT_INSTALLED`).
+
+1. `dsh plugin --profile <name> add <release-url>/asuna-napcat-qq-<version>.tgz`, then restart the profile.
+2. On the settings card, add the channel to the deployment fields (`channels.<id>`, and `integration` for a channel
+   with a managed adapter) and its tokens to the credential fields. **Save**, then **Apply saved settings**.
+
+What each channel needs, field by field, is in its README: [QQ](packages/channels/napcat-qq/README.md#setting-up-qq),
+[DSH peer](packages/channels/dsh-peer/README.md#configuration-owner-local). The channel API the adapters use is in
+[RUNTIME_API.md](RUNTIME_API.md).
+
+Check: the Plugins page lists the channel, the card's status line is `ready`, and a message on the platform appears
+in the channel's workspace on the Web page.
+
+## Adding or removing a package later
+
+The same commands work at any time: `dsh plugin --profile <name> add <package.tgz>` and a restart adds a channel
+(then configure it, step 5); a newer `.tgz` of an installed package upgrades it. To remove a channel, delete its
+settings on the card and apply, then uninstall the package on DSH's Plugins page. A profile has exactly one persona;
+give a different persona its own profile and database.

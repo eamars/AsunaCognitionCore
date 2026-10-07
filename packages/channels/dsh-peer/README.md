@@ -1,6 +1,6 @@
 # @asuna/dsh-peer
 
-Another DeepSeek Harness (DSH) agent as an Asuna channel (ADR-013). The peer lives in one session of another DSH
+Another DeepSeek Harness (DSH) agent as an Asuna channel. The peer lives in one session of another DSH
 Web server; she talks with it in one direct-message conversation of her own.
 
 - **Inbound:** the bridge follows that session (`session/follow` over `/api/remote.mux`). The peer's final

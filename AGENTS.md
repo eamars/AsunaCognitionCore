@@ -1,7 +1,9 @@
 # Asuna development and interaction rules
 
+Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the repository map, where state lives, tests, and how to write a persona or channel package. The rules below are binding.
+
 - Use the existing Web UI for normal interaction, runtime observation, execution details, and interactive review. Prefer the in-app browser when available and inspect the visible result.
-- The default entry point is `start-asuna.cmd`; `start-asuna-ui.cmd` is an alias. It launches the installed native DSH Web profile; `asuna ui` selects the same profile. Do not replace Web interaction with terminal chat, stdin text injection, or `asuna run`; fix Web issues in the Web path.
+- The default entry point is `start-asuna.cmd` (Windows) or `start-asuna.sh` (Linux, macOS); `start-asuna-ui.cmd` is an alias. It launches the installed native DSH Web profile; `asuna ui` selects the same profile. Do not replace Web interaction with terminal chat, stdin text injection, or `asuna run`; fix Web issues in the Web path.
 - CLI commands other than `ui` are for explicit `--debug` diagnosis and maintenance. Shell may be used for source edits, host lifecycle, and non-interactive diagnostics; these do not replace Web review.
 - `chat.py`'s `Chat` class is the Web-reused queue and action controller. There is no terminal chat adapter; all interaction goes through the Web UI.
 - Asuna extends the pinned DSH runtime. Prefer its existing capabilities and public UI primitives; do not duplicate its scheduler, tool system, or UI control library without a documented need.
@@ -11,7 +13,8 @@
 - UI development and review must use an isolated native DSH profile with synthetic inference. Do not enable or call real model endpoints, including background summaries, unless the user explicitly authorizes resuming real-model use. The operator's external model server is independent of Asuna and must remain available for their own testing.
 - Delivery tests must not tune Xiaoman's persona or wording to pass a test. Her runtime environment belongs to internal diagnostics, not QQ conversation; do not inject deployment details into her prompts to make an environment answer more accurate.
 - Tests and probes must drop their owned Mongo test databases after exporting file evidence, including failure teardown. Do not retain databases for audit. Protect runtime and unrelated databases; skip Mongo tests when the service is unavailable.
-- Current manuals describe behavior in the source, configuration, and contract tests. `README.md`, `RUN_ASUNA.md`, and `RUNTIME_API.md` are current references. `docs/development_plans/**` preserves design decisions and future plans and is not authority for current runtime behavior.
+- Current manuals describe behavior in the source, configuration, and contract tests. `README.md`, `INSTALL.md`, `RUN_ASUNA.md`, `NATIVE_PLUGIN.md`, `RUNTIME_API.md`, `docs/DEVELOPMENT.md` and the package and tool READMEs are current references. `docs/development_plans/**` preserves design decisions and future plans and is not authority for current runtime behavior.
+- Current references show only the present state: what it is, how to use it, what it needs. No history, dates, ADR provenance or reasons; those belong in the ADRs. Update them in the same change as the behavior.
 - In body text, Chinese fonts may supply English glyphs. Inline code, code blocks, JSON, tool payloads, and code editors use the shared monospace font stack.
 - The core is persona-agnostic. Persona names, persona text, and persona-specific parameters live only in persona packages, persona-private data, or test fixtures; core code, core prompts, core tools, and example configs must not contain them.
 - Personal data stays local. Real account IDs, addresses, host names, user names, time zones, and private content belong in ignored local config, MongoDB, or private source roots, never in tracked files. Examples use documentation-reserved placeholders.

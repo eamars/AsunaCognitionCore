@@ -7,7 +7,7 @@ from asuna import channel_kinds, lines
 from asuna.channels import Channels
 from asuna.config import ROOT
 
-channel_kinds.load([{'python': ROOT / 'packages' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
+channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
 SCENE = 'dsh:home:dm:peer'
 
 

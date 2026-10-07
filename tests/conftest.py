@@ -9,7 +9,7 @@ from asuna.testing import dispose_test_store
 from asuna import channel_kinds
 
 # Fixtures use QQ scenes and people (qq:<bot>:group:<id>, qq:<account>): register the channel package's kind.
-QQ_CHANNEL={'python':ROOT/'packages'/'napcat-qq'/'python','module':'napcat_qq'}
+QQ_CHANNEL={'python':ROOT/'packages'/'channels'/'napcat-qq'/'python','module':'napcat_qq'}
 channel_kinds.load([QQ_CHANNEL])
 
 # Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does:

@@ -1,8 +1,7 @@
 # @asuna/demo
 
-Synthetic persona package for tests and the demo Web environment (ADR-009 §0.3).
-It contains placeholder text only. Build and install it into the isolated
-`asuna-demo` profile:
+Synthetic persona package for tests and the demo Web environment. It contains placeholder text only. Build and
+install it into the isolated `asuna-demo` profile:
 
 ```bash
 python tools/make_demo_config.py

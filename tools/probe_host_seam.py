@@ -19,6 +19,7 @@ from asuna.host import prepare_channels
 from asuna.lanes import FakeLane, LaneResult
 from asuna.router import Router
 from asuna.state import Store
+from asuna.testing import dispose_test_store
 
 
 def probe():
@@ -90,7 +91,7 @@ def probe():
     finally:
         server.close()
         client.close()
-        store.client.close()
+        dispose_test_store(store)
 
 
 if __name__ == '__main__':

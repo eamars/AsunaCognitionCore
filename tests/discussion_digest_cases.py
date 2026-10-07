@@ -25,7 +25,7 @@ from asuna import channel_kinds                      # noqa: E402
 def _qq_kind():
     """The fixture is a QQ group. The core names no platform: use the channel package's kind module when
     this tree has it (the repository), else the few id rules these cases rely on (a core candidate alone)."""
-    package = os.path.join(os.path.dirname(HERE), "packages", "napcat-qq", "python")
+    package = os.path.join(os.path.dirname(HERE), "packages", "channels", "napcat-qq", "python")
     if os.path.isdir(package):
         channel_kinds.load([{"python": package, "module": "napcat_qq"}])
         return

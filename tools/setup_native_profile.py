@@ -151,7 +151,7 @@ def main():
     parser.add_argument('--persona-package', type=Path, required=True,
                         help='persona package directory (its packed artifact must be in the pack manifest)')
     parser.add_argument('--channel-package', type=Path, action='append', default=[],
-                        help='channel package directory, e.g. packages/napcat-qq (repeatable; packed like the persona)')
+                        help='channel package directory, e.g. packages/channels/napcat-qq (repeatable; packed like the persona)')
     parser.add_argument('--profile', default='asuna-native', help='DSH profile name (asuna-demo for the demo environment)')
     parser.add_argument('--shared-action-model', action='store_true', help='Route both brains to the configured action model')
     args = parser.parse_args()

@@ -1,4 +1,12 @@
-"""Scoped, hash-verified GridFS storage for bounded-document overflow."""
+"""Scoped, hash-verified GridFS storage for bounded-document overflow.
+
+Bucket `artifact_blobs` in the configured database (GridFS creates `.files`, `.chunks` and their indexes on the first
+upload); the `artifacts` collection holds each blob's scope, size, SHA256, source ids and GridFS id. An upload writes
+an audit intent, reads the bytes back to verify them, then commits the manifest; a failed check deletes the blob.
+Reads need the operator view and a matching scope. Scoped erasure deletes the GridFS records before redacting the
+manifests. Ordinary BSON records stay under 1 MiB: callers store larger content here explicitly and keep the
+reference; nothing is silently truncated. Back up both collections with the database.
+"""
 import uuid
 from gridfs import GridFSBucket
 from .evidence import sha

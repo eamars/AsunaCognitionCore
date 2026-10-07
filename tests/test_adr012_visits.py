@@ -211,7 +211,7 @@ def test_an_errand_from_someone_else_at_home_goes_out_in_their_name(store):
 def test_the_old_home_line_is_a_trusted_home_conversation(store):
     from asuna import channel_kinds, visibility
     from asuna.config import ROOT
-    channel_kinds.load([{'python': ROOT / 'packages' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
+    channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
     scene = {'_id': 'dsh:new-home:dm:old-home', 'kind': 'dm'}
     assert visibility.session_class(store.config, store.db, scene, 'dsh:old-home') == visibility.OWNER_PRIVATE
     assert visibility.session_class(store.config, store.db, {'_id': 'qq:1:dm:2', 'kind': 'dm'}, 'qq:2') == visibility.PUBLIC

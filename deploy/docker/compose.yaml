@@ -33,6 +33,8 @@ services:
       ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-mongodb://127.0.0.1:27099/?directConnection=true}
       ASUNA_PERSONA_PACKAGE: ${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}
       ASUNA_CHANNEL_PACKAGES: ${ASUNA_CHANNEL_PACKAGES:-}
+      ASUNA_CHANNEL_CONFIG_JSON: ${ASUNA_CHANNEL_CONFIG_JSON:-}
+      ASUNA_INTEGRATION_CONFIG_JSON: ${ASUNA_INTEGRATION_CONFIG_JSON:-}
       ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
       ASUNA_PORT: ${ASUNA_PORT:-8780}
       # Local time, as on any host: default quiet hours follow it. Set it to where she lives.

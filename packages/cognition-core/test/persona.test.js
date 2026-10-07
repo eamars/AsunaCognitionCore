@@ -10,13 +10,11 @@ import { CognitionCore } from '../src/index.js';
 import { PublicationFloor } from '../src/floor.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
-// The installed persona package is the other package beside the core that carries a persona model;
-// a channel package (e.g. napcat-qq) registers a channel instead.
-const siblings = (await fs.readdir(path.join(repo, 'packages'))).filter(name => name !== 'cognition-core');
-const hasModel = async name => fs.access(path.join(repo, 'packages', name, 'persona-model.json')).then(() => true, () => false);
-const installed = (await Promise.all(siblings.map(async name => await hasModel(name) && name))).find(Boolean);
-const channelPackages = (await Promise.all(siblings.map(async name => !await hasModel(name) && name))).filter(Boolean);
-const packages = { demo: path.join(repo, 'tests/fixtures/personas/demo'), installed: path.join(repo, 'packages', installed) };
+// Every persona package (packages/personas) and channel package (packages/channels) in the repository.
+const group = async name => (await fs.readdir(path.join(repo, 'packages', name))).map(entry => path.join(repo, 'packages', name, entry));
+const personaPackages = await group('personas');
+const channelPackages = await group('channels');
+const demoPackage = path.join(repo, 'tests/fixtures/personas/demo');
 
 function core(persona = 'demo') {
   return new CognitionCore(new Context(), { persona });
@@ -29,25 +27,27 @@ async function install(core, directory) {
   return JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'));
 }
 
-test('T1.1 the synthetic and the installed persona package both register; no persona leaves Core inert', async () => {
+test('T1.1 the synthetic and every persona package register; no persona leaves Core inert', async () => {
   const withDemo = core('demo');
-  await install(withDemo, packages.demo);
+  await install(withDemo, demoPackage);
   const demo = withDemo.personas.get('demo');
   assert.equal(demo.model, 'persona-model.json');
   assert.deepEqual(demo.seeds.map(seed => seed.kind), ['persona', 'voice', 'ledger']);
   assert.equal(demo.seeds.find(seed => seed.kind === 'persona').path, 'seeds/persona.md');
-  const withInstalled = core('other');
-  const manifest = await install(withInstalled, packages.installed);
-  assert.equal(withInstalled.personas.size, 1);
-  assert.equal(manifest.peerDependencies['@asuna/cognition-core'], '0.2.x');
+  for (const directory of personaPackages) {
+    const withPersona = core('other');
+    const manifest = await install(withPersona, directory);
+    assert.equal(withPersona.personas.size, 1, directory);
+    assert.equal(manifest.peerDependencies['@asuna/cognition-core'], '0.2.x', directory);
+  }
   const empty = core('demo');
   await assert.rejects(empty.ready(), /Select an installed Asuna persona/);
   assert.equal(empty.lifecycle.state, 'unconfigured', 'waiting for its settings, not failed');
 });
 
 test('a channel package registers its kind; its paths stay inside the package and resolve to the published artifact', async () => {
-  for (const name of channelPackages) {
-    const value = core('demo'), directory = path.join(repo, 'packages', name);
+  for (const directory of channelPackages) {
+    const value = core('demo');
     await install(value, directory);
     assert.equal(value.channels.size, 1);
     const [channel] = value.channels.values();

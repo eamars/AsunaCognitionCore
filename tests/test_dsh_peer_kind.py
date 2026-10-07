@@ -1,10 +1,10 @@
-"""The dsh channel kind (packages/dsh-peer): id formats the core uses for a peer DSH conversation."""
+"""The dsh channel kind (packages/channels/dsh-peer): id formats the core uses for a peer DSH conversation."""
 from asuna import channel_kinds
 from asuna.config import ROOT
 
 
 def test_a_peer_conversation_has_dsh_ids():
-    channel_kinds.load([{'python': ROOT / 'packages' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
+    channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
     kind = channel_kinds.of_channel('dsh')
     assert kind.TITLE == 'DSH' and kind.IMAGE_HOSTS == ()
     assert kind.person_id('peer') == 'dsh:peer' and kind.account_of('dsh:peer') == 'peer'

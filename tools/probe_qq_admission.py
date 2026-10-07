@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path(sys.argv[1] if len(sys.argv) > 1 else '').resolve()
 ADAPTER = PACKAGE / 'integration'
 if not (ADAPTER / 'qqadapter').is_dir():
-    raise SystemExit('Usage: probe_qq_admission.py <channel-package-directory, e.g. packages/napcat-qq>')
+    raise SystemExit('Usage: probe_qq_admission.py <channel-package-directory, e.g. packages/channels/napcat-qq>')
 sys.path.insert(0, str(ADAPTER))
 from qqadapter.config import Config
 from qqadapter.inbound import classify, SeenLRU

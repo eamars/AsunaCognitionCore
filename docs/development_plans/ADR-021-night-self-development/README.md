@@ -1,9 +1,7 @@
 # ADR-021: Night self-development in stages
 
-Status: **Accepted in part** 2026-10-08. Night stages (D1–D3) built 2026-10-08. Putting a change that needs a Host
-restart into effect without the owner (D4) is **open**: a first design (the Host asks the launcher to restart it when
-idle) was withdrawn the same day, before it was committed, because it did not answer supervision, health or Docker
-(§4).
+Status: **Accepted** 2026-10-08. Night stages (D1–D3) built 2026-10-08. D4 decided the same day after evaluation (§4):
+the owner restarts the Host; the plugin card says when a published change waits for it.
 
 ## 1. Context
 
@@ -23,7 +21,8 @@ self-development schedule at night that allows multi-stage work and evaluation.
   task is still at work, or while one of her publications is not running yet.
 - **D3 — Hers to tune.** The window and pace are her policy keys within limits; the owner can switch the stages off
   (`self_development.night: false`).
-- **D4 — A change that needs a Host restart is put into effect when she is idle.** Open (§4).
+- **D4 — A change that needs a Host restart waits for the owner.** A stage that publishes one stops the later stages;
+  the Asuna plugin card says which project's change waits and since when. Decided after §4.
 
 ## 3. As built
 
@@ -57,7 +56,7 @@ the selection and started DSH again in a loop. The owner's questions (2026-10-08
 - **Proof it came back with the change.** The design trusted the next start; the existing fallback (a selection that
   never confirms running for two starts is replaced by the previous ACTIVE one) was never exercised by it.
 
-Directions to evaluate before deciding:
+Directions evaluated:
 
 1. **No process restart:** DSH's plugin manager can apply a plugin change in place when its hot-reload service
    (`dsh-hmr`) is mounted (`application: "applied"` instead of `"restart-required"`). If the core plugin can be
@@ -68,3 +67,9 @@ Directions to evaluate before deciding:
    supervisor in Docker and on Windows.
 3. **The owner restarts:** stages that need a Host restart stop the night; the owner restarts in the morning, and the
    Web card says a restart is waiting and why.
+
+Evaluation (2026-10-08): (1) is not available for her publications. The profile installs Asuna's plugins as packed
+packages (`.runtime/adr008/packages/*.tgz`), a publication is a new package version, and `dsh-hmr` documents that
+replacing an installed package version needs a restart through the Plugin Manager; DSH has no supervisor of its own.
+(2) is an ADR of its own. Of her 20 publications from 2026-09-24 to 2026-10-05, 4 needed a Host restart; the others
+(Python, skills, adapter) take effect without one. The owner chose (3).

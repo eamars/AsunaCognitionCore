@@ -107,6 +107,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.invalidJson': '请输入有效的 JSON 值', 'settings.form.unavailable': '配置暂不可用', 'settings.form.readOnly': '当前配置只读',
       'settings.form.saveFailed': '保存失败，草稿已保留。', 'settings.form.save': '保存设置', 'settings.form.saving': '保存中…',
       'settings.status': '业务 worker：{state} · Mongo：{database}', 'settings.disconnected': '未连接',
+      'settings.restartWaiting': '{project} 的已发布改动（{time}）要重启宿主后才生效；在那之前夜里的自我开发会跳过。',
       'settings.readingStatus': '读取状态…',
       'settings.note': '配置由 DSH 保存；凭据只写不回显。模型与 API key 在 DSH 原生 provider 设置管理。会话中的模型选择优先于下方默认路由。',
       'settings.savedPending': '已保存，尚未应用。', 'settings.savedApplied': '已保存，与当前应用配置一致。',
@@ -221,6 +222,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.invalidJson': 'Enter a valid JSON value', 'settings.form.unavailable': 'Settings are unavailable', 'settings.form.readOnly': 'Settings are read-only',
       'settings.form.saveFailed': 'Saving failed; your draft is kept.', 'settings.form.save': 'Save settings', 'settings.form.saving': 'Saving…',
       'settings.status': 'Business worker: {state} · Mongo: {database}', 'settings.disconnected': 'not connected',
+      'settings.restartWaiting': 'A published change to {project} ({time}) takes effect after a Host restart; until then her night self-development stages are skipped.',
       'settings.readingStatus': 'Reading status…',
       'settings.note': 'DSH stores these settings; credentials are write-only. Models and API keys are managed in DSH’s own provider settings. A model chosen in a conversation takes precedence over the routes below.',
       'settings.savedPending': 'Saved, not applied yet.', 'settings.savedApplied': 'Saved; matches what is running.',
@@ -828,6 +830,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h('p', null, status ? t('settings.status', { state: status.lifecycle.state + (status.lifecycle.step ? ' · ' + status.lifecycle.step : ''), database: worker?.database || t('settings.disconnected') })
           : t('settings.readingStatus')),
         status?.lifecycle.error && h('p', { role: 'alert' }, status.lifecycle.error),
+        // A publication that only a Host restart puts into effect is said, never left silent (ADR-021 D4).
+        ...(status?.publications ?? []).filter(p => p.state === 'HOST_RESTART_REQUIRED').map(p => h('p', { key: 'restart-' + p.project,
+          role: 'status' }, t('settings.restartWaiting', { project: p.project,
+            time: p.published_at ? new Date(p.published_at).toLocaleString() : '?' }))),
         h('p', { style: small }, t('settings.note')),
         h(SettingsForm, { state: state.shell, onSave: editor.actions.save, onDiscard: editor.actions.discard,
           labels: { unavailable: t('settings.form.unavailable'), readOnly: t('settings.form.readOnly'),

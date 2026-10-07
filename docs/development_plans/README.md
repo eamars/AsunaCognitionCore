@@ -30,4 +30,4 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 018 | Notes between her own conversations (trusted from home, cautioned and tool-limited from public) | Implemented 2026-10-07 (M1–M4); live review on the Web page pending. |
 | 019 | Linux deployment, with the plugin inheriting DSH's platform layer (and Docker) | Implemented 2026-10-07: launcher sync, portability fixes, `deploy/docker/`, Linux docs; 一之瀬アスナ runs as a Portainer stack on Linux, reviewed by the owner. |
 | 020 | Several characters at once: what a profile owns, what may be shared, leases, the Web UI | Accepted 2026-10-07 (one Host and page per character with its name on every workspace, database per profile, accounts by documentation, core changes shared); M1, M2, M4, M5 built, Web review pending. |
-| 021 | Night self-development in stages | Accepted in part 2026-10-08: night stages built; putting a Host-restart change into effect without the owner is open (supervision, health, Docker). |
+| 021 | Night self-development in stages | Accepted 2026-10-08: night stages built; a change that needs a Host restart waits for the owner, said on the plugin card. |

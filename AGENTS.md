@@ -4,6 +4,7 @@ Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the repository map, where
 
 - Use the existing Web UI for normal interaction, runtime observation, execution details, and interactive review. Prefer the in-app browser when available and inspect the visible result.
 - The default entry point is `start-asuna.cmd` (Windows) or `start-asuna.sh` (Linux, macOS); `start-asuna-ui.cmd` is an alias. It launches the installed native DSH Web profile; `asuna ui` selects the same profile. Do not replace Web interaction with terminal chat, stdin text injection, or `asuna run`; fix Web issues in the Web path.
+- An agent that talks to a persona through any shared interface (her Web chat, a channel such as QQ, a peer bridge) says who it is when it starts and whenever it could be mistaken: which agent it is and that it is not the owner. It never writes as the owner or lets a message pass for the owner's.
 - CLI commands other than `ui` are for explicit `--debug` diagnosis and maintenance. Shell may be used for source edits, host lifecycle, and non-interactive diagnostics; these do not replace Web review.
 - `chat.py`'s `Chat` class is the Web-reused queue and action controller. There is no terminal chat adapter; all interaction goes through the Web UI.
 - Asuna extends the pinned DSH runtime. Prefer its existing capabilities and public UI primitives; do not duplicate its scheduler, tool system, or UI control library without a documented need.

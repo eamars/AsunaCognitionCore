@@ -332,6 +332,11 @@ export class PublicationFloor {
   }
 
   async publish(project, reason, origin = {}) {
+    // An unattended self-improvement turn never stacks a change on one that has not run yet (ADR-021 D4).
+    if (origin.unattended && (await this.selected()).projects?.[project.id]?.state === 'HOST_RESTART_REQUIRED')
+      throw new Error(`DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 ${project.id} 上一次发布的改动还在等宿主重启，`
+        + '重启前没人在场的自我开发回合不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
+        + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
     const current = await files(project.candidate), hashes = {};
     for (const [name, file] of current) hashes[name] = hash(await fs.readFile(file));
     const changed = Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);

@@ -976,8 +976,11 @@ class NativeDevelopmentBridge:
                                                              max(1, limit*self.PAGE_BYTES//size)))
             return {'database':self.store.name,'collection':collection,'skip':skip,'limit':limit,'rows':rows}
         try:
+            episode = self.store.db.episodes.find_one({'_id': task.get('episode_id')}, {'episode_kind': 1}) or {}
             result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
-                'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision']}})
+                'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision'],
+                # A self-improvement turn runs with nobody present (ADR-021 D4: it never publishes onto a waiting change).
+                'unattended': episode.get('episode_kind') == 'self_development'}})
         except RuntimeError as exc:
             if tool == 'development_write' and 'EEXIST' in str(exc):
                 raise ValueError('DEVELOPMENT_FILE_EXISTS: %s 已经存在；要替换就加 overwrite: true，要保留就换个路径'

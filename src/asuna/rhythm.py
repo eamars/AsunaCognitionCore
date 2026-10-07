@@ -173,9 +173,9 @@ def recent_phrasing(texts, *, minimum=3, limit=5):
 NIGHT_STAGE_TEXT = ('这是夜里分段自我开发的一段，不是用户消息或新授权。这一段只做一件事：改一处，或者验上一段改的那处；'
                     '也可以什么都不做。无需公开回复。')
 NIGHT_STAGE_NOTE = ('夜里这个时段每隔一阵有一段自我开发，每段都能带开发工具委托行动脑。上一段的活还没交回来，'
-                    '或者发布的改动还没生效，程序就跳过这一段，所以一段一件事，不用自己挂提醒排活；'
-                    '要宿主重启才生效的改动，等宿主重启以后才生效，在那之前后面的段都会跳过。上一段做了什么、发布到哪一步，看近期经历里的任务和发布记录。'
-                    '时段和间隔是你的设置（self_development.night_*）。')
+                    '或者发布的改动还在生效中，程序就跳过这一段，所以一段一件事，不用自己挂提醒排活；'
+                    '要宿主重启才生效的改动，等宿主重启以后才生效：在那之前那个项目不能再发布，别的项目照常。'
+                    '上一段做了什么、发布到哪一步，看近期经历里的任务和发布记录。时段和间隔是你的设置（self_development.night_*）。')
 
 
 def night_stage_block(stage):
@@ -184,4 +184,8 @@ def night_stage_block(stage):
              'note': NIGHT_STAGE_NOTE}
     if stage.get('last_stage'):
         block['last'] = '这是今晚最后一段'
+    if stage.get('waiting_restart'):
+        projects = '、'.join('%s（%s 发布）' % (row['project'], row['published']) if row.get('published') else row['project']
+                            for row in stage['waiting_restart'])
+        block['waiting_restart'] = projects + '的改动在等宿主重启：重启前这些项目不能再发布，可以做别的项目，或只读检查'
     return block

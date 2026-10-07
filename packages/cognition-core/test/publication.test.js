@@ -129,3 +129,21 @@ test('a refused development call says what was wrong, with the values, and what 
   await assert.rejects(floor.call('development_read', { path: '.env' }), /DEVELOPMENT_PATH_DENIED: '\.env' 是私密文件/);
   await assert.rejects(floor.call('development_run', { argv: Array(41).fill('a') }), /DEVELOPMENT_ARGV_INVALID: argv 有 41 项，最多 40 项/);
 });
+
+test('ADR-021 D4: an unattended turn does not publish onto a change still waiting for a Host restart', async () => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-wait-'));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['src'], type: 'module' }));
+  await fs.mkdir(path.join(source, 'src'));
+  await fs.writeFile(path.join(source, 'src/index.js'), 'export const name = "probe"; export function apply() {}');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await floor.call('development_write', { path: 'src/index.js', text: 'export const name = "probe-2"; export function apply() {}', overwrite: true });
+  const first = await floor.call('development_publish', { reason: 'a JS change' }, { unattended: true });
+  assert.equal(first.state, 'HOST_RESTART_REQUIRED', JSON.stringify(first));
+  await floor.call('development_write', { path: 'src/index.js', text: 'export const name = "probe-3"; export function apply() {}', overwrite: true });
+  await assert.rejects(floor.call('development_publish', { reason: 'on top' }, { unattended: true }),
+    /DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 persona .*重试也一样/);
+  const attended = await floor.call('development_publish', { reason: 'the owner is here' }, {});
+  assert.equal(attended.state, 'HOST_RESTART_REQUIRED');                    // with someone present it may replace it
+});

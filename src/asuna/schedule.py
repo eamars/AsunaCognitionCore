@@ -41,7 +41,8 @@ def intent_problem(intent):
 
 def night_stage_busy(store):
     """Why a night stage would stack on an earlier one, or None: a self-development turn or its task still at work,
-    or one of her publications not running yet (it waits for a worker or Host restart)."""
+    or one of her publications still being activated. One waiting for a Host restart does not hold the night: only
+    that project takes no new publication until then (floor.js publish, waiting_restart)."""
     # A turn still at work (one waiting on its task is judged by the task below).
     if store.db.episodes.find_one({'episode_kind': 'self_development',
                                    'state': {'$in': ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED']}}, {'_id': 1}):
@@ -51,9 +52,16 @@ def night_stage_busy(store):
                 'episode_kind') == 'self_development':
             return 'STAGE_BUSY'
     if store.db.sink_receipts.find_one({'kind': 'self_development_publish',
-                                        'state': {'$in': ['APPLIED', 'HOST_RESTART_REQUIRED']}}, {'_id': 1}):
+                                        'state': 'APPLIED'}, {'_id': 1}):
         return 'PUBLISH_NOT_RUNNING'
     return None
+
+
+def waiting_restart(store):
+    """Her publications that run only once the Host restarts: [(project, published_at)], oldest first."""
+    rows = store.db.sink_receipts.find({'kind': 'self_development_publish', 'state': 'HOST_RESTART_REQUIRED'},
+                                       {'project': 1, 'published_at': 1}).sort('published_at', 1)
+    return [(row.get('project'), row.get('published_at')) for row in rows]
 PRESENCE_PLAN = 'plan-asuna-presence'
 HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local day
 HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and this long is rebuilt
@@ -261,6 +269,11 @@ class ScheduleService:
         left = hours * 60 - into
         stage = {'window': '%02d:00–%02d:00' % (start, (start + hours) % 24), 'every_min': every,
                  'last_stage': left <= every}
+        waiting = [{'project': project, 'published': schedule_rules.local_moment(
+                        zone if schedule_rules.is_iana(zone) else 'UTC', schedule_rules._aware(at)).strftime('%H:%M')
+                    if at else ''} for project, at in waiting_restart(self.store)]
+        if waiting:
+            stage['waiting_restart'] = waiting
         self.controller.offer_self_development('self-development:night:' + occurrence, text=NIGHT_STAGE_TEXT,
                                                stage=stage)
         current = self.store.db.plans.find_one({'_id': plan['_id']})

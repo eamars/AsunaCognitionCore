@@ -147,12 +147,13 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert not ok_wrong and ok_reply
     reply = store.db.notes.find_one({'from_episode': home['_id']})
     assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'next_time', 'trusted')
-    # Later at home: with nobody talking to her the text stays out; when someone is, it shows, labelled.
+    # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},
                    [('stay_silent', {'reason': '没事'})])
-    assert '聚会不办了' not in json.dumps(beat['context'], ensure_ascii=False)
-    assert beat['context']['notes_from_program']['items'][0]['summary'] == notes.HIDDEN_SUMMARY
+    assert '聚会不办了' in json.dumps(beat['context']['notes_from_program'], ensure_ascii=False)
+    assert notes.received_block(store, 'demo', 'dm-a', visibility.OWNER_PRIVATE, 'self_development', 'ep-dev',
+                                datetime.now(timezone.utc))['items'][0]['summary'] == notes.HIDDEN_SUMMARY
     asked, _ = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '群里怎么了'}, [], '没事')
     assert '聚会不办了' in json.dumps(asked['context']['notes_from_program'], ensure_ascii=False)
     # In the group: her reply from home as a note, and her own note's status. The reply is the end of the chain.

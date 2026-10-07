@@ -159,6 +159,7 @@ The turn opens immediately in queue order (rule 2), in a home scene, with a fixe
 
 - **Receiver side:** `notes_from_program` lists notes to this scene from the last 72 hours: from where, when, trust label, text, and what happened (read in a turn / replied / unread). `next_time` notes appear here first. A note is marked read when a turn that rendered it finishes.
   - Untrusted note text in **later** home turns: shown with its caution label only in turns where someone at home is talking to her (`external`), and as a one-line summary without the text in turns where nobody is present (heartbeat, scheduled, settlement, self-improvement). The reason is that the self-improvement turn holds the development grant, and ADR-017 lets public influence reach it only through the idea notebook. See §10 Q4.
+  - **Amended 2026-10-08 (owner):** waiting for someone to talk was the wrong moment; 小满 could not read her own notes at home in heartbeat or scheduled turns. The text with its caution label now shows in every home turn except a self-improvement turn, which alone holds the development grant and keeps the one-line summary (`notes.received_block`).
 - **Sender side:** `notes_sent_from_program` gives program status words only, like errand: "delivered", "read, replied", "read, no reply", "expired unread". A reply's content comes back as its own note, with the trust of the replying conversation.
 - Times are formatted for reading and states are fixed words (AGENTS.md: interpreted state).
 

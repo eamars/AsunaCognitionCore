@@ -61,15 +61,28 @@ def test_a_stage_never_stacks_on_open_work(store, monkeypatch):
     assert svc._night_stage(store.db.plans.find_one({'_id': NIGHT_PLAN}), 'occ') == 'STAGE_BUSY' and not offered
     task = store.db.tasks.find_one({'_id': 'task-dev'})
     store.put('tasks', {**task, 'state': 'RETURNED'}, expected=task['revision'])
-    store.put('sink_receipts', {'_id': 'self-publish-x', 'kind': 'self_development_publish', 'state': 'HOST_RESTART_REQUIRED',
+    store.put('sink_receipts', {'_id': 'self-publish-x', 'kind': 'self_development_publish', 'state': 'APPLIED',
                                 'project': 'demo', 'task_id': 'task-dev'})
-    assert night_stage_busy(store) == 'PUBLISH_NOT_RUNNING'                 # waits until it runs
+    assert night_stage_busy(store) == 'PUBLISH_NOT_RUNNING'                 # still being activated
     receipt = store.db.sink_receipts.find_one({'_id': 'self-publish-x'})
     store.put('sink_receipts', {**receipt, 'state': 'ACTIVE'}, expected=receipt['revision'])
     assert night_stage_busy(store) is None
 
 
+def test_a_change_waiting_for_a_restart_holds_only_its_project(store, monkeypatch):
+    offered = []
+    svc = service(store, offered)
+    at(monkeypatch, 2)
+    store.put('sink_receipts', {'_id': 'self-publish-y', 'kind': 'self_development_publish', 'state': 'HOST_RESTART_REQUIRED',
+                                'project': 'core', 'published_at': '2026-10-08T01:40:00Z'})
+    assert night_stage_busy(store) is None
+    assert svc._night_stage(store.db.plans.find_one({'_id': NIGHT_PLAN}), 'occ') == 'ENQUEUED'
+    stage = offered[-1][1]['stage']
+    assert stage['waiting_restart'] == [{'project': 'core', 'published': '01:40'}]
+    assert night_stage_block(stage)['waiting_restart'].startswith('core（01:40 发布）的改动在等宿主重启')
+
+
 def test_she_reads_which_stage_of_the_night_this_is():
     block = night_stage_block({'window': '01:00–06:00', 'every_min': 30, 'last_stage': True})
     assert block['window'] == '01:00–06:00' and block['pace'] == '每 30 分钟一段' and block['last'] == '这是今晚最后一段'
-    assert '一段一件事' in block['note'] and '宿主重启以后才生效' in block['note']
+    assert '一段一件事' in block['note'] and '那个项目不能再发布' in block['note']

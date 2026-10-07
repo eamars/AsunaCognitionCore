@@ -23,13 +23,18 @@ self-development schedule at night that allows multi-stage work and evaluation.
   (`self_development.night: false`).
 - **D4 — A change that needs a Host restart waits for the owner.** A stage that publishes one stops the later stages;
   the Asuna plugin card says which project's change waits and since when. Decided after §4.
+  **Amended 2026-10-08 (owner, on 小满's question):** one waiting change cost her the rest of the night. It now holds
+  only its own project: the stages go on, each stage's context names the waiting projects (`waiting_restart`), and a
+  self-improvement turn's `development_publish` to such a project is refused (`DEVELOPMENT_PUBLISH_WAITING_RESTART`),
+  so unverified changes in one project never stack. A publication still being activated (APPLIED) holds the stages as
+  before. With someone present (the owner's private chat) a publish may still replace the waiting one.
 
 ## 3. As built
 
 - `ScheduleService.ensure_night_development` registers one native recurring tick every 10 minutes
   (`plan-asuna-self-development-night`, `NIGHT_TICK_SECONDS`); `_night_stage` decides at each tick: `NIGHT_OFF`,
   `OUTSIDE_NIGHT` (her rhythm zone, `self_development.night_start_hour` + `night_hours`), `NOT_DUE`
-  (`night_every_min` since `last_stage_at`), `STAGE_BUSY` / `PUBLISH_NOT_RUNNING` (`night_stage_busy`), else
+  (`night_every_min` since `last_stage_at`), `STAGE_BUSY` / `PUBLISH_NOT_RUNNING` (`night_stage_busy`; APPLIED only), else
   `ENQUEUED`. A change of her keys applies at the next tick; there is no record to re-arm.
 - The stage is `offer_self_development('self-development:night:<occurrence>', stage=…)`; her context gains
   `night_stage_from_program` (window, pace, last stage of the night, the rules) (`rhythm.night_stage_block`).

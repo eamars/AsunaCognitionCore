@@ -18,14 +18,15 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
      recorded in its `launch.json`;
   6. starts `start-asuna.sh`, the same launcher every install uses. It installs any other change to the checkout.
 - **Network:** the three containers share the stack's own network. **Only Caddy publishes ports**: 8443 (the
-  page, HTTPS) and 8781 (Caddy's root certificate). Asuna listens on port 8780 inside the stack network and reaches
-  NapCat, the model servers and the embedding service at their LAN addresses.
+  page, HTTPS) and 8781 (Caddy's root certificate). Asuna shares Caddy's network namespace: DSH listens only on
+  loopback (port 8780), where Caddy reaches it. Asuna reaches MongoDB as `mongo` and NapCat, the model servers and
+  the embedding service at their LAN addresses. Recreating the caddy container needs a restart of `asuna` too.
 - **`mongo`** is the stack's own MongoDB, `mongo:27017` inside the stack and `127.0.0.1:27099` on the host:
   `mongodb/mongodb-atlas-local`, which runs mongod and
   its search process (mongot) together, so memory recall's vector search works. Embeddings come from the embedding
   service in each profile's config. `asuna` starts once the image's own health check reports both up. To use an
   existing MongoDB instead, point the config at one with vector search and remove this service.
-- **`caddy`** serves HTTPS with Caddy's internal certificate authority and proxies to `asuna:8780`. It rewrites
+- **`caddy`** serves HTTPS with Caddy's internal certificate authority and proxies to `localhost:8780`. It rewrites
   `Host` and `Origin` to a loopback address, so DSH's server-side fence accepts the request.
 - **Sandbox:** DSH's defaults. The image installs no sandbox tool and the stack adds no privileges. DSH picks its
   runner (Landlock on a kernel that has it), and Asuna reports the enforcement level DSH gives it.

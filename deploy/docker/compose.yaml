@@ -1,6 +1,7 @@
 # Asuna as a Portainer stack (ADR-019 §3.3), on the stack's own network. Only Caddy publishes ports: HTTPS for the LAN
-# with its internal CA, and plain HTTP for its root certificate. Asuna listens inside the stack network only, and
-# reaches NapCat and the model servers at their LAN addresses. The stack brings its own MongoDB (published on the
+# with its internal CA, and plain HTTP for its root certificate. Asuna shares Caddy's network namespace, so DSH keeps
+# listening on loopback (it refuses any other address) and Caddy reaches it there; Asuna reaches MongoDB as `mongo`
+# and NapCat and the model servers at their LAN addresses. The stack brings its own MongoDB (published on the
 # host's loopback for tools): Atlas Local, whose search engine (mongot) the memory's vector search needs, with
 # the open-file limit MongoDB needs. Point ASUNA_MONGO_URI or the config at another search-capable MongoDB and remove
 # that service to use an existing one. Container names follow ASUNA_NAME, so stacks can coexist.
@@ -33,6 +34,11 @@ services:
     depends_on:
       mongo:
         condition: service_healthy        # the image's own check: mongod and mongot both up
+      caddy:
+        condition: service_started
+    # Caddy's network namespace: its published ports reach this container's loopback. If the caddy container is ever
+    # recreated, restart this one too.
+    network_mode: service:caddy
     environment:
       ASUNA_REPO: ${ASUNA_REPO:-https://github.com/eamars/AsunaCognitionCore.git}
       ASUNA_REF: ${ASUNA_REF:-main}
@@ -46,8 +52,6 @@ services:
       ASUNA_INTEGRATION_CONFIG_JSON: ${ASUNA_INTEGRATION_CONFIG_JSON:-}
       ASUNA_CHANNEL_ADMISSION: ${ASUNA_CHANNEL_ADMISSION:-}
       ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
-      # The Web server listens on the stack network (port 8780) for Caddy; nothing publishes it.
-      ASUNA_LISTEN: 0.0.0.0
       # Local time, as on any host: default quiet hours follow it. Set it to where she lives.
       TZ: ${TZ:-UTC}
     volumes:
@@ -66,9 +70,6 @@ services:
     image: caddy:2-alpine
     container_name: ${ASUNA_NAME:-asuna}-https
     init: true
-    depends_on:
-      asuna:
-        condition: service_healthy
     ports:
       - ${ASUNA_HTTPS_PORT:-8443}:443           # the page: https://<host>:8443/
       - ${ASUNA_HTTP_PORT:-8781}:80             # Caddy's root certificate, and a redirect to HTTPS
@@ -90,7 +91,7 @@ services:
             tls internal {
                 on_demand
             }
-            reverse_proxy asuna:8780 {
+            reverse_proxy localhost:8780 {
                 header_up Host localhost:8780
                 header_up Origin http://localhost:8780
             }

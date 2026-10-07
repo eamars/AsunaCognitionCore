@@ -10,7 +10,7 @@ const read = async (file, fallback) => {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
-const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--host 127.0.0.1] [--port 8780] [--no-sync] [--dry-run]';
+const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port 8780] [--no-sync] [--dry-run]';
 const exists = file => fs.access(file).then(() => true, () => false);
 
 // DSH installs plugins by running `pnpm` from PATH. Node ships pnpm through corepack, so a machine
@@ -95,21 +95,17 @@ export function profileBase(profile) {
 
 export async function resolveLaunch(argv, env = process.env) {
   const args = argv.filter(arg => !['ui', '--native'].includes(arg));
-  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, host: '127.0.0.1', port: 8780, dryRun: false,
+  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: 8780, dryRun: false,
     sync: true };
   for (let index = 0; index < args.length; index++) {
     const flag = args[index], value = args[index + 1];
     if (flag === '--dry-run') { options.dryRun = true; continue; }
     if (flag === '--no-sync') { options.sync = false; continue; }
-    if (!['--port', '--profile', '--config', '--host'].includes(flag) || value === undefined) throw new Error(usage);
+    if (!['--port', '--profile', '--config'].includes(flag) || value === undefined) throw new Error(usage);
     index++;
     if (flag === '--port') {
       if (!/^\d{2,5}$/.test(value)) throw new Error(usage);
       options.port = Number(value);
-    } else if (flag === '--host') {
-      // The address the Web server listens on: loopback by default; all interfaces only behind a proxy (a container).
-      if (!['127.0.0.1', '::1', '0.0.0.0', '::'].includes(value)) throw new Error('Invalid listen address: ' + value);
-      options.host = value;
     } else options[flag.slice(2)] = value;
   }
   if (!/^[a-z][a-z0-9-]{0,50}$/.test(options.profile)) throw new Error('Invalid profile name');
@@ -122,7 +118,7 @@ export async function resolveLaunch(argv, env = process.env) {
   // Native settings own the credentials once imported; the local file is then only a migration source.
   const local = await read(config, launch.native_credentials ? {} : undefined);
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
-    host: options.host, port: options.port, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
+    port: options.port, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
     sharedActionModel: Boolean(launch.shared_action_model),
     nativeCredentials: Boolean(launch.native_credentials), local };
 }
@@ -177,7 +173,7 @@ async function main() {
     await fs.writeFile(selectionPath + '.tmp', JSON.stringify(selection, null, 2));
     await fs.rename(selectionPath + '.tmp', selectionPath);
   }
-  return run(['--profile', launch.profile, '--no-open', '--host', launch.host, '--port', String(launch.port)]);
+  return run(['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)]);
 }
 
 if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) process.exitCode = await main();

@@ -36,7 +36,7 @@ test('a program note in the same turn is its own stage: only its own text, only 
   assert.deepEqual(stageView(events, 'ep:TURN:fix-1', 1), { said: ['好的，我换个说法。'], seen_inputs: ['in-late'] });
 });
 
-test('her text is read without the reasoning markup the model leaked into it, and the stage says so', () => {
+test('an answer the model wrote again around reasoning markup is read once, and the stage says so', () => {
   seq = 0;
   const events = [ev('turn/start', { turn: 1 }), ev('asuna/stage', { operation: 'ep:TURN' }),
     said(1, '明天见\n</think>\n\n明天见')];

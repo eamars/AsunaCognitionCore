@@ -1,94 +1,125 @@
 /**
- * A model fault in her own output is corrected where it was made: in what she says, and in what her conversation
- * shows the model from then on.
+ * Reasoning markup in a conversation is kept from teaching the model a fault.
  *
- * A model can leak its reasoning markup into the answer (`</think>`, `</next_thinking>`, the answer written again
- * around such a tag), or write the previous step's reasoning again word for word. Left in the conversation, every
- * later request shows the fault as her own earlier output and the model repeats it. So:
- * - Her text is read as the last segment between think-like tags (a closed think block is dropped first); that is
- *   what she says, and what the program reads from the stage (`cleanMessage`).
- * - Before each request of an Asuna session, every assistant message in the model's view is checked once; a faulty
- *   one gets an `asuna/model-fault` record whose message projection (DSH's registerMessageProjection, as
- *   `image/offload` does) shows the model the corrected texts, and no reasoning where it copied the previous
- *   message's. The session log keeps what the model wrote.
+ * A model server can take a think-like tag (`</think>`, `</next_thinking>`) written as text for the end of the
+ * reasoning: a message mentioning one splits the reasoning there, and the answer comes back with the rest of the
+ * reasoning, the tag, and often the answer again around it. A mention and a real boundary look the same in the
+ * text, so the program never guesses which part is her answer:
+ * - Her text that is one answer written again around such tags (each part the same, or a cut-off start of it) is
+ *   read as that answer (`cleanMessage`); that is what she says and what the program reads from the stage.
+ *   Any other text with such a tag is left as it is, and the end-of-turn check asks her to write it again.
+ * - Before each request of an Asuna session, every message in the model's view is checked once, and one that needs
+ *   it gets an `asuna/model-view` record, a DSH message projection (registerMessageProjection, as `image/offload`
+ *   does): in her messages the model sees a repeated answer once, nothing of any other text with reasoning markup,
+ *   and no reasoning where it copied the previous message's word for word; in every other message it sees each such
+ *   tag, and each `<|…|>` control token, written with full-width brackets (`＜/think＞`), so a line quoting one cannot
+ *   end her reasoning. The session log keeps what was written.
  */
 
 const THINK_TAG = /<\/?\s*[a-z_]*think[a-z_]*\s*>/gi;
 const HAS_THINK_TAG = /<\/?\s*[a-z_]*think[a-z_]*\s*>/i;
-const THINK_BLOCK = /<\s*([a-z_]*think[a-z_]*)\s*>[\s\S]*?<\/\s*\1\s*>/gi;
+const CONTROL_TOKEN = /<(\|[^|<>\s]{1,40}\|)>/g;
 // A reasoning shorter than this repeating the previous one is not a copy worth omitting.
 const COPY_MIN = 20;
-export const MODEL_FAULT = 'asuna/model-fault';
+export const MODEL_VIEW = 'asuna/model-view';
 
-/** Her text without the model's reasoning markup: the last segment between think-like tags. */
+/** True when the text carries a think-like tag. */
+export const hasReasoningMarkup = text => HAS_THINK_TAG.test(text);
+
+/** One answer written again around think-like tags, as that answer; any other text unchanged. */
 export function cleanText(text) {
   if (!HAS_THINK_TAG.test(text)) return text;
-  return text.replace(THINK_BLOCK, '\n').split(THINK_TAG).map(part => part.trim()).filter(Boolean).at(-1) ?? '';
+  const parts = text.split(THINK_TAG).map(part => part.trim()).filter(Boolean);
+  const answer = parts.reduce((longest, part) => part.length > longest.length ? part : longest, '');
+  return parts.length > 1 && parts.every(part => answer.startsWith(part)) ? answer : text;
 }
 
 /** The message with every text cleaned; the same object when nothing changed. */
 export function cleanMessage(message) {
   const content = message?.content ?? [];
-  if (!content.some(block => block.type === 'text' && HAS_THINK_TAG.test(block.text))) return message;
-  return { ...message, content: content.map(block => block.type === 'text' ? { ...block, text: cleanText(block.text) } : block) };
+  const cleaned = content.map(block => block.type === 'text' ? cleanText(block.text) : null);
+  if (content.every((block, index) => block.type !== 'text' || cleaned[index] === block.text)) return message;
+  return { ...message, content: content.map((block, index) => block.type === 'text' ? { ...block, text: cleaned[index] } : block) };
 }
 
+/** Think-like tags and control tokens written with full-width brackets. */
+export const disarm = text => text.replace(THINK_TAG, tag => '＜' + tag.slice(1, -1) + '＞')
+  .replace(CONTROL_TOKEN, (_, token) => '＜' + token + '＞');
+
+const textsOf = message => (message?.content ?? []).filter(block => block.type === 'text').map(block => block.text);
 const reasoningOf = message => (message?.content ?? []).filter(block => block.type === 'reasoning')
   .map(block => block.text).join('');
+const messageOf = event => event.type === 'user/message' ? event.data : event.data.message;
+const VIEWED = new Set(['assistant/message', 'user/message', 'tool/result']);
 
 const checked = new WeakMap();
 
+/** What the model should see of one of her messages instead (null: as it is). */
+function herMessage(raw, copied) {
+  const before = textsOf(raw);
+  const texts = before.map(text => {
+    const cleaned = cleanText(text);
+    return hasReasoningMarkup(cleaned) ? '' : cleaned;
+  });
+  if (!copied && texts.every((text, index) => text === before[index])) return null;
+  return { texts, ...(copied ? { reasoning: false } : {}) };
+}
+
 /**
- * Record one correction for the assistant messages of the session's model view that are faulty and not yet
- * corrected. Each message is read once per live session (its reasoning is kept to compare the next one).
- * @returns the corrected targets (none: nothing recorded).
+ * Record one `asuna/model-view` decision for the messages of the session's model view that need one and have none.
+ * Each message is read once per live session (her reasoning is kept to compare the next one).
+ * @returns the recorded targets (none: nothing recorded).
  */
-export function correctModelFaults(session) {
+export function correctModelView(session) {
   const seen = checked.get(session) ?? new Map();
   checked.set(session, seen);
   const targets = [];
   let previous = '';
   for (const seq of session.surface.nodes) {
     const event = session.eventAt(seq);
-    if (event?.type !== 'assistant/message') continue;
-    const raw = event.data.message;
+    if (!VIEWED.has(event?.type)) continue;
     if (!seen.has(seq)) {
+      const raw = messageOf(event);
+      const derived = session.deriveEventMessage(event);
       const reasoning = reasoningOf(raw);
       seen.set(seq, reasoning);
-      if (session.deriveEventMessage(event) === raw) {             // not corrected before (a resumed session)
-        const before = raw.content.filter(block => block.type === 'text').map(block => block.text);
-        const texts = before.map(cleanText);
+      if (event.type === 'assistant/message') {
         const copied = reasoning.trim().length >= COPY_MIN && reasoning === previous;
-        if (copied || texts.some((text, index) => text !== before[index]))
-          targets.push({ seq, texts, ...(copied ? { reasoning: false } : {}) });
+        const view = derived === raw ? herMessage(raw, copied) : null;      // otherwise decided before
+        if (view) targets.push({ seq, ...view });
+      } else if (derived) {
+        const before = textsOf(derived);
+        const texts = before.map(disarm);
+        if (texts.some((text, index) => text !== before[index])) targets.push({ seq, texts });
       }
     }
-    previous = seen.get(seq);
+    if (event.type === 'assistant/message') previous = seen.get(seq);
   }
-  if (targets.length) session.append(MODEL_FAULT, { targets });
+  if (targets.length) session.append(MODEL_VIEW, { targets });
   return targets;
 }
 
 const isSeq = value => Number.isSafeInteger(value) && value >= 0;
 
-/** The pure replay of an `asuna/model-fault` record, for DSH's message projections. */
-export const modelFaultProjection = {
-  type: MODEL_FAULT,
+/** The pure replay of an `asuna/model-view` record, for DSH's message projections. */
+export const modelViewProjection = {
+  type: MODEL_VIEW,
   project(event, context) {
     const targets = event.data?.targets;
-    if (!Array.isArray(targets) || !targets.length) throw new Error(MODEL_FAULT + ': data must contain a nonempty targets array');
+    if (!Array.isArray(targets) || !targets.length) throw new Error(MODEL_VIEW + ': data must contain a nonempty targets array');
     const nodes = new Set(context.nodes);
     const messages = new Map();
     for (const target of targets) {
       const { seq, texts, reasoning } = target ?? {};
-      if (!isSeq(seq) || !nodes.has(seq) || messages.has(seq)) throw new Error(`${MODEL_FAULT}: target ${seq} is not a current surface node`);
+      if (!isSeq(seq) || !nodes.has(seq) || messages.has(seq)) throw new Error(`${MODEL_VIEW}: target ${seq} is not a current surface node`);
       const source = context.events[seq - context.baseSeq];
-      if (source?.type !== 'assistant/message') throw new Error(`${MODEL_FAULT}: target ${seq} must be assistant/message`);
-      const message = context.messages.get(seq) ?? source.data.message;
+      if (!VIEWED.has(source?.type)) throw new Error(`${MODEL_VIEW}: target ${seq} must be a user, assistant or tool message`);
+      const message = context.messages.get(seq) ?? messageOf(source);
       const count = message.content.filter(block => block.type === 'text').length;
       if (!Array.isArray(texts) || texts.length !== count || !texts.every(text => typeof text === 'string'))
-        throw new Error(`${MODEL_FAULT}: target ${seq} needs one text for each of its ${count} text blocks`);
-      if (reasoning !== undefined && reasoning !== false) throw new Error(`${MODEL_FAULT}: reasoning may only be false`);
+        throw new Error(`${MODEL_VIEW}: target ${seq} needs one text for each of its ${count} text blocks`);
+      if (reasoning !== undefined && (reasoning !== false || source.type !== 'assistant/message'))
+        throw new Error(`${MODEL_VIEW}: reasoning may only be false, on an assistant message`);
       let index = 0;
       const content = message.content.map(block => Object.freeze(block.type === 'text' ? { ...block, text: texts[index++] }
         : block.type === 'reasoning' && reasoning === false ? { ...block, text: '' } : block));

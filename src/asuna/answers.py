@@ -98,6 +98,7 @@ def json_list(text):
 # about the turn instead of to the person: tool names (all of hers have an underscore) and the
 # context's program blocks.
 import re as _re
+REASONING_MARKUP = _re.compile(r'</?\s*[a-z_]*think[a-z_]*\s*>', _re.I)
 PROGRAM_TALK = _re.compile(r'\b[a-z]+_(?:action|silent|image|document|self|person|policy|memory|idea)\b'
                            r'|_from_program\b|\btool_calls?\b|工具调用|调用工具')
 
@@ -113,6 +114,10 @@ def speech_problem(value, *, thought, consult=False):
         return '这回合还没写心里话：先调用 think，再把要说的话写出来。'
     if not text:
         return '这回合没有写要说的话：写出要对对方说的话，或者用 stay_silent 结束。'
+    if REASONING_MARKUP.search(text):
+        # The model server may take such a tag for the end of her reasoning, so the text around it is not
+        # known to be her answer (model-fault.js): it is not sent, and the conversation no longer shows it.
+        return '上一段正文里混进了思考用的结束标记，没有发出去：重新写出要对对方说的话；要提到这种标记，写成全角的＜/think＞。'
     if text.startswith('{') and text.endswith('}'):
         import json
         try:

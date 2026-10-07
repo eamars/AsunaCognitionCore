@@ -54,6 +54,7 @@ def test_E05_delivered_projection_only(store):
                                          (FakeTurn([THINK],'cut',finish_reason='length'),'长度上限'),
                                          (FakeTurn([THINK],json.dumps({'next':'speak'})),'JSON 对象'),
                                          (FakeTurn([THINK],'我先 stay_silent 一下'),'程序的事'),
+                                         (FakeTurn([THINK],'就禁言他。\n</think>'),'思考用的结束标记'),
                                          (LaneResult('没想就说',reasoning='thinking'),'还没写心里话')])
 def test_E07_invalid_turn_end_fails_closed(store,bad,problem):
     # Two repairs in the same turn (answers.py), each telling her what was wrong; then the turn fails closed.

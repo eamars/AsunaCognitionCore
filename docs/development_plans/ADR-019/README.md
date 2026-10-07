@@ -53,6 +53,21 @@ Asuna has only ever run on the owner's Windows machine. The owner wants it to ru
 | `build_dsh_inline.mjs` goes through PowerShell on Windows | builds the pinned rendering extension from a dedicated DSH checkout | It already has a non-Windows branch. Check it on Linux once, or take the built artifacts from the GitHub Release (ADR-010). |
 | The note that `.runtime` needs full control | RUN_ASUNA, ADR-015 | This is Windows-only (the ACL runner). On Linux the runner needs user namespaces (§3.3). |
 
+### 2.4 The target host (inventory 2026-10-07, read-only, taken by a Claude session on that host)
+
+The owner's Docker host. Its address and names stay out of this file (AGENTS.md: personal data).
+
+| Fact | Value | Consequence |
+| --- | --- | --- |
+| OS and kernel | Ubuntu 22.04 LTS, Linux 5.15, x86-64; 36 CPUs, 62 GiB memory | Plenty of headroom |
+| Disk | The root disk is 76% full (about 23 GB free); Docker's data is on it | An Asuna image plus her Python environment and data fit, but the free space should be watched |
+| Docker | Engine 29, running as root (not rootless), cgroup v2, AppArmor and seccomp on | Standard. The owner's user is in the docker group |
+| Compose | Neither the compose plugin nor `docker-compose` is installed. Stacks are deployed through Portainer | The compose file of §3.3 is deployed as a Portainer stack. Nothing has to be installed on the host |
+| Sandbox | Landlock is in the active LSMs. Unprivileged user namespaces are allowed (Ubuntu 22.04 has no AppArmor restriction on them). `bwrap` is not installed | DSH's Landlock path is available. Linux 5.15 provides Landlock ABI 1, which confines file writes but has no rules for truncating or for the network. DSH reports the enforcement level it gets, and Asuna passes that on |
+| Host toolchain | python3 3.10 and git. No node, npm or uv | The host runs nothing of Asuna's itself. The image brings Node, uv and Python 3.12 |
+| Already running | Her MongoDB (with vector search), NapCat, a SearXNG search instance, another DSH instance behind Caddy, and Portainer | Asuna runs next to her database and NapCat. Nothing of those is changed. Ports already taken there are avoided; Asuna's 8780 is free |
+| Earlier incident (that host's notes) | The vector-search stack crash-looped on 2026-10-03, from leaked `asuna_v2_test_*` databases and a low open-file limit. Both were fixed | Tests must keep dropping their own databases (AGENTS.md). A container deployment does not run the test suite against that MongoDB |
+
 ## 3. Design
 
 ### 3.1 The rule in code
@@ -114,19 +129,19 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | M0 | The owner answers §6. Update this ADR | — |
 | M1 | Portability fixes from §2.3: tests confine through DSH's sandbox provider, launcher `--host`, `check_dsh_release.py`, the contract test that lists platform branches | Full test suite on Windows, unchanged |
 | M2 | A Linux machine (§6 Q1): install by §3.2, the sandbox probe's enforcement level, the full Python and native test suites, one start with synthetic inference (AGENTS.md: no real model unless authorized) | Test reports, the probe result, the Web page loading |
-| M3 | Docker image and compose file by §3.3, with volumes and the entrypoint | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
+| M3 | Docker image and compose file by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
 | M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
 | M5 | The owner's review on the real page, on Linux | — |
 
 ## 6. Decisions for the owner
 
-1. **Where to verify Linux.** A Linux machine or VM the owner provides (recommended: closest to a real deployment), or Docker Desktop on this PC. Docker Desktop runs on WSL2, which ADR-015 ruled out for the runtime, but only for verifying here.
+1. **Where to verify Linux.** The owner's Docker host (§2.4, recommended: it is the target, and it already runs her database and NapCat), in a container that is separate from everything already there. The alternative is Docker Desktop on this PC, which runs on WSL2 (ADR-015 ruled WSL out for the runtime, but only for verifying here). A Claude session on the host does the host-side steps; every one of its actions is approved in that session.
 2. **Her core self-development in a container.**
    - *Bind-mounted checkout (recommended):* the checkout lives on a volume, so her publications persist and the launcher installs them, exactly as on bare metal.
    - *Artifacts only:* her publications live as packages in the data folder; an image rebuild drops them unless they are upstreamed.
    - *Off:* core self-development is disabled in containers.
 3. **The sandbox inside a container.**
-   - *Landlock only (recommended):* no extra container privileges; enforcement as DSH reports it.
+   - *Landlock only (recommended):* no extra container privileges; the host kernel has Landlock (ABI 1, §2.4); enforcement as DSH reports it.
    - *Allow bubblewrap:* user namespaces through a seccomp or AppArmor setting.
 4. **Web exposure.** The port is published to the host's loopback only, and reached from elsewhere through the owner's own tunnel or proxy (recommended). The alternative is publishing on the LAN, which would rely on the token alone.
 5. **NapCat placement** on Linux: on the same host, or in its own container. This is a deployment choice; Asuna only needs its address.

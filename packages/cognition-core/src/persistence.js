@@ -5,7 +5,7 @@
 import SessionPersistence from '@deepseek-ai/dsh-session-persistence';
 import JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl';
 
-// asuna/action-linked, asuna/action-range and asuna/model-fault are retired but remain in older logs.
+// asuna/action-linked, asuna/action-range, asuna/model-fault and asuna/model-view are retired but remain in older logs.
 export const ASUNA_EVENTS = new Set(['asuna/stage', 'asuna/stage-result', 'asuna/schedule', 'asuna/collab',
   'asuna/model-view', 'asuna/model-fault', 'asuna/action-linked', 'asuna/action-range']);
 const compatible = event => ASUNA_EVENTS.has(event.type) ? { ...event, ignorable: true } : event;

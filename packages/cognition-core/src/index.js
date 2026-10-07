@@ -9,7 +9,6 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
-import { cleanMessage, correctModelView, modelViewProjection } from './model-fault.js';
 import { holdSteeredInput } from './steer.js';
 import { composeContext, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
@@ -79,14 +78,12 @@ export function stageView(events, token, turn) {
   const marks = events.filter(event => event.type === 'asuna/stage' && event.data.operation === token);
   const first = marks[0]?.seq ?? Infinity, lastRequest = marks.at(-1)?.seq ?? -1;
   const before = events.findLast(event => event.type === 'asuna/stage' && event.seq < first)?.seq ?? -1;
-  const messages = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn
-    && event.seq > first && !event.data.interrupted).map(event => event.data.message);
-  const said = messages.map(message => textOf(cleanMessage(message))).filter(text => text.trim());
+  const said = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn
+    && event.seq > first && !event.data.interrupted).map(event => textOf(event.data.message)).filter(text => text.trim());
   const seen = events.filter(event => event.type === 'user/message' && event.seq > before && event.seq < lastRequest
     && event.data.source?.kind === 'user' && event.data.source.channel && event.data.source.receipt)
     .map(event => event.data.source.receipt);
-  return { said, seen_inputs: [...new Set(seen)],
-    ...(messages.some(message => cleanMessage(message) !== message) ? { corrected: true } : {}) };
+  return { said, seen_inputs: [...new Set(seen)] };
 }
 
 export class CognitionCore {
@@ -576,9 +573,8 @@ export class CognitionCore {
   }
 
   result(stage, sessionId, last, finishReason) {
-    const message = cleanMessage(last.data.message);
     return {
-      content: textOf(message), finish_reason: finishReason, ...(message !== last.data.message ? { corrected: true } : {}),
+      content: textOf(last.data.message), finish_reason: finishReason,
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
       receipt: stage.token, request_refs: [sessionId + ':' + last.seq],
@@ -708,10 +704,6 @@ export class CognitionCore {
     });
     // Route selection only. All model-visible material uses the durable inbox.
     scope.on('agent/request', async ({ agent, turn, step }, next) => {
-      // Reasoning markup in the conversation reaches the model disarmed, never as her way of writing (model-fault.js).
-      const corrected = correctModelView(agent.session);
-      if (corrected.length) this.ctx.logger.warn(`Asuna: ${corrected.length} message(s) in ${agent.session.id} reach the model `
-        + `corrected (seq ${corrected.map(target => target.seq).join(', ')})`);
       const request = await next();
       const stage = this.state(agent.session.id).current;
       if (lane === 'executor') {
@@ -908,8 +900,6 @@ export function apply(ctx, config = {}) {
   }));
   // A picture the model refuses becomes DSH's offload placeholder in that conversation, and the request is tried
   // once more, instead of ending her turn and every later one there (image-refusal.js).
-  // Messages with reasoning markup, and her copied reasonings, reach the model corrected (model-fault.js).
-  ctx.sessions.registerMessageProjection(modelViewProjection);
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   ctx.on('dispose', () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;

@@ -54,11 +54,3 @@ def test_a_line_she_already_saw_gets_no_second_turn(store, tmp_path):
     assert said == ['那必须的，被夸了我会更来劲。\n\n他教没教我不好说。']           # core default: one message
     assert store.db.audit_events.count_documents({'stream_id': first, 'type': 'input.absorbed'}) == 1
 
-
-def test_a_reply_she_wrote_again_after_a_tool_leaves_once(store, tmp_path):
-    platform_world(store)
-    lane = FakeLane(store, [FakeTurn([THINK], '……叫错人了。我是カズサ。',
-                                     said=['……叫错人了。我是カズサ。'])])
-    Router(store, Coordinator(store, lane)).receive(line('l3', '小满？'))
-    said = [m['text'] for m in store.db.messages.find({'scene_id': 'dm-b', 'direction': 'outbound', 'phase': 'SPEAK'})]
-    assert said == ['……叫错人了。我是カズサ。']

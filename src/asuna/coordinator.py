@@ -222,20 +222,14 @@ class Coordinator:
             speech=self._speech(ep,value)
             # stay_silent ends the turn with nothing more to say: words she already wrote in it still leave.
             if ep.get('silent') and kind!='consult' and not speech:
-                if not ep.get('await_answer') or attempt:
-                    self._absorb(ep,seen)
-                    return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                                        silent_reason=ep['silent']['reason'])
-                # await_answer is about words she said, yet none were written (a reply left in her thinking):
-                # asked once whether she meant to say something.
-                ep=self._update(ep,silent=None)
-                issue=answers.NOTHING_WRITTEN
-            else:
-                issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
-                                             consult=kind=='consult')
-                if issue is None and kind!='consult':
-                    from . import stickers
-                    issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
+                self._absorb(ep,seen)
+                return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
+                                    silent_reason=ep['silent']['reason'])
+            issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
+                                         consult=kind=='consult')
+            if issue is None and kind!='consult':
+                from . import stickers
+                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
             if issue is None:
                 self._absorb(ep,seen)
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))
@@ -247,10 +241,9 @@ class Coordinator:
 
     def _speech(self, ep, value):
         """Every text she wrote this turn, in order; with more than one, each leaves as its own message where the
-        persona allows several (speak.max_messages), else they join as paragraphs of one. A text she wrote again
-        word for word (a model often restates its reply after a tool result) leaves once."""
-        pieces=list(dict.fromkeys(text.strip() for text in (value.said if value.said is not None else [value.content or ''])
-                                  if isinstance(text,str) and text.strip()))
+        persona allows several (speak.max_messages), else they join as paragraphs of one."""
+        pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
+                if isinstance(text,str) and text.strip()]
         if len(pieces)<=1:
             return pieces[0] if pieces else ''
         from .persona_model import effective
@@ -289,8 +282,7 @@ class Coordinator:
         from .state import content_ref
         self.store.audit(ep['_id'],'turn.output',{'operation':operation,**content_ref(value.content),
             'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
-            'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery,
-            **({'corrected':True} if value.corrected else {})},ep['scope_key'])
+            'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
         require_current_feedback(self.store, ep)
         return value
 

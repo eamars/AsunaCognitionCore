@@ -112,7 +112,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 1. `src/index.js` calls `registerChannel({kind, title, project, resource_root, python, module,
    integration_directory, skill_directories})`.
 2. `python/<module>/__init__.py` is the kind module: the names listed in `src/asuna/channel_kinds.py`'s docstring
-   (id formats, mentions, media hosts, derived adapter settings, optional faces, stickers, home or text-only).
+   (id formats, mentions, media hosts, derived adapter settings; optional faces, stickers, home or text-only, and
+   `SERVICE_ARGV`, the managed adapter's resident command, which an enabled integration starts by itself).
 3. The adapter speaks the channel API in [RUNTIME_API.md](../RUNTIME_API.md#channel-api) with the channel's token.
 4. The README says what a deployment configures (see the QQ package's "Setting up QQ").
 5. `npm install`, `npm run test:native`, then add it to a profile

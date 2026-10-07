@@ -253,6 +253,15 @@ class IntegrationRunner:
 
     def restore(self):
         if not self.enabled_path.exists():
+            # Never started, never stopped: an enabled adapter that serves a channel starts by itself, with the command
+            # its channel package declares. From then on it is restored like any started service, and a stop is kept.
+            argv = self.service_argv()
+            if argv:
+                try:
+                    if self.call('integration_start', {'argv': argv})['state'] != 'RUNNING':
+                        self.restoration_error = 'INTEGRATION_AUTOSTART_NOT_RUNNING'
+                except Exception as exc:
+                    self.restoration_error = 'INTEGRATION_AUTOSTART_FAILED: ' + str(exc)
             return
         saved = json.loads(self.enabled_path.read_text(encoding='utf-8'))
         if not saved.get('enabled'):
@@ -274,6 +283,18 @@ class IntegrationRunner:
                 raise
         finally:
             self._sweep_snapshots()
+
+    def service_argv(self):
+        """The resident command of the channel this adapter serves (its kind's SERVICE_ARGV), or None."""
+        channel_id = ((self.profile.get('adapter_config') or {}).get('host') or {}).get('channel_id')
+        if not self.profile.get('enabled') or not channel_id:
+            return None
+        from . import channel_kinds
+        try:
+            argv = getattr(channel_kinds.of_channel(channel_id), 'SERVICE_ARGV', None)
+        except ValueError:
+            return None
+        return valid_argv(list(argv)) if argv else None
 
     def release(self):
         """The published adapter: the only code a managed service runs (ADR-011 §5.2, one publish path)."""

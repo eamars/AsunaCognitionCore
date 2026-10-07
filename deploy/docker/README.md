@@ -17,8 +17,10 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
   5. installs the profile when it has never been installed, or when the stack names other packages than the ones
      recorded in its `launch.json`;
   6. starts `start-asuna.sh`, the same launcher every install uses. It installs any other change to the checkout.
-- **`mongo`** is the stack's own MongoDB on `127.0.0.1:27099`, with a 64000 open-file limit. To use an existing
-  MongoDB instead, point the config at it and remove this service.
+- **`mongo`** is the stack's own MongoDB on `127.0.0.1:27099`: `mongodb/mongodb-atlas-local`, which runs mongod and
+  its search process (mongot) together, so memory recall's vector search works. Embeddings come from the embedding
+  service in each profile's config. `asuna` starts once the image's own health check reports both up. To use an
+  existing MongoDB instead, point the config at one with vector search and remove this service.
 - **`caddy`** serves HTTPS on the LAN with Caddy's internal certificate authority, and proxies to Asuna on loopback.
   It rewrites `Host` and `Origin` to that loopback address, so DSH's server-side fence accepts the request. Both
   containers use host networking, so Asuna reaches MongoDB and NapCat as any process on that host would.
@@ -38,7 +40,7 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
 | `ASUNA_CONFIG_JSON` | — | For any other profile: the config written to `ASUNA_CONFIG` when that file is missing |
 | `ASUNA_PERSONA_PACKAGE` | `tests/fixtures/personas/demo` | The persona package directory |
 | `ASUNA_CHANNEL_PACKAGES` | none | Channel package directories, separated by spaces (e.g. `packages/channels/napcat-qq`) |
-| `ASUNA_CHANNEL_CONFIG_JSON`, `ASUNA_INTEGRATION_CONFIG_JSON` | — | The channel and integration settings (the shapes of `config/asuna-channel.example.json` and `config/integration.example.json`). Written beside the config when missing, and read by the installer into a profile that has none |
+| `ASUNA_CHANNEL_CONFIG_JSON`, `ASUNA_INTEGRATION_CONFIG_JSON` | — | The channel and integration settings (the shapes of `config/asuna-channel.example.json` and `config/integration.example.json`). Written beside the config when missing, and read by the installer into a profile that has none. An enabled adapter for a channel starts by itself on the first start |
 | `ASUNA_CHANNEL_ADMISSION` | `explicit` | `automatic` admits new DMs, groups and members on their first valid message. A first choice only: the settings card's saved choice wins |
 | `ASUNA_SHARED_ACTION_MODEL` | `0` | `1` routes both brains to the action model |
 | `ASUNA_PORT`, `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8780, 8443, 8781 | Asuna's loopback port, Caddy's HTTPS port, and the plain-HTTP port that serves Caddy's root certificate. Pick ports that are free on the host |

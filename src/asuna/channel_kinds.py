@@ -11,6 +11,7 @@ A kind module knows one platform's id formats and adapter conventions:
   FACES, STICKERS (optional)                   the platform's own faces by name -> id; whether it sends stickers
   HOME (optional)                              its conversations are trusted home ones (owner_private); default public
   TEXT_ONLY (optional)                         it carries text only, no pictures; default False
+  SERVICE_ARGV (optional)                      its managed adapter's resident command, started by itself once
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).

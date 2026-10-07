@@ -100,7 +100,7 @@ Asuna 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（
 
 ## 快速开始
 
-你需要准备 DeepSeek Harness 0.2.0-rc.2、Python 3.12+、MongoDB、给两个脑子用的模型服务（两个脑子也可以共用同一个模型），以及一个人格包。可选组件：接入 QQ 用的 NapCat。命令在 DSH 自带的沙箱里运行，支持 Windows、Linux 和 macOS。
+你需要准备 DeepSeek Harness 0.2.0-rc.2、Python 3.12+、支持向量搜索的 MongoDB、给两个脑子用的模型服务（两个脑子也可以共用同一个模型），以及一个人格包。可选组件：接入 QQ 用的 NapCat。命令在 DSH 自带的沙箱里运行，支持 Windows、Linux 和 macOS。
 
 - **把发布的插件装进 DSH**：按照 [INSTALL.md](INSTALL.md) 操作即可。这份说明写得足够具体，人或者编程智能体都能照着完成安装。
 - **从本仓库运行**：参见 [RUN_ASUNA.md](RUN_ASUNA.md)。运行 `start-asuna.cmd`（Windows）或 `./start-asuna.sh`（Linux、macOS）启动，然后打开它输出的网址。Docker 部署见 [deploy/docker](deploy/docker/README.md)。

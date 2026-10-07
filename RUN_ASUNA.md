@@ -22,7 +22,7 @@ The core and the channel packages are licensed under the GNU General Public Lice
 
 ## Install from a checkout
 
-You need Node (the version DSH 0.2.0-rc.2 supports), Python **3.12+** through [uv](https://docs.astral.sh/uv/), MongoDB, and a model server for each brain (both may share one). Model and embedding services run independently of Asuna. Commands run under DSH's own sandbox.
+You need Node (the version DSH 0.2.0-rc.2 supports), Python **3.12+** through [uv](https://docs.astral.sh/uv/), MongoDB with vector search (Atlas, Atlas Local, or Community with mongot; see [INSTALL.md](INSTALL.md#what-you-need)), and a model server for each brain (both may share one). Model and embedding services run independently of Asuna. Commands run under DSH's own sandbox.
 
 First write `config/local.json` from [config/local.example.json](config/local.example.json) (see [Settings and private files](#settings-and-private-files)). Then pack the packages and install them into the profile. Pass the persona package and **every** channel package you want to both the packer and the installer:
 

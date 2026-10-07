@@ -84,6 +84,30 @@ def test_changed_network_profile_does_not_autorestore(runner, tmp_path):
     other.close()
 
 
+def test_an_enabled_channel_adapter_starts_by_itself_once_and_a_stop_is_kept(tmp_path, monkeypatch):
+    from asuna import channel_kinds
+    from conftest import QQ_CHANNEL
+    channel_kinds.load([QQ_CHANNEL])
+    configured = profile(); configured['integration']['adapter_config'] = {'host': {'channel_id': 'qq'}}
+    root = ROOT/'.runtime/integration'/('test-'+uuid.uuid4().hex)
+    try:
+        first = IntegrationRunner(configured, root=root)
+        assert first.service_argv() == ['python3', '/app/adapter.py', '--service']       # what the QQ package declares
+        monkeypatch.setattr(IntegrationRunner, 'service_argv', lambda self: ['python3', '-c', 'import time; time.sleep(20)'])
+        first.restore()                                        # no published adapter yet: says so, starts nothing
+        assert first.active is None and 'INTEGRATION_RELEASE_UNAVAILABLE' in first.status()['error']
+        first.config['_native_integration_release'] = str(tmp_path)
+        first.restore()
+        assert first.active.snapshot()['state'] == 'RUNNING'
+        first.call('integration_stop', {}); first.close()
+        again = IntegrationRunner({**configured, '_native_integration_release': str(tmp_path)}, root=root)
+        again.restore()
+        assert again.active is None                            # stopped once, it stays stopped
+        again.close()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_second_host_cannot_own_same_integration(runner):
     with pytest.raises(TimeoutError, match='QUEUE_TIMEOUT'):
         IntegrationRunner(profile(), root=runner.root)

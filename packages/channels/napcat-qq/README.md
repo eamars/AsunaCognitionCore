@@ -48,6 +48,8 @@ time: never let two instances consume the same account or routes.
    - `adapter_config.napcat`: `{"transport": "websocket_forward", "url": "ws://<ip>:<alias port>", "token": "<NapCat
      access token>"}`;
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`.
+   With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
+   restarts with her from then on; after an `integration_stop` it stays stopped until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.
 5. **Save and apply** on the settings card, then check the card's status line and send her a DM.
    `python tools/probe_qq_admission.py packages/channels/napcat-qq` checks the admission policy offline.

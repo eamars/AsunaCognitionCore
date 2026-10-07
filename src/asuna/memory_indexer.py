@@ -1,5 +1,6 @@
 """Index persisted local dialogue off the generation thread; restart scans pending work."""
 import threading
+import time
 import traceback
 
 import httpx
@@ -7,6 +8,10 @@ import httpx
 from .config import redact_text
 from .memory import MemoryService
 from .retrieval import Retrieval
+
+
+class _Waiting(Exception):
+    """Indexing is waiting out a failure; the summaries still run."""
 
 
 class MemoryIndexer:
@@ -35,11 +40,16 @@ class MemoryIndexer:
         try:
             index_ready = False
             cursor = 0
+            # A failure that repeats is recorded once, and indexing waits longer between tries (up to 5 minutes);
+            # summaries keep their own pace.
+            failing, pause, retry_at = None, 2, 0.0
             while not self.stopping.is_set():
                 try:
                     scene_id = self.scene_ids[cursor % len(self.scene_ids)]
                     cursor += 1
                     scene = self.store.db.scenes.find_one({'_id': scene_id})
+                    if time.monotonic() < retry_at:
+                        raise _Waiting()
                     chunks = MemoryService(self.store).chunk(scene_id)
                     count = self.retrieval.index_pending(scope=scene['scope_key'], epoch=scene['policy_epoch'], stopping=self.stopping)
                     if not index_ready:
@@ -47,9 +57,16 @@ class MemoryIndexer:
                     if chunks or count:
                         self.evidence.record('memory.indexed', {'scene_id': scene_id,
                             'chunk_ids': [m['_id'] for m in chunks], 'indexed': count, 'index_ready': index_ready})
-                except Exception:
-                    self.evidence.record('memory.index_error', {'scene_id': self.scene_id,
-                        'traceback': redact_text(traceback.format_exc(), self.store.config)})
+                    failing, pause = None, 2
+                except _Waiting:
+                    pass
+                except Exception as exc:
+                    if failing != repr(exc):
+                        failing = repr(exc)
+                        self.evidence.record('memory.index_error', {'scene_id': self.scene_id,
+                            'traceback': redact_text(traceback.format_exc(), self.store.config)})
+                    pause = min(pause * 2, 300)
+                    retry_at = time.monotonic() + pause
                 if self.summarizer and scene_id in self.summarizer.scene_ids:
                     try:
                         # 轮转到哪个场景就判断哪个场景：触发点由该场景自己的节奏算。

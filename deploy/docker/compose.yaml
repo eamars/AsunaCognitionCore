@@ -1,18 +1,25 @@
 # Asuna as a Portainer stack (ADR-019 §3.3). Web access follows the owner's existing DSH container: host networking,
 # Asuna's launcher on 127.0.0.1, and a Caddy container that serves HTTPS on the LAN with its internal CA. The stack
-# brings its own MongoDB on loopback (with the open-file limit MongoDB needs); point ASUNA_MONGO_URI or the config
-# elsewhere and remove that service to use an existing one. Container names follow ASUNA_NAME, so stacks can coexist.
+# brings its own MongoDB on loopback: Atlas Local, whose search engine (mongot) the memory's vector search needs, with
+# the open-file limit MongoDB needs. Point ASUNA_MONGO_URI or the config at another search-capable MongoDB and remove
+# that service to use an existing one. Container names follow ASUNA_NAME, so stacks can coexist.
 # Defaults run the synthetic demo persona against its own database: a new stack cannot reach the live persona or QQ.
 services:
   mongo:
-    image: mongo:8.0
+    image: mongodb/mongodb-atlas-local:8.0
     container_name: ${ASUNA_NAME:-asuna}-mongo
+    # The single-node replica set is registered under this host name; keep it stable.
+    hostname: mongodb
+    environment:
+      DO_NOT_TRACK: "1"
     ulimits:
       nofile: {soft: 64000, hard: 64000}
     ports:
       - 127.0.0.1:${ASUNA_MONGO_PORT:-27099}:27017
     volumes:
-      - asuna-mongo-data:/data/db
+      - asuna-atlas-data:/data/db
+      - asuna-atlas-config:/data/configdb
+      - asuna-atlas-mongot:/data/mongot
     restart: unless-stopped
 
   asuna:
@@ -23,7 +30,8 @@ services:
     pull_policy: build
     container_name: ${ASUNA_NAME:-asuna}
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy        # the image's own check: mongod and mongot both up
     environment:
       ASUNA_REPO: ${ASUNA_REPO:-https://github.com/eamars/AsunaCognitionCore.git}
       ASUNA_REF: ${ASUNA_REF:-main}
@@ -104,7 +112,9 @@ services:
     restart: unless-stopped
 
 volumes:
-  asuna-mongo-data:
+  asuna-atlas-data:
+  asuna-atlas-config:
+  asuna-atlas-mongot:
   asuna-checkout:
   asuna-caddy-data:
   asuna-caddy-config:

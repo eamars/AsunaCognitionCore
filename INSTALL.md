@@ -6,7 +6,9 @@ order; every step says how to check it worked.
 ## What you need
 
 - **DSH 0.2.0-rc.2** with a Web profile (`dsh --profile <name>`). The plugins pin this exact version.
-- **MongoDB** that the profile can reach, and a database name for Asuna. Asuna keeps all of its state there.
+- **MongoDB with vector search** that the profile can reach, and a database name for Asuna. Asuna keeps all of its
+  state there, and its memory recall uses Atlas Vector Search: MongoDB Atlas, the `mongodb/mongodb-atlas-local` image,
+  or MongoDB Community with its search process (mongot). A plain `mongod` runs, but memory is never indexed.
 - **uv** (<https://docs.astral.sh/uv/>) or **Python 3.12+**. Asuna's worker is Python; on first start it builds its own
   environment in the profile's data folder from the package's pinned `python/requirements.lock`.
 - **A persona package.** Asuna is persona-agnostic: the persona (who she is, her voice, her seeds) is a separate

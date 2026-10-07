@@ -22,6 +22,26 @@ except Exception:                     # 同目录平铺加载（离线自检）�
 # Her rhythm plans belong to the program (ADR-012 §4.3): she never sees them in her plan list, so she cannot
 # cancel or retime them there; she sets the heartbeat's pace through her policy keys.
 RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
+# ADR-021: night self-development stages ride one native tick; each tick decides whether a stage is due.
+NIGHT_PLAN = 'plan-asuna-self-development-night'
+NIGHT_TICK_SECONDS = 600
+
+
+def night_stage_busy(store):
+    """Why a night stage would stack on an earlier one, or None: a self-development turn or its task still at work,
+    or one of her publications not running yet (it waits for a worker or Host restart)."""
+    # A turn still at work (one waiting on its task is judged by the task below).
+    if store.db.episodes.find_one({'episode_kind': 'self_development',
+                                   'state': {'$in': ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED']}}, {'_id': 1}):
+        return 'STAGE_BUSY'
+    for task in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'episode_id': 1}):
+        if (store.db.episodes.find_one({'_id': task.get('episode_id')}, {'episode_kind': 1}) or {}).get(
+                'episode_kind') == 'self_development':
+            return 'STAGE_BUSY'
+    if store.db.sink_receipts.find_one({'kind': 'self_development_publish',
+                                        'state': {'$in': ['APPLIED', 'HOST_RESTART_REQUIRED']}}, {'_id': 1}):
+        return 'PUBLISH_NOT_RUNNING'
+    return None
 PRESENCE_PLAN = 'plan-asuna-presence'
 HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local day
 HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and this long is rebuilt
@@ -62,6 +82,7 @@ class ScheduleService:
         self._migrate_native_links()
         self.reconcile()
         self.ensure_self_development()
+        self.ensure_night_development()
         for ensure in (self.ensure_presence, self.ensure_settlement):
             try:
                 ensure()
@@ -164,9 +185,19 @@ class ScheduleService:
         interval = int(minutes) * 60
         if type(interval) is not int or not schedule_rules.MIN_INTERVAL_SECONDS <= interval <= schedule_rules.MAX_INTERVAL_SECONDS:
             raise ValueError('SELF_DEVELOPMENT_INTERVAL_INVALID')
+        self._ensure_development_plan('plan-asuna-self-development', interval, '回顾近期经历，自主决定是否继续自我开发')
+
+    def ensure_night_development(self):
+        """ADR-021: a native tick every NIGHT_TICK_SECONDS; each tick asks whether a night stage is due (_night_stage),
+        so her own window and pace apply at once, with no record to re-arm."""
+        settings = self.app.config.get('self_development', {})
+        if not settings.get('enabled') or settings.get('night') is False:
+            return
+        self._ensure_development_plan(NIGHT_PLAN, NIGHT_TICK_SECONDS, '夜里分段自我开发：每段只做一件事', night=True)
+
+    def _ensure_development_plan(self, plan_id, interval, intent, **fields):
         scene_id, person_id = self.controller.settings['scene_id'], self.controller.settings['person_id']
         scene = self.store.authorize(scene_id, person_id)
-        plan_id = 'plan-asuna-self-development'
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if plan and (plan.get('kind') != 'self_development' or plan['scene_id'] != scene_id
                      or plan['person_id'] != person_id or plan['policy_epoch'] != scene['policy_epoch']):
@@ -174,9 +205,8 @@ class ScheduleService:
         if not plan:
             plan = self.store.put('plans', {'_id': plan_id, 'kind': 'self_development',
                 'scene_id': scene_id, 'person_id': person_id, 'scope_key': scene['scope_key'],
-                'policy_epoch': scene['policy_epoch'], 'status': 'CREATING',
-                'intent': '回顾近期经历，自主决定是否继续自我开发',
-                'rule': {'every_seconds': interval}, 'plan_version': 1,
+                'policy_epoch': scene['policy_epoch'], 'status': 'CREATING', 'intent': intent,
+                'rule': {'every_seconds': interval}, 'plan_version': 1, **fields,
                 'created_at': now()}, stream=plan_id)
         events=self._native_events()
         creates, _, deleted=self._grouped(events)
@@ -190,6 +220,40 @@ class ScheduleService:
         self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
+
+    def _night_stage(self, plan, occurrence):
+        """One night stage when it is due (ADR-021): inside her window, her pace after the last stage, and nothing of
+        an earlier stage still open; otherwise the reason it is not (recorded on the plan, no model call)."""
+        from .persona_model import effective, timezone as persona_timezone
+        from .rhythm import NIGHT_STAGE_TEXT
+        if (self.app.config.get('self_development') or {}).get('night') is False:
+            return 'NIGHT_OFF'
+        _, model, policy = self._persona()
+        start = int(effective(model, 'self_development.night_start_hour', policy) or 0)
+        hours = int(effective(model, 'self_development.night_hours', policy) or 0)
+        every = int(effective(model, 'self_development.night_every_min', policy) or 30)
+        if hours <= 0:
+            return 'NIGHT_OFF'
+        zone, _ = persona_timezone(model, policy, self.app.config)
+        moment = schedule_rules._aware(now())
+        local = schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment)
+        into = ((local.hour - start) % 24) * 60 + local.minute
+        if into >= hours * 60:
+            return 'OUTSIDE_NIGHT'
+        last = plan.get('last_stage_at')
+        if last and (moment - schedule_rules._aware(last)).total_seconds() < every * 60 - NIGHT_TICK_SECONDS // 2:
+            return 'NOT_DUE'
+        busy = night_stage_busy(self.store)
+        if busy:
+            return busy
+        left = hours * 60 - into
+        stage = {'window': '%02d:00–%02d:00' % (start, (start + hours) % 24), 'every_min': every,
+                 'last_stage': left <= every}
+        self.controller.offer_self_development('self-development:night:' + occurrence, text=NIGHT_STAGE_TEXT,
+                                               stage=stage)
+        current = self.store.db.plans.find_one({'_id': plan['_id']})
+        self.store.put('plans', {**current, 'last_stage_at': now()}, expected=current['revision'], stream=plan['_id'])
+        return 'ENQUEUED'
 
     # ── ADR-009 §10: heartbeat (presence) and nightly settlement ─────
     def _persona(self):
@@ -840,7 +904,9 @@ class ScheduleService:
             scene = self.store.authorize(plan['scene_id'], plan['person_id'])
             if scene['policy_epoch'] != plan['policy_epoch']:
                 raise Denied('SCHEDULE_POLICY_STALE')
-            if plan.get('kind') == 'self_development':
+            if plan.get('kind') == 'self_development' and plan.get('night'):
+                outcome = self._night_stage(plan, occurrence)
+            elif plan.get('kind') == 'self_development':
                 self.controller.offer_self_development('self-development:' + occurrence)
                 outcome = 'ENQUEUED'
             elif plan.get('kind') == 'presence':

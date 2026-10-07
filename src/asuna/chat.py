@@ -184,7 +184,7 @@ class Chat:
                              'adapter_id': kind, 'episode_kind': kind, 'text': text, **visit})
 
     def offer_self_development(self, event_id: str, *, text=None, trusted_context_events=None,
-                               task_id=None):
+                               task_id=None, stage=None):
         """Queue a host-origin opportunity in the owner's existing role scene."""
         if not event_id.startswith('self-development:'):
             raise ValueError('INVALID_SELF_DEVELOPMENT_EVENT')
@@ -209,6 +209,7 @@ class Chat:
                 (integration.get('scene_id'),integration.get('person_id'))):
             event['integration_profile']='owner'
         if task_id:event['task_id']=task_id
+        if stage:event['night_stage']=stage                 # ADR-021: one stage of her night self-development
         return self.receive(event)
 
     def receive(self, event):

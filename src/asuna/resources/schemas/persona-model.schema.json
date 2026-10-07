@@ -503,7 +503,10 @@
         "every_min": {
           "type": "integer",
           "minimum": 60
-        }
+        },
+        "night_start_hour": {"type": "integer", "minimum": 0, "maximum": 23},
+        "night_hours": {"type": "integer", "minimum": 0, "maximum": 8},
+        "night_every_min": {"type": "integer", "minimum": 20, "maximum": 120}
       }
     },
     "people": {

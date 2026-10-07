@@ -392,6 +392,9 @@ class ContextBuilder:
                 'scope':target['scope'],
                 'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
+        if event.get('episode_kind') == 'self_development' and isinstance(event.get('night_stage'), dict):
+            from .rhythm import night_stage_block
+            context['night_stage_from_program']=night_stage_block(event['night_stage'])
         if event.get('episode_kind') == 'self_development':
             # ADR-011 §6.2: ideas from anywhere are read and decided only here.
             from .role_tools import ideas_block, ideas_left

@@ -38,6 +38,13 @@ CORE_WRITABLE_KEYS = {
                                 'what': '在一个群说过话或去看过以后，多久内不再去（分钟）'},
     'heartbeat.visits_per_day': {'type': 'integer', 'min': 0, 'max': 8, 'what': '每天最多出门几次'},
     'heartbeat.visits_per_beat': {'type': 'integer', 'min': 1, 'max': 3, 'what': '一拍里最多去几个群'},
+    # Her night self-development stages (ADR-021): when and how often; the owner can switch them off.
+    'self_development.night_start_hour': {'type': 'integer', 'min': 0, 'max': 23,
+                                          'what': '夜里分段自我开发从几点开始（你的钟面，整点）'},
+    'self_development.night_hours': {'type': 'integer', 'min': 0, 'max': 8,
+                                     'what': '夜里分段自我开发持续几个小时（0 = 不开）'},
+    'self_development.night_every_min': {'type': 'integer', 'min': 20, 'max': 120,
+                                         'what': '夜里两段自我开发之间隔多久（分钟）'},
 }
 # Only the owner turns her heartbeat on or off: a package may default it, never offer it to her as a policy key.
 OWNER_KEYS = {'heartbeat.enabled'}
@@ -59,7 +66,7 @@ CORE_DEFAULTS = {
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
     'speak': {'max_messages': 1, 'split_marker': '[分条]', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
     'phrasing': {'window': 20},
-    'self_development': {'every_min': None},
+    'self_development': {'every_min': None, 'night_start_hour': 1, 'night_hours': 5, 'night_every_min': 30},
     # How people read in group and private chats (people.py): her word for the owner, and other names she answers to;
     # familiarity.py names how well she knows someone, and a persona may word each level and give its stance.
     'people': {'owner_label': '本机用户', 'self_names': [], 'familiarity': {}},

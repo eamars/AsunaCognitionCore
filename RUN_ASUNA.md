@@ -207,6 +207,8 @@ Only two sources hand work with these tools to the action brain: the owner askin
 - `ACTIVE`: the relevant worker or resources loaded successfully.
 - `HOST_RESTART_REQUIRED`: restart this Host to install the selected JS, composition or dependency change.
 
+At night she gets self-improvement turns in stages: inside a window on her clock (default 01:00–06:00) one every N minutes (default 30), each with the development grant. A stage is skipped while an earlier one's turn or task is still at work, or while one of her publications is not running yet, so one stage does one thing. The window and pace are her policy keys (`self_development.night_start_hour`, `night_hours`, `night_every_min`); `self_development.night: false` in the local config switches the stages off.
+
 Skill resources apply without restarting the Host; Python updates replace the worker when idle. A selection that is installed but never confirms running for more than two starts is replaced by the previous ACTIVE selection, which the launcher installs again; the published source is never rolled back.
 
 If the worker fails, create a native session using **Asuna recovery** in the authorized local workspace. Its project tools operate independently of Python, preserve the selected candidate and publish a forward correction. Protected publication/repair/persistence modules, the modules they import (`persona.js`, `channel.js`, `settings.js`), the launcher and the install tools remain outside autonomous edits.

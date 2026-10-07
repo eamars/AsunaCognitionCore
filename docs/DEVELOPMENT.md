@@ -23,7 +23,9 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
 
 ## Where state lives
 
-- **MongoDB**: all business state — persona, memories, people, messages, tasks, audit. One database per profile.
+- **MongoDB**: all business state — persona, memories, people, messages, tasks, audit. One database per profile; the
+  running Host's claim on it is the `host_leases` document (`host_lease.py`), and the data folder's `host-id` names
+  the deployment.
 - **`.runtime/adr008/`** (profile `asuna-native`; another profile uses `.runtime/adr008/profiles/<name>/`):
   - `packages/`: packed `.tgz` files, `manifest.json`, and `native-inline-manifest.json` when the inline extension is built;
   - `launch.json`: the config, the installed package list (`setup`) and digests (`installed`);

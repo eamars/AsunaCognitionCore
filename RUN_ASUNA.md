@@ -130,6 +130,32 @@ The stack's environment holds the list and the channel settings; see [deploy/doc
 
 Add the package's `.tgz` with `dsh plugin --profile <name> add <package.tgz>` and restart the profile; see [INSTALL.md](INSTALL.md#5-optional-a-channel).
 
+## Running several characters
+
+Each character is a profile with one persona. Several can run at once, on one machine or several.
+
+| Each character has its own | May be shared between characters |
+|---|---|
+| profile: DSH home, saved settings, credentials, data folder | the MongoDB server (each character its own database on it) |
+| database | the model servers and the embedding service |
+| platform accounts: a QQ number, a peer session | a NapCat server that logs in several accounts, each with its own WebSocket port and token |
+| Web port, and `channel_port` (default 8766) on a machine with more than one | the checkout and installed DSH on one machine |
+
+- **One platform account per running character.** Nothing stops two characters on the same QQ account: both receive
+  every message and both answer it, from one account in two voices. Stop one before starting the other.
+- **One running Host per database.** A second Host on the same database, from any machine, is refused with
+  `DATABASE_IN_USE`, naming the character and machine holding it. A crashed Host's claim expires after 90 seconds;
+  a restart of the same deployment takes over at once.
+- **A database stays with its profile.** Conversations are bound to the profile's data folder, so a database cannot
+  be moved to another profile; a new profile starts with a new database.
+- **Ports:** `tools/setup_native_profile.py --port <port>` records a profile's Web port, and every start uses it.
+  `start-asuna.cmd --list` (or `./start-asuna.sh --list`) prints each installed profile with its persona, port,
+  database and whether something answers on its port.
+- **Self-development:** characters on one checkout share the core, so a core change one of them publishes reaches
+  the others on their next start. Persona and channel packages stay each character's own.
+- A Docker stack is one character with its own checkout; several stacks need different `ASUNA_NAME` and ports
+  ([deploy/docker](deploy/docker/README.md)).
+
 ## Using the Web page
 
 The colored labels show only **角色脑** (purple) or **行动脑** (blue). Main Chat references the actual action session's thinking, tools and output inline, with character consultations between the corresponding action ranges. Both labels remain visible outside the native process disclosure by default. Expand DSH's process disclosure and analysis row to inspect full native reasoning, text and tools. DSH's own controls show execution status. Both brains can use the same model without losing their identity labels.

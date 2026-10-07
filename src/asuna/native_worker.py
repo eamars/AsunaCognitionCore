@@ -282,6 +282,9 @@ class BusinessWorker:
         # One Host per database: two Hosts may never run the same business queue
         # or publish the same scene concurrently.
         self.stack.enter_context(RuntimeLease(database_lock(config)))
+        # The same across machines: a lease in the database itself (ADR-020).
+        from .host_lease import DatabaseLease
+        self.stack.enter_context(DatabaseLease(config, persona=persona['id']))
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')

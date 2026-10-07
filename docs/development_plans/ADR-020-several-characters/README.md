@@ -1,6 +1,8 @@
 # ADR-020: Several characters at once
 
-Status: **Accepted** 2026-10-07 (owner decisions D1–D4 in §7). Not built yet; the owner will test it on another day.
+Status: **Accepted** 2026-10-07 (owner decisions D1–D4 in §7, D4 amended the same day). M1, M2 and M5 built 2026-10-07
+without a live test (the owner will test another day; the running setups are unaffected); M3 dropped; M4 waits for a
+Web review.
 
 ## 1. Context
 
@@ -94,12 +96,11 @@ A Host holds two leases while it runs, renewed every 30 s and expiring after 90 
 - The same for `channel_port`, chosen at install when the profile configures a channel.
 - Docker stacks keep publishing their own ports (ADR-019); the stack README lists them.
 
-### 4.4 Self-development stays inside one character
+### 4.4 Self-development
 
-Persona and channel projects are per package; the core project is the checkout's. Per D4 a self-developing
-character has a checkout of its own, so nothing she publishes reaches another character. The launcher refuses to
-start a profile with `self_development.enabled` on a checkout that another installed profile also self-develops on
-(`CHECKOUT_SHARED_BY_SELF_DEVELOPING_PROFILES`), naming the other profile and how to give each its own checkout.
+Persona and channel projects are per package, so characters never change each other's. The core project is the
+checkout's: on a shared checkout a core change one character publishes reaches the others on their next start, which
+D4 (amended) accepts. A Docker stack has a checkout of its own.
 
 ### 4.5 Web UI
 
@@ -135,12 +136,17 @@ same `mongo_uri`.
 
 ## 6. Milestones
 
-- **M1** Database lease in the profile's database (replaces the machine-local lock); the status line names the holder
-  when refused. Tests: two Hosts on one database, a lease expiring after a crash.
-- **M2** Ports recorded per profile; `--list`; channel port per profile outside Docker.
-- **M3** The launcher's refusal of two self-developing profiles on one checkout (§4.4).
+- **M1** Database lease in the profile's database, beside the machine-local lock; refused with the holder named.
+  Tests: two Hosts on one database, a lease expiring after a crash. **Built** (`host_lease.py`, `test_host_lease.py`):
+  the holder is a host id kept in the data folder, so a restart or a recreated container takes over at once;
+  expiry uses the database server's clock.
+- **M2** Ports recorded per profile; `--list`; channel port per profile outside Docker. **Built**: setup's `--port`
+  is recorded in `launch.json` and kept on reinstall; the launcher uses it unless `--port` is given, else 8780 as
+  before; `--list`. The channel port stays a setting, documented.
+- **M3** ~~The launcher's refusal of two self-developing profiles on one checkout (§4.4).~~ Dropped (D4 amended).
 - **M4** The persona's name as a prefix in the browser tab title, if DSH allows it without a new element (D3).
-- **M5** Manuals: "Running several characters" in RUN_ASUNA (owns / may share table, one platform account per
+  Not built: it needs a review on the Web page.
+- **M5** **Built.** Manuals: "Running several characters" in RUN_ASUNA (owns / may share table, one platform account per
   running character and what happens otherwise, one checkout per self-developing character), the Docker README,
   the QQ README; `docs/DEVELOPMENT.md`.
 - **M6** Owner review: 小满 on Windows and Kazusa in Docker on separate QQ accounts at the same time.
@@ -161,3 +167,6 @@ same `mongo_uri`.
   another character: each self-developing character runs from **its own checkout** (a Docker stack's volume
   already is one; on one machine, a separate clone or `git worktree` per character). §4.4's "one owning profile per
   checkout" is replaced by this; a shared checkout is for characters whose self-development is off.
+- **D4 amended (owner, same day):** a core change being universal is acceptable. Characters on one checkout share the
+  core; what a character publishes to the core reaches the others on their next start. Persona and channel packages,
+  memories and pace stay each character's own. No checkout refusal is built (M3 dropped).

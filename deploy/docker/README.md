@@ -66,7 +66,7 @@ docker build -t asuna:local "https://github.com/eamars/AsunaCognitionCore.git#ma
 Install Caddy's root certificate once per client from `http://<host>:8781/caddy-local-root.crt`, then open
 `https://<host>:8443/`.
 
-Two Asuna instances must never serve the same persona, database or channel route at the same time.
+Two Asuna instances must never serve the same database or platform account at the same time (a second Host on a database is refused; a shared QQ account is not). Several characters: [Running several characters](../../RUN_ASUNA.md#running-several-characters).
 
 ## Update the checkout
 

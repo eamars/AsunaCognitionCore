@@ -22,7 +22,8 @@ account, route, log, inbox/outbox or media is included.
 
 You need a running [NapCat](https://napneko.github.io/) logged in to the QQ account she uses, with its OneBot v11
 **WebSocket server** enabled (forward WebSocket) and an access token. One QQ account serves one Asuna instance at a
-time: never let two instances consume the same account or routes.
+time: two characters on one account both receive every message and both answer it. Give each running character its
+own account ([Running several characters](../../../RUN_ASUNA.md#running-several-characters)).
 
 1. **Install the package** with the persona: `--channel packages/channels/napcat-qq` to `tools/pack_plugins.py` and
    `--channel-package packages/channels/napcat-qq` to `tools/setup_native_profile.py` (or add the release `.tgz`

@@ -157,11 +157,14 @@ def main():
                         help='channel package directory, e.g. packages/channels/napcat-qq (repeatable; packed like the persona)')
     parser.add_argument('--profile', default='asuna-native', help='DSH profile name (asuna-demo for the demo environment)')
     parser.add_argument('--shared-action-model', action='store_true', help='Route both brains to the configured action model')
+    parser.add_argument('--port', type=int, help='Web port this profile starts on (recorded; default: as before, else 8780)')
     parser.add_argument('--channel-admission', choices=('explicit', 'automatic'),
                         help='channel admission for a profile that has not saved one (default explicit)')
     args = parser.parse_args()
     if not args.profile.replace('-', '').isalnum():
         raise ValueError('INVALID_PROFILE_NAME')
+    if args.port is not None and not 1024 <= args.port <= 65535:
+        raise ValueError('INVALID_WEB_PORT')
     config = load(args.config)
     persona = persona_package(args.persona_package)
     channels = [channel_package(directory) for directory in args.channel_package]
@@ -265,14 +268,19 @@ def main():
     # What the launcher needs to install this checkout again when it changes (asuna-launch.mjs): the packages this
     # profile is composed of, and the packed digests now installed.
     relative = lambda directory: Path(os.path.relpath(directory.resolve(), ROOT)).as_posix()
-    (base / 'launch.json').write_text(json.dumps({'config': str(args.config.resolve()),
+    # The Web port is the profile's own (ADR-020): given here, else the one recorded before, else the launcher's 8780.
+    try:
+        port = args.port or json.loads((base / 'launch.json').read_text(encoding='utf-8')).get('port')
+    except (OSError, ValueError):
+        port = args.port
+    (base / 'launch.json').write_text(json.dumps({'config': str(args.config.resolve()), **({'port': port} if port else {}),
         'profile': args.profile, 'shared_action_model': args.shared_action_model, 'native_credentials': True,
         'setup': {'persona_package': relative(args.persona_package),
                   'channel_packages': [relative(directory) for directory in args.channel_package]},
         'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}}, indent=2), encoding='utf-8')
     suffix = '' if args.profile == 'asuna-native' else ' --profile %s --config %s' % (args.profile, args.config)
     print('Installed native profile. Start with start-asuna.cmd (Windows) or ./start-asuna.sh' + suffix
-          + ' (add --port to choose the Web port; 8780 by default)')
+          + ' (Web port %s)' % (port or 8780))
 
 
 if __name__ == '__main__':

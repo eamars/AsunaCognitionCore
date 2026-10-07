@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -10,7 +11,7 @@ const read = async (file, fallback) => {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
-const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port 8780] [--no-sync] [--dry-run]';
+const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port <port>] [--no-sync] [--dry-run] | --list';
 const exists = file => fs.access(file).then(() => true, () => false);
 
 // DSH installs plugins by running `pnpm` from PATH. Node ships pnpm through corepack, so a machine
@@ -95,7 +96,7 @@ export function profileBase(profile) {
 
 export async function resolveLaunch(argv, env = process.env) {
   const args = argv.filter(arg => !['ui', '--native'].includes(arg));
-  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: 8780, dryRun: false,
+  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: null, dryRun: false,
     sync: true };
   for (let index = 0; index < args.length; index++) {
     const flag = args[index], value = args[index + 1];
@@ -109,7 +110,7 @@ export async function resolveLaunch(argv, env = process.env) {
     } else options[flag.slice(2)] = value;
   }
   if (!/^[a-z][a-z0-9-]{0,50}$/.test(options.profile)) throw new Error('Invalid profile name');
-  if (options.port < 1024 || options.port > 65535) throw new Error('Invalid local Web port');
+  if (options.port !== null && (options.port < 1024 || options.port > 65535)) throw new Error('Invalid local Web port');
   const base = profileBase(options.profile);
   const launch = await read(path.join(base, 'launch.json'), options.dryRun ? {} : undefined);
   const config = path.resolve(root, options.config ?? launch.config ?? 'config/local.json');
@@ -118,12 +119,40 @@ export async function resolveLaunch(argv, env = process.env) {
   // Native settings own the credentials once imported; the local file is then only a migration source.
   const local = await read(config, launch.native_credentials ? {} : undefined);
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
-    port: options.port, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
+    // The profile's own port (ADR-020): this start's --port, else the one its install recorded, else 8780.
+    port: options.port ?? launch.port ?? 8780, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
     sharedActionModel: Boolean(launch.shared_action_model),
     nativeCredentials: Boolean(launch.native_credentials), local };
 }
 
+/** Every installed profile of this checkout: its persona, Web port, database and whether something answers there. */
+export async function listProfiles() {
+  const base = path.join(root, '.runtime/adr008');
+  const names = ['asuna-native', ...await fs.readdir(path.join(base, 'profiles')).catch(() => [])];
+  const rows = [];
+  for (const profile of names) {
+    const launch = await read(path.join(profileBase(profile), 'launch.json'), null);
+    if (!launch) continue;
+    const local = launch.config ? await read(launch.config, {}) : {};
+    const port = launch.port ?? 8780;
+    const running = await new Promise(resolve => {
+      const socket = net.connect({ host: '127.0.0.1', port }, () => { socket.destroy(); resolve(true); });
+      socket.setTimeout(300, () => { socket.destroy(); resolve(false); });
+      socket.once('error', () => resolve(false));
+    });
+    rows.push({ profile, persona: launch.setup ? path.basename(launch.setup.persona_package) : local.chat?.persona ?? '?', port,
+      database: local.database ?? '?', running });
+  }
+  return rows;
+}
+
 async function main() {
+  if (process.argv.includes('--list')) {
+    for (const row of await listProfiles())
+      process.stdout.write([row.profile, row.persona, 'port ' + row.port, 'database ' + row.database,
+        row.running ? 'answering' : 'not running'].join('  ') + '\n');
+    return 0;
+  }
   const launch = await resolveLaunch(process.argv.slice(2));
   if (launch.dryRun) {
     const { local, ...visible } = launch;

@@ -83,3 +83,24 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('ADR-020: a profile starts on its own recorded Web port unless this start names one', async () => {
+  const { resolveLaunch, profileBase, listProfiles } = await import('../../../tools/asuna-launch.mjs');
+  const profile = 'port-probe-' + process.pid;
+  const base = profileBase(profile);
+  const config = path.join(base, 'config.json');
+  await fs.mkdir(base, { recursive: true });
+  try {
+    await fs.writeFile(config, JSON.stringify({ database: 'asuna_v2_test_port_probe', chat: { persona: 'demo' } }));
+    await fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ config, port: 8799 }));
+    assert.equal((await resolveLaunch(['ui', '--profile', profile, '--dry-run'], {})).port, 8799);
+    assert.equal((await resolveLaunch(['ui', '--profile', profile, '--port', '8801', '--dry-run'], {})).port, 8801);
+    const row = (await listProfiles()).find(item => item.profile === profile);
+    assert.deepEqual({ ...row, running: undefined }, { profile, persona: 'demo', port: 8799,
+      database: 'asuna_v2_test_port_probe', running: undefined });
+    await fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ config }));
+    assert.equal((await resolveLaunch(['ui', '--profile', profile, '--dry-run'], {})).port, 8780);   // as before
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});

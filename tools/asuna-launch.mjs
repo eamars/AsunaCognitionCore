@@ -10,7 +10,7 @@ const read = async (file, fallback) => {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
-const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port 8780] [--dry-run]';
+const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port 8780] [--no-sync] [--dry-run]';
 const exists = file => fs.access(file).then(() => true, () => false);
 
 // DSH installs plugins by running `pnpm` from PATH. Node ships pnpm through corepack, so a machine
@@ -28,6 +28,41 @@ export async function packageManagerEnv(env, { nodeDir = path.dirname(process.ex
   if (process.platform === 'win32') await fs.writeFile(path.join(shimDir, 'pnpm.cmd'), `@"${corepack}" pnpm %*\r\n`);
   else await fs.writeFile(path.join(shimDir, 'pnpm'), `#!/bin/sh\nexec "${corepack}" pnpm "$@"\n`, { mode: 0o755 });
   return { ...env, [key]: [shimDir, ...dirs].join(path.delimiter), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' };
+}
+
+// The checkout's own Python (uv sync), which runs the pack and install tools; the worker has its own (python-env.js).
+export const checkoutPython = (base = root, platform = process.platform) =>
+  platform === 'win32' ? path.join(base, '.venv', 'Scripts', 'python.exe') : path.join(base, '.venv', 'bin', 'python');
+
+/** Which packed packages differ from the ones this profile last installed (names), or all of them when unknown. */
+export function changedPackages(installed, packed) {
+  const wanted = Object.keys(installed ?? {});
+  if (!wanted.length) return null;
+  const now = Object.fromEntries((packed ?? []).map(artifact => [artifact.name, artifact.sha256]));
+  return wanted.filter(name => now[name] !== installed[name]);
+}
+
+/** Owner 2026-10-07: a start installs what the checkout holds now, so a change never waits on a manual install.
+ * Packing is deterministic, so packing and comparing digests with the last install is the change check; only a
+ * difference runs the installer, which records the previous running package so a start that never comes up returns
+ * to it (advanceSelection below). Uncommitted edits are installed too: what is on disk is what runs. */
+export async function syncCheckout(launch, exec, report = text => process.stderr.write(text + '\n'),
+  { python = checkoutPython(), manifest = path.join(root, '.runtime/adr008/packages/manifest.json') } = {}) {
+  const setup = launch.setup;
+  if (!setup) { report('Asuna: this profile does not record its packages yet; run tools/setup_native_profile.py once.'); return 'UNKNOWN'; }
+  if (!await exists(python)) { report('Asuna: no checkout environment (.venv); run `uv sync` to let starts install changes.'); return 'NO_PYTHON'; }
+  const channels = (setup.channel_packages ?? []).flatMap(directory => ['--channel', directory]);
+  if (await exec(python, ['tools/pack_plugins.py', '--persona', setup.persona_package, ...channels], { quiet: true }) !== 0)
+    throw new Error('Packing the checkout failed; start with --no-sync to run what is installed');
+  const packed = await read(manifest, []);
+  const changed = changedPackages(launch.installed, packed);
+  if (changed && !changed.length) return 'UP_TO_DATE';
+  report('Asuna: installing the checkout (' + (changed ?? ['all packages']).join(', ') + ')');
+  const install = ['tools/setup_native_profile.py', '--config', launch.config, '--profile', launch.profile,
+    '--persona-package', setup.persona_package, ...(setup.channel_packages ?? []).flatMap(d => ['--channel-package', d]),
+    ...(launch.sharedActionModel ? ['--shared-action-model'] : [])];
+  if (await exec(python, install) !== 0) throw new Error('Installing the checkout failed; start with --no-sync to run what is installed');
+  return 'INSTALLED';
 }
 
 // A selection installed but never confirmed running (ACTIVE) counts each start; past this many the
@@ -60,10 +95,12 @@ export function profileBase(profile) {
 
 export async function resolveLaunch(argv, env = process.env) {
   const args = argv.filter(arg => !['ui', '--native'].includes(arg));
-  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: 8780, dryRun: false };
+  const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: 8780, dryRun: false,
+    sync: true };
   for (let index = 0; index < args.length; index++) {
     const flag = args[index], value = args[index + 1];
     if (flag === '--dry-run') { options.dryRun = true; continue; }
+    if (flag === '--no-sync') { options.sync = false; continue; }
     if (!['--port', '--profile', '--config'].includes(flag) || value === undefined) throw new Error(usage);
     index++;
     if (flag === '--port') {
@@ -81,7 +118,8 @@ export async function resolveLaunch(argv, env = process.env) {
   // Native settings own the credentials once imported; the local file is then only a migration source.
   const local = await read(config, launch.native_credentials ? {} : undefined);
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
-    port: options.port, dryRun: options.dryRun, sharedActionModel: Boolean(launch.shared_action_model),
+    port: options.port, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
+    sharedActionModel: Boolean(launch.shared_action_model),
     nativeCredentials: Boolean(launch.native_credentials), local };
 }
 
@@ -104,6 +142,14 @@ async function main() {
     child.once('exit', () => { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); });
   });
 
+  if (launch.sync) {
+    const exec = (command, args, { quiet = false } = {}) => new Promise((resolve, reject) => {
+      const child = spawn(command, args, { cwd: root, windowsHide: true, stdio: quiet ? ['ignore', 'ignore', 'inherit'] : 'inherit',
+        env: { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
+      child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
+    });
+    await syncCheckout(launch, exec);
+  }
   const selectionPath = path.join(launch.base, 'activation.json');
   const selection = await read(selectionPath, { projects: {} });
   for (const note of advanceSelection(selection)) process.stderr.write('Asuna selection: ' + note + '\n');

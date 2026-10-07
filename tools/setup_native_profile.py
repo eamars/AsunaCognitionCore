@@ -166,9 +166,9 @@ def main():
     home = base / 'home'
     home.mkdir(parents=True, exist_ok=True)
     env = with_pnpm({**os.environ, 'DSH_HOME': str(home), 'DSH_TELEMETRY_DISABLED': '1'})
-    dsh = str(ROOT / 'node_modules/.bin/dsh.cmd')
+    dsh = ['node', str(ROOT / 'node_modules/@deepseek-ai/dsh/lib/bin.js')]        # any OS, as the launcher runs it
     if not (home / 'profiles' / args.profile / 'package.json').exists():
-        subprocess.run([dsh, '--profile', args.profile, '--from-default-profile', 'web', '--help'],
+        subprocess.run([*dsh, '--profile', args.profile, '--from-default-profile', 'web', '--help'],
                        env=env, cwd=ROOT, check=True, capture_output=True)
     packed = json.loads((ROOT / '.runtime/adr008/packages/manifest.json').read_text(encoding='utf-8'))
     # The reviewed native rendering extension (tools/dsh-inline) is installed with the plugins it serves.
@@ -178,7 +178,7 @@ def main():
     if {a['name'] for a in manifest} != names:
         raise ValueError('PACKED_ARTIFACT_MISSING: run tools/pack_plugins.py --persona ' + str(args.persona_package)
                          + ''.join(' --channel ' + str(d) for d in args.channel_package))
-    subprocess.run([dsh, 'plugin', '--profile', args.profile, 'add', *[a['path'] for a in manifest]],
+    subprocess.run([*dsh, 'plugin', '--profile', args.profile, 'add', *[a['path'] for a in manifest]],
                    env=env, cwd=ROOT, check=True)
     for artifact in manifest:
         installed = home / 'profiles' / args.profile / 'node_modules' / artifact['name']
@@ -240,18 +240,32 @@ def main():
             continue                        # a profile dependency, not a development project
         project = 'core' if artifact['name'] == '@asuna/cognition-core' else projects[artifact['name']]
         installed = home / 'profiles' / args.profile / 'node_modules' / artifact['name']
-        selected.setdefault('projects', {})[project] = {
-            **selected.get('projects', {}).get(project, {}), 'project': project, 'state': 'APPLIED',
-            'artifact': artifact['path'], 'sha256': artifact['sha256'], 'packageRoot': str(installed),
-            'receipt_id': 'native-install-' + artifact['sha256'],
-            **({'workerPath': str(installed / 'python')} if project == 'core' else {})}
+        current = selected.setdefault('projects', {}).get(project, {})
+        if current.get('sha256') == artifact['sha256'] and current.get('state') in ('APPLIED', 'ACTIVE'):
+            continue                        # this package is already the one selected: keep its state and history
+        value = {'project': project, 'state': 'APPLIED',
+                 'artifact': artifact['path'], 'sha256': artifact['sha256'], 'packageRoot': str(installed),
+                 'receipt_id': 'native-install-' + artifact['sha256'],
+                 **({'workerPath': str(installed / 'python')} if project == 'core' else {})}
+        # As her own publications do (floor.js): the last selection that ran, so a start that never comes up
+        # returns to it (asuna-launch.mjs, ADR-011 §6.4).
+        previous = (selected.get('active') or {}).get(project)
+        if previous and previous.get('sha256') != artifact['sha256']:
+            value['previous'] = {k: v for k, v in previous.items() if k not in ('previous', 'boots')}
+        selected['projects'][project] = value
     temporary = activation_path.with_suffix('.tmp')
     temporary.write_text(json.dumps(selected, ensure_ascii=False, indent=2), encoding='utf-8')
     temporary.replace(activation_path)
+    # What the launcher needs to install this checkout again when it changes (asuna-launch.mjs): the packages this
+    # profile is composed of, and the packed digests now installed.
+    relative = lambda directory: Path(os.path.relpath(directory.resolve(), ROOT)).as_posix()
     (base / 'launch.json').write_text(json.dumps({'config': str(args.config.resolve()),
-        'profile': args.profile, 'shared_action_model': args.shared_action_model, 'native_credentials': True}), encoding='utf-8')
+        'profile': args.profile, 'shared_action_model': args.shared_action_model, 'native_credentials': True,
+        'setup': {'persona_package': relative(args.persona_package),
+                  'channel_packages': [relative(directory) for directory in args.channel_package]},
+        'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}}, indent=2), encoding='utf-8')
     suffix = '' if args.profile == 'asuna-native' else ' --profile %s --config %s' % (args.profile, args.config)
-    print('Installed native profile. Start with start-asuna.cmd' + suffix + ' --port 8780')
+    print('Installed native profile. Start with start-asuna.cmd (Windows) or ./start-asuna.sh' + suffix + ' --port 8780')
 
 
 if __name__ == '__main__':

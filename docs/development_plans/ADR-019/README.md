@@ -2,7 +2,7 @@
 
 | Item | Content |
 | --- | --- |
-| Status | **Draft for the owner's review (2026-10-07).** §2 is a survey of the code as it is. The launcher items marked *done* were built the same day. §6 lists the decisions the owner still has to make. |
+| Status | **Proposed (2026-10-07).** §2 is a survey of the code as it is. The launcher items marked *done* were built the same day. The owner decided §6.1 the same day; §6.2 is still open. |
 | Date | 2026-10-07 |
 | Author | The implementer (Claude), at the owner's request |
 | Relation | Builds on ADR-010 (distributable plugin, data folder) and ADR-015 (DSH's sandbox replaces WSL). Amends neither. |
@@ -47,7 +47,7 @@ Asuna has only ever run on the owner's Windows machine. The owner wants it to ru
 | Item | Where | What changes |
 | --- | --- | --- |
 | Tests confine commands only with DSH's Windows ACL runner, so on Linux the sandboxed tests are skipped | `tests/conftest.py` (`ACL_RUNNER`, `HOST_SANDBOX`) | Ask DSH's sandbox provider (`dsh-sandbox-local`) for the wrapped argv through a small Node helper, the same way the host does. This works with any runner DSH picks. |
-| The launcher always binds `127.0.0.1` | `tools/asuna-launch.mjs` | Add `--host`, for a container that binds inside and publishes only to the host's loopback. The default stays `127.0.0.1`. |
+| The launcher always binds `127.0.0.1` | `tools/asuna-launch.mjs` | Nothing to change. In a host-network container, a reverse proxy on the host reaches `127.0.0.1` (§3.3). |
 | `check_dsh_release.py` calls `npm.cmd` | operator tool | Use `npm` off Windows. |
 | `fingerprint_models.py` reads model weights through WSL | operator tool, for the owner's independent model server | Leave as it is. It is not part of Asuna's runtime, and the model server is the owner's. |
 | `build_dsh_inline.mjs` goes through PowerShell on Windows | builds the pinned rendering extension from a dedicated DSH checkout | It already has a non-Windows branch. Check it on Linux once, or take the built artifacts from the GitHub Release (ADR-010). |
@@ -108,7 +108,16 @@ The container uses the same launcher path, so there is one way to run Asuna:
   - bubblewrap needs user namespaces, which Docker's default seccomp profile blocks.
   - Landlock works without extra privileges on a host kernel that has it.
   - DSH chooses between them and Asuna reports the enforcement it gets. The compose file documents whichever setting the owner picks (§6 Q3).
-- **The web token** is printed in the container's log, as it is in a console. The port is published to `127.0.0.1` on the host only. The launcher binds inside the container through `--host` (§2.3).
+- **Web access follows the owner's existing DSH container** (its own repository, outside this one), as the owner asked (§6.1):
+  - The Asuna container uses host networking, and the launcher keeps binding `127.0.0.1:8780`.
+  - A Caddy container, also on host networking, terminates HTTPS with Caddy's internal certificate authority. It serves the root certificate once over plain HTTP, and certificates are issued per connection, so no LAN address is written into the stack.
+  - Caddy reverse-proxies to `localhost:8780` and rewrites `Host` and `Origin` to that loopback authority, so DSH's server-side fence accepts the request.
+  - Ports 80 and 443 are already the existing DSH stack's. Asuna's Caddy takes a free HTTPS port (proposed: 8443; checked on the host with `ss` before deploying).
+  - Whether the DSH token gate is also removed is §6.2 Q6.
+- **The rest also follows that container:**
+  - a non-root user;
+  - `init`, a health check against the web port, and `restart: unless-stopped`;
+  - a Portainer stack with its settings in the stack environment, not in tracked files.
 - **Other services** run as their own containers or hosts: MongoDB, NapCat, and the owner's model server (independent, untouched). A compose file can include MongoDB for a fresh install. The owner's existing MongoDB stays where it is.
 
 ### 3.4 Her self-development in a container
@@ -133,7 +142,23 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
 | M5 | The owner's review on the real page, on Linux | — |
 
-## 6. Decisions for the owner
+## 6. Decisions
+
+### 6.1 Decided by the owner (2026-10-07)
+
+1. **Verify on the owner's Docker host**, in a new container separate from everything already there. A Claude session on that host does the host-side steps, each approved there. It cannot send messages back to the PC session; its transcript is read instead.
+2. **Her core self-development: the checkout lives on a volume.** Her publications persist, and every start installs them, as on bare metal.
+3. **Sandbox: DSH's defaults, nothing added.** No bubblewrap installed by Asuna, no extra container privileges, no relaxed seccomp or AppArmor. DSH picks its runner (on that host, Landlock), and Asuna reports the enforcement level DSH gives it.
+4. **Web access: as the owner's existing DSH container does it** (§3.3).
+5. **NapCat** already runs on that host; Asuna only needs its address.
+
+### 6.2 Still open
+
+6. **The login token on the LAN.** The owner's DSH container patches DSH's client connection so the page needs no token and the browser reports loopback, which makes Settings → Models usable from the LAN HTTPS address. The LAN is then the access boundary.
+   - *Keep DSH's token (recommended for Asuna):* her page holds her private home chat and the owner's settings. No DSH patch, in line with §1 rule 1. Settings that DSH only allows from loopback are changed through an SSH tunnel to `localhost:8780`.
+   - *Same as the existing container:* no token on the LAN. Settings work from the LAN address. Asuna then carries a second DSH patch.
+
+### 6.3 The original questions (for the record)
 
 1. **Where to verify Linux.** The owner's Docker host (§2.4, recommended: it is the target, and it already runs her database and NapCat), in a container that is separate from everything already there. The alternative is Docker Desktop on this PC, which runs on WSL2 (ADR-015 ruled WSL out for the runtime, but only for verifying here). A Claude session on the host does the host-side steps; every one of its actions is approved in that session.
 2. **Her core self-development in a container.**

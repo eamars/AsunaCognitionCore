@@ -17,6 +17,7 @@ Asuna has only ever run on the owner's Windows machine. The owner wants it to ru
 1. **Asuna inherits whatever DSH uses.** The plugin does not assume the host operating system. Where DSH has a platform layer (sandbox, process spawning, plugin installation, credentials, storage), Asuna calls it. Asuna adds no mechanism of its own for one OS.
 2. **Docker is on the way.** The design should work as a container deployment, not only on a Linux machine someone sets up by hand.
 3. **Starts apply changes automatically** (done 2026-10-07; see §2.2). This has to keep working on Linux and in a container.
+4. **Windows without Docker stays a first-class install** (owner, 2026-10-07). Docker is one deployment layer on top of DSH. The cognition core and its plugins do not rely on Docker and know nothing about it. Everything Docker-specific lives in a separate deployment folder: the Dockerfile, the compose file, the Caddy configuration, and the LAN login patch of §6.1 Q6.
 
 ## 2. What exists today
 
@@ -73,6 +74,12 @@ The owner's Docker host. Its address and names stay out of this file (AGENTS.md:
 ### 3.1 The rule in code
 
 Asuna calls DSH's interfaces for anything a platform does differently: sandboxing, subprocesses, plugin installation, credentials and storage. Branches on `process.platform` or `os.name` exist only where Node or Python themselves differ, which means executable names (`npm` or `npm.cmd`) and venv layout (`Scripts` or `bin`). Asuna owns no ACL code, no namespace code and no per-OS shell. A contract test lists the files allowed to branch on the platform, and why. A new branch has to be added to that list, which shows up in review.
+
+### 3.1a Where Docker lives
+
+Docker files go in `deploy/docker/` and nowhere else. Nothing under `src/`, `packages/` or `tools/` mentions Docker, checks whether it runs in a container, or reads a container-only setting. A container gets its differences only through what any deployment can set: the launcher's arguments, the profile's settings and the environment DSH already reads.
+
+A contract test (`tests/test_no_docker_in_core.py`) keeps it that way: it fails if Docker is named anywhere in the core or plugin sources (`src/`, `packages/`). The operator diagnostics in `tools/` may talk to a Docker host; they are not part of what runs. A Windows install never needs Docker, Portainer or Caddy. The Windows checks (§5) are run on Windows without Docker at every milestone.
 
 ### 3.2 A Linux machine
 
@@ -138,7 +145,7 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | M0 | The owner answers §6. Update this ADR | — |
 | M1 | Portability fixes from §2.3: tests confine through DSH's sandbox provider, launcher `--host`, `check_dsh_release.py`, the contract test that lists platform branches | Full test suite on Windows, unchanged |
 | M2 | A Linux machine (§6 Q1): install by §3.2, the sandbox probe's enforcement level, the full Python and native test suites, one start with synthetic inference (AGENTS.md: no real model unless authorized) | Test reports, the probe result, the Web page loading |
-| M3 | Docker image and compose file by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
+| M3 | Docker image and compose file in `deploy/docker/` by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint. The Windows install is checked again without Docker | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
 | M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
 | M5 | The owner's review on the real page, on Linux | — |
 

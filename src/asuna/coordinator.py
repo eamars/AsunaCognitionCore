@@ -219,11 +219,12 @@ class Coordinator:
                     'diagnostic':value.diagnostic,'request_refs':value.request_refs},ensure_ascii=False))
             if kind=='consult' and ep.get('answer'):
                 return self._update(ep,state='COMMITTED')
-            if ep.get('silent') and kind!='consult':
+            speech=self._speech(ep,value)
+            # stay_silent ends the turn with nothing more to say: words she already wrote in it still leave.
+            if ep.get('silent') and kind!='consult' and not speech:
                 self._absorb(ep,seen)
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
-            speech=self._speech(ep,value)
             issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
                                          consult=kind=='consult')
             if issue is None and kind!='consult':

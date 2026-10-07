@@ -49,6 +49,14 @@ def test_stay_silent_ends_the_turn_without_publishing(store):
     assert published(store, ep) == []
 
 
+def test_words_written_before_stay_silent_still_leave(store):
+    # She wrote her reply beside a tool call, then ended the turn with nothing more to say.
+    coordinator, _ = run(store, FakeTurn([THINK, ('stay_silent', {'reason': '已经回过了，不用再补话'})], said=['回来啦。']))
+    ep = coordinator.ingest(event())
+    assert ep['state'] == 'COMMITTED' and not ep.get('silent_reason')
+    assert published(store, ep) == ['回来啦。']
+
+
 def test_think_comes_first_and_a_refusal_goes_back_to_her(store):
     coordinator, lane = run(store, FakeTurn([('recall', {'query': '他是谁'}), THINK, ('recall', {'query': '他是谁'})], '想起来了。'))
     ep = coordinator.ingest(event())

@@ -101,8 +101,8 @@ TOOLS = {
         'parameters': {'answer': _s('你的回答', required=True)},
     },
     'stay_silent': {
-        'description': ('这回合不说话，直接结束回合：这回合一个字都不会发出去，只写在思考里的话不算说过。'
-                        '只在确实不用回应时用，不代表出错。'),
+        'description': ('不再说话，直接结束回合：这回合已经写在正文里的话照常发出，没写就一个字都不发；'
+                        '只写在思考里的话不算说过。只在确实不用（再）回应时用，不代表出错。'),
         'parameters': {'reason': _s('为什么不说', required=True)},
     },
     'quote': {
@@ -644,7 +644,7 @@ class RoleTools:
     def tool_stay_silent(self, ep, call_id, args):
         reason = self._text(args, 'reason', 1000)
         self.coordinator._update(self._fresh(ep), silent={'reason': reason})
-        return {'silent': True, 'note': '这回合什么都没发出去。'}, True
+        return {'silent': True, 'note': '这回合到此结束：已经写在正文里的话照常发出，没写就什么都不发。'}, True
 
     def tool_quote(self, ep, call_id, args):
         how = args.get('how')

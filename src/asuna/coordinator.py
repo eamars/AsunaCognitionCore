@@ -222,14 +222,20 @@ class Coordinator:
             speech=self._speech(ep,value)
             # stay_silent ends the turn with nothing more to say: words she already wrote in it still leave.
             if ep.get('silent') and kind!='consult' and not speech:
-                self._absorb(ep,seen)
-                return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                                    silent_reason=ep['silent']['reason'])
-            issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
-                                         consult=kind=='consult')
-            if issue is None and kind!='consult':
-                from . import stickers
-                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
+                if not ep.get('await_answer') or attempt:
+                    self._absorb(ep,seen)
+                    return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
+                                        silent_reason=ep['silent']['reason'])
+                # await_answer is about words she said, yet none were written (a reply left in her thinking):
+                # asked once whether she meant to say something.
+                ep=self._update(ep,silent=None)
+                issue=answers.NOTHING_WRITTEN
+            else:
+                issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
+                                             consult=kind=='consult')
+                if issue is None and kind!='consult':
+                    from . import stickers
+                    issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
             if issue is None:
                 self._absorb(ep,seen)
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))

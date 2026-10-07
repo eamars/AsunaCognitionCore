@@ -57,6 +57,20 @@ def test_words_written_before_stay_silent_still_leave(store):
     assert published(store, ep) == ['回来啦。']
 
 
+def test_waiting_on_words_never_written_is_asked_once(store):
+    # Her reply stayed in her thinking: she called await_answer, wrote nothing, and ended the turn silent.
+    unsaid = [THINK, ('await_answer', {'wait': 'no'}), ('stay_silent', {'reason': '已经解释过了'})]
+    coordinator, lane = run(store, FakeTurn(unsaid), FakeTurn([], '运营商级 NAT，好多家共用一个公网出口。'))
+    ep = coordinator.ingest(event(scene='g1'))                  # await_answer is offered in groups
+    assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
+    assert '还没有发出任何话' in lane.calls[1]['messages'][-1]['content']
+    assert published(store, ep) == ['运营商级 NAT，好多家共用一个公网出口。']
+    # Asked once: she may still choose silence.
+    coordinator, lane = run(store, FakeTurn(unsaid), FakeTurn([('stay_silent', {'reason': '不说了'})]))
+    ep = coordinator.ingest(event('e2', scene='g1'))
+    assert ep['state'] == 'COMMITTED' and ep['silent_reason'] == '不说了' and published(store, ep) == []
+
+
 def test_think_comes_first_and_a_refusal_goes_back_to_her(store):
     coordinator, lane = run(store, FakeTurn([('recall', {'query': '他是谁'}), THINK, ('recall', {'query': '他是谁'})], '想起来了。'))
     ep = coordinator.ingest(event())

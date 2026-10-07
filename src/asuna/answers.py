@@ -103,6 +103,10 @@ PROGRAM_TALK = _re.compile(r'\b[a-z]+_(?:action|silent|image|document|self|perso
                            r'|_from_program\b|\btool_calls?\b|工具调用|调用工具')
 
 
+NOTHING_WRITTEN = ('这回合还没有发出任何话：正文里一个字都没写，思考里写的回复不会发出去。'
+                   '你用了 await_answer，像是以为已经回过了。要回就把要说的话写在正文里；确实不说，就再用 stay_silent 结束。')
+
+
 def speech_problem(value, *, thought, consult=False):
     """What is wrong with the end of a turn, in words for her; None when it can be said."""
     text = (value.content or '').strip()

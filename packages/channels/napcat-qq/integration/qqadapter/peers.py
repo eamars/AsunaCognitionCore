@@ -34,6 +34,9 @@ import time
 from datetime import datetime, timezone
 
 PEER_KEY = "asuna_peer"
+# The people a group message @-mentions, looked up like its sender (a list of profiles).
+MENTIONED_KEY = "asuna_mentioned"
+MENTION_LOOKUPS = 3                       # lookups one message may spend on the people it mentions
 FIELD_DENIED = "CHANNEL_ENVELOPE_FIELD_DENIED"
 ROLES = ("owner", "admin", "member")
 NAME_LIMIT = 60
@@ -303,6 +306,56 @@ class PeerDirectory:
             envelope["raw"][PEER_KEY] = profile
         return profile
 
+    def observe_mentions(self, envelope, api=None, cap=MENTION_LOOKUPS):
+        """Profiles of the people a group message @-mentions, in envelope["raw"]["asuna_mentioned"].
+
+        Looked up with the same gates as a sender (one lookup per person and group within the refresh and
+        cache windows), at most `cap` lookups per message; a mention is not a message from them, so their
+        message count and change history stay as they were. Never raises.
+        """
+        group_id = str(envelope.get("group_id") or "").strip()
+        if not group_id.isdigit():
+            return []
+        sender = str(envelope.get("sender_id") or "").strip()
+        own = str(envelope.get("account_id") or "").strip()
+        scene = "group:%s" % group_id
+        profiles, spent = [], 0
+        for account in dict.fromkeys(str(a).strip() for a in envelope.get("mentioned_account_ids") or []):
+            if not account.isdigit() or account in (sender, own):
+                continue
+            person_id = "qq:%s" % account
+            with self._lock:
+                rec = self._people.get(person_id) or _new_person(account)
+                self._people[person_id] = rec
+                scene_rec = rec["scenes"].get(scene) or _new_scene(scene)
+                rec["scenes"][scene] = scene_rec
+                want_api, _ = self._want_api(person_id, scene, scene_rec, False)
+            result = None
+            if want_api and api is not None:
+                if spent >= cap:
+                    self._bump("peer_mention_capped")
+                else:
+                    spent += 1
+                    result = self._fetch(api, scene, account, False)
+            with self._lock:
+                self._changes_now = []
+                if result is not None:
+                    if result.get("error"):
+                        scene_rec["profile_source"] = "api_error:%s" % str(result["error"])[:40]
+                    else:
+                        result["source"] = "api"
+                        self._merge(rec, scene_rec, result)
+                        scene_rec["profile_at"] = iso()
+                        scene_rec["profile_source"] = "api"
+                        scene_rec["verified"] = True
+                self._changes_now = []                       # a mention reports no change of theirs
+                if scene_rec.get("profile_source") == "api":
+                    profiles.append(self._profile_for(rec, scene_rec, scene, group_id))
+                self._save()
+        if profiles and self.inject and isinstance(envelope.get("raw"), dict):
+            envelope["raw"][MENTIONED_KEY] = profiles
+        return profiles
+
     def _want_api(self, person_id, scene, scene_rec, disagree):
         """Spend a lookup only when it can tell us something new.  `disagree` is
         judged against the record as it stood before this message, because the
@@ -460,12 +513,14 @@ class PeerDirectory:
 
     @staticmethod
     def strip(envelope):
-        """Drop the injected block (used if a host ever refuses it)."""
+        """Drop the injected blocks (used if a host ever refuses them)."""
         raw = envelope.get("raw") if isinstance(envelope.get("raw"), dict) else None
-        if raw is not None and PEER_KEY in raw:
-            del raw[PEER_KEY]
-            return True
-        return False
+        found = False
+        for key in (PEER_KEY, MENTIONED_KEY):
+            if raw is not None and key in raw:
+                del raw[key]
+                found = True
+        return found
 
     @staticmethod
     def denied(obj):

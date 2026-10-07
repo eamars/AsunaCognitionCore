@@ -11,6 +11,8 @@ with Core (`registerChannel`).
   license). Core's integration service runs it in DSH's sandbox; the owner-granted `integration_*` tools develop
   it in this package's own development project (`napcat-qq`).
 - `skills/qq-napcat-adapter/` is the adapter's skill; it joins her skill directories.
+- The people a group message @-mentions are looked up like its sender (`get_group_member_info`, the same refresh and
+  cache windows, at most three lookups per message) and ride on the event as `raw.asuna_mentioned`.
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.

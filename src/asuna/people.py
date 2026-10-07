@@ -133,8 +133,10 @@ class People:
             self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find({'scene_id': scene_id})}
         return self._rosters[scene_id]
 
-    def entry(self, scene, person_id, row=None):
-        """This person's record in the scene: created with the next label on first sight, refreshed from a newer verified profile."""
+    def entry(self, scene, person_id, row=None, profile=None):
+        """This person's record in the scene: created with the next label on first sight, refreshed from a newer verified profile.
+
+        `profile`: their names from a message that @-mentions them (`mentioned`); `row` is then that message."""
         person = self.person(person_id)
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
@@ -153,12 +155,14 @@ class People:
                 doc = self.db.scene_people.find_one({'_id': key})      # someone else placed it, or took the number
         if not doc:
             raise Conflict('SCENE_PERSON_UNAVAILABLE')
-        if row is None and not doc.get('seen_at') and person != self.self_id and key not in self._looked_up:
+        if row is None and profile is None and not doc.get('seen_at') and person != self.self_id \
+                and key not in self._looked_up:
             # Someone first labelled from older history: take the names from their latest saved message.
             self._looked_up.add(key)
             row = self.db.messages.find_one({'scene_id': scene['_id'], 'author': person_id, 'direction': 'inbound',
                                              'event.raw.asuna_peer': {'$exists': True}}, sort=[('received_at', -1)])
-        fresh = self._profile(row) if row is not None and person != self.self_id else None
+        fresh = profile if profile is not None else (
+            self._profile(row) if row is not None and person != self.self_id else None)
         moment = str((row or {}).get('received_at') or '')
         if fresh and (not doc.get('seen_at') or moment > str(doc['seen_at'])):
             changed = {k: v for k, v in fresh.items() if doc.get(k) != v}
@@ -188,6 +192,18 @@ class People:
         if not ok or not platform or row.get('author') not in (platform.person_id(sender),
                                                                self.account_person(None, sender, platform)):
             return None
+        return self._names(peer)
+
+    def mentioned(self, row, account):
+        """Names and group role of someone this message @-mentions, from the profile kept with it, or None."""
+        from .peer_context import MENTIONED_KEY
+        for item in ((row.get('event') or {}).get('raw') or {}).get(MENTIONED_KEY) or []:
+            if isinstance(item, dict) and str(item.get('account_id')) == str(account):
+                return self._names(item) or None
+        return None
+
+    @staticmethod
+    def _names(peer):
         out = {}
         for field in ('card', 'nickname'):
             if isinstance(peer.get(field), str):
@@ -397,7 +413,8 @@ class People:
         account = (event.get('channel') or {}).get('account_id')
         for number in group.get('mentioned_account_ids') or []:
             if str(number) != str(account):
-                self.entry(scene, self.account_person(scene['_id'], number))
+                profile = self.mentioned(row, number)
+                self.entry(scene, self.account_person(scene['_id'], number), row if profile else None, profile)
         self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
         # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.

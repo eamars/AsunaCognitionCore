@@ -183,6 +183,18 @@ class Adapter:
                             profile["display"], profile["nickname"], profile.get("card", "-"),
                             profile["role"], profile["source"], profile["verified"],
                             profile["seen_messages"], ",".join(profile.get("changed") or []) or "-"))
+        if self.peers is not None and envelope.get("group_id") and envelope.get("mentioned_account_ids"):
+            try:
+                mentioned = self.peers.observe_mentions(envelope, self.onebot)
+            except Exception as exc:
+                mentioned = []
+                self.counters.inc("peer_mention_error")
+                self.log("PEER_MENTION_ERROR type=%s" % type(exc).__name__)
+            for profile in mentioned:
+                self.counters.inc("peer_mention_enriched")
+                self.log("PEER_MENTION person=%s group=%s display=%r verified=%s"
+                         % (profile["person_id"], profile.get("group_id", "-"), profile["display"],
+                            profile["verified"]))
         if envelope.get("group_id"):
             try:
                 self.self_roles.attach(envelope, self.onebot)

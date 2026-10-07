@@ -38,17 +38,21 @@ def route_members(route):
     raise Denied('CHANNEL_TARGET_TYPE_DENIED')
 
 
-def kept_raw(event, raw):
+def kept_raw(event, raw, mentioned=None):
     """What of the adapter's raw event the host keeps: the sender profile verified against this
-    authenticated sender and group, the normalized media block, and the group's name. The platform
-    event itself (and anything else an adapter puts there) is never stored."""
-    from .peer_context import snapshot_event
+    authenticated sender and group, the profiles of the people it @-mentions (each bound to a mentioned
+    account and this group), the normalized media block, and the group's name. The platform event
+    itself (and anything else an adapter puts there) is never stored."""
+    from .peer_context import MENTIONED_KEY, snapshot_event, snapshot_mentioned
     from .vision import MEDIA_KEY
     raw = raw if isinstance(raw, dict) else {}
     kept = {}
     peer = snapshot_event({**event, 'raw': raw})
     if peer:
         kept['asuna_peer'] = peer
+    profiles = snapshot_mentioned(event, raw, mentioned)
+    if profiles:
+        kept[MENTIONED_KEY] = profiles
     if isinstance(raw.get(MEDIA_KEY), dict):
         kept[MEDIA_KEY] = raw[MEDIA_KEY]
     if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
@@ -219,7 +223,7 @@ class Channels:
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
-        event['raw'] = kept_raw(event, body.get('raw'))
+        event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
         if route['target']['type'] == 'group':
             event['group_context'] = group_context(self.store, route, body, event_id, member['person_id'])
         if 'occurred_at' in body:

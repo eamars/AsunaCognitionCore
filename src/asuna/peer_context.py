@@ -15,6 +15,8 @@ except ImportError:                   # history_query 的平铺加载（离线�
     from asuna import channel_kinds
 
 PEER_KEY = "asuna_peer"
+MENTIONED_KEY = "asuna_mentioned"
+MAX_MENTIONED = 10
 CHANGE_LABEL = {"nickname": "昵称", "card": "群名片", "role": "身份", "title": "头衔"}
 MAX_NAME = 60
 MAX_ALIASES = 4
@@ -111,6 +113,37 @@ def snapshot_event(event):
     if isinstance(previous, dict):
         profile["previous"] = {key: _clean(previous.get(key)) for key in CHANGE_LABEL if previous.get(key)}
     return profile
+
+
+def snapshot_mentioned(event, raw, mentioned):
+    """Profiles of the people this group message @-mentions, as the adapter looked them up, bounded for storage.
+
+    Only a profile of an account the message really mentions, of this platform, in this group, is kept.
+    """
+    channel = channel_of(event)
+    target = (channel or {}).get("target") if isinstance(channel, dict) else None
+    items = raw.get(MENTIONED_KEY) if isinstance(raw, dict) else None
+    if not isinstance(target, dict) or target.get("type") != "group" or not isinstance(items, list):
+        return []
+    platform = channel_kinds.get(channel.get("id"))
+    if platform is None:
+        return []
+    group = _clean(target.get("id"), 20)
+    wanted = {str(account) for account in mentioned or []}
+    kept = {}
+    for item in items[:MAX_MENTIONED]:
+        if not isinstance(item, dict):
+            continue
+        account = _clean(item.get("account_id"), 32)
+        if (account not in wanted or account in kept or _clean(item.get("person_id"), 40) != platform.person_id(account)
+                or _clean(item.get("group_id"), 20) != group or _clean(item.get("scene"), 40) != "group:%s" % group):
+            continue
+        profile = {key: _clean(item.get(key), 80 if key == "profile_at" else MAX_NAME)
+                   for key in ("person_id", "account_id", "scene", "group_id", "display", "nickname", "card", "role",
+                               "source", "profile_at") if item.get(key) is not None}
+        profile["verified"] = item.get("verified") is True
+        kept[account] = profile
+    return list(kept.values())
 
 
 def speaker_name(config, person_id, row=None, db=None):

@@ -62,20 +62,20 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     const python = path.join(dir, 'python'), manifest = path.join(dir, 'manifest.json');
     await fs.writeFile(python, '');
     const launch = { config: 'config/local.json', profile: 'asuna-native', sharedActionModel: true,
-      setup: { persona_package: 'packages/personas/xiaoman', channel_packages: ['packages/channels/napcat-qq'] },
-      installed: { '@asuna/cognition-core': 'aa', '@asuna/xiaoman': 'bb' } };
+      setup: { persona_package: 'tests/fixtures/personas/demo', channel_packages: ['packages/channels/napcat-qq'] },
+      installed: { '@asuna/cognition-core': 'aa', '@asuna/demo': 'bb' } };
     const calls = [], notes = [];
     const exec = async (command, args) => { calls.push(args[0]); return 0; };
-    await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'aa' }, { name: '@asuna/xiaoman', sha256: 'bb' }]));
+    await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'aa' }, { name: '@asuna/demo', sha256: 'bb' }]));
     assert.equal(await syncCheckout(launch, exec, note => notes.push(note), { python, manifest }), 'UP_TO_DATE');
     assert.deepEqual(calls, ['tools/pack_plugins.py'], 'unchanged: packed and compared, nothing installed');
-    await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'cc' }, { name: '@asuna/xiaoman', sha256: 'bb' }]));
+    await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'cc' }, { name: '@asuna/demo', sha256: 'bb' }]));
     let installArgs;
     const record = async (command, args) => { if (args[0].includes('setup')) installArgs = args; return 0; };
     assert.equal(await syncCheckout(launch, record, note => notes.push(note), { python, manifest }), 'INSTALLED');
     assert.match(notes.at(-1), /installing the checkout \(@asuna\/cognition-core\)/);
     assert.deepEqual(installArgs, ['tools/setup_native_profile.py', '--config', 'config/local.json', '--profile', 'asuna-native',
-      '--persona-package', 'packages/personas/xiaoman', '--channel-package', 'packages/channels/napcat-qq', '--shared-action-model']);
+      '--persona-package', 'tests/fixtures/personas/demo', '--channel-package', 'packages/channels/napcat-qq', '--shared-action-model']);
     assert.equal(await syncCheckout({ ...launch, setup: undefined }, exec, note => notes.push(note), { python, manifest }), 'UNKNOWN');
     assert.equal(await syncCheckout(launch, exec, note => notes.push(note), { python: path.join(dir, 'none'), manifest }), 'NO_PYTHON');
     await assert.rejects(syncCheckout(launch, async () => 1, () => {}, { python, manifest }), /--no-sync/);

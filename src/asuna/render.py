@@ -73,7 +73,7 @@ def model_and_policy(store, persona):
 
 # Chinese, Japanese and Korean characters, and their full-width punctuation: about one token each or less.
 WIDE = re.compile('[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef'
-                  '\U00020000-\U0003ffff]')
+                  '\U00020000-\U0003ffff]')   # personal-scan: ok (CJK extension planes)
 SEED_ROOM = 1.25            # what the package's own seeds render to, plus a quarter to grow
 
 

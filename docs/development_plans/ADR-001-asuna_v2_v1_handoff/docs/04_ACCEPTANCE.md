@@ -15,7 +15,7 @@
 
 ## 2. 正式运行顺序
 
-1. `python tools/verify_bundle.py`：只检查交付材料。
+1. （原为 `tools/verify_bundle.py` 交付材料哈希校验；2026-10-07 按主人决定连同哈希清单一起移除。）
 2. `asuna doctor ...`，保存真实 environment/preflight。
 3. 创建独立测试库与 DSH_HOME，seed `world.json`；存数据库名和输入 hash。
 4. `engineering`：fake clock、fake lane、真实/容器 Mongo 分层执行，区分真实 DB 和 mock DB。

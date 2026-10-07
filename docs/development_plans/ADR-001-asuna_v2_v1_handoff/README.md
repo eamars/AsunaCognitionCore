@@ -28,7 +28,6 @@
 ## 本包能运行的内容
 
 ```bash
-python tools/verify_bundle.py
 python tools/check_report.py reports/report.template.json --allow-incomplete
 ```
 

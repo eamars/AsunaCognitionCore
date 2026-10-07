@@ -20,6 +20,8 @@ services:
       ASUNA_CHANNEL_PACKAGES: ${ASUNA_CHANNEL_PACKAGES:-}
       ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
       ASUNA_PORT: ${ASUNA_PORT:-8780}
+      # Local time, as on any host: default quiet hours follow it. Set it to where she lives.
+      TZ: ${TZ:-UTC}
     # The host's interfaces, so Caddy reaches Asuna on loopback and Asuna reaches MongoDB and NapCat as on any host.
     network_mode: host
     volumes:

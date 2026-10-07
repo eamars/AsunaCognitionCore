@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
 // 一之瀬アスナ: an original persona inspired by a Blue Archive character, run on the Asuna core (owner 2026-10-07,
-// the first persona deployed in Docker, ADR-019). Her text is written fresh; nothing here is copied game text.
+// the first persona deployed on Linux, ADR-019). Her text is written fresh; nothing here is copied game text.
 export const name = 'asuna-ichinose';
 export const inject = ['asuna'];
 export function apply(ctx) {

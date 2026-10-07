@@ -9,7 +9,7 @@ from asuna.lanes import FakeLane, FakeTurn
 from test_engineering_m1 import THINK
 from test_group_admin import BOT, GROUP, SCENE, setup as group_setup
 
-NOON = datetime(2026, 10, 6, 4, 0, tzinfo=timezone.utc)       # 12:00 at +8
+NOON = datetime(2026, 10, 6, 4, 0, tzinfo=timezone.utc)       # 12:00 at +8 (the route's offset below)
 EVIDENCE = SimpleNamespace(record=lambda *a, **k: None)
 
 
@@ -17,6 +17,9 @@ def world(store):
     scene = group_setup(store, 'member')
     route = store.config['channels']['qq']['routes']['g']
     route['members'] = {str(n): {'person_id': 'qq:%d' % n} for n in (20001, 20002, 20003, 20004)}
+    # Default quiet hours follow the route's offset when it names one, else the host's local time: pin it, so these
+    # tests read the same on any machine and in any time zone (ADR-019 M2 ran them in a UTC container).
+    route['proactive'] = {'enabled': False, 'utc_offset_minutes': 480}
     assert not proactive.route_settings(store.config, scene)['enabled']        # unprompted speaking is off here
     return store.db.scenes.find_one({'_id': SCENE})
 

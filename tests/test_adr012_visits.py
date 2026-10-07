@@ -24,7 +24,8 @@ def group_world(store, quiet_hours=()):
         'r1': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'G1'}, 'members': {'s-a': {'person_id': 'A'},
                                                                                       's-b': {'person_id': 'B'}},
                'proactive': {'enabled': True, 'quiet_hours': [list(pair) for pair in quiet_hours]}},
-        'r2': {'scene_id': 'g2', 'target': {'type': 'group', 'id': 'G2'}, 'members': {'s-a': {'person_id': 'A'}}}}}}
+        'r2': {'scene_id': 'g2', 'target': {'type': 'group', 'id': 'G2'}, 'members': {'s-a': {'person_id': 'A'}},
+               'proactive': {'enabled': True, 'quiet_hours': [list(pair) for pair in quiet_hours]}}}}}
     store.db.scenes.update_many({'_id': {'$in': ['g1', 'g2']}}, {'$set': {'channel_id': 'qq', 'channel_account_id': 'acct'}})
     service.ensure_presence()
     service.app.coordinator = None

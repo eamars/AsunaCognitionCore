@@ -31,6 +31,7 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
 });
 
 test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async () => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/stale-probe-'));
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module' }));
@@ -51,6 +52,7 @@ test('ADR-010 D9: a file she changed whose source moved after her baseline is ma
 });
 
 test('native spilled output stays readable only by its own action, in bounded pages', async () => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const root = await fs.mkdtemp(path.resolve('.runtime/adr008/spill-probe-'));
   const ctx = new Context(); const store = new LocalSpillStore(ctx, { root, cleanupPeriodDays: 0 });
   try {

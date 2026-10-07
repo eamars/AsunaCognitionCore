@@ -43,9 +43,11 @@ def world(store):
     store.db.scenes.insert_one({**home, '_id': 'dm-o', 'scene_id': 'dm-o', 'scope_key': 'scene:dm-o', 'sequence': 0})
     store.config['channels']['qq'] = {'account_id': 'acct', 'routes': {
         'r1': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'G1'}, 'members': {'s-a': {'person_id': 'A'},
-                                                                                      's-b': {'person_id': 'B'}}},
+                                                                                      's-b': {'person_id': 'B'}},
+               'proactive': {'enabled': True, 'quiet_hours': []}},           # no night: tests never depend on the clock
         'r2': {'scene_id': 'g2', 'target': {'type': 'group', 'id': 'G2'}, 'members': {'s-a': {'person_id': 'A'},
-                                                                                      's-c': {'person_id': 'C'}}},
+                                                                                      's-c': {'person_id': 'C'}},
+               'proactive': {'enabled': True, 'quiet_hours': []}},
         'r3': {'scene_id': 'dm-b', 'target': {'type': 'dm', 'id': 's-b'}, 'sender_id': 's-b', 'person_id': 'B'},
         'r4': {'scene_id': 'dm-o', 'target': {'type': 'dm', 'id': 's-a'}, 'sender_id': 's-a', 'person_id': 'A'}}}
     store.db.scenes.update_many({'_id': {'$in': ['g1', 'g2', 'dm-b', 'dm-o']}},

@@ -17,11 +17,13 @@ if os.name == 'nt':
 else:
     import fcntl
 
+    # flock, not lockf: lockf's POSIX record locks belong to the whole process, so a second holder in the same
+    # process would be let in. flock belongs to the open file, as msvcrt's lock does on Windows (ADR-019 M2).
     def _try_lock(file):
-        fcntl.lockf(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB, 1)
+        fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def _unlock(file):
-        fcntl.lockf(file.fileno(), fcntl.LOCK_UN, 1)
+        fcntl.flock(file.fileno(), fcntl.LOCK_UN)
 
 
 class EndpointLock:
@@ -55,7 +57,7 @@ class RuntimeLease(EndpointLock):
 class _DatabaseEffectsLock:
     """Serialize accepted cancellation with local tool/publication effects.
 
-    A reentrant thread lock and a Windows byte lock share one local database
+    A reentrant thread lock and an OS file lock share one local database
     domain. The OS releases the byte lock on process exit. Model inference is
     deliberately outside this lock, so a running model cannot block cancel.
     """

@@ -26,6 +26,7 @@ ADR-019 §3.3. Docker is one deployment layer on top of DSH. The cognition core 
 | `ASUNA_PERSONA_PACKAGE`, `ASUNA_CHANNEL_PACKAGES` | demo persona, none | Package directories for the first install. Channels are separated by spaces |
 | `ASUNA_SHARED_ACTION_MODEL` | `0` | `1` routes both brains to the action model |
 | `ASUNA_PORT`, `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8780, 8443, 8781 | Asuna's loopback port, Caddy's HTTPS port, and the plain-HTTP port that serves Caddy's root certificate. Pick ports that are free on the host |
+| `TZ` | `UTC` | The container's local time zone (an IANA name). Default quiet hours follow local time, as on any host, so set it to where she lives |
 | `ASUNA_REPO`, `ASUNA_REF` | this repository, `main` | What the first start clones |
 
 ## Deploy

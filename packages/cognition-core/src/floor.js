@@ -17,7 +17,9 @@ const excluded = new Set(['.runtime', '.venv', '.git', 'node_modules', '__pycach
 // The floor and everything it imports (ADR-011 §6.4): persona.js and channel.js for floor.js,
 // settings.js for recovery.js. A publication can never replace what keeps the Host bootable.
 const FLOOR_FILES = ['floor.js', 'recovery.js', 'persistence.js', 'persona.js', 'channel.js', 'settings.js', 'paths.js'];
-const protectedPaths = new Set(['start-asuna.cmd', 'tools/asuna-launch.mjs',
+// The launcher runs the packer and installer on every start (owner 2026-10-07), so they are the floor too.
+const protectedPaths = new Set(['start-asuna.cmd', 'start-asuna.sh', 'tools/asuna-launch.mjs',
+  'tools/pack_plugins.py', 'tools/setup_native_profile.py',
   ...FLOOR_FILES.map(name => 'packages/cognition-core/src/' + name), 'packages/cognition-core/runtime-manifest.json',
   ...FLOOR_FILES.map(name => 'src/' + name), 'runtime-manifest.json']);
 // A child process that really imports a plugin entry, resolving bare packages from this Host's own

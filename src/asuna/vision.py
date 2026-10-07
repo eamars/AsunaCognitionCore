@@ -314,7 +314,7 @@ class _KeepInsideAllowList(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def pull_bytes(entry, config, *, max_bytes=None):
+def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
     """按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 
     只用标准库：这条路径要能在没有第三方 HTTP 库的离线自检里真跑一次真实 socket，
@@ -332,7 +332,7 @@ def pull_bytes(entry, config, *, max_bytes=None):
         request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
         opener = urllib.request.build_opener(_KeepInsideAllowList(vision['image_hosts']))
         try:
-            with opener.open(request, timeout=vision['timeout_seconds']) as response:
+            with opener.open(request, timeout=timeout or vision['timeout_seconds']) as response:
                 status = getattr(response, 'status', None) or 200
                 if status != 200:
                     raise ValueError(f'IMAGE_FETCH_FAILED:HTTP_{status}')

@@ -14,7 +14,9 @@ fits; a picture she made herself may go on the shelf too. Only stickers can be k
   the nightly settlement lists the ones she has not used, and she drops what she no longer wants. The
   program never drops one for her.
 - A sticker she kept or looked at and named stays known (``sticker_memory``): posted again, its line says
-  what she called it, so she need not look again.
+  what she called it, so she need not look again. It is known by the file's md5 (which the platform may give
+  without a download) and by its picture (``picture_key``: the image data without metadata), so a copy
+  re-sent with rewritten metadata is still hers; keeping the same picture twice is refused.
 """
 from __future__ import annotations
 
@@ -108,7 +110,8 @@ def keep(store, blobs, ep, persona, args, config):
         if not row or not produced(row):
             raise Denied('STICKER_NOT_YOURS')
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
-                   media_type=row.get('media_type'), identity='sha:' + row['sha256'])
+                   media_type=row.get('media_type'), identity='sha:' + row['sha256'],
+                   picture=_picture_of(store, ref))
     else:
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         listing = scene_attachments(store, scene, config)
@@ -128,8 +131,9 @@ def keep(store, blobs, ep, persona, args, config):
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
                        media_type=media_type or sniff_media_type(data), identity='sha:' + stored['sha256'],
-                       md5=hashlib.md5(data).hexdigest().upper())
-    same = store.db.stickers.find_one({'persona': persona, 'identity': doc['identity']})
+                       md5=hashlib.md5(data).hexdigest().upper(), picture=picture_key(data))
+    same = store.db.stickers.find_one({'persona': persona, '$or': [{'identity': doc['identity']},
+                                       *([{'picture': doc['picture']}] if doc.get('picture') else [])]})
     if same:
         raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
     doc['_id'] = 'stk-' + sha((persona + '|' + doc['identity']).encode())[:20]
@@ -334,7 +338,7 @@ def pool_seen(store, blobs, config, message_id):
         if not entry.get('sticker') or not entry.get('pullable'):
             continue
         fingerprint = memory_key(entry)
-        if fingerprint and store.db.sticker_memory.find_one({'key': fingerprint}, {'_id': 1}):
+        if fingerprint and store.db.sticker_memory.find_one(_by_key(fingerprint), {'_id': 1}):
             continue                                   # she knows it already: kept once, or looked and let go
         try:
             data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, task, config, entry)}, config)
@@ -346,8 +350,9 @@ def pool_seen(store, blobs, config, message_id):
         md5 = hashlib.md5(data).hexdigest().upper()
         if store.db.stickers.find_one({'identity': identity}, {'_id': 1}):
             continue                                   # already on her shelf
-        if store.db.sticker_memory.find_one({'key': 'md5:' + md5}, {'_id': 1}):
-            continue                                   # known by its bytes, though the platform named it otherwise
+        picture = picture_key(data)
+        if store.db.sticker_memory.find_one({'$or': [_by_key('md5:' + md5), {'picture': picture}]}, {'_id': 1}):
+            continue                                   # known by its bytes or its picture, though named otherwise
         at = row.get('received_at') or now()
         key = 'cand-' + sha(identity.encode())[:16]
         current = store.db.sticker_pool.find_one({'_id': key})
@@ -358,7 +363,8 @@ def pool_seen(store, blobs, config, message_id):
                           expected=current['revision'], stream='sticker-pool')
             else:
                 doc = {'_id': key, 'identity': identity, 'kind': entry['sticker'], 'artifact_id': stored['artifact_id'],
-                       'sha256': stored['sha256'], 'md5': md5, 'size': stored['size'], 'media_type': media_type,
+                       'sha256': stored['sha256'], 'md5': md5, 'picture': picture, 'size': stored['size'],
+                       'media_type': media_type,
                        'first_seen': at, 'last_seen': at, 'seen': 1, 'scenes': [scene['_id']],
                        'source_message_id': message_id}
                 if entry['sticker'] == 'market':
@@ -420,7 +426,8 @@ def keep_candidate(store, ep, persona, args):
         raise Denied('STICKER_SHELF_FULL')
     if find(store, persona, name):
         raise Denied('STICKER_NAME_TAKEN: ' + name)
-    same = store.db.stickers.find_one({'persona': persona, 'identity': row['identity']})
+    same = store.db.stickers.find_one({'persona': persona, '$or': [{'identity': row['identity']},
+                                       *([{'picture': row['picture']}] if row.get('picture') else [])]})
     if same:
         raise Denied('STICKER_ALREADY_KEPT: ' + same['name'])
     doc = {'_id': 'stk-' + sha((persona + '|' + row['identity']).encode())[:20], 'persona': persona, 'name': name,
@@ -430,7 +437,8 @@ def keep_candidate(store, ep, persona, args):
         doc['market'] = row['market']
     else:
         doc.update(artifact_id=row['artifact_id'], sha256=row['sha256'], size=row['size'], media_type=row.get('media_type'),
-                   md5=row.get('md5') or _md5_of(store, row['artifact_id']))
+                   md5=row.get('md5') or _md5_of(store, row['artifact_id']),
+                   picture=row.get('picture') or _picture_of(store, row['artifact_id']))
     store.put('stickers', doc, stream='stickers:' + persona)
     _kept(store, persona, doc)
     store.db.sticker_pool.delete_one({'_id': row['_id']})
@@ -440,11 +448,68 @@ def keep_candidate(store, ep, persona, args):
 
 # ── the stickers she knows (owner 2026-10-06) ───────────────────────
 # A sticker she looked at and named stays known for good, by a fingerprint: the md5 of a picture's bytes (a
-# platform may name the file by it, channel_kinds.sticker_md5) or a store sticker's ids. When it is posted
-# again, the line under it says what she called it, so she need not look again. The words are only hers: a
-# sticker on her shelf is known by its name and note (and stays known after she drops it); one she looked at
-# and does not want to send she may remember with a name and a line of her own.
+# platform may name the file by it, channel_kinds.sticker_md5) or a store sticker's ids, and by its picture
+# (picture_key). When it is posted again, the line under it says what she called it, so she need not look
+# again: the file md5 needs no download; a copy whose md5 is unknown is downloaded once by the program and
+# matched by its picture, and that md5 is then known too (aliases). The words are only hers: a sticker on her
+# shelf is known by its name and note (and stays known after she drops it); one she looked at and does not want
+# to send she may remember with a name and a line of her own.
 MEMORY_WORDS = {'kept': '在你架子上', 'dropped': '你收过又放下了', 'looked': '你看过没收'}
+PICTURE_FETCH_SECONDS = 5
+_JPEG_METADATA = set(range(0xE0, 0xF0)) | {0xFE}          # APP0-APP15 (JFIF, EXIF, XMP, ICC...) and comments
+_PNG_METADATA = {b'tEXt', b'zTXt', b'iTXt', b'tIME', b'eXIf', b'pHYs'}
+_WEBP_METADATA = {b'EXIF', b'XMP ', b'VP8X'}
+
+
+def _jpeg_image(data):
+    out, index = [], 2
+    while index + 4 <= len(data) and data[index] == 0xFF:
+        marker = data[index + 1]
+        if marker == 0xDA:                                 # start of scan: the rest is image data
+            out.append(data[index:])
+            return b''.join(out)
+        length = int.from_bytes(data[index + 2:index + 4], 'big')
+        if marker not in _JPEG_METADATA:
+            out.append(data[index:index + 2 + length])
+        index += 2 + length
+    return None
+
+
+def _chunks_without(data, start, metadata, *, size_first):
+    out, index = [], start
+    while index + 8 <= len(data):
+        if size_first:                                     # PNG: length, type, data, crc
+            length, kind = int.from_bytes(data[index:index + 4], 'big'), data[index + 4:index + 8]
+            end = index + 12 + length
+        else:                                              # RIFF: type, length, data (padded to even)
+            kind, length = data[index:index + 4], int.from_bytes(data[index + 4:index + 8], 'little')
+            end = index + 8 + length + (length & 1)
+        if end > len(data):
+            return None
+        if kind not in metadata:
+            out.append(data[index:end])
+        index = end
+    return b''.join(out) if index == len(data) else None
+
+
+def picture_key(data):
+    """The picture's fingerprint: its image data without metadata (EXIF, XMP, text and time chunks), so a copy
+    whose metadata was rewritten on the way is the same picture. Other formats, or bytes that do not parse,
+    use all of their bytes."""
+    image = None
+    if data[:3] == b'\xff\xd8\xff':
+        image = _jpeg_image(data)
+    elif data[:8] == b'\x89PNG\r\n\x1a\n':
+        image = _chunks_without(data, 8, _PNG_METADATA, size_first=True)
+    elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        image = _chunks_without(data, 12, _WEBP_METADATA, size_first=False)
+    return 'img:' + hashlib.sha256(image or data).hexdigest()
+
+
+def _blob(store, artifact_id):
+    from .blobs import BlobStore
+    row = store.db.artifacts.find_one({'_id': artifact_id}, {'scope_key': 1})
+    return BlobStore(store).get(artifact_id, row['scope_key'], operator=True) if row else None
 
 
 def memory_key(entry):
@@ -457,12 +522,17 @@ def memory_key(entry):
 
 
 def _md5_of(store, artifact_id):
-    import hashlib
-    from .blobs import BlobStore
-    row = store.db.artifacts.find_one({'_id': artifact_id}, {'scope_key': 1})
-    if not row:
-        return None
-    return hashlib.md5(BlobStore(store).get(artifact_id, row['scope_key'], operator=True)).hexdigest().upper()
+    data = _blob(store, artifact_id)
+    return hashlib.md5(data).hexdigest().upper() if data is not None else None
+
+
+def _picture_of(store, artifact_id):
+    data = _blob(store, artifact_id)
+    return picture_key(data) if data is not None else None
+
+
+def _by_key(key):
+    return {'$or': [{'key': key}, {'aliases': key}]}
 
 
 def _shelf_key(store, doc):
@@ -472,22 +542,41 @@ def _shelf_key(store, doc):
     return 'md5:' + md5 if md5 else None
 
 
-def _know(store, persona, key, name, note, how, identity=None):
+def _know(store, persona, key, name, note, how, identity=None, picture=None):
     """Write what she knows of one sticker (a new look replaces the old words)."""
     _id = 'skm-' + sha((persona + '|' + key).encode())[:20]
     current = store.db.sticker_memory.find_one({'_id': _id})
     doc = {**(current or {}), '_id': _id, 'persona': persona, 'key': key, 'name': name, 'note': note, 'how': how,
-           'identity': identity or (current or {}).get('identity'), 'at': now()}
+           'identity': identity or (current or {}).get('identity'),
+           'picture': picture or (current or {}).get('picture'), 'at': now()}
     return store.put('sticker_memory', doc, expected=current and current['revision'], stream='sticker-memory:' + persona)
 
 
+def _shelf_picture(store, doc):
+    """A custom shelf sticker's picture fingerprint, worked out once from its bytes and kept on its shelf row."""
+    if doc.get('kind') == 'market' or doc.get('picture'):
+        return doc.get('picture')
+    from .state import Conflict
+    picture = _picture_of(store, doc['artifact_id'])
+    if picture and doc.get('revision'):
+        try:
+            store.put('stickers', {**doc, 'picture': picture}, expected=doc['revision'], stream='stickers:' + doc['persona'])
+        except Conflict:
+            pass                                           # changed meanwhile: worked out again next start
+    return picture
+
+
 def remember_shelf(store, persona):
-    """Every sticker on her shelf is known (startup: the shelf as it is now)."""
+    """Every sticker on her shelf is known, by its md5 and its picture (startup: the shelf as it is now)."""
     count = 0
     for doc in shelf(store, persona):
         key = _shelf_key(store, doc)
-        if key and not store.db.sticker_memory.find_one({'persona': persona, 'key': key}, {'_id': 1}):
-            _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'])
+        if not key:
+            continue
+        picture = _shelf_picture(store, doc)
+        row = store.db.sticker_memory.find_one({'persona': persona, 'key': key}, {'picture': 1})
+        if not row or (picture and row.get('picture') != picture):
+            _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'], picture)
             count += 1
     return count
 
@@ -495,7 +584,7 @@ def remember_shelf(store, persona):
 def _kept(store, persona, doc):
     key = _shelf_key(store, doc)
     if key:
-        _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'])
+        _know(store, persona, key, doc['name'], doc['when'], 'kept', doc['identity'], _shelf_picture(store, doc))
 
 
 def _pool_key(store, row):
@@ -505,14 +594,42 @@ def _pool_key(store, row):
 
 
 def known(store, persona, key):
-    return store.db.sticker_memory.find_one({'persona': persona, 'key': key}) if key else None
+    return store.db.sticker_memory.find_one({'persona': persona, **_by_key(key)}) if key else None
 
 
-def recognized(store, persona, entries):
-    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf."""
+_pictures = {}                  # ref -> picture of a posted sticker, downloaded once (None: it could not be)
+
+
+def _known_by_picture(store, persona, entry, key, fetch):
+    """A posted custom sticker whose md5 she does not know: downloaded once and matched by its picture; a match
+    makes that md5 known too, so the next copy needs no download."""
+    ref = entry['ref']
+    if ref not in _pictures:
+        try:
+            _pictures[ref] = picture_key(fetch(entry))
+        except Exception:                                  # unreachable or gone: it stays unknown, as before
+            _pictures[ref] = None
+        while len(_pictures) > 512:
+            _pictures.pop(next(iter(_pictures)))
+    picture = _pictures[ref]
+    row = store.db.sticker_memory.find_one({'persona': persona, 'picture': picture}) if picture else None
+    if row and key and key != row['key'] and key not in (row.get('aliases') or ()):
+        store.put('sticker_memory', {**row, 'aliases': [*(row.get('aliases') or ()), key][-20:]},
+                  expected=row['revision'], stream='sticker-memory:' + persona)
+    return row
+
+
+def recognized(store, persona, entries, fetch=None):
+    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf.
+    ``fetch(entry) -> bytes`` lets a custom sticker whose md5 is unknown be matched by its picture."""
     out = {}
     for entry in entries:
-        row = entry.get('sticker') and known(store, persona, memory_key(entry))
+        if not entry.get('sticker'):
+            continue
+        key = memory_key(entry)
+        row = known(store, persona, key)
+        if not row and fetch and entry['sticker'] == 'custom' and entry.get('pullable'):
+            row = _known_by_picture(store, persona, entry, key, fetch)
         if not row:
             continue
         how = row['how']
@@ -534,7 +651,8 @@ def remember(store, ep, persona, args, config):
             raise Denied('STICKER_CANDIDATE_GONE')
         if candidate not in looked:
             raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
-        _know(store, persona, _pool_key(store, row), name, when, 'looked')
+        _know(store, persona, _pool_key(store, row), name, when, 'looked',
+              picture=row.get('picture') or _picture_of(store, row['artifact_id']))
         store.db.sticker_pool.delete_one({'_id': row['_id']})
         return {'remembered': name}
     ref = str(args.get('ref') or '').strip()
@@ -549,6 +667,7 @@ def remember(store, ep, persona, args, config):
     key = memory_key(entry)
     if not key:
         raise Denied('STICKER_NO_FINGERPRINT')
-    _know(store, persona, key, name, when, 'looked')
+    pooled = store.db.sticker_pool.find_one({'$or': [{'identity': key}, {'md5': key[4:]}]}, {'picture': 1})
+    _know(store, persona, key, name, when, 'looked', picture=(pooled or {}).get('picture'))
     store.db.sticker_pool.delete_many({'$or': [{'identity': key}, {'md5': key[4:]}]})
     return {'remembered': name}

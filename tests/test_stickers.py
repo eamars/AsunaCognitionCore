@@ -95,7 +95,7 @@ def group_world(store, monkeypatch):
     store.config['vision'] = {'image_hosts': ['multimedia.nt.qq.com.cn', 'gxh.vip.qq.com']}
     store.config.setdefault('character', {})['input_modalities'] = ['text', 'image']
     # each sticker its own bytes (the same picture sent twice is the same bytes)
-    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None:
+    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None, timeout=None:
                         (PNG + entry['url'].encode(), 'image/png', 'url', {}))
     refs = {'custom': media_line(store, 'in-sticker', '[表情包]', {'file': 'A' * 32 + '.png', 'url': STICKER_URL,
                                                                     'sub_type': '1', 'sticker': 'custom'}, 1),
@@ -303,3 +303,49 @@ def test_a_sticker_she_kept_or_looked_at_is_named_when_it_comes_back(store, monk
     store.db.sticker_memory.delete_many({})
     assert stickers.remember_shelf(store, 'P1') == 1 and stickers.remember_shelf(store, 'P1') == 0
     assert '「摸鱼」' in vision.line_refs(row, store.config, known)
+
+
+def jpeg(exif, scan=b'the picture'):
+    """A JPEG whose metadata (APP1) and image data (tables, scan) are given apart."""
+    app1 = b'Exif\x00\x00' + exif
+    return (b'\xff\xd8' + b'\xff\xe1' + (len(app1) + 2).to_bytes(2, 'big') + app1
+            + b'\xff\xdb\x00\x04\x00\x01' + b'\xff\xda\x00\x02' + scan + b'\xff\xd9')
+
+
+def test_a_known_sticker_resent_with_rewritten_metadata_is_still_known(store, monkeypatch):
+    """Owner 2026-10-08: a saved and re-sent sticker comes back with its metadata rewritten, so the file md5 the
+    platform names it by is new; the program downloads it once, matches its picture, and she need not look."""
+    import hashlib
+    from asuna.people import People
+    assert stickers.picture_key(jpeg(b'first')) == stickers.picture_key(jpeg(b'rewritten on the way'))
+    assert stickers.picture_key(jpeg(b'first')) != stickers.picture_key(jpeg(b'first', b'another picture'))
+    refs = group_world(store, monkeypatch)
+    pictures = {STICKER_URL: jpeg(b'first'), STICKER_URL + '-copy': jpeg(b'rewritten on the way')}
+    fetched = []
+    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None, timeout=None:
+                        fetched.append(entry['url']) or (pictures.get(entry['url'], PNG + entry['url'].encode()),
+                                                         'image/jpeg', 'url', {}))
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    ep = {'scene_id': SCENE, 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'], 'persona': 'P1',
+          'looked': []}
+    stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': refs['custom'], 'name': '白吃', 'when': '骂人白吃时'},
+                  store.config)
+    md5 = hashlib.md5(pictures[STICKER_URL + '-copy']).hexdigest().upper()
+    copy = media_line(store, 'in-copy', '[表情包]', {'file': md5 + '.jpg', 'url': STICKER_URL + '-copy',
+                                                    'sub_type': '1', 'sticker': 'custom'}, 11)
+    row = store.db.messages.find_one({'_id': 'in-copy'})
+    known = lambda entries: stickers.recognized(store, 'P1', entries)
+    assert '你认得' not in vision.line_refs(row, store.config, known)          # by the file md5 alone: unknown
+    fetched.clear()
+    assert '你认得：「白吃」，骂人白吃时；在你架子上' in People(store, 'P1').transcript(scene, row)
+    assert fetched == [STICKER_URL + '-copy']
+    # That md5 is known now: the next copy needs no download.
+    assert '你认得：「白吃」' in vision.line_refs(row, store.config, known)
+    # The same picture cannot go on her shelf twice.
+    with pytest.raises(Exception, match='STICKER_ALREADY_KEPT: 白吃'):
+        stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': copy, 'name': '又白吃', 'when': '同一张'}, store.config)
+    # A shelf sticker kept before pictures were known gets its picture at startup.
+    store.db.stickers.update_many({}, {'$unset': {'picture': 1}})
+    store.db.sticker_memory.delete_many({})
+    assert stickers.remember_shelf(store, 'P1') == 1 and stickers.remember_shelf(store, 'P1') == 0
+    assert store.db.sticker_memory.find_one({'name': '白吃'})['picture'] == stickers.picture_key(jpeg(b'first'))

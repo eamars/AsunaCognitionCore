@@ -915,6 +915,18 @@ def rejected_time_does_not_kill_the_turn(env):
 
 
 @case
+def a_plan_made_this_turn_can_be_cancelled_this_turn(env):
+    """这回合刚建的安排还不在这回合的列表里，但它是她的：同一回合就能改、能取消。"""
+    store, _lane, _ep_id, call = plan_turn(config=config_with({'timezone': ZONE}))
+    made = call('plan', {'op': 'create', 'intent': '测试闹钟', 'at': '2026-09-25 09:00'})
+    plan_id = made[1]['plan_id'] if made[0] == 'ok' else None
+    cancelled = call('plan', {'op': 'cancel', 'plan_id': plan_id})
+    row = store.db.plans.find_one({'_id': plan_id}) or {}
+    return made[0] == 'ok' and cancelled[0] == 'ok' and row.get('status') == 'CANCELLED', \
+        {'made': made, 'cancelled': cancelled, 'status': row.get('status')}
+
+
+@case
 def driver_keeps_all_date_math_out_of_itself(env):
     source = open(os.path.join(SRC, 'schedule.py'), encoding='utf-8').read()
     banned = ['timedelta', 'zoneinfo', 'Timer', 'sleep', 'cron', 'APScheduler', 'asyncio']

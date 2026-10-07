@@ -1017,9 +1017,13 @@ class RoleTools:
                                                       where=where))
             elif op in ('update', 'cancel'):
                 plan_id = self._text(args, 'plan_id', 200)
-                row = planned.get(plan_id)
+                # A plan made earlier in this turn is hers to change too, though the turn's list predates it.
+                made = {(call.get('result') or {}).get('plan_id') for call in (ep.get('tool_calls') or {}).values()
+                        if call.get('tool') == 'plan'}
+                row = planned.get(plan_id) or (plan_id in made and self.store.db.plans.find_one({'_id': plan_id}))
                 if not row:
-                    raise Refused('「%s」不在 plans_from_program 里；照那里原样抄 plan_id。' % plan_id)
+                    raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
+                                  '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
                 if op == 'cancel':
                     plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
                 else:

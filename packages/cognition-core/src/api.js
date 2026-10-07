@@ -1,5 +1,6 @@
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol';
 import { editSettings } from './settings.js';
+import { workspaceTitle } from './navigation.js';
 
 const initializers = [];
 export class AsunaApi extends TypertRemoteService {
@@ -92,7 +93,7 @@ export class AsunaApi extends TypertRemoteService {
       const workspace = this.core.navigationWorkspaces?.get(key);
       if (!workspace) continue;
       this.core.workspaceTitles = { ...this.core.workspaceTitles, [key]: title.trim() };
-      await workspace.setTitle(title.trim()); titled.push(key);
+      await workspace.setTitle(workspaceTitle(this.core, key)); titled.push(key);
     }
     return { titled };
   }

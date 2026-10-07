@@ -99,7 +99,7 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 
 Both launchers accept `--profile <name>` and `--config <path>` (or `ASUNA_PROFILE` / `ASUNA_CONFIG`); the defaults are `asuna-native` and `config/local.json`. A profile other than `asuna-native` keeps its own DSH home, activation state and candidates under `.runtime/adr008/profiles/<name>/`. `--dry-run` prints the resolved profile, config and database without starting anything.
 
-Open the authenticated `dsh web:` address printed by the launcher. The token is private. Under **Local**, continue the persona's local chat. Under each channel's workspace (**QQ**, **DSH**), each active DM or group has one continuous main conversation; its composer is view-only, so reply on the platform. Use native Chat for conversation and Trajectory for actual steps and tools. **Standard mode** remains ordinary DSH. Native New Session remains available for deliberate additional or recovery conversations; archived sessions show through native View options.
+Open the authenticated `dsh web:` address printed by the launcher. The token is private. Workspaces carry the character's name (**<persona> · 本地**, **<persona> · QQ**). Under the local workspace, continue the persona's local chat. Under each channel's workspace, each active DM or group has one continuous main conversation; its composer is view-only, so reply on the platform. Use native Chat for conversation and Trajectory for actual steps and tools. **Standard mode** remains ordinary DSH. Native New Session remains available for deliberate additional or recovery conversations; archived sessions show through native View options.
 
 Ctrl+C stops this Host and its managed worker and adapters. Let active work settle before a manual restart, and restart with the same command. **Never start two instances that consume the same channel routes.** Unfinished old actions and task feedback pause instead of calling either brain automatically; their native context, results and receipts remain. In the local conversation, explicitly ask to continue the paused work: the character's new decision can reuse its original execution binding and must first check prior results. A task cancelled by the user cannot be revived this way. External model services are not stopped by Asuna.
 
@@ -132,7 +132,7 @@ Add the package's `.tgz` with `dsh plugin --profile <name> add <package.tgz>` an
 
 ## Running several characters
 
-Each character is a profile with one persona. Several can run at once, on one machine or several.
+Each character is a profile with one persona and its own Web page, whose workspaces carry the character's name. Several can run at once, on one machine or several.
 
 | Each character has its own | May be shared between characters |
 |---|---|

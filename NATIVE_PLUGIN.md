@@ -17,7 +17,7 @@ Core includes its Python business modules and, under `python/asuna/resources/`, 
 
 ## The conversations on the Web page
 
-The shipped workspace list contains **Local** and one workspace per configured channel (titled by the channel, e.g. **QQ**). The persona's local chat is under Local. A channel has one main role session per DM or group; different group speakers continue that same session. Channel input is view-only in the native composer and is also refused by the worker: reply on the platform. DSH hides unused blank conversations until they have activity.
+The shipped workspace list contains the local workspace and one per configured channel, each titled with the character's name first (**杏山カズサ · QQ**, **杏山カズサ · 本地**), so every page says whose conversations it holds. The persona's local chat is under Local. A channel has one main role session per DM or group; different group speakers continue that same session. Channel input is view-only in the native composer and is also refused by the worker: reply on the platform. DSH hides unused blank conversations until they have activity.
 
 With **QQ 接入策略** `automatic`, new DMs, groups and group members are admitted on their first valid message; `explicit` keeps configured enrollment. New identities receive isolated channel workspaces, without owner source, credential or integration grants. Admission facts persist in the database and restore after restart. `channels.<id>.blocked_senders` and `blocked_groups` deny input, work grants and new outbox sends; changing membership authorization can retire the old native session rather than redirect old tasks into a new epoch.
 

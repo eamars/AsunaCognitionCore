@@ -120,13 +120,21 @@ export async function lineBeforeTurn(core, agent, receipt) {
   return true;
 }
 
+/** The title a workspace shows: the character's name, then the viewer's word for it (api.js) or its key, so every
+ * page says whose conversations these are (ADR-020 D3). */
+export function workspaceTitle(core, key) {
+  const name = core.personas?.get(core.config?.persona)?.display_name;
+  const word = core.workspaceTitles?.[key] ?? key;
+  return name ? name + ' · ' + word : word;
+}
+
 /** Native workspace/session migration. No client layout or alternate chat store. */
 export async function organizeNativeWorkspaces(core, plan) {
   const { ctx } = core;
   const workspaces = new Map();
   for (const [title, directory] of Object.entries(plan.workspaces)) {
-    // The key stays the identifier; the title shown is the viewer's word for it when one was given (api.js).
-    const shown = core.workspaceTitles?.[title] ?? title;
+    // The key stays the identifier; the title shown carries the character's name (workspaceTitle).
+    const shown = workspaceTitle(core, title);
     const workspace = await ctx.workspaceRegistry.create(directory, shown);
     await workspace.setTitle(shown);
     workspaces.set(title, workspace);

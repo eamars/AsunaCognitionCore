@@ -220,3 +220,11 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(reopened.sessionProjectionCache.cachedSnapshot(header).values.title, 'My QQ name',
     'the cold sidebar must retain its native title after host restart');
 });
+
+test('ADR-020 D3: each workspace says whose it is, before the viewer\'s word for it', async () => {
+  const { workspaceTitle } = await import('../src/navigation.js');
+  const core = { config: { persona: 'p' }, personas: new Map([['p', { display_name: '杏山カズサ' }]]), workspaceTitles: { Local: '本地' } };
+  assert.equal(workspaceTitle(core, 'QQ'), '杏山カズサ · QQ');
+  assert.equal(workspaceTitle(core, 'Local'), '杏山カズサ · 本地');
+  assert.equal(workspaceTitle({ config: {}, personas: new Map() }, 'QQ'), 'QQ', 'no character selected: the bare word');
+});

@@ -1,8 +1,7 @@
 # ADR-020: Several characters at once
 
-Status: **Accepted** 2026-10-07 (owner decisions D1–D4 in §7, D4 amended the same day). M1, M2 and M5 built 2026-10-07
-without a live test (the owner will test another day; the running setups are unaffected); M3 dropped; M4 waits for a
-Web review.
+Status: **Accepted** 2026-10-07 (owner decisions D1–D4 in §7, D4 amended the same day). M1, M2, M4 and M5 built 2026-10-07
+without a live test (the owner will test another day); M3 dropped. D3 revised the same day (§7).
 
 ## 1. Context
 
@@ -117,8 +116,7 @@ Options (decision D3):
 - **D.** One DSH Web server showing every profile with a switcher. DSH 0.2 does not support it, and one core runs
   one persona; it would mean changing DSH. Rejected.
 
-Recommended: **A** now, **B** next; **C** only if one bookmark for all characters matters. Decided (D3): a
-prefix in existing text only; see §7.
+Recommended: **A** now, **B** next; **C** only if one bookmark for all characters matters. Decided (D3, revised): one page per character, its name on every workspace; see §7.
 
 ## 5. Configuration per profile
 
@@ -144,8 +142,8 @@ same `mongo_uri`.
   is recorded in `launch.json` and kept on reinstall; the launcher uses it unless `--port` is given, else 8780 as
   before; `--list`. The channel port stays a setting, documented.
 - **M3** ~~The launcher's refusal of two self-developing profiles on one checkout (§4.4).~~ Dropped (D4 amended).
-- **M4** The persona's name as a prefix in the browser tab title, if DSH allows it without a new element (D3).
-  Not built: it needs a review on the Web page.
+- **M4** Workspaces titled `<persona> · <word>` (D3). **Built** (`navigation.workspaceTitle`); waits for a review on
+  the Web page.
 - **M5** **Built.** Manuals: "Running several characters" in RUN_ASUNA (owns / may share table, one platform account per
   running character and what happens otherwise, one checkout per self-developing character), the Docker README,
   the QQ README; `docs/DEVELOPMENT.md`.
@@ -157,10 +155,13 @@ same `mongo_uri`.
 - **D2 — documentation only** for platform accounts. No registry and no adapter detection: the manuals say one
   account per running character, and what happens otherwise (both answer everything). The database lease of §4.2
   is a separate matter and stays proposed for M1; the channel account lease is dropped.
-- **D3 — minimum design, no new UI element.** Profiles are told apart by a prefix in text DSH already shows: the
-  persona's name leads the role preset (`<persona> · 角色脑`, as today), the local conversation and the browser tab
-  title, where DSH lets the plugin set it without adding an element. No landing page, no switcher, no list in the
-  page. Listing profiles stays a command (`--list`), which is not UI.
+- **D3 — one Web page per character; workspaces carry the character's name.** First recorded as a prefix in the
+  browser tab title; the owner's intention was one UI with each character's name under its workspaces. Weighed
+  (2026-10-07): one Host and one page holding every character (an isolated core per character) against one Host
+  per character. The owner chose **one Host per character**: in a shared page, someone starting a new conversation
+  could pick the wrong character's preset under the wrong workspace. Within each page every workspace is titled
+  `<persona> · <word>` (`杏山カズサ · QQ`, `杏山カズサ · 本地`), the only UI change; no landing page, switcher or list
+  in the page.
 - **D4 — each persona is separate.** Characters have their own growth profile and pace, and never touch each other
   except through an external channel (a platform, or a peer line) or, later, a dedicated internal agent-teams
   channel of their own (a future ADR). So a character's self-development, core changes included, never reaches

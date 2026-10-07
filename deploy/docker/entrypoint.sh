@@ -131,4 +131,4 @@ if ! installed_as_configured; then
   .venv/bin/python tools/setup_native_profile.py "${install[@]}"
 fi
 
-exec ./start-asuna.sh --profile "$profile" --config "$config" --port "$port"
+exec ./start-asuna.sh --profile "$profile" --config "$config" --host "${ASUNA_LISTEN:-127.0.0.1}" --port "$port"

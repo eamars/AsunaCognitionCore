@@ -17,13 +17,16 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
   5. installs the profile when it has never been installed, or when the stack names other packages than the ones
      recorded in its `launch.json`;
   6. starts `start-asuna.sh`, the same launcher every install uses. It installs any other change to the checkout.
-- **`mongo`** is the stack's own MongoDB on `127.0.0.1:27099`: `mongodb/mongodb-atlas-local`, which runs mongod and
+- **Network:** the three containers share the stack's own network. **Only Caddy publishes ports**: 8443 (the
+  page, HTTPS) and 8781 (Caddy's root certificate). Asuna listens on port 8780 inside the stack network and reaches
+  NapCat, the model servers and the embedding service at their LAN addresses.
+- **`mongo`** is the stack's own MongoDB, `mongo:27017` inside the stack and `127.0.0.1:27099` on the host:
+  `mongodb/mongodb-atlas-local`, which runs mongod and
   its search process (mongot) together, so memory recall's vector search works. Embeddings come from the embedding
   service in each profile's config. `asuna` starts once the image's own health check reports both up. To use an
   existing MongoDB instead, point the config at one with vector search and remove this service.
-- **`caddy`** serves HTTPS on the LAN with Caddy's internal certificate authority, and proxies to Asuna on loopback.
-  It rewrites `Host` and `Origin` to that loopback address, so DSH's server-side fence accepts the request. Both
-  containers use host networking, so Asuna reaches MongoDB and NapCat as any process on that host would.
+- **`caddy`** serves HTTPS with Caddy's internal certificate authority and proxies to `asuna:8780`. It rewrites
+  `Host` and `Origin` to a loopback address, so DSH's server-side fence accepts the request.
 - **Sandbox:** DSH's defaults. The image installs no sandbox tool and the stack adds no privileges. DSH picks its
   runner (Landlock on a kernel that has it), and Asuna reports the enforcement level DSH gives it.
 - **No login token on the LAN.** `lan-login.mjs` patches DSH's client connection: the browser reports loopback, so
@@ -36,17 +39,17 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
 | --- | --- | --- |
 | `ASUNA_PROFILE` | `asuna-demo` | DSH profile. The default is the synthetic demo persona with its own database and no channels |
 | `ASUNA_CONFIG` | `config/demo.local.json` | Config path inside the checkout |
-| `ASUNA_MONGO_URI` | stack MongoDB | Demo profile only. Its config is made from the tracked example, with every model route on a closed local port, so no model is called |
+| `ASUNA_MONGO_URI` | `mongodb://mongo:27017/?directConnection=true` | Demo profile only. Its config is made from the tracked example, with every model route on a closed local port, so no model is called |
 | `ASUNA_CONFIG_JSON` | — | For any other profile: the config written to `ASUNA_CONFIG` when that file is missing |
 | `ASUNA_PERSONA_PACKAGE` | `tests/fixtures/personas/demo` | The persona package directory |
 | `ASUNA_CHANNEL_PACKAGES` | none | Channel package directories, separated by spaces (e.g. `packages/channels/napcat-qq`) |
 | `ASUNA_CHANNEL_CONFIG_JSON`, `ASUNA_INTEGRATION_CONFIG_JSON` | — | The channel and integration settings (the shapes of `config/asuna-channel.example.json` and `config/integration.example.json`). Written beside the config when missing, and read by the installer into a profile that has none. An enabled adapter for a channel starts by itself on the first start |
 | `ASUNA_CHANNEL_ADMISSION` | `explicit` | `automatic` admits new DMs, groups and members on their first valid message. A first choice only: the settings card's saved choice wins |
 | `ASUNA_SHARED_ACTION_MODEL` | `0` | `1` routes both brains to the action model |
-| `ASUNA_PORT`, `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8780, 8443, 8781 | Asuna's loopback port, Caddy's HTTPS port, and the plain-HTTP port that serves Caddy's root certificate. Pick ports that are free on the host |
+| `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8443, 8781 | The host ports Caddy publishes: the page (HTTPS) and its root certificate (HTTP). Pick ports that are free on the host |
 | `TZ` | `UTC` | The container's local time zone (an IANA name). Default quiet hours follow local time, so set it to where she lives |
 | `ASUNA_NAME` | `asuna` | Container name prefix (`<name>`, `<name>-https`, `<name>-mongo`), so several stacks can run side by side |
-| `ASUNA_MONGO_PORT` | 27099 | The stack MongoDB's loopback port; keep `ASUNA_MONGO_URI` in step |
+| `ASUNA_MONGO_PORT` | 27099 | The host loopback port the stack MongoDB is published on, for tools on the host |
 | `ASUNA_REPO`, `ASUNA_REF` | this repository, `main` | What the first start clones |
 
 Keep secrets (tokens, the config) in the stack environment, never in tracked files.

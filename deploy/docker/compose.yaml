@@ -1,6 +1,7 @@
-# Asuna as a Portainer stack (ADR-019 §3.3). Web access follows the owner's existing DSH container: host networking,
-# Asuna's launcher on 127.0.0.1, and a Caddy container that serves HTTPS on the LAN with its internal CA. The stack
-# brings its own MongoDB on loopback: Atlas Local, whose search engine (mongot) the memory's vector search needs, with
+# Asuna as a Portainer stack (ADR-019 §3.3), on the stack's own network. Only Caddy publishes ports: HTTPS for the LAN
+# with its internal CA, and plain HTTP for its root certificate. Asuna listens inside the stack network only, and
+# reaches NapCat and the model servers at their LAN addresses. The stack brings its own MongoDB (published on the
+# host's loopback for tools): Atlas Local, whose search engine (mongot) the memory's vector search needs, with
 # the open-file limit MongoDB needs. Point ASUNA_MONGO_URI or the config at another search-capable MongoDB and remove
 # that service to use an existing one. Container names follow ASUNA_NAME, so stacks can coexist.
 # Defaults run the synthetic demo persona against its own database: a new stack cannot reach the live persona or QQ.
@@ -38,24 +39,23 @@ services:
       ASUNA_PROFILE: ${ASUNA_PROFILE:-asuna-demo}
       ASUNA_CONFIG: ${ASUNA_CONFIG:-config/demo.local.json}
       ASUNA_CONFIG_JSON: ${ASUNA_CONFIG_JSON:-}
-      ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-mongodb://127.0.0.1:27099/?directConnection=true}
+      ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-mongodb://mongo:27017/?directConnection=true}
       ASUNA_PERSONA_PACKAGE: ${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}
       ASUNA_CHANNEL_PACKAGES: ${ASUNA_CHANNEL_PACKAGES:-}
       ASUNA_CHANNEL_CONFIG_JSON: ${ASUNA_CHANNEL_CONFIG_JSON:-}
       ASUNA_INTEGRATION_CONFIG_JSON: ${ASUNA_INTEGRATION_CONFIG_JSON:-}
       ASUNA_CHANNEL_ADMISSION: ${ASUNA_CHANNEL_ADMISSION:-}
       ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
-      ASUNA_PORT: ${ASUNA_PORT:-8780}
+      # The Web server listens on the stack network (port 8780) for Caddy; nothing publishes it.
+      ASUNA_LISTEN: 0.0.0.0
       # Local time, as on any host: default quiet hours follow it. Set it to where she lives.
       TZ: ${TZ:-UTC}
-    # The host's interfaces, so Caddy reaches Asuna on loopback and Asuna reaches MongoDB and NapCat as on any host.
-    network_mode: host
     volumes:
       - ${ASUNA_CHECKOUT_VOLUME:-asuna-checkout}:/srv/asuna
     init: true
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:' + (process.env.ASUNA_PORT || 8780) + '/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8780/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 30
@@ -69,18 +69,13 @@ services:
     depends_on:
       asuna:
         condition: service_healthy
-    network_mode: host
+    ports:
+      - ${ASUNA_HTTPS_PORT:-8443}:443           # the page: https://<host>:8443/
+      - ${ASUNA_HTTP_PORT:-8781}:80             # Caddy's root certificate, and a redirect to HTTPS
     environment:
-      ASUNA_PORT: ${ASUNA_PORT:-8780}
-      ASUNA_HTTPS_PORT: ${ASUNA_HTTPS_PORT:-8443}
-      ASUNA_HTTP_PORT: ${ASUNA_HTTP_PORT:-8781}
+      ASUNA_HTTPS_PORT: ${ASUNA_HTTPS_PORT:-8443}   # only for the redirect's address
       CADDYFILE: |
-        {
-            http_port {$$ASUNA_HTTP_PORT}
-            https_port {$$ASUNA_HTTPS_PORT}
-        }
-
-        http://:{$$ASUNA_HTTP_PORT} {
+        http:// {
             handle /caddy-local-root.crt {
                 root * /data/caddy/pki/authorities/local
                 rewrite * /root.crt
@@ -91,13 +86,13 @@ services:
             }
         }
 
-        https://:{$$ASUNA_HTTPS_PORT} {
+        https:// {
             tls internal {
                 on_demand
             }
-            reverse_proxy localhost:{$$ASUNA_PORT} {
-                header_up Host localhost:{$$ASUNA_PORT}
-                header_up Origin http://localhost:{$$ASUNA_PORT}
+            reverse_proxy asuna:8780 {
+                header_up Host localhost:8780
+                header_up Origin http://localhost:8780
             }
         }
     entrypoint: ["/bin/sh", "-c"]

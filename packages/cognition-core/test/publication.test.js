@@ -63,6 +63,7 @@ test('native spilled output stays readable only by its own action, in bounded pa
 });
 
 test('ADR-011 §6.4: publication imports the plugin entry and reads its structure; the floor closure is protected', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/import-probe-'));
   t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });

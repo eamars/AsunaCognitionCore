@@ -29,7 +29,8 @@ if (!status) {
   git(['apply', '--check', patchPath]); git(['apply', patchPath]);
   git(['add', '--intent-to-add', 'packages/client/ui-chat/src/client/chat/ChatContent.tsx']);
 }
-const diff = git(['diff', '--binary', '--no-ext-diff']).replaceAll('\r\n', '\n');
+// A fixed hash length: a shallow clone (as a container builds from) abbreviates index lines differently (ADR-019).
+const diff = git(['-c', 'core.abbrev=10', 'diff', '--binary', '--no-ext-diff']).replaceAll('\r\n', '\n');
 if (diff !== patch.replaceAll('\r\n', '\n')) throw new Error('Source changes differ from the reviewed inline patch; use a dedicated clean checkout');
 const untracked = git(['ls-files', '--others', '--exclude-standard']).trim();
 if (untracked) throw new Error('Unexpected files in the native source checkout: ' + untracked);

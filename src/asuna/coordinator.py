@@ -282,7 +282,8 @@ class Coordinator:
         from .state import content_ref
         self.store.audit(ep['_id'],'turn.output',{'operation':operation,**content_ref(value.content),
             'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
-            'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
+            'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery,
+            **({'corrected':True} if value.corrected else {})},ep['scope_key'])
         require_current_feedback(self.store, ep)
         return value
 

@@ -100,6 +100,9 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
    the seeds (one with kind `persona`), any jobs, and `preset`.
 4. In `cordis.patch.yml`, rename the plugin and preset ids and the preset's display name.
 5. Write `seeds/` and `persona-model.json` (schema: `src/asuna/resources/schemas/persona-model.schema.json`).
+   Seeds may be any length the character model's window allows: the prompt limit grows with them
+   ([RUNTIME_API.md](../RUNTIME_API.md), "Her persona"). Leave `render.budget_tokens` out unless the persona needs
+   a larger fixed budget.
 6. `npm install` (records the workspace in `package-lock.json`), then `npm run test:native`.
 7. Install it in a demo profile ([RUN_ASUNA.md](../RUN_ASUNA.md#demo-environment)) with its own database.
 

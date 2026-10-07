@@ -190,8 +190,28 @@ def test_her_self_description_and_understanding_have_a_length_limit(store):
 
 def test_the_persona_render_has_a_fixed_budget_she_can_only_raise_so_far():
     from asuna.persona_model import CORE_DEFAULTS, key_spec
-    assert CORE_DEFAULTS['render']['budget_tokens'] == 16384
-    assert key_spec({}, 'render.budget_tokens')['max'] == 32768
+    assert CORE_DEFAULTS['render']['budget_tokens'] == 6144
+    assert key_spec({}, 'render.budget_tokens')['max'] == 12288
+
+
+def test_the_render_limit_follows_the_package_seeds_up_to_the_window_share(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from asuna import render
+    monkeypatch.setattr(render, 'model_and_policy', lambda store, persona: ({}, {}))
+
+    def limit(persona_chars, window=68608):
+        (tmp_path / 'persona.md').write_text('## 我\n' + '她' * persona_chars, encoding='utf-8')
+        (tmp_path / 'voice.md').write_text('## 说话\n短。', encoding='utf-8')
+        seeds = [{'slug': 'persona', 'kind': 'persona', 'path': str(tmp_path / 'persona.md')},
+                 {'slug': 'voice', 'kind': 'voice', 'path': str(tmp_path / 'voice.md')}]
+        store = SimpleNamespace(config={'character': {'context_window': window}, 'persona_contribution': {'seeds': seeds}})
+        return render.budget_limit(store, 'p'), render.seed_estimate(store, 'p')
+
+    assert limit(800)[0] == 6144                                  # little seed text: the core budget
+    big, seeded = limit(9000)
+    assert seeded > 9000 and big == -(-seeded * 5 // 4)           # more seed text: its own size and a quarter more
+    assert limit(9000, window=16000)[0] == 4000                   # never past the window share
+    assert render.estimate_tokens('一之瀬アスナ') == 6 and render.estimate_tokens('hello world!') == 3
 
 
 def test_in_its_group_she_tucks_a_section_away_and_from_home_she_tidies_it_by_name(store):

@@ -24,7 +24,7 @@ PRIVATE_KEYS = {
 }
 # Core-writable keys: a package may default them without declaring them.
 CORE_WRITABLE_KEYS = {
-    'render.budget_tokens': {'type': 'integer', 'min': 256, 'max': 32768, 'what': '人格渲染的绝对 token 预算'},
+    'render.budget_tokens': {'type': 'integer', 'min': 256, 'max': 12288, 'what': '人格渲染的绝对 token 预算'},
     # Her heartbeat's pace is hers; the heartbeat itself belongs to the program (ADR-012 §4.3).
     'heartbeat.every_min': {'type': 'integer', 'min': 15, 'max': 240, 'what': '心跳间隔（分钟）'},
     'heartbeat.min_gap_min': {'type': 'integer', 'min': 0, 'max': 720,
@@ -43,9 +43,10 @@ CORE_WRITABLE_KEYS = {
 OWNER_KEYS = {'heartbeat.enabled'}
 HEARTBEAT_EVERY_MIN = (15, 240)
 CORE_DEFAULTS = {
-    # The persona and voice render every turn: a fixed budget (UTF-8 bytes, about 5k Chinese characters) bounds it
-    # even when the window is large (context_budget.py, owner 2026-10-06).
-    'render': {'budget_tokens': 16384, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'values'},
+    # The persona and voice render every turn: a budget (estimated tokens, about 6k Chinese characters) bounds it
+    # even when the window is large (context_budget.py, owner 2026-10-06). A package whose own seeds are longer
+    # gets room for them (render.budget_limit, owner 2026-10-07).
+    'render': {'budget_tokens': 6144, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'values'},
     'recall_protocol': {'order': None},
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,

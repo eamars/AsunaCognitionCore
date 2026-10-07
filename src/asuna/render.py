@@ -6,11 +6,15 @@ owner-private) + the voice document's. It is the complete system prompt of a
 role session. Episodes keep only ``system_ref`` (revisions, class and hashes)
 and every stage re-renders from it; results are cached by ``render_sha256``.
 The render is never truncated: an over-budget render is still complete, and is
-reported (audit + red status) instead.
+reported (audit + red status) instead. The limit follows the package's own seeds: a persona that ships more seed
+text gets room for it (budget_limit).
 """
 from __future__ import annotations
 
 from collections import OrderedDict
+import math
+from pathlib import Path
+import re
 import threading
 
 from .config import prompt_path
@@ -67,20 +71,49 @@ def model_and_policy(store, persona):
     return model, PolicyStore(store, persona, model).params()
 
 
+# Chinese, Japanese and Korean characters, and their full-width punctuation: about one token each or less.
+WIDE = re.compile('[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef'
+                  '\U00020000-\U0003ffff]')
+SEED_ROOM = 1.25            # what the package's own seeds render to, plus a quarter to grow
+
+
 def estimate_tokens(text: str) -> int:
-    """Conservative upper bound used for chunk budgets too: UTF-8 bytes ≥ tokens."""
-    return len(text.encode('utf-8'))
+    """Tokenizer-free upper estimate: one token per CJK character, DSH's characters/4 for everything else."""
+    wide = len(WIDE.findall(text))
+    return wide + math.ceil((len(text) - wide) / 4)
+
+
+def seed_estimate(store, persona):
+    """Estimated tokens of the owner-private render the installed package's own persona and voice seeds make, or
+    None when the package declares neither."""
+    from .documents import parse_markdown
+    seeds = {seed['slug']: seed for seed in (store.config.get('persona_contribution') or {}).get('seeds') or []
+             if seed.get('slug') in ('persona', 'voice')}
+    if not seeds:
+        return None
+    content = {}
+    for slug, seed in seeds.items():
+        try:
+            content[slug] = {'sections': parse_markdown(Path(seed['path']).read_text(encoding='utf-8'), seed['kind'])[1]}
+        except OSError:
+            return None
+    return estimate_tokens(compose(common_text(store.config), content.get('persona'), content.get('voice'),
+                                   visibility.OWNER_PRIVATE))
 
 
 def budget_limit(store, persona):
-    """min(render.budget_tokens, character context window × render.max_window_share), or None."""
+    """The larger of render.budget_tokens and the package's seeds with room to grow, never above the character
+    context window × render.max_window_share; None when nothing bounds it."""
     from .persona_model import effective
     model, policy = model_and_policy(store, persona)
     budget = effective(model, 'render.budget_tokens', policy)
     share = effective(model, 'render.max_window_share', policy)
     window = (store.config.get('character') or {}).get('context_window')
-    limits = [value for value in (budget, int(window * share) if window and share else None) if value]
-    return min(limits) if limits else None
+    seeded = seed_estimate(store, persona)
+    wanted = [value for value in (budget, math.ceil(seeded * SEED_ROOM) if seeded else None) if value]
+    cap = int(window * share) if window and share else None
+    limit = max(wanted) if wanted else None
+    return min(limit, cap) if limit and cap else limit or cap
 
 
 def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE):

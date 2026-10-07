@@ -1,6 +1,6 @@
 # @asuna/ichinose-asuna
 
-一之瀬アスナ: an original persona inspired by the Blue Archive character of that name, for the Asuna core
+一之瀬アスナ (一之濑明日奈, Ichinose Asuna): an original persona inspired by the Blue Archive character of that name, for the Asuna core
 (persona contract v2).
 
 - `seeds/persona.md` and `seeds/voice.md` are original text written from public descriptions of the character; no

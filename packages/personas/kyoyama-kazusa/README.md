@@ -1,6 +1,6 @@
 # @asuna/kyoyama-kazusa
 
-杏山カズサ: an original persona inspired by the Blue Archive character of that name, for the Asuna core
+杏山カズサ (杏山千纱, Kyoyama Kazusa): an original persona inspired by the Blue Archive character of that name, for the Asuna core
 (persona contract v2).
 
 - `seeds/persona.md` and `seeds/voice.md` are original text written from public descriptions of the character; no

@@ -46,15 +46,9 @@ class Router:
         if event.get('integration_profile'):
             from .integration import event_granted
             if event_granted(self.store.config, event): trusted['integration_profile'] = 'owner'
-        elif isinstance(event.get('channel'),dict):
-            # The owner's own platform DM carries the owner's workspace grant too (owner 2026-10-06); the route and
-            # the canonical person decide it here, never anything the adapter sent.
-            from .integration import event_granted, owner_dm
-            if owner_dm(getattr(self.store,'config',None) or {},event['scene_id'],event['person_id']):
-                try:
-                    if event_granted(self.store.config,{**event,'integration_profile':'owner'}): trusted['integration_profile']='owner'
-                except Denied:
-                    pass
+        else:
+            from .integration import owner_dm_granted
+            if owner_dm_granted(getattr(self.store,'config',None),event): trusted['integration_profile']='owner'
         if (event.get('development_profile')=='owner' and not event.get('channel')
                 and (event['scene_id'],event['person_id']) == (
                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])

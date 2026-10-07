@@ -218,6 +218,9 @@ class Chat:
                 raise RuntimeError('HOST_STOPPING')
             if self.reconfiguring:
                 raise RuntimeError('HOST_RECONFIGURING')
+            from .integration import owner_dm_granted
+            if 'integration_profile' not in event and owner_dm_granted(self.app.config, event):
+                event = {**event, 'integration_profile': 'owner'}        # as the router will decide it
             row, created = persist_input(self.app.store, event, managed=True)
             if self.on_input_received:
                 try:

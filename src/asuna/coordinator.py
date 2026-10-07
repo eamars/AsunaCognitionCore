@@ -240,9 +240,10 @@ class Coordinator:
 
     def _speech(self, ep, value):
         """Every text she wrote this turn, in order; with more than one, each leaves as its own message where the
-        persona allows several (speak.max_messages), else they join as paragraphs of one."""
-        pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
-                if isinstance(text,str) and text.strip()]
+        persona allows several (speak.max_messages), else they join as paragraphs of one. A text she wrote again
+        word for word (a model often restates its reply after a tool result) leaves once."""
+        pieces=list(dict.fromkeys(text.strip() for text in (value.said if value.said is not None else [value.content or ''])
+                                  if isinstance(text,str) and text.strip()))
         if len(pieces)<=1:
             return pieces[0] if pieces else ''
         from .persona_model import effective

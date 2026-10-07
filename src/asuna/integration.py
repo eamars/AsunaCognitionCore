@@ -57,6 +57,18 @@ def owner_profile(config, scene, person):
     return profile
 
 
+def owner_dm_granted(config, event):
+    """The owner speaking in their own platform DM carries the owner's workspace grant (owner 2026-10-06): the route
+    and the canonical person decide it, never anything the adapter sent. Decided the same way where the input is
+    first stored and where it is handled, so both agree."""
+    if not isinstance(event.get('channel'), dict) or not owner_dm(config or {}, event['scene_id'], event['person_id']):
+        return False
+    try:
+        return event_granted(config, {**event, 'integration_profile': 'owner'})
+    except Denied:
+        return False
+
+
 def event_granted(config, event):
     if event.get('integration_profile') != 'owner':
         return False

@@ -219,3 +219,25 @@ def test_chat_continues_while_action_waits_and_result_returns_once(store, tmp_pa
     finally:
         release.set()
         chat.stop()
+
+
+def test_the_owner_in_their_own_platform_dm_is_stored_and_handled_with_the_same_grant(store, tmp_path):
+    settings = {'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'display_name': '演示', 'workspace': str(tmp_path)}
+    store.config.update(chat=settings, canonical_persons={'qq:1': 'A'}, _host_sandbox={'available': True},
+                        integration={'enabled': True, 'scene_id': 'dm-a', 'person_id': 'A'},
+                        channels={'qq': {'account_id': '9', 'token': 'x' * 24, 'routes': {'me': {
+                            'sender_id': '1', 'person_id': 'qq:1', 'scene_id': 'qq:9:dm:1',
+                            'target': {'type': 'dm', 'id': '1'}}}}})
+    store.put('scenes', {'_id': 'qq:9:dm:1', 'scene_id': 'qq:9:dm:1', 'kind': 'dm', 'members': ['qq:1'],
+                         'scope_key': 'scene:qq:9:dm:1', 'policy_epoch': 1, 'sequence': 0, 'channel_id': 'qq'})
+    lane = FakeLane(store, [turn('他找我。', '在。')])
+    app = SimpleNamespace(store=store, config=store.config, evidence=Evidence(tmp_path / 'evidence'),
+                          character=lane, router=Router(store, Coordinator(store, lane)))
+    chat = Chat(app, settings, lambda _: None)
+    event = {'event_id': 'dm-1', 'scene_id': 'qq:9:dm:1', 'person_id': 'qq:1', 'text': '在吗', 'adapter_id': 'qq',
+             'channel': {'id': 'qq', 'account_id': '9', 'target': {'type': 'dm', 'id': '1'}, 'sender_id': '1',
+                         'platform_event_id': 'pe-1'}}
+    accepted = chat.receive(event)                         # stored on arrival, as the channel API does
+    source = store.db.messages.find_one({'_id': 'in-' + accepted['episode_id']})
+    assert source['event']['integration_profile'] == 'owner'
+    assert app.router.receive(source['event'])['state'] == 'COMMITTED'      # was INPUT_IDENTITY_OR_CONTENT_CONFLICT

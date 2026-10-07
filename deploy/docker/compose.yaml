@@ -1,0 +1,89 @@
+# Asuna as a Portainer stack (ADR-019 §3.3). Web access follows the owner's existing DSH container: host networking,
+# Asuna's launcher on 127.0.0.1, and a Caddy container that serves HTTPS on the LAN with its internal CA.
+# Defaults run the synthetic demo persona against its own database: a new stack cannot reach the live persona or QQ.
+services:
+  asuna:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: asuna:local
+    pull_policy: build
+    container_name: asuna
+    environment:
+      ASUNA_REPO: ${ASUNA_REPO:-https://github.com/eamars/AsunaCognitionCore.git}
+      ASUNA_REF: ${ASUNA_REF:-main}
+      ASUNA_PROFILE: ${ASUNA_PROFILE:-asuna-demo}
+      ASUNA_CONFIG: ${ASUNA_CONFIG:-config/demo.local.json}
+      ASUNA_CONFIG_JSON: ${ASUNA_CONFIG_JSON:-}
+      ASUNA_MONGO_URI: ${ASUNA_MONGO_URI:-}
+      ASUNA_PERSONA_PACKAGE: ${ASUNA_PERSONA_PACKAGE:-tests/fixtures/personas/demo}
+      ASUNA_CHANNEL_PACKAGES: ${ASUNA_CHANNEL_PACKAGES:-}
+      ASUNA_SHARED_ACTION_MODEL: ${ASUNA_SHARED_ACTION_MODEL:-0}
+      ASUNA_PORT: ${ASUNA_PORT:-8780}
+    # The host's interfaces, so Caddy reaches Asuna on loopback and Asuna reaches MongoDB and NapCat as on any host.
+    network_mode: host
+    volumes:
+      - ${ASUNA_CHECKOUT_VOLUME:-asuna-checkout}:/srv/asuna
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + (process.env.ASUNA_PORT || 8780) + '/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      # The first start clones, installs and builds the rendering extension: allow it time.
+      start_period: 30m
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: asuna-https
+    init: true
+    depends_on:
+      asuna:
+        condition: service_healthy
+    network_mode: host
+    environment:
+      ASUNA_PORT: ${ASUNA_PORT:-8780}
+      ASUNA_HTTPS_PORT: ${ASUNA_HTTPS_PORT:-8443}
+      ASUNA_HTTP_PORT: ${ASUNA_HTTP_PORT:-8781}
+      CADDYFILE: |
+        {
+            http_port {$$ASUNA_HTTP_PORT}
+            https_port {$$ASUNA_HTTPS_PORT}
+        }
+
+        http://:{$$ASUNA_HTTP_PORT} {
+            handle /caddy-local-root.crt {
+                root * /data/caddy/pki/authorities/local
+                rewrite * /root.crt
+                file_server
+            }
+            handle {
+                redir https://{http.request.host}:{$$ASUNA_HTTPS_PORT}{uri} permanent
+            }
+        }
+
+        https://:{$$ASUNA_HTTPS_PORT} {
+            tls internal {
+                on_demand
+            }
+            reverse_proxy localhost:{$$ASUNA_PORT} {
+                header_up Host localhost:{$$ASUNA_PORT}
+                header_up Origin http://localhost:{$$ASUNA_PORT}
+            }
+        }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '%s\n' "$$CADDYFILE" > /tmp/Caddyfile
+        caddy fmt --overwrite /tmp/Caddyfile
+        exec caddy run --config /tmp/Caddyfile --adapter caddyfile
+    volumes:
+      - asuna-caddy-data:/data
+      - asuna-caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  asuna-checkout:
+  asuna-caddy-data:
+  asuna-caddy-config:

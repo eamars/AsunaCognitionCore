@@ -144,7 +144,7 @@ A core publication writes the changed files back into the checkout (`floor.js pu
 | --- | --- | --- |
 | M0 | The owner answers §6. Update this ADR | — |
 | M1 | **Done 2026-10-07.** Portability fixes from §2.3: tests confine through DSH's sandbox provider, `check_dsh_release.py`, the contract test that lists the files allowed to branch on the OS (`tests/test_platform_branches.py`), and the no-Docker-in-core test | Windows: 376 Python and 50 native tests pass; the sandbox test that was skipped now runs |
-| M2 | A Linux machine (§6 Q1): install by §3.2, the sandbox probe's enforcement level, the full Python and native test suites, one start with synthetic inference (AGENTS.md: no real model unless authorized) | Test reports, the probe result, the Web page loading |
+| M2 | On the owner's Docker host (§6.1), in the image of `deploy/docker/` (written 2026-10-07): the full Python and native test suites against a throwaway MongoDB container (never the live one, §2.4), the sandbox probe's enforcement level, and one start of the demo profile with every model route on a closed port (AGENTS.md: synthetic inference) | Test reports, the probe result, the Web page loading without a token |
 | M3 | Docker image and compose file in `deploy/docker/` by §3.3 (deployed as a Portainer stack on the owner's host), with volumes and the entrypoint. The Windows install is checked again without Docker | First start installs; a second start installs nothing; a change to the checkout is installed on the next start; sandbox enforcement reported |
 | M4 | RUN_ASUNA and INSTALL: a Linux section, the systemd example, the Docker section | Docs reviewed |
 | M5 | The owner's review on the real page, on Linux | — |

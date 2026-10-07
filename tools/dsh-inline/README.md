@@ -8,7 +8,7 @@ The patch applies only to DSH commit `639ed015397290b3745d163aafe02ffee4aa3f84` 
 git -C C:\workspace\deepseek-harness fetch origin tag dsh-v0.2.0-rc.2
 git -C C:\workspace\deepseek-harness worktree add --detach C:\workspace\dsh-asuna-inline dsh-v0.2.0-rc.2
 node tools/build_dsh_inline.mjs --source C:\workspace\dsh-asuna-inline
-npm.cmd run pack:plugins
+.\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\xiaoman --channel packages\napcat-qq --channel packages\dsh-peer
 node tools/probe_plugin_install.mjs
 ```
 

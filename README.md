@@ -119,7 +119,7 @@ The repository is split the same way:
 | `packages/cognition-core` | The home itself: cognition, memory, the two brains, privacy and safety. It names no character and no platform. |
 | `packages/channels/napcat-qq` | A channel for QQ, through NapCat. |
 | `packages/channels/dsh-peer` | A channel to an agent in another DeepSeek Harness (the peer line). |
-| `packages/personas/` | Persona packages: `xiaoman`, the author's personal one, and `ichinose-asuna`. |
+| `packages/personas/` | Persona packages, each run with a different set of channels: `ichinose-asuna` (local chat only), `kyoyama-kazusa` (QQ), and `xiaoman`, the author's personal one (QQ and a peer line). |
 | `tests/fixtures/personas/demo` | A small synthetic persona, used by the tests and for trying things out. |
 | `deploy/docker` | A Docker stack that runs the same install on a Linux host. |
 

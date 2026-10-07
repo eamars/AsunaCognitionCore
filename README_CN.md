@@ -94,7 +94,7 @@ Asuna 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（
 | `packages/cognition-core` | 家本身：认知、记忆、两个脑子、隐私与安全。不绑定任何角色，也不绑定任何平台。 |
 | `packages/channels/napcat-qq` | 通过 NapCat 接入 QQ 的通道。 |
 | `packages/channels/dsh-peer` | 连接另一个 DeepSeek Harness 中智能体的通道（对端线）。 |
-| `packages/personas/` | 人格包：作者自用的 `xiaoman`，以及 `ichinose-asuna`。 |
+| `packages/personas/` | 人格包，各自搭配不同的通道：`ichinose-asuna`（只有本地私聊）、`kyoyama-kazusa`（QQ），以及作者自用的 `xiaoman`（QQ 和对端线）。 |
 | `tests/fixtures/personas/demo` | 一个小型的合成人格，供测试和试用。 |
 | `deploy/docker` | 在 Linux 主机上用 Docker 运行同一套安装。 |
 

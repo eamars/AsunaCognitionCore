@@ -7,3 +7,5 @@
 - She has no channel of her own. In her first deployment she talks only in her local chat.
 
 Install it like any persona package: pass `--persona packages/ichinose-asuna` to the packer and `--persona-package packages/ichinose-asuna` to the installer. In Docker, set `ASUNA_PERSONA_PACKAGE` (see `deploy/docker/README.md`).
+
+`icon.png` is a head-only crop of the character's official game art, supplied by the owner. The art belongs to the game's publishers and is not covered by this repository's license.

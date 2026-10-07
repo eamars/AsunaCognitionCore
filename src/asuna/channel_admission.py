@@ -1,5 +1,6 @@
 """Owner-configured channel admission. Platform events never grant owner access."""
 from copy import deepcopy
+import re
 
 from . import channel_kinds
 from .config import DATA
@@ -7,12 +8,23 @@ from .evidence import canonical, sha
 from .state import Denied
 
 
+def _in_this_data_folder(route):
+    """An admitted person's folder is named by a hash under <data>/channels; the data folder belongs to the profile
+    that runs now, so a stored admission's folder is placed there, whatever data folder it was admitted under."""
+    grants = route.get('members', {}).values() if route['target']['type'] == 'group' else [route]
+    for grant in grants:
+        name = re.split(r'[\\/]', grant.get('workspace') or '')[-1]
+        if name.startswith('auto-'):
+            grant['workspace'] = str(DATA / 'channels' / name)
+    return route
+
+
 def restore_admissions(store):
     for row in store.db.artifacts.find({'kind': 'channel_admission'}):
         channel = store.config.get('channels', {}).get(row['channel_id'])
         if not channel or channel.get('admission') != 'automatic' or channel['account_id'] != row['account_id']:
             continue
-        route = deepcopy(row['route'])
+        route = _in_this_data_folder(deepcopy(row['route']))
         current = channel.setdefault('routes', {}).get(row['route_id'])
         if current:
             if current['scene_id'] != route['scene_id'] or current['target'] != route['target']:

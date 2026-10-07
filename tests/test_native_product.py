@@ -83,6 +83,15 @@ def test_new_group_member_continues_the_same_named_session_and_restores(product)
     channel_admission.restore_admissions(p.store)
     host.prepare_channels(p.store)
     assert routes == p.config['channels']['qq']['routes']
+    # Admitted under another data folder (another profile, another machine): restored into this one.
+    for row in p.store.db.artifacts.find({'kind': 'channel_admission'}):
+        for grant in row['route'].get('members', {}).values():
+            grant['workspace'] = 'C:\\elsewhere\\channels\\' + grant['workspace'].replace('\\', '/').rsplit('/', 1)[-1]
+        p.store.db.artifacts.replace_one({'_id': row['_id']}, row)
+    p.config['channels']['qq']['routes'] = {}
+    channel_admission.restore_admissions(p.store)
+    host.prepare_channels(p.store)
+    assert routes == p.config['channels']['qq']['routes']
 
 
 @pytest.mark.parametrize('body', [envelope(group='22220000', mentioned_account_ids='invalid'),

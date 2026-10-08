@@ -234,6 +234,9 @@ def main():
     for row in merged:
         if row.get('id') == 'asuna-publication-floor':
             row['config'].update(defaultProject=floor['defaultProject'], projects=floor['projects'])
+        # So is which providers back web_search and web_fetch: an existing profile takes the current pins.
+        if row.get('id') == 'web':
+            row['config'] = dict(next(r for r in defaults if r['id'] == 'web')['config'])
     editable.write_text(yaml.safe_dump(merged, allow_unicode=True, sort_keys=False), encoding='utf-8')
     credential_values = {'ASUNA_NATIVE_' + lane.upper() + '_KEY': config[source].get('api_key') or 'local-no-auth'
         for lane, source in (('character', 'executor' if args.shared_action_model else 'character'), ('action', 'executor'))}

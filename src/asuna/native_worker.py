@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from queue import Queue, Empty
 import re
+import shutil
 import sys
 import threading
 import time
@@ -30,6 +31,16 @@ from .people import People
 from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
+
+
+KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
+
+
+def prune_host_reports():
+    """Each worker start writes its evidence to a new reports folder; only the newest few are kept."""
+    starts = sorted((DATA / 'reports').glob('native-host-*'), key=lambda path: path.stat().st_mtime, reverse=True)
+    for old in starts[KEPT_HOST_REPORTS:]:
+        shutil.rmtree(old, ignore_errors=True)
 
 
 class NativeLane:
@@ -315,6 +326,7 @@ class BusinessWorker:
         if releases:
             config['_native_integration_release'] = releases[0]
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
+        prune_host_reports()
         def configure(host):
             self.app, self.controller = host.app, host.controller
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
@@ -783,7 +795,13 @@ class BusinessWorker:
                         future.set_result(args['result'])
             return {'accepted': True}
         if method == 'session':
-            return self.session(args['session_id'])
+            record = self.session(args['session_id'])
+            # The conversation's clock, for the times a Host tool shows its model (web_search's publication dates).
+            from . import local_time
+            from .schedule_rules import offset_minutes
+            zone = local_time.zone_of(self.app.store, record['scene_id'])
+            return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
+                    'utc_offset_minutes': offset_minutes(zone['tz'], datetime.now(timezone.utc))}
         if method == 'stage.valid':
             with self.pending_lock:
                 future=self.pending.get(args['token'])

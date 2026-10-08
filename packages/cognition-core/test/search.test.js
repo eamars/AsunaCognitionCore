@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import WebRuntime from '@deepseek-ai/dsh-web';
-import { OrderedSearch, registered, searxngResult, geminiRetryAt, nextPacificMidnight, SEARCH_PROVIDER_ID } from '../src/search.js';
+import { OrderedSearch, registered, registerWebSearch, localStamp, searxngResult, geminiRetryAt, nextPacificMidnight, SEARCH_PROVIDER_ID } from '../src/search.js';
 
 const SEARX = { url: 'http://searx.invalid:8080/search', engines: ['bing', 'yandex'], cooldown_seconds: 30, rest_minutes: 15 };
 const page = (results, unresponsive = []) => ({ results, answers: [], unresponsive_engines: unresponsive });
@@ -185,4 +185,70 @@ test('Gemini: a 429 on a daily quota rests it until midnight Pacific; a per-minu
 test('midnight Pacific across both daylight-saving changes', () => {
   assert.equal(nextPacificMidnight(Date.UTC(2026, 10, 1, 8, 0)), Date.UTC(2026, 10, 2, 8, 0));   // 25-hour day
   assert.equal(nextPacificMidnight(Date.UTC(2027, 2, 14, 12, 0)), Date.UTC(2027, 2, 15, 7, 0));  // 23-hour day
+});
+
+function toolScope(search) {
+  const sections = [], tools = new Map();
+  return { sections, tools, scope: {
+    systemPrompt: { section: section => sections.push(section), getSectionOrder: () => 2000 },
+    tools: { register: definition => tools.set(definition.name, definition), get: name => tools.get(name) },
+    web: { search } } };
+}
+const many = (prefix, n) => ({ sources: Array.from({ length: n }, (_, i) => ({ url: `https://${prefix}.example/${i}`, title: `${prefix} ${i}`,
+  snippet: 'about ' + prefix, publishedAt: '2026-10-01' })), truncated: false });
+
+test('web_search: DSH\'s output, 10 sources merged round-robin, and titles without snippets', async () => {
+  const asked = [];
+  const { scope, tools, sections } = toolScope(async request => { asked.push(request); return many(request.query, 8); });
+  registerWebSearch(scope);
+  const tool = tools.get('web_search');
+  const full = await tool.execute({ queries: ['a', 'b', 'a'] }, { signal: new AbortController().signal });
+  assert.deepEqual(asked.map(request => [request.query, request.maxResults]), [['a', 10], ['b', 10]]);
+  assert.equal(full.sources.length, 10);
+  assert.deepEqual(full.sources.slice(0, 3).map(source => source.url), ['https://a.example/0', 'https://b.example/0', 'https://a.example/1']);
+  assert.equal(full.truncated, true);
+  const text = tool.output.render({}, full)[0].text;
+  assert.match(text, /^External web content follows/);
+  assert.match(text, /- \[a 0\]\(https:\/\/a\.example\/0\) — about a \(2026-10-01\)/);
+  const titles = await tool.execute({ queries: ['a'], detail: 'titles' }, { signal: new AbortController().signal });
+  assert.ok(titles.sources.every(source => source.snippet === undefined && source.title && source.publishedAt));
+  assert.match(tool.output.render({}, titles)[0].text, /- \[a 0\]\(https:\/\/a\.example\/0\) — \(2026-10-01\)\n/);
+  assert.match(sections[0].text({ scope: undefined }), /Use the returned source snippets/, 'no web_fetch registered here');
+});
+
+test('web_search: DSH\'s argument errors, and the first failing query fails the call', async () => {
+  const { scope, tools } = toolScope(async (request, signal) => {
+    if (request.query === 'bad') throw new Error('backend down');
+    await new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+  });
+  registerWebSearch(scope);
+  const tool = tools.get('web_search');
+  await assert.rejects(tool.execute({ queries: [] }, { signal: new AbortController().signal }), /at least one query/);
+  await assert.rejects(tool.execute({ queries: ['a', 'b', 'c', 'd', 'e'] }, { signal: new AbortController().signal }), /at most 4 queries/);
+  await assert.rejects(tool.execute({ queries: ['slow', 'bad'] }, { signal: new AbortController().signal }), /backend down/);
+});
+
+test('every backend\'s snippets are capped (300 characters by default)', async () => {
+  const h = harness({ search: { order: ['deepseek-official'] } });
+  h.provider.registry = () => new Map([['deepseek-official', { id: 'deepseek-official', available: () => true,
+    search: async () => ({ sources: [{ url: 'https://x.example', snippet: 'x'.repeat(1000) }, { url: 'https://y.example', snippet: 'short' }], truncated: false }) }]]);
+  const result = await h.provider.search({ query: 'q' });
+  assert.equal(result.sources[0].snippet, 'x'.repeat(300) + '…');
+  assert.equal(result.sources[1].snippet, 'short');
+  h.provider.settings = () => ({ order: ['deepseek-official'], snippet_chars: 50 });
+  assert.equal((await h.provider.search({ query: 'q' })).sources[0].snippet.length, 51);
+});
+
+test('web_search puts publication times on the conversation\'s clock; a date alone stays', async () => {
+  const zone = { timezone: 'Pacific/Auckland', utc_offset_minutes: 780 };
+  assert.equal(localStamp('2026-03-30T20:03:39.000Z', zone), '2026-03-31 09:03', 'daylight time, +13');
+  assert.equal(localStamp('2026-06-03T10:52:34Z', zone), '2026-06-03 22:52', 'standard time, +12');
+  assert.equal(localStamp('2026-10-01T00:00:00', zone), '2026-10-01 13:00', 'no offset: UTC');
+  assert.equal(localStamp('2026-10-01', zone), '2026-10-01');
+  assert.equal(localStamp('2026-10-01T00:00:00Z', { timezone: 'Not/AZone', utc_offset_minutes: 780 }), '2026-10-01 13:00');
+  const { scope, tools } = toolScope(async () => ({ sources: [{ url: 'https://d.example', publishedAt: '2026-03-30T20:03:39.000Z' }], truncated: false }));
+  registerWebSearch(scope, { zone });
+  const value = await tools.get('web_search').execute({ queries: ['q'], detail: 'titles' }, { signal: new AbortController().signal });
+  assert.equal(value.sources[0].publishedAt, '2026-03-31 09:03');
+  assert.doesNotMatch(tools.get('web_search').output.render({}, value)[0].text, /\d{2}:\d{2}:\d{2}(\.\d+)?Z/);
 });

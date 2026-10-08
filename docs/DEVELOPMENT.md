@@ -27,7 +27,8 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
   running Host's claim on it is the `host_leases` document (`host_lease.py`), and the data folder's `host-id` names
   the deployment.
 - **`.runtime/adr008/`** (profile `asuna-native`; another profile uses `.runtime/adr008/profiles/<name>/`):
-  - `packages/`: packed `.tgz` files, `manifest.json`, and `native-inline-manifest.json` when the inline extension is built;
+  - `packages/`: packed `.tgz` files (packing removes those that no manifest, installed profile or `activation.json`
+    names), `manifest.json`, and `native-inline-manifest.json` when the inline extension is built;
   - `launch.json`: the config, the installed package list (`setup`) and digests (`installed`);
   - `activation.json`: the selected artifact per development project, and the last one that ran;
   - `home/`: the DSH home (`DSH_HOME`), with the profile under `home/profiles/<profile>/` (its `cordis.patch.yml`
@@ -35,8 +36,8 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
 - **The profile's data folder**, `$DSH_HOME/asuna/<profile>/`: development candidates, the worker's Python
   environment, bridge positions, integration runs.
 - **The worker's data root** (`ASUNA_DATA_ROOT`, default `.runtime/`): task and channel workspaces (`work/`,
-  `channels/`) and the worker's own files. Everything under `.runtime/` is local and disposable except what a
-  profile needs; never commit it.
+  `channels/`), the evidence of the last five worker starts (`reports/native-host-*`) and the worker's own files.
+  Everything under `.runtime/` is local and disposable except what a profile needs; never commit it.
 
 ## How a change reaches the running Host
 

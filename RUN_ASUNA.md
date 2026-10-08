@@ -196,7 +196,7 @@ The **记忆** right tab reads bounded pages for the current native scene bindin
 
 ## Web search
 
-The action brain's `web_search` is DSH's tool; Asuna chooses the backend underneath. The installer pins the profile's search provider to `asuna-search`, which tries the backends of `deployment.search.order` in turn and passes a query on when a backend is resting, not configured, failing, or answers with no sources. Edit `search` on the cognition-core card (or put it in `config/local.json` before installing):
+The action brain's `web_search` is DSH's tool (its validation, output text, result cards and guidance) with up to 10 sources a call and one more argument: `detail: "titles"` returns only each source's title, link and date, for scanning before `web_fetch`; the default `"snippets"` adds an excerpt of at most `search.snippet_chars` characters (default 300) from any backend. Publication times are shown on the conversation's clock. Asuna chooses the backend underneath. The installer pins the profile's search provider to `asuna-search`, which tries the backends of `deployment.search.order` in turn and passes a query on when a backend is resting, not configured, failing, or answers with no sources. Edit `search` on the cognition-core card (or put it in `config/local.json` before installing):
 
 ```json
 "search": {

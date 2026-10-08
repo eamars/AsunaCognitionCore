@@ -127,3 +127,36 @@ The owner gave two free-tier keys. With both: every Gemini 2.5 model answers 404
 answers 429 "exceeded your current quota" with no quota details, i.e. a limit of zero: grounding on 3.x models is
 paid-tier only. D7's free tier is therefore not available to a new key. The owner took Gemini out of the live
 order; the code, its default model (now `gemini-3.5-flash-lite`) and the stored key stay for when billing is on.
+
+## 5. Amendment: result size, and a cache not built (owner, 2026-10-08)
+
+### 5.1 Context
+
+- Exa's snippets are whole page sections: one real result was about 6,000 characters for 8 sources, against a
+  median of 1,273 (p90 1,802) for her 84 earlier results, which came from DeepSeek.
+- The owner asked for a 7-day cache that she may choose to use, matched by embedding as well as by text. Her 222
+  accepted queries (2026-10-05 to 10-08) were all distinct, even ignoring word order. With Asuna's own embedding
+  model (query prefix), the closest earlier query within 7 days was at least 0.95 similar for 2, 0.90 for 7 (3%),
+  0.85 for 33 and 0.80 for 56. At 0.90 and above they were the same question reworded; between 0.85 and 0.90 mostly
+  deliberate refinements (the same price search narrowed to a shop, or to a year-on-year comparison), where an old
+  answer would undo the refinement.
+
+### 5.2 Decisions
+
+- **D11 — No cache now.** About 3% of her searches would hit. Recorded for when her volume or repetition grows: a
+  shared cache where a hit from another conversation shows only the results and their age, not that query's text.
+- **D12 — Snippets capped, titles on request.** Every backend's snippet is cut to 300 characters (configurable,
+  `search.snippet_chars`) with an ellipsis; a `detail: "titles"` argument returns only title, link and date. This
+  extends D1: the tool keeps DSH's name, output text and cards, and gains one optional argument.
+- **D13 — 10 sources a call** (DSH's default is 8).
+- Publication times reach her on the conversation's clock (the owner's rule that every time a model reads is local):
+  the session binding names the zone, and the tool formats `publishedAt` as `YYYY-MM-DD HH:MM`.
+
+### 5.3 As built
+
+`search.js`: `capSnippets` in the provider; `registerWebSearch` builds the action scope's `web_search` from
+dsh-tool-web's exported `formatSearchOutput`, `presentSearchCall`, `presentSearchResult` and `searchMetaFromValue`,
+with copies of its unexported argument check and merge (`parseSearchArgs`, `mergeResults`) and its guidance text;
+`web_fetch` stays DSH's (`search: false`). `localStamp` formats publication times; `native_worker`'s `session` reply
+carries `timezone` and `utc_offset_minutes`. Measured with real searches: the same Exa query is about 4,100
+characters for 10 sources with snippets, 1,400 as titles.

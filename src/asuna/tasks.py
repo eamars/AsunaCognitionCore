@@ -470,14 +470,18 @@ class ToolBroker:
         self.bindings.clear()
 
 
+def workspace_lock_path(workspace):
+    """The lease file that keeps two task workers out of one workspace."""
+    return DATA/'locks'/('workspace-'+sha(str(Path(workspace).resolve()).casefold().encode())+'.lock')
+
+
 class Executor:
     def __init__(self,service,lane,broker):self.service,self.lane,self.broker=service,lane,broker
 
     def run(self,task_id,workspace):
         # Two task workers must not share a mutable project concurrently.
         # Take the lease before claiming: a busy workspace leaves the task READY.
-        key=sha(str(Path(workspace).resolve()).casefold().encode())
-        with RuntimeLease(DATA/'locks'/('workspace-'+key+'.lock')):
+        with RuntimeLease(workspace_lock_path(workspace)):
             return self._run_owned(task_id,workspace)
 
     def _run_owned(self,task_id,workspace):

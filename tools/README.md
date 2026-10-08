@@ -8,7 +8,7 @@ Windows, `.venv/bin/python` elsewhere).
 | Script | Does |
 |---|---|
 | `asuna-launch.mjs` | The entry behind `start-asuna.cmd` / `start-asuna.sh`: installs the checkout when it changed, then starts the DSH Web profile. Options `--profile`, `--config`, `--port` (else the profile's recorded port, else 8780), `--no-sync`, `--dry-run`; `--list` prints the installed profiles. |
-| `pack_plugins.py` | Packs the core and the `--persona` / `--channel` packages into content-addressed `.tgz` files under `.runtime/adr008/packages/`. |
+| `pack_plugins.py` | Packs the core and the `--persona` / `--channel` packages into content-addressed `.tgz` files under `.runtime/adr008/packages/`, and removes earlier ones that no installed profile or `activation.json` names. |
 | `setup_native_profile.py` | Installs the packed core, `--persona-package` and `--channel-package` packages into a profile, migrates the config into its settings and records the package list (and `--port`) in `launch.json`. |
 | `import_native_credentials.mjs` | Writes secrets into DSH's credential store; called by the installer. |
 | `build_dsh_inline.mjs` | Builds the optional inline rendering extension ([dsh-inline/README.md](dsh-inline/README.md)). |

@@ -5,7 +5,8 @@ from pymongo import MongoClient
 from asuna.config import ROOT,load
 from asuna.state import Store
 from asuna.evidence import write_json,sha
-from asuna.testing import dispose_test_store
+from asuna.testing import dispose_test_store,remove_lock_files,remove_workspace
+from asuna.queue import effects_lock_path
 from asuna import channel_kinds
 
 # Fixtures use QQ scenes and people (qq:<bot>:group:<id>, qq:<account>): register the channel package's kind.
@@ -132,7 +133,7 @@ def pytest_sessionfinish(session,exitstatus):
     config=load()
     for name in sorted(_OWNED):
         drop_database(config,name)
-        shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)
+        remove_workspace(ROOT/'.runtime/work'/name)
 
 
 @pytest.fixture
@@ -142,7 +143,7 @@ def runtime_work():
     def make(prefix):
         path=ROOT/'.runtime/work'/(prefix+'-'+uuid.uuid4().hex);made.append(path);return path
     yield make
-    for path in made:shutil.rmtree(path,ignore_errors=True)
+    for path in made:remove_workspace(path)
 
 
 def isolated_database(prefix):
@@ -155,7 +156,7 @@ def drop_database(config,name):
     client=MongoClient(config['mongo_uri'],serverSelectionTimeoutMS=5000)
     try:client.drop_database(name)
     finally:client.close()
-
+    remove_lock_files(effects_lock_path(name))
 
 @pytest.fixture
 def store(request):
@@ -191,6 +192,6 @@ def store(request):
                 db.client.close();_POOL.append(name)                # reset by the next test; dropped at session end
             else:
                 dispose_test_store(db)
-                shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)
+                remove_workspace(ROOT/'.runtime/work'/name)
             for derived in getattr(db,'derived_databases',[]):   # replay targets etc.
                 drop_database(config,derived)

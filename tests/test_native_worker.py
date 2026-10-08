@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from asuna.native_worker import BusinessWorker
+from asuna.native_worker import BusinessWorker, prune_host_reports, KEPT_HOST_REPORTS
 from asuna.state import Denied
 from asuna.router import Router
 from asuna.config import ROOT
@@ -210,3 +210,30 @@ def test_a_tool_error_is_its_own_words_and_a_fault_says_it_is_not_hers():
     assert fault.startswith('TOOL_FAULT: ') and "KeyError: 'scene_id'" in fault and '不是参数写错' in fault
     assert error_text('tool', RuntimeError('ENOENT: no such file')).startswith('TOOL_FAULT: ')   # not a code
     assert error_text('status', KeyError('x')) == "KeyError: 'x'"            # only tool calls are told how to act
+
+
+def test_the_session_binding_names_its_conversations_clock():
+    """web_search (a Host tool) puts publication times on this clock, as every time a model reads is."""
+    worker = BusinessWorker()
+    record = {'_id': 'native-session', 'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
+    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'},
+        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record),
+                           scenes=SimpleNamespace(find_one=lambda query: None)),
+        authorize=lambda scene, person: {'policy_epoch': 1}))
+    binding = worker.dispatch('session', {'session_id': 'native-session'})
+    assert binding['timezone'] == 'Pacific/Auckland' and binding['utc_offset_minutes'] in (720, 780)
+    assert binding['scene_id'] == 'scene'
+
+
+def test_a_worker_start_keeps_only_the_newest_host_reports(tmp_path, monkeypatch):
+    import os
+    monkeypatch.setattr('asuna.native_worker.DATA', tmp_path)
+    reports = tmp_path / 'reports'
+    for index in range(KEPT_HOST_REPORTS + 3):
+        folder = reports / ('native-host-%02d' % index); folder.mkdir(parents=True)
+        (folder / 'events.jsonl').write_text('{}', encoding='utf-8')
+        os.utime(folder, (1000 + index, 1000 + index))
+    (reports / 'other-run').mkdir()
+    prune_host_reports()
+    kept = sorted(p.name for p in reports.iterdir())
+    assert kept == ['native-host-%02d' % i for i in range(3, KEPT_HOST_REPORTS + 3)] + ['other-run']

@@ -20,7 +20,7 @@ import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
-import { applySearch } from './search.js';
+import { applySearch, registerWebSearch } from './search.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -854,8 +854,10 @@ export class CognitionCore {
     // registered in this action scope. Do not pass scoped names as globals.
     scope.tools.restrict({ allow: [] });
     if (allowed.has('todo_write')) await scope.plugin(todoTool, { allowParallelInProgress: true });
-    if (allowed.has('web_search') || allowed.has('web_fetch'))
-      await scope.plugin(webTool, { search: allowed.has('web_search'), fetch: allowed.has('web_fetch') });
+    // web_fetch is DSH's; web_search is DSH's tool with a `detail` choice and 10 sources (search.js, ADR-026).
+    if (allowed.has('web_fetch')) await scope.plugin(webTool, { search: false, fetch: true });
+    if (allowed.has('web_search')) registerWebSearch(scope, { fetchEnabled: allowed.has('web_fetch'),
+      zone: { timezone: binding.timezone ?? null, utc_offset_minutes: binding.utc_offset_minutes } });
     if (allowed.has('skill') && binding.skill_directories?.length) {
       const skills = scope.isolate('skills');
       await skills.plugin(SkillService, {});

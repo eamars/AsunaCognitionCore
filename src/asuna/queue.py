@@ -63,7 +63,7 @@ class _DatabaseEffectsLock:
     """
     def __init__(self,name):
         self.thread=threading.RLock();self.depth=0
-        self.path=LOCKS/('effects-'+hashlib.sha256(name.encode()).hexdigest()+'.lock')
+        self.path=effects_lock_path(name)
     def __enter__(self):
         self.thread.acquire()
         try:
@@ -81,6 +81,10 @@ class _DatabaseEffectsLock:
 
 _database_locks={}
 _registry_lock=threading.Lock()
+
+
+def effects_lock_path(name):
+    return LOCKS/('effects-'+hashlib.sha256(name.encode()).hexdigest()+'.lock')
 
 
 def database_effects_lock(name):

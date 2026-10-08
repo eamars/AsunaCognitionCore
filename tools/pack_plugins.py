@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import os
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +109,20 @@ packages = ["asuna"]
             'PYTHONPATH': str(destination.parent), 'PYTHONDONTWRITEBYTECODE': '1'}, check=True, capture_output=True)
 
 
+def prune(artifacts):
+    """Remove packed files that neither this manifest nor any profile's installed packages or activation still name."""
+    named = {Path(item['path']).name for item in artifacts}
+    adr008 = DESTINATION.parent
+    for base in [adr008, *(adr008 / 'profiles').glob('*')]:
+        profiles = base / 'home/profiles'
+        for record in [base / 'activation.json', *profiles.glob('*/package.json'), *profiles.glob('*/pnpm-lock.yaml')]:
+            if record.is_file():
+                named.update(re.findall(r'[\w.+-]+\.tgz', record.read_text(encoding='utf-8')))
+    for path in DESTINATION.glob('*.tgz'):
+        if path.name not in named:
+            path.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--persona', action='append', default=[], type=Path,
@@ -152,6 +167,7 @@ def main():
                           'sha256': digest,
                           'files': [row['path'] for row in package['files']]})
     (DESTINATION / 'manifest.json').write_text(json.dumps(artifacts, indent=2), encoding='utf-8')
+    prune(artifacts)
     print(json.dumps([{k:v for k,v in item.items() if k != 'files'} for item in artifacts], indent=2))
 
 

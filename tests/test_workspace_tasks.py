@@ -1,5 +1,4 @@
 """Workspace mode contracts; C2 live evidence is separate from these test doubles."""
-import shutil
 import uuid
 
 import pytest
@@ -10,6 +9,7 @@ from asuna.evidence import sha
 from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from asuna.state import Denied
 from asuna.tasks import TaskService, ToolBroker, Executor
+from asuna.testing import remove_workspace
 
 
 THINK = ('think', {'thought': '先读原文再写，原文要保留。'})
@@ -23,7 +23,7 @@ CREATED = []
 def remove_workspaces():
     yield
     while CREATED:
-        shutil.rmtree(CREATED.pop(), ignore_errors=True)
+        remove_workspace(CREATED.pop())
 
 
 def setup_workspace(store):

@@ -1,10 +1,9 @@
 from pathlib import Path
 import pytest
-from asuna.config import ROOT
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,FakeTurn
 from asuna.router import Router
-from asuna.tasks import TaskService,ToolBroker,Executor
+from asuna.tasks import TaskService,ToolBroker,Executor,workspace_lock_path
 from asuna.state import Denied
 from asuna.queue import RuntimeLease
 from asuna.evidence import sha
@@ -58,8 +57,7 @@ def test_E16_busy_workspace_is_not_claimed(store,runtime_work):
     service,router=route(store)
     ep=router.receive({'event_id':'work','scene_id':'dm-a','person_id':'A','text':'核实'})
     work=runtime_work('busy');work.mkdir()
-    key=sha(str(work.resolve()).casefold().encode())
-    with RuntimeLease(ROOT/'.runtime/locks'/('workspace-'+key+'.lock')):
+    with RuntimeLease(workspace_lock_path(work)):
         with pytest.raises(TimeoutError):Executor(service,None,None).run(ep['task_ids'][0],work)
     assert store.db.tasks.find_one({'_id':ep['task_ids'][0]})['state']=='READY'
 

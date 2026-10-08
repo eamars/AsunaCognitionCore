@@ -1,8 +1,26 @@
 """Explicit teardown for databases owned by isolated tests and probes."""
 import re
+import shutil
 
 from pymongo import MongoClient
 from .config import validate_database
+from .queue import effects_lock_path
+from .tasks import workspace_lock_path
+
+
+def remove_lock_files(*paths):
+    """Remove lock files a test or probe owned; one still held stays (Windows refuses to delete an open file)."""
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def remove_workspace(path):
+    """A test workspace and the lease file a task run left for it."""
+    shutil.rmtree(path, ignore_errors=True)
+    remove_lock_files(workspace_lock_path(path))
 
 
 def dispose_test_store(store):
@@ -19,3 +37,4 @@ def dispose_test_store(store):
     finally:
         cleanup.close()
         store.client.close()
+    remove_lock_files(effects_lock_path(name))

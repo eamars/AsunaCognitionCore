@@ -391,3 +391,24 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
     assert places.OUTCOMES['pending'] == '那边那一轮还没跑完，结果还没出来'
     with pytest.raises(ValueError, match='已经出门去那个群了，那边那一轮还没跑完'):
         service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
+
+
+def test_a_group_she_gave_a_time_zone_is_night_on_its_own_clock(store):
+    """Regression (her note, 2026-10-09): with no offset on the route, 'it is night there' used the Host's clock, so a
+    group at +8 having dinner read as asleep. Its own time zone, set with place_timezone, decides now."""
+    group_world(store, quiet_hours=(('23:00', '08:00'),))
+    scene = lambda: store.db.scenes.find_one({'_id': 'g1'})
+    with pytest.raises(ValueError, match='IANA'):
+        places.set_zone(store, PLACE, 'Asia/Atlantis')
+    with pytest.raises(ValueError, match='place'):
+        places.set_zone(store, 'gnope0', 'Asia/Shanghai')
+    places.set_zone(store, PLACE, 'Asia/Shanghai')
+    dinner = datetime(2026, 10, 8, 11, 5, tzinfo=timezone.utc)          # 19:05 in Shanghai, 00:05 in Auckland
+    small_hours = datetime(2026, 10, 8, 17, 30, tzinfo=timezone.utc)    # 01:30 in Shanghai
+    assert not places.night_there(store.config, scene(), dinner)
+    assert places.night_there(store.config, scene(), small_hours)
+    [row] = [row for row in places.zones(store, 'P1', dinner) if row['place'] == PLACE]
+    assert row['timezone'] == 'Asia/Shanghai' and row['their_time'] == '那边现在 19:05'
+    places.set_zone(store, PLACE, None)
+    [row] = [row for row in places.zones(store, 'P1', dinner) if row['place'] == PLACE]
+    assert 'their_time' not in row and row['timezone'].startswith('没设')

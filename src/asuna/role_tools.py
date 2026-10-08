@@ -298,6 +298,16 @@ TOOLS = {
                        'op': _s('开还是关', required=True, enum=['open', 'close']),
                        'close_for': _s('op=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
     },
+    'place_timezone': {
+        'description': ('你在的群各在哪个时区：设了以后，「那边是不是夜里」按那个群的钟算，你在那个群定的计划也按它。'
+                        'op=list 列出每个群设了什么、那边现在几点；op=set 给一个群设（place 照抄 list 或 places_from_program '
+                        '里的 place，timezone 写 IANA 名，比如 Asia/Shanghai），回执里有「那边现在几点」，对不上就是填错了；'
+                        'op=clear 撤掉。没把握的群不设：没设的照旧按宿主的钟算。'),
+        'parameters': {'op': {'type': 'string', 'enum': ['list', 'set', 'clear'], 'description': 'list、set 或 clear',
+                              'required': True},
+                       'place': _s('哪个群：照抄 place（set、clear 要写）'),
+                       'timezone': _s('IANA 时区名（set 要写），比如 Asia/Shanghai')},
+    },
     'message_developer': {
         'description': ('给开发代理留话：改你程序的那位（不是主人）。level=wake 是要他尽快来看：卡住了、出了得他动手的问题'
                         '（他开着的时候大约一小时内会看到，不开着就等他下次来）；level=note 是不急的，等他下次来看。'
@@ -421,7 +431,7 @@ def exposed(store, ep):
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
-        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer']
+        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer', 'place_timezone']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -1231,6 +1241,25 @@ class RoleTools:
             return private_words.run(args), False
         except private_words.PrivateWordsError as exc:
             raise Refused(str(exc)) from exc
+
+    def tool_place_timezone(self, ep, call_id, args):
+        from datetime import datetime, timezone
+        from . import places
+        moment = datetime.now(timezone.utc)
+        op = args.get('op')
+        if op == 'list':
+            return {'groups': places.zones(self.store, ep['persona'], moment)}, False
+        if op not in ('set', 'clear'):
+            raise Refused('op 是 list、set 或 clear%s。' % _given(args, 'op'))
+        place = self._text(args, 'place', 40)
+        name = self._text(args, 'timezone', 64) if op == 'set' else None
+        try:
+            scene_id = places.set_zone(self.store, place, name)
+        except ValueError as exc:
+            raise Refused(str(exc)) from exc
+        self.store.audit(ep['_id'], 'place.timezone', {'scene_id': scene_id, 'timezone': name}, ep['scope_key'])
+        row = next(row for row in places.zones(self.store, ep['persona'], moment) if row['place'] == place)
+        return {**row, 'note': '设好了，「那边是不是夜里」从现在起按这个算。' if name else '撤掉了，这个群照旧按宿主的钟算。'}, False
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members

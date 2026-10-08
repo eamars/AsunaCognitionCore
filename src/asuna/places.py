@@ -155,17 +155,66 @@ def visitor(route, channel):
     return members[0] if members else None
 
 
+def group_zone(scene):
+    """The time zone she set for this group (place_timezone), as a tzinfo; None when unset or no longer valid."""
+    from . import schedule_rules
+    name = (scene or {}).get('timezone')
+    zone = schedule_rules._zone(name) if isinstance(name, str) and name else None
+    return zone['tz'] if zone and zone['zone_unavailable'] is None else None
+
+
+def their_time(scene, moment):
+    """'HH:MM' on the group's own clock, or None when she has not set one."""
+    tz = group_zone(scene)
+    return moment.astimezone(tz).strftime('%H:%M') if tz else None
+
+
 def night_there(config, scene, moment):
-    """Quiet hours there are about other people's night: the route's P5 quiet hours, or the core default."""
-    from . import proactive
+    """Quiet hours there are about other people's night: the route's P5 quiet hours, or the core default, on the
+    route's offset, else the group's own time zone (place_timezone), else the Host's clock."""
+    from . import proactive, schedule_rules
     limits = proactive.route_settings(config, scene)
     if limits['enabled']:
         windows, offset = limits['quiet_windows'], limits['utc_offset_minutes']
     else:
         windows = [(proactive._clock(start, None), proactive._clock(end, None)) for start, end in proactive.QUIET_DEFAULT]
         offset = None
+    tz = group_zone(scene)
+    if offset is None and tz:
+        offset = schedule_rules.offset_minutes(tz, moment)
     windows = [(start, end) for start, end in windows if start is not None and end is not None]
     return proactive.in_quiet(proactive.local_minutes(moment.timestamp(), offset), windows)
+
+
+def set_zone(store, place, name):
+    """Set or (name None) clear a group's time zone. Returns the group's row as zones() shows it."""
+    from . import schedule_rules
+    found = find(store.config, place)
+    if not found:
+        raise ValueError('没有这个群（place 照抄 places_from_program 或 op=list 里的 place）')
+    if name is not None:
+        zone = schedule_rules._zone(name)
+        if zone['zone_unavailable'] is not None:
+            raise ValueError('「%s」不是一个时区名：写 IANA 名，比如 Asia/Shanghai、America/Los_Angeles' % name)
+        store.db.scenes.update_one({'_id': found[0]}, {'$set': {'timezone': name}})
+    else:
+        store.db.scenes.update_one({'_id': found[0]}, {'$unset': {'timezone': ''}})
+    return found[0]
+
+
+def zones(store, persona, moment):
+    """Every group she is in: whether its time zone is set, and the time there now."""
+    from .people import People
+    people, rows = People(store, persona), []
+    for scene_id, _, _ in groups(store.config):
+        scene = store.db.scenes.find_one({'_id': scene_id})
+        if not scene:
+            continue
+        time = their_time(scene, moment)
+        rows.append({'place': place_id(scene_id), 'group': people.scene_title(scene),
+                     'timezone': scene.get('timezone') if time else '没设（夜里按宿主的钟算）',
+                     **({'their_time': '那边现在 ' + time} if time else {})})
+    return rows
 
 
 def room(store, scene, moment):
@@ -336,6 +385,8 @@ def places_block(store, persona, model, policy, plan, moment, date):
                'you': ('你%s在这里说过话' % _ago(moment, here['mine_at'])) if here['mine_at'] else '你还没在这里说过话',
                'your_notes': notes or '你还没写过这个群的笔记',
                'can_visit': why}
+        if their_time(scene, moment):
+            row['their_time'] = '那边现在 ' + their_time(scene, moment)
         if visit:
             row['last_visit'] = '%s来看过：%s' % (_ago(moment, _at(visit['at'])), OUTCOMES[outcome(store, visit)])
         if here['called']:

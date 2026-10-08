@@ -233,6 +233,10 @@ class Lane:
         if path == '/schedule/update':
             current = [e['data']['schedule'] for e in self.events if e['data'].get('operation') in ('create', 'update')
                        and e['data']['schedule']['id'] == payload['id']][-1]
+            if 'change' not in payload:              # a title only: the timing stays (DSH answers the record)
+                record = {**current, **({'title': payload['title']} if payload.get('title') else {})}
+                self.events.append({'seq': self._next_seq(), 'data': {'operation': 'update', 'schedule': record}})
+                return record
             change = dict(payload['change'])
             kind = change.pop('kind')
             record = {**{k: v for k, v in current.items() if k not in ('daily', 'weekly', 'every_seconds')},
@@ -548,6 +552,23 @@ def native_daily_fires_without_rearm_and_updates_in_place(env):
             and updated['schedule_id'] == plan['schedule_id'] and '/schedule/update' in paths
             and '/schedule/delete' not in paths and lane.created == created and updated['plan_version'] == 2
             and len(lane.live(plan['_id'])) == 1), {'paths': paths, 'created': lane.created}
+
+
+@case
+def new_wording_for_a_daily_plan_keeps_its_native_record(env):
+    """Regression: a wording-only update of a daily plan left DSH's timing as it was, DSH answered a no-op, and the
+    update failed with KeyError 'scheduledAt'. The native record stays; only its title follows the wording."""
+    native = setup(config=config_with({'timezone': ZONE}))
+    service, store, lane = native['service'], native['store'], native['lane']
+    plan = service.create(EP, DAILY)
+    created = lane.created
+    updated = service.update(EP, plan['_id'], {'plan_id': plan['_id'], 'intent': '换个说法，时间不变'})
+    paths = [path for path, _ in lane.calls]
+    sent = [payload for path, payload in lane.calls if path == '/schedule/update']
+    return (updated['schedule_id'] == plan['schedule_id'] and updated['intent'] == '换个说法，时间不变'
+            and updated['rule'] == plan['rule'] and updated['plan_version'] == 2 and lane.created == created
+            and '/schedule/delete' not in paths and sent and 'change' not in sent[-1]
+            and sent[-1]['title'].startswith('换个说法') and updated['scheduled_at']),         {'paths': paths, 'sent': sent}
 
 
 @case

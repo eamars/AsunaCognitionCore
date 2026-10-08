@@ -62,3 +62,16 @@ test('ADR-012: a task is named as she reads it, and what DSH changes is logged a
   assert.equal(logged.length, 1);
   assert.equal(logged[0].data.schedule.scheduledAt, '2026-01-03T09:00:00Z');
 });
+
+test('an update that changes nothing answers with the record, not a status', async () => {
+  // Regression: a wording-only change of a daily plan sent the same timing; DSH answered {updated: false, record}
+  // and the worker read the record's fields off that status (KeyError 'scheduledAt').
+  const h = harness();
+  h.schedules.ctx.schedule.update = async request => { h.calls.push(request);
+    return { id: 'n1', updated: false, record: request.expected }; };
+  const before = h.events.length;
+  const result = await h.schedules.request({ session_id: 's', path: '/schedule/update', payload: { id: 'n1', title: 'Same' } });
+  assert.equal(result.id, 'n1');
+  assert.equal(result.scheduledAt, '2026-01-02T09:00:00Z');
+  assert.equal(h.events.length, before, 'a no-op is not logged as an update');
+});

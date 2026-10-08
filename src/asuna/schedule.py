@@ -745,11 +745,17 @@ class ScheduleService:
         recurring = schedule_rules.native_recurring(rule, zone['name'])
         change = recurring and {'kind': next(iter(recurring)), **recurring} or (
             {'kind': 'every', 'every_seconds': rule['every_seconds']} if 'every_seconds' in rule else None)
-        native = None
-        if change and current.get('schedule_id') and (current.get('native_recurring') or 'every_seconds' in current['rule']):
+        native, title = None, plan_title({**current, 'intent': intent})
+        in_place = None
+        if current.get('schedule_id') and current['rule'] == rule:
+            # New wording only: the native record keeps its timing; its title follows the wording.
+            in_place = {'id': current['schedule_id'], 'title': title}
+        elif change and current.get('schedule_id') and (current.get('native_recurring') or 'every_seconds' in current['rule']):
             # ADR-009 D-5: change a native recurring rule in place (schedule_update), no delete + create.
-            updated_native = self.lane.schedule('/schedule/update', {'id': current['schedule_id'], 'change': change})
-            if isinstance(updated_native, dict) and updated_native.get('id') == current['schedule_id']:
+            in_place = {'id': current['schedule_id'], 'change': change, 'title': title}
+        if in_place:
+            updated_native = self.lane.schedule('/schedule/update', in_place)
+            if isinstance(updated_native, dict) and updated_native.get('id') == current['schedule_id']                     and updated_native.get('scheduledAt'):
                 native = updated_native
         native = native or self._create_native(plan_id,
             recurring or schedule_rules.native_payload(rule, fire_at, now()))

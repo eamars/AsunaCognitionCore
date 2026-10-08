@@ -117,9 +117,9 @@ export class NativeSchedules {
         if (result.updated && result.record) {
           agent.session.append('asuna/schedule', { operation: 'update', schedule: result.record });
           await this.ctx.sessions.flush(agent.session);
-          return result.record;
         }
-        return result;
+        // A change that leaves the record as it is (a no-op) answers with the record too.
+        return result.record ?? result;
       }
       if (path === '/schedule/delete') {
         const result = await this.ctx.schedule.delete({ sessionId, id: payload.id });

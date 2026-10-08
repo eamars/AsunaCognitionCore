@@ -150,16 +150,22 @@ class Collection:
         return iter(rows)
 
 
+class Database(types.SimpleNamespace):
+    """Every collection a real module reads exists, empty until written (as in Mongo)."""
+    def __getattr__(self, name):
+        if name.startswith('__'):
+            raise AttributeError(name)
+        collection = Collection()
+        setattr(self, name, collection)
+        return collection
+
+
 class Store:
     def __init__(self, config):
         self.config = config
         self.name = 'p3-fake-store'
         self.audits = []
-        self.db = types.SimpleNamespace(plans=Collection(), scenes=Collection(),
-                                        messages=Collection(), audit_events=Collection(),
-                                        episodes=Collection(), tasks=Collection(),
-                                        memory_units=Collection(), state_heads=Collection(),
-                                        state_revisions=Collection(), watches=Collection(), notes=Collection())
+        self.db = Database()
 
     def put(self, collection, document, *, expected=None, stream='state'):
         coll = getattr(self.db, collection)
@@ -231,8 +237,11 @@ class Lane:
                                   'kind': kind, 'scheduledAt': scheduled}, **rule)}})
             return {'id': native_id, 'scheduledAt': scheduled, 'kind': kind}
         if path == '/schedule/update':
-            current = [e['data']['schedule'] for e in self.events if e['data'].get('operation') in ('create', 'update')
-                       and e['data']['schedule']['id'] == payload['id']][-1]
+            known = [e['data']['schedule'] for e in self.events if e['data'].get('operation') in ('create', 'update')
+                     and e['data']['schedule']['id'] == payload['id']]
+            if not known:                            # as DSH answers an id it does not hold
+                return {'id': payload['id'], 'updated': False, 'code': 'schedule_not_found'}
+            current = known[-1]
             if 'change' not in payload:              # a title only: the timing stays (DSH answers the record)
                 record = {**current, **({'title': payload['title']} if payload.get('title') else {})}
                 self.events.append({'seq': self._next_seq(), 'data': {'operation': 'update', 'schedule': record}})
@@ -759,7 +768,8 @@ STUB_EXTRA = {
     'lanes.py': 'class Lane:\n    pass\n',
     'publish.py': 'class PublishService:\n    def __init__(self, *a, **k):\n        pass\n',
     'peer_context.py': 'def apply_peer_context(context, source):\n    return context\n',
-    'people.py': 'class People:\n    owner_label = \"本机用户\"\n    def __init__(self, store, persona=None):\n        pass\n    def identity_line(self, scene, row):\n        return None\n    def self_role(self, scene):\n        return None\n    def relabel(self, context, scene, author):\n        return context\n',
+    'people.py': 'class People:\n    owner_label = \"本机用户\"\n    def __init__(self, store, persona=None):\n        pass\n    def identity_line(self, scene, row):\n        return None\n    def self_role(self, scene):\n        return None\n    def relabel(self, context, scene, author):\n        return context\n'
+                 'def safe_name(value, limit=40):\n    return " ".join(str(value or "").split())[:limit]\n',
     'ingress.py': 'def episode_id(event):\n    return \"ep-\" + str(event[\"event_id\"])\n',
     'tasks.py': 'import threading\nclass FeedbackStale(Exception):\n    pass\ndef require_current_feedback(store, ep):\n    return None\n'
                 'class TaskService:\n    def __init__(self, store, *a, **k):\n        self.store, self.lock = store, threading.RLock()\n',
@@ -785,7 +795,7 @@ def load_coordinator():
     # documents / persona_model / policy：ADR-009 P1–P2 后 coordinator 与 render 同包 import 它们。
     # role_tools：ADR-011 后她的每个动作（含 plan）都是一次工具调用，coordinator 同包 import 它。
     # schedule.py：plan 工具接的是真的 ScheduleService，与 role_tools 同包装，异常类才是同一个。
-    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py', 'context_budget.py', 'lines.py', 'sandbox_backend.py', 'image_generation.py', 'integration_import.py', 'places.py', 'stickers.py', 'watches.py', 'credentials.py', 'notes.py')
+    optional = ('render.py', 'visibility.py', 'documents.py', 'role_tools.py', 'persona_model.py', 'policy.py', 'affect.py', 'rhythm.py', 'grants.py', 'skills.py', 'outbound_media.py', 'context_budget.py', 'lines.py', 'sandbox_backend.py', 'image_generation.py', 'integration_import.py', 'places.py', 'stickers.py', 'watches.py', 'credentials.py', 'notes.py', 'animated.py', 'local_time.py', 'understanding.py', 'group_members.py', 'caught_up.py')
     # channel_kinds：scene_links / vision 按 id 前缀问已装平台（标准库，无平台时各自退成本地）。
     for name in ('coordinator.py', 'context.py', 'schedule.py', 'schedule_rules.py', 'self_state.py', 'vision.py',
                  'scene_links.py', 'channel_kinds.py', 'familiarity.py', 'attend.py', 'group_admin.py', 'answers.py', *optional):   # 少带一个真文件只会红在 ModuleNotFound

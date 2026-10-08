@@ -12,6 +12,7 @@ import time
 
 from . import inbound as inbound_mod
 from .catchup import Catchup
+from .members import Members
 from .hostapi import HostApi
 from .journal import Counters, Journal
 from .onebot import OneBot
@@ -71,6 +72,8 @@ class Adapter:
         self.self_roles = SelfRoles(cfg.napcat["account_id"], counters=self.counters)
         # the messages missed while this adapter or its event socket was down (catchup.py)
         self.catchup = Catchup(cfg, data_dir, self.onebot, self.on_event, self.counters, log=self.log)
+        # who is in each admitted group, posted to the host when it changed (members.py)
+        self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, log=self.log)
         self.onebot.on_up = lambda path, gap: (self.catchup.request("reconnect")
                                                if path == "/event" and gap is not None else None)
         self.stop = threading.Event()
@@ -279,7 +282,7 @@ class Adapter:
                     "up" if snap["ws_api_up"] else "down",
                     snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
                     json.dumps({k: v for k, v in sorted(snap.items())
-                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_"))},
+                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_"))},
                                sort_keys=True)))
 
     # ---- identity -------------------------------------------------------
@@ -336,6 +339,7 @@ class Adapter:
         threading.Thread(target=self._submitter_loop, name="submitter", daemon=True).start()
         threading.Thread(target=self._health_loop, name="health", daemon=True).start()
         threading.Thread(target=self.catchup.loop, args=(self.stop,), name="catchup", daemon=True).start()
+        threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
         self.catchup.request("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"
                  % (os.getpid(), self.identity.get("user_id"),

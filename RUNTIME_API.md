@@ -137,6 +137,21 @@ A row that records `attachment_skipped` is treated as never having declared the 
 
 Refusals are `403` with a code — `PUBLICATION_NOT_FOUND`, `PUBLICATION_ATTEMPT_MISMATCH`, `ATTACHMENT_NOT_DECLARED`, `ATTACHMENT_ARTIFACT_DENIED`, `ATTACHMENT_SCOPE_DENIED`, `ATTACHMENT_SHA_MISMATCH`, `ATTACHMENT_HASH_MISMATCH`, `ATTACHMENT_NOT_AN_IMAGE`, `ATTACHMENT_OVER_LIMIT`, `ATTACHMENT_MEDIA_TYPE_MISMATCH` — and carry no partial body. The adapter re-checks the digest and the file signature on its side. Neither side treats a successful claim as proof the image arrived: only a platform receipt says that.
 
+### Post a group's member list
+
+```http
+POST /v1/channels/{channel_id}/members
+Content-Type: application/json
+```
+
+```json
+{"group_id": "group-id", "fetched_at": "2026-10-08T00:00:00Z",
+ "members": [{"user_id": "10001", "nickname": "name", "card": "group card", "role": "member",
+              "last_sent_time": 1791000000, "join_time": 1780000000}]}
+```
+
+The whole list of one group whose route the channel admits (not a blocked group), 1–5000 members, body up to 4 MiB. The host keeps `user_id`, `nickname`, `card`, `role` (`owner`, `admin`, `member`), `last_sent_time` and `join_time` in `group_members`, one row per group, replaced on each post; the answer is `{"status": "stored", "count": n}`. Refusals: `403 MEMBERS_GROUP_NOT_ROUTED`, `403 MEMBERS_SCENE_UNKNOWN` (no conversation for the group yet), `400 MEMBERS_INVALID`. A group turn carries `members_from_program`: the member count, the owner and admins by name, and at most 80 members (`context_budget.MEMBER_LINES`) — the people she knows there (by their label), the 50 most recently active, and anyone @-mentioned in the last 2 hours — each with how long ago they last spoke, plus how many are not listed and how old the list is. `find_member` (`name`, ≤ 20 characters; offered when the group has a list) finds members whose card or nickname contains it, at most 10, most recently active first. The list never enters `scene_people`.
+
 ### Record a platform receipt
 
 ```http

@@ -651,6 +651,10 @@ class ContextBuilder:
             notes_revision,context['group_notes_from_program']=group_admin.notes_block(docs,scene)
             if notes_revision:
                 documents[group_admin.notes_slug(scene['_id'])]=notes_revision
+        if scene['kind']=='group':
+            from . import group_members
+            members=group_members.block(self.store,scene,persona)
+            if members:context['members_from_program']=members
         from .ingress import episode_id as _episode_id
         context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),*[m['_id'] for m in memories],
             *[t['_id'] for t in task_states],

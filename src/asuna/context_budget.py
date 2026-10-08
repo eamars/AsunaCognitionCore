@@ -23,13 +23,15 @@ REVIEW_EVERY_DAYS = 7               # a changed note is due for tidying this lon
 REVIEW_PER_NIGHT = 3                # notes listed in one settlement
 STICKER_SHELF = 60                  # stickers she keeps (ADR-016); her turn lists their names only
 STICKER_REVIEW = 6                  # stickers listed for her weekly look at the shelf
+MEMBER_LINES = 80                   # group members a turn names (group_members.py); find_member reaches the rest
 
 # How full a note is, in words (share of its limit).
 FULLNESS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))
 # How long ago a feeling was stirred, in words coarse enough to stay the same for a while.
 ROUGH_AGO = ((1, '一小时内'), (6, '几小时前'), (24, '一天之内'), (72, '这两三天'), (None, '更早'))
 # Over the ceiling, these lists lose rows first, in this order: (block, list inside it or None, which end goes).
-TRIM_ORDER = (('recent_experience_from_program', 'messages', 'oldest'),
+TRIM_ORDER = (('members_from_program', 'items', 'last'),
+              ('recent_experience_from_program', 'messages', 'oldest'),
               ('settlement_from_program', 'promotion_candidates', 'last'),
               ('memories', None, 'last'),
               ('group_continuity_from_program', 'related_messages', 'oldest'),

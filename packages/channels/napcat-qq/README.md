@@ -18,6 +18,9 @@ with Core (`registerChannel`).
   `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder, at most
   `lookback_hours` back, 1–6) and fed oldest first through the usual inbound path, marked `raw.asuna_catchup`.
   Off by default.
+- Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
+  policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
+  and posted to Core's `members` endpoint only when it changed.
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.

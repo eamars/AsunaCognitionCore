@@ -301,6 +301,11 @@ TOOLS = {
         'parameters': {'level': _s('wake（要他尽快来）或 note（等他下次来看）', required=True, enum=['wake', 'note']),
                        'text': _s('留言：什么事、卡在哪、要他做什么，800 字以内', required=True)},
     },
+    'find_member': {
+        'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多列 10 个，最近说过话的在前。'
+                        'members_from_program 只列了一部分，别的人用这个找。'),
+        'parameters': {'name': _s('名字里的几个字，20 字以内', required=True)},
+    },
     'note_idea': {
         'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
                         '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
@@ -400,6 +405,8 @@ def exposed(store, ep):
         names.append('credential')            # her credential vault: filed at home only (credentials.py)
     if scene_kind in ('group', 'dm') or context.get('watching_from_program'):
         names.append('watch')
+    if scene_kind == 'group' and context.get('members_from_program'):
+        names.append('find_member')
     if scene_kind == 'group':
         names.append('await_answer')
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
@@ -1194,6 +1201,11 @@ class RoleTools:
                         source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
                                 'turn': turn_kind(ep)})
         return {'noted': row['_id'], 'note': '记下了。它会在你的自我改进时间里再拿出来，现在不用去改。'}, False
+
+    def tool_find_member(self, ep, call_id, args):
+        from . import group_members
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        return group_members.find(self.store, scene, ep['persona'], self._text(args, 'name', 20)), False
 
     def tool_message_developer(self, ep, call_id, args):
         from . import developer_inbox

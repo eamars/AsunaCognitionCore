@@ -33,3 +33,4 @@ Handoff packages keep the status line they were delivered with; this table is th
 | 021 | Night self-development in stages | Accepted 2026-10-08: night stages built; a change that needs a Host restart waits for the owner, said on the plugin card. |
 | 022 | Catching up QQ messages missed in a gap (history fetched by the adapter, old lines marked and gated) | Accepted and built 2026-10-08 from 小满's design; off until the owner names routes. |
 | [023](ADR-023-chatbot-security-by-design/README.md) | Chatbot security by design: prompt injection, trust boundaries, manipulation, and greater autonomy | Draft proposal, 2026-10-08; source assessment and proposed architecture, with no runtime or policy changes approved. |
+| 024 | What she sees in a group: its members (lists fetched by the adapter, a slice per turn) and its pictures (the trigger line's, then recent photos) | Accepted and built 2026-10-08 from 小满's asks; owner decided each from measured options. |

@@ -24,7 +24,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # Notes between her own conversations (ADR-018, owner 2026-10-07).
                'notes',
                # Her messages to the developer agent (developer_inbox.py, owner 2026-10-08).
-               'developer_inbox')
+               'developer_inbox',
+               # Who is in each group, as the channel adapter last fetched it (group_members.py, owner 2026-10-08).
+               'group_members')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 

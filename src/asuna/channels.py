@@ -181,6 +181,10 @@ class Channels:
             raise Denied('CHANNEL_AUTH_REQUIRED')
         return channel
 
+    def members(self, channel_id, body):
+        from . import group_members
+        return group_members.receive(self.store, channel_id, body)
+
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
         with self.controller.ingress_lock:
@@ -409,6 +413,9 @@ class Channels:
             PublishService(self.store).cancel_after(unknown)
 
 
+MEMBERS_BODY_LIMIT = 4 * 1024 * 1024
+
+
 class ChannelServer:
     def __init__(self, channels, port=0):
         class Handler(BaseHTTPRequestHandler):
@@ -428,13 +435,16 @@ class ChannelServer:
                     body = {}
                     if self.command == 'POST':
                         size = int(self.headers.get('Content-Length', '0'))
-                        if not 0 < size <= 262144:
+                        # A group's member list (group_members.py) is the one body that may be large.
+                        if not 0 < size <= (MEMBERS_BODY_LIMIT if parts[3:] == ['members'] else 262144):
                             raise ValueError('INVALID_BODY_SIZE')
                         body = json.loads(self.rfile.read(size))
                         if not isinstance(body, dict):
                             raise ValueError('INVALID_BODY')
                     if self.command == 'POST' and parts[3:] == ['events']:
                         value = channels.receive(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['members']:
+                        value = channels.members(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         value = channels.claim(channel_id, int(query.get('wait_seconds', ['0'])[0]),

@@ -25,7 +25,8 @@ Her research (`napcat-catchup-plan.md` in her workspace, read-only probes agains
 ## 2. Decisions
 
 - **D1 — Where:** the adapter fetches; the host only learns that a line is late. Only routes the owner names in
-  `adapter.catchup.routes` (route ids or `"all"`); off by default. Reading history is a real widening of what the
+  `adapter.catchup.routes` (route ids, `auto-group-<id>` / `auto-dm-<id>` for automatically admitted targets, or
+  `"all"` for the configured routes); off by default. Reading history is a real widening of what the
   adapter reads (until now `get_msg` was limited to its own sent message), so it stays inside authorized routes.
 - **D2 — When:** once the adapter is READY, and whenever the event socket comes back after a drop.
 - **D3 — From where:** a per-route cursor (time, with the platform seq) of the newest message accepted on that

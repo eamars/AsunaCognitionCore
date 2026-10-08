@@ -7,7 +7,8 @@ identity lookups, host), marked `asuna_catchup` so the host knows it is an old l
 is the original one.
 
 - When: once the adapter is READY, and whenever the event socket comes back after a drop.
-- Where: only the routes `adapter.catchup.routes` names (route ids, or "all"); none by default.
+- Where: only the routes `adapter.catchup.routes` names (route ids, `auto-group-<id>` / `auto-dm-<id>` under
+  automatic admission, or "all" for the configured ones); none by default.
 - From: a cursor per route, the time (and platform seq) of the newest message seen there, push or caught
   up, kept in `<data>/catchup/cursors.json`.  The cursor is a time, not a message number: message ids are
   not monotonic.  Without a cursor, or with one older than `lookback_hours` (at most 6), the look back
@@ -129,8 +130,10 @@ class Catchup:
     def run(self, reason):
         started = self.clock()
         totals = {"routes": 0, "rows": 0, "fed": 0}
-        for route in sorted(self.cfg.routes.values(), key=lambda r: r.route_id):
-            if route.route_id not in self.routes:
+        for route_id in sorted(self.routes):
+            route = self.cfg.route_by_id(route_id)
+            if route is None:
+                self.log("CATCHUP_ROUTE_SKIPPED route=%s (blocked, or no longer admitted)" % route_id)
                 continue
             totals["routes"] += 1
             rows, truncated = self._missed(route, started)

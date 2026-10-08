@@ -57,7 +57,8 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      access token>"}`;
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
    - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
-     catch-up after a gap for those routes (the route ids are the keys of `channels.qq.routes`).
+     catch-up after a gap for those routes (the keys of `channels.qq.routes`; under automatic admission a group or DM
+     without one is `auto-group-<id>` / `auto-dm-<id>`; `"all"` means the configured routes).
    With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
    restarts with her from then on; after an `integration_stop` it stays stopped until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.

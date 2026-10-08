@@ -126,7 +126,8 @@ class Config:
         self.host = self._host(adapter.get("host"))
         self.routes = self._routes(adapter.get("routes"))
         self.media_mode = self._media_mode(adapter.get("media_mode"))
-        self.catchup_routes, self.catchup_lookback_hours = self._catchup(adapter.get("catchup"), self.routes)
+        self.catchup_routes, self.catchup_lookback_hours = self._catchup(adapter.get("catchup"), self.routes,
+                                                                         self.admission)
         self._cross_check()
 
     # ---- sections -------------------------------------------------------
@@ -140,8 +141,10 @@ class Config:
         return value
 
     @staticmethod
-    def _catchup(node, routes):
-        """(route ids caught up after a gap, look-back hours); absent means off (catchup.py)."""
+    def _catchup(node, routes, admission):
+        """(route ids caught up after a gap, look-back hours); absent means off (catchup.py). Under automatic
+        admission a target without a configured route is named by its automatic route id (auto-group-<id>,
+        auto-dm-<id>); "all" means the configured routes."""
         if node is None:
             return frozenset(), 6
         if not isinstance(node, dict):
@@ -150,10 +153,13 @@ class Config:
         if wanted == "all":
             chosen = frozenset(routes)
         elif isinstance(wanted, list) and all(isinstance(r, str) for r in wanted):
-            unknown = sorted(set(wanted) - set(routes))
+            automatic = re.compile(r"auto-(group|dm)-\d{4,20}") if admission == "automatic" else None
+            unknown = sorted(r for r in set(wanted) - set(routes) if not (automatic and automatic.fullmatch(r)))
             if unknown:
-                raise ConfigError("adapter.catchup.routes names unknown routes %s (routes are %s)"
-                                  % (",".join(unknown), ",".join(sorted(routes))))
+                raise ConfigError("adapter.catchup.routes names unknown routes %s (routes are %s%s)"
+                                  % (",".join(unknown), ",".join(sorted(routes)),
+                                     ", or auto-group-<id> / auto-dm-<id> under automatic admission"
+                                     if admission == "automatic" else ""))
             chosen = frozenset(wanted)
         else:
             raise ConfigError('adapter.catchup.routes must be "all" or a list of route ids')
@@ -285,6 +291,16 @@ class Config:
             return Route('auto-dm-' + sender_id, {'message_type': 'private', 'sender_id': sender_id,
                 'target': {'type': 'dm', 'id': sender_id}})
         return None
+
+    def route_by_id(self, route_id):
+        """A configured route, or the automatic route that id names (None when blocked or not admitted)."""
+        if route_id in self.routes:
+            return self.routes[route_id]
+        match = re.fullmatch(r"auto-(group|dm)-(\d{4,20})", route_id or "")
+        if not match or self.admission != "automatic":
+            return None
+        route = (self.route_for_group if match.group(1) == "group" else self.route_for_sender)(match.group(2))
+        return route if route is not None and route.route_id == route_id else None
 
     def route_for_group(self, group_id):
         if group_id in self.blocked_groups or not DIGITS.fullmatch(group_id):

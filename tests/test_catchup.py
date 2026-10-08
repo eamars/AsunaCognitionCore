@@ -49,7 +49,8 @@ class History:
 def catchup(tmp_path, api, routes=('group-900000001',), hours=6):
     route = SimpleNamespace(route_id='group-900000001', message_type='group', target_id='900000001')
     dm = SimpleNamespace(route_id='owner-dm', message_type='private', target_id='900000010')
-    cfg = SimpleNamespace(routes={r.route_id: r for r in (route, dm)}, napcat={'account_id': ACCOUNT},
+    known = {r.route_id: r for r in (route, dm)}
+    cfg = SimpleNamespace(routes=known, napcat={'account_id': ACCOUNT}, route_by_id=known.get,
                           catchup_routes=frozenset(routes), catchup_lookback_hours=hours)
     fed = []
     return Catchup(cfg, str(tmp_path), api, fed.append, Counters(), log=lambda _m: None, clock=lambda: NOW), fed
@@ -66,6 +67,14 @@ def test_the_owner_names_the_routes_and_nothing_runs_by_default():
     raw['adapter']['catchup'] = {'routes': ['nope']}
     with pytest.raises(ConfigError, match='unknown routes nope'):
         Config(raw, 'x')
+    raw['adapter']['catchup'] = {'routes': ['auto-group-900000077']}       # explicit admission: no automatic routes
+    with pytest.raises(ConfigError, match='unknown routes auto-group-900000077'):
+        Config(raw, 'x')
+    auto = fixtures.raw_config(admission='automatic')
+    auto['adapter']['catchup'] = {'routes': ['auto-group-900000077']}
+    cfg = Config(auto, 'x')
+    assert cfg.catchup_routes == {'auto-group-900000077'} and cfg.route_by_id('auto-group-900000077').target_id == '900000077'
+    assert cfg.route_by_id('group-900000001').route_id == 'group-900000001' and cfg.route_by_id('auto-dm-x') is None
     raw['adapter']['catchup'] = {'routes': 'all', 'lookback_hours': 24}
     with pytest.raises(ConfigError, match='1..6'):
         Config(raw, 'x')

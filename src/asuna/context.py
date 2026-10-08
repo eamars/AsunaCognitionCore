@@ -562,6 +562,9 @@ class ContextBuilder:
             from . import developer_inbox as _developer_inbox
             asked=_developer_inbox.block(self.store,persona,moment)
             if asked:context['developer_inbox_from_program']=asked
+            from . import host_stops as _host_stops
+            away=_host_stops.block(self.store,schedule_zone,moment)
+            if away:context['host_from_program']=away
         if note_kind!='consult':
             note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
             if note_places:context['note_places_from_program']=note_places

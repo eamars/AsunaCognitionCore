@@ -285,7 +285,7 @@ class BusinessWorker:
         self.stack.enter_context(RuntimeLease(database_lock(config)))
         # The same across machines: a lease in the database itself (ADR-020).
         from .host_lease import DatabaseLease
-        self.stack.enter_context(DatabaseLease(config, persona=persona['id']))
+        lease = self.stack.enter_context(DatabaseLease(config, persona=persona['id']))
         # Existing state identity wins. Package defaults seed only absent heads.
         if config['chat']['persona'] != persona['id']:
             raise ValueError('PERSONA_STATE_ID_MISMATCH')
@@ -317,6 +317,9 @@ class BusinessWorker:
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
+            if lease.left_behind:                  # the last Host was taken away from outside (host_stops)
+                from . import host_stops
+                host_stops.record(self.app.store, lease.left_behind)
             self.navigation = self.prepare_navigation(native_sessions or [])
             self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
             if not self.projection_start:

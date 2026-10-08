@@ -75,3 +75,23 @@ test('an update that changes nothing answers with the record, not a status', asy
   assert.equal(result.scheduledAt, '2026-01-02T09:00:00Z');
   assert.equal(h.events.length, before, 'a no-op is not logged as an update');
 });
+
+test('reminders queued in the scheduler session are removed once read; one arriving meanwhile stays', async () => {
+  // Regression: DSH claims one queued reminder per turn, so reminders that arrived during a turn stayed in the
+  // scheduler session's queue for good (the owner saw "4 queued messages"). Delivery reads the log, not the queue.
+  const h = harness();
+  const reminder = id => ({ id, source: { kind: 'schedule' }, content: [{ type: 'text',
+    text: '[SCHEDULE REMINDER BATCH]\nreminders_json: ' + JSON.stringify([{ schedule_id: 'n1', occurrence_at: id }]) }] });
+  let queue = [reminder('old-1'), reminder('old-2')];
+  for (const message of queue) h.events.push({ type: 'agent/inbox/spliced', seq: h.events.length + 1,
+    data: { target: 'next-turn', start: 0, inserted: [message] } });
+  h.agent.inbox = { get nextTurn() { return queue; }, remove: id => { queue = queue.filter(m => m.id !== id); return true; } };
+  const delivered = [];
+  h.schedules.core = { ready: async () => {}, worker: { call: async (method, args) => {
+    delivered.push(args.id);
+    if (delivered.length === 1) queue = [...queue, reminder('arrived-meanwhile')];
+  } } };
+  await h.schedules.delivered(h.agent);
+  assert.deepEqual(queue.map(m => m.id), ['arrived-meanwhile']);
+  assert.ok(delivered.length >= 2, 'both queued reminders were delivered from the log');
+});

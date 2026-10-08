@@ -132,10 +132,16 @@ export class NativeSchedules {
   }
 
   async delivered(agent) {
+    // DSH claims one queued reminder per turn; reminders that arrive during a turn would stay queued for good.
+    // The log is what delivers them (refresh reads every inserted reminder), so the ones queued before this
+    // reading are removed once it has been read. One arriving later stays and wakes its own turn.
+    const queued = agent.inbox.nextTurn.filter(message => message.source?.kind === 'schedule').map(message => message.id);
     const rows = await this.exclusive(() => this.refresh(agent));
     await this.core.ready();
     for (const event of rows.filter(e => e.data.operation === 'dispatch'))
       await this.core.worker.call('schedule.deliver', {
         session: agent.session.id, seq: event.seq, id: event.data.id });
+    for (const id of queued) agent.inbox.remove(id);
+    if (queued.length) await this.ctx.sessions.flush(agent.session);
   }
 }

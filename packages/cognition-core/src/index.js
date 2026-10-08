@@ -859,7 +859,7 @@ export class CognitionCore {
     if (allowed.has('todo_write')) await scope.plugin(todoTool, { allowParallelInProgress: true });
     // web_fetch is DSH's; web_search is DSH's tool with a `detail` choice and 10 sources (search.js, ADR-026).
     if (allowed.has('web_fetch')) await scope.plugin(webTool, { search: false, fetch: true });
-    if (allowed.has('web_search')) registerWebSearch(scope, { fetchEnabled: allowed.has('web_fetch'),
+    if (allowed.has('web_search')) registerWebSearch(scope, { fetchEnabled: allowed.has('web_fetch'), web: () => this.web,
       zone: { timezone: binding.timezone ?? null, utc_offset_minutes: binding.utc_offset_minutes } });
     if (allowed.has('skill') && binding.skill_directories?.length) {
       const skills = scope.isolate('skills');

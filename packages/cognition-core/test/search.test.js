@@ -192,7 +192,9 @@ function toolScope(search) {
   return { sections, tools, scope: {
     systemPrompt: { section: section => sections.push(section), getSectionOrder: () => 2000 },
     tools: { register: definition => tools.set(definition.name, definition), get: name => tools.get(name) },
-    web: { search } } };
+    // As cordis: an action scope that did not inject `web` refuses the property, and get() looks the service up.
+    get web() { throw new Error('cannot get property "web" without inject'); },
+    get: name => (name === 'web' ? { search } : undefined) } };
 }
 const many = (prefix, n) => ({ sources: Array.from({ length: n }, (_, i) => ({ url: `https://${prefix}.example/${i}`, title: `${prefix} ${i}`,
   snippet: 'about ' + prefix, publishedAt: '2026-10-01' })), truncated: false });
@@ -251,4 +253,14 @@ test('web_search puts publication times on the conversation\'s clock; a date alo
   const value = await tools.get('web_search').execute({ queries: ['q'], detail: 'titles' }, { signal: new AbortController().signal });
   assert.equal(value.sources[0].publishedAt, '2026-03-31 09:03');
   assert.doesNotMatch(tools.get('web_search').output.render({}, value)[0].text, /\d{2}:\d{2}:\d{2}(\.\d+)?Z/);
+});
+
+test('web_search uses the web service the core received by injection, never the scope property', async () => {
+  const asked = [];
+  const injected = { search: async request => { asked.push(request.query); return many('i', 1); } };
+  const { scope, tools } = toolScope(async () => { throw new Error('the fallback lookup should not run'); });
+  registerWebSearch(scope, { web: () => injected });
+  const value = await tools.get('web_search').execute({ queries: ['q'] }, { signal: new AbortController().signal });
+  assert.deepEqual(asked, ['q']);
+  assert.equal(value.sources[0].url, 'https://i.example/0');
 });

@@ -84,7 +84,7 @@ export class AsunaApi extends TypertRemoteService {
   }
 
   /** The browser's language for the names the program gives (ui-language.js); unsupported means English. */
-  async uiLanguage({ locale } = {}) {
+  async uiLanguage(locale) {
     if (typeof locale !== 'string' || locale.length > 35) throw new Error('INVALID_LOCALE');
     return applyLanguage(this.core, locale);
   }

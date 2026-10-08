@@ -31,3 +31,15 @@ test('a reported language is kept for the next start and handed to the worker on
   await applyLanguage(core, 'de');
   assert.deepEqual(calls.at(-1), ['ui.titles', 'Heartbeat']);
 });
+
+test('every remote method takes plain named parameters, as DSH\'s gateway requires', async () => {
+  // Regression: uiLanguage({ locale }) was refused at runtime (gateway/signature-invalid) and the language never arrived.
+  const { AsunaApi } = await import('../src/api.js');
+  const source = (await import('node:fs')).readFileSync(new URL('../src/api.js', import.meta.url), 'utf8');
+  const names = JSON.parse(source.match(/for \(const name of (\[[^\]]+\])\)/)[1].replaceAll("'", '"'));
+  assert.ok(names.includes('uiLanguage'));
+  for (const name of names) {
+    const params = AsunaApi.prototype[name].toString().match(/^[^(]*\(([^)]*)\)/)[1];
+    assert.ok(params.split(',').every(p => /^\s*[A-Za-z_$][\w$]*\s*$|^\s*$/.test(p)), name + '(' + params + ')');
+  }
+});

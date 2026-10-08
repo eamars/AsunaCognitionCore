@@ -41,3 +41,15 @@ def test_packing_removes_artifacts_nothing_names_any_more(tmp_path, monkeypatch)
     pack.prune([{'path': str(pack.DESTINATION / 'core-1-aaaa.tgz')}])
     # This pack, what a profile installed and what a selection names stay; older packs and npm's copy go.
     assert sorted(p.name for p in pack.DESTINATION.iterdir()) == ['core-1-aaaa.tgz', 'core-1-bbbb.tgz', 'core-1-cccc.tgz']
+
+
+def test_every_folder_a_package_ships_is_one_the_packer_admits():
+    """Regression: the core's new meta/ folder was refused at pack time and the Host did not start (2026-10-09)."""
+    import json
+    source = (ROOT / 'tools/pack_plugins.py').read_text(encoding='utf-8')
+    allowed = source.split('allowed = (', 1)[1].split(')', 1)[0]
+    for manifest in [ROOT / 'packages/cognition-core/package.json', *ROOT.glob('packages/personas/*/package.json'),
+                     *ROOT.glob('packages/channels/*/package.json')]:
+        for entry in json.loads(manifest.read_text(encoding='utf-8')).get('files', []):
+            if (manifest.parent / entry).is_dir():
+                assert "'package/%s/'" % entry in allowed, '%s ships %s/, which the packer refuses' % (manifest.parent.name, entry)

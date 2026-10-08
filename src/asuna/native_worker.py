@@ -594,6 +594,11 @@ class BusinessWorker:
     def project_input(self, row):
         if not row.get('event', {}).get('channel'):
             return
+        if not self.navigation_ready.is_set():
+            # Called inside Chat.receive's ingress lock. Waiting here for navigation, which the plugin confirms
+            # only after initialize returns, deadlocks a start whose activations queue input while the adapter
+            # delivers its spool. The row is durable; navigation.ready projects it.
+            return
         if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
 

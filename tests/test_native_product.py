@@ -197,3 +197,17 @@ def test_session_kinds_mark_her_platform_groups_and_dms_but_not_the_local_chat(p
     kinds = p.worker.dispatch('session_kinds', {'session_ids': asked})
     assert sorted(kinds.values()) == ['dm', 'group'] and set(kinds) == set(sessions.values())
     assert group['status'] != 'duplicate' and dm['status'] != 'duplicate'
+
+
+def test_input_before_navigation_is_held_and_projected_at_ready_without_waiting(product):
+    # Projection runs inside Chat.receive's ingress lock: waiting there for navigation deadlocked a start in which
+    # the adapter delivered its spool while initialize was still offering input (2026-10-08).
+    p = product
+    import time
+    p.worker.navigation_ready.clear()
+    started = time.monotonic()
+    p.channel.receive('qq', envelope(group='22220000'))
+    assert time.monotonic() - started < p.config['workflow_timeout_seconds'] / 2, 'receive never waits for navigation'
+    assert p.events == [] and p.worker.controller.pending.qsize() == 1, 'stored and queued, not projected yet'
+    p.worker.dispatch('navigation.ready', {})
+    assert len(p.events) == 1 and p.events[0]['kind'] == 'channel_input'

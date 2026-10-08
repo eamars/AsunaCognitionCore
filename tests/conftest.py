@@ -132,6 +132,17 @@ def pytest_sessionfinish(session,exitstatus):
     config=load()
     for name in sorted(_OWNED):
         drop_database(config,name)
+        shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)
+
+
+@pytest.fixture
+def runtime_work():
+    """Make folders under .runtime/work (the sandbox only confines roots there); all are removed at teardown."""
+    made=[]
+    def make(prefix):
+        path=ROOT/'.runtime/work'/(prefix+'-'+uuid.uuid4().hex);made.append(path);return path
+    yield make
+    for path in made:shutil.rmtree(path,ignore_errors=True)
 
 
 def isolated_database(prefix):
@@ -180,5 +191,6 @@ def store(request):
                 db.client.close();_POOL.append(name)                # reset by the next test; dropped at session end
             else:
                 dispose_test_store(db)
+                shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)
             for derived in getattr(db,'derived_databases',[]):   # replay targets etc.
                 drop_database(config,derived)

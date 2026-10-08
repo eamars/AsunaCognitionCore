@@ -113,8 +113,8 @@ def test_second_host_cannot_own_same_integration(runner):
         IntegrationRunner(profile(), root=runner.root)
 
 
-def test_only_explicit_owner_event_grants_tools(store):
-    work = ROOT/'.runtime/work'/('integration-auth-'+uuid.uuid4().hex); work.mkdir(parents=True)
+def test_only_explicit_owner_event_grants_tools(store, runtime_work):
+    work = runtime_work('integration-auth'); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id': 'dm-a', 'person_id': 'A', 'workspace': str(work)},
                         integration=profile('dm-a', 'A')['integration'])
     lane = FakeLane(store, [delegates('check runner')]*2)
@@ -145,9 +145,9 @@ def test_only_explicit_owner_event_grants_tools(store):
         broker.close()
 
 
-def test_continuation_cannot_inherit_previous_integration_grant(store):
+def test_continuation_cannot_inherit_previous_integration_grant(store, runtime_work):
     from fixture_grant import returned
-    work = ROOT/'.runtime/work'/('integration-revision-'+uuid.uuid4().hex); work.mkdir(parents=True)
+    work = runtime_work('integration-revision'); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
                         integration=profile('dm-a','A')['integration'])
     coordinator=Coordinator(store,FakeLane(store,[delegates('check')]))
@@ -175,9 +175,9 @@ def test_continuation_cannot_inherit_previous_integration_grant(store):
     assert continued['integration_profile']=='owner' and 'integration_start' in continued['allowed_capabilities']
 
 
-def test_import_artifact_is_written_into_the_bound_task_workspace(store):
+def test_import_artifact_is_written_into_the_bound_task_workspace(store, runtime_work):
     """导入工具只跟 owner 授权走，并且只能写这次绑定的工作区（宿主侧真 DB 复测）。"""
-    work = ROOT/'.runtime/work'/('integration-import-'+uuid.uuid4().hex); work.mkdir(parents=True)
+    work = runtime_work('integration-import'); work.mkdir(parents=True)
     store.config.update(task_mode='workspace', chat={'scene_id':'dm-a','person_id':'A','workspace':str(work)},
                         integration=profile('dm-a','A')['integration'])
     lane=FakeLane(store,[delegates('take the report')]*2)

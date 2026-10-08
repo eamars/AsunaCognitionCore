@@ -1,10 +1,9 @@
-import json,time,uuid
+import json,time
 from pathlib import Path
 import pytest
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,FakeTurn
 from asuna.sandbox import Sandbox
-from asuna.config import ROOT
 from asuna.privacy import PrivacyService
 from asuna.state import Denied
 from asuna.audit import verify
@@ -64,8 +63,8 @@ def test_E06_duplicate_result_one_character_feedback(store):
     finally:broker.close()
 
 
-def test_E12_output_cap_and_literal_shell_arguments():
-    work=ROOT/'.runtime/work'/('limits-'+uuid.uuid4().hex);sandbox=Sandbox(work,config={'_host_sandbox':{'available':True}})
+def test_E12_output_cap_and_literal_shell_arguments(runtime_work):
+    work=runtime_work('limits');sandbox=Sandbox(work,config={'_host_sandbox':{'available':True}})
     text='literal; $(touch /tmp/ASUNA_HOST_ESCAPE) `echo nope`'
     result=sandbox.run(['python3','-c','import sys;print(sys.argv[1])',text])
     assert result['stdout'].strip()==text

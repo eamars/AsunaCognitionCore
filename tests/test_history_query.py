@@ -12,11 +12,10 @@
 """
 import json
 import os
-import uuid
 
 import pytest
 
-from asuna.config import ROOT, load
+from asuna.config import load
 from asuna.state import Store, Denied
 from asuna.tasks import TaskService, ToolBroker
 from asuna.history_query import HISTORY_TOOL_NAME, HistoryQueryService, query_history
@@ -140,8 +139,8 @@ class FakeRetrieval:
 
 
 @pytest.fixture
-def broker_env(store):
-    work = ROOT / '.runtime/work' / ('p1b-' + uuid.uuid4().hex)
+def broker_env(store, runtime_work):
+    work = runtime_work('p1b')
     work.mkdir(parents=True)
     store.config.update(task_mode='workspace',
                         chat={'scene_id': SCENE_ID, 'person_id': PERSON, 'workspace': str(work)})

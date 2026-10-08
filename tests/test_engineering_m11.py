@@ -1,5 +1,4 @@
 from pathlib import Path
-import uuid
 import pytest
 from asuna.config import ROOT
 from asuna.coordinator import Coordinator
@@ -55,10 +54,10 @@ def test_E16_old_worker_exception_does_not_poison_replacement(store):
     finally:broker.close()
 
 
-def test_E16_busy_workspace_is_not_claimed(store):
+def test_E16_busy_workspace_is_not_claimed(store,runtime_work):
     service,router=route(store)
     ep=router.receive({'event_id':'work','scene_id':'dm-a','person_id':'A','text':'核实'})
-    work=ROOT/'.runtime/work'/('busy-'+uuid.uuid4().hex);work.mkdir()
+    work=runtime_work('busy');work.mkdir()
     key=sha(str(work.resolve()).casefold().encode())
     with RuntimeLease(ROOT/'.runtime/locks'/('workspace-'+key+'.lock')):
         with pytest.raises(TimeoutError):Executor(service,None,None).run(ep['task_ids'][0],work)

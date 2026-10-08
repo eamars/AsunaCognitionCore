@@ -9,11 +9,10 @@ Unauthorized；库内隔离靠每个用例开头与结束清空本套件写的�
 这里补的是真实 Mongo 那一层：三支时间、游标续页、真实 ToolBroker 调用与取消围栏。
 """
 import os
-import uuid
 
 import pytest
 
-from asuna.config import ROOT, load
+from asuna.config import load
 from conftest import isolated_database, drop_database
 from asuna.state import Store, Denied
 from asuna.tasks import TaskService, ToolBroker
@@ -61,8 +60,8 @@ def make_task(db, capabilities, scope=None, epoch=cases.EPOCH):
 
 
 @pytest.fixture
-def broker_env(store):
-    work = ROOT / '.runtime/work' / ('p1c-' + uuid.uuid4().hex)
+def broker_env(store, runtime_work):
+    work = runtime_work('p1c')
     work.mkdir(parents=True)
     store.config.update(task_mode='workspace',
                         chat={'scene_id': cases.SCENE_ID, 'person_id': cases.A_ID,

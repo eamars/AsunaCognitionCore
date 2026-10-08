@@ -1,6 +1,7 @@
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol';
 import { editSettings } from './settings.js';
 import { workspaceTitle } from './navigation.js';
+import { applyLanguage } from './ui-language.js';
 
 const initializers = [];
 export class AsunaApi extends TypertRemoteService {
@@ -82,6 +83,12 @@ export class AsunaApi extends TypertRemoteService {
     return this.core.worker.call('session_kinds', { session_ids: sessionIds });
   }
 
+  /** The browser's language for the names the program gives (ui-language.js); unsupported means English. */
+  async uiLanguage({ locale } = {}) {
+    if (typeof locale !== 'string' || locale.length > 35) throw new Error('INVALID_LOCALE');
+    return applyLanguage(this.core, locale);
+  }
+
   /** Workspace titles in the viewer's language: DSH stores them as plain text, so the client says which
    * words it shows (client.js). Only workspaces navigation created can be titled. */
   async workspaceTitles(titles) {
@@ -144,7 +151,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'uiLanguage', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

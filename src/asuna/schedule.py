@@ -67,10 +67,21 @@ HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local da
 HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and this long is rebuilt
 # How her reminders are named in DSH's own task page (ADR-012 §8), where the owner sees each one's next run
 # and delivery records. Her own plans are named by what she wrote; her rhythms by what they are.
-RHYTHM_TITLES = {'presence': '心跳 · Heartbeat', 'settlement': '夜间沉淀 · Nightly settlement',
-                 'self_development': '每日自我改进 · Daily self-improvement'}
-# The night tick only asks whether a night stage is due (ADR-021); its name says so, apart from the daily turn.
-NIGHT_TITLE = '夜间自我改进检查 · Night self-improvement check'
+# Her rhythm tasks' names in DSH's task page, in the language of the browser that last opened the Web UI: the Host
+# gives them from the core's locale files (ui-language.js, set_titles). The night tick only asks whether a night stage
+# is due (ADR-021), so it is named apart from the daily turn.
+RHYTHM_TITLES = {'presence': 'Heartbeat', 'settlement': 'Nightly settlement',
+                 'self_development': 'Daily self-improvement', 'self_development_night': 'Night self-improvement check'}
+
+
+RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
+
+
+def set_titles(titles):
+    """The Host's words for her rhythm tasks; keys it does not know are ignored."""
+    for key, value in (titles or {}).items():
+        if key in RHYTHM_TITLES and isinstance(value, str) and value.strip():
+            RHYTHM_TITLES[key] = value.strip()[:TITLE_CHARS]
 TITLE_CHARS = 60
 LEGACY_TITLE = 'Asuna · '
 # An in-place timing change names DSH's own timing kind (its `every` carries every_seconds).
@@ -79,7 +90,7 @@ NATIVE_KIND = {'every_seconds': 'every'}
 
 def plan_title(plan):
     if plan.get('kind') == 'self_development' and plan.get('night'):
-        return NIGHT_TITLE
+        return RHYTHM_TITLES['self_development_night']
     if plan.get('kind') in RHYTHM_TITLES:
         return RHYTHM_TITLES[plan['kind']]
     line = ' '.join(str(plan.get('intent') or '').split())
@@ -897,6 +908,18 @@ class ScheduleService:
                         'scheduled_at': newest['scheduledAt']}, expected=plan['revision'], stream=plan_id)
                 elif schedule_rules.rearms_after_fire(plan['rule']) and not plan.get('native_recurring'):
                     self._rearm(plan_id)
+
+    def retitle(self):
+        """Her rhythm tasks renamed after the Host gave new words (set_titles); her own plans keep their wording."""
+        creates, _, deleted = self._grouped(self._native_events())
+        for plan in self.store.db.plans.find({'status': 'ACTIVE', 'kind': {'$in': list(RHYTHM_KINDS)}}):
+            native = creates.get(plan.get('schedule_id'))
+            if not native or native['id'] in deleted or (native.get('title') or '') == plan_title(plan):
+                continue
+            try:
+                self.lane.schedule('/schedule/update', {'id': native['id'], 'title': plan_title(plan)})
+            except Exception as exc:
+                self.store.audit(plan['_id'], 'schedule.rename_refused', {'error': str(exc)[:300]}, plan['scope_key'])
 
     def deliver(self, payload):
         if not isinstance(payload, dict) or set(payload) != {'session', 'seq', 'id'}:

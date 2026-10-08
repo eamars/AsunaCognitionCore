@@ -311,7 +311,7 @@ def test_her_rhythm_is_named_in_the_task_page_and_her_pace_holds_against_edits_t
     service = scheduler(store)
     plan = service.ensure_presence()
     create = next(payload for path, payload in service.lane.calls if path == '/schedule/create')
-    assert create['title'] == '心跳 · Heartbeat' and create['every_seconds'] == 1800
+    assert create['title'] == 'Heartbeat' and create['every_seconds'] == 1800       # English until a browser reports
     # The owner retimes it to every 10 minutes in DSH's task page; the record is logged as updated.
     record = dict([e['data']['schedule'] for e in service.lane.events if e['data'].get('operation') == 'create'][-1])
     service.lane.events.append({'seq': len(service.lane.events) + 1, 'data': {'operation': 'update',

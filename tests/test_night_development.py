@@ -94,3 +94,30 @@ def test_the_night_tick_is_named_apart_from_the_daily_turn():
     night = plan_title({'kind': 'self_development', 'night': True})
     daily = plan_title({'kind': 'self_development'})
     assert night != daily and 'Night' in night and 'Daily' in daily
+
+
+def test_rhythm_task_names_follow_the_words_the_host_gives_and_only_they_are_renamed():
+    """The Host gives her rhythm tasks' names in the browser's language (ui-language.js); her own plans keep theirs."""
+    import mongomock
+    from asuna.schedule import RHYTHM_TITLES, plan_title, set_titles
+    saved = dict(RHYTHM_TITLES)
+    try:
+        set_titles({'presence': '心跳', 'self_development_night': '夜间自我改进检查', 'unknown': 'x', 'settlement': ''})
+        assert plan_title({'kind': 'presence'}) == '心跳' and 'unknown' not in RHYTHM_TITLES
+        assert plan_title({'kind': 'self_development', 'night': True}) == '夜间自我改进检查'
+        assert plan_title({'kind': 'settlement'}) == saved['settlement'], 'an empty word is ignored'
+        db = mongomock.MongoClient().db
+        db.plans.insert_many([{'_id': 'beat', 'kind': 'presence', 'status': 'ACTIVE', 'schedule_id': 'n1', 'scope_key': 's'},
+                              {'_id': 'mine', 'kind': None, 'status': 'ACTIVE', 'schedule_id': 'n2', 'intent': '喝水',
+                               'scope_key': 's'}])
+        calls = []
+        events = [{'seq': 1, 'data': {'operation': 'create', 'schedule': {'id': 'n1', 'title': 'Heartbeat'}}},
+                  {'seq': 2, 'data': {'operation': 'create', 'schedule': {'id': 'n2', 'title': 'Old wording'}}}]
+        service = ScheduleService.__new__(ScheduleService)
+        service.store = SimpleNamespace(db=db, audit=lambda *a: None)
+        service.lane = SimpleNamespace(schedule=lambda path, payload=None: events if path == '/schedule/events'
+                                       else calls.append((path, payload)) or {})
+        service.retitle()
+        assert calls == [('/schedule/update', {'id': 'n1', 'title': '心跳'})]
+    finally:
+        RHYTHM_TITLES.clear(); RHYTHM_TITLES.update(saved)

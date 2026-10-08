@@ -318,10 +318,12 @@ class BusinessWorker:
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
-                   schedule=True, channels=None, sandbox=None):
+                   schedule=True, channels=None, sandbox=None, ui_titles=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
+        from .schedule import set_titles
+        set_titles(ui_titles)            # her rhythm tasks' names, before the scheduler first reconciles them
         # Channel plugins (e.g. @asuna/napcat-qq) bring their platform's id formats before any route is read.
         channel_kinds.load(channels)
         from .native_settings import runtime_settings
@@ -900,6 +902,14 @@ class BusinessWorker:
             zone = local_time.zone_of(self.app.store, record['scene_id'])
             return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
                     'utc_offset_minutes': offset_minutes(zone['tz'], datetime.now(timezone.utc))}
+        if method == 'ui.titles':
+            # A browser in another language opened the Web UI (ui-language.js): her rhythm tasks follow it.
+            from .schedule import set_titles
+            set_titles(args.get('titles'))
+            scheduler = getattr(self.host, 'schedule', None) if self.host else None
+            if scheduler:
+                scheduler.retitle()
+            return {'retitled': bool(scheduler)}
         if method == 'stage.valid':
             with self.pending_lock:
                 future=self.pending.get(args['token'])

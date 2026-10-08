@@ -24,6 +24,7 @@ import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
+import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -228,9 +229,12 @@ export class CognitionCore {
           [...this.channels.values()].find(channel => channel.integration_directory)),
         native_sessions: nativeSessions,
         deployment: this.config.deployment, secrets: await this.credentialValues(this.config.deployment), admission: this.config.channelAdmission,
-        channels, apply_integrations: !!this.applying, schedule, sandbox: await this.sandboxStatus() });
+        channels, apply_integrations: !!this.applying, schedule, sandbox: await this.sandboxStatus(),
+        // Her rhythm tasks' names in the language last reported by a browser (ui-language.js).
+        ui_titles: this.uiTitles ??= (await languageWords(await savedLanguage(this.ctx.asunaFloor.dataRoot))).titles });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
+      await this.schedules.retitle().catch(error => this.ctx.logger.warn('Asuna: scheduler session not retitled: ' + String(error)));
       // Publish the native controller's own summaries after cold metadata
       // repair, including to clients already connected during worker startup.
       const primary = new Set(status.navigation.entries.map(entry => entry.session_id));

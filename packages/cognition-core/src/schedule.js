@@ -5,6 +5,7 @@ export class NativeSchedules {
   constructor(core) { this.core = core; this.ctx = core.ctx; this.serial = Promise.resolve(); }
 
   async agent(sessionId) {
+    this.sessionId = sessionId;
     const existing = this.ctx.agents.get(sessionId);
     if (existing) return existing;
     const setup = scope => this.ctx.agentPresets.mount(scope, 'asuna-scheduler').then(() => undefined);
@@ -14,8 +15,17 @@ export class NativeSchedules {
       : await this.ctx.agents.create({ sessionId, meta: { cwd: this.ctx.asunaFloor.dataRoot,
         agentPreset: 'asuna-scheduler' }, setup });
     this.core.handles.set(sessionId, handle);
-    if (!saved) await this.ctx.sessionController.rename({ sessionId, title: 'Asuna schedules' });
+    if (!saved) await this.ctx.sessionController.rename({ sessionId, title: this.core.uiTitles?.schedules ?? 'Asuna schedules' });
     return handle.agent;
+  }
+
+  /** The scheduler session's title in the language of the names the program gives (ui-language.js). */
+  async retitle() {
+    const title = this.core.uiTitles?.schedules;
+    if (!this.sessionId || !title) return;
+    const agent = await this.agent(this.sessionId);
+    if (agent.session.snapshotEvents().findLast(event => event.type === 'session/title')?.data?.title !== title)
+      await this.ctx.sessionController.rename({ sessionId: this.sessionId, title });
   }
 
   exclusive(work) {

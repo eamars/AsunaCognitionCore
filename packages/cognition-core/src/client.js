@@ -1088,9 +1088,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     let titledIn;
     const titleWorkspaces = () => {
       const active = ctx.locale.getSnapshot().active;
-      if (active === titledIn) return;
+      if (!active || active === titledIn) return;       // empty while the page is still resolving its language
       titledIn = active;
       rpc('workspaceTitles', { titles: { Local: t('workspace.local') } }).catch(() => { titledIn = undefined; });
+      // The names the program gives in the task page and the scheduler session follow this language too.
+      rpc('uiLanguage', { locale: active }).catch(() => { titledIn = undefined; });
     };
     ctx.effect(() => ctx.locale.subscribe(titleWorkspaces)); titleWorkspaces();
     // A small mark before each of her platform conversations in the sidebar (DSH's leading row slot).

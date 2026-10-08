@@ -56,6 +56,8 @@ The owner runs a SearXNG instance on the LAN and may add Exa later. Measured on 
 - `ctx.web` has no lookup by id, so `registered()` reads the pinned `dsh-web`'s provider map; a test guards that.
 - `tools/setup_native_profile.py` pins the `web` row to `asuna-search`, restating `fetchProvider: http` because a
   profile patch replaces the whole row config.
+- `native_settings.runtime_settings` drops `search` before resolving credentials: the worker never reads it, and
+  an Exa reference without a stored key would otherwise stop the worker (`CREDENTIAL_NOT_CONFIGURED`).
 - The cooldown lives in the Host process: a restart forgets it, at most one early query.
 - Tests: `packages/cognition-core/test/search.test.js`, `tests/test_search_profile.py`. Current reference:
   [RUN_ASUNA.md](../../../RUN_ASUNA.md#web-search).

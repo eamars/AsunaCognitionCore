@@ -62,7 +62,8 @@ def resolve_secrets(value, secrets):
 
 
 def runtime_settings(deployment, secrets, models, admission='explicit', *, create_dirs=False, persona=None):
-    value = resolve_secrets(deepcopy(deployment), secrets)
+    # `search` is the Host's web search provider's (search.js): its credential may be unset, and the worker never reads it.
+    value = resolve_secrets(deepcopy({key: item for key, item in deployment.items() if key != 'search'}), secrets)
     value.setdefault('chat', {})          # every local-chat key has a default below
     for key in ('chat', 'embedding'):
         if not isinstance(value.get(key), dict):

@@ -210,7 +210,7 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
 | Backend | Needs | Behaviour |
 |---|---|---|
 | `searxng` | `url` of the instance's `/search` with `json` in its `search.formats` | At most one query per `cooldown_seconds` (default 30); the other queries of a call go on. After a failure, or an empty answer in which every asked engine was blocked, it rests for `rest_minutes` (default 15). `engines` lists the engines to ask (empty: the instance's defaults), including ones disabled on the instance. |
-| `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`). |
+| `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`); passed over while the reference has no stored value. The worker never reads `search`, so an unset reference here does not stop it. |
 | any other id | a provider registered on DSH's web service | `deepseek-official` is DSH's DeepSeek search, keyed by the Models page's `DEEPSEEK_API_KEY`; each search is a model request. |
 
 Without a `search` section the order is `searxng`, `exa`, `deepseek-official`, and the first two are skipped as not configured. When no backend answers with sources, an empty answer is the result; when none answers at all, the tool returns an error naming each backend's state. Each search writes an `asuna/web-search` event (the query, the backend that answered, and why earlier ones were passed over) to the calling conversation's log; the model does not see it.

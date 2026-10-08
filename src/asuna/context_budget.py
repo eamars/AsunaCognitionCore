@@ -24,6 +24,7 @@ REVIEW_PER_NIGHT = 3                # notes listed in one settlement
 STICKER_SHELF = 60                  # stickers she keeps (ADR-016); her turn lists their names only
 STICKER_REVIEW = 6                  # stickers listed for her weekly look at the shelf
 MEMBER_LINES = 80                   # group members a turn names (group_members.py); find_member reaches the rest
+CARRIED_CHARS = 12000               # the summary a new session carries from one that no longer fit (ADR-028)
 
 # How full a note is, in words (share of its limit).
 FULLNESS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))
@@ -178,6 +179,19 @@ def _longest_text(node):
             elif isinstance(value, (dict, list)):
                 stack.append(value)
     return best
+
+
+def carried_block(summary):
+    """What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028)."""
+    text = (summary or '').strip()
+    if len(text) > CARRIED_CHARS:
+        text = text[:CARRIED_CHARS] + CUT_NOTE % (len(text) - CARRIED_CHARS)
+    if not text:
+        return {'note': '之前那段会话太长，模型装不下了，程序换了这个新会话接着聊。旧会话还没压缩过，没有总结可带；'
+                        '最近的消息在 delivered_history 里，更早的事要看就 recall。'}
+    return {'summary': text,
+            'note': '之前那段会话太长，模型装不下了，程序换了这个新会话接着聊。summary 是旧会话最后一次压缩时留下的总结；'
+                    '那之后的细节不在这里，最近的消息在 delivered_history 里，更早的事要看就 recall。'}
 
 
 # ---- nightly tidying ----------------------------------------------------------

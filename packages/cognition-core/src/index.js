@@ -23,6 +23,7 @@ import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
+import { carrySession, lastSummary, overflowed } from './carry.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -500,6 +501,7 @@ export class CognitionCore {
           : event.method === 'sandbox' ? await this.confine(event.args)
           : event.method === 'credentials' ? await this.credentialRecords(event.args)
           : event.method === 'render_svg' ? await renderSvg(event.args)
+          : event.method === 'carry_session' ? await carrySession(this, event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its
@@ -804,7 +806,12 @@ export class CognitionCore {
       const state = this.state(agent.session.id);
       const stage = state.current; state.current = null; state.admitted = null; state.claimed = [];
       state.waiter?.reject(error); state.waiter = null;
-      if (stage) this.worker?.call('result', { token: stage.token, error: String(error) }).catch(() => {});
+      // Her conversation no longer fits even after DSH's overflow compaction: the worker continues it in a new
+      // session carrying this one's last summary (ADR-028).
+      const carry = lane === 'character' && overflowed(error)
+        ? { summary: lastSummary(agent.session.snapshotEvents()) } : undefined;
+      if (stage) this.worker?.call('result', { token: stage.token, error: String(error), ...(carry ? { carry } : {}) })
+        .catch(() => {});
     });
     scope.on('agent/status', ({ agent, status }) => {
       // The thread's entries that arrived during her turn are appended once she is idle (collab.js).

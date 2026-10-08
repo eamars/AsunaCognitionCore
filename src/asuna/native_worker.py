@@ -43,6 +43,14 @@ def prune_host_reports():
         shutil.rmtree(old, ignore_errors=True)
 
 
+class ContextOverflow(RuntimeError):
+    """A stage of her conversation was refused because the session no longer fits the model's window, after DSH's own
+    overflow compaction (ADR-028). `carry` is what the plugin read from the session: its last summary."""
+    def __init__(self, message, carry, session_id):
+        super().__init__(message)
+        self.carry, self.session_id = carry, session_id
+
+
 class NativeLane:
     composes_context = True     # the plugin composes a role notice from structured context
     def __init__(self, worker, config, store, evidence, lane='character', *args):
@@ -66,6 +74,16 @@ class NativeLane:
     def generate(self, binding, operation, phase, text, system, tools=None, handler=None, **kwargs):
         """One stage of a native turn. A character turn exposes `tools`: each call she makes reaches
         `handler` on this thread (role_tools.py) while the turn waits for its result."""
+        try:
+            return self._generate(binding, operation, phase, text, system, tools, handler, **kwargs)
+        except ContextOverflow as exc:
+            successor = self.worker.carry_session(exc.session_id, exc.carry) if self.lane == 'character' else None
+            if not successor:
+                raise
+            from .coordinator import SessionCarried
+            raise SessionCarried(str(exc), successor) from exc
+
+    def _generate(self, binding, operation, phase, text, system, tools, handler, **kwargs):
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
             if prior and prior.get('native_host'):
@@ -110,8 +128,15 @@ class NativeLane:
             if not role_id:
                 raise ValueError('NATIVE_ROLE_SESSION_REQUIRED')
             role_id = self.worker.continued_session(role_id)
+            context = ep.get('character_context')
+            if role_id != ep['native_session_id']:
+                # A conversation that continued in another session (ADR-028) keeps that session's own context.
+                context = (self.store.db.sessions.find_one({'_id': role_id}) or {}).get('character_context', context)
+            parent_id = role_id
             if self.lane == 'executor':
                 native_id = self.worker.action_session_id(binding, role_id, ep, task)
+                # A task begun before its conversation continued elsewhere keeps the parent it was started under.
+                parent_id = (self.store.db.sessions.find_one({'_id': native_id}) or {}).get('parent_session_id') or role_id
             elif self.lane == 'summary':
                 native_id = 'asuna-summary-' + sha((binding + ':' + base).encode())[:32]
             elif self.lane == 'appraiser':
@@ -136,10 +161,10 @@ class NativeLane:
             record = self.worker.bind_session(native_id, {
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
                 'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
-                'character_context': ep.get('character_context'),
+                'character_context': context,
                 'persona': ep['persona'], 'cwd': cwd,
-                'role_session_id': role_id, 'task_id': task['_id'] if task else None,
-                'parent_session_id': role_id if self.lane != 'character' else None,
+                'role_session_id': parent_id, 'task_id': task['_id'] if task else None,
+                'parent_session_id': parent_id if self.lane != 'character' else None,
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
@@ -147,6 +172,14 @@ class NativeLane:
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'],
                                                                               self.store.db)],
             })
+            carried = record.get('carry') if self.lane == 'character' and 'context' in kwargs else None
+            if carried and not carried.get('delivered'):
+                # The first notice in a session that replaced one that no longer fit (ADR-028), once.
+                from .context_budget import carried_block
+                kwargs = {**kwargs, 'context': {'carried_from_program': carried_block(carried.get('summary')),
+                                                **kwargs['context']}}
+            else:
+                carried = None
             scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
@@ -195,6 +228,10 @@ class NativeLane:
                 self.store.put('lane_receipts', {
                     '_id': operation, 'native_host': True, 'native_session_id': native_id,
                     'scope_key': ep['scope_key'], 'result': vars(result)}, stream=operation)
+                if carried:
+                    row = self.store.db.sessions.find_one({'_id': native_id})
+                    self.store.put('sessions', {**row, 'carry': {**row['carry'], 'delivered': operation}},
+                                   expected=row['revision'], stream='native-binding:' + native_id)
                 return result
             finally:
                 with self.worker.pending_lock:
@@ -260,6 +297,7 @@ class BusinessWorker:
         self.host = None
         self.host_pending = {}
         self.stopping = threading.Event()
+        self.carry_lock = threading.Lock()
 
     def host_call(self, method, args):
         request_id = uuid.uuid4().hex
@@ -448,15 +486,71 @@ class BusinessWorker:
         return 'asuna-role-' + sha(key.encode())[:32]
 
     def continued_session(self, session_id):
-        record = self.app.store.db.sessions.find_one({'_id': session_id}) or {}
-        return record.get('successor_id', session_id)
+        """The session a conversation continues in now: its successors followed to the last one."""
+        seen = {session_id}
+        while True:
+            successor = (self.app.store.db.sessions.find_one({'_id': session_id}, {'successor_id': 1}) or {}).get('successor_id')
+            if not successor or successor in seen:
+                return session_id
+            seen.add(successor)
+            session_id = successor
+
+    def earlier_sessions(self, session_id):
+        """This session and every session it continued from (their successors lead to it)."""
+        chain, frontier = [session_id], [session_id]
+        while frontier:
+            rows = self.app.store.db.sessions.find({'successor_id': {'$in': frontier}}, {'_id': 1})
+            frontier = [row['_id'] for row in rows if row['_id'] not in chain]
+            chain += frontier
+        return chain
+
+    def carry_session(self, session_id, carry):
+        """Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that
+        carries the old one's last summary, and the old binding names it as successor. The Host prepares the new
+        session and archives the old one. Returns the new session id, or None when this session is not a main
+        conversation or is itself a carried session whose first notice never got through (no loop)."""
+        store = self.app.store
+        with self.carry_lock:
+            old = store.db.sessions.find_one({'_id': session_id, 'native_host': True})
+            if not old or old.get('lane') != 'character':
+                return None
+            if old.get('successor_id'):
+                return self.continued_session(session_id)
+            if not old.get('main_conversation') or (old.get('carry') and not old['carry'].get('delivered')):
+                return None
+            scene = store.authorize(old['scene_id'], old['person_id'])
+            context = 'carried-' + uuid.uuid4().hex[:16]
+            # $set, not a whole-document write: ingress increments the scene's sequence concurrently.
+            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'character_context': context}})
+            successor = self.role_session_id({'scene_id': scene['_id'], 'persona': old['persona'],
+                                              'policy_epoch': scene['policy_epoch'], 'character_context': context})
+            summary = str((carry or {}).get('summary') or '').strip()
+            record = self.bind_session(successor, {
+                **{key: old[key] for key in ('lane', 'scene_id', 'person_id', 'scope_key', 'persona', 'cwd', 'native_title')},
+                'policy_epoch': scene['policy_epoch'], 'character_context': context, 'role_session_id': successor,
+                'main_conversation': True, 'retired': False, 'navigation_version': 1,
+                'previous_native_title': None, 'source_session_id': None,
+                'carry': {'from_session_id': session_id, 'summary': summary, 'delivered': None}})
+            # The old binding keeps an explicit context: a row without one would match any context at navigation.
+            store.put('sessions', {**old, 'character_context': old.get('character_context'), 'main_conversation': False,
+                                   'retired': True, 'successor_id': successor},
+                      expected=old['revision'], stream='native-binding:' + session_id)
+            store.audit(session_id, 'native.context.carried', {
+                'from_session_id': session_id, 'successor_id': successor, 'scene_id': scene['_id'],
+                'summary_chars': len(summary)}, scene['scope_key'])
+            platform = channel_kinds.of(scene['_id'])
+            workspace = platform.TITLE if platform else 'Local'
+            self.host_call('carry_session', {'session_id': session_id, 'plan': {
+                'first': False, 'archive_ids': [], 'workspaces': {workspace: record['cwd']},
+                'entries': [{'session_id': successor, 'workspace': workspace, 'binding': record}]}})
+            return successor
 
     def action_session_id(self, binding, role_id, ep, task):
         """One native context per authorized execution binding, including old logs."""
         query = {
             'native_host': True, 'lane': 'executor',
             'broker_session': 's-' + sha(binding.encode())[:40],
-            'parent_session_id': role_id, 'scene_id': ep['scene_id'],
+            'parent_session_id': {'$in': self.earlier_sessions(role_id)}, 'scene_id': ep['scene_id'],
             'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
             'person_id': ep['person_id'], 'persona': ep['persona'],
         }
@@ -791,7 +885,9 @@ class BusinessWorker:
                 if not future:
                     raise ValueError('NATIVE_OPERATION_NOT_WAITING')
                 if not future.done():
-                    if args.get('error'):
+                    if args.get('error') and args.get('carry') is not None:
+                        future.set_exception(ContextOverflow(args['error'], args['carry'], future.asuna_session_id))
+                    elif args.get('error'):
                         future.set_exception(RuntimeError(args['error']))
                     else:
                         future.set_result(args['result'])

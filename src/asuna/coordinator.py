@@ -37,6 +37,13 @@ class ProtocolFailure(RuntimeError):
     pass
 
 
+class SessionCarried(RuntimeError):
+    """Her conversation no longer fit the model's window and continues in a new session (ADR-028)."""
+    def __init__(self, message, successor):
+        super().__init__(message)
+        self.successor=successor
+
+
 # Every state a turn can be resumed from after a restart (chat.py, tasks.py, recover()).
 RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
@@ -180,7 +187,14 @@ class Coordinator:
     def _turn(self, ep):
         """Run (or resume) the episode's native turn until she speaks, stays silent or answers."""
         try:
-            return self._run_turn(ep)
+            try:
+                return self._run_turn(ep)
+            except SessionCarried as exc:
+                # ADR-028: the turn runs again, once, in the session that replaced the one that no longer fit.
+                self.store.audit(ep['_id'],'turn.carried',{'successor':exc.successor},ep['scope_key'])
+                ep=self.store.db.episodes.find_one({'_id':ep['_id']})
+                ep=self._update(ep,resume_diagnostic='旧会话太长，模型装不下了，这一回合换到新会话重新开始')
+                return self._run_turn(ep)
         finally:
             # The native turn waits after each stage for another one (a repair note); tell it there is none.
             done=getattr(self.character,'turn_done',None)

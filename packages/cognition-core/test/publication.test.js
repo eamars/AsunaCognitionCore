@@ -7,9 +7,10 @@ import LocalSpillStore from '@deepseek-ai/dsh-spill-local';
 import { PublicationFloor } from '../src/floor.js';
 import { readSpill } from '../src/spill.js';
 
-test('actual npm artifact freezes a bounded candidate; edits do not change active resources', async () => {
+test('actual npm artifact freezes a bounded candidate; edits do not change active resources', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
   await fs.writeFile(path.join(source, 'README.md'), 'Before publication');
@@ -28,12 +29,12 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
   await assert.rejects(floor.call('development_write', { path: 'credentials.json', text: 'denied' }), /PATH_DENIED/);
   assert.match((await floor.call('development_read', { path: 'src/floor.js' })).text, /Stable floor/);
   await assert.rejects(floor.call('development_write', { path: 'src/floor.js', text: 'denied', overwrite: true }), /PATH_DENIED/);
-  console.log('Publication artifact evidence:', result.artifact);
 });
 
-test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async () => {
+test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/stale-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module' }));
   for (const name of ['a.md', 'b.md', 'c.md']) await fs.writeFile(path.join(source, name), 'v1 ' + name);
@@ -52,9 +53,10 @@ test('ADR-010 D9: a file she changed whose source moved after her baseline is ma
     /EFFECTIVE_PROJECT_CHANGED: a\.md/);
 });
 
-test('native spilled output stays readable only by its own action, in bounded pages', async () => {
+test('native spilled output stays readable only by its own action, in bounded pages', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const root = await fs.mkdtemp(path.resolve('.runtime/adr008/spill-probe-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
   const ctx = new Context(); const store = new LocalSpillStore(ctx, { root, cleanupPeriodDays: 0 });
   try {
     const value = await store.saveText({ owner: { sessionId: 'action-one' }, source: { kind: 'tool', toolName: 'read', callId: 'one', label: 'result' }, suggestedName: 'result', content: 'abcdefghijklmnop' });
@@ -130,9 +132,10 @@ test('a refused development call says what was wrong, with the values, and what 
   await assert.rejects(floor.call('development_run', { argv: Array(41).fill('a') }), /DEVELOPMENT_ARGV_INVALID: argv 有 41 项，最多 40 项/);
 });
 
-test('ADR-021 D4: an unattended turn does not publish onto a change still waiting for a Host restart', async () => {
+test('ADR-021 D4: an unattended turn does not publish onto a change still waiting for a Host restart', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-wait-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(source);
   await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['src'], type: 'module' }));
   await fs.mkdir(path.join(source, 'src'));

@@ -1,7 +1,8 @@
 // Executable native-timer probe: actual DSH scheduler, loop, JSON storage and
 // JSONL sessions. No model request, Mongo connection, channel or message sink.
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
 import LlmRuntime from '@deepseek-ai/dsh-llm';
@@ -20,7 +21,7 @@ import * as StorageDomain from '@deepseek-ai/dsh-storage-domain';
 import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { CognitionCore } from '../packages/cognition-core/src/index.js';
 
-const root = await mkdtemp(path.resolve('.runtime/adr008/schedule-probe-'));
+const root = await mkdtemp(path.join(os.tmpdir(), 'asuna-schedule-probe-'));
 const ctx = new Context();
 new LlmRuntime(ctx); new SessionStore(ctx); new SessionProjectionRegistry(ctx);
 new Persistence(ctx, { root: path.join(root, 'sessions') });
@@ -35,6 +36,7 @@ await ctx.plugin(StorageDomain, { backend: 'json' });
 ctx.provide('sessionController', {
   resolveAgent: async id => ({ agent: ctx.agents.get(id) }), rename: async () => {},
 });
+ctx.provide('asunaFloor', { dataRoot: root });
 await ctx.plugin(ScheduleService, {});
 const core = new CognitionCore(ctx, { workspace: root });
 ctx.provide('asuna', core);
@@ -67,7 +69,7 @@ try {
   assert.equal((await core.schedules.refresh(resumed)).filter(e => e.data.operation === 'dispatch').length, 1);
   assert.equal(resumed.session.snapshotEvents().filter(e => e.type === 'asuna/schedule').every(e => e.ignorable), true);
   console.log(JSON.stringify({ result: 'passed', native_timer: created.id,
-    actual_native_delivery: true, model_requests: 0, durable_evidence: root }));
+    actual_native_delivery: true, model_requests: 0 }));
 } catch (error) {
   console.error(JSON.stringify({ catalog: await ctx.schedule.catalog(),
     events: ctx.agents.get('native-scheduler-probe')?.session.snapshotEvents() }, null, 2));
@@ -76,4 +78,5 @@ try {
   clearTimeout(timer);
   for (const handle of core.handles.values()) await handle.dispose();
   await ctx.fiber.dispose();
+  await rm(root, { recursive: true, force: true });
 }

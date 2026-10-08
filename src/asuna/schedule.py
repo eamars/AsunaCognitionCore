@@ -865,7 +865,10 @@ class ScheduleService:
             plan = self.store.db.plans.find_one({'_id': plan_id})
             if not plan or plan['status'] in ('CANCELLED', 'SUSPENDED'):
                 continue
-            if (native.get('title') or '').startswith(LEGACY_TITLE) and native['id'] == plan.get('schedule_id') \
+            if plan['status'] == 'FIRED' and native['id'] in dispatched and native['id'] not in deleted:
+                self._remove_fired(plan_id, native['id'])
+                continue
+            if (native.get('title') or '') != plan_title(plan) and native['id'] == plan.get('schedule_id') \
                     and native['id'] not in deleted and plan['status'] == 'ACTIVE':
                 try:                          # the task page names it by what it is (ADR-012 §8)
                     named = self.lane.schedule('/schedule/update', {'id': native['id'], 'title': plan_title(plan)})
@@ -915,6 +918,17 @@ class ScheduleService:
         if action and action.get('rearm'):
             # 锁外挂下一次：不在原生调用上持锁。floor=刚到期那一次，回调早到也不原地重挂。
             self._rearm(action['plan_id'], action.get('fired_at'))
+        if action and action.get('fired'):
+            self._remove_fired(action['plan_id'], schedule_id)
+
+    def _remove_fired(self, plan_id, schedule_id):
+        """A one-off that has fired leaves DSH's task page, as a cancelled one does; the plan keeps its record."""
+        try:
+            self.lane.schedule('/schedule/delete', {'id': schedule_id})
+        except Exception as exc:
+            plan = self.store.db.plans.find_one({'_id': plan_id}, {'scope_key': 1}) or {}
+            self.store.audit(plan_id, 'schedule.remove_refused', {'native_schedule_id': schedule_id,
+                'error': str(exc)[:300]}, plan.get('scope_key'))
 
     def _deliver_locked(self, seq, schedule_id, creates):
         native = creates.get(schedule_id)
@@ -996,4 +1010,4 @@ class ScheduleService:
         self.store.audit(plan_id, 'schedule.dispatched', {'occurrence': occurrence,
             'native_schedule_id': schedule_id, 'outcome': outcome, 'rearm': repeating}, plan['scope_key'])
         return {'plan_id': plan_id, 'kind': plan.get('kind'), 'rearm': repeating and status == 'ACTIVE',
-            'fired_at': native.get('scheduledAt')}
+            'fired_at': native.get('scheduledAt'), 'fired': status == 'FIRED'}

@@ -633,6 +633,38 @@ def fired_one_shot_is_fired_and_not_rearmed(env):
 
 
 @case
+def a_fired_one_shot_leaves_the_task_page(env):
+    """A one-off that has fired is removed from DSH's task page, as a cancelled one is; the plan keeps its record.
+    Regression: every fired reminder stayed there as Inactive (34 after four days). A start removes leftovers."""
+    service, store, lane = env['service'], env['store'], env['lane']
+    plan = service.create(EP, ONCE)
+    fire(env, plan['schedule_id'])
+    removed = [payload['id'] for path, payload in lane.calls if path == '/schedule/delete']
+    left = service.create(EP, {**ONCE, 'intent': '另一件'}, plan_id='plan-left')
+    lane.fire(left['schedule_id'])                  # fired while the Host was down: delivered at the next start
+    current = store.db.plans.find_one({'_id': 'plan-left'})
+    store.put('plans', {**current, 'status': 'FIRED'}, expected=current['revision'], stream='plan-left')
+    service.reconcile()
+    service.reconcile()
+    later = [payload['id'] for path, payload in lane.calls if path == '/schedule/delete']
+    after = store.db.plans.find_one({'_id': plan['_id']})
+    return (removed == [plan['schedule_id']] and after['status'] == 'FIRED' and after['schedule_id'] == plan['schedule_id']
+            and later == [plan['schedule_id'], left['schedule_id']]), {'removed': removed, 'later': later}
+
+
+@case
+def a_reminder_named_by_old_wording_is_renamed_at_start(env):
+    service, store, lane = env['service'], env['store'], env['lane']
+    plan = service.create(EP, DAILY)
+    current = store.db.plans.find_one({'_id': plan['_id']})
+    store.put('plans', {**current, 'intent': '新的说法'}, expected=current['revision'], stream=plan['_id'])
+    service.reconcile()
+    service.reconcile()
+    renames = [payload for path, payload in lane.calls if path == '/schedule/update']
+    return [payload.get('title') for payload in renames] == ['新的说法'], renames
+
+
+@case
 def fired_interval_leaves_repeat_to_native(env):
     service, store, lane = env['service'], env['store'], env['lane']
     plan = service.create(EP, INTERVAL)

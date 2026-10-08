@@ -39,7 +39,7 @@ def prepare_resources(destination: Path) -> list:
     return mappings
 
 
-WORKER_DEPENDENCIES = ['httpx', 'pymongo', 'jsonschema', 'pydantic', 'PyYAML', 'tzdata', 'websockets']
+WORKER_DEPENDENCIES = ['httpx', 'pymongo', 'jsonschema', 'pydantic', 'PyYAML', 'tzdata', 'websockets', 'pillow']
 
 
 def pinned_requirements(roots):

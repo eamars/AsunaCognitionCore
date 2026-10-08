@@ -502,7 +502,8 @@ def turn_pictures(store, ep):
             continue
         if isinstance(payload, dict) and isinstance(payload.get('image'), dict):
             pulled.append((entry['ref'], payload))
-            shown.append({'ref': entry['ref'], 'line': line, **({'sticker': '表情包'} if entry.get('sticker') else {})})
+            shown.append({'ref': entry['ref'], 'line': line, **({'sticker': '表情包'} if entry.get('sticker') else {}),
+                          **({'animated': payload['animated']} if payload.get('animated') else {})})
     if not shown:
         return [], None
     return pulled, {'items': shown, 'note': PICTURES_NOTE}

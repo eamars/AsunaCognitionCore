@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from . import channel_kinds
+from . import animated, channel_kinds
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -469,6 +469,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
         blob = None
     digest = sha(data)
+    shown, moving = animated.seen(data, media_type)
     if blob is None:
         # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
         blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
@@ -481,7 +482,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
                'sticker': entry.get('sticker') or None, 'media_type': media_type, 'bytes': len(data), 'sha256': digest, 'pulled_via': via,
                'source': source, 'blob_artifact': (blob or {}).get('artifact_id'),
                'blob_sha256': (blob or {}).get('sha256'),
-               'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
+               'image': shown, **({'animated': moving} if moving else {}),
                'visual': 'awaiting_attachment',
                'note': '图片字节已按本次调用真实拉取；此前正文里的占位符只说明这里出现过一张图，不代表内容已被读过。'}
     if payload['linked_scene']:
@@ -507,10 +508,11 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     media_type = sniff_media_type(data)
     if media_type is None:
         raise _not_a_picture()
+    shown, moving = animated.seen(data, media_type)
     return {'ref': artifact_id, 'artifact_id': artifact_id, 'scene_id': task['scene_id'],
             'media_type': media_type, 'bytes': len(data), 'sha256': sha(data), 'pulled_via': 'artifact',
             'produced': produced(row),
-            'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
+            'image': shown, **({'animated': moving} if moving else {}),
             'visual': 'awaiting_attachment',
             'note': '这是存好的那张图本身；看完再判断它是不是要的样子。'}
 

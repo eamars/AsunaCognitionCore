@@ -6,7 +6,7 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
 
 ## What the stack does
 
-- **`asuna`** runs the toolchain image (`Dockerfile`: Node 24, uv, git, a compiler). The **checkout lives on a
+- **`asuna`** runs the toolchain image (`Dockerfile`: Node 24, uv, git, a compiler, and DejaVu and Noto CJK fonts for text in rendered SVGs). The **checkout lives on a
   volume** (`/srv/asuna`), so her publications and the data folder `.runtime` persist across image rebuilds. On
   start, `entrypoint.sh`:
   1. clones the repository into the empty volume (once);

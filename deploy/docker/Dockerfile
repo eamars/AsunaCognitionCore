@@ -5,9 +5,11 @@ FROM node:24-trixie-slim
 
 # A compiler for the native modules npm builds (node-pty), git for the checkout and the DSH release the rendering
 # extension is built from, python3 for node-gyp, tzdata so TZ gives the host's local time (default quiet hours
-# follow it, as on any install).
+# follow it, as on any install), and fonts for text in a rendered SVG (render_svg reads the system fonts; Noto CJK
+# for Chinese and Japanese, DejaVu for the rest).
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends bash build-essential ca-certificates curl git procps python3 tzdata \
+    fonts-dejavu-core fonts-noto-cjk \
  && rm -rf /var/lib/apt/lists/*
 
 # uv builds the checkout's Python environment and the worker's (the same version the checkout is tested with).

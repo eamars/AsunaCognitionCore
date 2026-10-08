@@ -22,6 +22,7 @@ import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
+import { renderSvg } from './svg.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -498,6 +499,7 @@ export class CognitionCore {
           : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
           : event.method === 'sandbox' ? await this.confine(event.args)
           : event.method === 'credentials' ? await this.credentialRecords(event.args)
+          : event.method === 'render_svg' ? await renderSvg(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its

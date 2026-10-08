@@ -481,6 +481,9 @@ class Coordinator:
         if integration:capabilities+=INTEGRATION_TOOLS
         from .image_generation import available as image_available, GENERATE_IMAGE_TOOL
         if image_available(self.store.config):capabilities.append(GENERATE_IMAGE_TOOL)
+        from . import svg_render
+        # Rendering runs none of her code and reads only the task folder: every task gets it (owner 2026-10-08).
+        if svg_render.available():capabilities.append(svg_render.RENDER_SVG_TOOL)
         from . import sandbox_backend, visibility
         # Running commands is for the owner's own scenes (owner 2026-10-06): the Host sandbox confines writes only,
         # so in anyone else's scene the boundary is that the tool is not given.

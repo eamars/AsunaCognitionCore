@@ -318,7 +318,8 @@ class ToolBroker:
     @property
     def specs(self):
         from .image_generation import GENERATE_IMAGE_TOOL
-        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        from .svg_render import RENDER_SVG_TOOL
+        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
 
     def bind(self,session,task,workspace):
         from .grants import workspace_grant
@@ -367,7 +368,7 @@ class ToolBroker:
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool=='generate_image' or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(DEVELOPMENT_GRANT)
@@ -429,6 +430,11 @@ class ToolBroker:
                 from .image_generation import generate
                 result=generate(args,runner=self.integration,workspace=sandbox.task_dir,
                                 protected=sandbox.protected_paths,register=outbound_media.import_register(self.store,task))
+                with self.service.lock:self.service.valid(task)
+            elif tool=='render_svg':
+                # The Host renders; this side reads the SVG, drops links to outside pictures and keeps the PNG as hers.
+                from . import svg_render
+                result=svg_render.render(args,workspace=sandbox.task_dir,register=outbound_media.import_register(self.store,task))
                 with self.service.lock:self.service.valid(task)
             elif integration_gated(tool):
                 # 导入产物：端点白名单、工作区边界、默认不覆盖与大小上限都在
@@ -529,6 +535,8 @@ class Executor:
         text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
+        if 'render_svg' in task.get('allowed_capabilities',()):
+            text+='\n要把 SVG 变成图（截图、预览、发出去）：write_file 写好 .svg，再用 render_svg；PNG 落进 /task/images 并登记成她自己的图，用 read_image 传 artifact_id 亲眼看过再交。SVG 链接的外部图片不会加载，要用就内嵌成 data: URI。'
         if 'generate_image' in task.get('allowed_capabilities',()):
             text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。先用 workflows=true 看有哪些路线、各要什么样的提示词；画完用 read_image 传 artifact_id 亲眼看，不对就改了再画。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
         if task.get('development_grant'):

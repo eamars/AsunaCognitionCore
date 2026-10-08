@@ -320,6 +320,8 @@ class BusinessWorker:
         # Her credentials live in DSH's credential store; the Host reads and writes them on request (credentials.py).
         from . import credentials
         credentials.attach(lambda args: self.host_call('credentials', args))
+        from . import svg_render
+        svg_render.attach(lambda args: self.host_call('render_svg', args))
         config['_native_apply_integrations'] = apply_integrations
         # The installed adapter release belongs to the channel plugin that ships it.
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]

@@ -293,6 +293,14 @@ TOOLS = {
                        'op': _s('开还是关', required=True, enum=['open', 'close']),
                        'close_for': _s('op=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
     },
+    'message_developer': {
+        'description': ('给开发代理留话：改你程序的那位（不是主人）。level=wake 是要他尽快来看：卡住了、出了得他动手的问题'
+                        '（他开着的时候大约一小时内会看到，不开着就等他下次来）；level=note 是不急的，等他下次来看。'
+                        '他在本机聊天里回你。要拍板的事（权限、花钱、开不开哪条道）找主人，不找他。'
+                        '800 字以内；24 小时内 wake 最多 3 条、note 最多 20 条。'),
+        'parameters': {'level': _s('wake（要他尽快来）或 note（等他下次来看）', required=True, enum=['wake', 'note']),
+                       'text': _s('留言：什么事、卡在哪、要他做什么，800 字以内', required=True)},
+    },
     'note_idea': {
         'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
                         '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
@@ -397,7 +405,7 @@ def exposed(store, ep):
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
-        names += ['update_self', 'set_policy', 'pin_memory']
+        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -1139,6 +1147,17 @@ class RoleTools:
                         source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
                                 'turn': turn_kind(ep)})
         return {'noted': row['_id'], 'note': '记下了。它会在你的自我改进时间里再拿出来，现在不用去改。'}, False
+
+    def tool_message_developer(self, ep, call_id, args):
+        from . import developer_inbox
+        level = args.get('level')
+        if level not in developer_inbox.LIMITS:
+            raise Refused('level 是 wake 或 note%s。' % _given(args, 'level'))
+        text = self._text(args, 'text', developer_inbox.TEXT_CHARS)
+        row = developer_inbox.leave(self.store, ep['persona'], level, text, key=[ep['_id'], call_id],
+                                    source={'scene_id': ep['scene_id'], 'episode_id': ep['_id'], 'turn': turn_kind(ep)})
+        return {'left': row['_id'], 'note': ('留好了。他开着的时候大约一小时内会看到，回话在本机聊天里；不开着就等他下次来。'
+                                            if level == developer_inbox.WAKE else '留好了，他下次来会看到。')}, False
 
     def tool_read_ideas(self, ep, call_id, args):
         from . import schedule_rules

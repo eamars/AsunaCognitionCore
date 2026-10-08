@@ -22,7 +22,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # Her watchlist: people she wants to hear about when they speak anywhere (owner 2026-10-06).
                'watches',
                # Notes between her own conversations (ADR-018, owner 2026-10-07).
-               'notes')
+               'notes',
+               # Her messages to the developer agent (developer_inbox.py, owner 2026-10-08).
+               'developer_inbox')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
@@ -116,6 +118,7 @@ class Store:
             'watches': [([('persona',1),('person',1),('state',1)],{})],
             'notes': [([('to_scene',1),('created_at',-1)],{}), ([('from_scene',1),('created_at',-1)],{}),
                       ([('persona',1),('created_at',-1)],{}), ([('reply_to',1)],{})],
+            'developer_inbox': [([('persona',1),('created_at',-1)],{}), ([('state',1),('created_at',1)],{})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:

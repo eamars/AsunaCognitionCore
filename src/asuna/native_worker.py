@@ -142,7 +142,8 @@ class NativeLane:
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
                        **({'tools': list(tools)} if tools is not None else {}),
                        **({'trigger': kwargs['trigger']} if kwargs.get('trigger') else {}),
-                       **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {})}
+                       **({'context': kwargs['context'], 'tail': kwargs['tail']} if 'context' in kwargs else {}),
+                       **({'pictures': kwargs['pictures']} if kwargs.get('pictures') else {})}
             if self.lane == 'executor' and task:
                 request['task'] = {'_id': task['_id'], 'thread': task.get('thread') or task['_id'],
                                    'title': task.get('title') or task.get('goal'),

@@ -81,6 +81,21 @@ export async function imagesOf(attachments, messages, signal) {
   return images;
 }
 
+/** The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her
+ * context says read_image reaches any picture that did not appear). */
+export async function pictureParts(attachments, pictures) {
+  const parts = [];
+  for (const picture of pictures.slice(0, 4)) {
+    if (typeof picture?.data !== 'string' || typeof picture.media_type !== 'string') continue;
+    try {
+      const attachment = await attachments.saveImage({ data: new Uint8Array(Buffer.from(picture.data, 'base64')),
+        mediaType: picture.media_type, name: typeof picture.ref === 'string' ? picture.ref : undefined });
+      parts.push({ type: 'image', attachment });
+    } catch { /* left out: read_image still reaches it */ }
+  }
+  return parts;
+}
+
 export function stageView(events, token, turn) {
   const marks = events.filter(event => event.type === 'asuna/stage' && event.data.operation === token);
   const first = marks[0]?.seq ?? Infinity, lastRequest = marks.at(-1)?.seq ?? -1;
@@ -443,7 +458,7 @@ export class CognitionCore {
     }
     // The summary is a stable identifier, never shown as prose; the client titles a turn's trigger
     // from `trigger` in the viewer's language (client.js).
-    return createUserMessage({ content: [{ type: 'text', text }],
+    return createUserMessage({ content: [{ type: 'text', text }, ...(stage.pictureParts ?? [])],
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':' + stage.phase,
         operation: stage.token, lane: stage.lane, phase: stage.phase,
         ...(stage.trigger ? { trigger: stage.trigger } : {}), ...(carried ? { carried } : {}) } });
@@ -705,6 +720,8 @@ export class CognitionCore {
             ...(images.length ? { images } : {}) }), waiting,
         ]);
         if (stage.error) throw new Error(stage.error);
+        // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
+        if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);
         state.admitted = stage;
         if (stage.kind === 'stage') { state.current = stage; state.system = stage.system; }
       }

@@ -17,7 +17,7 @@ import Commands from '@deepseek-ai/dsh-commands';
 import { serviceForAgent } from '@deepseek-ai/dsh-agent-preset-registry';
 import fs from 'node:fs/promises';
 import YAML from 'yaml';
-import { CognitionCore } from '../src/index.js';
+import { CognitionCore, pictureParts } from '../src/index.js';
 import { asunaRender, attachImage } from '../src/tool-output.js';
 
 async function harness(t, finish = 'stop', composition) {
@@ -226,4 +226,17 @@ test('a picture that cannot become an attachment says why, in a result the tool 
     assert.match(result.visual, /^unavailable:(ATTACHMENT_TYPE_UNSUPPORTED|ATTACHMENT_SERVICE_MISSING)$/);
     assert.match(result.note, /重试也一样/);
   }
+});
+
+test('pictures of a group turn become image parts; one that cannot be saved is left out', async () => {
+  const saved = [];
+  const attachments = { saveImage: async ({ name, mediaType }) => {
+    if (name === 'att-bad') throw new Error('unsupported');
+    saved.push(name); return { attachmentId: 'a-' + name, mediaType };
+  } };
+  const data = Buffer.from('png').toString('base64');
+  const parts = await pictureParts(attachments, [{ ref: 'att-1', media_type: 'image/png', data },
+    { ref: 'att-bad', media_type: 'image/png', data }, { ref: 'att-2' }]);
+  assert.deepEqual(parts, [{ type: 'image', attachment: { attachmentId: 'a-att-1', mediaType: 'image/png' } }]);
+  assert.deepEqual(saved, ['att-1']);
 });

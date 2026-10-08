@@ -270,10 +270,18 @@ class Coordinator:
         """One delivery to her role session: the turn's notice, or the program's note in the same turn."""
         require_current_feedback(self.store, ep)
         self.store.audit(ep['_id'],'turn.started',{'operation':operation,'tools':names},ep['scope_key'])
+        # A group turn brings the pictures of the line that started it (role_tools.turn_pictures).
+        pulled,shown=role_tools.turn_pictures(self.store,ep) if first else ([],None)
+        context={**ep['context'],'pictures_from_program':shown} if shown else ep['context']
+        if pulled:
+            fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
+            self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
         # A native role session composes the notice itself: what it still shows verbatim is not repeated.
-        delivery=({'context':ep['context'],'tail':text,'episode_id':ep['_id']}
+        delivery=({'context':context,'tail':text,'episode_id':ep['_id']}
                   if first and getattr(self.character,'composes_context',False) else {})
-        body=(json.dumps(ep['context'],ensure_ascii=False,default=str)+'\n'+text) if first and not delivery else text
+        if pulled:
+            delivery['pictures']=[{'ref':ref,**payload['image']} for ref,payload in pulled]
+        body=(json.dumps(context,ensure_ascii=False,default=str)+'\n'+text) if first and 'context' not in delivery else text
         value=self.character.generate(self._binding(ep),operation,'TURN' if first else 'REPAIR',body,
                                       episode_system(self.store,ep),tools=names,handler=handler,
                                       trigger='note' if ep['context'].get('note_from_program')

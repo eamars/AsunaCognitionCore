@@ -454,6 +454,53 @@ def her_pictures(store, ep):
     return any(item.get('pullable') for item in listing['attachments'])
 
 
+# Pictures that come with a group turn by themselves (owner 2026-10-08, on her ask): she should not have to decide
+# whether a picture is worth a look before she has seen it. The line that started the turn brings its pictures; up
+# to TURN_PICTURES are filled from photos (not stickers: she knows those by fingerprint) in the few lines before it.
+TURN_PICTURES = 2
+TURN_PICTURE_LINES = 6
+PICTURES_NOTE = ('这些图已经作为图片跟这一轮一起给你了，不用再 read_image；别的图照旧用 read_image（ref 照抄图旁标的）。'
+                 '哪张没出现，就是没拉下来，用 read_image 再看一次也行。')
+
+
+def turn_pictures(store, ep):
+    """([(ref, payload)] to attach to her group turn, pictures_from_program or None). A picture that cannot be
+    pulled is left out (read_image still reaches it)."""
+    from .blobs import BlobStore
+    from .vision import attachments_of, read_image_for_task, vision_capability
+    scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+    if (scene or {}).get('kind') != 'group' or not vision_capability(store.config, 'character')['supported']:
+        return [], None
+    source = store.db.messages.find_one({'_id': 'in-' + ep['_id'], 'scene_id': ep['scene_id']})
+    if not source:
+        return [], None
+    chosen = [(entry, '触发这一轮的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
+    if len(chosen) < TURN_PICTURES:
+        earlier = store.db.messages.find({'scene_id': ep['scene_id'], 'direction': 'inbound',
+                                          'policy_epoch': ep['policy_epoch'],
+                                          'scene_seq': {'$lt': source.get('scene_seq', 0),
+                                                        '$gte': source.get('scene_seq', 0) - TURN_PICTURE_LINES},
+                                          'event.raw.asuna_media': {'$exists': True}}).sort('scene_seq', -1)
+        for row in earlier:
+            for entry in attachments_of(row, config=store.config):
+                if len(chosen) < TURN_PICTURES and not entry.get('sticker'):
+                    chosen.append((entry, '前面第 %d 条' % (source.get('scene_seq', 0) - row.get('scene_seq', 0))))
+    pulled, shown = [], []
+    where = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+    for entry, line in chosen:
+        try:
+            payload = read_image_for_task(store, BlobStore(store), where, store.config, {'ref': entry['ref']},
+                                          route='character')
+        except Exception:                                   # noqa: BLE001 an expired link: read_image says why
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get('image'), dict):
+            pulled.append((entry['ref'], payload))
+            shown.append({'ref': entry['ref'], 'line': line, **({'sticker': '表情包'} if entry.get('sticker') else {})})
+    if not shown:
+        return [], None
+    return pulled, {'items': shown, 'note': PICTURES_NOTE}
+
+
 # Words for the refusals she is most likely to meet: the gist. The detail after the code carries the values and the
 # fix; a code not listed here is passed on as it is (its own message says both).
 WORDS = {

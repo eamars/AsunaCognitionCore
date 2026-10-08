@@ -20,6 +20,7 @@ import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
+import { applySearch } from './search.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -906,6 +907,8 @@ export function apply(ctx, config = {}) {
   };
   ctx.asunaFloor.activateRecovery = activateRecovery;
   new AsunaApi(ctx, core);
+  // Her web_search tries the configured backends in order (ADR-026); the profile pins this provider on ctx.web.
+  applySearch(ctx, core);
   // ADR-012 §8: /heartbeat gives her one heartbeat now, through DSH's own command surface (no model message),
   // and says when the next scheduled one is due. Her rhythm stays program-owned; this only knocks early.
   ctx.inject(['commands'], child => child.effect(() => child.commands.register({

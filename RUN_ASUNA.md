@@ -194,6 +194,27 @@ The card reports saved-but-not-applied state and actual failures. Save preflight
 
 The **记忆** right tab reads bounded pages for the current native scene binding. Open a row for full authorized details and sources. It does not edit Mongo or broaden A2 access.
 
+## Web search
+
+The action brain's `web_search` is DSH's tool; Asuna chooses the backend underneath. The installer pins the profile's search provider to `asuna-search`, which tries the backends of `deployment.search.order` in turn and passes a query on when a backend is resting, not configured, failing, or answers with no sources. Edit `search` on the cognition-core card (or put it in `config/local.json` before installing):
+
+```json
+"search": {
+  "order": ["searxng", "exa", "deepseek-official"],
+  "searxng": {"url": "http://192.0.2.10:8080/search", "engines": ["bing", "wikipedia"],
+              "cooldown_seconds": 30, "rest_minutes": 15, "timeout_seconds": 10},
+  "exa": {"api_key": {"$secret": "EXA_API_KEY"}}
+}
+```
+
+| Backend | Needs | Behaviour |
+|---|---|---|
+| `searxng` | `url` of the instance's `/search` with `json` in its `search.formats` | At most one query per `cooldown_seconds` (default 30); the other queries of a call go on. After a failure, or an empty answer in which every asked engine was blocked, it rests for `rest_minutes` (default 15). `engines` lists the engines to ask (empty: the instance's defaults), including ones disabled on the instance. |
+| `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`). |
+| any other id | a provider registered on DSH's web service | `deepseek-official` is DSH's DeepSeek search, keyed by the Models page's `DEEPSEEK_API_KEY`; each search is a model request. |
+
+Without a `search` section the order is `searxng`, `exa`, `deepseek-official`, and the first two are skipped as not configured. When no backend answers with sources, an empty answer is the result; when none answers at all, the tool returns an error naming each backend's state. Each search writes an `asuna/web-search` event (the query, the backend that answered, and why earlier ones were passed over) to the calling conversation's log; the model does not see it.
+
 ## Self-development and recovery
 
 `development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the cognition source, and a channel package is its own project (`napcat-qq`). Skills live in the candidate too and change only through these tools; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.

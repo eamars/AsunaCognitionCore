@@ -1,0 +1,28 @@
+{
+  "name": "@asuna/yan-sui",
+  "version": "0.2.0",
+  "type": "module",
+  "private": true,
+  "description": "晏绥：拥有自洽残酷价值观的原创成年女性人格，中文设定与口吻自包含。",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": [
+    "src",
+    "seeds",
+    "locale",
+    "persona-model.json",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x"
+  }
+}

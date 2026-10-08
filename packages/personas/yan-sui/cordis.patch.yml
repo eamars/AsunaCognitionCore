@@ -1,0 +1,34 @@
+- insert:
+    - id: asuna-yan-sui
+      name: '@asuna/yan-sui'
+    - id: asuna-yan-sui-preset
+      name: '@asuna/cognition-core/preset'
+      config:
+        id: asuna-yan-sui
+        names:
+          en: Yan Sui · Character brain
+          zh: 晏绥 · 角色脑
+        descriptions:
+          en: Original adult female antagonist with self-contained Chinese persona and voice
+          zh: 中文设定自包含的原创成年女性反派人格
+        plugins:
+          - name: '@asuna/cognition-core/role'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@asuna/cognition-core/compaction'
+                config:
+                  maxTokens: 24576
+                  retainRatio: 0.16
+                  headroomTokens: 32768
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

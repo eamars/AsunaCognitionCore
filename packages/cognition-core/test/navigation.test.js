@@ -206,6 +206,16 @@ test('native continuation preserves history and task children retain their actua
   assert.deepEqual(order.filter(event => event.type === 'user/message').map(event => event.data.source.receipt ?? 'notice'),
     ['missed', 'notice']);
   assert.equal(await lineBeforeTurn(core, opened.agent, missed), false, 'present after the turn');
+  // A page that opens a conversation while the Host starts holds its write handle for a moment: the start waits and
+  // titles it, instead of failing (SessionAlreadyOwnedError stopped the worker on 2026-10-09).
+  const held = await ctx.sessionPersistence.open('original', 'write');
+  const organizing = organizeNativeWorkspaces(core, { first: false, archive_ids: [], workspaces: { QQ: qq, Local: local },
+    entries: [{ session_id: 'original', workspace: 'Local', binding: { _id: 'original', cwd: local, native_title: 'Held' } }] });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  await held.close();
+  await organizing;
+  const heldHeader = (await ctx.sessionPersistence.stat('original')).header;
+  assert.equal(ctx.sessionProjectionCache.cachedSnapshot(heldHeader).values.title, 'Held');
   await opened.dispose();
   await core.handles.get(role._id).dispose();
   await ctx.fiber.dispose();

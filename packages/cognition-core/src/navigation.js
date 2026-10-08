@@ -128,6 +128,40 @@ export function workspaceTitle(core, key) {
   return name ? name + ' · ' + word : word;
 }
 
+/** Title an existing session: in place when it is loaded, otherwise cold, without resuming its Agent or replaying its
+ * inbox. A page open during a start can load the session between the check and the cold open (its write handle is then
+ * taken): the title then goes to the loaded session instead of failing the start. */
+async function titleExisting(ctx, id, binding) {
+  for (let attempt = 0; ; attempt++) {
+    const session = ctx.sessions.get(id);
+    if (session) {
+      if (needsTitle(session.snapshotEvents(), binding.native_title, binding.previous_native_title))
+        session.append('session/title', titleData(binding.native_title));
+      await ctx.sessionProjectionCache.write(session);
+      return;
+    }
+    let handle;
+    try { handle = await ctx.sessionPersistence.open(id, 'write'); }
+    catch (error) {
+      if (error?.name !== 'SessionAlreadyOwnedError' || attempt >= 100) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      continue;
+    }
+    try {
+      const { events } = await handle.read();
+      if (needsTitle(events, binding.native_title, binding.previous_native_title)) {
+        const title = { type: 'session/title', seq: events.length, time: Date.now(),
+          data: titleData(binding.native_title) };
+        await handle.append([title]);
+        events.push(title);
+      }
+      await handle.flush();
+      await checkpointCold(ctx, handle.header, handle.inheritedEventCount, events);
+    } finally { await handle.close(); }
+    return;
+  }
+}
+
 /** Native workspace/session migration. No client layout or alternate chat store. */
 export async function organizeNativeWorkspaces(core, plan) {
   const { ctx } = core;
@@ -144,11 +178,9 @@ export async function organizeNativeWorkspaces(core, plan) {
     const { session_id: id, binding } = entry;
     const persisted = await ctx.sessionPersistence.stat(id);
     let session = ctx.sessions.get(id);
-    if (session) {
-      if (needsTitle(session.snapshotEvents(), binding.native_title, binding.previous_native_title))
-        session.append('session/title', titleData(binding.native_title));
-      await ctx.sessionProjectionCache.write(session);
-    } else if (!persisted) {
+    if (session || persisted) {
+      await titleExisting(ctx, id, binding);
+    } else {
       let seed;
       const source = binding.source_session_id;
       if (source && await ctx.sessionPersistence.stat(source)) {
@@ -173,20 +205,6 @@ export async function organizeNativeWorkspaces(core, plan) {
         await checkpointCold(ctx, handle.header, handle.inheritedEventCount, session.snapshotEvents());
       }
       finally { await handle.close(); }
-    } else {
-      // Renaming a cold session must not resume its Agent or replay its inbox.
-      const handle = await ctx.sessionPersistence.open(id, 'write');
-      try {
-        const { events } = await handle.read();
-        if (needsTitle(events, binding.native_title, binding.previous_native_title)) {
-          const title = { type: 'session/title', seq: events.length, time: Date.now(),
-            data: titleData(binding.native_title) };
-          await handle.append([title]);
-          events.push(title);
-        }
-        await handle.flush();
-        await checkpointCold(ctx, handle.header, handle.inheritedEventCount, events);
-      } finally { await handle.close(); }
     }
     await workspaces.get(entry.workspace).attachSession(id);
     if (!persisted || plan.first) await ctx.workspaceRegistry.unarchiveSession(id);

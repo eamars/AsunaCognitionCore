@@ -200,9 +200,10 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
 
 ```json
 "search": {
-  "order": ["searxng", "exa", "deepseek-official"],
+  "order": ["searxng", "gemini", "exa", "deepseek-official"],
   "searxng": {"url": "http://192.0.2.10:8080/search", "engines": ["bing", "wikipedia"],
               "cooldown_seconds": 30, "rest_minutes": 15, "timeout_seconds": 10},
+  "gemini": {"api_key": {"$secret": "GEMINI_API_KEY"}, "model": "gemini-2.5-flash-lite"},
   "exa": {"api_key": {"$secret": "EXA_API_KEY"}}
 }
 ```
@@ -210,10 +211,11 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
 | Backend | Needs | Behaviour |
 |---|---|---|
 | `searxng` | `url` of the instance's `/search` with `json` in its `search.formats` | At most one query per `cooldown_seconds` (default 30); the other queries of a call go on. After a failure, or an empty answer in which every asked engine was blocked, it rests for `rest_minutes` (default 15). `engines` lists the engines to ask (empty: the instance's defaults), including ones disabled on the instance. |
-| `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`); passed over while the reference has no stored value. The worker never reads `search`, so an unset reference here does not stop it. |
+| `gemini` | a credential reference in `api_key` (a Gemini API key) | One `generateContent` request with Grounding with Google Search on `model` (default `gemini-2.5-flash-lite`; `timeout_seconds` default 20). The pages Gemini cites are the sources, each Google redirect link followed to the page's own address; Gemini's answer text is not passed on. After a 429 it rests until the quota the error names refreshes: a daily quota at midnight Pacific time, any other after its retry delay (a minute when none is given). |
+| `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`). |
 | any other id | a provider registered on DSH's web service | `deepseek-official` is DSH's DeepSeek search, keyed by the Models page's `DEEPSEEK_API_KEY`; each search is a model request. |
 
-Without a `search` section the order is `searxng`, `exa`, `deepseek-official`, and the first two are skipped as not configured. When no backend answers with sources, an empty answer is the result; when none answers at all, the tool returns an error naming each backend's state. Each search writes an `asuna/web-search` event (the query, the backend that answered, and why earlier ones were passed over) to the calling conversation's log; the model does not see it.
+A backend whose credential reference has no stored value is passed over; the worker never reads `search`, so an unset reference does not stop it. Without a `search` section the order is `searxng`, `gemini`, `exa`, `deepseek-official`, and the first three are skipped as not configured. When no backend answers with sources, an empty answer is the result; when none answers at all, the tool returns an error naming each backend's state. Each search writes an `asuna/web-search` event (the query, the backend that answered, and why earlier ones were passed over) to the calling conversation's log; the model does not see it.
 
 ## Self-development and recovery
 

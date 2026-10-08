@@ -1,7 +1,7 @@
 # ADR-026: Her web search tries the owner's SearXNG first
 
 Status: **Accepted and built** 2026-10-08. The owner's proposal; the owner decided each open point from measured
-options.
+options. **Amended** 2026-10-08: a Gemini backend between SearXNG and Exa (§4), accepted, not built.
 
 ## 1. Context
 
@@ -61,3 +61,60 @@ The owner runs a SearXNG instance on the LAN and may add Exa later. Measured on 
 - The cooldown lives in the Host process: a restart forgets it, at most one early query.
 - Tests: `packages/cognition-core/test/search.test.js`, `tests/test_search_profile.py`. Current reference:
   [RUN_ASUNA.md](../../../RUN_ASUNA.md#web-search).
+
+## 4. Amendment: Gemini grounding between SearXNG and Exa (owner, 2026-10-08)
+
+Status: **Accepted and built** 2026-10-08; not yet live (no key configured).
+
+### 4.1 Context
+
+- Google turns the owner's SearXNG away (§1), and an automated browser signed in to a Google account is not a way
+  around it: Google's terms forbid automated queries, and the account would be challenged or suspended. Google's own
+  sanctioned path to its results is the Gemini API's Grounding with Google Search: a Gemini request with the search
+  tool on, in which Gemini runs the Google queries and answers with citations. It returns no raw result page.
+- Request (`generateContent`): `POST /v1beta/models/<model>:generateContent`, header `x-goog-api-key`, body with
+  `"tools": [{"google_search": {}}]`. The response's `candidates[0].groundingMetadata` carries `webSearchQueries`,
+  `groundingChunks[].web.{uri,title}` (each `uri` is a `vertexaisearch.cloud.google.com/grounding-api-redirect/...`
+  link, not the page's address), `groundingSupports` (answer spans to chunks) and `searchEntryPoint.renderedContent`
+  (search suggestions HTML that Google's terms ask to show with grounded results). The current docs also describe a
+  newer `POST /v1beta/interactions` endpoint (`"tools": [{"type": "google_search"}]`, `url_citation` annotations).
+- Price, read 2026-10-08 from the Gemini API pricing page:
+
+  | Model | Free | Beyond |
+  |---|---|---|
+  | 2.5 Flash-Lite / 2.5 Flash | 500 requests a day (free tier); 1,500 a day (paid tier); shared by both | $35 per 1,000 grounded requests |
+  | 3.x Flash, 3.5 Flash-Lite | 5,000 searches a month, paid tier only, shared by all 3.x | $14 per 1,000 searches, each query Gemini runs counted |
+
+- Fit against §1's usage (up to 39 calls a day): 2.5 Flash-Lite's free tier is about 8% used at the peak; 3.x at
+  2–4 queries per call is about 2,300–4,700 searches a month against 5,000. Placed after SearXNG, Gemini sees only
+  the calls SearXNG skips, rests on or misses, so less. Free-tier prompts may be used by Google to improve its
+  products; free-tier keys also have a per-minute limit, which §1's bursts may reach (unmeasured).
+
+### 4.2 Decision
+
+- **D6 — A `gemini` backend between SearXNG and Exa.** The default order becomes `searxng`, `gemini`, `exa`,
+  `deepseek-official`; like the others it is skipped when not configured, a failure falls through, and the order
+  stays configurable. It is configured in the core's `search` section on the existing card (D4), with a write-only
+  credential control for its key.
+
+### 4.3 Decisions on the open points (owner, 2026-10-08, from measured options)
+
+- **D7 — 2.5 Flash-Lite on the free tier.** 500 grounded requests a day, free; the owner accepted that Google may use
+  free-tier prompts (her search queries) to improve its products. The model is configurable.
+- **D8 — Sources only.** Gemini's cited pages fill `web_search`'s source list like the other backends'; its answer
+  text is dropped, as DSH drops DeepSeek's. The grounding supports are Gemini's wording, so sources carry no snippet.
+- **D9 — Real addresses.** Each `grounding-api-redirect` link is followed one hop (`HEAD`, no body, 5 s) to the
+  page's own URL, so she cites and fetches the page; a link that does not resolve stays as it was.
+- **D10 — A 429 rests Gemini until its quota refreshes.** The owner: for 2.5 Flash-Lite, daily, matching its refresh
+  cycle. The 429's `QuotaFailure` names the quota: a per-day quota rests until midnight Pacific time (when Gemini's
+  daily quotas reset); any other rests for the error's `retryDelay`, or a minute without one. Following the named
+  quota rather than the model keeps a per-minute 429 from resting it all day.
+- Not decided: Google's terms ask that search suggestions (`searchEntryPoint`) be shown with grounded results. Here
+  the results reach a model, not a person, and nothing renders them; raised with the owner.
+
+### 4.4 As built
+
+`search.js`: `gemini` step (`OrderedSearch.gemini`, `geminiSources`, `resolve`, `geminiRetryAt`,
+`nextPacificMidnight`), `GEMINI_DEFAULTS` (`gemini-2.5-flash-lite`, v1beta `generateContent`, 20 s), default order
+`searxng`, `gemini`, `exa`, `deepseek-official`. Its key is a credential reference in `search.gemini.api_key`; an
+unset one is passed over (§3). Tests stub Gemini's responses; no real Gemini call was made in development.

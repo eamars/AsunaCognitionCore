@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import WebRuntime from '@deepseek-ai/dsh-web';
-import { OrderedSearch, registered, searxngResult, SEARCH_PROVIDER_ID } from '../src/search.js';
+import { OrderedSearch, registered, searxngResult, geminiRetryAt, nextPacificMidnight, SEARCH_PROVIDER_ID } from '../src/search.js';
 
 const SEARX = { url: 'http://searx.invalid:8080/search', engines: ['bing', 'yandex'], cooldown_seconds: 30, rest_minutes: 15 };
 const page = (results, unresponsive = []) => ({ results, answers: [], unresponsive_engines: unresponsive });
@@ -124,4 +124,65 @@ test('the pinned dsh-web keeps its search providers where registered() reads the
   const provider = { id: 'deepseek-official', available: () => true, search: async () => ({ sources: [], truncated: false }) };
   web.registerSearchProvider(provider);
   assert.equal(registered(web).get('deepseek-official'), provider);
+});
+
+const grounded = (...chunks) => ({ candidates: [{ content: { parts: [{ text: 'Gemini says…' }] },
+  groundingMetadata: { groundingChunks: chunks.map(([uri, title]) => ({ web: { uri, title } })) } }] });
+const REDIRECT = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/';
+
+function geminiHarness(replies, { order = ['gemini', 'deepseek-official'] } = {}) {
+  const h = harness({ search: { order, gemini: { api_key: { $secret: 'GEMINI_API_KEY' } } }, secrets: { GEMINI_API_KEY: 'g' } });
+  const calls = [];
+  h.provider.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (init.method === 'HEAD') {
+      const target = { [REDIRECT + 'a']: 'https://page.example/a', [REDIRECT + 'b']: 'https://page.example/a' }[url];
+      if (!target) throw new Error('unreachable');
+      return { status: 302, headers: new Headers({ location: target }) };
+    }
+    const [status, body] = replies.shift();
+    return { ok: status === 200, status, json: async () => body };
+  };
+  return { ...h, calls };
+}
+
+test('Gemini: its cited pages are the sources, redirects resolved, its own answer dropped', async () => {
+  const h = geminiHarness([[200, grounded([REDIRECT + 'a', 'page.example'], [REDIRECT + 'b', 'dup'], [REDIRECT + 'c', 'other.example'])]]);
+  const result = await h.provider.search({ query: 'q' });
+  assert.deepEqual(result, { sources: [{ url: 'https://page.example/a', title: 'page.example' },
+    { url: REDIRECT + 'c', title: 'other.example' }], truncated: false }, 'deduplicated after resolving; an unresolved link kept');
+  const request = h.calls[0];
+  assert.match(request.url, /\/models\/gemini-2\.5-flash-lite:generateContent$/);
+  assert.equal(request.init.headers['x-goog-api-key'], 'g');
+  assert.deepEqual(JSON.parse(request.init.body).tools, [{ google_search: {} }]);
+});
+
+test('Gemini: no grounding falls through; no key is skipped', async () => {
+  const h = geminiHarness([[200, { candidates: [{ content: { parts: [{ text: 'no search' }] } }] }]]);
+  assert.equal((await h.provider.search({ query: 'q' })).sources[0].url, 'https://paid.example/q');
+  const none = harness({ search: { order: ['gemini'] } });
+  await assert.rejects(none.provider.search({ query: 'q' }), /gemini: no API key/);
+});
+
+test('Gemini: a 429 on a daily quota rests it until midnight Pacific; a per-minute one for its retry delay', async () => {
+  const daily = { error: { code: 429, message: 'quota', details: [
+    { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] },
+    { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '23s' }] } };
+  const h = geminiHarness([[429, daily]]);
+  const now = Date.UTC(2026, 9, 8, 20, 0);            // 13:00 Pacific daylight time
+  h.provider.now = () => now;
+  assert.equal((await h.provider.search({ query: 'one' })).sources[0].url, 'https://paid.example/one');
+  assert.equal(h.provider.geminiUntil, Date.UTC(2026, 9, 9, 7, 0));
+  await h.provider.search({ query: 'two' });
+  assert.equal(h.calls.length, 1, 'resting');
+  assert.match(h.routes[1].route[0].outcome, /^rate limited, 660 min left/);
+  const minute = { error: { code: 429, details: [{ violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier' }] },
+    { retryDelay: '23.5s' }] } };
+  assert.equal(geminiRetryAt(minute, now), now + 24_000);
+  assert.equal(geminiRetryAt({}, now), now + 60_000);
+});
+
+test('midnight Pacific across both daylight-saving changes', () => {
+  assert.equal(nextPacificMidnight(Date.UTC(2026, 10, 1, 8, 0)), Date.UTC(2026, 10, 2, 8, 0));   // 25-hour day
+  assert.equal(nextPacificMidnight(Date.UTC(2027, 2, 14, 12, 0)), Date.UTC(2027, 2, 15, 7, 0));  // 23-hour day
 });

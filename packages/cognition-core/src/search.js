@@ -3,6 +3,9 @@
  *
  * - `searxng`: the owner's SearXNG instance (JSON API). At most one query per `cooldown_seconds`; after a failure, or
  *   an empty answer in which every asked engine was blocked, it rests for `rest_minutes`.
+ * - `gemini`: Gemini with Grounding with Google Search, keyed by a credential reference. Its cited pages are the
+ *   sources (its own answer text is dropped), each Google redirect link resolved to the page's address. A 429 rests
+ *   it until the quota it names refreshes: a daily quota at midnight Pacific time, any other after its retry delay.
  * - `exa`: DSH's Exa provider (dsh-web-search-exa), keyed by a credential reference.
  * - any other id: a provider registered on ctx.web (DSH's `deepseek-official`).
  *
@@ -13,8 +16,11 @@ import { ExaSearchProvider } from '@deepseek-ai/dsh-web-search-exa';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 
 export const SEARCH_PROVIDER_ID = 'asuna-search';
-export const DEFAULT_ORDER = ['searxng', 'exa', 'deepseek-official'];
+export const DEFAULT_ORDER = ['searxng', 'gemini', 'exa', 'deepseek-official'];
 export const SEARXNG_DEFAULTS = { cooldown_seconds: 30, rest_minutes: 15, timeout_seconds: 10 };
+export const GEMINI_DEFAULTS = { model: 'gemini-2.5-flash-lite', base_url: 'https://generativelanguage.googleapis.com/v1beta',
+  timeout_seconds: 20 };
+const GEMINI_REDIRECT = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/';
 
 /** The providers registered on the seam, by id. ctx.web exposes no lookup by id; the pinned DSH keeps them in this
  * map (a contract test guards it). */
@@ -42,6 +48,41 @@ export function searxngResult(body) {
   return { result: { ...(answers.length ? { content: answers.join('\n') } : {}), sources, truncated: false }, blocked };
 }
 
+/** Gemini's grounding chunks as the seam's sources (redirect links, unresolved): url and title, no snippet — the
+ * supports are Gemini's own wording, not the pages'. */
+export function geminiSources(body) {
+  const seen = new Set(), sources = [];
+  for (const chunk of body?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []) {
+    const { uri, title } = chunk?.web ?? {};
+    if (typeof uri !== 'string' || !uri || seen.has(uri)) continue;
+    seen.add(uri);
+    sources.push({ url: uri, ...(typeof title === 'string' && title.trim() ? { title: title.trim() } : {}) });
+  }
+  return sources;
+}
+
+/** The next midnight in Pacific time, when Gemini's daily quotas refresh. */
+export function nextPacificMidnight(now) {
+  const parts = moment => Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
+    hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(new Date(moment))
+    .filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]));
+  const { hour, minute, second } = parts(now);
+  let at = now - (now % 1000) + (86_400 - (hour * 3600 + minute * 60 + second)) * 1000;
+  const off = parts(at).hour;                                 // a daylight-saving change makes the day 23 or 25 hours
+  if (off) at += (off < 12 ? -off : 24 - off) * 3_600_000;
+  return at;
+}
+
+/** When a Gemini 429 may be tried again: the named daily quota's refresh, else its retry delay, else a minute. */
+export function geminiRetryAt(body, now) {
+  const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+  const quotas = details.flatMap(detail => (Array.isArray(detail?.violations) ? detail.violations : []))
+    .map(violation => String(violation?.quotaId ?? ''));
+  if (quotas.some(quota => /PerDay/i.test(quota))) return nextPacificMidnight(now);
+  const delay = details.map(detail => /^(\d+(?:\.\d+)?)s$/.exec(String(detail?.retryDelay ?? ''))).find(Boolean);
+  return now + (delay ? Math.ceil(Number(delay[1])) : 60) * 1000;
+}
+
 export class OrderedSearch {
   id = SEARCH_PROVIDER_ID;
 
@@ -49,6 +90,7 @@ export class OrderedSearch {
   constructor({ settings, registry, secret, record = () => {}, now = Date.now, fetch = globalThis.fetch }) {
     Object.assign(this, { settings, registry, secret, record, now, fetch });
     this.searxngUntil = 0;
+    this.geminiUntil = 0;
   }
 
   /** Selection is per call: a backend that cannot run is passed over then, so the seam always reaches this one. */
@@ -83,6 +125,7 @@ export class OrderedSearch {
 
   async step(id, config, request, signal) {
     if (id === 'searxng') return this.searxng(config.searxng ?? {}, request, signal);
+    if (id === 'gemini') return this.gemini(config.gemini ?? {}, request, signal);
     if (id === 'exa') return this.exa(config.exa ?? {}, request, signal);
     const provider = this.registry().get(id);
     if (!provider || provider === this) return { skipped: 'not installed' };
@@ -118,6 +161,43 @@ export class OrderedSearch {
     // An empty answer from blocked engines means the instance is being turned away upstream: let it rest.
     if (!result.sources.length && blocked.length && (!engines.length || engines.every(name => blocked.includes(name)))) rest();
     return { result };
+  }
+
+  async gemini(options, request, signal) {
+    const ref = options.api_key?.$secret;
+    const apiKey = typeof ref === 'string' ? await this.secret(ref) : undefined;
+    if (!apiKey) return { skipped: 'no API key' };
+    const now = this.now();
+    if (now < this.geminiUntil) return { skipped: 'rate limited, ' + Math.ceil((this.geminiUntil - now) / 60_000) + ' min left' };
+    const model = options.model || GEMINI_DEFAULTS.model;
+    const timeout = AbortSignal.timeout(positive(options.timeout_seconds, GEMINI_DEFAULTS.timeout_seconds) * 1000);
+    const response = await this.fetch(`${options.base_url || GEMINI_DEFAULTS.base_url}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', redirect: 'error', signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Search the web for: ' + request.query }] }],
+        tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 1024 } }),
+    });
+    const body = await response.json().catch(() => null);
+    if (response.status === 429) {
+      this.geminiUntil = geminiRetryAt(body, this.now());
+      throw new Error('HTTP 429 ' + String(body?.error?.message ?? '').slice(0, 160));
+    }
+    if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + String(body?.error?.message ?? '').slice(0, 160));
+    const sources = await Promise.all(geminiSources(body).map(async source => ({ ...source, url: await this.resolve(source.url, signal) })));
+    const unique = sources.filter((source, index) => sources.findIndex(other => other.url === source.url) === index);
+    return { result: { sources: unique, truncated: false } };
+  }
+
+  /** A Google grounding redirect, followed one hop to the page's own address; the link as it was when that fails. */
+  async resolve(url, signal) {
+    if (!url.startsWith(GEMINI_REDIRECT)) return url;
+    try {
+      const timeout = AbortSignal.timeout(5000);
+      const response = await this.fetch(url, { method: 'HEAD', redirect: 'manual',
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+      const location = response.headers?.get?.('location');
+      return location && /^https?:\/\//.test(location) ? location : url;
+    } catch { return url; }
   }
 
   async exa(options, request, signal) {

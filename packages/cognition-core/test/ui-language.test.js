@@ -79,3 +79,12 @@ test('every Asuna preset row names itself in each shipped language', async () =>
     }
   }
 });
+
+test('the core components listed on the plugin page have a title and description in each shipped language', async () => {
+  const { readFileSync } = await import('node:fs');
+  for (const name of ['persistence', 'floor', 'preset']) for (const language of ['en', 'zh']) {
+    const file = new URL(import.meta.resolve('@asuna/cognition-core/' + name + '/locale/' + language + '.json'));
+    const { meta } = JSON.parse(readFileSync(file, 'utf8'));
+    assert.ok(meta.title?.trim() && meta.description?.trim(), name + ' ' + language);
+  }
+});

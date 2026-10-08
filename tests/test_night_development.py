@@ -121,3 +121,9 @@ def test_rhythm_task_names_follow_the_words_the_host_gives_and_only_they_are_ren
         assert calls == [('/schedule/update', {'id': 'n1', 'title': '心跳'})]
     finally:
         RHYTHM_TITLES.clear(); RHYTHM_TITLES.update(saved)
+
+
+def test_a_plan_title_drops_markdown_bold_and_code_marks_but_keeps_her_words():
+    from asuna.schedule import plan_title
+    assert plan_title({'intent': '回看 Claude 那两件**我自己看到没有**，看 `scene_people`'}) == '回看 Claude 那两件我自己看到没有，看 scene_people'
+    assert plan_title({'intent': '回 罗兹__official 一句'}) == '回 罗兹__official 一句'

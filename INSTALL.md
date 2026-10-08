@@ -38,7 +38,7 @@ offers; it never stores model endpoints or keys itself.
 
 ## 3. Configure Asuna on its settings card
 
-Open Plugins → Asuna Cognition Core. A new profile shows `Business worker: unconfigured` and the fields to fill:
+Open Plugins → Asuna Cognition Core. A new profile shows `Business process: not configured` and the fields to fill:
 
 - **Character**: the installed persona.
 - **Character brain / Action brain**: model service and model (reasoning effort and output limit may stay at the
@@ -54,7 +54,7 @@ Open Plugins → Asuna Cognition Core. A new profile shows `Business worker: unc
 **Save settings**, then **Apply saved settings**. The first start may take a few minutes while the Python
 environment is built; the status line shows the step.
 
-Check: the card shows `Business worker: ready · Mongo: connected`, and its last status line names the sandbox
+Check: the card shows `Business process: ready · Mongo: connected`, and its last status line names the sandbox
 (`Sandbox: dsh`, or `none (reason)`).
 
 Everything the profile writes goes to its data folder, `$DSH_HOME/asuna/<profile>/` by default (the floor's

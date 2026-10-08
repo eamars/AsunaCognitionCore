@@ -20,7 +20,10 @@
     "./attend": "./src/attend.js",
     "./preset": "./src/preset.js",
     "./package.json": "./package.json",
-    "./locale/*": "./locale/*"
+    "./locale/*": "./locale/*",
+    "./persistence/locale/*": "./meta/persistence/locale/*",
+    "./floor/locale/*": "./meta/floor/locale/*",
+    "./preset/locale/*": "./meta/preset/locale/*"
   },
   "files": [
     "src",
@@ -30,7 +33,8 @@
     "cordis.patch.yml",
     "README.md",
     "icon.svg",
-    "locale"
+    "locale",
+    "meta"
   ],
   "dsh": {
     "bundle": {

@@ -620,7 +620,7 @@ class BusinessWorker:
                 'sandbox': ({k: v for k, v in sandbox_backend.chosen(self.app.config).items() if k != 'distro'}
                             if self.app else None),
                 'database': 'connected' if self.app else 'unavailable',
-                'self_source': 'existing Mongo state heads' if self.app else None,
+                'self_source': 'mongo' if self.app else None,      # a code: the settings card words it
                 'active_role': self.controller.active if self.controller else None,
                 'queued_inputs': self.controller.pending.qsize() if self.controller else 0,
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,

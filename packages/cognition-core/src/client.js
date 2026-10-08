@@ -106,13 +106,34 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.jsonHint': 'JSON 配置；凭据使用 {"$secret":"名称"} 引用。', 'settings.pythonHint': '留空：首次启动时在数据目录里按包里的锁文件建好 Python 环境（需要 uv 或 Python 3.12+）。', 'settings.invalidNumber': '请输入正整数',
       'settings.invalidJson': '请输入有效的 JSON 值', 'settings.form.unavailable': '配置暂不可用', 'settings.form.readOnly': '当前配置只读',
       'settings.form.saveFailed': '保存失败，草稿已保留。', 'settings.form.save': '保存设置', 'settings.form.saving': '保存中…',
-      'settings.status': '业务 worker：{state} · Mongo：{database}', 'settings.disconnected': '未连接',
+      'settings.status': '业务进程：{state} · Mongo：{database}', 'settings.disconnected': '未连接',
       'settings.restartWaiting': '{project} 的已发布改动（{time}）要重启宿主后才生效；在那之前夜里的自我开发会跳过。',
       'settings.readingStatus': '读取状态…',
       'settings.note': '配置由 DSH 保存；凭据只写不回显。模型与 API key 在 DSH 原生 provider 设置管理。会话中的模型选择优先于下方默认路由。',
       'settings.savedPending': '已保存，尚未应用。', 'settings.savedApplied': '已保存，与当前应用配置一致。',
       'settings.activated': '已应用到业务 worker 与后续模型请求。',
       'settings.selfSource': '自我来源：{source}', 'settings.waiting': '等待连接', 'settings.channelsFallback': '外部渠道',
+      'settings.deployment.database': "数据库名", 'settings.deployment.allowed_databases': "允许的数据库",
+      'settings.deployment.legacy_database': "旧数据库", 'settings.deployment.mongo_uri': "Mongo 连接",
+      'settings.deployment.embedding': "向量模型", 'settings.deployment.local_only': "仅本机",
+      'settings.deployment.workflow_timeout_seconds': "阶段超时（秒）",
+      'settings.deployment.provider_idle_timeout_seconds': "模型空闲超时（秒）",
+      'settings.deployment.publish_adapter': "发布适配器", 'settings.deployment.prompts_dir': "提示词目录",
+      'settings.deployment.chat': "本机对话", 'settings.deployment.self_development': "自我改进",
+      'settings.deployment.timezone': "时区", 'settings.deployment.persona_runtime': "人格运行参数",
+      'settings.deployment.integration': "设备集成", 'settings.deployment.channels': "外部渠道",
+      'settings.deployment.channel_port': "渠道端口", 'settings.deployment.context_links': "关联对话",
+      'settings.deployment.canonical_persons': "同一个人的账号", 'settings.deployment.vision': "看图",
+      'settings.deployment.reasoning_effort': "推理强度", 'settings.deployment.search': "网页搜索",
+      'settings.state.unconfigured': "未配置", 'settings.state.inert': "未启用", 'settings.state.starting': "启动中",
+      'settings.state.ready': "就绪", 'settings.state.failed': "失败", 'settings.state.preparing': "准备中",
+      'settings.state.restarting': "重启中", 'settings.step.uv': "用 uv 建 Python 环境",
+      'settings.step.python': "用本机 Python 建环境", 'settings.step.ready': "Python 环境就绪",
+      'settings.database.connected': "已连接", 'settings.database.unavailable': "不可用",
+      'settings.selfSource.mongo': "Mongo 里已有的自我状态", 'settings.integration.RUNNING': "运行中",
+      'settings.integration.STARTING': "启动中", 'settings.integration.STOPPED': "已停止",
+      'settings.integration.EXITED': "已退出", 'settings.integration.DISABLED': "未启用", 'settings.sandbox.dsh': "DSH 沙箱",
+      'settings.sandboxReason.off': "设置里关掉了", 'settings.sandboxReason.no_host': "宿主没有沙箱",
       'settings.channels': '{titles}：{state}', 'settings.channelOn': '本机入口已启动；适配器 {state}；平台连接未验证',
       'settings.channelOff': '未启用', 'settings.schedule': '定时：{state}', 'settings.sandbox': '沙箱：{state}', 'settings.sandboxNone': '无（{reason}）：跑代码、自开发与集成已关闭', 'settings.scheduleOn': '原生调度',
       'settings.pending': '已保存的配置尚未应用。', 'settings.applied': '保存配置与当前应用配置一致。',
@@ -221,13 +242,38 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.jsonHint': 'JSON; refer to credentials as {"$secret":"name"}.', 'settings.pythonHint': 'Leave empty to build a Python environment from the package lock in the data folder on first start (needs uv or Python 3.12+).', 'settings.invalidNumber': 'Enter a positive whole number',
       'settings.invalidJson': 'Enter a valid JSON value', 'settings.form.unavailable': 'Settings are unavailable', 'settings.form.readOnly': 'Settings are read-only',
       'settings.form.saveFailed': 'Saving failed; your draft is kept.', 'settings.form.save': 'Save settings', 'settings.form.saving': 'Saving…',
-      'settings.status': 'Business worker: {state} · Mongo: {database}', 'settings.disconnected': 'not connected',
+      'settings.status': 'Business process: {state} · Mongo: {database}', 'settings.disconnected': 'not connected',
       'settings.restartWaiting': 'A published change to {project} ({time}) takes effect after a Host restart; until then her night self-development stages are skipped.',
       'settings.readingStatus': 'Reading status…',
       'settings.note': 'DSH stores these settings; credentials are write-only. Models and API keys are managed in DSH’s own provider settings. A model chosen in a conversation takes precedence over the routes below.',
       'settings.savedPending': 'Saved, not applied yet.', 'settings.savedApplied': 'Saved; matches what is running.',
       'settings.activated': 'Applied to the business worker and later model requests.',
       'settings.selfSource': 'Self from: {source}', 'settings.waiting': 'waiting for connection', 'settings.channelsFallback': 'Channels',
+      'settings.deployment.database': "Database name", 'settings.deployment.allowed_databases': "Allowed databases",
+      'settings.deployment.legacy_database': "Legacy database", 'settings.deployment.mongo_uri': "Mongo connection",
+      'settings.deployment.embedding': "Embedding model", 'settings.deployment.local_only': "Local only",
+      'settings.deployment.workflow_timeout_seconds': "Stage timeout (seconds)",
+      'settings.deployment.provider_idle_timeout_seconds': "Model idle timeout (seconds)",
+      'settings.deployment.publish_adapter': "Publish adapter", 'settings.deployment.prompts_dir': "Prompts folder",
+      'settings.deployment.chat': "Local chat", 'settings.deployment.self_development': "Self-improvement",
+      'settings.deployment.timezone': "Time zone", 'settings.deployment.persona_runtime': "Persona runtime",
+      'settings.deployment.integration': "Device integration", 'settings.deployment.channels': "Channels",
+      'settings.deployment.channel_port': "Channel port",
+      'settings.deployment.context_links': "Linked conversations",
+      'settings.deployment.canonical_persons': "One person's accounts", 'settings.deployment.vision': "Vision",
+      'settings.deployment.reasoning_effort': "Reasoning effort", 'settings.deployment.search': "Web search",
+      'settings.state.unconfigured': "not configured", 'settings.state.inert': "inactive",
+      'settings.state.starting': "starting", 'settings.state.ready': "ready", 'settings.state.failed': "failed",
+      'settings.state.preparing': "preparing", 'settings.state.restarting': "restarting",
+      'settings.step.uv': "building the Python environment with uv",
+      'settings.step.python': "building the Python environment with the local Python",
+      'settings.step.ready': "Python environment ready", 'settings.database.connected': "connected",
+      'settings.database.unavailable': "unavailable", 'settings.selfSource.mongo': "the self state already in Mongo",
+      'settings.integration.RUNNING': "running", 'settings.integration.STARTING': "starting",
+      'settings.integration.STOPPED': "stopped", 'settings.integration.EXITED': "exited",
+      'settings.integration.DISABLED': "off", 'settings.sandbox.dsh': "DSH sandbox",
+      'settings.sandboxReason.off': "turned off in the settings",
+      'settings.sandboxReason.no_host': "the Host has no sandbox",
       'settings.channels': '{titles}: {state}', 'settings.channelOn': 'local entry running; adapter {state}; platform connection not verified',
       'settings.channelOff': 'off', 'settings.schedule': 'Schedules: {state}', 'settings.sandbox': 'Sandbox: {state}', 'settings.sandboxNone': 'none ({reason}): running code, self-development and integration are off', 'settings.scheduleOn': 'native scheduler',
       'settings.pending': 'Saved settings are not applied yet.', 'settings.applied': 'Saved settings match what is running.',
@@ -273,6 +319,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     : Array.isArray(label) ? label.map(part => say(t, part)).join('')
     : t(label.key, Object.fromEntries(Object.entries(label.params ?? {}).map(([name, value]) =>
       [name, value && typeof value === 'object' ? say(t, value) : value])));
+
+  // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'local_only', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'reasoning_effort', 'search']);
+  const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
+  const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 
   // ── which brain ─────────────────────────────────────────────────────
   const stageLabel = (t, stage) => ['character', 'executor'].includes(stage?.lane) ? t('brain.' + stage.lane) : null;
@@ -713,14 +764,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         // Business values use the shipped settings fields. Structured settings
         // retain their JSON type; no second schema editor or settings store.
         for (const [key, value] of Object.entries(initial.deployment ?? {}))
-          add(['deployment', key], key, typeof value === 'string' ? 'text' : 'json');
+          add(['deployment', key], deploymentLabel(key), typeof value === 'string' ? 'text' : 'json');
         // A new profile has no deployment yet: its required sections appear with a starting value staged
         // (the Mongo URI already pointing at a credential), so the page alone can configure it (ADR-010 M1).
         const starters = [];
         for (const [key, type, text] of [['database', 'text', ''], ['mongo_uri', 'json', '{"$secret":"ASUNA_MONGO_URI"}'],
           ['embedding', 'json', '{"base_url":"","model":""}']]) {
           if (initial.deployment?.[key] !== undefined) continue;
-          add(['deployment', key], key, type);
+          add(['deployment', key], deploymentLabel(key), type);
           if (text) starters.push([JSON.stringify(['deployment', key]), text]);
         }
         const secretNames = new Set(initial.deployment?.mongo_uri === undefined ? ['ASUNA_MONGO_URI'] : []);
@@ -827,7 +878,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const worker = status?.worker;
       return h('section', { style: stack, 'aria-label': t('settings.aria') },
         h('h3', null, 'Asuna'),
-        h('p', null, status ? t('settings.status', { state: status.lifecycle.state + (status.lifecycle.step ? ' · ' + status.lifecycle.step : ''), database: worker?.database || t('settings.disconnected') })
+        h('p', null, status ? t('settings.status', { state: word(t, 'settings.state.', status.lifecycle.state)
+            + (status.lifecycle.step ? ' · ' + word(t, 'settings.step.', status.lifecycle.step) : ''),
+          database: worker?.database ? word(t, 'settings.database.', worker.database) : t('settings.disconnected') })
           : t('settings.readingStatus')),
         status?.lifecycle.error && h('p', { role: 'alert' }, status.lifecycle.error),
         // A publication that only a Host restart puts into effect is said, never left silent (ADR-021 D4).
@@ -855,13 +908,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
                 hint: field.type === 'json' ? t('settings.jsonHint') : field.path[0] === 'python' ? t('settings.pythonHint') : undefined });
           })),
         status && h('p', { style: small }, [
-          t('settings.selfSource', { source: worker?.self_source || t('settings.waiting') }),
+          t('settings.selfSource', { source: worker?.self_source ? word(t, 'settings.selfSource.', worker.self_source) : t('settings.waiting') }),
           t('settings.channels', { titles: worker?.channel_titles?.join(t('memory.separator')) || t('settings.channelsFallback'),
-            state: worker?.channels_active ? t('settings.channelOn', { state: worker.integration_state }) : t('settings.channelOff') })
+            state: worker?.channels_active ? t('settings.channelOn', { state: word(t, 'settings.integration.', worker.integration_state) }) : t('settings.channelOff') })
             + (worker?.integration_error ? ' · ' + worker.integration_error : ''),
           t('settings.schedule', { state: worker?.schedules_active ? t('settings.scheduleOn') : t('settings.channelOff') }),
           ...(worker?.sandbox ? [t('settings.sandbox', { state: worker.sandbox.backend === 'none'
-            ? t('settings.sandboxNone', { reason: worker.sandbox.reason }) : worker.sandbox.backend })] : [])].join(' · ')),
+            ? t('settings.sandboxNone', { reason: worker.sandbox.reason_code ? word(t, 'settings.sandboxReason.', worker.sandbox.reason_code)
+              : worker.sandbox.reason }) : word(t, 'settings.sandbox.', worker.sandbox.backend) })] : [])].join(' · ')),
         status && h('p', { role: 'status' }, status.pending ? t('settings.pending') : t('settings.applied')),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h(Button, { disabled: busy || state.shell.dirty || state.shell.saving, onClick: activate, variant: 'outline' }, t('settings.apply')),

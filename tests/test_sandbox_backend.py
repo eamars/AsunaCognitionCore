@@ -32,7 +32,7 @@ def test_the_host_decides_whether_commands_can_run():
 def test_none_turns_off_what_needs_a_sandbox_and_says_so(store, tmp_path):
     owner(store)
     store.config.update(sandbox={'backend': 'none'}, self_development={'enabled': True})
-    assert sandbox_backend.chosen(store.config) == {'backend': 'none', 'reason': 'turned off in the settings'}
+    assert sandbox_backend.chosen(store.config) == {'backend': 'none', 'reason': 'turned off in the settings', 'reason_code': 'off'}
     scene = store.db.scenes.find_one({'_id': 'dm-a'})
     assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'external'}) is False
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '看看。'})], '好。')])

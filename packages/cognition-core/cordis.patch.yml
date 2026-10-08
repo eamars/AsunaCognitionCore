@@ -19,6 +19,9 @@
         names:
           en: Action brain
           zh: 行动脑
+        descriptions:
+          en: "Does the work she hands over, with tools, files and the web, and reports back to her"
+          zh: 替她做交出去的事：用工具、文件和网络，做完向她报告
         plugins:
           - name: '@asuna/cognition-core/action'
           - id: compaction
@@ -53,6 +56,9 @@
         names:
           en: Conversation summary
           zh: 交流摘要
+        descriptions:
+          en: "Summarizes her conversations for her memory"
+          zh: 为她的记忆摘要对话
         plugins:
           - name: '@asuna/cognition-core/summary'
           - id: compaction
@@ -82,6 +88,9 @@
         names:
           en: Affect appraiser
           zh: 情感评估
+        descriptions:
+          en: "Judges how a turn moved her feelings, without tools"
+          zh: 判断一回合怎样触动了她的情绪，不用工具
         plugins:
           - name: '@asuna/cognition-core/appraiser'
     - id: asuna-attend-preset
@@ -91,6 +100,9 @@
         names:
           en: Join-in check
           zh: 接话判断
+        descriptions:
+          en: "Decides whether she joins in a group conversation"
+          zh: 判断她要不要在群里接话
         plugins:
           - name: '@asuna/cognition-core/attend'
           # Each group's gate session stays small: it compacts at about 5% of the window and keeps a short tail.
@@ -118,6 +130,9 @@
         names:
           en: Asuna schedules
           zh: Asuna 定时提醒
+        descriptions:
+          en: "Receives her reminders from DSH's scheduler and hands them on"
+          zh: 从 DSH 定时器接收她的提醒并转交
         plugins:
           - name: '@asuna/cognition-core/scheduler'
     - id: asuna-recovery-preset

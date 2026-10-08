@@ -58,12 +58,12 @@ export async function ensurePythonEnvironment({ dataRoot, workerPath, report = (
   const uv = await run('uv', ['--version'], { timeout: 20_000 });
   let steps;
   if (uv.code === 0) {
-    report('Building the Python environment with uv');
+    report('uv');                     // a step key: the settings card words it (settings.step.*)
     steps = [['uv', ['venv', '--python', '3.12', env]], ['uv', ['pip', 'install', '--python', python, '-r', lockFile]]];
   } else {
     const base = await basePython();
     if (!base) throw new Error('PYTHON_NOT_FOUND: install uv (https://docs.astral.sh/uv/) or Python 3.12+, then apply the settings again');
-    report('Building the Python environment with ' + base.join(' '));
+    report('python');
     const [command, ...args] = base;
     steps = [[command, [...args, '-m', 'venv', env]], [python, ['-m', 'pip', 'install', '--no-input', '-r', lockFile]]];
   }
@@ -76,6 +76,6 @@ export async function ensurePythonEnvironment({ dataRoot, workerPath, report = (
   }
   await fs.writeFile(path.join(env, MARKER), JSON.stringify({ lock: digest, built_at: new Date().toISOString(),
     with: uv.code === 0 ? 'uv' : 'pip' }));
-  report('Python environment ready');
+  report('ready');
   return python;
 }

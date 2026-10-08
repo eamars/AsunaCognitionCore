@@ -7,6 +7,7 @@ ADR-005 P3 起，这里同时是"自然语言安排"的落点：角色在 DECIDE
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 import threading
 
@@ -93,7 +94,8 @@ def plan_title(plan):
         return RHYTHM_TITLES['self_development_night']
     if plan.get('kind') in RHYTHM_TITLES:
         return RHYTHM_TITLES[plan['kind']]
-    line = ' '.join(str(plan.get('intent') or '').split())
+    # Her words as she wrote them, without Markdown's bold and code marks, which a plain-text title shows raw.
+    line = ' '.join(re.sub(r'\*\*|`', '', str(plan.get('intent') or '')).split())
     return (line[:TITLE_CHARS] + '…' if len(line) > TITLE_CHARS else line) or LEGACY_TITLE + plan.get('_id', '')
 
 

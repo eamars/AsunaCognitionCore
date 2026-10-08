@@ -29,14 +29,16 @@ def validate(setting):
 
 
 def chosen(config):
-    """{'backend', 'reason'} for this worker."""
+    """{'backend', 'reason', 'reason_code'} for this worker: a reason the program words has a code the settings card
+    shows in the viewer's language; the Host's own reason is passed as it is."""
     setting = config.get('sandbox') or {}
     validate(setting)
     if setting.get('backend') == 'none':
-        return {'backend': 'none', 'reason': 'turned off in the settings'}
+        return {'backend': 'none', 'reason': 'turned off in the settings', 'reason_code': 'off'}
     host = config.get('_host_sandbox') or {}
     if _CONFINE['call'] is None or not host.get('available'):
-        return {'backend': 'none', 'reason': host.get('reason') or 'the Host has no sandbox'}
+        return {'backend': 'none', 'reason': host.get('reason') or 'the Host has no sandbox',
+                **({} if host.get('reason') else {'reason_code': 'no_host'})}
     return {'backend': 'dsh', 'reason': None, 'enforcement': host.get('enforcement')}
 
 

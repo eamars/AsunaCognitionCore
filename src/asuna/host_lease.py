@@ -62,7 +62,8 @@ class DatabaseLease:
             self.left_behind = mine['expires_at'] - timedelta(seconds=LEASE_SECONDS)
             marked = (mine.get('planned_stop') or {}).get('at')
             self.planned = bool(marked) and self.left_behind - marked <= timedelta(seconds=PLANNED_SECONDS)
-        take = [{'$set': {**self.holder, 'since': '$$NOW', 'expires_at': self._expiry()}}]
+        # A planned-restart mark belongs to the Host that was stopped, never to this one.
+        take = [{'$set': {**self.holder, 'since': '$$NOW', 'expires_at': self._expiry()}}, {'$unset': 'planned_stop'}]
         free_or_mine = {'$or': [{'$lt': ['$expires_at', '$$NOW']}, {'$eq': ['$instance', self.me]}]}
         if self.leases.update_one({'_id': 'host', '$expr': free_or_mine}, take).matched_count:
             return self                 # expired, or this deployment's own

@@ -25,6 +25,7 @@ def test_a_lease_left_behind_is_found_and_a_clean_stop_leaves_none(store, tmp_pa
     assert mark_planned({'mongo_uri': store.config['mongo_uri'], 'database': store.name}, 'developer')
     with lease(store, tmp_path / 'h') as after_deploy:
         assert after_deploy.planned, 'a deploy marked its restart before killing the Host'
+        assert 'planned_stop' not in store.db.host_leases.find_one({'_id': 'host'}), 'the new Host starts unmarked'
 
 
 def test_a_planned_restart_is_recorded_and_not_shown(store):

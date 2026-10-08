@@ -31,10 +31,11 @@ def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path)
         if task['_id']=='old':raise Denied('STALE_TASK_FENCE')
     worker.app=SimpleNamespace(service=SimpleNamespace(valid=valid),broker=SimpleNamespace(
         bind=lambda session,task,cwd:calls.append((session,task['_id'],cwd)),
-        call=lambda *args:{'accepted':True}))
+        call=lambda *args:{'accepted':True}),
+        store=SimpleNamespace(config={},db=SimpleNamespace(scenes=SimpleNamespace(find_one=lambda *a,**k:None))))
     for token,task in (('old-stage','old'),('new-stage','successor')):
         future=Future();future.asuna_lane='executor';future.asuna_session_id='source'
-        future.asuna_task={'_id':task};future.asuna_binding={'cwd':str(tmp_path)}
+        future.asuna_task={'_id':task,'scene_id':'s'};future.asuna_binding={'cwd':str(tmp_path)}
         future.asuna_broker_session=token
         worker.pending[token]=future
     args={'session_id':'source','call_id':'call','tool':'read_file','args':{'path':'note'}}

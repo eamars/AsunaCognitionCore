@@ -44,7 +44,7 @@ Retrieval.search 只挑 memory_units 候选、不覆盖完整 messages，所以�
 import base64
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 try:
     from . import channel_kinds
@@ -898,7 +898,15 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                                                  for member in members})}}
 
 
-def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET):
+def _clock(value, zone):
+    """A time in a rendered line: on the conversation's local clock when its zone is known (local_time.py)."""
+    if zone is None:
+        return str(value)[:16].replace("T", " ")
+    from .local_time import stamp
+    return stamp(value, zone)
+
+
+def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=None):
     """行首时间，然后场景#序号、谁说的（我说／对方说）、身份、原文片段。"""
     """给角色读的几行。数据里的 text 是整条原文；这里只显示片段并标明截断。"""
     if result.get("degraded"):
@@ -935,13 +943,13 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET):
                      % fb["skipped_ties"])
     if not hits:
         return "[%s] 没查到（近 %s 起，授权场景内没有匹配；不代表对方没说过别的）%s" % (
-            header, (result.get("window") or ["?"])[0], "；" + "，".join(notes) if notes else "")
+            header, _clock((result.get("window") or ["?"])[0], zone), "；" + "，".join(notes) if notes else "")
     lines = ["[%s %d 条%s]" % (header, len(hits), "；" + "，".join(notes) if notes else "")]
     for hit in hits:
         body = hit["text"] or "（空）"
         if len(body) > snippet:
             body = "%s…〔显示截断，全文 %d 字在 text〕" % (body[:snippet], hit["chars"])
-        stamp = hit["at"][:16].replace("T", " ") if hit["at"] else "无时间戳"
+        stamp = _clock(hit["at"], zone) if hit["at"] else "无时间戳"
         if hit.get("time_source") == TIME_SOURCE_SINK:
             stamp += "⟨本机送达回执⟩"          # 不是平台 ack，行首就说清
         note = hit.get("attachment")
@@ -984,7 +992,8 @@ HISTORY_TOOL = {
                     "person 用标签或 #编号（如 #4）最准；给名字时，名字对上不止一个人会列出各自标签，请改用 #编号。"
                     "场景由任务绑定，外加配置给它挂的只读联动场景（同一人的另一个入口）；参数不能换"
                     "查询范围，也不接受 Mongo 表达式。跨场景命中行首带各自的场景号。"
-                    "回执时间回退会标明是送达回执，不伪称原始发送时刻；more=true 时必须带 cursor 续查，不能宣称查完。"),
+                    "回执时间回退会标明是送达回执，不伪称原始发送时刻；more=true 时必须带 cursor 续查，不能宣称查完。"
+                    "时间都是本地钟面：结果里的时间这样显示，since/until 也这样写（2026-09-22 或 2026-09-22 12:00）。"),
     "parameters": {
         "query": {"type": "string"},
         "person": {"type": "string"},
@@ -1032,8 +1041,22 @@ def _bounded_int(value, low, high, name, prefix="INVALID_HISTORY_"):
 
 
 def _bad_stamp(prefix, name, value):
-    return ValueError("%s%s: %s %r 不是日期；写成 2026-09-22 或 2026-09-22T12:00:00Z 这样的 ISO 时间"
+    return ValueError("%s%s: %s %r 不是日期；按本地钟面写成 2026-09-22 或 2026-09-22 12:00 这样的时间"
                       % (prefix, name, name.lower(), value[:40]))
+
+
+def _utc(value, zone):
+    """A since/until she wrote: without an offset it is a local time, compared against stored UTC as ISO-Z."""
+    if not value:
+        return value
+    text = value.strip().replace(" ", "T")
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=zone["tz"])
+    return _iso(moment.astimezone(timezone.utc))
 
 
 def _bad_flag(prefix, name, value):
@@ -1137,6 +1160,10 @@ class HistoryQueryService:
         for name, value in (("SINCE", since), ("UNTIL", until)):
             if value and not _STAMP_SHAPE.match(value):
                 raise _bad_stamp("INVALID_HISTORY_", name, value)
+        # She reads times on the local clock (local_time.py), so a time without an offset is read in that zone.
+        from .local_time import zone_of
+        zone = zone_of(self.store, task["scene_id"])
+        since, until = _utc(since, zone), _utc(until, zone)
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
         cursor = _bounded_text(args.get("cursor"), 1024, "CURSOR")
@@ -1168,10 +1195,11 @@ class HistoryQueryService:
             query, person=person, window_days=window_days or DEFAULT_WINDOW_DAYS,
             since=since or None, until=until or None, limit=limit or DEFAULT_LIMIT,
             cursor=inner, case_sensitive=case_sensitive)
-        return self._payload(result, inner, mark)
+        from .local_time import zone_of
+        return self._payload(result, inner, mark, zone_of(self.store, task["scene_id"]))
 
     @staticmethod
-    def _payload(result, inner_cursor, mark):
+    def _payload(result, inner_cursor, mark, zone=None):
         hits = [{key: value for key, value in hit.items() if key not in ("author", "person_id", "names")}
                 for hit in result.get("hits") or []]
         trimmed = 0
@@ -1187,7 +1215,7 @@ class HistoryQueryService:
         else:
             raw_next = raw
         wrapped = _wrap_cursor(raw_next, mark) if more else None
-        text = render(result)
+        text = render(result, zone=zone)
         if raw and wrapped:
             # 渲染行里呈现的 cursor 必须与结构化 next_cursor 同值：行动脑照哪个续查都一样。
             text = text.replace(str(raw), str(wrapped))

@@ -276,6 +276,9 @@ class Coordinator:
         # A group turn brings the pictures of the line that started it (role_tools.turn_pictures).
         pulled,shown=role_tools.turn_pictures(self.store,ep) if first else ([],None)
         context={**ep['context'],'pictures_from_program':shown} if shown else ep['context']
+        # What she reads is on the local clock; the stored context keeps UTC for the program (local_time.py).
+        from . import local_time
+        context=local_time.for_model(context,local_time.zone_of(self.store,ep['scene_id']))
         if pulled:
             fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
             self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
@@ -359,6 +362,8 @@ class Coordinator:
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
         try:
             material=attend.material(self.store,scene,event,row,ep['persona'])
+            from . import local_time
+            material=local_time.for_model(material,local_time.zone_of(self.store,ep['scene_id']))
             question=attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False)
             system=attend.system(self.store,ep['persona'])
             def generate(attempt, note):

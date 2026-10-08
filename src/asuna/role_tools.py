@@ -642,7 +642,7 @@ class RoleTools:
                 raise Refused('CALL_ID_REUSED: 这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。')
             if done.get('refused'):
                 raise Refused(done['refused'])
-            return done['result'], bool(done.get('conclude'))
+            return self._local(ep, done['result']), bool(done.get('conclude'))
         try:
             if name not in TOOLS or name not in (ep.get('turn_tools') or ()):
                 raise Refused('这回合没有 %s 这个工具。能用的是：%s。' % (name, '、'.join(ep.get('turn_tools') or ())))
@@ -664,7 +664,12 @@ class RoleTools:
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
         self._record(ep_id, call_id, name, args, conclude=conclude,
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
-        return result, conclude
+        return self._local(ep, result), conclude
+
+    def _local(self, ep, result):
+        """What she reads back is on the local clock; the record keeps UTC (local_time.py)."""
+        from . import local_time
+        return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False):
         c = self.coordinator

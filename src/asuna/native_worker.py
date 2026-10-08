@@ -812,7 +812,10 @@ class BusinessWorker:
                 broker_session = future.asuna_broker_session
             self.app.service.valid(task)
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
-            return self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+            # The action brain reads tool results on the local clock; receipts keep UTC (local_time.py).
+            from . import local_time
+            return local_time.for_model(self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args']),
+                                        local_time.zone_of(self.app.store, task['scene_id']))
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs

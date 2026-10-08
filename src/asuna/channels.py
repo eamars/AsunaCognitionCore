@@ -123,6 +123,33 @@ def awaited_answer(store, scene, person_id, mentions, reply):
                                            'event.group_context.wake_reason': 'awaited_answer'}, {'_id': 1})
 
 
+def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
+    """A reused platform id resolves within this scene to the latest line no later than the reply.
+
+    A line without a readable time cannot be shown to be later, so it stays a candidate, ranked below every dated one.
+    """
+    def moment(value):
+        try:
+            date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+            return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
+        except (ValueError, TypeError):
+            return None
+    ceiling = moment(at) or datetime.now(timezone.utc)
+    undated = datetime.min.replace(tzinfo=timezone.utc)
+    outbound = {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED'}
+    if outbound_author:
+        outbound['author'] = outbound_author
+    candidates = store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
+        '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply}, outbound]})
+    eligible = []
+    for row in candidates:
+        field = 'occurred_at' if row['direction'] == 'inbound' else 'receipt_at'
+        when = moment(row.get(field) or row.get('received_at')) or undated
+        if when <= ceiling:
+            eligible.append((when, row.get('scene_seq') or 0, str(row['_id']), row))
+    return max(eligible, key=lambda item: item[:3])[3] if eligible else None
+
+
 def group_context(store, route, body, event_id, person_id=None):
     """Bind a normalized reply to an actual record in this group and epoch."""
     mentions = body.get('mentioned_account_ids', [])
@@ -134,9 +161,8 @@ def group_context(store, route, body, event_id, person_id=None):
     scene = store.db.scenes.find_one({'_id': route['scene_id']})
     parent = None
     if reply:
-        parent = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-            '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
-                    {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED', 'author': character_id(store.config)}]})
+        parent = reply_parent(store, scene, reply, body.get('occurred_at'),
+                              outbound_author=character_id(store.config))
     reason = 'mentioned_account' if body['account_id'] in mentions else None
     from .caught_up import stale as _stale
     late = _stale(body.get('raw'), body.get('occurred_at'))     # caught up after a gap and no longer fresh
@@ -229,7 +255,10 @@ class Channels:
         if 'occurred_at' in body and not isinstance(body['occurred_at'], str):
             raise ValueError('INVALID_OCCURRED_AT')
         # Namespaced by connection/account/scene; same text/time is not deduplication.
-        event_id = 'channel-' + sha(canonical([channel_id, channel['account_id'], route['scene_id'], body['event_id']]))
+        identity = [channel_id, channel['account_id'], route['scene_id'], body['event_id']]
+        if 'occurred_at' in body:
+            identity.append(body['occurred_at'])
+        event_id = 'channel-' + sha(canonical(identity))
         event = {'event_id': event_id, 'scene_id': route['scene_id'], 'person_id': member['person_id'],
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],

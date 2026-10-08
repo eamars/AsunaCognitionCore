@@ -472,6 +472,13 @@ def _check_group_inbound(rep, gcfg):
     rep.check("group_missing_message_id", reason == "bad_shape", reason)
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4100), gcfg, seen)
     rep.check("group_duplicate_same_route", reason == "duplicate_local", reason)
+    reused = _group_event(gcfg, groups[0], OWNER, 4100)
+    reused['time'] += 86400
+    _res, reason = inbound_mod.classify(reused, gcfg, seen)
+    rep.check('group_reused_id_at_new_time', reason == 'accepted', reason)
+    reused['asuna_catchup'] = {'reason': 'reconnect'}
+    _res, reason = inbound_mod.classify(reused, gcfg, seen)
+    rep.check('group_catchup_same_id_and_time', reason == 'duplicate_local', reason)
     long_text = "a" * 16001
     res, reason = inbound_mod.classify(_group_event(gcfg, groups[0], OWNER, 4111, message=_text(long_text)), gcfg, seen)
     rep.check("group_over_host_limit_flagged", reason == "accepted" and res[1]["over_host_limit"] is True and

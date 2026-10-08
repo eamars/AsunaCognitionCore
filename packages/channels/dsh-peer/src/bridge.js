@@ -216,7 +216,7 @@ export class PeerBridge {
         const text = ((ours || !this.peer.ownerNote) ? '' : this.peer.ownerNote + '\n') + said;
         this.state.pending.push({ event_id: this.peer.sessionId + ':turn:' + data.turn + ':' + event.seq,
           text: text.length > TEXT_LIMIT ? text.slice(0, TEXT_LIMIT - 1) + '…' : text,
-          occurred_at: new Date(event.time ?? Date.now()).toISOString() });
+          ...(event.time == null ? {} : { occurred_at: new Date(event.time).toISOString() }) });
       }
     }
     this.state.lastSeq = event.seq;

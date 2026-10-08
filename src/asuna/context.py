@@ -137,10 +137,10 @@ class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
 
-    def _reply_context(self, rows, scene):
+    def _reply_context(self, rows, scene, *, keep_event=False):
         """Keep transport reply attribution when projecting scoped history."""
         for row in rows:
-            event = row.pop('event', {})
+            event = row.get('event', {}) if keep_event else row.pop('event', {})
             group = event.get('group_context', {})
             if group:
                 row['mentioned_account_ids'] = group.get('mentioned_account_ids', [])
@@ -148,16 +148,12 @@ class ContextBuilder:
             if not reply:
                 continue
             row['reply_to'] = reply
-            parent = self.store.db.messages.find_one({
-                **(scene_links.scene_id_filter(scene_links.read_scope(self.store.config, scene))
-                   if scene_links else {'scene_id': scene['_id']}),
-                'policy_epoch': scene['policy_epoch'],
-                '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply},
-                        {'direction': 'outbound', 'platform_message_id': reply,
-                         'delivery_state': 'DELIVERED'}]},
-                {'text': 1, 'author': 1, 'direction': 1})
+            from .channels import reply_parent
+            source = self.store.db.scenes.find_one({'_id': row.get('scene_id', scene['_id'])})
+            parent = reply_parent(self.store, source or scene, reply,
+                                  row.get('occurred_at') or row.get('receipt_at') or row.get('received_at'))
             if parent:
-                row['reply_to_message'] = parent
+                row['reply_to_message'] = {key: parent[key] for key in ('_id', 'text', 'author', 'direction')}
         return rows
 
     def _merge_linked_history(self, own, scene, read, projection):
@@ -245,14 +241,16 @@ class ContextBuilder:
             history=catch_up(self.store,scene,history)
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
-        else:
+        self._reply_context(history, scene, keep_event=True)
+        if not read['linked_scenes']:
             zone=schedule_rules.scene_timezone(self.store.config,scene)
             for row in history:                  # no raw times: when it was said, on her clock face
                 said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
                 for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
                 stamp=schedule_rules.line_stamp(zone,said)
                 if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
-        self._reply_context(history, scene)
+        for row in history:
+            row.pop('event', None)
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
@@ -598,7 +596,8 @@ class ContextBuilder:
             related = list(self.store.db.messages.find({'_id': {'$in': [r for r in refs if r]},
                 'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
                 {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                 'platform_reply_to':1, 'event.group_context':1}))
+                 'platform_reply_to':1, 'event.group_context':1,
+                 'occurred_at':1, 'receipt_at':1, 'received_at':1}))
             # P5：整条话题线（含没@她的旁听行）一并给出——接不上话题就谈不上要不要接话。
             seen = {row['_id'] for row in related}
             if group.get('topic_id'):
@@ -607,7 +606,8 @@ class ContextBuilder:
                         'event.group_context.topic_id': group['topic_id'],
                         '$or': [{'direction':'inbound'}, {'delivery_state':'DELIVERED'}]},
                         {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                         'platform_reply_to':1, 'event.group_context':1}
+                         'platform_reply_to':1, 'event.group_context':1,
+                         'occurred_at':1, 'receipt_at':1, 'received_at':1}
                         ).sort('scene_seq', -1).limit(12):
                     if row['_id'] not in seen:
                         seen.add(row['_id'])
@@ -616,10 +616,13 @@ class ContextBuilder:
             self._reply_context(related, scene)
             speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
-                {'text':1,'author':1,'scene_seq':1,'event.group_context':1}).sort('scene_seq',-1).limit(3)) \
+                {'text':1,'author':1,'scene_seq':1,'event.group_context':1,
+                 'occurred_at':1,'received_at':1}).sort('scene_seq',-1).limit(3)) \
                 if source and event.get('episode_kind')!='visit' else []
             self._reply_context(speaker_tail, scene)
             for row in [*related, *speaker_tail]:
+                for key in ('occurred_at', 'receipt_at', 'received_at'):
+                    row.pop(key, None)
                 row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             continuity = {**group, 'related_messages': related,
                           'current_speaker_tail': list(reversed(speaker_tail))}

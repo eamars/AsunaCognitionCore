@@ -140,6 +140,17 @@ test('her words reach the peer labelled, are receipted, and the answer to them c
   } finally { done(); }
 });
 
+test('a peer turn without platform time does not acquire a fresh delivery timestamp', async () => {
+  const { peer, host, done } = await setup();
+  try {
+    const records = turn(11, 4, { kind: 'user' }, 'untimed peer answer');
+    delete records.at(-1).time;
+    for (const event of records) peer.send({ type: 'event', event });
+    await until(() => host.events.length === 1);
+    assert.equal(Object.hasOwn(host.events[0], 'occurred_at'), false);
+  } finally { done(); }
+});
+
 test('a refused prompt is a failed receipt, and pings are answered', async () => {
   const { peer, host, done } = await setup();
   try {

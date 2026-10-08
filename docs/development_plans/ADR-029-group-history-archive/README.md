@@ -1,7 +1,9 @@
 # ADR-029: old group chat kept as archived messages; a platform message id names a message only with its time
 
-Status: **Accepted, not built** 2026-10-09. The owner set the requirements and asked Claude to lead the method;
-Claude decided the method below. Part A is a one-off import. Part B is a persistent fix to live ingress.
+Status: **Built, imported and activated; live lookup checked with a scope limitation** 2026-10-09. The owner set
+the requirements and asked Claude to lead the method; Claude decided the method below. Part A's records are
+imported and verified. The owner restarted the production profile; the installed history, ingress, context and
+channel files match the checkout. Part A is a one-off import. Part B is a persistent fix to live ingress.
 
 ## 1. Context
 
@@ -187,3 +189,74 @@ not. It identifies one only together with its send time.
 - Whether a summary or embedding pass over the archive is ever wanted. It would need its own decision and
   real-model authorization.
 - Media bytes beyond the few hundred inline items. They are not in the archives.
+
+## 6. Implementation and evidence (2026-10-09)
+
+The one-off importer and its frozen manifest live under `<data>/private/adr029-group-history-archive/`.
+The superseded proposal and discovery scripts were removed; their five evidence files are retained in that
+directory's `discovery/`. Deployment identifiers and original content remain private.
+
+- The dry run reconciled all 726,637 source rows: **714,182 human group records kept**, 12,455 excluded,
+  across 24 approved numeric group identifiers. The source payload hashes were checked again before importing.
+- The import inserted all 714,182 records. Command monitoring recorded only `insert` commands against the
+  target `messages` collection. No production index was added. The pre-import `messages` dump has 10,898 rows
+  and was decoded again to verify its count; its checksum is in the private manifest.
+- A full production rerun found all 714,182 records already present, inserted none, and issued zero MongoDB
+  write commands.
+- Post-import verification read every imported payload back, verified all 714,182 hashes and original text/time
+  values, and reconciled every group's counts by day. All forbidden live-routing fields were absent.
+- Direct, non-semantic history calls against the live database returned attributed archive lines from all 16
+  matched groups, with the scope checks intact. The eight unmatched groups remain stored without scene documents.
+- The same sample of 30 people retained its familiarity levels. No outbound row was added during the measured
+  interval. The already-running Host independently advanced some receipts, sessions, audit records and memory
+  units; the command log establishes that the importer wrote none of them.
+- A 2,000-record pilot proved interruption/resume, an unchanged rerun, rejection of a changed payload, scoped
+  attribution and rollback. Its test database was dropped after evidence export. A 360,000-record synthetic
+  archive took 1.4–2.0 seconds for full-page, matching and missing-term searches using existing indexes.
+- An isolated native DSH profile with synthetic inference called the real Python history service and displayed
+  its dated archive receipt through the shipped Web interface. The Web fixture database was dropped and its Host
+  stopped; the screenshot and source receipt are retained privately. No real model endpoint was called by these
+  probes, and the operator's independent model server was not stopped.
+- Targeted Mongo/runtime checks passed, including archive pagination, transport-budget continuation, scope/epoch
+  fences, read-only historical naming, media-only rows, stable familiarity, repeated platform IDs and reply time
+  ordering. Native tests passed (100); the adapter's offline self-test passed (281 checks), including its new
+  ID-and-time and catch-up cases. The summary and proactive offline checks passed (24 and 19 cases).
+- The older flat-module discussion check passes 17/18 cases. Its remaining relative-import failure in
+  `case_cursor_and_argument_fences` was reproduced with the unchanged `HEAD` history reader. The changed-file
+  personal-data scan found no hits; the deployment's personal-word-list check is skipped because no list is
+  configured, so that particular check remains unchecked.
+
+The history change also fixes transport-budget continuation advancing from the newest delivered row: each stream
+now continues after its oldest delivered row. Archive media payloads are excluded from the query projection while
+remaining intact in storage. Reply attribution runs before recent-context timestamps are rendered, preserving the
+catch-up marker until its original-time label has been produced.
+
+Claude's audit ran the full Python suite. It showed that reply resolution dropped any candidate without a readable
+time, which `test_host.py`'s scene-isolation fixture relies on. Such a line cannot be shown to be later than the
+reply, so it now stays a candidate ranked below every dated one. No live row lacks those times. After the fix the
+full suite passed (470), and the adapter self-test passed again (281).
+
+The owner restarted the production profile manually and then explicitly requested a live lookup experiment.
+The installed code was checked against the checkout before the experiment.
+
+## 7. Live lookup experiment (2026-10-09)
+
+Codex identified itself as a development agent, not the owner, in the existing local Web conversation and asked
+for a dated human statement from one imported group. The answer was selected from the source beforehand and was
+not supplied in the question. The character delegated a read-only lookup to the action brain.
+
+The action brain recovered the exact statement, its original UTC timestamp and its archive message ID. All three
+matched the original source record. It also kept uncertainty about the statement's intent separate from its
+verbatim text. The result and screenshot are in the private `live-experiment/` evidence directory.
+
+This was **not a successful ordinary history lookup from the local conversation**: `query_authorized_history`
+correctly reported a scope containing the local conversation and its configured private-chat link, not the named
+group. The action brain then used `development_database_read`, the read-only maintenance interface, to obtain the
+archive. It took 32 tool calls and about two and a half minutes of action execution. No read link or permission was
+changed for the experiment, and no group message was requested or sent by its task.
+
+Thus the live archive and source fidelity are confirmed, while ordinary cross-group lookup from home remains
+limited by the accepted scope design. A normal history-tool experiment would need that group's own authorized
+context or an explicitly configured read link. The maintenance report also described the displayed `occurred_at`
+as local storage time; the actual stored value is UTC and the tool formats it for reading. Its separately quoted
+original UTC timestamp was correct.

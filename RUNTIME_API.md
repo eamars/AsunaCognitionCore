@@ -54,6 +54,8 @@ POST bodies are JSON objects, limited to 256 KiB. Unsupported envelope fields ar
 
 ### Receive an event
 
+An inbound identity binds the channel, account, scene and platform event ID. When `occurred_at` is supplied, its value is part of that identity too: the same ID and send time is a redelivery, while the same ID at a different time is a new message. Adapters supply the original platform send time, or omit the field when unavailable; they do not substitute the time of forwarding. A reply resolves within its own scene and policy epoch to the newest matching inbound occurrence or delivered outbound receipt no later than the replying message.
+
 ```http
 POST /v1/channels/{channel_id}/events
 Content-Type: application/json
@@ -193,7 +195,9 @@ Asuna tools include scoped workspace operations, history search, structured disc
 
 Conversation and memory records are scoped by scene and policy epoch. Memory indexing runs in the background. History search reads authorized inbound messages and delivered `SPEAK` messages; it can return literal matches and, when available, semantic candidates. It does not turn a derived summary into a verbatim quote.
 
-Structured discussion digests use the same scene-bound history reader. They report their actual time and source coverage, preserve source references, and identify partial results rather than claiming an unread window was fully covered.
+The explicit `history` tool also reads `direction: archived` rows under `archive:<scene_id>` for the current scene and its configured read links, with the same epoch rules. Archive rows share the live scene's `scope_key`, so conversation erasure covers them. They have independent sequence numbers and retain original text and timestamps; empty text can represent a media-only source. A result marks them `archived: true` and uses the person's existing roster label or their stored historical name without creating a people entry. Use explicit `since` and `until` dates for older archives; `window_days` is limited to 90. Archive rows do not enter recent context, familiarity, attention, recovery, publication, chunking, summaries, or automatic memory retrieval. Groups without a live scene remain unreadable until admitted. Raw wire text, unresolved reply context and attachment metadata remain under `legacy`; they are not attributed to a speaker as new prose.
+
+Structured discussion digests use the scene-bound live history reader, without archived rows. They report their actual time and source coverage, preserve source references, and identify partial results rather than claiming an unread window was fully covered.
 
 Background dialogue summaries process new messages in direct-message and authorized-group scenes after the summary boundary is initialized. They include inbound messages and delivered public `SPEAK` messages, and do not block the conversation. Each summary stores its source IDs, source window, participants, and per-speaker attribution. The participant list is computed from stored authors, not inferred by the summarizing model. Correction annotations resolve only against records in the same scene and policy epoch; unresolved references remain unresolved. When a later correction points to an earlier summary, the host appends a correction marker without rewriting the earlier summary text. A summary is evidence for a person only when its recorded participants include that person.
 

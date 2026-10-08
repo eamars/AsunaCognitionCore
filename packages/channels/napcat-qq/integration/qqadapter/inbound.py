@@ -82,7 +82,7 @@ TAG_RE = re.compile(r"<[^>]+>")
 
 class SeenLRU:
     """Cheap guard against re-submitting the same platform message in the same
-    scene.  Keys must carry the route, never the bare message id."""
+    scene. Keys carry the route, message id and original platform time."""
 
     def __init__(self, capacity=512):
         self.capacity = capacity
@@ -470,7 +470,7 @@ def _classify_private(event, cfg, seen):
         # nothing a text-only host can be told about; the caller journals the
         # reason, never the content
         return None, "no_text"
-    if not seen.add_if_new("private:%s:%s" % (route.route_id, event_id)):
+    if not seen.add_if_new((route.route_id, event_id, _iso(event.get('time')))):
         return None, "duplicate_local"
     text, shrunk = fit_host_limit(parsed, text, False)
     envelope = _base_envelope(event, user_id, event_id, text, route)
@@ -520,7 +520,7 @@ def _classify_group(event, cfg, seen):
         # the gate is still here, in the same place, after every authorization
         # check: an unauthorized sender never gets their content looked at
         return None, "no_text"
-    if not seen.add_if_new("group:%s:%s" % (route.route_id, event_id)):
+    if not seen.add_if_new((route.route_id, event_id, _iso(event.get('time')))):
         return None, "duplicate_local"
     text, shrunk = fit_host_limit(parsed, text, True)
     envelope = _base_envelope(event, user_id, event_id, text, route)

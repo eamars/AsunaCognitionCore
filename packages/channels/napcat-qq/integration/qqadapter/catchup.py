@@ -17,7 +17,7 @@ is the original one.
   without a seq, the newest page.  Rows are fed oldest first, so a reply finds the line it quotes.
   `disable_get_url` is always on: an old picture's link has expired anyway.  Her own lines are dropped.
 - Duplicates: a row already seen in this process is dropped by the local LRU; one seen before a restart
-  is the same host event id (`str(message_id)`), which the host answers as a duplicate.
+  has the same message id and send time (`occurred_at`), which the host answers as a duplicate.
 
 The log carries counts and ids only, never text.
 """

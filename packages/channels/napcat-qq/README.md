@@ -18,6 +18,7 @@ with Core (`registerChannel`).
   `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder, at most
   `lookback_hours` back, 1–6) and fed oldest first through the usual inbound path, marked `raw.asuna_catchup`.
   Off by default.
+- Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
   and posted to Core's `members` endpoint only when it changed.

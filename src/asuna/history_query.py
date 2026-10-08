@@ -109,6 +109,7 @@ TEXT_FIELD = "text"
 EPOCH_FIELD = "policy_epoch"
 DIRECTION_FIELD = "direction"        # ingress.py / coordinator.py 都写这个，取值如下
 INBOUND = "inbound"
+ARCHIVED = "archived"
 OUTBOUND = "outbound"
 SIDE_INBOUND = "对方说"        # 入站：场景里那个人亲口说的
 SIDE_OUTBOUND = "我说"        # 出站：我自己说过的（不是对方原话）
@@ -161,7 +162,7 @@ TIME_SOURCE_SINK = "sink_receipts.received_at"            # 经 receipt 关联�
 TIME_SOURCE_NONE = ""
 TIME_SOURCES = {INBOUND_TIME_FIELD: TIME_SOURCE_INBOUND, OUTBOUND_TIME_FIELD: TIME_SOURCE_RECEIPT_AT,
                 SINK_TIME_FIELD: TIME_SOURCE_SINK}
-STREAM_KEYS = (INBOUND, OUTBOUND, OUTBOUND_VIA_RECEIPT)
+STREAM_KEYS = (INBOUND, OUTBOUND, OUTBOUND_VIA_RECEIPT, ARCHIVED)
 
 
 def _text(value, limit=60):
@@ -177,6 +178,17 @@ def _stamp(value):
     if isinstance(value, datetime):
         return _iso(value)
     return _text(value, 32)
+
+
+def _archive_stamp(value):
+    """Archive timestamps retain microseconds in one UTC representation."""
+    try:
+        date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return str(value)              # Preserve the existing reader's handling of undated legacy live rows.
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    return date.astimezone(timezone.utc).isoformat(timespec='microseconds')
 
 
 def _parse(value):
@@ -223,6 +235,8 @@ def _scene_parts(scene):
             "scene_ids": [scene_id] + extra, "linked_scenes": extra,
             "person_classes": classes, "person_aliases": aliases,
             "person_authors": list(authors) if isinstance(authors, (list, tuple)) else None,
+            "include_archived": scene.get("include_archived") is True,
+            "archive_labeler": scene.get("archive_labeler"),
             "labeler": scene.get("labeler") if callable(scene.get("labeler")) else None}
 
 
@@ -248,8 +262,44 @@ def bind_people(store, scene, scene_doc, person):
         return None
     people = People(store)
     scene_doc["labeler"] = people.row_head
+    def archive_label(row):
+        live_scene = row['scene_id'].removeprefix('archive:')
+        record = store.db.scene_people.find_one({'_id': live_scene + '|' + people.person(row['author'])})
+        if record:
+            return people.label(record)
+        from .people import safe_name
+        name = safe_name(row.get('historical_display_name') or (row.get('legacy') or {}).get('display_name'))
+        return (name or '未记录姓名') + '（当时的名字；归档作者 ' + row['author'] + '）'
+    scene_doc['archive_labeler'] = archive_label
     if not person:
         return None
+    if scene_doc.get('include_archived'):
+        # Resolve stored historical names without enrolling their speakers in the live roster.
+        from .people import safe_name
+        scope = [scene_doc['scene_id'], *(scene_doc.get('readable_scenes') or [])]
+        roster = list(people.roster(scene['_id']).values())
+        ids = {people.person(person), *channel_kinds.person_ids(person),
+               *(scene_doc.get('person_aliases') or [])}
+        if person.isdigit():
+            ids.add(people.account_person(scene['_id'], person))
+        numbered = re.fullmatch(r'\[?[^#\[\]]*#\s*(\d{1,6})\s*\]?', person)
+        matches = [doc for doc in roster if doc.get('person') in ids
+                   or numbered and str(doc.get('handle')) == numbered.group(1)
+                   or safe_name(person) in {people.shown(doc), people.label(doc),
+                       *(safe_name(p.get('name')) for p in doc.get('previous') or [])}]
+        ids.update(doc['person'] for doc in matches)
+        candidates = store.db.messages.distinct('author', {
+            'scene_id': {'$in': ['archive:' + sid for sid in scope]}, 'direction': ARCHIVED,
+            'policy_epoch': scene_doc['policy_epoch'], 'deletion_id': {'$exists': False},
+            '$or': [{'author': {'$in': list(ids)}}, {'historical_display_name': person}]})
+        persons = {people.person(author) for author in candidates} | {doc['person'] for doc in matches}
+        if candidates:
+            if len(persons) != 1:
+                return '这个名字对应多位归档作者；请用完整的平台账号再查，不把同名的人合在一起。'
+            canonical = next(iter(persons))
+            scene_doc['person_authors'] = sorted(set(candidates) | set(people.authors_of(
+                canonical, scope + ['archive:' + sid for sid in scope])))
+            return None
     found = people.resolve(scene, person)
     if len(found) == 1:
         scene_doc["person_authors"] = people.authors_of(
@@ -519,7 +569,14 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
     if clause:
         inbound["$and"] = [dict(clause)]
         outbound["$and"] = [dict(clause)]
-    return [(INBOUND, INBOUND_TIME_FIELD, inbound), (OUTBOUND, OUTBOUND_TIME_FIELD, outbound)]
+    streams = [(INBOUND, INBOUND_TIME_FIELD, inbound), (OUTBOUND, OUTBOUND_TIME_FIELD, outbound)]
+    if parts.get('include_archived'):
+        archive = {**inbound, 'scene_id': {'$in': ['archive:' + sid for sid in parts['scene_ids']]},
+                   DIRECTION_FIELD: ARCHIVED, 'deletion_id': {'$exists': False}}
+        if bounds:
+            archive[INBOUND_TIME_FIELD] = {op: _archive_stamp(value) for op, value in bounds.items()}
+        streams.append((ARCHIVED, INBOUND_TIME_FIELD, archive))
+    return streams
 
 
 def outbound_fallback_filter(parts, query="", *, author=None, case_sensitive=True,
@@ -563,6 +620,10 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
             "side": SIDE_OUTBOUND if _text(doc.get(DIRECTION_FIELD), 16) == OUTBOUND else SIDE_INBOUND,
             "speaker": author,          # 发言者只认记录里的 author，不拿身份块自称顶替
             "text": full, "chars": len(full), "verbatim": bool(full)}
+    if doc.get(DIRECTION_FIELD) == ARCHIVED:
+        labeler = (parts or {}).get('archive_labeler')
+        who = labeler(doc) if callable(labeler) else doc.get('historical_display_name') or author
+        return dict(base, archived=True, who=who, speaker=who, person_id='', names=[])
     if outbound_media is not None:
         # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
         slot = outbound_media.history_slot(doc)
@@ -733,7 +794,8 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         if after:
             flt.setdefault("$and", []).append(after)   # 不盖掉按人过滤那一支
         try:
-            found = list(store.db.messages.find(flt, sort=[(field, -1), (SORT_FIELD, -1),
+            found = list(store.db.messages.find(flt, {'legacy': 0} if key == ARCHIVED else None,
+                                               sort=[(field, -1), (SORT_FIELD, -1),
                                                            ("scene_id", -1)],
                                                limit=page + 1) or [])
         except Exception as exc:
@@ -778,7 +840,8 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
                         rank=item["rank"])
     # 归并决胜位三位一起：时间 → scene_seq → scene_id。跨场景后前两位可能两条完全相同，
     # 少第三位就会在同一秒两条上重一条或漏一条（V7）。
-    merged.sort(key=lambda item: (item["eff"], item["seq"], item.get("sid", "")), reverse=True)
+    merged.sort(key=lambda item: (_archive_stamp(item['eff']) if item['eff'] else '',
+                                  item["seq"], item.get("sid", "")), reverse=True)
     cut = _group_safe_cut(merged, min(page, len(merged)))
     page_items = merged[:cut]
     consumed = dict((stream["key"], stream["cursor"]) for stream in streams)
@@ -1070,7 +1133,8 @@ def _fingerprint(scene, query, person, since, until, window_days, case_sensitive
                          list(scene.get("readable_scenes") or []),
                          sorted(scene.get("person_aliases") or []),
                          query, person, since, until,
-                         window_days, bool(case_sensitive), bool(include_semantic)], ensure_ascii=False)
+                         window_days, bool(case_sensitive), bool(include_semantic),
+                         bool(scene.get('include_archived'))], ensure_ascii=False)
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
 
 
@@ -1102,8 +1166,8 @@ def _cursor_after_delivered(delivered, inner_cursor):
     游标只是三支各自的 (时间, 序/回执引用) 位置，筛选每次由任务与参数重建，所以按已交付
     命中重建位置与模块自身翻页等价；命中必带有效时间戳（无时间戳的行进不了时间窗），位置总是可用。"""
     pairs = _cursors(inner_cursor)
-    for hit in reversed(delivered):            # 页为倒序：最后一条是最旧交付
-        key = _STREAM_BY_FIELD.get(hit.get("time_field"))
+    for hit in delivered:                     # Descending page: the last delivered row advances each stream.
+        key = ARCHIVED if hit.get('archived') else _STREAM_BY_FIELD.get(hit.get("time_field"))
         if not key or not hit.get("at"):
             continue
         pairs[key] = [hit["at"], hit.get("time_ref") if key == OUTBOUND_VIA_RECEIPT else hit.get("scene_seq"),
@@ -1176,7 +1240,7 @@ class HistoryQueryService:
         # 围栏比对的是「任务场景 + 它按配置能只读的那些场景」：联动集合现算自配置（不是工具参数），
         # 所以工具既不能把范围换宽，也不能把游标借到另一条边上去。
         scene_doc = {"scene_id": scene["_id"], "scope_key": scene["scope_key"],
-                     "policy_epoch": scene["policy_epoch"], "person": person}
+                     "policy_epoch": scene["policy_epoch"], "person": person, "include_archived": True}
         scene_doc.update(_link_fields(self.store, scene_doc, person))
         mark = _fingerprint(scene_doc, query, person, since, until,
                             window_days or DEFAULT_WINDOW_DAYS, case_sensitive, include_semantic)

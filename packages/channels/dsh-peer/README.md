@@ -8,6 +8,7 @@ Web server; she talks with it in one direct-message conversation of her own.
   - A reply that did not answer her gets `ownerNote` as its first line. Such a reply answered someone else in
     that session.
   - A new bridge starts from the session's present; it never replays history.
+  - `occurred_at` uses the peer event's timestamp. A peer event without a timestamp omits it; forwarding time is not substituted.
 - **Outbound:** her words leave through the channel outbox. The bridge sends them as prompts to the session,
   with `label` as the first line, and records the platform receipt (`platform_message_id` = the prompt's
   `requestId`).

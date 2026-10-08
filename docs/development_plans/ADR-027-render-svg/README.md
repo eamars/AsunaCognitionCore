@@ -43,5 +43,10 @@ the `render_svg` Host request); `packages/cognition-core/src/svg.js` and `svg-wo
 `coordinator._grants` when the Host renderer is attached; dispatched in `tasks.py` without the effects lock, with a
 line in the task brief. The PNG goes to a new file under `images/` and is registered through
 `outbound_media.import_register` with source `integration:svg:<path>`, so it counts as her own picture.
-`deploy/docker/Dockerfile` installs `fonts-dejavu-core` and `fonts-noto-cjk`. Tests: `tests/test_svg_render.py`,
+`deploy/docker/Dockerfile` installs `fonts-dejavu-core` and `fonts-noto-cjk`. resvg finds system fonts on Linux through
+fontconfig's settings, which the slim image lacks: with the fonts installed, text still rendered blank until the
+worker named `/usr/share/fonts` and `/usr/local/share/fonts` as font folders too (a missing folder is skipped; Windows
+falls back to its own CJK font, DengXian). Verified in a throwaway `node:24-trixie-slim` container on the Docker
+host with the image's font packages and the real `svg.js`/`svg-worker.js`: her pelican SVG at 800×600 in 158 ms,
+Chinese text drawn in Noto CJK. Tests: `tests/test_svg_render.py`,
 `packages/cognition-core/test/svg.test.js`. Current reference: [RUNTIME_API.md](../../../RUNTIME_API.md).

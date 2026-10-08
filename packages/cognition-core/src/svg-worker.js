@@ -3,8 +3,11 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { Resvg } from '@resvg/resvg-js';
 
 const { svg, width, background, maxPixels } = workerData;
+// resvg finds system fonts through fontconfig's settings, which a slim Linux image lacks; the usual font folders are
+// named as well (a folder that does not exist is skipped).
+const FONT_DIRS = ['/usr/share/fonts', '/usr/local/share/fonts'];
 try {
-  const options = { font: { loadSystemFonts: true }, ...(background ? { background } : {}) };
+  const options = { font: { loadSystemFonts: true, fontDirs: FONT_DIRS }, ...(background ? { background } : {}) };
   const probe = new Resvg(svg, options);
   const scale = width ? width / probe.width : 1;
   const out = { width: Math.round(probe.width * scale), height: Math.round(probe.height * scale) };

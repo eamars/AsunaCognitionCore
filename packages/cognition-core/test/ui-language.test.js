@@ -43,3 +43,39 @@ test('every remote method takes plain named parameters, as DSH\'s gateway requir
     assert.ok(params.split(',').every(p => /^\s*[A-Za-z_$][\w$]*\s*$|^\s*$/.test(p)), name + '(' + params + ')');
   }
 });
+
+test('an Asuna preset registers its name and description in the saved language, else English', async () => {
+  const { default: AsunaPreset } = await import('../src/preset.js');
+  const { Service } = await import('@deepseek-ai/cordis');
+  const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'asuna-preset-'));
+  const register = async language => {
+    if (language) await (await import('node:fs/promises')).writeFile(path.join(dataRoot, 'ui-language.json'), JSON.stringify({ language }));
+    const registered = [];
+    const ctx = { asunaFloor: { dataRoot }, agentPresets: { register: async definition => { registered.push(definition); return () => {}; } } };
+    const preset = new AsunaPreset(ctx, { id: 'asuna-action', plugins: [],
+      names: { en: 'Action brain', zh: '行动脑' }, descriptions: { en: 'Does the work' } });
+    await preset[Service.init]().next();
+    return registered[0];
+  };
+  assert.deepEqual(await register(), { id: 'asuna-action', plugins: [], name: 'Action brain', description: 'Does the work' });
+  const zh = await register('zh');
+  assert.equal(zh.name, '行动脑');
+  assert.equal(zh.description, 'Does the work', 'a description without Chinese words stays English');
+  assert.equal((await register('fr')).name, 'Action brain');
+});
+
+test('every Asuna preset row names itself in each shipped language', async () => {
+  const { readFileSync } = await import('node:fs');
+  const yaml = (await import('js-yaml')).default;
+  const files = ['../cordis.patch.yml', '../../personas/xiaoman/cordis.patch.yml', '../../personas/kyoyama-kazusa/cordis.patch.yml',
+    '../../personas/ichinose-asuna/cordis.patch.yml'];
+  for (const file of files) {
+    const text = readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('!!js ', '');   // DSH's expression tag
+    const rows = yaml.load(text).flatMap(item => item.insert ?? []);
+    assert.ok(!rows.some(row => row.name === '@deepseek-ai/dsh-agent-preset'), file + ' declares a preset without per-language words');
+    for (const row of rows.filter(row => row.name === '@asuna/cognition-core/preset')) {
+      assert.deepEqual(Object.keys(row.config.names).sort(), ['en', 'zh'], row.config.id);
+      if (row.config.descriptions) assert.deepEqual(Object.keys(row.config.descriptions).sort(), ['en', 'zh'], row.config.id);
+    }
+  }
+});

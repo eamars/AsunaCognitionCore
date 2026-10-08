@@ -2,11 +2,15 @@
     - id: asuna-demo
       name: '@asuna/demo'
     - id: asuna-demo-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-demo
-        name: 演示 · 角色脑
-        description: Synthetic demo persona on the Asuna core (test and demo environment only)
+        names:
+          en: Demo · Character brain
+          zh: 演示 · 角色脑
+        descriptions:
+          en: Synthetic demo persona on the Asuna core (test and demo environment only)
+          zh: Asuna 核心上的合成演示人格（仅测试与演示环境）
         plugins:
           - name: '@asuna/cognition-core/role'
           - id: compaction

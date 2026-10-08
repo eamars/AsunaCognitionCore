@@ -2,11 +2,15 @@
     - id: asuna-ichinose
       name: '@asuna/ichinose-asuna'
     - id: asuna-ichinose-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-ichinose
-        name: 一之瀬アスナ · 角色脑
-        description: Asuna character cognition with native action records in the same conversation
+        names:
+          en: Ichinose Asuna · Character brain
+          zh: 一之瀬アスナ · 角色脑
+        descriptions:
+          en: Asuna character cognition with native action records in the same conversation
+          zh: Asuna 角色认知，行动记录在同一会话里
         plugins:
           - name: '@asuna/cognition-core/role'
           - id: compaction

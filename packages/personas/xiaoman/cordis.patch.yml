@@ -2,11 +2,15 @@
     - id: asuna-xiaoman
       name: '@asuna/xiaoman'
     - id: asuna-xiaoman-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-xiaoman
-        name: 小满 · 角色脑
-        description: Asuna character cognition with native action records in the same conversation
+        names:
+          en: Xiaoman · Character brain
+          zh: 小满 · 角色脑
+        descriptions:
+          en: Asuna character cognition with native action records in the same conversation
+          zh: Asuna 角色认知，行动记录在同一会话里
         plugins:
           - name: '@asuna/cognition-core/role'
           - id: compaction

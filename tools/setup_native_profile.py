@@ -59,7 +59,7 @@ def persona_package(directory):
     package = json.loads((directory / 'package.json').read_text(encoding='utf-8'))
     patch = yaml.safe_load((directory / 'cordis.patch.yml').read_text(encoding='utf-8')) or []
     presets = [row['config']['id'] for item in patch for row in item.get('insert', [])
-               if row.get('name') == '@deepseek-ai/dsh-agent-preset']
+               if row.get('name') == '@asuna/cognition-core/preset']
     if len(presets) != 1:
         raise ValueError('PERSONA_PACKAGE_PRESET_REQUIRED')
     project = package['name'].rsplit('/', 1)[-1]

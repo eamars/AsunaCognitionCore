@@ -101,7 +101,7 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
    (`@asuna/cognition-core` `0.2.x`) and the `dsh.bundle.patch` entry.
 3. In `src/index.js`, set `name` and the `registerPersona` fields: `id`, `character_id`, `display_name`, `version`,
    the seeds (one with kind `persona`), any jobs, and `preset`.
-4. In `cordis.patch.yml`, rename the plugin and preset ids and the preset's display name.
+4. In `cordis.patch.yml`, rename the plugin and preset ids and the preset's `names` (and `descriptions`), one entry per shipped language (`en`, `zh`). The row is `@asuna/cognition-core/preset`: DSH shows a declared preset name as written, so it registers the words of the language the program's names follow (English when that language has none).
 5. Write `seeds/` and `persona-model.json` (schema: `src/asuna/resources/schemas/persona-model.schema.json`).
    Seeds may be any length the character model's window allows: the prompt limit grows with them
    ([RUNTIME_API.md](../RUNTIME_API.md), "Her persona"). Leave `render.budget_tokens` out unless the persona needs

@@ -13,10 +13,12 @@
     - id: asuna-cognition-core
       name: '@asuna/cognition-core'
     - id: asuna-action-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-action
-        name: 行动脑
+        names:
+          en: Action brain
+          zh: 行动脑
         plugins:
           - name: '@asuna/cognition-core/action'
           - id: compaction
@@ -45,10 +47,12 @@
                   headChars: 4096
                   tailChars: 1024
     - id: asuna-summary-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-summary
-        name: 交流摘要
+        names:
+          en: Conversation summary
+          zh: 交流摘要
         plugins:
           - name: '@asuna/cognition-core/summary'
           - id: compaction
@@ -72,17 +76,21 @@
                   headChars: 4096
                   tailChars: 1024
     - id: asuna-appraiser-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-appraiser
-        name: Asuna affect appraiser
+        names:
+          en: Affect appraiser
+          zh: 情感评估
         plugins:
           - name: '@asuna/cognition-core/appraiser'
     - id: asuna-attend-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-attend
-        name: 接话判断
+        names:
+          en: Join-in check
+          zh: 接话判断
         plugins:
           - name: '@asuna/cognition-core/attend'
           # Each group's gate session stays small: it compacts at about 5% of the window and keeps a short tail.
@@ -104,18 +112,24 @@
     - id: asuna-ui-schedule
       name: '@deepseek-ai/dsh-client-ui-schedule'
     - id: asuna-scheduler-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-scheduler
-        name: Asuna schedules
+        names:
+          en: Asuna schedules
+          zh: Asuna 定时提醒
         plugins:
           - name: '@asuna/cognition-core/scheduler'
     - id: asuna-recovery-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-recovery
-        name: Asuna recovery
-        description: Repair an authorized plugin project when its business worker cannot start
+        names:
+          en: Asuna recovery
+          zh: Asuna 修复
+        descriptions:
+          en: Repair an authorized plugin project when its business worker cannot start
+          zh: 业务进程起不来时，修复一个已授权的插件项目
         plugins:
           - name: '@asuna/cognition-core/recovery'
           - id: compaction

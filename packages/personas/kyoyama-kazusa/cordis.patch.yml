@@ -2,11 +2,15 @@
     - id: asuna-kazusa
       name: '@asuna/kyoyama-kazusa'
     - id: asuna-kazusa-preset
-      name: '@deepseek-ai/dsh-agent-preset'
+      name: '@asuna/cognition-core/preset'
       config:
         id: asuna-kazusa
-        name: 杏山カズサ · 角色脑
-        description: Asuna character cognition with native action records in the same conversation
+        names:
+          en: Kyoyama Kazusa · Character brain
+          zh: 杏山カズサ · 角色脑
+        descriptions:
+          en: Asuna character cognition with native action records in the same conversation
+          zh: Asuna 角色认知，行动记录在同一会话里
         plugins:
           - name: '@asuna/cognition-core/role'
           - id: compaction

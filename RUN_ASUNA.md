@@ -158,7 +158,7 @@ Each character is a profile with one persona and its own Web page, whose workspa
 
 ## Using the Web page
 
-The colored labels show only **角色脑** (purple) or **行动脑** (blue). Main Chat references the actual action session's thinking, tools and output inline, with character consultations between the corresponding action ranges. Both labels remain visible outside the native process disclosure by default. Expand DSH's process disclosure and analysis row to inspect full native reasoning, text and tools. DSH's own controls show execution status. Both brains can use the same model without losing their identity labels.
+The colored labels show only the character brain (purple) or the action brain (blue), in the Web UI's language. Main Chat references the actual action session's thinking, tools and output inline, with character consultations between the corresponding action ranges. Both labels remain visible outside the native process disclosure by default. Expand DSH's process disclosure and analysis row to inspect full native reasoning, text and tools. DSH's own controls show execution status. Both brains can use the same model without losing their identity labels.
 
 In a character conversation the composer shows two context wheels, both DSH's own meter with its click-open breakdown: the stock one, tinted purple, for the character brain, and a second instance fed the latest action session's context projections, tinted blue. DSH does not export the meter; the plugin reads it from the rendered stock meter, and if a DSH revision changes that, the blue wheel is simply absent.
 

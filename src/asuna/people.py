@@ -36,6 +36,15 @@ LABEL = r'\[(?P<name>[^\[\]#\n]*)#\s*(?P<handle>\d{1,6})\s*\]'
 LABEL_MENTION = re.compile(r'@\s*(?P<open>\[\s*)?(?:[^\s@\[\]#]{1,12}\s*)?' + LABEL + r'(?(open)(?:\s*\])?)'
                            r'|@#(?P<bare>\d{1,6})')
 BARE_LABEL = re.compile(LABEL)
+# A label opening her line or one of its lines, without @: it reads like a tag but leaves as a plain name.
+LEADING_LABEL = re.compile(r'(?:^|\n)[ \t]*(\[[^\[\]#\n]*#\s*\d{1,6}\s*\])')
+LEADING_LABEL_PROBLEM = ('开头的「%s」不会 @ 到人（发出去只是名字）：要 @ 他就写 @%s；只是提到他，就直接写名字。')
+
+
+def speech_problem(speech):
+    """A label she opened a line with and did not @, handed back in the same turn; None when there is none."""
+    found = LEADING_LABEL.search(speech or '')
+    return LEADING_LABEL_PROBLEM % (found.group(1), found.group(1)) if found else None
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
 

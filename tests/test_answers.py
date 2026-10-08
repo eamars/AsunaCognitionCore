@@ -135,3 +135,12 @@ def test_a_mistyped_task_id_is_told_with_the_real_one(store):
     continued = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
     assert ep['task_ids'] == [fixed[4]['task']] and continued['continues_task_id'] == real
     assert ep['state'] == 'WAITING_TASK'
+
+
+def test_a_line_opened_with_a_label_and_no_at_is_handed_back(store):
+    # A bare label leaves as the plain name: one that opens her line reads like a tag, so she is told how to @.
+    lane = FakeLane(store, [FakeTurn([THINK], '[阿杰 #3] 你说得对。'), FakeTurn([], '@[阿杰 #3] 你说得对。')])
+    ep = Coordinator(store, lane).ingest(event())
+    assert ep['state'] == 'COMMITTED' and ep['speech'] == '@[阿杰 #3] 你说得对。'
+    assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
+    assert '开头的「[阿杰 #3]」不会 @ 到人' in lane.calls[1]['messages'][-1]['content']

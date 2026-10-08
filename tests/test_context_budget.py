@@ -68,11 +68,24 @@ def test_an_oversized_turn_loses_the_oldest_list_rows_first_and_says_so():
                'memories': [{'_id': 'm%d' % n, 'body_markdown': '记' * 3000} for n in range(10)],
                'delivered_history': [{'_id': 'h%d' % n, 'text': '话' * 2000} for n in range(12)]}
     left = budget.trim_turn(context, limit=5000)
-    assert left == {'memories': 10, 'delivered_history': 8}               # memories go first; four lines always stay
+    assert left['memories'] == 10 and left['delivered_history'] == 8        # memories go first; four lines always stay
     assert [row['_id'] for row in context['delivered_history']] == ['h8', 'h9', 'h10', 'h11']   # newest kept
+    assert left['shortened_texts'] >= 1, 'four lines still over: their texts are shortened, the ceiling is hard'
+    assert budget.size({k: v for k, v in context.items() if k != 'trimmed_from_program'}) <= 5000
     assert 'recall' in context['trimmed_from_program']['note']
     small = {'event': {'text': 'hi'}, 'memories': []}
     assert budget.trim_turn(small) == {} and 'trimmed_from_program' not in small
+
+
+def test_one_huge_message_is_cut_to_the_ceiling_saying_how_much_went():
+    # Nothing in the trim lists can help: the one message is over the whole turn's ceiling by itself.
+    context = {'event': {'text': '长' * 90000}, 'memories': [], 'persona': {'core': '我' * 2000}}
+    left = budget.trim_turn(context)
+    text = context['event']['text']
+    assert left == {'shortened_texts': left['shortened_texts']} and left['shortened_texts'] >= 1
+    assert budget.size({k: v for k, v in context.items() if k != 'trimmed_from_program'}) <= budget.TURN_CHARS
+    assert text.startswith('长' * budget.SHORT_TEXT) and '没列出' in text and 'recall' in text
+    assert context['persona']['core'] == '我' * 2000, 'the longest text goes first; a short block stays whole'
 
 
 # ---- her mood ---------------------------------------------------------------------

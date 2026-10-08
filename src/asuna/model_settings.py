@@ -49,6 +49,10 @@ def validate(model):
     value['sampling'] = sampling
     if not isinstance(value.get('api_key', ''), str):
         raise ValueError('API key 必须为文本')
+    budgets = value.get('thinking_budgets')
+    if budgets is not None and (not isinstance(budgets, dict) or set(budgets) != {'minimal', 'low', 'medium', 'high'}
+                                or any(type(v) is not int or v < 1 for v in budgets.values())):
+        raise ValueError('thinking_budgets 要给 minimal、low、medium、high 四档的正整数 token 数')
     return value
 
 

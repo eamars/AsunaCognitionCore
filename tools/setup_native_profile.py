@@ -122,7 +122,9 @@ def profile_patch(config, config_path, persona, shared_action_model=False, profi
             'streamIdleTimeoutMs': config['provider_idle_timeout_seconds'] * 1000,
             'models': [{'id': model['model'], 'contextWindow': model['context_window'],
                         'maxTokens': model['max_tokens'], 'reasoningEfforts': model['reasoning_efforts'],
-                        'input': model.get('input_modalities', ['text'])}],
+                        'input': model.get('input_modalities', ['text']),
+                        # Thinking per effort (pi-ai's defaults otherwise: 1024/2048/8192/16384; xhigh counts as high).
+                        **({'thinkingBudgets': model['thinking_budgets']} if model.get('thinking_budgets') else {})}],
         }
         routes[lane] = {'provider': provider, 'model': model['model'],
                         'reasoningEffort': model['reasoning_effort'], 'maxTokens': model['max_tokens']}

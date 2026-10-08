@@ -140,10 +140,44 @@ def trim_turn(context, limit=TURN_CHARS):
             left[name] = left.get(name, 0) + 1
         if total <= limit:
             break
+    # Still over (one huge message, row or block): the ceiling is hard. The longest text left is halved, again and
+    # again, keeping its start and saying how much went; the original stays in the record (recall, history).
+    shortened = 0
+    while total > limit:
+        found = _longest_text(context)
+        if found is None or len(found[2]) <= SHORT_TEXT:
+            break
+        holder, key, text = found
+        keep = max(SHORT_TEXT, len(text) // 2)
+        holder[key] = text[:keep] + CUT_NOTE % (len(text) - keep)
+        total = size(context)
+        shortened += 1
+    if shortened:
+        left['shortened_texts'] = shortened
     if left:
         context['trimmed_from_program'] = {
-            'left_out': left, 'note': '这回合的资料超过了上限，这些列表里较早的几条没列出；要看就 recall。'}
+            'left_out': left, 'note': '这回合的资料超过了上限，这些列表里较早的几条没列出、过长的文字截短了；要看原文就 recall。'}
     return left
+
+
+SHORT_TEXT = 400                    # a text is never cut below this many characters
+CUT_NOTE = '……（太长，后面 %d 字没列出；原文还在记录里，要看就 recall）'
+
+
+def _longest_text(node):
+    """(holder, key, text) of the longest string value in a context block, or None."""
+    best = None
+    stack = [node]
+    while stack:
+        item = stack.pop()
+        pairs = item.items() if isinstance(item, dict) else enumerate(item) if isinstance(item, list) else ()
+        for key, value in pairs:
+            if isinstance(value, str):
+                if best is None or len(value) > len(best[2]):
+                    best = (item, key, value)
+            elif isinstance(value, (dict, list)):
+                stack.append(value)
+    return best
 
 
 # ---- nightly tidying ----------------------------------------------------------

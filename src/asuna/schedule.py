@@ -68,7 +68,9 @@ HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and thi
 # How her reminders are named in DSH's own task page (ADR-012 §8), where the owner sees each one's next run
 # and delivery records. Her own plans are named by what she wrote; her rhythms by what they are.
 RHYTHM_TITLES = {'presence': '心跳 · Heartbeat', 'settlement': '夜间沉淀 · Nightly settlement',
-                 'self_development': '自我改进 · Self-improvement'}
+                 'self_development': '每日自我改进 · Daily self-improvement'}
+# The night tick only asks whether a night stage is due (ADR-021); its name says so, apart from the daily turn.
+NIGHT_TITLE = '夜间自我改进检查 · Night self-improvement check'
 TITLE_CHARS = 60
 LEGACY_TITLE = 'Asuna · '
 # An in-place timing change names DSH's own timing kind (its `every` carries every_seconds).
@@ -76,6 +78,8 @@ NATIVE_KIND = {'every_seconds': 'every'}
 
 
 def plan_title(plan):
+    if plan.get('kind') == 'self_development' and plan.get('night'):
+        return NIGHT_TITLE
     if plan.get('kind') in RHYTHM_TITLES:
         return RHYTHM_TITLES[plan['kind']]
     line = ' '.join(str(plan.get('intent') or '').split())

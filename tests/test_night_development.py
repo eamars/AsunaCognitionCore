@@ -86,3 +86,11 @@ def test_she_reads_which_stage_of_the_night_this_is():
     block = night_stage_block({'window': '01:00–06:00', 'every_min': 30, 'last_stage': True})
     assert block['window'] == '01:00–06:00' and block['pace'] == '每 30 分钟一段' and block['last'] == '这是今晚最后一段'
     assert '一段一件事' in block['note'] and '那个项目不能再发布' in block['note']
+
+
+def test_the_night_tick_is_named_apart_from_the_daily_turn():
+    """The 10-minute tick only asks whether a night stage is due; the task page names it so (owner 2026-10-09)."""
+    from asuna.schedule import plan_title
+    night = plan_title({'kind': 'self_development', 'night': True})
+    daily = plan_title({'kind': 'self_development'})
+    assert night != daily and 'Night' in night and 'Daily' in daily

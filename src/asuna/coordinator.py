@@ -232,7 +232,7 @@ class Coordinator:
                 issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
                 if issue is None:
                     from . import people
-                    issue=people.speech_problem(speech)                 # a line opened with a label and no @
+                    issue=people.speech_problem(self.store,ep,speech)   # a label's number or a tag that tags nobody
             if issue is None:
                 self._absorb(ep,seen)
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))

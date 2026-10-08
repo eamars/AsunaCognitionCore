@@ -39,12 +39,31 @@ BARE_LABEL = re.compile(LABEL)
 # A label opening her line or one of its lines, without @: it reads like a tag but leaves as a plain name.
 LEADING_LABEL = re.compile(r'(?:^|\n)[ \t]*(\[[^\[\]#\n]*#\s*\d{1,6}\s*\])')
 LEADING_LABEL_PROBLEM = ('开头的「%s」不会 @ 到人（发出去只是名字）：要 @ 他就写 @%s；只是提到他，就直接写名字。')
+# A label's number outside a whole label: nobody there can see it.
+LOOSE_HANDLE = re.compile(r'#\s*(\d{1,6})(?!\d)')
+LOOSE_HANDLE_PROBLEM = ('「%s」是程序给你认人的编号，群里的人看不到：说起他就只写名字；要 @ 他就照抄整个标签写 @%s。'
+                        '你说的要不是人（比如 issue 编号），去掉 #。')
 
 
-def speech_problem(speech):
-    """A label she opened a line with and did not @, handed back in the same turn; None when there is none."""
+def speech_problem(store, ep, speech):
+    """What she is about to say that would show the group a label's number or a tag that tags nobody, handed back
+    in the same turn; None when there is none. Detection only: nothing she wrote is rewritten by pattern."""
     found = LEADING_LABEL.search(speech or '')
-    return LEADING_LABEL_PROBLEM % (found.group(1), found.group(1)) if found else None
+    if found:
+        return LEADING_LABEL_PROBLEM % (found.group(1), found.group(1))
+    people = People(store, ep.get('persona'))
+    handles = {str(doc.get('handle')): doc for doc in people.roster(ep['scene_id']).values()
+               if doc.get('person') != people.self_id and doc.get('handle') is not None}
+    if not handles:
+        return None
+    rest = BARE_LABEL.sub(' ', LABEL_MENTION.sub(' ', speech or ''))        # whole labels are the program's to render
+    for match in LOOSE_HANDLE.finditer(rest):
+        doc = handles.get(match.group(1))
+        if doc:
+            return LOOSE_HANDLE_PROBLEM % (match.group(0), people.label(doc))
+    return None
+
+
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
 

@@ -33,3 +33,5 @@ packages = ["src/asuna"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Every run lists what it skipped and why (a check with nothing to check against says so).
+addopts = "-rs"

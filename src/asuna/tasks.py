@@ -319,7 +319,9 @@ class ToolBroker:
     def specs(self):
         from .image_generation import GENERATE_IMAGE_TOOL
         from .svg_render import RENDER_SVG_TOOL
-        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+        from .private_words import PRIVATE_WORDS_TOOL
+        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, PRIVATE_WORDS_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS,
+                *PERSONA_JOB_TOOLS]
 
     def bind(self,session,task,workspace):
         from .grants import workspace_grant
@@ -368,7 +370,7 @@ class ToolBroker:
         # must remain available. A later cancellation still
         # fences new calls; recording this accepted call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg','private_words') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(DEVELOPMENT_GRANT)
@@ -431,6 +433,11 @@ class ToolBroker:
                 result=generate(args,runner=self.integration,workspace=sandbox.task_dir,
                                 protected=sandbox.protected_paths,register=outbound_media.import_register(self.store,task))
                 with self.service.lock:self.service.valid(task)
+            elif tool=='private_words':
+                # Her list lives with the deployment's data, outside the task folder (private_words.py).
+                from . import private_words
+                try:result=private_words.run(args)
+                except private_words.PrivateWordsError as exc:raise Denied('PRIVATE_WORDS_REFUSED: '+str(exc)) from exc
             elif tool=='render_svg':
                 # The Host renders; this side reads the SVG, drops links to outside pictures and keeps the PNG as hers.
                 from . import svg_render

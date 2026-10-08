@@ -346,6 +346,9 @@ TOOLS = {
 # read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
 from .vision import READ_IMAGE_TOOL as _READ_IMAGE
 TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name'}
+# Her list of words that point at real people and places, shared with the action brain (private_words.py).
+from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
+TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
 TOOL_NAMES = tuple(TOOLS)
 
 
@@ -385,6 +388,7 @@ def exposed(store, ep):
             if context.get('affect_from_program'):
                 names.append('feel')
             return names + ['watch']
+    names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
         names += ['read_ideas', 'review_idea']           # the listing shows the first page; she reads on herself
@@ -1220,6 +1224,13 @@ class RoleTools:
                         source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
                                 'turn': turn_kind(ep)})
         return {'noted': row['_id'], 'note': '记下了。它会在你的自我改进时间里再拿出来，现在不用去改。'}, False
+
+    def tool_private_words(self, ep, call_id, args):
+        from . import private_words
+        try:
+            return private_words.run(args), False
+        except private_words.PrivateWordsError as exc:
+            raise Refused(str(exc)) from exc
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members

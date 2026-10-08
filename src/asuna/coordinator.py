@@ -498,6 +498,9 @@ class Coordinator:
         from . import svg_render
         # Rendering runs none of her code and reads only the task folder: every task gets it (owner 2026-10-08).
         if svg_render.available():capabilities.append(svg_render.RENDER_SVG_TOOL)
+        # Her list of words that point at real people and places: every task may add to it (private_words.py).
+        from .private_words import PRIVATE_WORDS_TOOL
+        capabilities.append(PRIVATE_WORDS_TOOL)
         from . import sandbox_backend, visibility
         # Running commands is for the owner's own scenes (owner 2026-10-06): the Host sandbox confines writes only,
         # so in anyone else's scene the boundary is that the tool is not given.

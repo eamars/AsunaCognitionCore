@@ -36,7 +36,9 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
 - **The profile's data folder**, `$DSH_HOME/asuna/<profile>/`: development candidates, the worker's Python
   environment, bridge positions, integration runs.
 - **The worker's data root** (`ASUNA_DATA_ROOT`, default `.runtime/`): task and channel workspaces (`work/`,
-  `channels/`), the evidence of the last five worker starts (`reports/native-host-*`) and the worker's own files.
+  `channels/`), the evidence of the last five worker starts (`reports/native-host-*`), the deployment's private
+  files (`private/`, with the list of words that point at real people and places, `personal-words.txt`) and the
+  worker's own files.
   Everything under `.runtime/` is local and disposable except what a profile needs; never commit it.
 
 ## How a change reaches the running Host

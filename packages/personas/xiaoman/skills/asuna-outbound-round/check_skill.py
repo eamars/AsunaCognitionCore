@@ -73,6 +73,36 @@ PERSONAL_TOKENS = [
     "主人", "旧居", "交流群", "姐姐",
 ]
 
+# 具体的人和地方由这台机器的私密名单拦（private_words 工具维护；永远不进仓库）：
+# ASUNA_PRIVATE_WORDS 指的文件，否则 <数据目录>/private/personal-words.txt。一行一条 category|word|why。
+# 纯字母数字的词按整词、不分大小写；别的按出现即中。命中只报类别和名单第几行，不打印词本身。
+def private_list():
+    named = os.environ.get("ASUNA_PRIVATE_WORDS")
+    data = os.environ.get("ASUNA_DATA_ROOT")
+    path = named or (os.path.join(data, "private", "personal-words.txt") if data else None)
+    if not path or not os.path.isfile(path):
+        return path, None
+    entries = []
+    with open(path, encoding="utf-8") as handle:
+        for number, line in enumerate(handle, 1):
+            parts = line.strip().split("|", 2)
+            if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
+                entries.append((number, parts[0].strip(), parts[1].strip()))
+    return path, entries
+
+
+def listed_hits(entries, text):
+    hits = []
+    for number, category, word in entries:
+        if all(ch.isascii() for ch in word):
+            found = re.search(r"(?<![A-Za-z0-9_])" + re.escape(word) + r"(?![A-Za-z0-9_])", text, re.IGNORECASE)
+        else:
+            found = word in text
+        if found:
+            hits.append("%s（名单第 %d 行）" % (category, number))
+    return hits
+
+
 # 字面编号（#12 这种）是具体坐标，规则里只该出现占位的「#编号」
 LITERAL_ID = re.compile(r"#\d")
 
@@ -135,6 +165,13 @@ def main():
     check("no_personal_info", not hits, ",".join(hits))
     check("no_literal_ids", not LITERAL_ID.search(body),
           "出现字面编号：" + ",".join(LITERAL_ID.findall(body)[:5]))
+
+    listed_path, entries = private_list()
+    if entries is None:
+        print("NOTE 私密名单未配置（%s），真人名／群名这一项没查" % (listed_path or "没有 ASUNA_PRIVATE_WORDS 也没有 ASUNA_DATA_ROOT"))
+    else:
+        found = listed_hits(entries, text)
+        check("no_listed_words", not found, "、".join(found))
 
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 800, "body_chars=%d" % len(body))

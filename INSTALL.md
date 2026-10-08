@@ -90,6 +90,15 @@ What each channel needs, field by field, is in its README: [QQ](packages/channel
 Check: the Plugins page lists the channel, the card's status line is `ready`, and a message on the platform appears
 in the channel's workspace on the Web page.
 
+## 6. Optional: the private list
+
+Words that point at real people and places in this deployment (names, group names, account numbers, host names,
+addresses) are kept in `<data>/private/personal-words.txt`, one `category|word|why` per line, never in git. The
+character fills it herself with her `private_words` tool; you may edit it by hand. `tests/test_personal_words.py`
+then refuses any committed file that contains one of them. On a machine without the list the test is skipped and
+names the path it looked for: nothing was checked. To move a deployment, copy `<data>/private/` with its data, never
+through the repository.
+
 ## Adding or removing a package later
 
 The same commands work at any time: `dsh plugin --profile <name> add <package.tgz>` and a restart adds a channel

@@ -132,9 +132,8 @@ def profile_patch(config, config_path, persona, shared_action_model=False, profi
         {'id': 'agent-default-model', 'config': {key: routes['character'][key]
             for key in ('provider', 'model', 'reasoningEffort')}},
         {'id': 'session-title-llm', 'disabled': True},
-        # Her web_search goes through the cognition core's ordered provider (deployment.search). A patch replaces
-        # the whole row config, so the base row's fetch provider is restated.
-        {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'http'}},
+        # Her web_search and web_fetch go through the cognition core's providers (search.js, fetch.js).
+        {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'asuna-fetch'}},
         {'id': 'agent-preset-registry', 'config': {'default': persona['preset']}},
         {'id': 'asuna-publication-floor', 'config': {
             'dataRoot': str(data_root), 'python': sys.executable,

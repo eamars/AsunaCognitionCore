@@ -217,6 +217,10 @@ The action brain's `web_search` is DSH's tool (its validation, output text, resu
 
 A backend whose credential reference has no stored value is passed over; the worker never reads `search`, so an unset reference does not stop it. Without a `search` section the order is `searxng`, `gemini`, `exa`, `deepseek-official`, and the first three are skipped as not configured. When no backend answers with sources, an empty answer is the result; when none answers at all, the tool returns an error naming each backend's state. Each search writes an `asuna/web-search` event (the query, the backend that answered, and why earlier ones were passed over) to the calling conversation's log; the model does not see it.
 
+## Web fetch
+
+`web_fetch` is DSH's tool; the installer pins its provider to `asuna-fetch`. It retrieves through DSH's own HTTP provider (public addresses only, same-origin redirects, its user agent), reading up to the 5 MB response limit. An HTML page is reduced before DSH converts it: the head keeps only its title, and scripts, styles, SVG and templates are removed, so a page with a large head still reaches the model with its text. A page that answers 403 or 503 and loads Cloudflare's challenge platform is returned as an error saying it is a human-verification page that another route will not get past. Pages that build their text with JavaScript are not rendered.
+
 ## Self-development and recovery
 
 `development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the cognition source, and a channel package is its own project (`napcat-qq`). Skills live in the candidate too and change only through these tools; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.

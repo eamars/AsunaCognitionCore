@@ -1,5 +1,5 @@
 """Her web_search goes through the cognition core's ordered provider (ADR-026): the installer pins it on DSH's web
-seam, and restates the base row's fetch provider because a profile patch replaces the whole row config."""
+seam, with its fetch provider (fetch.js) for web_fetch."""
 import importlib.util
 from pathlib import Path
 
@@ -15,7 +15,7 @@ def test_the_profile_pins_the_ordered_search_and_keeps_fetch():
     config = load(ROOT / 'config/local.example.json')
     persona = {'preset': 'p', 'project': 'persona', 'root': ROOT}
     rows = {row['id']: row for row in setup.profile_patch(config, ROOT / 'config/local.example.json', persona, profile='probe')}
-    assert rows['web'] == {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'http'}}
+    assert rows['web'] == {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'asuna-fetch'}}
 
 
 def test_the_worker_leaves_the_search_section_and_its_unset_credential_alone():

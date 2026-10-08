@@ -21,6 +21,7 @@ import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
+import { applyFetch } from './fetch.js';
 import { Collab } from './collab.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
@@ -911,6 +912,8 @@ export function apply(ctx, config = {}) {
   new AsunaApi(ctx, core);
   // Her web_search tries the configured backends in order (ADR-026); the profile pins this provider on ctx.web.
   applySearch(ctx, core);
+  // web_fetch reads whole pages and drops what is not content before DSH converts them (ADR-026 §6).
+  applyFetch(ctx);
   // ADR-012 §8: /heartbeat gives her one heartbeat now, through DSH's own command surface (no model message),
   // and says when the next scheduled one is due. Her rhythm stays program-owned; this only knocks early.
   ctx.inject(['commands'], child => child.effect(() => child.commands.register({

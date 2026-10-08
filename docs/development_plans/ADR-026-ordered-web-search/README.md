@@ -160,3 +160,45 @@ with copies of its unexported argument check and merge (`parseSearchArgs`, `merg
 `web_fetch` stays DSH's (`search: false`). `localStamp` formats publication times; `native_worker`'s `session` reply
 carries `timezone` and `utc_offset_minutes`. Measured with real searches: the same Exa query is about 4,100
 characters for 10 sources with snippets, 1,400 as titles.
+
+## 6. Amendment: web_fetch reads whole pages (owner, 2026-10-08)
+
+### 6.1 Context
+
+Her 413 `web_fetch` calls (2026-10-05 to 10-08): 281 fine; 37 guessed URLs that did not exist; 24 through
+`r.jina.ai`, a hosted renderer she found herself (7 of them still blocked); 13 anti-bot or login walls (Zhihu,
+Baidu 安全验证, Cloudflare, NGA); 11 signed Aliyun links that fail from anywhere (curl too); 8 private addresses
+(by design); 8 pages cut before their text; 7 pages that are empty until JavaScript runs; 6 cross-origin redirects;
+the rest timeouts, PDFs, a malformed charset header and API errors.
+
+DSH's HTTP provider keeps the first 100,000 characters of a page, and its conversion reads at most 200,000. On the
+pages cut before their text the body starts 160,000–270,000 characters in, after inline CSS and scripts, while the
+page holds 6,600–9,700 characters of text. 50 of her 320 HTTP-200 fetches (16%) ended cut, with a median output of
+about 4,000 characters.
+
+Playwright was measured on her failed URLs once each (headless Chromium 1.63, no disguise): the 6 JavaScript pages
+all gave text (240–6,200 characters, 4–16 s each, some of it navigation); the pages cut at 100k worked but with less
+text than a plain fetch that skips the head; of 7 anti-bot walls only Baidu Baike opened. Cost: about 830 MB of
+browser and library, 4–16 s a page, a larger Docker image, and every subresource request needing a public-address
+filter so a page cannot reach the owner's LAN services. DSH's `dsh-browser-use` is only a registration point; DSH
+ships no browser fetch.
+
+### 6.2 Decisions
+
+- **D14 — A plain fetch that reads whole pages.** Her fetch provider uses DSH's HTTP provider with its 5 MB limit
+  and removes the head (title kept), scripts, styles, SVG and templates before DSH converts the page. Same tool and
+  output.
+- **D15 — No JavaScript rendering now** (about 2% of her fetches); neither Playwright nor a hosted renderer.
+- **D16 — Walls said plainly only when the content shows it for certain; no site list.** A Cloudflare challenge
+  answers 403 or 503 and loads Cloudflare's challenge platform; that pair is the test (a served page may load the
+  same platform with 200). Site-specific pages (Zhihu, Baidu) are not recognised and reach her as their HTTP status
+  and text.
+
+### 6.3 As built
+
+`packages/cognition-core/src/fetch.js`: `SlimFetch` (`asuna-fetch`) over `HttpFetchProvider` with `FETCH_LIMITS`,
+`slimHtml` with `@mixmark-io/domino` (the DOM DSH's converter uses), `isCloudflareChallenge`; the installer pins
+`fetchProvider: asuna-fetch`. Measured before and after on her pages: pttweb 118 → 10,450 characters, FT中文网
+109 → 11,758, SiliconFlow pricing 105 → 2,904, TrendForce 6,797 → 16,519, all under a second; two Cloudflare pages
+now an error saying so. The malformed charset header (`utf-8, text/html`) is still refused by DSH's provider.
+Tests: `packages/cognition-core/test/fetch.test.js`.

@@ -152,7 +152,7 @@ test('Gemini: its cited pages are the sources, redirects resolved, its own answe
   assert.deepEqual(result, { sources: [{ url: 'https://page.example/a', title: 'page.example' },
     { url: REDIRECT + 'c', title: 'other.example' }], truncated: false }, 'deduplicated after resolving; an unresolved link kept');
   const request = h.calls[0];
-  assert.match(request.url, /\/models\/gemini-2\.5-flash-lite:generateContent$/);
+  assert.match(request.url, /\/models\/gemini-3\.5-flash-lite:generateContent$/);
   assert.equal(request.init.headers['x-goog-api-key'], 'g');
   assert.deepEqual(JSON.parse(request.init.body).tools, [{ google_search: {} }]);
 });

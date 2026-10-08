@@ -18,7 +18,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials';
 export const SEARCH_PROVIDER_ID = 'asuna-search';
 export const DEFAULT_ORDER = ['searxng', 'gemini', 'exa', 'deepseek-official'];
 export const SEARXNG_DEFAULTS = { cooldown_seconds: 30, rest_minutes: 15, timeout_seconds: 10 };
-export const GEMINI_DEFAULTS = { model: 'gemini-2.5-flash-lite', base_url: 'https://generativelanguage.googleapis.com/v1beta',
+export const GEMINI_DEFAULTS = { model: 'gemini-3.5-flash-lite', base_url: 'https://generativelanguage.googleapis.com/v1beta',
   timeout_seconds: 20 };
 const GEMINI_REDIRECT = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/';
 

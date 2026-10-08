@@ -203,7 +203,7 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
   "order": ["searxng", "gemini", "exa", "deepseek-official"],
   "searxng": {"url": "http://192.0.2.10:8080/search", "engines": ["bing", "wikipedia"],
               "cooldown_seconds": 30, "rest_minutes": 15, "timeout_seconds": 10},
-  "gemini": {"api_key": {"$secret": "ASUNA_GEMINI_API_KEY"}, "model": "gemini-2.5-flash-lite"},
+  "gemini": {"api_key": {"$secret": "ASUNA_GEMINI_API_KEY"}, "model": "gemini-3.5-flash-lite"},
   "exa": {"api_key": {"$secret": "ASUNA_EXA_API_KEY"}}
 }
 ```
@@ -211,7 +211,7 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
 | Backend | Needs | Behaviour |
 |---|---|---|
 | `searxng` | `url` of the instance's `/search` with `json` in its `search.formats` | At most one query per `cooldown_seconds` (default 30); the other queries of a call go on. After a failure, or an empty answer in which every asked engine was blocked, it rests for `rest_minutes` (default 15). `engines` lists the engines to ask (empty: the instance's defaults), including ones disabled on the instance. |
-| `gemini` | a credential reference in `api_key` (a Gemini API key) | One `generateContent` request with Grounding with Google Search on `model` (default `gemini-2.5-flash-lite`; `timeout_seconds` default 20). The pages Gemini cites are the sources, each Google redirect link followed to the page's own address; Gemini's answer text is not passed on. After a 429 it rests until the quota the error names refreshes: a daily quota at midnight Pacific time, any other after its retry delay (a minute when none is given). |
+| `gemini` | a credential reference in `api_key` (a Gemini API key) | One `generateContent` request with Grounding with Google Search on `model` (default `gemini-3.5-flash-lite`; `timeout_seconds` default 20). The pages Gemini cites are the sources, each Google redirect link followed to the page's own address; Gemini's answer text is not passed on. After a 429 it rests until the quota the error names refreshes: a daily quota at midnight Pacific time, any other after its retry delay (a minute when none is given). |
 | `exa` | a credential reference in `api_key` | DSH's Exa provider (`dsh-web-search-exa`). |
 | any other id | a provider registered on DSH's web service | `deepseek-official` is DSH's DeepSeek search, keyed by the Models page's `DEEPSEEK_API_KEY`; each search is a model request. |
 

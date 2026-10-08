@@ -64,7 +64,8 @@ The owner runs a SearXNG instance on the LAN and may add Exa later. Measured on 
 
 ## 4. Amendment: Gemini grounding between SearXNG and Exa (owner, 2026-10-08)
 
-Status: **Accepted and built** 2026-10-08; not yet live (no key configured).
+Status: **Accepted and built** 2026-10-08; **out of the live order** (owner, the same day): the free tier gives
+new keys no Google Search grounding (§4.5).
 
 ### 4.1 Context
 
@@ -118,3 +119,11 @@ Status: **Accepted and built** 2026-10-08; not yet live (no key configured).
 `nextPacificMidnight`), `GEMINI_DEFAULTS` (`gemini-2.5-flash-lite`, v1beta `generateContent`, 20 s), default order
 `searxng`, `gemini`, `exa`, `deepseek-official`. Its key is a credential reference in `search.gemini.api_key`; an
 unset one is passed over (§3). Tests stub Gemini's responses; no real Gemini call was made in development.
+
+### 4.5 Tried live (2026-10-08)
+
+The owner gave two free-tier keys. With both: every Gemini 2.5 model answers 404 "no longer available to new users"
+(Flash-Lite and Flash); `gemini-3.5-flash-lite` answers a plain request (200) but a request with `google_search`
+answers 429 "exceeded your current quota" with no quota details, i.e. a limit of zero: grounding on 3.x models is
+paid-tier only. D7's free tier is therefore not available to a new key. The owner took Gemini out of the live
+order; the code, its default model (now `gemini-3.5-flash-lite`) and the stored key stay for when billing is on.

@@ -211,7 +211,9 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     if not text:
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
     if len(text) > NOTE_CHARS:
-        raise NoteRefused('NOTE_TOO_LONG', '便条最多 %d 字，现在 %d 字；写短一点。' % (NOTE_CHARS, len(text)))
+        from .role_tools import COUNTED
+        raise NoteRefused('NOTE_TOO_LONG', '便条最多 %d 字，现在 %d 字，超了 %d 字（%s）；写短一点。'
+                          % (NOTE_CHARS, len(text), len(text) - NOTE_CHARS, COUNTED))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:

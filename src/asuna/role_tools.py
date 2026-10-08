@@ -30,6 +30,8 @@ THOUGHT_CHARS = 300
 # What she is told is THOUGHT_CHARS; refused only past this. Most refusals were a few characters over a count a
 # model cannot keep exactly (owner 2026-10-06), and each cost her a full retry.
 THOUGHT_HARD_CHARS = 360
+# How a length limit counts, said with every over-length refusal so one cut is enough.
+COUNTED = '标点、空格、换行和字母也各算一个字'
 RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
@@ -700,15 +702,16 @@ class RoleTools:
             raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
                           % (field, limit))
         if len(value) > limit:
-            raise Refused('%s 太长了（%d 字），%d 字以内：精简后再调用。' % (field, len(value), limit))
+            raise Refused('%s 太长了（%d 字），%d 字以内，超了 %d 字（%s）：精简后再调用。'
+                          % (field, len(value), limit, len(value) - limit, COUNTED))
         return value.strip()
 
     # ── mind ────────────────────────────────────────────────────────
     def tool_think(self, ep, call_id, args):
         thought = self._text(args, 'thought', 100000)
         if len(thought) > THOUGHT_HARD_CHARS:
-            raise Refused('心里话 %d 字，超过 %d 字：精简到 %d 字以内，只留要点；详细的推演留在思考里。'
-                          % (len(thought), THOUGHT_CHARS, THOUGHT_CHARS))
+            raise Refused('心里话 %d 字，超过 %d 字，多了 %d 字（%s）：精简到 %d 字以内，只留要点；详细的推演留在思考里。'
+                          % (len(thought), THOUGHT_CHARS, len(thought) - THOUGHT_CHARS, COUNTED, THOUGHT_CHARS))
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         if not self.store.db.memory_units.find_one({'_id': memory_id}):

@@ -24,9 +24,9 @@
                 config:
                   maxTokens: 24576
                   retainRatio: 0.16
-                  # Compact at 75% of the window, like the action brain (ADR-011 §8): one turn can add
-                  # ~45k tokens at once, and the summary request replays the prefix plus this cap.
-                  thresholdRatio: 0.75
+                  # Compact at 80% of the window: a compaction leaves her at about 35%, and one turn can add
+                  # ~45k tokens at once while the summary request replays the prefix plus this cap.
+                  thresholdRatio: 0.80
                   headroomTokens: 6144
               - id: tool-result-pruner
                 name: '@deepseek-ai/dsh-compaction-tool-result-pruner'

@@ -25,7 +25,7 @@ INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头
 VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
-            'pending': '还在那儿', 'failed': '没去成'}
+            'pending': '那边那一轮还没跑完，结果还没出来', 'failed': '没去成'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Intents that open a conversation: these wait until the group has been quiet for heartbeat.quiet_min.
 STARTING = ('start_topic',)          # a picture fits into talk; a new topic waits (owner 2026-10-06)
@@ -291,7 +291,11 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
         gap *= 2                         # she spoke and nobody answered: wait twice as long (as P5 does)
     recent = [at for at in (here['mine_at'], _at((visit or {}).get('at'))) if at]
     if recent and moment - max(recent) < gap:
-        return False, '你%s来过这里（说过话或来看过），过一阵再来' % _ago(moment, max(recent))
+        # Read from home as well as in the group: name the group, never "here"; a visit whose turn has not run yet
+        # is not a look she took.
+        if visit and max(recent) == _at(visit.get('at')) and outcome(store, visit) == 'pending':
+            return False, '你%s已经出门去那个群了，那边那一轮还没跑完；等它跑完、结果带回来再说' % _ago(moment, max(recent))
+        return False, '你%s去过那个群（在那儿说过话或看过），过一阵再去' % _ago(moment, max(recent))
     if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
         if intent in STARTING:
             return False, '这会儿有人在聊；起话头等安静下来，去看看、写笔记、发图可以'

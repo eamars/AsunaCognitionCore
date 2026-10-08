@@ -250,7 +250,8 @@ TOOLS = {
     'visit': {
         'description': ('出门：去你在的某个群看看。place 照抄 places_from_program 里的 place，intent 是你去做什么。'
                         '程序会在那个群里给你开一个回合，你在那儿看了现场再决定说不说、说什么；这回合在家里照常结束，'
-                        '结果下次心跳带回来。topic 是你想聊的话头，会原样带进群里的那个回合：只写你愿意在那儿说的，'
+                        '结果下次心跳带回来（last_visits_from_program）。那一轮看到的是那边的聊天记录：你自己发过的话按你写的'
+                        '原样存着，看不出平台上显示成什么样（@ 有没有落成之类），这种事出门也验不了。topic 是你想聊的话头，会原样带进群里的那个回合：只写你愿意在那儿说的，'
                         '不写家里的私事。家里的心跳或你自己定的计划到期时可以出门，一拍能去几个群看 places_from_program.this_beat；'
                         '想过一会儿再去，就用 plan 定个时间，到时候再走这一步。'),
         'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),

@@ -376,3 +376,18 @@ def test_her_own_setting_lets_one_beat_go_to_two_groups(store):
     assert ep['context']['places_from_program']['this_beat'] == '这一拍最多去 2 个群'
     assert [row[5] for row in home.tool_results if row[2] == 'visit'] == [True, True, False]
     assert [offer[2] for offer in service.controller.offers] == ['g1', 'g2']
+
+
+def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
+    # Owner 2026-10-08: "还在那儿" and "你 25 分钟前来过这里" confused her at home about a visit that had not run.
+    service = group_world(store)
+    home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
+                                      ('stay_silent', {'reason': '出门了'})], '')])
+    coordinator = Coordinator(store, home)
+    coordinator.scheduler = service
+    assert coordinator.ingest(home_beat(store))['state'] == 'COMMITTED'
+    plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
+    assert places.outcome(store, plan['visits'][-1]) == 'pending'
+    assert places.OUTCOMES['pending'] == '那边那一轮还没跑完，结果还没出来'
+    with pytest.raises(ValueError, match='已经出门去那个群了，那边那一轮还没跑完'):
+        service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)

@@ -469,6 +469,9 @@ class ToolBroker:
             if tool!=READ_IMAGE_TOOL_NAME:
                 from . import credentials
                 result=credentials.scrub(result)          # no stored credential value reaches her or a receipt
+            # A result is JSON data: the receipt and her character brain's view of it are JSON, and a raw database row
+            # can hold other values (an archived message's original ObjectId).
+            result=json.loads(json.dumps(result,ensure_ascii=False,default=str))
             self.service.crash('after_tool_before_receipt')
             result['evidence_ref']=key
             result['artifact_ref']=key

@@ -165,3 +165,35 @@ def test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply
     assert 'clusterTime' not in str(refused.value)
     with pytest.raises(ValueError, match='DEVELOPMENT_PAGE_INVALID: .*skip=-1，limit=20'):
         bridge.call(task, 'development_database_read', {'collection': 'scenes', 'skip': -1})
+
+
+def test_a_database_read_of_an_archived_row_still_reaches_her_character_brain(store):
+    """Regression (live 2026-10-09): an archived message keeps its source's original ObjectId; a development read that
+    returned it stored it raw, and handing the task's result back to her failed, so she never answered."""
+    from bson import ObjectId
+    from asuna.native_worker import NativeDevelopmentBridge
+    owner(store)
+    store.db.messages.insert_one({'_id': 'archive-x', 'schema_version': 1, 'scene_id': 'archive:dm-a',
+                                  'direction': 'archived', 'text': '旧的一句', 'legacy': {'_id': ObjectId()}})
+    lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '查旧消息', 'brief': '只读查一条归档消息。'})], '交给行动脑了。')])
+    ep = Coordinator(store, lane).ingest(event('own-archive', text='查一下那条旧消息'))
+    service = TaskService(store)
+    task = service.claim(ep['task_ids'][0])
+    broker = ToolBroker(service)
+    broker.development = NativeDevelopmentBridge(None, store.config, store)
+    from pathlib import Path
+    work = Path(store.config['channels']['fixture']['routes']['dm-a']['workspace'])
+    store.config['chat']['workspace'] = str(work)
+    broker.bind('s', task, work)
+    try:
+        read = broker.call('s', 'call-1', 'development_database_read', {'collection': 'messages', 'filter': {'_id': 'archive-x'}})
+        assert isinstance(read['rows'][0]['legacy']['_id'], str)
+        current = store.db.tasks.find_one({'_id': task['_id']})
+        done = store.put('tasks', {**current, 'state': 'RETURNED', 'feedback_state': 'READY',
+                                   'result': {'task_id': task['_id'], 'intent_revision': 1, 'text': '找到了。',
+                                              'facts': [], 'artifact_refs': [read['artifact_ref']]}},
+                         expected=current['revision'])
+        lane = FakeLane(store, [FakeTurn([THINK], '找到了，原话在这。')])
+        assert service.feedback(done, Coordinator(store, lane))['state'] == 'COMMITTED'
+    finally:
+        broker.close()

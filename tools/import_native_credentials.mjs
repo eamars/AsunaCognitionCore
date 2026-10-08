@@ -7,7 +7,9 @@ for await (const chunk of process.stdin) input += chunk;
 const { home, values } = JSON.parse(input);
 const ctx = new Context();
 try {
-  const credentials = new Credentials(ctx, { dshHome: home, watch: false });
+  // The store reads its file when its service starts: wait for that, or every value reads as missing and is overwritten.
+  ctx.plugin(Credentials, { dshHome: home, watch: false });
+  const credentials = await new Promise(resolve => ctx.inject(['credentials'], child => resolve(child.credentials)));
   for (const [name, value] of Object.entries(values)) {
     if (!value) continue;                      // an empty value is no credential; the store refuses it
     const ref = credentialRef(name);

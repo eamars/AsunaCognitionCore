@@ -203,8 +203,8 @@ The action brain's `web_search` is DSH's tool; Asuna chooses the backend underne
   "order": ["searxng", "gemini", "exa", "deepseek-official"],
   "searxng": {"url": "http://192.0.2.10:8080/search", "engines": ["bing", "wikipedia"],
               "cooldown_seconds": 30, "rest_minutes": 15, "timeout_seconds": 10},
-  "gemini": {"api_key": {"$secret": "GEMINI_API_KEY"}, "model": "gemini-2.5-flash-lite"},
-  "exa": {"api_key": {"$secret": "EXA_API_KEY"}}
+  "gemini": {"api_key": {"$secret": "ASUNA_GEMINI_API_KEY"}, "model": "gemini-2.5-flash-lite"},
+  "exa": {"api_key": {"$secret": "ASUNA_EXA_API_KEY"}}
 }
 ```
 

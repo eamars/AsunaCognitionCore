@@ -253,7 +253,7 @@ class Store:
         return head,revision
 
     def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
-               sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=()):
+               sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=(),origin=None):
         # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
         allowed = {'body'}
         # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
@@ -321,7 +321,8 @@ class Store:
         if evidence_ids and evidence_ids.issubset(processed):
             raise Conflict('NO_NEW_SOURCE_EVENTS')
         new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
-        metadata={k:v for k,v in {'reason':reason,'change_class':change_class}.items() if v is not None}
+        # origin: where and when a revision was written, for a record read in other conversations (understanding.py).
+        metadata={k:v for k,v in {'reason':reason,'change_class':change_class,'origin':origin}.items() if v is not None}
         revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':entity+'|'+scope,'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
         if first:
             self.put('state_heads',{'_id':entity+'|'+scope,'scope_key':scope,'revision_id':new_id},stream='mutation:'+mutation_id)

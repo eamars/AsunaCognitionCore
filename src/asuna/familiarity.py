@@ -21,7 +21,6 @@ CORE_WORDS = {
     'met': '见过几次：跟你说过几句话',
     'new': '不熟：几乎没跟你说过话',
 }
-NO_UNDERSTANDING = '你还没写过对这个人的理解。'
 
 
 def level(store, person_id):

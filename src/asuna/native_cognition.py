@@ -52,7 +52,8 @@ class CognitionView:
             if entity.startswith('persona:'):
                 selected = manifest.get('persona_revision')
             elif entity.startswith('relationship:'):
-                selected = manifest.get('relationship_revision') if key == manifest.get('relationship_entity_key') else None
+                selected = (manifest.get('relationship_revision') if key == manifest.get('relationship_entity_key')
+                            else manifest.get('person_revision') if key == manifest.get('person_entity_key') else None)
             elif entity.startswith(('character_core:', 'current_self:')):
                 selected = (context.get('self_state_from_program', {}).get(entity.split(':')[0]) or {}).get('revision_id')
             else:

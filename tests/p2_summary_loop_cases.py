@@ -482,7 +482,7 @@ def r3_epistemic_order_is_kept():
 def r4_relationship_read_path_untouched():
     store = bind_store(rows())
     _system, context, manifest = prepare(store)
-    assert context['relationship']['understanding'] == '刚认识，还在试口径。', context['relationship']
+    assert context['relationship']['here'] == '刚认识，还在试口径。', context['relationship']
     assert manifest['relationship_revision'] == 'rev-rel-0', manifest
     return '读取腿没动关系口径：下一轮仍按 head 版本读'
 

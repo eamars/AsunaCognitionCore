@@ -21,6 +21,28 @@ class PrivacyService:
         for lane in active_lanes:lane.close()
         return self._erase(key,memory)
 
+    def _erase_person_layer(self,scope,deletion):
+        """A person-layer understanding (understanding.py) lives outside any one conversation: a revision citing a
+        source from the erased conversation goes, and the record falls back to the newest revision before it that
+        cites none (or is deleted when there is none)."""
+        from .understanding import PERSON_SCOPE
+        db=self.store.db
+        def tainted(rev):
+            return any((db.memory_units.find_one({'_id':source},{'scope_key':1}) or {}).get('scope_key')==scope
+                       for source in rev.get('source_ids',[]))
+        for head in db.state_heads.find({'scope_key':PERSON_SCOPE}):
+            chain=[];rev=db.state_revisions.find_one({'_id':head['revision_id']})
+            while rev:
+                chain.append(rev)
+                rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']}) if rev.get('parent_revision_id') else None
+            bad=[i for i,rev in enumerate(chain) if tainted(rev)]
+            if not bad:continue
+            keep=chain[bad[-1]+1] if bad[-1]+1<len(chain) else None
+            if keep:db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':keep['_id'],'revision':head['revision']+1}})
+            else:db.state_heads.delete_one({'_id':head['_id']})
+            for rev in chain[:bad[-1]+1]:
+                db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})
+
     def _erase(self,key,memory):
         db=self.store.db;scope=memory['scope_key']
         deletion='erase-'+uuid.uuid4().hex
@@ -81,6 +103,7 @@ class PrivacyService:
             if rev and not(set(rev.get('source_ids',[]))&sources):
                 db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':rev['_id'],'revision':head['revision']+1}})
             else:db.state_heads.delete_one({'_id':head['_id']})
+        self._erase_person_layer(scope,deletion)
         active_revisions={h['revision_id'] for h in db.state_heads.find({'scope_key':scope})}
         for rev in db.state_revisions.find({'scope_key':scope,'_id':{'$nin':list(active_revisions)}}):
             db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})

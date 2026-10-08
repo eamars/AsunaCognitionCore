@@ -8,7 +8,7 @@ from asuna.memory import MemoryService
 
 def setup_turn(store, reflection):
     store.config['task_mode']='workspace'
-    understand=('understand_person',{'body':reflection})
+    understand=('understand_person',{'layer':'here','body':reflection})
     lane=FakeLane(store,[
         FakeTurn([('think',{'thought':'这是当前人物明确的反馈，不代表所有人。'}),understand],'知道了。'),
         # The resumed turn is told which calls already took effect (think); the interrupted one is not among them.
@@ -22,8 +22,8 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     coordinator,lane,event=setup_turn(store,text)
     before=store.head('relationship:A','scene:dm-a')[1]
     original=MemoryService.commit_understanding
-    def interrupted(service,ep,body):
-        result=original(service,ep,body)
+    def interrupted(service,ep,body,layer='here'):
+        result=original(service,ep,body,layer)
         raise RuntimeError('after state commit, before episode marker')
     monkeypatch.setattr(MemoryService,'commit_understanding',interrupted)
     with pytest.raises(RuntimeError):coordinator.ingest(event)
@@ -43,7 +43,7 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     assert store.db.state_revisions.count_documents({'mutation_id':ep['_id']+':understanding'})==1
     assert done['manifest']['relationship_revision']==before['_id']
     _,current,manifest=ContextBuilder(store).prepare({**event,'event_id':'later'})
-    assert current['relationship']['understanding']==text
+    assert current['relationship']['here']==text
     assert manifest['relationship_revision']==revision['_id']
     _,foreign,_=ContextBuilder(store).prepare({'event_id':'other','scene_id':'dm-b','person_id':'B','text':'你好'})
     assert text not in json.dumps(foreign,ensure_ascii=False)

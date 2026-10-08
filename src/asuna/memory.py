@@ -3,7 +3,7 @@ import copy
 import json
 from .config import character_id
 from .evidence import canonical,sha
-from .state import Store,Denied,Conflict
+from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock
 from .ingress import NOT_CORE_NOTICE
 from . import summary_attribution
@@ -25,14 +25,17 @@ class MemoryService:
     # "本轮是否真的展示给过角色 + 现在仍是当前 scope/纪元的 active 条目"重读复核。
     UNDERSTANDING_AUTO_SOURCES=('dialogue_summary',)
 
-    def commit_understanding(self,episode,body):
-        """Commit bounded role-authored prose using the existing revision/CAS path."""
-        scope=episode['scope_key'];operation=episode['_id']+':understanding'
+    def commit_understanding(self,episode,body,layer='here'):
+        """Commit bounded role-authored prose using the existing revision/CAS path: the here layer (this
+        conversation's record) or the person layer (one record for the person, understanding.py)."""
+        scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')
         scene=self.store.authorize(episode['scene_id'],episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
             raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
         if body.strip()=='不更新':
             result={'state':'NO_CHANGE'}
+        elif layer=='person':
+            result=self._commit_person(episode,body,scope,operation)
         else:
             entity='relationship:'+episode['person_id']
             target_scope,linked=scope,[]
@@ -75,8 +78,33 @@ class MemoryService:
                         'accepted_revision':revision['_id'],'body':body,'source_ids':sources,
                         'auto_source_ids':auto,'auto_source_skipped':skipped,
                         'auto_stale_source_ids':stale}
-        self.store.audit(episode['_id'],'understanding.result',result,scope)
+        self.store.audit(episode['_id'],'understanding.result',{**result,'layer':layer},scope)
         return result
+
+    def _commit_person(self,episode,body,scope,operation):
+        """The person layer: written from this conversation into the person's one record, with where and when."""
+        from .understanding import PERSON_SCOPE,person_entity
+        entity=person_entity(self.store.config,self.store.db,episode['person_id'])
+        key=episode['manifest'].get('person_entity_key')
+        if key!=entity+'|'+PERSON_SCOPE:
+            raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')
+        base_id=episode['manifest'].get('person_revision')
+        base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+        if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
+        if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
+        if base and body==base['content'].get('body'):
+            return {'state':'NO_CHANGE'}
+        sources,auto,skipped,stale=self._understanding_sources(episode,scope)
+        common={'entity':entity,'target_scope':PERSON_SCOPE,'base_revision':base_id,'body':body,'source_ids':sources,
+                'auto_source_ids':auto,'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
+        try:
+            revision=self.store.mutate(entity,PERSON_SCOPE,base_id,{'body':body},sources,scope,operation,
+                linked_scopes=[scope],change_class='interpretation',
+                reason='角色在一个对话里写下的、她认为这个人在哪儿都成立的理解；来源由程序关联。',
+                origin={'scene_id':episode['scene_id'],'at':now()})
+        except Conflict as exc:
+            return {'state':'NOT_COMMITTED','reason':str(exc),**common}
+        return {'state':'COMMITTED','accepted_revision':revision['_id'],**common}
 
     def _understanding_sources(self,episode,scope):
         """本回合独白 + 本回合程序实际展示过、且确实盖到当前说话人的当前场景摘要。

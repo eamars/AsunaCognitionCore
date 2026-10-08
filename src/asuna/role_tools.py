@@ -190,9 +190,11 @@ TOOLS = {
                        'body': _s('完整的新正文', required=True), 'reason': _s('为什么改', required=True)},
     },
     'understand_person': {
-        'description': ('更新你对当前说话人的理解：写完整的新理解正文，保留仍然成立的旧理解，分清对方说过的、你判断的和'
-                        '已核实的。只在这次真有值得留下的变化时用，不为了被夸而每轮更新。'),
-        'parameters': {'body': _s('完整的新理解', required=True)},
+        'description': ('更新你对当前说话人的理解，两层选一层：person 是人那层（你在哪儿遇到他都看得到），here 是这里那层'
+                        '（只在这个对话里看得到）。写那一层完整的新正文，保留仍然成立的旧内容，分清对方说过的、你看到的和你推的。'
+                        '只在这次真有值得留下的变化时用，不为了被夸而每轮更新；两层各自一回合最多写一次。'),
+        'parameters': {'layer': _s('person（人那层）或 here（这里那层）', required=True, enum=['person', 'here']),
+                       'body': _s('那一层完整的新正文', required=True)},
     },
     'set_policy': {
         'description': '调整你自己声明过的一个参数（persona-model 里的 policy key）。',
@@ -950,20 +952,27 @@ class RoleTools:
         from .queue import database_effects_lock
         from .tasks import require_current_feedback
         body = self._text(args, 'body', SINGLE_BODY_CHARS)
+        layer = args.get('layer')
+        if layer not in ('person', 'here'):
+            raise Refused('UNDERSTANDING_LAYER_REQUIRED: layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
+                          '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,))
         if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
             raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
-        if (ep.get('understanding_update') or {}).get('state') == 'COMMITTED':
-            raise Refused('这回合已经更新过一次对这个人的理解了，一回合只更新一次；还有要补的，下回合再写。')
-        saved = self.store.db.state_revisions.find_one({'mutation_id': ep['_id'] + ':understanding'}, {'_id': 1})
+        field = 'understanding_update' if layer == 'here' else 'person_understanding_update'
+        words = '这里那层' if layer == 'here' else '人那层'
+        if (ep.get(field) or {}).get('state') == 'COMMITTED':
+            raise Refused('这回合已经写过一次%s了，每层一回合只写一次；还有要补的，下回合再写。' % words)
+        mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person')
+        saved = self.store.db.state_revisions.find_one({'mutation_id': mutation}, {'_id': 1})
         if saved:
-            # Saved before this turn was interrupted: once per episode, never a second revision.
+            # Saved before this turn was interrupted: once per episode and layer, never a second revision.
             update = {'state': 'COMMITTED', 'accepted_revision': saved['_id']}
-            self.coordinator._update(self._fresh(ep), understanding_update=update)
-            return {'state': 'COMMITTED', 'note': '这回合中断前已经保存过这次理解。'}, False
+            self.coordinator._update(self._fresh(ep), **{field: update})
+            return {'state': 'COMMITTED', 'note': '这回合中断前已经保存过%s。' % words}, False
         with database_effects_lock(self.store.name):
             require_current_feedback(self.store, ep)
-            update = MemoryService(self.store).commit_understanding(self._fresh(ep), body)
-        self.coordinator._update(self._fresh(ep), understanding_update=update)
+            update = MemoryService(self.store).commit_understanding(self._fresh(ep), body, layer)
+        self.coordinator._update(self._fresh(ep), **{field: update})
         result = {k: update.get(k) for k in ('state', 'reason') if update.get(k)}
         if update.get('state') == 'NOT_COMMITTED':
             result['note'] = UNDERSTANDING_NOT_SAVED.get(str(update.get('reason')).split(':', 1)[0],

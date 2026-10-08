@@ -9,7 +9,7 @@ from .persona_model import effective
 from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
-from .familiarity import NO_UNDERSTANDING, words as familiarity_words
+from .familiarity import words as familiarity_words
 from . import attend, caught_up
 
 try:                                  # 宿主按包加载
@@ -218,6 +218,10 @@ class ContextBuilder:
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
         relation=self.store.head(target['entity'],target['scope'])
+        # The person layer (understanding.py): one record for this person, read wherever she meets them.
+        from . import understanding as _understanding
+        person_entity=_understanding.person_entity(self.store.config,self.store.db,event['person_id'])
+        person_head=self.store.head(person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
         from .ingress import episode_id
@@ -359,8 +363,9 @@ class ContextBuilder:
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  # How well she knows them (familiarity.py) and what she has written about them, in words.
                  'relationship':{**familiarity_words(self.store,event['person_id'],persona),
-                                 'understanding':((relation[1]['content'] or {}).get('body') if relation else None)
-                                                 or NO_UNDERSTANDING},
+                                 'person':_understanding.person_view(self.store,event['person_id'],scope,person_head,moment),
+                                 'here':((relation[1]['content'] or {}).get('body') if relation else None)
+                                        or _understanding.NO_HERE},
                  'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
                  'memory_source_rules':'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。',
@@ -575,11 +580,10 @@ class ContextBuilder:
                 {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1})
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             context['scheduled_plan_from_program']=plan
-        target_note=('只更新当前场景下对当前说话人的关系理解；不修改全局人格或权限。'
-                     if not target['shared'] else
-                     '只更新对当前说话人的关系理解。配置认定他与另一个入口是同一个人，这份关系记录共用'
-                     '（写在 %s 那一份上，来源仍只取本轮场景里真实给过你的证据）；不修改全局人格或权限。'
-                     % target['scope'])
+        target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
+                     + ('（只在这个对话里看得到）' if not target['shared'] else
+                        '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
+                     + '；不修改全局人格或权限。' + _understanding.ASK)
         if retrieval_manifest.get('error'):
             context['retrieval_diagnostic_from_host']=retrieval_manifest
         if source and source.get('failure'):
@@ -663,11 +667,11 @@ class ContextBuilder:
             *[t['_id'] for t in task_states],
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
-        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         # Available with or without a record: her first understanding of someone creates it.
         context['understanding_update_from_program']={
             'available':True,'target':target_note,
-            'route':'有值得留下的理解变化时，用 understand_person 写下完整的新理解；无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+            'route':'有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={

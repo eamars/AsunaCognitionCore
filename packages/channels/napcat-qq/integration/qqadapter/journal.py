@@ -12,16 +12,20 @@ import time
 
 try:                      # Linux and macOS
     import fcntl
-except ImportError:       # Windows: the same non-blocking exclusive lock, on the file's first byte
+except ImportError:       # Windows: the same non-blocking exclusive lock, on one byte past the file's content
     fcntl = None
     import msvcrt
+
+# Windows locks bytes, and a locked byte cannot be read through another handle: the lock sits past the end of
+# the file, so the informational pid line stays readable. (A byte range past the end may be locked.)
+LOCK_OFFSET = 1 << 20
 
 
 def _lock(fd):
     if fcntl:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     else:
-        os.lseek(fd, 0, os.SEEK_SET)
+        os.lseek(fd, LOCK_OFFSET, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
 
 
@@ -29,7 +33,7 @@ def _unlock(fd):
     if fcntl:
         fcntl.flock(fd, fcntl.LOCK_UN)
     else:
-        os.lseek(fd, 0, os.SEEK_SET)
+        os.lseek(fd, LOCK_OFFSET, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
@@ -159,6 +163,7 @@ class Journal:
         self._lock_path = path
         try:                      # informational only; the flock is the lock
             os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
             os.write(fd, ("pid=%d" % os.getpid() + chr(10)).encode("ascii"))
             os.fsync(fd)
         except OSError:

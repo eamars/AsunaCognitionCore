@@ -14,9 +14,9 @@ import base64
 import hashlib
 import json
 import os
-import select
 import subprocess
 import sys
+import threading
 import time
 
 from . import hostapi as hostapi_mod
@@ -41,10 +41,13 @@ OUTSIDER = fixtures.OUTSIDER                 # on no member snapshot
 UNKNOWN_SENDER = fixtures.UNKNOWN_SENDER     # a DM peer with no route
 UNKNOWN_GROUP = fixtures.UNKNOWN_GROUP       # neither allowlisted nor routed
 LOOSE_GROUP = fixtures.UNROUTED_GROUP        # allowlisted, route removed by _loose_cfg
+# Another process taking the adapter's own lock (flock, or the byte lock on Windows) on the same file.
 HELPER_LOCK_CHILD = (
-    "import fcntl,os,sys,time\n"
+    "import os,sys,time\n"
+    "sys.path.insert(0,sys.argv[3])\n"
+    "from qqadapter.journal import _lock\n"
     "fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o644)\n"
-    "fcntl.flock(fd,fcntl.LOCK_EX)\n"
+    "_lock(fd)\n"
     "print('LOCKED',flush=True)\n"
     "time.sleep(float(sys.argv[2]))\n"
 )
@@ -1433,12 +1436,17 @@ def _check_lock_and_spool(rep, cfg, root):
     # a live holder is refused, and a holder that dies releases the lock so the
     # leftover file never blocks a restart
     holder.release_lock()
-    child = subprocess.Popen([sys.executable, "-c", HELPER_LOCK_CHILD, path, "30"],
+    child = subprocess.Popen([sys.executable, "-c", HELPER_LOCK_CHILD, path, "30", os.path.dirname(HERE)],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              universal_newlines=True)
     try:
-        ready, _, _ = select.select([child.stdout], [], [], 8)
-        line = child.stdout.readline().strip() if ready else ""
+        # a reader thread, not select(): Windows can only select sockets, not a pipe
+        said = []
+        reader = threading.Thread(target=lambda: said.append(child.stdout.readline()), daemon=True)
+        reader.start()
+        reader.join(8)
+        ready = bool(said)
+        line = said[0].strip() if said else ""
         refused = None
         if line == "LOCKED":
             try:

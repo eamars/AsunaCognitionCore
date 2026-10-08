@@ -317,9 +317,9 @@ class BusinessWorker:
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
         def configure(host):
             self.app, self.controller = host.app, host.controller
-            if lease.left_behind:                  # the last Host was taken away from outside (host_stops)
+            if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
                 from . import host_stops
-                host_stops.record(self.app.store, lease.left_behind)
+                host_stops.record(self.app.store, lease.left_behind, planned=lease.planned)
             self.navigation = self.prepare_navigation(native_sessions or [])
             self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
             if not self.projection_start:

@@ -7,7 +7,8 @@ another deployment waits until the lease expires (no renewal for LEASE_SECONDS) 
 holds it. Expiry uses the database server's clock, so clocks on different machines need not agree.
 
 A clean stop deletes the lease. Finding this deployment's own lease at start means the last Host did not stop by
-itself: `left_behind` is then about when it was last alive (host_stops).
+itself: `left_behind` is then about when it was last alive, and `planned` whether someone marked that stop as a
+planned restart first (`mark_planned`, host_stops).
 """
 import os
 import socket
@@ -24,6 +25,7 @@ from .state import Denied
 LEASE_SECONDS = 90
 RENEW_SECONDS = 30
 COLLECTION = 'host_leases'
+PLANNED_SECONDS = 600                     # a planned-restart mark counts for a stop within this long
 
 
 def host_id(root=None):
@@ -49,14 +51,17 @@ class DatabaseLease:
         self.stopping = threading.Event()
         self.thread = None
         self.left_behind = None
+        self.planned = False
 
     def _expiry(self):
         return {'$add': ['$$NOW', LEASE_SECONDS * 1000]}
 
     def acquire(self):
-        mine = self.leases.find_one({'_id': 'host', 'instance': self.me}, {'expires_at': 1})
+        mine = self.leases.find_one({'_id': 'host', 'instance': self.me}, {'expires_at': 1, 'planned_stop': 1})
         if mine and mine.get('expires_at'):
             self.left_behind = mine['expires_at'] - timedelta(seconds=LEASE_SECONDS)
+            marked = (mine.get('planned_stop') or {}).get('at')
+            self.planned = bool(marked) and self.left_behind - marked <= timedelta(seconds=PLANNED_SECONDS)
         take = [{'$set': {**self.holder, 'since': '$$NOW', 'expires_at': self._expiry()}}]
         free_or_mine = {'$or': [{'$lt': ['$expires_at', '$$NOW']}, {'$eq': ['$instance', self.me]}]}
         if self.leases.update_one({'_id': 'host', '$expr': free_or_mine}, take).matched_count:
@@ -92,3 +97,14 @@ class DatabaseLease:
             self.leases.delete_one({'_id': 'host', 'instance': self.me})
         finally:
             self.client.close()
+
+
+def mark_planned(config, by):
+    """Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the
+    next start then records a planned restart, not an external termination. False when no Host holds the lease."""
+    client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, timeoutMS=10000)
+    try:
+        return bool(client[config['database']][COLLECTION].update_one(
+            {'_id': 'host'}, [{'$set': {'planned_stop': {'at': '$$NOW', 'by': str(by)[:40]}}}]).matched_count)
+    finally:
+        client.close()

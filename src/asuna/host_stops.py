@@ -3,7 +3,8 @@ the logs whether she was away. A clean stop deletes the database lease (host_lea
 leaves its own lease behind. The next start finds it, records one row in `host_stops` — about when the old Host was
 last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home
 turns for the next day carry it in words. Nothing about the process tree or who stopped it: only that it did not
-stop by itself, and for how long nothing ran.
+stop by itself, and for how long nothing ran. A stop marked beforehand as a planned restart
+(`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown.
 """
 from __future__ import annotations
 
@@ -20,11 +21,11 @@ def _aware(value):
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def record(store, alive_until, back_at=None):
-    """One external termination, found at startup: alive_until is the old Host's last known moment."""
+def record(store, alive_until, back_at=None, planned=False):
+    """One stop that left the lease behind, found at startup: alive_until is the old Host's last known moment."""
     from .state import now
     back_at = back_at or now()
-    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': 'killed', 'alive_until': _aware(alive_until).isoformat(),
+    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': 'planned' if planned else 'killed', 'alive_until': _aware(alive_until).isoformat(),
            'back_at': back_at, 'scope_key': 'operator'}
     store.put('host_stops', row, stream=row['_id'])
     return row
@@ -53,3 +54,21 @@ def block(store, zone, moment=None):
             'when': '最后确认还在运行约是 %s，重新起来是 %s，中间约 %s宿主没有运行'
                     % (line_stamp(zone, row['alive_until']), line_stamp(zone, row['back_at']), _span(gone)),
             'note': NOTE}
+
+
+def main(argv=None):
+    """`python -m asuna.host_stops planned [--by NAME]`: mark the running Host's coming stop as a planned restart."""
+    import argparse
+    from .config import load
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument('action', choices=['planned'])
+    parser.add_argument('--by', default='developer')
+    args = parser.parse_args(argv)
+    from .host_lease import mark_planned
+    marked = mark_planned(load(), args.by)
+    print('marked' if marked else 'HOST_NOT_RUNNING: 没有正在运行的宿主持有租约；不用标记')
+    return 0 if marked else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

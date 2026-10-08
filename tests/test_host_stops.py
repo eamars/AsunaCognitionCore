@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from asuna import host_stops
-from asuna.host_lease import LEASE_SECONDS
+from asuna.host_lease import LEASE_SECONDS, mark_planned
 from test_host_lease import lease
 
 ZONE = {'tz': ZoneInfo('UTC'), 'name': 'UTC', 'source': 'config'}
@@ -19,7 +19,18 @@ def test_a_lease_left_behind_is_found_and_a_clean_stop_leaves_none(store, tmp_pa
     killed.client.close()
     held = store.db.host_leases.find_one({'_id': 'host'})['expires_at']
     with lease(store, tmp_path / 'h') as next_start:
-        assert next_start.left_behind == held - timedelta(seconds=LEASE_SECONDS)
+        assert next_start.left_behind == held - timedelta(seconds=LEASE_SECONDS) and not next_start.planned
+    killed = lease(store, tmp_path / 'h').acquire()
+    killed.client.close()
+    assert mark_planned({'mongo_uri': store.config['mongo_uri'], 'database': store.name}, 'developer')
+    with lease(store, tmp_path / 'h') as after_deploy:
+        assert after_deploy.planned, 'a deploy marked its restart before killing the Host'
+
+
+def test_a_planned_restart_is_recorded_and_not_shown(store):
+    host_stops.record(store, datetime.now(timezone.utc) - timedelta(minutes=2), planned=True)
+    assert store.db.host_stops.find_one()['how'] == 'planned'
+    assert host_stops.block(store, ZONE) is None
 
 
 def test_her_home_turns_say_it_for_a_day_in_words(store):

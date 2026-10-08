@@ -156,7 +156,7 @@ def main():
             shutil.copyfile(path, addressed)
         path = addressed
         with tarfile.open(path, 'r:gz') as archive:
-            allowed = ('package/src/', 'package/persona/', 'package/seeds/', 'package/jobs/', 'package/skills/', 'package/python/', 'package/integration/', 'package/locale/')
+            allowed = ('package/src/', 'package/persona/', 'package/seeds/', 'package/jobs/', 'package/skills/', 'package/python/', 'package/integration/', 'package/locale/', 'package/meta/')
             exact = {'package/package.json', 'package/LICENSE', 'package/cordis.patch.yml', 'package/README.md', 'package/runtime-manifest.json', 'package/resources-provenance.json', 'package/persona-model.json', 'package/icon.svg', 'package/icon.png'}
             for entry in archive.getmembers():
                 if '/__pycache__/' in entry.name or entry.name.endswith('.pyc'):

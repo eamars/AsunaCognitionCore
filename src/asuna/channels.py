@@ -1,4 +1,6 @@
 """Authenticated transport-neutral adapter seam. Platform protocol belongs to the adapter."""
+import hashlib
+import hmac
 import json
 import secrets
 import threading
@@ -196,16 +198,56 @@ def group_context(store, route, body, event_id, person_id=None):
             'mentioned_account_ids': mentions}
 
 
+def route_key(channel_token, route_id):
+    """The key that opens one route of a channel whose kind declares ROUTE_KEYS (ADR-033 D4): derived from the
+    channel's token, so nothing new is stored, and useless for any other route or channel."""
+    digest = hmac.new(channel_token.encode(), ('asuna-route-key:' + route_id).encode(), hashlib.sha256).hexdigest()
+    return 'route-%s.%s' % (route_id, digest)
+
+
+def route_keys_allowed(channel_id):
+    from . import channel_kinds
+    return bool(getattr(channel_kinds.get(channel_id), 'ROUTE_KEYS', False))
+
+
 class Channels:
     def __init__(self, controller):
         self.controller = controller
         self.store = controller.app.store
 
     def authenticate(self, channel_id, authorization):
+        """(channel, route id) for the bearer: the channel's own token opens all of it (route None); a route key
+        opens that route alone, on a kind that declares ROUTE_KEYS."""
         channel = self.store.config.get('channels', {}).get(channel_id)
-        if not channel or not secrets.compare_digest(authorization, 'Bearer ' + channel['token']):
-            raise Denied('CHANNEL_AUTH_REQUIRED')
-        return channel
+        if channel and secrets.compare_digest(authorization, 'Bearer ' + channel['token']):
+            return channel, None
+        if channel and route_keys_allowed(channel_id) and authorization.startswith('Bearer route-'):
+            route_id = authorization[len('Bearer route-'):].partition('.')[0]
+            if route_id in channel.get('routes', {}) and secrets.compare_digest(
+                    authorization, 'Bearer ' + route_key(channel['token'], route_id)):
+                return channel, route_id
+        raise Denied('CHANNEL_AUTH_REQUIRED')
+
+    def route_target(self, channel_id, route_id):
+        return self.store.config['channels'][channel_id]['routes'][route_id]['target']
+
+    def line_closed(self, channel_id, route_id):
+        from . import lines
+        return lines.is_closed(self.store, self.store.config['channels'][channel_id]['routes'][route_id]['scene_id'])
+
+    def scope_check(self, channel_id, route_id, command, path, body):
+        """A route key posts as its own route, claims and confirms its own line's words, and nothing else."""
+        if command == 'POST' and path == ['events']:
+            if body.get('route_id') != route_id:
+                raise Denied('ROUTE_KEY_OTHER_ROUTE')
+        elif command == 'GET' and path == ['outbox']:
+            pass
+        elif command == 'POST' and len(path) == 3 and path[0] == 'outbox' and path[2] == 'receipt':
+            row = self.store.db.messages.find_one({'_id': path[1], 'channel_id': channel_id}, {'target': 1})
+            if not row or row.get('target') != self.route_target(channel_id, route_id):
+                raise Denied('ROUTE_KEY_OTHER_ROUTE')
+        else:
+            raise Denied('ROUTE_KEY_ENDPOINT_DENIED')
 
     def members(self, channel_id, body):
         from . import group_members
@@ -304,7 +346,7 @@ class Channels:
             if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
 
-    def claim(self, channel_id, wait_seconds=0, supports=None):
+    def claim(self, channel_id, wait_seconds=0, supports=None, target=None):
         # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
         # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
         from . import group_admin
@@ -313,10 +355,13 @@ class Channels:
             if self.controller.reconfiguring:
                 return {'items': []}
             with database_effects_lock(self.store.name):
-                action = group_admin.claim(self.store, channel_id)       # an admin action goes before her words
+                action = None if target else group_admin.claim(self.store, channel_id)   # an admin action goes first
                 if action:
                     return {'items': [action]}
-                row = self.store.db.messages.find_one({'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}, sort=[('scene_seq', 1)])
+                query = {'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}
+                if target:                       # a route key claims only its own line's words (ADR-033)
+                    query.update({'target.type': target['type'], 'target.id': target['id']})
+                row = self.store.db.messages.find_one(query, sort=[('scene_seq', 1)])
                 # A paced segment holds the line until its time and until earlier segments are delivered,
                 # so later messages never overtake it (ADR-009 §11.1).
                 if row and row.get('not_before') and row['not_before'] > now():
@@ -460,7 +505,7 @@ class ChannelServer:
                     if len(parts) < 4 or parts[:2] != ['v1', 'channels']:
                         raise ValueError('UNKNOWN_CHANNEL_ENDPOINT')
                     channel_id = parts[2]
-                    channels.authenticate(channel_id, self.headers.get('Authorization', ''))
+                    _, scoped = channels.authenticate(channel_id, self.headers.get('Authorization', ''))
                     body = {}
                     if self.command == 'POST':
                         size = int(self.headers.get('Content-Length', '0'))
@@ -470,14 +515,20 @@ class ChannelServer:
                         body = json.loads(self.rfile.read(size))
                         if not isinstance(body, dict):
                             raise ValueError('INVALID_BODY')
+                    if scoped:
+                        channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
                     if self.command == 'POST' and parts[3:] == ['events']:
                         value = channels.receive(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['members']:
                         value = channels.members(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
-                        value = channels.claim(channel_id, int(query.get('wait_seconds', ['0'])[0]),
-                                               supports=outbound_media.parse_supports(query))
+                        if scoped and channels.line_closed(channel_id, scoped):
+                            value = {'items': [], 'line': 'closed'}    # her words wait while she keeps it closed
+                        else:
+                            value = channels.claim(channel_id, int(query.get('wait_seconds', ['0'])[0]),
+                                                   supports=outbound_media.parse_supports(query),
+                                                   target=channels.route_target(channel_id, scoped) if scoped else None)
                     elif self.command == 'GET' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'attachment':
                         payload = channels.attachment(channel_id, parts[4], parse_qs(url.query))
                         raw = payload if isinstance(payload, tuple) else None

@@ -94,6 +94,14 @@ def prepare_channels(store, *, dry_run=False):
                     identities_by_id[person] = created
                 elif (identity['platform'], identity['account_id']) != (channel_id, sender):
                     raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
+                # A line's own name for whoever speaks there (an agent line names the agent, ADR-033 D3).
+                display = route.get('display_name')
+                if display is not None and (not isinstance(display, str) or not 1 <= len(display) <= 40):
+                    raise ValueError('CHANNEL_DISPLAY_NAME_INVALID')
+                if display and identities_by_id[person].get('display_name') != display:
+                    current = identities_by_id[person]
+                    identities_by_id[person] = put('identities', {**current, 'display_name': display},
+                        **({'expected': current['revision']} if 'revision' in current else {}), stream='host:setup')
                 # No relationship record is seeded: everyone starts with none, which her context says in
                 # words, and her first written understanding creates it (familiarity.py, memory.py).
                 if not dry_run:
@@ -120,6 +128,31 @@ def prepare_channels(store, *, dry_run=False):
         # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))
     return scene_ids
+
+
+def write_route_keys(config, root):
+    """Each route of a ROUTE_KEYS channel gets its key in <data>/private/route-keys/<channel>-<route>.json, ignored
+    by git, for the agent on that line to read (ADR-033 D4). Keys of routes no longer configured are removed."""
+    import json
+    from .channels import route_key, route_keys_allowed
+    folder = Path(root) / 'private' / 'route-keys'
+    wanted = {}
+    for channel_id, channel in (config.get('channels') or {}).items():
+        if not route_keys_allowed(channel_id):
+            continue
+        for route_id, route in channel['routes'].items():
+            wanted['%s-%s.json' % (channel_id, route_id)] = {
+                'url': 'http://127.0.0.1:%d/v1/channels/%s' % (config.get('channel_port', 8766), channel_id),
+                'route_id': route_id, 'account_id': channel['account_id'], 'sender_id': route['sender_id'],
+                'key': route_key(channel['token'], route_id)}
+    if wanted:
+        folder.mkdir(parents=True, exist_ok=True)
+    for name, value in wanted.items():
+        (folder / name).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+    for stale in (folder.glob('*.json') if folder.is_dir() else ()):
+        if stale.name not in wanted:
+            stale.unlink()
+    return sorted(wanted)
 
 
 class RuntimeHost:
@@ -207,6 +240,7 @@ class RuntimeHost:
             if self.config.get('channels'):
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
                 self.stack.callback(self.channel_server.close)
+                write_route_keys(self.config, DATA)
                 self.evidence.record('host.channels_started', {'port': self.channel_server.server.server_port})
             self.evidence.record('host.channels.ready', {})
             if self.integration:

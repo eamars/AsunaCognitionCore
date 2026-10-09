@@ -52,6 +52,15 @@ Authorization: Bearer <channel-token>
 
 POST bodies are JSON objects, limited to 256 KiB. Unsupported envelope fields are rejected.
 
+A channel kind that declares `ROUTE_KEYS` (`agent`) also takes a route key: `route-<route>.<hex>`, the HMAC-SHA256 of
+`asuna-route-key:<route>` under the channel's token (`channels.route_key`). A route key posts events only as its own
+route, claims only its own line's words (`/outbox` filtered by the route's target; group admin actions are never
+handed out), and confirms only those (`/receipt`); every other endpoint, another route and another channel answer 403.
+While she keeps that line closed, its claim returns `{"items":[],"line":"closed"}` and her words wait. At start the
+host writes each such route's key to `<data>/private/route-keys/<channel>-<route>.json` (`url`, `route_id`,
+`account_id`, `sender_id`, `key`) and removes keys of routes no longer configured. A route's optional `display_name`
+(1–40 characters) is set on its person's identity at start.
+
 ### Receive an event
 
 An inbound identity binds the channel, account, scene and platform event ID. When `occurred_at` is supplied, its value is part of that identity too: the same ID and send time is a redelivery, while the same ID at a different time is a new message. Adapters supply the original platform send time, or omit the field when unavailable; they do not substitute the time of forwarding. A reply resolves within its own scene and policy epoch to the newest matching inbound occurrence or delivered outbound receipt no later than the replying message.

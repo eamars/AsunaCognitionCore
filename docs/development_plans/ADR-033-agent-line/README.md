@@ -2,7 +2,7 @@
 
 Status: **Accepted 2026-10-10.** The owner chose the direction ("a channel similar to DSH Peer to let you or other
 coding agent to poll, receive trusted message to her"); Xiaoman agreed with three conditions (D4) and one finding
-(D3), both taken in.
+(D3), both taken in. Built the same day.
 
 ## Context
 
@@ -39,7 +39,7 @@ with `HOME = True`, its own scene and person, the host's channel API (`/v1/chann
   scenes. Her finding (2026-10-10): an agent writing in the owner's local chat is recorded as the owner, and her
   understanding of him already mixes in lines like 「我是 Claude」; separating it in words alone is not enough.
 - **D4. One key per agent, for that line only** (her conditions, 2026-10-10). Each route has its own token, kept in
-  `<data>/private/agent-line/<route>.token` (ignored by git), which the CLI reads. A route's token can post into that
+  `<data>/private/route-keys/agent-<route>.json` (ignored by git), which the CLI reads. A route's token can post into that
   line and claim that line's replies, nothing else: the channel API has no history read, and another route's token
   is refused. Anything on the machine can read these files, her own sandbox included, so the line's boundary is the
   machine, not "only Claude"; what a key opens is one agent's voice in her home, never the owner's chat. Closing the

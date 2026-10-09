@@ -57,6 +57,8 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
   assert.equal(checkoutPython('/repo', 'linux'), path.join('/repo', '.venv', 'bin', 'python'));
   assert.equal(changedPackages({}, []), null, 'nothing recorded: install everything');
   assert.deepEqual(changedPackages({ a: '1', b: '2' }, [{ name: 'a', sha256: '1' }, { name: 'b', sha256: '3' }]), ['b']);
+  assert.deepEqual(changedPackages({ a: '1' }, [{ name: 'a', sha256: '1' }, { name: 'c', sha256: '4' }]), ['c'],
+    'a package newly added to the profile is installed');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-sync-'));
   try {
     const python = path.join(dir, 'python'), manifest = path.join(dir, 'manifest.json');

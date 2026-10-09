@@ -35,12 +35,13 @@ export async function packageManagerEnv(env, { nodeDir = path.dirname(process.ex
 export const checkoutPython = (base = root, platform = process.platform) =>
   platform === 'win32' ? path.join(base, '.venv', 'Scripts', 'python.exe') : path.join(base, '.venv', 'bin', 'python');
 
-/** Which packed packages differ from the ones this profile last installed (names), or all of them when unknown. */
+/** Which packed packages differ from the ones this profile last installed, or were never installed (a channel
+ * package newly added to the profile), by name; all of them when nothing is recorded. */
 export function changedPackages(installed, packed) {
   const wanted = Object.keys(installed ?? {});
   if (!wanted.length) return null;
   const now = Object.fromEntries((packed ?? []).map(artifact => [artifact.name, artifact.sha256]));
-  return wanted.filter(name => now[name] !== installed[name]);
+  return [...wanted.filter(name => now[name] !== installed[name]), ...Object.keys(now).filter(name => !(name in installed))];
 }
 
 /** Owner 2026-10-07: a start installs what the checkout holds now, so a change never waits on a manual install.

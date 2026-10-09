@@ -158,8 +158,8 @@ import_integration_artifact(
 `read_image` 亲眼看一遍，跟提交时的要求对——画面不对就改提示词或换 workflow 重画。
 **「提交成功、字节对、登记成功」不等于画对了**：job 回执、导入 sha、BlobStore 登记都只是流程证据，
 画没画对以看过为准。依据：核侧 `read_image_for_task` 的 docstring 明写 ref 可以是已存好图的
-artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图）；2026-10-10 主人实测用 `read_image`
-直接看过候选池里的 `blob-…` 图。
+artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图）——这是主要依据；实测那一例是 2026-10-09 我在家里那一轮用 `read_image`
+传 `artifact_id` 看过自己刚画的那张图（后来收进表情包架子，名字叫「不太信」）。
 
 `read_image` 的 ref 两类都认：
 

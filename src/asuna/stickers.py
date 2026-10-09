@@ -94,7 +94,7 @@ CANDIDATE_GONE = 'STICKER_CANDIDATE_GONE: 「%s」；照抄 sticker_candidates_f
 
 
 def _ref_problem(ref):
-    return '「%s」' % ref if ref else '没写 ref（也没写 candidate）'
+    return '「%s」' % ref if ref else '没写 ref（也没写 candidate）；想从候选池里收，先用 op=pool 看池子'
 
 
 def fullness(count):
@@ -417,10 +417,16 @@ def candidates_block(store, moment, scene_id=None):
     return {'items': items, 'pool': '池子里 %d 个' % store.db.sticker_pool.count_documents({}), 'note': POOL_NOTE}
 
 
-def candidate_ids(context):
-    """The candidate pictures listed this turn: she may look at them with read_image."""
+def pool_listing(store, moment):
+    """sticker op=pool: the candidate pool when she asks, anywhere her shelf is -- the list the nightly round shows."""
+    return candidates_block(store, moment) or {'items': [], 'pool': '池子里 0 个',
+                                               'note': '池子现在是空的：群里有人发表情包，程序会先替你存着。'}
+
+
+def candidate_ids(context, listed=()):
+    """The candidate pictures listed this turn (in her context, or by op=pool): she may look at them with read_image."""
     items = ((context or {}).get('sticker_candidates_from_program') or {}).get('items') or ()
-    return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))
+    return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))         + tuple(listed or ())
 
 
 def keep_candidate(store, ep, persona, args):

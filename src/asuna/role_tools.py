@@ -154,14 +154,15 @@ TOOLS = {
         'description': ('整理你的表情包架子（stickers_from_program）。keep：收下一个表情包——ref 照抄群里表情包下面标的'
                         '「表情包 ref」（att-…），或你自己画的图的 artifact_id（blob-…）；起个名字（name），写一句什么时候用'
                         '（when）。只有表情包能收，照片不行；架子满了先 drop 一个。drop：按名字放下一个。'
-                        'rename：改名字（new_name）或用法（when）。sticker_candidates_from_program 里的候选：先 read_image 看过，'
+                        'rename：改名字（new_name）或用法（when）。pool：看候选池（群里有人发过、程序替你存着的表情包，发得最多的几个和池子总数），'
+                        '哪儿都能看。sticker_candidates_from_program 或 pool 列出的候选：先 read_image 看过，'
                         '再 keep 并写 candidate。remember：看过但不想收的表情包（ref 或 candidate），记个名字和一句它在说什么'
                         '（when），以后再有人发它，下面会标你认得它，不用再看；记错了再 remember 一次就改了。'
                         '收下和记住的名字、说明在群里也会被看到。发的时候不用这个工具：在要说的话里单独写一行「[表情包:名字]」。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember']),
-                       'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内', required=True),
+        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool']),
+                       'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内；pool 不用写'),
                        'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
-                       'candidate': _s('keep/remember 用：候选池里的 candidate（照抄 sticker_candidates_from_program，先看过）'),
+                       'candidate': _s('keep/remember 用：候选池里的 candidate（照抄 sticker_candidates_from_program 或 pool 列出的，先看过）'),
                        'when': _s('keep、remember 必填，rename 可改：什么时候用它／它在说什么，40 字以内'),
                        'new_name': _s('rename 用：新名字')},
     },
@@ -465,7 +466,7 @@ def offered_pictures(ep):
     """The artifact ids her turn may send (image_artifacts_from_program): she may also look at them."""
     from .stickers import candidate_ids
     items = ((ep.get('context') or {}).get('image_artifacts_from_program') or {}).get('items') or ()
-    return tuple(item['artifact_id'] for item in items if isinstance(item, dict) and item.get('artifact_id'))         + candidate_ids(ep.get('context'))                 # sticker candidates: she looks before she keeps
+    return tuple(item['artifact_id'] for item in items if isinstance(item, dict) and item.get('artifact_id'))         + candidate_ids(ep.get('context'), ep.get('pool_listed'))  # sticker candidates: she looks before she keeps
 
 
 def her_pictures(store, ep):
@@ -476,6 +477,8 @@ def her_pictures(store, ep):
         return False
     if offered_pictures(ep) or ((ep.get('context') or {}).get('your_pictures_from_program') or {}).get('items'):
         return True                       # she can look before she sends, and at her own pictures at home
+    if (ep.get('context') or {}).get('stickers_from_program') and store.db.sticker_pool.find_one({}, {'_id': 1}):
+        return True                       # what sticker op=pool lists, she looks at before she keeps
     try:
         listing = scene_attachments(store, ep, store.config)
     except Denied:
@@ -878,7 +881,7 @@ class RoleTools:
         from .vision import read_image_for_task
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
-                                     route='character', offered=offered_pictures(ep))
+                                     route='character', offered=offered_pictures(self._fresh(ep)))
         ref = str((args or {}).get('ref') or '')
         if ref:                                       # what she looked at this turn (a candidate is kept only after)
             fresh = self._fresh(ep)
@@ -923,7 +926,14 @@ class RoleTools:
             return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when')), False
         if op == 'remember':
             return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
-        raise Refused('op 是 keep、drop、rename 或 remember%s。' % _given(args, 'op'))
+        if op == 'pool':
+            from datetime import datetime, timezone
+            listing = stickers.pool_listing(self.store, datetime.now(timezone.utc))
+            fresh = self._fresh(ep)
+            self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
+                                                                         *(item['candidate'] for item in listing['items'])])])
+            return listing, False
+        raise Refused('op 是 keep、drop、rename、remember 或 pool%s。' % _given(args, 'op'))
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):

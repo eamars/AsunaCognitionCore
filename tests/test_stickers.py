@@ -245,6 +245,35 @@ def test_group_stickers_wait_in_a_pool_and_reach_her_shelf_only_after_she_looks(
     assert left['source_message_id'] == 'in-market'                        # the least recently seen left first
 
 
+def test_at_home_she_asks_for_the_pool_looks_at_a_candidate_and_keeps_it(store, monkeypatch):
+    """Her ask 2026-10-09: at home the pool was not listed and a keep without a ref could not say what was in it."""
+    from test_engineering_m1 import event
+    refs = group_world(store, monkeypatch)
+    store.config['chat'] = {**store.config.get('chat', {}), 'scene_id': 'dm-a', 'person_id': 'A'}     # her home
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    stickers.keep(store, BlobStore(store), {'scene_id': SCENE, 'scope_key': scene['scope_key'], 'policy_epoch': 1,
+                  'persona': 'P1'}, 'P1', {'ref': refs['old'], 'name': '老图', 'when': '怀旧'}, store.config)
+    blobs = BlobStore(store)
+    for rid in ('in-sticker', 'in-market'):
+        stickers.pool_seen(store, blobs, store.config, rid)
+    candidate = store.db.sticker_pool.find_one({'source_message_id': 'in-sticker'})['artifact_id']
+    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'name': '探测', 'when': '试试'}),
+                                      ('sticker', {'op': 'pool'}), ('read_image', {'ref': candidate}),
+                                      ('sticker', {'op': 'keep', 'candidate': candidate, 'name': '摸鱼', 'when': '有人摸鱼'})],
+                                     '收了一张')])
+    ep = Coordinator(store, lane).ingest(event('pool-1'), persona='P1')
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    assert 'sticker_candidates_from_program' not in ep['context'] and ep['context'].get('stickers_from_program')
+    assert {'sticker', 'read_image'} <= set(lane.calls[0]['tools'])
+    results = lane.tool_results[1:]
+    assert 'op=pool' in str(results[0][4]) and not results[0][5]                  # the refusal says where the pool is
+    assert results[1][5] and candidate in str(results[1][4]) and '池子里 2 个' in str(results[1][4])
+    assert results[2][5] and results[3][5], results
+    assert stickers.find(store, 'P1', '摸鱼') and store.db.sticker_pool.count_documents({}) == 1
+    store.db.sticker_pool.delete_many({})
+    assert stickers.pool_listing(store, datetime.now(timezone.utc))['pool'] == '池子里 0 个'
+
+
 def test_a_sticker_she_kept_or_looked_at_is_named_when_it_comes_back(store, monkeypatch):
     """Owner 2026-10-06: stickers she kept, or looked at and named, stay known by fingerprint for good; posted
     again, the line under them says what she called them, so she need not look again."""

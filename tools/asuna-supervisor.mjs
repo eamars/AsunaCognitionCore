@@ -149,6 +149,8 @@ export async function supervise(d) {
       killTree(child);
       continue;
     }
+    // Ctrl+C reaches DSH too (one console on Windows): an exit right before the stop is the owner's, not a crash.
+    await d.sleep(1000);
     if (d.stopped()) break;
     record = begin({ asked: 'nobody', why: 'the Host exited on its own (code ' + event.code + ')' });
     d.note('Asuna supervisor: the Host exited on its own (code ' + event.code + '); starting it again');

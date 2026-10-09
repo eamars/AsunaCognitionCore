@@ -74,6 +74,23 @@ BLOCKS = {
     'sender_identity': ('sender_identity',),
 }
 CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+SEGMENT_WORDS = {'face': '小黄脸', 'reply': '引用', 'at': '@', 'image': '图', 'record': '语音', 'mface': '表情包'}
+
+
+def landing_lost(verification):
+    """The parts of her delivered line the platform did not store, in words; None when it stored what was sent."""
+    if not isinstance(verification, dict) or verification.get('result') != 'segment_mismatch':
+        return None
+    stored = list(verification.get('stored_segments') or [])
+    lost = []
+    for kind in verification.get('sent_segments') or []:
+        if kind in stored:
+            stored.remove(kind)
+        elif kind != 'text':
+            lost.append(SEGMENT_WORDS.get(kind, kind))
+    return ('平台收下了这句，但%s没落成：对方看到的没有它' % '、'.join(dict.fromkeys(lost))) if lost else None
+
+
 UNDELIVERED_WORDS = {'READY': '还没发', 'QUEUED_EXTERNAL': '在发', 'SENDING': '在发', 'FAILED': '没发出去',
                      'UNKNOWN': '平台没给准话：多半已经发出去了，先看看那边有没有再决定，别直接重发'}
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
@@ -232,7 +249,8 @@ class ContextBuilder:
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
-            'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1}   # a caught-up line shows when it was said
+            'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1,   # a caught-up line shows when it was said
+            'platform_receipt.response.verification':1}   # what of her line the platform really stored
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -253,6 +271,9 @@ class ContextBuilder:
                 if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
         for row in history:
             row.pop('event', None)
+            # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
+            lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
+            if lost:row['not_landed']=lost
         undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)

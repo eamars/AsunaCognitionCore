@@ -80,3 +80,17 @@ def test_a_write_receipt_shows_the_tags_and_places_the_section_now_has(store):
     Coordinator(store, lane).ingest(event('tag-receipt'))
     receipt = lane.tool_results[1][4]
     assert receipt['now']['tags'] == ['place:group'] and receipt['now']['places'] == ['group']
+
+
+def test_her_delivered_line_says_which_part_the_platform_did_not_store(store):
+    from asuna.config import character_id
+    from asuna.context import landing_lost
+    assert landing_lost({'result': 'verified', 'sent_segments': ['text', 'face'], 'stored_segments': ['text', 'face']}) is None
+    store.db.messages.insert_one({'_id': 'out-face', 'schema_version': 1, 'scene_id': 'g1', 'policy_epoch': 1,
+        'scene_seq': 900, 'direction': 'outbound', 'author': character_id(store.config), 'delivery_state': 'DELIVERED',
+        'text': '好饿[表情:干饭]', 'platform_receipt': {'response': {'verification': {
+            'result': 'segment_mismatch', 'sent_segments': ['text', 'face'], 'stored_segments': ['text']}}}})
+    lane = FakeLane(store, [FakeTurn([THINK], '嗯。')])
+    ep = Coordinator(store, lane).ingest(event('face-lost', scene='g1'))
+    [row] = [r for r in ep['context']['delivered_history'] if r.get('text') == '好饿[表情:干饭]']
+    assert row['not_landed'] == '平台收下了这句，但小黄脸没落成：对方看到的没有它' and 'platform_receipt' not in row

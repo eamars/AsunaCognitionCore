@@ -825,6 +825,22 @@ def _check_outbound_verify(rep, gcfg, root):
               payload.get("status") == "platform_accepted" and ver.get("result") == "segment_mismatch" and
               ver.get("stored_segments") == ["text"], json.dumps(ver, ensure_ascii=False))
 
+    # Outbound faces: a `[表情:名字]` goes out as a real face segment, and a face the platform did not store is
+    # recorded as a segment mismatch (the host tells her which part did not land).
+    F = lambda fid: {"type": "face", "data": {"id": fid}}
+    stub, host, _c, _ob = run("face", item("face", GRP, "好饿[表情:干饭]"),
+                              verify_responses=[_stored_msg([T("好饿"), F("475")], group_id=grp, account=account)])
+    sent = next((c for c in stub.calls if c["action"] == "send_group_msg"), {}).get("params", {}).get("message") or []
+    ver = (host.last().get("payload", {}).get("response") or {}).get("verification") or {}
+    rep.check("outbound_face_sent_as_face_segment", sent[-1:] == [F("475")] and ver.get("result") == "verified",
+              json.dumps([sent, ver.get("result")], ensure_ascii=False))
+    stub, host, _c, _ob = run("face_lost", item("face_lost", GRP, "好饿[表情:干饭]"),
+                              verify_responses=[_stored_msg([T("好饿")], group_id=grp, account=account)])
+    ver = (host.last().get("payload", {}).get("response") or {}).get("verification") or {}
+    rep.check("outbound_face_not_stored_is_a_mismatch",
+              ver.get("result") == "segment_mismatch" and ver.get("sent_segments") == ["text", "face"] and
+              ver.get("stored_segments") == ["text"], json.dumps(ver, ensure_ascii=False))
+
     stub, host, counters, _ob = run("shape", item("shape", GRP, "正文"),
                                     verify_responses=[{"status": "ok", "retcode": 0, "data": {"message_id": 990001}}])
     ver = (host.last().get("payload", {}).get("response") or {}).get("verification") or {}

@@ -1051,14 +1051,26 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const lane = entry.from === 'action' ? 'executor' : 'character';
       const [all, setAll] = React.useState(false);
       const text = String(entry.text ?? '');
-      const long = text.split('\n').length > 6 || text.length > 360;
+      // The button shows only when the clipped text is really cut off, as rendered (a character count guessed wrong
+      // for short paragraphs of markdown).
+      const box = React.useRef(null);
+      const [cut, setCut] = React.useState(false);
+      React.useLayoutEffect(() => {
+        const element = box.current;
+        if (!element || all) return undefined;
+        const measure = () => setCut(element.scrollHeight > element.clientHeight + 1);
+        measure();
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+        observer?.observe(element);
+        return () => observer?.disconnect();
+      }, [text, all]);
       return h('div', { className: 'asuna-collab-bubble asuna-collab-' + lane },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
           h(Pill, { className: brainClass(lane) }, t('brain.' + lane)),
           entry.kind === 'progress' && h('span', { style: small }, t('collab.progress'))),
-        h('div', { className: 'asuna-collab-text' + (long && !all ? ' asuna-collab-clipped' : '') },
+        h('div', { ref: box, className: 'asuna-collab-text' + (all ? '' : ' asuna-collab-clipped') },
           h(MarkdownText, { text, labels: markdownLabels(t) })),
-        long && h(Button, { size: 'sm', variant: 'ghost', onClick: () => setAll(value => !value) },
+        (cut || all) && h(Button, { size: 'sm', variant: 'ghost', onClick: () => setAll(value => !value) },
           all ? t('collab.less') : t('collab.more')));
     }
     function WorkRow(props) {

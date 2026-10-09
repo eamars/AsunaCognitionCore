@@ -971,7 +971,9 @@ class RoleTools:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
         if written:
-            result['now'] = {'visibility': written['visibility'], 'inject': written['inject']}   # what the section is now
+            # What the section is now, tags included: she checks a place tag took, not just that the write did.
+            result['now'] = {'visibility': written['visibility'], 'inject': written['inject'], 'tags': written.get('tags') or [],
+                             'places': visibility.section_places(written) or '到处都带'}
         return result, False
 
     def tool_update_self(self, ep, call_id, args):

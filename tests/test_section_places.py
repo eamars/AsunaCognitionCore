@@ -69,3 +69,14 @@ def test_every_recall_is_recorded_with_what_came_back(store):
     assert row['payload']['query'] == '笔记' and row['payload']['place'] == 'home'
     assert row['payload']['sections_read'] == [{'doc': 'notes', 'sid': '私密'}]
     assert row['payload']['sections_missing'] == ['notes#没有：没有这一节'] and row['occurred_at']
+
+
+def test_a_write_receipt_shows_the_tags_and_places_the_section_now_has(store):
+    owner(store)
+    docs = DocumentStore(store, 'P1')
+    sid = docs.read('persona')[1]['sections'][-1]['sid']
+    tag = ('write_document', {'doc': 'persona', 'op': 'set_tags', 'sid': sid, 'tags': ['place:group'], 'reason': '只在群里'})
+    lane = FakeLane(store, [FakeTurn([THINK, tag], '改好了。')])
+    Coordinator(store, lane).ingest(event('tag-receipt'))
+    receipt = lane.tool_results[1][4]
+    assert receipt['now']['tags'] == ['place:group'] and receipt['now']['places'] == ['group']

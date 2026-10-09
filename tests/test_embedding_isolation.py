@@ -59,3 +59,26 @@ def test_an_unreachable_service_marks_nothing(store):
     with pytest.raises(httpx.ConnectError):
         retrieval(store, FakeService(limit=300, down=True)).index_pending()
     assert store.db.memory_units.find_one({'_id': 'mu-0'})['embedding_status'] == 'PENDING'
+
+
+def test_one_round_of_indexing_covers_her_owner_private_memories(store):
+    from asuna import visibility
+    from asuna.memory_indexer import MemoryIndexer
+
+    class Evidence:
+        def record(self, kind, payload):
+            pass
+
+    indexer = MemoryIndexer(store, Evidence(), ['dm-a'])
+    seen = []
+
+    def index_pending(scope=None, epoch=None, stopping=None):
+        seen.append((scope, epoch))
+        indexer.stopping.set()
+        return 0
+
+    indexer.retrieval.index_pending = index_pending
+    indexer.retrieval.ensure_index = lambda timeout=2: True
+    indexer._run()
+    private = visibility.owner_private_scope(store.config['chat']['persona'])
+    assert (private, 1) in seen and seen[0][0] == store.db.scenes.find_one({'_id': 'dm-a'})['scope_key']

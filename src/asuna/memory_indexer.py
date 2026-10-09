@@ -5,6 +5,7 @@ import traceback
 
 import httpx
 
+from . import visibility
 from .config import redact_text
 from .memory import MemoryService
 from .retrieval import Retrieval
@@ -52,6 +53,11 @@ class MemoryIndexer:
                         raise _Waiting()
                     chunks = MemoryService(self.store).chunk(scene_id)
                     count = self.retrieval.index_pending(scope=scene['scope_key'], epoch=scene['policy_epoch'], stopping=self.stopping)
+                    persona = self.store.config.get('chat', {}).get('persona')
+                    if persona and cursor % len(self.scene_ids) == 0:
+                        # Once a round, her owner-private memories, which no scene holds (recall reads them at epoch 1).
+                        count += self.retrieval.index_pending(scope=visibility.owner_private_scope(persona), epoch=1,
+                                                              stopping=self.stopping)
                     if not index_ready:
                         index_ready = self.retrieval.ensure_index(timeout=2)
                     if chunks or count:

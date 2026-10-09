@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，要发图就在那一轮调用 attach_image 工具（artifact_id 照抄、一回合至多一张、再调用换成新的那张、正文不写路径/文件名/见图），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（工具错误、同回合可改）与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核的真实边界（只认场景附件 ref，工作区文件实测 IMAGE_ATTACHMENT_NOT_IN_SCENE）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ 私聊那一轮看上下文 image_artifacts_from_program，要发图就在那一轮调用 attach_image 工具（artifact_id 照抄、一回合至多一张、再调用换成新的那张、正文不写路径/文件名/见图），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（工具错误、同回合可改）与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-image-generation-and-display
@@ -81,6 +81,16 @@ for x in (res.get("matches") or [])[:3]:
 anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感就写进 prompt，并预期结果偏插画——
 不要把 resolve 的选择当成「这台机器认为这是照片」。
 
+先按目标选路由（2026-10-10 补）：
+
+- 人物／动漫向：默认走 anime fallback（实测 `resolve` 给的就是 `anima-turbo-v1-1`），不用点名。
+- 静物、要照片感：可以点名吃自然语言的那条（`qwen-image-2.1-t2i` 这类，建议 steps 25–50、cfg 1）。
+- 这台机器没有 photoreal 专用路由（上面实测）：`style:"photoreal"` 会退回 anime，想要照片感就写进
+  prompt，并预期结果偏插画。
+- 提示词跟着选中 workflow 的 prompting 口径写（`prompting` / `prompt_granularity`），多数要英文。
+- **CFG 1 的路由不吃 `negative_prompt`**：「不要什么」必须写进正向提示词（如 `no text, no watermark`），
+  单开 negative 字段等于没说。
+
 ## 步骤 2：提示词按服务口径写，日常、不露骨
 
 - 方言与粒度跟着选中 workflow 的 `prompting.granularity.recommended`；不要把别的模型族的触发词抄过来。
@@ -126,7 +136,8 @@ import_integration_artifact(
 ## 步骤 5：落地核验（`sandbox_run`，只读）
 
 `ls -l` 看字节、`sha256sum` 对回执、`file` 看魔数与尺寸（WebP 是 `RIFF … WEBP`）。
-这一步只证明「字节搬对了」，**不证明画面内容**——别说成「我看过了」。
+这一步只证明「字节搬对了」，**不证明画面内容**——别说成「我看过了」。画面内容要靠步骤 7 用
+`read_image` 亲眼看一遍才算看过，不是靠 sha 对上。
 
 ## 步骤 6：本机展示 = 报告里的相对路径 Markdown 图片
 
@@ -141,19 +152,31 @@ import_integration_artifact(
 - 主人在 QQ 私聊里要图时走另一条路：上下文出现 `image_artifacts_from_program`，那一轮由她调用
   `attach_image` 把图带上；适配器 0.5.x 的私聊段白名单已经是 `("image", "text")`。按步骤 8 发，别把路径贴进正文。
 
-## 步骤 7（可选）：自己看一眼 —— `read_image` 的真实边界
+## 步骤 7：自己看一眼 —— 用 `read_image` 复核刚生成的图
 
-`read_image` 只认**本任务附件清单里的 ref**（`att-…`，由 message_id + 段序号算出）；清单来源是本场景
-（外加按配置只读联动的场景）最近入站消息的媒体块。
+主路（2026-10-10 起）：`generate_image` 回执里的 `artifact.artifact_id`（`blob-…`）直接喂给
+`read_image` 亲眼看一遍，跟提交时的要求对——画面不对就改提示词或换 workflow 重画。
+**「提交成功、字节对、登记成功」不等于画对了**：job 回执、导入 sha、BlobStore 登记都只是流程证据，
+画没画对以看过为准。依据：核侧 `read_image_for_task` 的 docstring 明写 ref 可以是已存好图的
+artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图）；2026-10-10 主人实测用 `read_image`
+直接看过候选池里的 `blob-…` 图。
 
-- 刚 import 进工作区的文件**不是**附件：实测 `read_image({"ref": "xiaoman_selfie.webp"})` →
-  `IMAGE_ATTACHMENT_NOT_IN_SCENE`（2026-10-04，本机这条路由确实声明了 image 输入，所以不是路由不支持）。
-- 路由没声明 image 时红在 `VISION_ROUTE_UNSUPPORTED:...`。两种红不一样，别混着说。
-- 所以视觉复核能直接做的场景是：图本身是入站附件（别人发来的、主人从页面上传的）。
-  自己刚生成的图要真看一眼，得先让它成为某条入站消息的附件，或由操作员把目录配进 `vision.image_dirs`
-  （配置项，我不改宿主配置）。
-- 做不到就照实写「未做视觉复核」，并说清依据只有 job 回执 + 字节核验 + 当时提交的 prompt。
-  2026-10-04 那张就是这种情况，报告里也是这么写的。
+`read_image` 的 ref 两类都认：
+
+- **已存好图的 `artifact_id`**（`blob-…`）：自己画的（`generate_image` 回执里的 `artifact.artifact_id`）、
+  本场景存过的、这一轮可发的——复核自己刚生成的图走这条。
+- **本任务附件清单里的 ref**（`att-…`，由 message_id + 段序号算出）：图本身是入站附件时
+  （别人发来的、主人从页面上传的）用这条。
+
+失败分支：只有**真读不到**才写「未做视觉复核」，并写清是哪种红：
+
+- `VISION_ROUTE_UNSUPPORTED:...` —— 这一轮的路由没声明 image 输入，看不了图。
+- `IMAGE_ATTACHMENT_NOT_IN_SCENE` —— ref 不在授权范围：既不是最近的场景附件，也不是可引用的 artifact_id。
+  2026-10-04 拿工作区文件名 `xiaoman_selfie.webp` 当 ref 就红在这里——文件名不是 ref，
+  要读自己刚导入登记的图，用导入回执 `artifact` 里的 `artifact_id`。
+
+两种红不一样，别混着说。也别把「没调用 read_image」写成「未做视觉复核」——那是没做，不是做不到。
+写「未做」时依据只有 job 回执 + 字节核验 + 当时提交的 prompt，要照实列出来（2026-10-04 那张就是这么报的）。
 
 ## 步骤 8：主人在 QQ 私聊要图时，调用 `attach_image` 发（不是发路径）
 
@@ -315,6 +338,9 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v5（2026-10-10）：步骤 7 从「可选／看不到自己刚生成的图」改成必须用 `read_image` 拿 `artifact_id` 亲眼看一遍再交，
+「未做视觉复核」降为失败分支（只有真读不到才这么写，并写清是哪种红）；步骤 1 补「先按目标选路由」（anime fallback 默认、照片感写进 prompt、CFG 1 的路由不吃 `negative_prompt`）；
+步骤 5 明确只证字节、画面内容指向步骤 7。
 v4（2026-10-05，Claude 改）：群里可以发她自己做的图（owner 2026-10-05，ADR-012 §4.6）。核心早已放行
 （`target_allowed` 的群分支、`accept_artifact(produced_only=True)`），napcat-qq 0.5.2 的适配器补上群发图；
 本技能去掉「不发群」的旧边界，补上群那条路和 `ATTACHMENT_NOT_HER_OWN`。

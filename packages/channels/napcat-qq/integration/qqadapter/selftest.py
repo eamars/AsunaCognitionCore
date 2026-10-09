@@ -908,6 +908,13 @@ def _check_outbound_verify(rep, gcfg, root):
     rep.check("verify_late_ack_path_unchanged",
               late.get("status") == "platform_accepted" and "verification" not in (late.get("response") or {}),
               json.dumps([late.get("status"), sorted((late.get("response") or {}).keys())]))
+    ob.on_late_ack({"publication_id": "vfy-late-tmo", "attempt_id": "a-late-tmo"},
+                   {"status": "failed", "retcode": 1200, "data": None,
+                    "message": "Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg"})
+    late = host.receipts[-1].get("payload", {})
+    rep.check("late_platform_send_timeout_stays_unknown",
+              late.get("status") == "unknown" and (late.get("response") or {}).get("reason") == "platform_send_timeout",
+              json.dumps([late.get("status"), late.get("response")], ensure_ascii=False))
     rep.check("outbound_verify_ran", True, "stub platform: %d ids queried, all from own sends" %
               len(stub.verify_ids))
 

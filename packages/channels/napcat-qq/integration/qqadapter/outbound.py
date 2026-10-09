@@ -52,6 +52,21 @@ def platform_send_timed_out(resp):
         return False
     text = str(resp.get("message") or "") + str(resp.get("wording") or "")
     return "Timeout" in text and "sendMsg" in text
+
+
+def send_outcome(resp):
+    """A send's answer, on time or late: (status, platform_message_id, tag, response object to store)."""
+    retcode = resp.get("retcode") if isinstance(resp, dict) else None
+    data = resp.get("data") if isinstance(resp, dict) else None
+    mid = data.get("message_id") if isinstance(data, dict) else None
+    if retcode == 0 and mid is not None:
+        return "platform_accepted", str(mid), "platform_accepted", resp
+    if platform_send_timed_out(resp):
+        # NapCat stopped waiting for QQ's own confirmation (a fresh picture's first upload is slow); QQ delivered
+        # every such send we have seen (owner 2026-10-06). Not failed: unknown, which is never re-sent.
+        return "unknown", None, "platform_send_timeout", dict(resp, reason="platform_send_timeout")
+    return ("failed", None, "retcode_%s" % retcode,
+            resp if isinstance(resp, dict) else {"unparsed_response": True})
 MAX_SPOOL_TRIES = 20
 
 SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
@@ -539,22 +554,8 @@ class Outbound:
 
     def settle(self, pub, attempt, resp, meta, stopping=False):
         retcode = resp.get("retcode") if isinstance(resp, dict) else None
-        data = resp.get("data") if isinstance(resp, dict) else None
-        mid = data.get("message_id") if isinstance(data, dict) else None
-        if retcode == 0 and mid is not None:
-            self.counters.inc("send_accepted")
-            status, pmid, tag = "platform_accepted", str(mid), "platform_accepted"
-            response = resp
-        elif platform_send_timed_out(resp):
-            # NapCat stopped waiting for QQ's own confirmation (a fresh picture's first upload is slow); QQ delivered
-            # every such send we have seen (owner 2026-10-06). Not failed: unknown, which is never re-sent.
-            self.counters.inc("send_unknown")
-            status, pmid, tag = "unknown", None, "platform_send_timeout"
-            response = dict(resp, reason="platform_send_timeout")
-        else:
-            self.counters.inc("send_failed")
-            status, pmid, tag = "failed", None, "retcode_%s" % retcode
-            response = resp if isinstance(resp, dict) else {"unparsed_response": True}
+        status, pmid, tag, response = send_outcome(resp)
+        self.counters.inc({"platform_accepted": "send_accepted", "unknown": "send_unknown"}.get(status, "send_failed"))
         if isinstance(meta.get("attachment"), dict):
             # what actually went out, into the response object the host already
             # stores verbatim; like the read-back, it cannot move `status`
@@ -688,15 +689,11 @@ class Outbound:
         if not pub or not attempt:
             return
         retcode = response.get("retcode") if isinstance(response, dict) else None
-        data = response.get("data") if isinstance(response, dict) else None
-        mid = data.get("message_id") if isinstance(data, dict) else None
         if (meta or {}).get("admin"):
             # an admin action has no message of its own: the platform's retcode is the whole answer
             status, pmid = ("platform_accepted" if retcode == 0 else "failed"), None
-        elif retcode == 0 and mid is not None:
-            status, pmid = "platform_accepted", str(mid)
         else:
-            status, pmid = "failed", None
+            status, pmid, _tag, response = send_outcome(response)
         self.log("LATE_ACK pub=%s attempt=%s retcode=%s -> %s" % (pub, attempt, retcode, status))
         self.journal.append("late_acks.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
                                                "retcode": retcode, "platform_message_id": pmid})

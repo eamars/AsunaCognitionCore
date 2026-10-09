@@ -18,6 +18,17 @@ def terms(text):
     return {part for word in words for part in ([word] if word.isascii() else [word[i:i+2] for i in range(max(1,len(word)-1))])}
 
 
+# A unit the embedding model refuses on its own (longer than its context) is embedded from its opening part, longest
+# first; one refused even at the shortest is marked REFUSED for this embedding route and left to lexical recall.
+EMBED_OPENING_CHARS=(400,200,100)
+
+
+def refused(exc):
+    """The embedding service refused this input (HTTP 400), as opposed to being unreachable or failing."""
+    import httpx
+    return isinstance(exc,httpx.HTTPStatusError) and exc.response is not None and exc.response.status_code==400
+
+
 class Retrieval:
     index_name='asuna_memory_v1'
 
@@ -47,7 +58,7 @@ class Retrieval:
         return vectors
 
     def index_pending(self, batch_size=16, *, scope=None, epoch=None, stopping=None):
-        query={'status':'active','$or':[{'embedding_status':{'$ne':'READY'}},{'embedding_revision':{'$ne':self.revision}}]}
+        query={'status':'active','$or':[{'embedding_status':{'$nin':['READY','REFUSED']}},{'embedding_revision':{'$ne':self.revision}}]}
         if scope is not None:query.update(scope_key=scope,policy_epoch=epoch)
         pending=list(self.store.db.memory_units.find(query))
         indexed=0
@@ -57,11 +68,34 @@ class Retrieval:
             try:vectors=self.embed([m['body_markdown'] for m in batch],'document')
             except Exception as exc:
                 self.store.audit('retrieval','embedding.failed',{'count':len(batch),'error_type':type(exc).__name__})
-                raise
+                if not refused(exc):raise
+                # One input the model refused fails its whole batch: embed them one by one, so it blocks no other.
+                indexed+=sum(self._index_one(mem) for mem in batch)
+                continue
             for mem,vector in zip(batch,vectors):
-                self.store.put('memory_units',{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],'embedding_dim':self.dim,'embedding_status':'READY','content_sha256':sha(mem['body_markdown'].encode())},expected=mem['revision'],stream='index')
+                self._ready(mem,vector)
                 indexed+=1
         return indexed
+
+    def _ready(self, mem, vector, opening=None):
+        self.store.put('memory_units',{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],
+            'embedding_dim':self.dim,'embedding_status':'READY','content_sha256':sha(mem['body_markdown'].encode()),
+            **({'embedding_opening_chars':opening} if opening else {})},expected=mem['revision'],stream='index')
+
+    def _index_one(self, mem):
+        """One unit on its own: whole, else its opening part (EMBED_OPENING_CHARS), else REFUSED. 1 when embedded."""
+        body=mem['body_markdown']
+        for opening in (None,*[n for n in EMBED_OPENING_CHARS if n<len(body)]):
+            try:vector=self.embed([body if opening is None else body[:opening]],'document')[0]
+            except Exception as exc:
+                if not refused(exc):raise
+                continue
+            self._ready(mem,vector,opening)
+            return 1
+        self.store.put('memory_units',{**mem,'embedding_status':'REFUSED','embedding_revision':self.revision,
+            'embedding_model':self.cfg['model']},expected=mem['revision'],stream='index')
+        self.store.audit('retrieval','embedding.refused',{'memory_unit':mem['_id'],'chars':len(body)})
+        return 0
 
     def ensure_index(self, timeout=45):
         definition={'fields':[{'type':'vector','path':'embedding','numDimensions':self.dim,'similarity':'cosine'},

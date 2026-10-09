@@ -31,6 +31,15 @@ def waiting(task):
     return task.get('state') in FINISHED and task.get('feedback_state') not in (*TAKEN, None)
 
 
+def continuations(store, task_ids):
+    """{task id: the newest task that continues it} for the given tasks."""
+    found = {}
+    for row in store.db.tasks.find({'continues_task_id': {'$in': list(task_ids)}},
+                                   {'continues_task_id': 1, 'created_at': 1}).sort('created_at', 1):
+        found[row['continues_task_id']] = row['_id']
+    return found
+
+
 def lost(store, on_its_way):
     """Finished tasks whose result was handed back by no one: not taken, not queued, not being handed back now."""
     rows = store.db.tasks.find({'state': {'$in': list(FINISHED)},
@@ -76,9 +85,12 @@ OUTCOME_WORDS = {'RETURNED': '跑完了', 'DONE': '跑完了', 'PARTIAL': '跑�
                  'NEEDS_CHARACTER_DECISION': '停下来等你定', 'UNKNOWN': '结果不确定'}
 
 
-def status_words(task):
-    """What she reads about one task: where its run and its result stand."""
+def status_words(task, continued_by=None):
+    """What she reads about one task: where its run and its result stand. `continued_by`: the task that carried
+    this one on, which is the one to go by."""
     state = task.get('state')
+    if continued_by and state not in ('READY', 'RUNNING'):
+        return '后来接着做了一轮，以 %s 那条为准' % continued_by
     if state == 'READY':
         return '排着队，还没开始跑'
     if state == 'RUNNING':
@@ -91,6 +103,8 @@ def status_words(task):
         return '交代改过了，这一份作废'
     outcome = OUTCOME_WORDS.get(state, '跑完了')
     handed = task.get('feedback_state')
+    if handed is None:
+        return outcome                       # no hand-back record (an old row): nothing to say about one
     if handed in ('DELIVERED', 'WAITING_TASK'):
         return outcome + '，结果已经交给你'
     if handed == 'UNDELIVERABLE':

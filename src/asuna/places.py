@@ -466,8 +466,6 @@ def record(plan, scene_id, event_id, intent, moment, date):
 # for another person's. Only her own actions, as program words -- nobody else's words (ADR-017).
 ELSEWHERE_HOURS = 6
 ELSEWHERE_PLACES = 5
-TASK_STATES = {'READY': '在做', 'RUNNING': '在做', 'QUEUED': '在做', 'PAUSED': '停着', 'RETURNED': '做完回来了',
-               'BLOCKED': '没做成', 'CANCELLED': '叫停了'}
 
 
 def _lines_word(count):
@@ -494,10 +492,11 @@ def elsewhere(store, persona, moment, home, private=()):
         at = _at(row.get('receipt_at'))
         place['last'] = max(filter(None, (place['last'], at)), default=None)
     for task in store.db.tasks.find({'scene_id': {'$nin': list(home), '$in': list(places) or [None]},
-                                     'created_at': {'$gte': since}}, {'scene_id': 1, 'title': 1, 'state': 1}):
+                                     'created_at': {'$gte': since}},
+                                    {'scene_id': 1, 'title': 1, 'state': 1, 'feedback_state': 1, 'cancel_reason': 1}):
         if task.get('title'):
-            places[task['scene_id']]['tasks'].append('%s（%s）' % (excerpt(task['title'], 40),
-                                                                  TASK_STATES.get(task.get('state'), '在做')))
+            from .handover import status_words      # the same words as her task list (ADR-030 D7)
+            places[task['scene_id']]['tasks'].append('%s（%s）' % (excerpt(task['title'], 40), status_words(task)))
     if not places:
         return None
     people = People(store, persona)

@@ -77,7 +77,7 @@ first sweep hands it over. An unfinished task is still paused until the owner as
 **D7. Her task list in words.** `task_state_from_program` gives each task one phrase instead of raw `state`,
 `feedback_state`, `pause_reason` and `cancel_reason`: queued, running, finished and the result is with her,
 finished and the result is still on its way to her, finished and could not be handed over (the developer was told),
-stopped at a restart before finishing, not finished, stopped.
+stopped at a restart before finishing, not finished, stopped. A task carried on by a later one points to the later one, which is the one to go by (two runs of one task otherwise read alike). Her summary of what she did in her other conversations uses the same phrases.
 
 **D8. Every handover.** All delegations use one task path (`delegate` and `message_action` continuations, in every
 scene, including her self-improvement and heartbeat turns), so D1–D7 cover all of them. `ask_character` needs no

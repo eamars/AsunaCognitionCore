@@ -191,3 +191,16 @@ def test_her_task_list_says_where_each_task_stands_in_words():
     assert words({'state': 'BLOCKED', 'feedback_state': 'UNDELIVERABLE'}).startswith('没做成，但结果交不到你手上')
     assert words({'state': 'PAUSED'}).startswith('做到一半宿主重启停了')
     assert words({'state': 'CANCELLED', 'cancel_reason': 'host_stop'}).endswith('message_action 接着做')
+
+
+def test_a_task_carried_on_by_a_later_one_points_to_it():
+    assert handover.status_words({'state': 'RETURNED', 'feedback_state': 'DELIVERED'}, 'task-later') == \
+        '后来接着做了一轮，以 task-later 那条为准'
+    assert handover.status_words({'state': 'RUNNING'}, 'task-later') == '在跑'
+
+
+def test_continuations_names_the_newest_task_that_carries_one_on(store):
+    for task_id, created in (('task-b', '2026-10-09T00:01:00+00:00'), ('task-c', '2026-10-09T00:02:00+00:00')):
+        store.put('tasks', {'_id': task_id, 'request_key': task_id, 'continues_task_id': 'task-a', 'created_at': created},
+                  stream=task_id)
+    assert handover.continuations(store, ['task-a', 'task-z']) == {'task-a': 'task-c'}

@@ -330,6 +330,7 @@ class ContextBuilder:
                     or _handover.waiting(task)]
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
         paused=any(task['state']=='PAUSED' for task in task_states)
+        carried_on=_handover.continuations(self.store,[task['_id'] for task in task_states])
         for task in task_states:
             task.pop('_active',None)
             # A task's title is what she called it; the old goal text only when there is no title.
@@ -338,7 +339,7 @@ class ContextBuilder:
             elif task.get('goal'):
                 task['goal']=excerpt(task['goal'],EXPERIENCE_TASK_CHARS)
             # Where it stands, in words (ADR-030 D7), instead of the raw fields.
-            task['status']=_handover.status_words(task)
+            task['status']=_handover.status_words(task,carried_on.get(task['_id']))
             running=task['state'] in ('READY','RUNNING')
             for key in ('state','feedback_state','cancel_reason','pause_reason','paused_at'):
                 task.pop(key,None)

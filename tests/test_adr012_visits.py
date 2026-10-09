@@ -342,7 +342,7 @@ def test_at_home_she_sees_what_she_herself_did_elsewhere_and_nothing_anyone_said
         {'event_id': 'home-look', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你在群里画画了？'})
     block = ep['context']['elsewhere_from_program']
     [item] = block['items']
-    assert '一句' in item['you'] and '1张你自己画的图' in item['you'] and item['handed_over'] == ['画一张自画像（做完回来了）']
+    assert '一句' in item['you'] and '1张你自己画的图' in item['you'] and item['handed_over'] == ['画一张自画像（跑完了）']
     assert '都是你' in block['note']
     # Her other home lines too: seen from another home conversation, what she did in this one is listed as home.
     store.db.messages.insert_one({'_id': 'mine-home', 'schema_version': 1, 'scene_id': 'dm-a', 'policy_epoch': 1,

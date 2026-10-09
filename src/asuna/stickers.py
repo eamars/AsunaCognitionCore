@@ -50,7 +50,7 @@ STICKERS_NOTE = ('这是你收着的表情包（只有名字和你写的用法�
                  '起个你记得住的名字、写一句什么时候用；只有表情包能收，照片不行。架子有上限，满了先 drop 一个。'
                  '你认得的表情包（收过的、看过记下的）下面会直接标你给它起的名字。')
 HOME_NOTE = ('这是你收着的表情包。这里发不出去；想整理就用 sticker（drop 放下、rename 改名或改用法），'
-             '你自己画的图也可以用 keep 放上来，在群里就能当表情包发。')
+             '你自己画的图也可以用 keep 放上来，在群里就能当表情包发。带图的那些标着 ref，想重看一眼就 read_image（ref 照抄）。')
 FACES_NOTE = ('%s 自己的小黄脸写「[表情:名字]」，夹在话里就行，会变成真的表情；名字要用 %s 的'
               '（下面是这里最近有人用过的，别处见过的也行），不认识的名字会被退回。')
 REVIEW_NOTE = ('这是你的表情包架子，每周看一眼。下面是收了以后一直没发、或很久没发的几个：'
@@ -193,8 +193,11 @@ def block(store, persona, scene, *, at_home=False):
     rows = shelf(store, persona)
     if at_home and not rows:
         return None
+    # At home, where she tidies it, a sticker with a picture carries its id so she can look at it again (her ask
+    # 2026-10-10: animated ones were named from their first frame only).
     return {'items': [{'sticker': row['name'], 'when': row['when'], 'used': _tier(USE_WORDS, row.get('sent') or 0),
-                       **({'from': ORIGIN_WORDS['own']} if row.get('origin') == 'own' else {})} for row in rows],
+                       **({'from': ORIGIN_WORDS['own']} if row.get('origin') == 'own' else {}),
+                       **({'ref': row['artifact_id']} if at_home and row.get('artifact_id') else {})} for row in rows],
             'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
             'note': HOME_NOTE if at_home else STICKERS_NOTE}
 
@@ -424,9 +427,11 @@ def pool_listing(store, moment):
 
 
 def candidate_ids(context, listed=()):
-    """The candidate pictures listed this turn (in her context, or by op=pool): she may look at them with read_image."""
+    """The sticker pictures listed this turn -- candidates (in her context, or by op=pool) and, at home, her shelf:
+    she may look at them with read_image."""
     items = ((context or {}).get('sticker_candidates_from_program') or {}).get('items') or ()
-    return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))         + tuple(listed or ())
+    shelf = ((context or {}).get('stickers_from_program') or {}).get('items') or ()
+    return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))         + tuple(item['ref'] for item in shelf if isinstance(item, dict) and item.get('ref')) + tuple(listed or ())
 
 
 def keep_candidate(store, ep, persona, args):

@@ -1049,23 +1049,29 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return props.renderFactorySlot('conversation.chat.content', { variant: 'fragment', kinds: workKinds,
         after: range.after_seq, through: range.through_seq });
     }
-    function Bubble({ entry, t }) {
-      const lane = entry.from === 'action' ? 'executor' : 'character';
-      const [all, setAll] = React.useState(false);
-      const text = String(entry.text ?? '');
-      // The button shows only when the clipped text is really cut off, as rendered (a character count guessed wrong
-      // for short paragraphs of markdown).
-      const box = React.useRef(null);
+    /** Whether an element's text is really cut off as rendered (vertically or on one line), measured again when its
+     * size changes. A length guessed from characters is wrong at some width: it offered a toggle with nothing more to
+     * show, or hid text with no way to read it. */
+    function useCut(ref, deps, active = true) {
       const [cut, setCut] = React.useState(false);
       React.useLayoutEffect(() => {
-        const element = box.current;
-        if (!element || all) return undefined;
-        const measure = () => setCut(element.scrollHeight > element.clientHeight + 1);
+        const element = ref.current;
+        if (!element || !active) return undefined;
+        const measure = () => setCut(element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1);
         measure();
         const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
         observer?.observe(element);
         return () => observer?.disconnect();
-      }, [text, all]);
+      }, [...deps, active]);
+      return cut;
+    }
+    function Bubble({ entry, t }) {
+      const lane = entry.from === 'action' ? 'executor' : 'character';
+      const [all, setAll] = React.useState(false);
+      const text = String(entry.text ?? '');
+      // The button shows only when the clipped text is really cut off, as rendered.
+      const box = React.useRef(null);
+      const cut = useCut(box, [text], !all);
       return h('div', { className: 'asuna-collab-bubble asuna-collab-' + lane },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
           h(Pill, { className: brainClass(lane) }, t('brain.' + lane)),
@@ -1151,10 +1157,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const refused = props.phase === 'result' && props.block.isError;
       const said = args[TOOL_SUMMARY[name]];
       const summary = name === 'think' ? firstSentence(said) : typeof said === 'string' ? said : said === undefined ? '' : JSON.stringify(said);
-      // A call whose only text is its summary (stay_silent's reason, feel's why…) still opens to that text in
-      // full when the one-line row would cut it off; a call with a body opens to the body.
+      // A call whose only text is its summary (stay_silent's reason, feel's why…) opens to that text in full when
+      // the one-line row really cuts it off at this width; a call with a body opens to the body.
+      const line = React.useRef(null);
+      const cut = useCut(line, [summary], !disclosure.expanded);       // measured while closed; kept while open
       const body = typeof args[TOOL_BODY[name]] === 'string' ? args[TOOL_BODY[name]]
-        : name !== 'think' && typeof said === 'string' && said.length > 40 ? said : '';
+        : name !== 'think' && typeof said === 'string' && cut ? said : '';
       const result = props.phase === 'result' ? resultText(props.block) : '';
       const Icon = primitives[TOOL_ICONS[name]] ?? primitives.IconInfoOutlineRegular;
       const detail = [body && h(MarkdownText, { key: 'body', text: body, labels: markdownLabels(t) }),
@@ -1163,7 +1171,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return h(DisclosureRow, { icon: h(Icon), previewChevron: false,
         title: t('tool.' + name),
         // DSH's own row text: the secondary size, a dot between the title and what the call was about.
-        collapsedContent: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        collapsedContent: h('span', { ref: line, style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           fontSize: 'var(--dsh-content-font-size-secondary, 13px)',
           ...(refused ? { color: 'var(--dsw-alias-state-error-primary)' } : {}) } },
           h('span', { 'aria-hidden': true, style: { margin: '0 6px', opacity: .6 } }, '·'),
@@ -1177,10 +1185,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     function RepairNote(props) {
       const t = props.t, text = props.node.data.text;
       const [open, setOpen] = React.useState(false);
-      const long = text.length > 80;
+      const line = React.useRef(null);
+      const long = useCut(line, [text], !open);   // opens only when the one-line row really cuts the note off
       return h(DisclosureRow, { icon: h(primitives.IconInfoOutlineRegular), previewChevron: false,
         title: t('repair.title'),
-        collapsedContent: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        collapsedContent: h('span', { ref: line, style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           fontSize: 'var(--dsh-content-font-size-secondary, 13px)' } },
           h('span', { 'aria-hidden': true, style: { margin: '0 6px', opacity: .6 } }, '·'), text),
         keepContentWhenOpen: true, open, expandable: long, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },

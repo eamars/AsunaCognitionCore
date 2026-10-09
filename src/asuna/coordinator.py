@@ -402,6 +402,7 @@ class Coordinator:
             verdict={'choice':'quiet','reason':'没能判断：'+type(exc).__name__}
             self.store.audit(ep['_id'],'attend.failed',{'error':str(exc)[:300]},ep['scope_key'])
         self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
+        row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})     # the chunker may have stamped it meanwhile
         if row:
             self.store.put('messages',{**row,'processing_outcome':'ATTEND_JOIN' if verdict['choice']=='join' else 'ATTEND_QUIET',
                                        'attend':verdict},expected=row['revision'],stream=ep['_id'])

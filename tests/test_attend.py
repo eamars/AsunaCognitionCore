@@ -75,6 +75,29 @@ def test_join_runs_the_full_turn_with_her_reason(store):
     assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_JOIN'
 
 
+class Chunked:
+    """A gate whose answer takes long enough for the memory chunker to stamp the line it is judging."""
+    def __init__(self, store, lane):
+        self.store, self.lane = store, lane
+
+    def generate(self, *args, **kwargs):
+        row = self.store.db.messages.find_one({'direction': 'inbound'}, sort=[('scene_seq', -1)])
+        self.store.put('messages', {**row, 'memory_chunk_version': 2}, expected=row['revision'], stream='chunk')
+        return self.lane.generate(*args, **kwargs)
+
+
+def test_a_line_changed_while_the_gate_thinks_still_gets_its_turn(store):
+    setup(store)
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'reason': '不用说'})])])
+    coordinator = Coordinator(store, character)
+    coordinator.attend = Chunked(store, FakeLane(store, [LaneResult('接话：他在回我')]))
+    ep = coordinator.ingest(gated_event(20002, '没有这东西', 'awaited_answer'), persona='P1')
+    assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'join'
+    assert [call['phase'] for call in character.calls] == ['TURN']
+    message = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+    assert message['processing_outcome'] == 'ATTEND_JOIN' and message['memory_chunk_version'] == 2
+
+
 def test_a_gate_that_cannot_answer_lets_the_message_pass(store):
     setup(store)
     coordinator = Coordinator(store, FakeLane(store, []))

@@ -161,10 +161,12 @@ class People:
             self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find({'scene_id': scene_id})}
         return self._rosters[scene_id]
 
-    def entry(self, scene, person_id, row=None, profile=None):
+    def entry(self, scene, person_id, row=None, profile=None, looked_up=False):
         """This person's record in the scene: created with the next label on first sight, refreshed from a newer verified profile.
 
-        `profile`: their names from a message that @-mentions them (`mentioned`); `row` is then that message."""
+        `profile`: their names from a message that @-mentions them (`mentioned`); `row` is then that message.
+        `looked_up`: she found them in the group's member list to address them (find_member); the record says so
+        until a message by or about them arrives here."""
         person = self.person(person_id)
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
@@ -178,7 +180,8 @@ class People:
                     '_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': person,
                     'author': person_id,
                     'handle': (last or {}).get('handle', 0) + 1, 'card': '', 'nickname': '', 'role': '',
-                    'previous': [], 'seen_at': '', 'created_at': now()}, stream='people:' + scene['_id'])
+                    'previous': [], 'seen_at': '', 'created_at': now(), **({'looked_up': True} if looked_up else {})},
+                    stream='people:' + scene['_id'])
             except Conflict:
                 doc = self.db.scene_people.find_one({'_id': key})      # someone else placed it, or took the number
         if not doc:
@@ -205,6 +208,13 @@ class People:
                                          expected=doc['revision'], stream='people:' + scene['_id'])
                 except Conflict:
                     doc = self.db.scene_people.find_one({'_id': key}) or doc
+        if row is not None and doc.get('looked_up'):
+            # A message by or about them here: they have now appeared, not only been looked up.
+            try:
+                doc = self.store.put('scene_people', {**doc, 'looked_up': False}, expected=doc['revision'],
+                                     stream='people:' + scene['_id'])
+            except Conflict:
+                doc = self.db.scene_people.find_one({'_id': key}) or doc
         roster[key] = doc
         return doc
 
@@ -278,6 +288,8 @@ class People:
         role = ROLE_NOTES.get(doc.get('role'))
         if role:
             out.append(role)
+        if doc.get('looked_up'):
+            out.append('你查名单找来要叫的，还没在这里说过话')
         name = self.shown(doc)
         keys = {name_key(doc.get('card')), name_key(doc.get('nickname'))} - {''}
         alike = []

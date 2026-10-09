@@ -59,3 +59,19 @@ Status: **Accepted and built** 2026-10-08. D1 and D2 are 小满's asks, D3 the o
   stored bytes stay the original. Over 1,500 frames or 300 million decoded pixels, or a decode failure, passes the
   original with `ANIMATION_NOT_SPLIT`. Dependency `pillow==12.3.0` (host and worker). Tests:
   `tests/test_animated.py`. On the 48 stored animated pictures the slowest sheet took 0.46 s.
+
+## Amendment (2026-10-09): a member she finds gets a label
+
+Asked in a group to @ every bot, she found the bots with `find_member` but could not address them. An @ needs a
+label, labels exist only in `scene_people`, and D1 kept that roster to "people who appeared here"; `find_member`
+returned plain names. She agreed to a change, with conditions, and Claude built it:
+
+- `find_member` places each member it returns in that group's `scene_people` (names from the list) and returns their
+  label, so the existing @ path, its checks and its refusals apply unchanged.
+- Her condition, source kept: such an entry carries `looked_up: true`, and her notes on that person say
+  "你查名单找来要叫的，还没在这里说过话" until a message by or about them arrives there.
+- Her condition, no silent loss: nothing is removed from `scene_people`. The limit of 10 is per search, not a roster
+  size.
+- Looked-up people stay in that group's roster; nothing is raised to the person level.
+
+Tests: `tests/test_group_members.py`.

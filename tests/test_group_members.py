@@ -1,5 +1,6 @@
 """Who is in a group (owner 2026-10-08, her design): the adapter posts each admitted group's member list when it
-changed; the host keeps it apart from her roster; a group turn names a slice in words; find_member reaches the rest."""
+changed; the host keeps it apart from her roster; a group turn names a slice in words; find_member reaches the rest
+and gives a label to whom it finds."""
 import sys
 import time
 from types import SimpleNamespace
@@ -55,7 +56,23 @@ def test_a_turn_names_who_she_knows_the_recently_active_and_the_mentioned(store)
     assert '人3' in whos and '人69' not in whos and len(whos) == 51            # top 50 active + the known one
     assert block['not_shown'] == '另有 18 人没列出' and '最近说话是' in block['items'][0]['active']
     found = group_members.find(store, scene, 'demo', '人6')
-    assert found['count'] == 11 and len(found['found']) == 10 and found['found'][0]['who'] == '人6'
+    assert found['count'] == 11 and len(found['found']) == 10 and found['found'][0]['who'].startswith('[人6 #')
+
+
+def test_someone_found_in_the_list_gets_a_label_she_can_at_marked_as_looked_up_until_they_appear(store):
+    """Owner 2026-10-09: asked to @ every bot, she found them but had no label to @ them with."""
+    scene = setup(store)
+    channel(store)
+    group_members.receive(store, 'qq', {'group_id': GROUP, 'members': [member(7, card='灯', ago_hours=900)]})
+    [hit] = group_members.find(store, scene, 'demo', '灯')['found']
+    people = People(store, 'demo')
+    entry = people.roster(scene['_id'])['%s|qq:20007' % scene['_id']]
+    assert hit['who'] == people.label(entry) == '[灯 #%s]' % entry['handle'] and entry['looked_up'] is True
+    assert '你查名单找来要叫的，还没在这里说过话' in people.notes(scene['_id'], entry)
+    assert group_members.find(store, scene, 'demo', '灯')['found'][0]['who'] == hit['who'], 'the same label next time'
+    People(store, 'demo').entry(scene, 'qq:20007', row(20007, '我在', card='灯'))      # they speak here
+    entry = People(store, 'demo').roster(scene['_id'])['%s|qq:20007' % scene['_id']]
+    assert entry['looked_up'] is False and '你查名单找来要叫的，还没在这里说过话' not in People(store, 'demo').notes(scene['_id'], entry)
 
 
 class Platform:

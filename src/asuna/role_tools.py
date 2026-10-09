@@ -319,7 +319,8 @@ TOOLS = {
     },
     'find_member': {
         'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多列 10 个，最近说过话的在前。'
-                        'members_from_program 只列了一部分，别的人用这个找。'),
+                        'members_from_program 只列了一部分，别的人用这个找。找到的人给的是标签，照抄就能 @；'
+                        '没在这里说过话的人进了这个群的名册，会标着「你查名单找来要叫的」，名册里的人不会被挤掉。'),
         'parameters': {'name': _s('名字里的几个字，20 字以内', required=True)},
     },
     'note_idea': {

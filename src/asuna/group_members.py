@@ -20,7 +20,7 @@ FIND_LIMIT = 10
 ROLES = ('owner', 'admin', 'member')
 ROLE_WORDS = {'owner': '群主', 'admin': '管理员'}
 BLOCK_NOTE = ('这个群的成员名单（程序定时从平台拉的，不是谁都跟你说过话）。这里只列一部分：你在这里认识的人、最近说过话的、'
-              '刚被 @ 过的；带标签的可以照抄标签 @ 他。找名单里别的人用 find_member。')
+              '刚被 @ 过的；带标签的可以照抄标签 @ 他。找名单里别的人用 find_member，它给的也是标签。')
 
 
 def _int(value):
@@ -68,6 +68,17 @@ def receive(store, channel_id, body):
 
 def _name(member):
     return member.get('card') or member.get('nickname') or ''
+
+
+def _label(people, scene, member):
+    """The label she copies to @ someone she found (ADR-024 amendment, 2026-10-09): a member not yet in this group's
+    roster is placed there, marked as looked up, with the names the list has; nothing is ever dropped from it."""
+    from .people import ROLES
+    profile = {field: ' '.join(str(member[field]).split())[:60] for field in ('card', 'nickname') if member.get(field)}
+    if member.get('role') in ROLES:
+        profile['role'] = member['role']
+    entry = people.entry(scene, people.account_person(scene['_id'], member['user_id']), profile=profile, looked_up=True)
+    return people.label(entry)
 
 
 def _active(member, moment):
@@ -128,7 +139,8 @@ def find(store, scene, persona, query, moment=None):
     needle = query.casefold()
     hits = [m for m in doc['members'] if needle in m.get('nickname', '').casefold() or needle in m.get('card', '').casefold()]
     hits.sort(key=lambda m: -(m.get('last_sent_time') or 0))
-    found = [{'who': _name(m) or '（没名字）', 'active': _active(m, moment),
+    people = People(store, persona)
+    found = [{'who': _label(people, scene, m), 'active': _active(m, moment),
               **({'role': ROLE_WORDS[m['role']]} if m['role'] in ROLE_WORDS else {}),
               **({'also': '群名片「%s」，昵称「%s」' % (m['card'], m['nickname'])} if m.get('card') and m.get('nickname')
                  and m['card'] != m['nickname'] else {})} for m in hits[:FIND_LIMIT]]

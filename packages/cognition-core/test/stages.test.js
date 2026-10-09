@@ -239,6 +239,11 @@ test('a finished run reads where its result stands: handing, taken by her, or ne
   assert.equal(threadOf([...run, hb('taken'), { id: 'more', kind: 'message', from: 'character', text: 'and more', at }]).handback,
     null, 'her follow-up queues the thread again');
   assert.equal(words('collab.handback.missed', { outcome: words('collab.outcome.done') }), 'Done · Never reached her');
+  // Her conversation moved to a new session after the run: the hand-back stands in a block of its own.
+  const alone = threadOf([hb('handing', { outcome: 'done' }), hb('taken', { outcome: 'done' })]);
+  assert.equal(alone.state, 'done', 'not queued: the run had finished');
+  assert.equal(alone.handback.state, 'taken');
+  assert.equal(threadOf([hb('taken', { outcome: 'failed' })]).outcome, 'failed');
 });
 
 test('every UI language has the same words with the same placeholders', () => {

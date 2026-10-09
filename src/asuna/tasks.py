@@ -335,8 +335,11 @@ class TaskService:
     def handback(self,task,state,cause=None,error=None,short=False,final=False):
         """Where the task's result stands on its way back to her character brain, for the thread's view: handing,
         taken (her turn on it finished) or missed (cause: report, turn or restart; final once the watchdog stops)."""
-        record=(self.store.db.tasks.find_one({'_id':task['_id']},{'handback':1}) or {}).get('handback') or {}
-        data={'state':state,**({'cause':cause} if cause else {}),**({'error':error} if error else {}),
+        current=self.store.db.tasks.find_one({'_id':task['_id']},{'handback':1,'state':1}) or {}
+        record=current.get('handback') or {}
+        # The run's outcome travels with it: her conversation may have moved to a new session since the run's status.
+        outcome='failed' if current.get('state') in ('BLOCKED','UNKNOWN') else 'done'
+        data={'state':state,'outcome':outcome,**({'cause':cause} if cause else {}),**({'error':error} if error else {}),
               **({'short':True} if short else {}),**({'final':True} if final else {})}
         attempt='%s%s' % (record.get('failures',0),':short' if short else '')
         self.collab(task,'handback',data,'handback:%s:%s:%s:%s' % (task['_id'],task['intent_revision'],state,attempt))

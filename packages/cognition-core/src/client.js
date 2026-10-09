@@ -577,11 +577,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     if (['done', 'failed', 'paused'].includes(state) && last && last !== statuses.at(-1) && ['message', 'open'].includes(last.kind)) state = 'queued';
     // The thread went on in a later block, below.
     if (entries.some(entry => entry.kind === 'continued')) state = 'continued';
-    // A finished run's result on its way back to her: handing, taken (her turn on it finished) or missed.
+    // A finished run's result on its way back to her: handing, taken (her turn on it finished) or missed. It may
+    // stand in a block of its own (her conversation moved to a new session after the run), so it carries the outcome.
     const lastHandback = entries.findLast(entry => entry.kind === 'handback');
-    const handback = ['done', 'failed', 'paused'].includes(state) && lastHandback
-      && entries.indexOf(lastHandback) > entries.indexOf(statuses.at(-1)) ? lastHandback : null;
-    const outcome = statuses.findLast(entry => ['done', 'failed'].includes(entry.state))?.state ?? 'done';
+    const after = lastHandback ? entries.slice(entries.indexOf(lastHandback) + 1) : [];
+    const handback = lastHandback && state !== 'continued' && entries.indexOf(lastHandback) > entries.indexOf(statuses.at(-1))
+      && !after.some(entry => ['message', 'open'].includes(entry.kind)) ? lastHandback : null;
+    const outcome = handback?.outcome ?? statuses.findLast(entry => ['done', 'failed'].includes(entry.state))?.state ?? 'done';
+    if (handback && !['done', 'failed', 'paused'].includes(state)) state = outcome;
     const started = Date.parse(entries[0]?.at), ended = Date.parse(last?.at);
     const child = open?.child_session_id ?? entries.findLast(entry => entry.child_session_id)?.child_session_id;
     const work = open && entries.slice(entries.indexOf(open)).findLast(entry => entry.kind === 'work');

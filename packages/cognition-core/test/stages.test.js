@@ -243,6 +243,7 @@ test('a finished run reads where its result stands: handing, taken by her, or ne
   const alone = threadOf([hb('handing', { outcome: 'done' }), hb('taken', { outcome: 'done' })]);
   assert.equal(alone.state, 'done', 'not queued: the run had finished');
   assert.equal(alone.handback.state, 'taken');
+  assert.equal(alone.elapsed, null, 'no run time: the run is not in this block');
   assert.equal(threadOf([hb('taken', { outcome: 'failed' })]).outcome, 'failed');
 });
 

@@ -591,7 +591,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     const live = state === 'running' && child && (work?.through_seq ?? open?.after_seq) !== undefined
       ? { child, after: work?.through_seq ?? open.after_seq, since: Date.parse(work?.at ?? open.at) } : null;
     return { title, open, child, live, state, handback, outcome, stopped: statuses.findLast(entry => entry.state === 'stopped'),
-      elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused', 'continued'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
+      // A block of hand-back entries alone holds none of the run, so it has no run time to show.
+      elapsed: entries.every(entry => entry.kind === 'handback') ? null
+        : Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused', 'continued'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
   }
 
   // ── her tool rows (ADR-011 §7.2) ────────────────────────────────────

@@ -200,7 +200,8 @@ class ContextBuilder:
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
         session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
-        system,system_ref=render_system(self.store,persona,session_class)
+        place=visibility.place(self.store.config,self.store.db,scene,event['person_id'])
+        system,system_ref=render_system(self.store,persona,session_class,place)
         docs=DocumentStore(self.store,persona)
         persona_doc=docs.read('persona')[1]
         body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))

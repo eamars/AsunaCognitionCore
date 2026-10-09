@@ -208,13 +208,13 @@ def test_a_labels_number_outside_a_whole_label_is_handed_back_and_real_numbers_p
     from asuna.people import speech_problem
     scene = setup(store)
     people = People(store)
-    people.entry(scene, 'qq:20005', row(20005, 'hi', card='维翰'))
+    people.entry(scene, 'qq:20005', row(20005, 'hi', card='小例'))
     ep = {'scene_id': SCENE, 'persona': 'demo'}
     label = people.label(people.roster(SCENE)['%s|qq:20005' % SCENE])
     number = label.split('#')[1].rstrip(']').strip()
-    for said in ('@维翰 #%s 不插电也亮' % number, '这词是维翰 #%s 造的' % number, '#%s自己说的' % number):
+    for said in ('@小例 #%s 不插电也亮' % number, '这词是小例 #%s 造的' % number, '#%s自己说的' % number):
         assert speech_problem(store, ep, said) == (
             '「#%s」是程序给你认人的编号，群里的人看不到：说起他就只写名字；要 @ 他就照抄整个标签写 @%s。'
             '你说的要不是人（比如 issue 编号），去掉 #。' % (number, label)), said
-    for fine in ('@%s 你说得对' % label, '我同意 %s 的说法' % label, '这跟 issue #1053 是同一个问题', '维翰说得对'):
+    for fine in ('@%s 你说得对' % label, '我同意 %s 的说法' % label, '这跟 issue #1053 是同一个问题', '小例说得对'):
         assert speech_problem(store, ep, fine) is None, fine

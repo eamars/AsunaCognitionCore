@@ -172,7 +172,8 @@ TOOLS = {
                         '没写 visibility 的新节按 owner_private 保存。visibility 也决定你哪些回合用得上这一节：public 的节群里和别人私聊里的'
                         '回合也读得到，owner_private 的只在家里的回合读得到。每回合自动带上的只有 persona 和 voice 里 inject=always 的节'
                         '（其他文档要 recall 才读得到），有上限：'
-                        '不常用的节改成 on_demand 收起来（还在，recall 能读）。不写对用户的台词，不把没发生的事写成发生过。'),
+                        '不常用的节改成 on_demand 收起来（还在，recall 能读）；只在某类回合用得上的节，tags 里加 place:group（群里）、'
+                        'place:home（家里）、place:peer（旧居那类桥接线）、place:dm（别人的私聊），就只在那里每回合带上，不加就是到处都带。不写对用户的台词，不把没发生的事写成发生过。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
@@ -758,6 +759,16 @@ class RoleTools:
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []]])
+        # Every recall is kept (ADR-032): what she asked, what came back, in which kind of turn and place, so a later
+        # review counts her real reads and misses from records, not from memory.
+        from .visibility import place
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        self.store.audit(ep['_id'], 'recall.read', {
+            'query': query, 'sections_asked': sections,
+            'sections_read': [{'doc': d.get('doc'), 'sid': d.get('sid')} for d in documents or []],
+            'sections_missing': missing or [], 'memories': [m.get('_id') for m in recalled.get('memories') or []],
+            'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store.db, scene, ep['person_id'])},
+            ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
         if recalled.get('coverage_from_program'):
             result['coverage'] = recalled['coverage_from_program']

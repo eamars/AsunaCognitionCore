@@ -17,6 +17,27 @@ VISIBILITIES = ('public', OWNER_PRIVATE)
 OWNER_PRIVATE_PREFIX = 'owner-private:'
 
 
+# Where a turn happens, for persona sections pinned to places (ADR-032): the owner's own conversations, a trusted home
+# channel's line (a peer bridge), a group, another direct conversation. Each place has one session class.
+PLACES = ('home', 'peer', 'group', 'dm')
+PLACE_CLASS = {'home': OWNER_PRIVATE, 'peer': OWNER_PRIVATE, 'group': PUBLIC, 'dm': PUBLIC}
+PLACE_TAG = 'place:'
+
+
+def place(config, db, scene: dict, person_id: str) -> str:
+    """The place of a turn in a scene, decided by the program like its session class."""
+    if channel_kinds.home(scene.get('_id') or scene.get('scene_id')):
+        return 'peer'
+    if session_class(config, db, scene, person_id) == OWNER_PRIVATE:
+        return 'home'
+    return 'group' if scene.get('kind') == 'group' else 'dm'
+
+
+def section_places(section) -> list:
+    """The places a section is pinned to (its `place:` tags); empty means everywhere."""
+    return [str(tag)[len(PLACE_TAG):] for tag in section.get('tags') or () if str(tag).startswith(PLACE_TAG)]
+
+
 def owner_private_scope(persona: str) -> str:
     return OWNER_PRIVATE_PREFIX + persona
 

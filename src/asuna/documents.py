@@ -65,6 +65,17 @@ def unique_sid(base: str, taken) -> str:
     return sid
 
 
+def _checked_tags(tags):
+    """Free tags, except `place:` ones (ADR-032), which must name a place: a typo there would hide a rule silently."""
+    from .visibility import PLACES, PLACE_TAG
+    tags = list(tags)
+    for tag in tags:
+        if str(tag).startswith(PLACE_TAG) and str(tag)[len(PLACE_TAG):] not in PLACES:
+            raise DocumentError('DOC_TAGS_INVALID', '「%s」不是地方：place: 后面只能写 %s（home 家里、peer 旧居那类桥接线、'
+                                'group 群里、dm 别人的私聊）；不写 place: 就是到处都带' % (tag, '、'.join(PLACES)))
+    return tags
+
+
 def _section(sid, heading, body, *, visibility, inject, tags=(), entry_date=None):
     value = {'sid': sid, 'heading': heading, 'body': body, 'visibility': visibility, 'inject': inject,
              'tags': list(tags), 'body_sha256': sha(body.encode())}
@@ -236,7 +247,7 @@ class DocumentStore:
                         raise DocumentError('DOC_TAGS_INVALID', _bad_tag(field, intent[field], allowed))
                     target[field] = intent[field]
             if intent.get('tags') is not None:
-                target['tags'] = list(intent['tags'])
+                target['tags'] = _checked_tags(intent['tags'])
         elif op in ('append_section', 'correction'):
             heading = intent.get('heading') or ''
             if op == 'correction':
@@ -249,7 +260,7 @@ class DocumentStore:
                 heading = heading or '更正：' + (original['heading'] or original['sid'])
             if not heading.strip():
                 raise DocumentError('DOC_HEADING_REQUIRED', 'append_section 要写 heading（新节的标题）')
-            tags = list(intent.get('tags') or [])
+            tags = _checked_tags(intent.get('tags') or [])
             if op == 'correction':
                 tags = [*dict.fromkeys([*tags, 'correction'])]
             visibility = intent.get('visibility') or 'owner_private'
@@ -273,7 +284,7 @@ class DocumentStore:
                         raise DocumentError('DOC_TAGS_INVALID', _bad_tag(field, intent[field], allowed))
                     target[field] = intent[field]
             if 'tags' in intent:
-                target['tags'] = list(intent['tags'])
+                target['tags'] = _checked_tags(intent['tags'])
         if budget:
             budget(slug, content)
         return self._commit(slug, content, base_revision_id=base_revision_id, reason=reason, author=author,

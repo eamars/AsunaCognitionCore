@@ -296,11 +296,14 @@ class PersonaDataAPI:
         cls = args.get('as')
         if cls not in visibility.VISIBILITIES:
             raise DataError('PROBE_CLASS_INVALID', cls)
-        text, ref = render_system(self.store, self.persona, cls)
+        place = args.get('place')
+        if place is not None and place not in visibility.PLACES:
+            raise DataError('PROBE_PLACE_INVALID', place)
+        text, ref = render_system(self.store, self.persona, cls, place)
         blocks = {}
         for slug in self.docs.slugs():
             _, content = self.docs.read(slug)
-            shown = readable_sections(content, cls)
+            shown = readable_sections(content, cls, place=place)
             if shown and (not args.get('blocks') or slug in args['blocks']):
                 blocks[slug] = [{'sid': s['sid'], 'heading': s['heading']} for s in shown]
         return {'render_sha256': ref['render_sha256'], 'system_ref': ref, 'blocks': blocks}

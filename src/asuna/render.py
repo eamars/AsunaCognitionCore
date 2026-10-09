@@ -32,26 +32,35 @@ def common_text(config) -> str:
     return prompt_path(config, 'common.md').read_text(encoding='utf-8')
 
 
-def readable_sections(content, cls, *, inject=('always',)):
-    """Sections of a document visible to a session class, public before owner-private."""
+def readable_sections(content, cls, *, inject=('always',), place=None):
+    """Sections of a document visible to a session class, public before owner-private. With a place, a section pinned
+    to other places (ADR-032) is left out."""
     if not content:
         return []
-    chosen = [s for s in content['sections'] if s['inject'] in inject and visibility.readable(s['visibility'], cls)]
+    chosen = [s for s in content['sections'] if s['inject'] in inject and visibility.readable(s['visibility'], cls)
+              and (place is None or not visibility.section_places(s) or place in visibility.section_places(s))]
     return [s for s in chosen if s['visibility'] == 'public'] + [s for s in chosen if s['visibility'] != 'public']
 
 
-def _document_text(content, cls):
+def _document_text(content, cls, place=None):
     if content is None:
         return ''
     if 'sections' not in content:              # a pre-conversion legacy persona head revision
         return content.get('body', '')
-    return render_markdown(readable_sections(content, cls))
+    return render_markdown(readable_sections(content, cls, place=place))
 
 
-def compose(common, persona_content, voice_content, cls) -> str:
-    text = common + '\n' + _document_text(persona_content, cls)
-    voice = _document_text(voice_content, cls)
+def compose(common, persona_content, voice_content, cls, place=None) -> str:
+    text = common + '\n' + _document_text(persona_content, cls, place)
+    voice = _document_text(voice_content, cls, place)
     return text + ('\n' + voice if voice else '')
+
+
+def largest(common, persona_content, voice_content):
+    """(estimated tokens, text) of the largest render over the places: the one the budget bounds."""
+    renders = [compose(common, persona_content, voice_content, cls, place) for place, cls in visibility.PLACE_CLASS.items()]
+    text = max(renders, key=estimate_tokens)
+    return estimate_tokens(text), text
 
 
 def _remember(text: str) -> str:
@@ -97,8 +106,7 @@ def seed_estimate(store, persona):
             content[slug] = {'sections': parse_markdown(Path(seed['path']).read_text(encoding='utf-8'), seed['kind'])[1]}
         except OSError:
             return None
-    return estimate_tokens(compose(common_text(store.config), content.get('persona'), content.get('voice'),
-                                   visibility.OWNER_PRIVATE))
+    return largest(common_text(store.config), content.get('persona'), content.get('voice'))[0]
 
 
 def budget_limit(store, persona):
@@ -116,36 +124,35 @@ def budget_limit(store, persona):
     return min(limit, cap) if limit and cap else limit or cap
 
 
-def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE):
-    """Render the current role system prompt for a session class; returns (text, system_ref)."""
+def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None):
+    """Render the current role system prompt for a session class and place; returns (text, system_ref)."""
     docs = DocumentStore(store, persona)
     persona_rev, persona_doc = docs.read('persona')
     if persona_doc is None:
         raise ValueError('REQUIRED_PERSONA_MISSING')
     voice_rev, voice_doc = docs.read('voice')
     common = common_text(store.config)
-    text = compose(common, persona_doc, voice_doc, cls)
-    ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls,
+    text = compose(common, persona_doc, voice_doc, cls, place)
+    ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
            'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
     report_budget(store, persona, persona_doc, voice_doc, common)
     return text, ref
 
 
 def render_status(store, persona) -> dict:
-    """Owner-private render (the largest) against the budget, for the settings card and memory tab."""
+    """The largest render over the places against the budget, for the settings card and memory tab."""
     docs = DocumentStore(store, persona)
     _, persona_doc = docs.read('persona')
     _, voice_doc = docs.read('voice')
-    estimate = estimate_tokens(compose(common_text(store.config), persona_doc, voice_doc, visibility.OWNER_PRIVATE))
+    estimate = largest(common_text(store.config), persona_doc, voice_doc)[0]
     limit = budget_limit(store, persona)
     return {'estimate_tokens': estimate, 'limit_tokens': limit, 'over_budget': bool(limit and estimate > limit)}
 
 
 def report_budget(store, persona, persona_doc, voice_doc, common):
-    largest = compose(common, persona_doc, voice_doc, visibility.OWNER_PRIVATE)
+    estimate, text = largest(common, persona_doc, voice_doc)
     limit = budget_limit(store, persona)
-    estimate = estimate_tokens(largest)
-    digest = sha(largest.encode())
+    digest = sha(text.encode())
     if limit and estimate > limit and digest not in _REPORTED:
         _REPORTED.add(digest)
         store.audit('render:' + persona, 'render.over_budget', {'estimate_tokens': estimate, 'limit_tokens': limit,
@@ -169,8 +176,8 @@ def budget_gate(store, persona):
         common = common_text(store.config)
         current = {'persona': docs.read('persona')[1], 'voice': docs.read('voice')[1]}
         proposed = {**current, slug: new_content}
-        before = estimate_tokens(compose(common, current['persona'], current['voice'], visibility.OWNER_PRIVATE))
-        after = estimate_tokens(compose(common, proposed['persona'], proposed['voice'], visibility.OWNER_PRIVATE))
+        before = largest(common, current['persona'], current['voice'])[0]
+        after = largest(common, proposed['persona'], proposed['voice'])[0]
         if after > before and after > limit:
             raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_budget_words(proposed, before, after, limit))
     return check
@@ -205,7 +212,7 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
             raise ValueError('SYSTEM_REF_REVISION_MISSING')
         revisions.append(revision['content'] if revision else None)
     common = common_text(store.config)
-    text = compose(common, revisions[0], revisions[1], ref.get('session_class', visibility.OWNER_PRIVATE))
+    text = compose(common, revisions[0], revisions[1], ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place'))
     digest = _remember(text)
     if digest != ref['render_sha256'] and stream:
         store.audit(stream, 'system.render_drift', {'expected': ref['render_sha256'], 'actual': digest,

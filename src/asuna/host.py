@@ -12,6 +12,7 @@ from .channels import Channels, ChannelServer, route_members
 from .chat import Chat, local_settings, prepare_local_scene
 from .config import DATA
 from .memory_indexer import MemoryIndexer
+from . import handover
 from .state import Denied, now
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
@@ -219,6 +220,7 @@ class RuntimeHost:
             self.evidence.record('host.schedule.ready', {'active': self.schedule is not None})
             self.controller.worker.start()
             self.controller.task_worker.start()
+            self.controller.watchdog.start()
             self.stack.callback(self.controller.stop)
             if self.schedule:
                 self.stack.callback(self.schedule.close)
@@ -315,6 +317,8 @@ class RuntimeHost:
                 continue
             if self._settle_received(task):
                 continue
+            if task['state'] in handover.FINISHED:
+                continue        # ADR-030 D6: its work is done; the watchdog's first sweep hands its result over
             # Approved restart policy: unfinished actions/results remain
             # durable, but do not run or call the role model on startup.
             # A new explicit local DECIDE may continue their native context.

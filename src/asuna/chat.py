@@ -8,6 +8,7 @@ import threading
 import traceback
 import uuid
 
+from . import handover
 from .config import redact_text as redact
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
@@ -92,6 +93,9 @@ class Chat:
         self.on_episode_finished = None
         self.on_input_received = None
         self.restart_pending = threading.Event()
+        # ADR-030: results on their way back to her (queued or being handed back now), and the watchdog over them.
+        self.handbacks = set()
+        self.watchdog = threading.Thread(target=self._watch, name='asuna-handover-watchdog', daemon=True)
 
     def _schedule(self, task_id):
         task = self.app.store.db.tasks.find_one({'_id': task_id})
@@ -126,8 +130,7 @@ class Chat:
                 grant = workspace_grant(self.app.config, task['scene_id'], task['requester_id'])
                 task = self.app.executor.run(task_id, Path(grant['workspace']))
                 if not self.stopping.is_set():
-                    self.pending.put(({'_feedback_task': task_id, 'event_id': task_id + ':feedback',
-                                       'scene_id': task['scene_id'], 'person_id': task['requester_id']}, task['episode_id']))
+                    self.hand_back(task)
                     self.app.evidence.record('chat.task_result_queued', {'task_id': task_id, 'state': task['state']})
             except Exception:
                 error = redact(traceback.format_exc(), self.app.config)
@@ -380,7 +383,8 @@ class Chat:
                     self.active = episode or event['event_id']
                 if event.get('_feedback_task'):
                     task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
-                    result = self.app.service.feedback(task, self.app.coordinator)
+                    result = self.app.service.feedback(task, self.app.coordinator, short=event.get('_short', False),
+                                                       again=event.get('_again', False))
                     if result is None:
                         continue
                     episode = result['_id']
@@ -441,14 +445,25 @@ class Chat:
                 error = redact(traceback.format_exc(), self.app.config)
                 self.app.evidence.record('chat.error', {'episode_id': episode, 'traceback': error})
                 if event.get('_feedback_task'):
-                    # A result that failed on its way back: the asking line itself was answered, it did not fail.
+                    # A result that failed on its way back (ADR-030): the asking line itself was answered, it did not
+                    # fail. What failed is recorded where the watchdog reads it: her turn on it ended, or the hand-back
+                    # never reached a turn.
                     try:
+                        from .handover import result_event_id
                         task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
-                        taken = self.app.store.db.episodes.find_one({'task_id': task['_id'], 'episode_kind': 'task_feedback',
-                                                                     'intent_revision': task['intent_revision']})
-                        self.app.service.handback(task, 'missed', 'turn' if taken else 'report', error.strip().splitlines()[-1][:200])
+                        short = event.get('_short', False)
+                        turn = self.app.store.db.episodes.find_one({'source_event_id': result_event_id(task, short),
+                                                                    'episode_kind': 'task_feedback'})
+                        if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK'):
+                            self.app.store.put('episodes', {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
+                                               else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
+                        elif not turn:
+                            self.app.service.record_handback_failure(task['_id'], short)
+                        self.app.service.handback(task, 'missed', 'turn' if turn else 'report', error.strip().splitlines()[-1][:200],
+                                                  short=short)
                     except Exception:
-                        pass
+                        self.app.evidence.record('chat.handback_record_error', {'task_id': event['_feedback_task'],
+                            'traceback': redact(traceback.format_exc(), self.app.config)})
                     self.emit(f'[系统] 本轮未完成；请查看本轮执行详情中的原始错误。原记录：{self.app.evidence.root.resolve()}')
                     continue
                 try:
@@ -471,11 +486,51 @@ class Chat:
                             'episode_id': episode, 'traceback': redact(traceback.format_exc(), self.app.config)})
                 with self.state_lock:
                     self.active = None
+                    if event.get('_feedback_task') and not (result and result['state'] == 'FAILED_PROTOCOL'):
+                        self.handbacks.discard(event['_feedback_task'])
                 with self.ingress_lock:
                     self.enqueued.discard(episode)
                 self.pending.task_done()
                 if self.on_turn_finished:
                     self.on_turn_finished()
+
+    def hand_back(self, task, short=False, again=False):
+        """Queue a finished task's result for her turn; the watchdog leaves it alone while it is on its way."""
+        with self.state_lock:
+            if task['_id'] in self.handbacks:
+                return
+            self.handbacks.add(task['_id'])
+        self.pending.put(({'_feedback_task': task['_id'], 'event_id': task['_id'] + ':feedback', '_short': short,
+                           '_again': again, 'scene_id': task['scene_id'], 'person_id': task['requester_id']},
+                          task['episode_id']))
+
+    def _watch(self):
+        """ADR-030: every minute (first one minute after start), the definite failures and only those."""
+        while not self.stopping.wait(handover.SWEEP_SECONDS):
+            if self.restart_pending.is_set():
+                continue
+            try:
+                self.sweep()
+            except Exception:
+                self.app.evidence.record('handover.sweep_error', {'traceback': redact(traceback.format_exc(), self.app.config)})
+
+    def sweep(self):
+        store, service = self.app.store, self.app.service
+        with self.state_lock:
+            running, on_its_way = self.active_task, set(self.handbacks)
+        for task in handover.orphaned(store, running):
+            closed = service.close_orphan(task)
+            if closed:
+                self.app.evidence.record('handover.orphan_closed', {'task_id': task['_id']})
+                on_its_way.discard(task['_id'])
+        for task in handover.lost(store, on_its_way | ({running} if running else set())):
+            step = handover.next_step(store, task)
+            self.app.evidence.record('handover.lost', {'task_id': task['_id'], 'step': step,
+                                                      'cause': handover.cause(store, task)})
+            if step == handover.GIVE_UP:
+                service.give_up_handback(task)
+            else:
+                self.hand_back(task, short=step == handover.SHORT, again=True)
 
     def stop(self):
         with self.state_lock:
@@ -495,6 +550,8 @@ class Chat:
         if active:
             self.app.character.close()
         self.worker.join(timeout=10)
+        if self.watchdog.ident is not None:
+            self.watchdog.join(timeout=10)
         if self.task_worker.ident is not None:
             self.task_worker.join(timeout=10)
         abandoned = []

@@ -4,7 +4,9 @@ From a home turn she leaves a message with `message_developer`: `wake` when she 
 the inbox about hourly while its session is open), `note` for something that can wait for its next visit. The
 developer reads `developer_inbox`, marks what it has seen and answered, and replies in her local chat. A message
 from outside never reaches here directly: the tool exists only in home turns, so outside words come through her own
-review there (ADR-017). Each kind has a daily limit; the audit records each message without its text.
+review there (ADR-017). Each kind has a daily limit; the audit records each message without its text. The program
+also leaves the developer a note here when a task's result could not be handed back to her (handover.py); such a note
+is marked `source.by: program`, counts against no limit of hers and is not shown to her as one of her messages.
 """
 from __future__ import annotations
 
@@ -33,7 +35,8 @@ def leave(store, persona, level, text, *, key, source):
     if row:
         return row
     since = (_now() - timedelta(hours=24)).isoformat()
-    used = store.db.developer_inbox.count_documents({'persona': persona, 'level': level, 'created_at': {'$gte': since}})
+    used = store.db.developer_inbox.count_documents({'persona': persona, 'level': level, 'created_at': {'$gte': since},
+                                                    'source.by': {'$ne': 'program'}})
     if used >= LIMITS[level]:
         raise ValueError('DEVELOPER_MESSAGE_LIMIT: 24 小时内的 %s 已经 %d 条（上限 %d）；%s'
                          % (level, used, LIMITS[level], '不急的改用 level=note，真急就找主人' if level == WAKE
@@ -51,7 +54,8 @@ def block(store, persona, moment=None):
     from .config import ago
     moment = moment or _now()
     since = (moment - timedelta(days=KEEP_DAYS)).isoformat()
-    rows = list(store.db.developer_inbox.find({'persona': persona, 'created_at': {'$gte': since}})
+    # Hers only: the program's own notes to the developer (handover.py) are not something she wrote.
+    rows = list(store.db.developer_inbox.find({'persona': persona, 'created_at': {'$gte': since}, 'source.by': {'$ne': 'program'}})
                 .sort('created_at', -1).limit(SHOWN))
     if not rows:
         return None

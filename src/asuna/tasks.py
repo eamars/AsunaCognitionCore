@@ -10,7 +10,7 @@ from contextlib import contextmanager,nullcontext
 import jsonschema
 from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
-from . import answers, visibility
+from . import answers, handover, visibility
 from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .state import Store,Denied,Conflict,now
@@ -32,6 +32,7 @@ TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARA
 # Per-turn budget for task feedback (the largest context block): the action brain's report and the
 # last few tool observations as evidence. Cuts are marked; the full records stay in the task.
 REPORT_CHARS = 6000
+SHORT_REPORT_CHARS = 3000        # the short hand-back (ADR-030): the report's words, no tool records
 OBSERVATIONS = 4
 OBSERVATION_CHARS = 600
 
@@ -195,7 +196,8 @@ class TaskService:
         with self.lock:
             task=self.store.db.tasks.find_one({'_id':task_id})
             if task['state']!='READY':raise Conflict('TASK_NOT_READY')
-            task=self.store.put('tasks',{**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':__import__('time').time()+600},expected=task['revision'],stream=task_id)
+            task=self.store.put('tasks',{**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':__import__('time').time()+600,
+                'started_at':now()},expected=task['revision'],stream=task_id)
             return task
 
     def valid(self,task,*,state='RUNNING'):
@@ -233,8 +235,6 @@ class TaskService:
                 expected=task['revision'], stream=task_id)
         # Without it the thread would still read as queued or running (ADR-011 §7.1).
         self.collab(paused,'status',{'state':'paused','reason':'host_restart'},'status:'+task_id+':paused:'+str(paused['fencing_token']))
-        if task['state'] in TERMINAL and task.get('feedback_state')!='DELIVERED':
-            self.handback(paused,'missed','restart')    # its work was done: only the hand-back is waiting
         return paused
 
     @contextmanager
@@ -254,17 +254,27 @@ class TaskService:
         try:yield check
         finally:stopped.set();worker.join(5)
 
-    def feedback(self,task,coordinator):
+    def feedback(self,task,coordinator,short=False,again=False):
+        """Hand a finished task's result back to her in a turn of her own. `again`: the watchdog hands back a result
+        whose earlier hand-back was lost; `short`: only her brief, the report's words and when it finished (ADR-030)."""
         current=self.store.db.tasks.find_one({'_id':task['_id']})
         scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
-        if current['state'] not in TERMINAL or current.get('feedback_state')!='READY':return None
-        if current['state'] in ('CANCELLED','STALE') or current['intent_revision']!=task['intent_revision'] or scene['policy_epoch']!=task['policy_epoch']:return None
+        handed=current.get('feedback_state')
+        if current['state'] not in TERMINAL or handed in (*handover.TAKEN,None) or handed!='READY' and not again:return None
+        if current['state'] in ('CANCELLED','STALE') or current['intent_revision']!=task['intent_revision'] or scene['policy_epoch']!=task['policy_epoch']:
+            if current['state'] in handover.FINISHED:
+                # Its scene changed under it: this result can never be handed back, so nothing waits for it.
+                with self.lock:
+                    latest=self.store.db.tasks.find_one({'_id':task['_id']})
+                    self.store.put('tasks',{**latest,'feedback_state':'SUPPRESSED'},expected=latest['revision'],stream=latest['_id'])
+            return None
         original=self.store.db.episodes.find_one({'_id':task['episode_id']})
-        ep=self.store.db.episodes.find_one({'_id':current.get('feedback_episode')}) if current.get('feedback_episode') else None
+        ep=None
+        if not short and current.get('feedback_episode'):
+            ep=self.store.db.episodes.find_one({'_id':current['feedback_episode']})
         if not ep:
             ep=self.store.db.episodes.find_one({'scene_id':task['scene_id'],
-                'source_event_id':task['_id']+':result:'+str(task['intent_revision']),
-                'episode_kind':'task_feedback'})
+                'source_event_id':handover.result_event_id(task,short),'episode_kind':'task_feedback'})
         continuing=bool(ep)
         if ep:
             if (ep.get('episode_kind')!='task_feedback' or ep.get('task_id')!=task['_id']
@@ -273,20 +283,25 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':task['_id']+':result:'+str(task['intent_revision']),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 message_action。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 message_action。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             if original.get('native_session_id'):
                 event['native_session_id']=original['native_session_id']
             if source and source.get('event', {}).get('group_context'):
                 event['group_context'] = source['event']['group_context']
             if task.get('integration_profile') == 'owner': event['integration_profile'] = 'owner'
-            observations=[]
-            for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
-                observations.append({'source':item['_id'],'tool':item['tool'],
-                                     'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
-            event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),brief=task.get('brief') or task['goal'],
-                observations=observations[-OBSERVATIONS:],observations_total=len(observations))
-            self.handback(task,'handing')
+            if short:
+                event.update(self._short_event(task,current))
+            else:
+                observations=[]
+                for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
+                    observations.append({'source':item['_id'],'tool':item['tool'],
+                                         'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
+                from . import local_time         # when it ran: a result handed back late describes that time
+                event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),brief=task.get('brief') or task['goal'],
+                    observations=observations[-OBSERVATIONS:],observations_total=len(observations),
+                    **local_time.for_model({'finished_at':current.get('finished_at')},local_time.zone_of(self.store,task['scene_id'])))
+            self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
@@ -297,16 +312,78 @@ class TaskService:
                 return ep  # Never overwrite a cancellation/revision while inference was in flight.
             self.store.put('tasks',{**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
         if ep['state']=='COMMITTED':
-            self.handback(task,'taken')
+            self.handback(task,'taken',short=short)
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
-    def handback(self,task,state,cause=None,error=None):
+    def _short_event(self,task,current):
+        """The short hand-back (ADR-030 D4): her brief, the report's words (a cut says so) and when the run finished,
+        without the tool records."""
+        from . import local_time
+        result=current.get('result') or {}
+        value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
+               'brief':task.get('brief') or task['goal'],'report':excerpt(result.get('text') or '',SHORT_REPORT_CHARS),
+               'finished_at':current.get('finished_at'),'uncertainties':result.get('uncertainties') or []}
+        value=local_time.for_model(value,local_time.zone_of(self.store,task['scene_id']))
+        return {'event_id':handover.result_event_id(task,True),
+                'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
+                       '只有你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'
+                       '要核实或接着做就用 message_action。',
+                'trusted_context_events':[value]}
+
+    def handback(self,task,state,cause=None,error=None,short=False,final=False):
         """Where the task's result stands on its way back to her character brain, for the thread's view: handing,
-        taken (her turn on it finished) or missed (cause: report, turn or restart)."""
-        data={'state':state,**({'cause':cause} if cause else {}),**({'error':error} if error else {})}
-        self.collab(task,'handback',data,'handback:%s:%s:%s' % (task['_id'],task['intent_revision'],state))
+        taken (her turn on it finished) or missed (cause: report, turn or restart; final once the watchdog stops)."""
+        record=(self.store.db.tasks.find_one({'_id':task['_id']},{'handback':1}) or {}).get('handback') or {}
+        data={'state':state,**({'cause':cause} if cause else {}),**({'error':error} if error else {}),
+              **({'short':True} if short else {}),**({'final':True} if final else {})}
+        attempt='%s%s' % (record.get('failures',0),':short' if short else '')
+        self.collab(task,'handback',data,'handback:%s:%s:%s:%s' % (task['_id'],task['intent_revision'],state,attempt))
+
+    def record_handback_failure(self,task_id,short):
+        """A hand-back failed before her turn (ADR-030 D4): counted, so the watchdog knows what to try next."""
+        with self.lock:
+            current=self.store.db.tasks.find_one({'_id':task_id})
+            record=dict(current.get('handback') or {})
+            if short:record['short_failed']=True
+            else:record['failures']=record.get('failures',0)+1
+            return self.store.put('tasks',{**current,'handback':record},expected=current['revision'],stream=task_id)
+
+    def give_up_handback(self,task):
+        """Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told."""
+        from . import developer_inbox
+        with self.lock:
+            current=self.store.db.tasks.find_one({'_id':task['_id']})
+            if current.get('feedback_state') in handover.TAKEN:
+                return current
+            given=self.store.put('tasks',{**current,'feedback_state':'UNDELIVERABLE'},expected=current['revision'],stream=task['_id'])
+        cause=handover.cause(self.store,given)
+        try:
+            developer_inbox.leave(self.store,self.store.config['chat']['persona'],developer_inbox.NOTE,
+                ('[程序] 行动结果交不回给她：任务 %s（%s），原因 %s；全文和短版都试过了。报告还存在任务里。'
+                 % (task['_id'],task.get('title') or task['goal'],cause))[:developer_inbox.TEXT_CHARS],
+                key=['handback-undeliverable',task['_id'],task['intent_revision']],source={'by':'program','task_id':task['_id']})
+        except ValueError as exc:
+            self.store.audit(task['_id'],'handback.developer_note_refused',{'error':str(exc)[:300]},task['scope_key'])
+        self.handback(given,'missed',cause,final=True)
+        return given
+
+    def close_orphan(self,task):
+        """A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such."""
+        with self.lock:
+            current=self.store.db.tasks.find_one({'_id':task['_id']})
+            if not current or current['state']!='RUNNING' or current['fencing_token']!=task['fencing_token']:
+                return None
+            refs=[row['_id'] for row in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':current['intent_revision'],'state':'DONE'},{'_id':1})]
+            result={'task_id':task['_id'],'intent_revision':current['intent_revision'],'artifact_refs':refs,
+                    'text':'行动脑这次执行中断了：它的进程不在了，没有交回报告。工具记录是它中断前做到的。',
+                    'facts':[],'uncertainties':['中断前已发起而没有回执的操作须先核实，不可盲目重做。']}
+            closed=self.store.put('tasks',{**current,'state':'BLOCKED','failure_type':'ORPHANED','result':result,
+                'finished_at':now(),'feedback_state':'READY','fencing_token':current['fencing_token']+1},
+                expected=current['revision'],stream=task['_id'])
+        self.collab(closed,'status',{'state':'failed'},'status:'+task['_id']+':orphaned')
+        return closed
 
 
 DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'

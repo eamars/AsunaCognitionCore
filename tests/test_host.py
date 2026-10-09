@@ -417,10 +417,14 @@ def test_host_restart_pauses_unfinished_actions_and_never_queues_old_feedback(st
     host.app, host.controller = chat.app, chat
     host._recover_tasks()
     paused = store.db.tasks.find_one({'_id': task['_id']})
+    if state == 'RETURNED':
+        # ADR-030 D6: finished work is not paused; the watchdog's first sweep hands its result over, not start-up.
+        assert paused['revision'] == task['revision'] and entries == []
+        assert chat.pending.empty() and chat.task_queue.empty() and len(lane.calls) == 1
+        return
     assert paused['state'] == 'PAUSED' and paused['paused_state'] == state
-    # Her thread says so, rather than still reading as queued or running; finished work waits only on its hand-back.
-    assert [(task_id, entry['kind'], entry['state']) for task_id, entry in entries] == [(task['_id'], 'status', 'paused')] + (
-        [(task['_id'], 'handback', 'missed')] if state == 'RETURNED' else [])
+    # Her thread says so, rather than still reading as queued or running.
+    assert [(task_id, entry['kind'], entry['state']) for task_id, entry in entries] == [(task['_id'], 'status', 'paused')]
     assert paused['feedback_state'] == 'PAUSED'
     assert paused['fencing_token'] > task['fencing_token']
     assert paused.get('result') == task.get('result')

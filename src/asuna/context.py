@@ -3,6 +3,7 @@ import json
 import traceback
 from .config import character_id, excerpt, redact_text
 from . import visibility
+from . import handover as _handover
 from .render import render_system, readable_sections, model_and_policy
 from .documents import DocumentStore, render_markdown
 from .persona_model import effective
@@ -323,9 +324,12 @@ class ContextBuilder:
             {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
                 'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1}},
         ]))
-        # Every open task, and only the last few finished ones (their results came back as their own turns).
-        open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED']
+        # Every open task (and every finished one whose result has not reached her), and only the last few others
+        # (their results came back as their own turns).
+        open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED'
+                    or _handover.waiting(task)]
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
+        paused=any(task['state']=='PAUSED' for task in task_states)
         for task in task_states:
             task.pop('_active',None)
             # A task's title is what she called it; the old goal text only when there is no title.
@@ -333,7 +337,12 @@ class ContextBuilder:
                 task.pop('goal',None)
             elif task.get('goal'):
                 task['goal']=excerpt(task['goal'],EXPERIENCE_TASK_CHARS)
-            if task['state'] not in ('READY','RUNNING'):
+            # Where it stands, in words (ADR-030 D7), instead of the raw fields.
+            task['status']=_handover.status_words(task)
+            running=task['state'] in ('READY','RUNNING')
+            for key in ('state','feedback_state','cancel_reason','pause_reason','paused_at'):
+                task.pop(key,None)
+            if not running:
                 continue
             # What the action brain reported on its own while working (report_progress), newest last.
             notes=list(self.store.db.task_messages.find({'task_id':task['_id'],'from':'action'},
@@ -380,9 +389,9 @@ class ContextBuilder:
         if thoughts:
             context['recent_thoughts_from_program']={'items':thoughts,
                 'note':'这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'}
-        if any(task['state'] == 'PAUSED' for task in task_states):
+        if paused:
             context['task_continuation_from_program'] = (
-                'PAUSED 是重启后等待操作者决定的旧行动，历史与回执仍保留。'
+                '「做到一半宿主重启停了」的是重启后等待操作者决定的旧行动，历史与回执仍保留。'
                 '只有本地用户明确要求继续时才可以用 message_action 接着做；'
                 '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
                 '继续时先核实已有结果，未确认回执的操作不能盲目重做。')

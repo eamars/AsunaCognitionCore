@@ -28,7 +28,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.handback.missed': '{outcome} · 没交到她手上',
       'collab.missed.report': '报告在上面，但交回给她时程序出错（{error}）。',
       'collab.missed.turn': '报告交回了，但她读它的那一轮没走完（{error}）。',
-      'collab.missed.restart': '报告在上面，宿主重启前没来得及交给她。', 'collab.missed.next': '要她接着看，在本机私聊里请她继续。',
+      'collab.missed.restart': '报告在上面，宿主重启前没来得及交给她。', 'collab.missed.retry': '程序会再交给她。',
+      'collab.missed.final': '全文和短版都没交成，已经告诉开发者；报告还存着。', 'collab.handback.handingShort': '{outcome} · 正在补交短版',
       'workspace.local': '本机', 'session.group': '群聊', 'session.dm': '私聊',
       'collab.state.continued': '下面接着', 'collab.working': '正在做 {duration}', 'collab.watch': '展开看实时过程',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
@@ -169,7 +170,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.missed.report': 'The report is above, but handing it back to her failed ({error}). ',
       'collab.missed.turn': 'The report was handed back, but her turn reading it did not finish ({error}). ',
       'collab.missed.restart': 'The report is above; the Host restarted before it reached her. ',
-      'collab.missed.next': 'To have her read it, ask her in the local chat to continue.',
+      'collab.missed.retry': 'The program will hand it back again.',
+      'collab.missed.final': 'Neither the full nor the short version reached her; the developer has been told. The report is still stored.',
+      'collab.handback.handingShort': '{outcome} · Handing her a short version',
       'workspace.local': 'Local', 'session.group': 'Group chat', 'session.dm': 'Direct message',
       'collab.state.continued': 'Continued below', 'collab.working': 'Working {duration}', 'collab.watch': 'Expand to watch it live',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
@@ -1093,14 +1096,16 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           h('span', { className: 'asuna-collab-title' }, thread.title || t('collab.untitled')),
           thread.handback
             ? h(Pill, { className: thread.handback.state === 'missed' ? 'asuna-collab-missed' : undefined },
-              t('collab.handback.' + thread.handback.state, { outcome: t('collab.outcome.' + thread.outcome) }))
+              t('collab.handback.' + thread.handback.state + (thread.handback.state === 'handing' && thread.handback.short ? 'Short' : ''),
+                { outcome: t('collab.outcome.' + thread.outcome) }))
             : h(Pill, null, t('collab.state.' + thread.state)),
           thread.elapsed !== null && h('span', { style: small }, duration(t, thread.elapsed)),
           openAside && h(Button, { size: 'sm', variant: 'ghost', onClick: openAside }, t('collab.open'))),
         ...entries.filter(entry => entry.kind !== 'open' && entry.kind !== 'continued').map(entry =>
           entry.kind === 'handback' ? entry === thread.handback && entry.state === 'missed'
               && h('p', { key: entry.id, role: 'status', className: 'asuna-collab-missed-note' },
-                t('collab.missed.' + (entry.cause ?? 'report'), { error: entry.error ?? '' }) + t('collab.missed.next'))
+                entry.final ? t('collab.missed.final')
+                  : t('collab.missed.' + (entry.cause ?? 'report'), { error: entry.error ?? '' }) + t('collab.missed.retry'))
             : entry.kind === 'work' ? h(WorkRow, { key: entry.id, entry, t, parent, SessionProvider: props.SessionProvider,
               renderSlot: props.renderSlot })
             : entry.kind === 'status' ? (entry.state === 'stopped' ? h('p', { key: entry.id, style: small },

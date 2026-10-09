@@ -152,7 +152,7 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
             incoming.update(episode_kind='self_development', adapter_id='self-development')
         result = Coordinator(store, lane).ingest(incoming)
         assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'PAUSED'
-        assert 'PAUSED 是重启后等待操作者决定' in lane.calls[0]['messages'][-1]['content']
+        assert '「做到一半宿主重启停了」的是重启后等待操作者决定' in lane.calls[0]['messages'][-1]['content']
         _, _, tool, _, outcome, ok = lane.tool_results[1]
         assert tool == 'message_action'
         if internal:

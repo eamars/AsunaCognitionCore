@@ -411,7 +411,8 @@ def exposed(store, ep):
         if tasks:
             names.append('message_action')
     # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
-    if any(task.get('state') in ('READY', 'RUNNING', 'PAUSED') for task in tasks):
+    if tasks and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
+                                          'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
         names.append('stop_action')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')

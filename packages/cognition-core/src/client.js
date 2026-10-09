@@ -409,6 +409,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     body[data-ds-dark-theme] .asuna-collab-executor { border-color: var(--dsw-static-blue-300); }
     body .asuna-collab-bubble .asuna-collab-text { color: var(--dsw-alias-label-primary); }
     body .asuna-collab-clipped { max-height: 9.6em; overflow: hidden; }
+    body .asuna-collab-cut { -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent);
+      mask-image: linear-gradient(to bottom, #000 65%, transparent); }
     body .asuna-collab-missed { color: var(--dsw-alias-status-danger, #c00);
       background: color-mix(in srgb, var(--dsw-alias-status-danger, #c00) 10%, var(--dsw-alias-bg-base)); }
     body .asuna-collab-missed-note { margin: 0; font-size: 12px; color: var(--dsw-alias-status-danger, #c00); }
@@ -1068,7 +1070,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
           h(Pill, { className: brainClass(lane) }, t('brain.' + lane)),
           entry.kind === 'progress' && h('span', { style: small }, t('collab.progress'))),
-        h('div', { ref: box, className: 'asuna-collab-text' + (all ? '' : ' asuna-collab-clipped') },
+        // A cut can fall between paragraphs and look complete: the clipped text fades out where it is cut.
+        h('div', { ref: box, className: 'asuna-collab-text' + (all ? '' : ' asuna-collab-clipped' + (cut ? ' asuna-collab-cut' : '')) },
           h(MarkdownText, { text, labels: markdownLabels(t) })),
         (cut || all) && h(Button, { size: 'sm', variant: 'ghost', onClick: () => setAll(value => !value) },
           all ? t('collab.less') : t('collab.more')));

@@ -108,3 +108,16 @@ test('thread entries are informational: plain DSH readers may skip them', async 
   const { ASUNA_EVENTS } = await import('../src/persistence.js');
   assert.ok(ASUNA_EVENTS.has('asuna/collab'), 'without ignorable, DSH refuses to load the conversation');
 });
+
+test('where a result stands on its way back stays in its run\'s block, though her turn on it came between', async () => {
+  const h = harness();
+  await h.collab.start(stage('run')); h.step(2, '查完了'); await h.collab.finish(stage('run'));
+  const say = (id, entry) => h.collab.entry({ session_id: 'role', thread: 'task-one', task_id: 'task-one', entry: { id, ...entry } });
+  await say('status:done', { kind: 'status', state: 'done' });
+  await say('handback:handing', { kind: 'handback', state: 'handing' });
+  h.events.push({ type: 'turn/start', data: { turn: 2 }, seq: h.events.length });     // her turn on the result
+  await say('handback:taken', { kind: 'handback', state: 'taken' });
+  const entries = h.thread(h.events);
+  assert.deepEqual(entries.map(e => e.kind), ['open', 'work', 'report', 'status', 'handback', 'handback']);
+  assert.equal(new Set(entries.map(e => e.block)).size, 1);
+});

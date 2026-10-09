@@ -440,6 +440,17 @@ class Chat:
             except Exception:
                 error = redact(traceback.format_exc(), self.app.config)
                 self.app.evidence.record('chat.error', {'episode_id': episode, 'traceback': error})
+                if event.get('_feedback_task'):
+                    # A result that failed on its way back: the asking line itself was answered, it did not fail.
+                    try:
+                        task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
+                        taken = self.app.store.db.episodes.find_one({'task_id': task['_id'], 'episode_kind': 'task_feedback',
+                                                                     'intent_revision': task['intent_revision']})
+                        self.app.service.handback(task, 'missed', 'turn' if taken else 'report', error.strip().splitlines()[-1][:200])
+                    except Exception:
+                        pass
+                    self.emit(f'[系统] 本轮未完成；请查看本轮执行详情中的原始错误。原记录：{self.app.evidence.root.resolve()}')
+                    continue
                 try:
                     input_state(self.app.store, episode, 'FAILED', failure=error)
                     self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])

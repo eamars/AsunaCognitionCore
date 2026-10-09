@@ -221,3 +221,29 @@ test('a Turn whose cut-off stage was retried and finished records that its last 
   assert.equal(snapshot(engine).timeline.turns.get(1).data.get('asuna-stage-finish'), 'stop',
     'DSH still ends the Turn at max-tokens; the retried stage finished');
 });
+
+test('a finished run reads where its result stands: handing, taken by her, or never reached her', () => {
+  const at = '2026-10-09T00:00:00Z';
+  const run = [{ id: 'brief', kind: 'message', from: 'character', text: 'look it up', title: 'lookup', at },
+    { id: 'open', kind: 'open', child_session_id: 'action', after_seq: 0, at },
+    { id: 'done', kind: 'status', state: 'done', at }];
+  const hb = (state, extra = {}) => ({ id: 'handback:' + state, kind: 'handback', state, at, ...extra });
+  assert.equal(threadOf(run).handback, null, 'no hand-back entry: the run reads as before');
+  assert.equal(threadOf([...run, hb('handing')]).handback.state, 'handing');
+  assert.equal(threadOf([...run, hb('handing'), hb('taken')]).handback.state, 'taken');
+  const missed = threadOf([...run, hb('handing'), hb('missed', { cause: 'report', error: 'TypeError' })]);
+  assert.equal(missed.handback.cause, 'report');
+  assert.equal(missed.outcome, 'done');
+  const paused = threadOf([...run, { id: 'paused', kind: 'status', state: 'paused', at }, hb('missed', { cause: 'restart' })]);
+  assert.equal(paused.handback.cause, 'restart', 'a finished run paused at a restart is waiting only on its hand-back');
+  assert.equal(threadOf([...run, hb('taken'), { id: 'more', kind: 'message', from: 'character', text: 'and more', at }]).handback,
+    null, 'her follow-up queues the thread again');
+  assert.equal(words('collab.handback.missed', { outcome: words('collab.outcome.done') }), 'Done · Never reached her');
+});
+
+test('every UI language has the same words with the same placeholders', () => {
+  const shape = table => Object.fromEntries(Object.entries(table).map(([key, text]) =>
+    [key, [...String(text).matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort().join(',')]));
+  const [first, ...others] = Object.keys(DICTIONARY);
+  for (const language of others) assert.deepEqual(shape(DICTIONARY[language]), shape(DICTIONARY[first]), language + ' vs ' + first);
+});

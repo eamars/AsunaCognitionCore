@@ -10,7 +10,8 @@
  *
  * Every entry shows where it happens (owner, 2026-10-05): a thread is drawn as blocks, and an entry that
  * arrives after the conversation moved on (a turn or a message since the thread's last entry) starts a
- * new block there, with the thread's title; the previous block is marked as continued below. A block
+ * new block there, with the thread's title; the previous block is marked as continued below. Where a result
+ * stands on its way back to her (`handback`) stays in its run's block: her turn on it comes between. A block
  * started while the action brain is running opens on that run, so its live work shows in the new block.
  */
 export class Collab {
@@ -75,7 +76,8 @@ export class Collab {
     if (!last) return [{ ...entry, block: 'block:' + entry.id }];
     const previous = last.data.block ?? last.data.thread;          // entries from before blocks: one per thread
     const moved = events.some(event => event.seq > last.seq && (event.type === 'turn/start' || event.type === 'user/message'));
-    if (!moved) return [{ ...entry, block: previous }];
+    // Where the result stands on its way back belongs to the run it came from: her turn on it comes between.
+    if (!moved || entry.kind === 'handback') return [{ ...entry, block: previous }];
     const block = 'block:' + entry.id, at = new Date().toISOString();
     const title = entry.title ?? thread.findLast(event => event.data.title)?.data.title;
     const run = this.runs.get(entry.thread);

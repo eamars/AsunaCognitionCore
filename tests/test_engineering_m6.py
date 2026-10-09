@@ -83,3 +83,32 @@ def test_E20_erasure_preserves_unique_keys_and_refences_context(store):
     verify(list(store.db.audit_events.find({})))
     c,lane=normal(store);assert c.ingest(event('third'))['state']=='COMMITTED'
     assert 'PRIVATE_A_CANARY' not in json.dumps(lane.calls)
+
+
+def test_a_result_reads_as_handing_then_taken_and_a_restart_before_it_reached_her_as_missed(store):
+    service,task,broker,work=task_setup(store)
+    entries=[]
+    service.on_collab=lambda task,entry:entries.append(entry)
+    try:
+        current=store.db.tasks.find_one({'_id':task['_id']})
+        done=store.put('tasks',{**current,'state':'RETURNED','feedback_state':'READY','result':{'task_id':task['_id'],
+            'intent_revision':1,'text':'文件已查阅','facts':[],'artifact_refs':[]}},expected=current['revision'])
+        paused=service.pause_for_restart(task['_id'])
+        missed=[entry for entry in entries if entry['kind']=='handback']
+        assert [(entry['state'],entry.get('cause')) for entry in missed]==[('missed','restart')]
+        entries.clear()
+        lane=FakeLane(store,[FakeTurn([('think',{'thought':'结果到了。'})],'查过了。')])
+        restored=store.put('tasks',{**paused,'state':'RETURNED','feedback_state':'READY'},expected=paused['revision'])
+        assert service.feedback(restored,Coordinator(store,lane))['state']=='COMMITTED'
+        assert [entry['state'] for entry in entries if entry['kind']=='handback']==['handing','taken']
+    finally:broker.close()
+
+
+def test_unfinished_work_paused_at_a_restart_has_nothing_to_hand_back(store):
+    service,task,broker,work=task_setup(store)
+    entries=[]
+    service.on_collab=lambda task,entry:entries.append(entry)
+    try:
+        service.pause_for_restart(task['_id'])
+        assert [entry['kind'] for entry in entries]==['status']
+    finally:broker.close()

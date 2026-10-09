@@ -241,3 +241,48 @@ def test_the_owner_in_their_own_platform_dm_is_stored_and_handled_with_the_same_
     source = store.db.messages.find_one({'_id': 'in-' + accepted['episode_id']})
     assert source['event']['integration_profile'] == 'owner'
     assert app.router.receive(source['event'])['state'] == 'COMMITTED'      # was INPUT_IDENTITY_OR_CONTENT_CONFLICT
+
+
+def test_a_result_that_fails_on_its_way_back_says_so_and_leaves_the_asking_line_answered(store, tmp_path):
+    """Regression (live 2026-10-09): handing a result back failed, nothing showed it, and the line that asked
+    for the work was recorded as a failed input."""
+    from asuna.tasks import TaskService
+    done = threading.Event()
+    lane = FakeLane(store, [delegating('需要查资料。', '读取资料')])
+    chat, output = make_chat(store, tmp_path, lane)
+    service = TaskService(store)
+    entries = []
+    service.on_collab = lambda task, entry: entries.append(entry)
+    chat.app.service = service
+    chat.app.coordinator = chat.app.router.coordinator
+    chat.settings['workspace'] = str(tmp_path)
+    store.config['chat'] = {**store.config['chat'], **chat.settings}
+
+    class Action:
+        def run(self, task_id, workspace):
+            return returned(store, service.claim(task_id), '执行侧报告', [])
+
+    ingest = chat.app.router.coordinator.ingest
+
+    def broken(event, **kwargs):
+        if event.get('episode_kind') == 'task_feedback':
+            raise TypeError('Object of type ObjectId is not JSON serializable')
+        return ingest(event, **kwargs)
+
+    chat.app.executor = Action()
+    chat.app.executor_lane = SimpleNamespace(sdk=SimpleNamespace(close=lambda: None))
+    chat.app.router.coordinator.ingest = broken
+    chat.on_episode_finished = lambda event, result, error: event.get('_feedback_task') and done.set()
+    chat.worker.start()
+    chat.task_worker.start()
+    try:
+        chat.submit('帮我查资料。')
+        assert done.wait(20)
+        task = store.db.tasks.find_one({})
+        asking = store.db.messages.find_one({'_id': 'in-' + task['episode_id']})
+        assert asking['ingress_state'] == 'COMPLETE' and not asking.get('failure')
+        handback = [entry for entry in entries if entry['kind'] == 'handback']
+        assert [entry['state'] for entry in handback] == ['handing', 'missed']
+        assert handback[-1]['cause'] == 'report' and 'ObjectId' in handback[-1]['error']
+    finally:
+        chat.stop()

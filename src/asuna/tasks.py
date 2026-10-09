@@ -233,6 +233,8 @@ class TaskService:
                 expected=task['revision'], stream=task_id)
         # Without it the thread would still read as queued or running (ADR-011 §7.1).
         self.collab(paused,'status',{'state':'paused','reason':'host_restart'},'status:'+task_id+':paused:'+str(paused['fencing_token']))
+        if task['state'] in TERMINAL and task.get('feedback_state')!='DELIVERED':
+            self.handback(paused,'missed','restart')    # its work was done: only the hand-back is waiting
         return paused
 
     @contextmanager
@@ -284,6 +286,7 @@ class TaskService:
                                      'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
             event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),brief=task.get('brief') or task['goal'],
                 observations=observations[-OBSERVATIONS:],observations_total=len(observations))
+            self.handback(task,'handing')
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
@@ -293,9 +296,17 @@ class TaskService:
                     or latest['intent_revision'] != task['intent_revision']):
                 return ep  # Never overwrite a cancellation/revision while inference was in flight.
             self.store.put('tasks',{**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
+        if ep['state']=='COMMITTED':
+            self.handback(task,'taken')
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
+
+    def handback(self,task,state,cause=None,error=None):
+        """Where the task's result stands on its way back to her character brain, for the thread's view: handing,
+        taken (her turn on it finished) or missed (cause: report, turn or restart)."""
+        data={'state':state,**({'cause':cause} if cause else {}),**({'error':error} if error else {})}
+        self.collab(task,'handback',data,'handback:%s:%s:%s' % (task['_id'],task['intent_revision'],state))
 
 
 DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'

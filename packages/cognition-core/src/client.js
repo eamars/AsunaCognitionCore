@@ -23,6 +23,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': '排队中', 'collab.state.running': '进行中', 'collab.state.waiting': '等她回答',
       'collab.state.done': '已完成', 'collab.state.failed': '没做成', 'collab.state.stopped': '已叫停',
       'collab.state.paused': '已暂停', 'collab.paused': '宿主重启时暂停了；要接着做，在本机私聊里请她继续。',
+      'collab.outcome.done': '做完了', 'collab.outcome.failed': '没做成',
+      'collab.handback.handing': '{outcome} · 正在交给她', 'collab.handback.taken': '{outcome} · 她看过了',
+      'collab.handback.missed': '{outcome} · 没交到她手上',
+      'collab.missed.report': '报告在上面，但交回给她时程序出错（{error}）。',
+      'collab.missed.turn': '报告交回了，但她读它的那一轮没走完（{error}）。',
+      'collab.missed.restart': '报告在上面，宿主重启前没来得及交给她。', 'collab.missed.next': '要她接着看，在本机私聊里请她继续。',
       'workspace.local': '本机', 'session.group': '群聊', 'session.dm': '私聊',
       'collab.state.continued': '下面接着', 'collab.working': '正在做 {duration}', 'collab.watch': '展开看实时过程',
       'collab.stopped': '已叫停：{reason}', 'collab.open': '在侧栏打开完整过程',
@@ -157,6 +163,13 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.state.queued': 'Queued', 'collab.state.running': 'In progress', 'collab.state.waiting': 'Waiting for her answer',
       'collab.state.done': 'Done', 'collab.state.failed': 'Not finished', 'collab.state.stopped': 'Stopped',
       'collab.state.paused': 'Paused', 'collab.paused': 'Paused when the Host restarted; ask her in the local chat to continue.',
+      'collab.outcome.done': 'Done', 'collab.outcome.failed': 'Not finished',
+      'collab.handback.handing': '{outcome} · Handing it to her', 'collab.handback.taken': '{outcome} · She has read it',
+      'collab.handback.missed': '{outcome} · Never reached her',
+      'collab.missed.report': 'The report is above, but handing it back to her failed ({error}). ',
+      'collab.missed.turn': 'The report was handed back, but her turn reading it did not finish ({error}). ',
+      'collab.missed.restart': 'The report is above; the Host restarted before it reached her. ',
+      'collab.missed.next': 'To have her read it, ask her in the local chat to continue.',
       'workspace.local': 'Local', 'session.group': 'Group chat', 'session.dm': 'Direct message',
       'collab.state.continued': 'Continued below', 'collab.working': 'Working {duration}', 'collab.watch': 'Expand to watch it live',
       'collab.stopped': 'Stopped: {reason}', 'collab.open': 'Open the full record in the sidebar',
@@ -393,6 +406,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     body[data-ds-dark-theme] .asuna-collab-executor { border-color: var(--dsw-static-blue-300); }
     body .asuna-collab-bubble .asuna-collab-text { color: var(--dsw-alias-label-primary); }
     body .asuna-collab-clipped { max-height: 9.6em; overflow: hidden; }
+    body .asuna-collab-missed { color: var(--dsw-alias-status-danger, #c00);
+      background: color-mix(in srgb, var(--dsw-alias-status-danger, #c00) 10%, var(--dsw-alias-bg-base)); }
+    body .asuna-collab-missed-note { margin: 0; font-size: 12px; color: var(--dsw-alias-status-danger, #c00); }
   `;
   // Palette only (pinned DSH version's class): DSH's meter is the character-brain purple, the second
   // instance of the same meter (the action session) the action-brain blue.
@@ -558,12 +574,17 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     if (['done', 'failed', 'paused'].includes(state) && last && last !== statuses.at(-1) && ['message', 'open'].includes(last.kind)) state = 'queued';
     // The thread went on in a later block, below.
     if (entries.some(entry => entry.kind === 'continued')) state = 'continued';
+    // A finished run's result on its way back to her: handing, taken (her turn on it finished) or missed.
+    const lastHandback = entries.findLast(entry => entry.kind === 'handback');
+    const handback = ['done', 'failed', 'paused'].includes(state) && lastHandback
+      && entries.indexOf(lastHandback) > entries.indexOf(statuses.at(-1)) ? lastHandback : null;
+    const outcome = statuses.findLast(entry => ['done', 'failed'].includes(entry.state))?.state ?? 'done';
     const started = Date.parse(entries[0]?.at), ended = Date.parse(last?.at);
     const child = open?.child_session_id ?? entries.findLast(entry => entry.child_session_id)?.child_session_id;
     const work = open && entries.slice(entries.indexOf(open)).findLast(entry => entry.kind === 'work');
     const live = state === 'running' && child && (work?.through_seq ?? open?.after_seq) !== undefined
       ? { child, after: work?.through_seq ?? open.after_seq, since: Date.parse(work?.at ?? open.at) } : null;
-    return { title, open, child, live, state, stopped: statuses.findLast(entry => entry.state === 'stopped'),
+    return { title, open, child, live, state, handback, outcome, stopped: statuses.findLast(entry => entry.state === 'stopped'),
       elapsed: Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused', 'continued'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
   }
 
@@ -1070,11 +1091,17 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h('div', { className: 'asuna-collab-head' },
           h('span', null, t('collab.header', { character: t('brain.character'), action: t('brain.executor') }), ' · '),
           h('span', { className: 'asuna-collab-title' }, thread.title || t('collab.untitled')),
-          h(Pill, null, t('collab.state.' + thread.state)),
+          thread.handback
+            ? h(Pill, { className: thread.handback.state === 'missed' ? 'asuna-collab-missed' : undefined },
+              t('collab.handback.' + thread.handback.state, { outcome: t('collab.outcome.' + thread.outcome) }))
+            : h(Pill, null, t('collab.state.' + thread.state)),
           thread.elapsed !== null && h('span', { style: small }, duration(t, thread.elapsed)),
           openAside && h(Button, { size: 'sm', variant: 'ghost', onClick: openAside }, t('collab.open'))),
         ...entries.filter(entry => entry.kind !== 'open' && entry.kind !== 'continued').map(entry =>
-          entry.kind === 'work' ? h(WorkRow, { key: entry.id, entry, t, parent, SessionProvider: props.SessionProvider,
+          entry.kind === 'handback' ? entry === thread.handback && entry.state === 'missed'
+              && h('p', { key: entry.id, role: 'status', className: 'asuna-collab-missed-note' },
+                t('collab.missed.' + (entry.cause ?? 'report'), { error: entry.error ?? '' }) + t('collab.missed.next'))
+            : entry.kind === 'work' ? h(WorkRow, { key: entry.id, entry, t, parent, SessionProvider: props.SessionProvider,
               renderSlot: props.renderSlot })
             : entry.kind === 'status' ? (entry.state === 'stopped' ? h('p', { key: entry.id, style: small },
               t('collab.stopped', { reason: entry.reason ?? '' }))

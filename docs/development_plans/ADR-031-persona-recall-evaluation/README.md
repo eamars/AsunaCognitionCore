@@ -1,6 +1,7 @@
 # ADR-031: evaluation of automatic recall for her persona sections
 
-Status: **Proposed (evaluation), not accepted, nothing built.** The owner asked for a careful evaluation before any
+Status: **Concluded 2026-10-09: retrieval by the incoming turn is rejected for her persona sections; A then B.** See §6
+for the benchmark that settled it. The owner asked for a careful evaluation before any
 build because the earlier Kazusa design of this kind ("prewarm") was patched repeatedly and never worked well, and a
 bad design could pollute Xiaoman. Xiaoman holds the decision on how her own pool is organised; this document is the
 evidence for that decision and for the owner's review.
@@ -34,7 +35,8 @@ rate exists in any of the four checkouts, plans, test artifacts or the local dat
 5. **Authority was mislabelled:** guidance rules were injected as plain facts.
 6. **There was no per-item relevance check** (one whole-set verdict) and no signal of whether an item was used.
 7. **A chat line was judged as if it were a question** (inferred from code).
-8. **The score threshold was calibrated on a different corpus.**
+8. ~~The score threshold was calibrated on a different corpus.~~ Corrected by the benchmark (§6): the prewarm path had
+   no score threshold at all; the defect was that nothing gated items.
 
 Its authors' own conclusions: no retrieval-first again, and only widen after real audits show repeated failures.
 
@@ -80,8 +82,9 @@ These follow from how this runtime carries a turn's content forward, not from a 
 
 **D. Automatic recall live.**
 - Every risk in §3 applies.
-- If it is ever built, recalled content must go into that turn's system prompt only, never into the message history,
-  so it does not persist into summaries and memory. It must be labelled as a program reminder, carry its source and
+- If it is ever built, where the content goes is a trade-off the benchmark measured (§6): message placement persists
+  until compaction and partly into summaries; system-prompt placement breaks the prompt cache on every turn (group
+  sessions run about 95% cached). It must be labelled as a program reminder, carry its source and
   age, and respect visibility.
 - Gate: only if C shows a reliable, labelled signal, and A + B leave a measured gap.
 
@@ -104,3 +107,37 @@ Xiaoman's acceptance conditions (2026-10-09) apply to every option that retrieve
 - a wiring test asserting the text reaches the request sent to the model;
 - four distinguishable outcomes;
 - a shadow gate of 200 turns or two weeks.
+
+## 6. Benchmark and conclusion (2026-10-09)
+
+The owner asked to conclude whether prewarm failed by design or by implementation. An independent agent sorted
+Kazusa's failures (3 implementation, 4 design, 1 both) and benchmarked a clean build on her real turns, with every
+implementation fault removed: the message as she received it (her own @ stripped), no model-written query,
+deterministic vector search with a threshold calibrated on her data, per-item judgement, and an LLM reranker proxy as
+an upper bound. Data: 1,311 character turns since 10-05; 248 stratified turns labelled offline (model labeller,
+evaluation only; 80% agreement with a blind hand-labelled sample of 50).
+
+- **Vector only** (deployed embedding model, section openings): at a cosine of 0.65 it matches 15% of turns with
+  precision 0.50 and recall 0.28; at 0.70, precision 0.89 but recall 0.12. On turns where the needed section already
+  existed: precision 0.24, recall 0.27. Short index lines are worse keys than section openings. A larger embedding
+  model is no better.
+- **Vector + reranker proxy:** precision 0.64 at recall 0.34 overall. On turns where the section already existed:
+  precision 0.19, recall 0.30, no better than vector only. No real cross-encoder runs on the deployed servers.
+- **Her own recalls:** for 4 of her 5 real section reads, the matcher ranked the section she chose 15th to 25th of 26.
+- **Instability:** the gap between the top two matches is 0.02 at the median. Prepending her @ flips the top match
+  in 13 of 40 turns.
+- **Visibility:** in public turns the nearest section is owner-private in 35 of 37 matches.
+- **Noise:** 23% of her turns are program-templated (heartbeats, hand-backs, plans), and match noise.
+
+Conclusion: a flawed idea for her persona sections in this runtime, not only a badly built one. What she needs is
+decided by the scene, the conversation's state, or a lesson being learned in that conversation, not by the words of
+the incoming message. By scene alone, the two single-purpose sections cover 41 of the 68 labelled needs. Persistence
+of injected content is real through the session and its summaries; the loop back into memory exists in mechanism but
+was not observed (on-demand phrases appear in 1 of 1,923 monologues and none of 11,526 chunks).
+
+Decision: build A (turn and scene scope; the outing section stays always loaded in groups, the old-home reports in
+the sister line), then B (the visible index), with a recall-rate baseline of about 1.4% of turns. Instrument recall
+reads and the owner's corrections now; they are the ground truth of real misses. Retrieval returns only if a
+measured gap remains, and then only as a shadow over scene-scoped candidates, with a real reranker, on 200 turns
+where the section already existed, gated at precision ≥ 0.6 and recall ≥ 0.5. Never unscoped vector-only with a
+threshold. Not evaluated: retrieval of memories and facts keyed by topic words, which is a different problem.

@@ -246,6 +246,14 @@ class RuntimeHost:
             if self.integration:
                 self.integration.restore()
             self.evidence.record('host.integration.ready', {})
+            # ADR-034: her restart requests go to the supervisor; a restart that fell back calls her once.
+            from . import restarts
+            restarts.DESK = restarts.Desk(self.app, self.controller)
+            self.stack.callback(restarts.DESK.close)
+            try:
+                restarts.call_after_fallback(self.app.store, self.controller, self.config)
+            except Exception as exc:
+                self.evidence.record('restart.call_failed', {'error': str(exc)[:300]})
             self.schedule = None
             if self.schedule_lane is not False:          # False: the native Host has no Schedule (mountSchedule=false)
                 from .schedule import ScheduleService

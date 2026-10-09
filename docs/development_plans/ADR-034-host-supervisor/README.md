@@ -1,7 +1,9 @@
 # ADR-034: a supervisor that restarts the Host for her and brings it back
 
 Status: **Accepted 2026-10-10.** The owner chose the direction ("Yes, I'd like a means of self rebooting/fallback
-routine"); Xiaoman agreed and added D7. This is option 2 of ADR-021 §4.
+routine"); Xiaoman agreed and added D7. This is option 2 of ADR-021 §4. Built the same day: `tools/asuna-supervisor.mjs`,
+`src/asuna/restarts.py`, her `restart` tool. Paused tasks are listed in the record with their tool records kept;
+they resume when she says so (a `quiet` restart waits until none is running).
 
 ## Context
 

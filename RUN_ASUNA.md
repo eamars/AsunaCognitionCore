@@ -97,6 +97,15 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 
 `--no-sync` starts what is installed without looking at the checkout. A profile with no `setup` in `launch.json` (installed before the launcher synced) needs the installer once by hand.
 
+**The launcher stays and supervises DSH** (`tools/asuna-supervisor.mjs`):
+
+- A start counts as up when the worker writes `runtime.ready` in `<data>/reports/native-host-*`, within 10 minutes.
+- A start that exits or is not up in time is stopped and the next one goes one rung down: the same packages again (with sync), then the previous running version of a selection being applied, then what is installed without syncing. The last rung is retried after 1, 5, 15 and 30 minutes, and every 30 minutes after that.
+- When DSH exits on its own, it is started again the same way.
+- When she asks for a restart (her `restart` tool), the worker writes `<data>/restart/request.json` once it is due; the launcher kills the DSH process tree (the stop is marked planned) and starts it again.
+- The record of each restart is `<data>/restart/last.json`: who asked and why, what it interrupted, each start and its rung, and what loaded (the checkout's commit, the installed packages, the selections).
+- Ctrl+C or a stop signal stops DSH and the launcher; nothing restarts. `--once` runs DSH once without the supervisor.
+
 Both launchers accept `--profile <name>` and `--config <path>` (or `ASUNA_PROFILE` / `ASUNA_CONFIG`); the defaults are `asuna-native` and `config/local.json`. A profile other than `asuna-native` keeps its own DSH home, activation state and candidates under `.runtime/adr008/profiles/<name>/`. `--dry-run` prints the resolved profile, config and database without starting anything.
 
 Open the authenticated `dsh web:` address printed by the launcher. The token is private. Workspaces carry the character's name (**<persona> · 本地**, **<persona> · QQ**). Under the local workspace, continue the persona's local chat. Under each channel's workspace, each active DM or group has one continuous main conversation; its composer is view-only, so reply on the platform. Use native Chat for conversation and Trajectory for actual steps and tools. **Standard mode** remains ordinary DSH. Native New Session remains available for deliberate additional or recovery conversations; archived sessions show through native View options.

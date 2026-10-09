@@ -11,7 +11,7 @@ const read = async (file, fallback) => {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 };
-const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port <port>] [--no-sync] [--dry-run] | --list';
+const usage = 'Usage: asuna-launch.mjs ui [--profile <name>] [--config <path>] [--port <port>] [--no-sync] [--once] [--dry-run] | --list';
 const exists = file => fs.access(file).then(() => true, () => false);
 
 // DSH installs plugins by running `pnpm` from PATH. Node ships pnpm through corepack, so a machine
@@ -98,11 +98,12 @@ export function profileBase(profile) {
 export async function resolveLaunch(argv, env = process.env) {
   const args = argv.filter(arg => !['ui', '--native'].includes(arg));
   const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: null, dryRun: false,
-    sync: true };
+    sync: true, once: false };
   for (let index = 0; index < args.length; index++) {
     const flag = args[index], value = args[index + 1];
     if (flag === '--dry-run') { options.dryRun = true; continue; }
     if (flag === '--no-sync') { options.sync = false; continue; }
+    if (flag === '--once') { options.once = true; continue; }       // run DSH once, without the supervisor (ADR-034)
     if (!['--port', '--profile', '--config'].includes(flag) || value === undefined) throw new Error(usage);
     index++;
     if (flag === '--port') {
@@ -121,7 +122,8 @@ export async function resolveLaunch(argv, env = process.env) {
   const local = await read(config, launch.native_credentials ? {} : undefined);
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
     // The profile's own port (ADR-020): this start's --port, else the one its install recorded, else 8780.
-    port: options.port ?? launch.port ?? 8780, dryRun: options.dryRun, sync: options.sync, setup: launch.setup, installed: launch.installed,
+    port: options.port ?? launch.port ?? 8780, dryRun: options.dryRun, sync: options.sync, once: options.once,
+    setup: launch.setup, installed: launch.installed,
     sharedActionModel: Boolean(launch.shared_action_model),
     nativeCredentials: Boolean(launch.native_credentials), local };
 }
@@ -172,17 +174,54 @@ async function main() {
     child.once('exit', () => { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); });
   });
 
-  if (launch.sync) {
-    const exec = (command, args, { quiet = false } = {}) => new Promise((resolve, reject) => {
-      const child = spawn(command, args, { cwd: root, windowsHide: true, stdio: quiet ? ['ignore', 'ignore', 'inherit'] : 'inherit',
-        env: { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
-      child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
-    });
-    await syncCheckout(launch, exec);
+  const exec = (command, args, { quiet = false } = {}) => new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, windowsHide: true, stdio: quiet ? ['ignore', 'ignore', 'inherit'] : 'inherit',
+      env: { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
+    child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
+  });
+  const host = ['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)];
+  if (launch.once) {
+    if (launch.sync) await syncCheckout(launch, exec);
+    await applySelection(launch, run, advanceSelection);
+    return run(host);
   }
+  // ADR-034: the launcher stays as DSH's parent and brings it back.
+  let stopped = false;
+  const stops = [];
+  const stop = () => { stopped = true; for (const fn of stops.splice(0)) fn(); };
+  process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  const supervisor = await import('./asuna-supervisor.mjs');
+  const launchFile = path.join(launch.base, 'launch.json');
+  await supervisor.supervise({
+    prepare: async rung => {
+      if (rung === 0) {
+        const fresh = await resolveLaunch(process.argv.slice(2));      // the install of a previous start rewrote launch.json
+        if (fresh.sync) await syncCheckout(fresh, exec);
+        // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
+        return (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
+      } else if (rung === 1) return applySelection(launch, run, supervisor.revertSelections);
+    },
+    spawnHost: () => spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },
+      windowsHide: true, stdio: 'inherit', detached: process.platform !== 'win32' }),
+    ready: since => supervisor.readySince(path.join(supervisor.dataRoot(env), 'reports'), since),
+    takeRequest: () => supervisor.takeRequest(env),
+    loaded: () => supervisor.loaded(launch.base, launchFile),
+    writeRecord: record => supervisor.writeRecord(env, record),
+    note: text => process.stderr.write(text + '\n'),
+    now: () => Date.now(),
+    sleep: ms => new Promise(resolve => { const timer = setTimeout(resolve, ms); stops.push(() => { clearTimeout(timer); resolve(); }); }),
+    stopped: () => stopped,
+    onStop: fn => stops.push(fn),
+  });
+  return 0;
+}
+
+/** Install selected publications waiting for a Host start; `step` decides first (advance or revert). */
+async function applySelection(launch, run, step) {
   const selectionPath = path.join(launch.base, 'activation.json');
   const selection = await read(selectionPath, { projects: {} });
-  for (const note of advanceSelection(selection)) process.stderr.write('Asuna selection: ' + note + '\n');
+  const notes = step(selection);
+  for (const note of notes) process.stderr.write('Asuna selection: ' + note + '\n');
   for (const selected of Object.values(selection.projects)) {
     if (selected.state !== 'HOST_RESTART_REQUIRED') continue;
     try {
@@ -203,7 +242,7 @@ async function main() {
     await fs.writeFile(selectionPath + '.tmp', JSON.stringify(selection, null, 2));
     await fs.rename(selectionPath + '.tmp', selectionPath);
   }
-  return run(['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)]);
+  return notes;
 }
 
 if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) process.exitCode = await main();

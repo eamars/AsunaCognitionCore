@@ -292,6 +292,17 @@ TOOLS = {
         'parameters': {'to': _s('送到哪儿：「家里」或 note_places_from_program 里的 place', required=True),
                        'text': _s('便条：你自己的话，300 字以内', required=True)},
     },
+    'restart': {
+        'description': ('重启宿主（只在家里）。preview：先看重启会打断什么（在跑和排队的任务、没轮到的消息、没确认送到的话、'
+                        '马上要响的计划、上次重启花了多久）。request：交给监工重启，why 写原因；when 选 now（立刻）、'
+                        'quiet（默认：等没有在跑的回合、任务和排队消息，最多等 30 分钟）或当地时刻 HH:MM（到点后再等安静）。'
+                        'drill：演练，跟 request 一样，但第一次启动故意让它失败，让监工的兜底真跑一遍。'
+                        'cancel：撤回还没执行的请求。起没起来由监工看，结果下一次在家那一轮的 restart_from_program 里；'
+                        '退回旧版本时会马上叫你。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['preview', 'request', 'drill', 'cancel']),
+                       'why': _s('request/drill 要写：为什么重启，一句话'),
+                       'when': _s('request/drill 可选：now、quiet 或当地时刻 HH:MM，默认 quiet')},
+    },
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（lines_from_program 里的 line）。关着时对方的话会被跳过，'
                         '不叫醒你，以后也不补发；你自己的话照常发得出去。关多久由你选：an_hour 一小时，'
@@ -436,6 +447,8 @@ def exposed(store, ep):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         names += ['update_self', 'set_policy', 'pin_memory', 'message_developer', 'place_timezone']
+        if kind in ('external', 'self_development', 'presence'):
+            names.append('restart')              # the Host supervisor (ADR-034); her home turns only
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -1229,6 +1242,35 @@ class RoleTools:
         return self._note(ep, call_id, args, visibility.PUBLIC)
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
+    def tool_restart(self, ep, call_id, args):
+        from . import restarts
+        from .persona_model import timezone as persona_zone
+        from .render import model_and_policy
+        desk = restarts.DESK
+        if desk is None:
+            raise Refused('这个宿主没有接重启请求的地方（不是正常起来的宿主）；要重启跟主人说。')
+        model, policy = model_and_policy(self.store, ep['persona'])
+        desk.zone = persona_zone(model, policy, self.store.config)[0]
+        op = args.get('op')
+        if op == 'preview':
+            return desk.preview(), False
+        if op == 'cancel':
+            had = desk.cancel()
+            return {'cancelled': bool(had), 'note': '撤回了。' if had else '没有在等的重启请求。'}, False
+        if op not in ('request', 'drill'):
+            raise Refused('op 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'))
+        why = self._text(args, 'why', 200)
+        try:
+            pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill')
+        except PermissionError as exc:
+            raise Refused(str(exc))
+        except ValueError as exc:
+            raise Refused(str(exc))
+        when = {'now': '下一刻就停', 'quiet': '等没有在跑的回合、任务和排队消息（最多 30 分钟）'}.get(
+            pending['when'], '到 %s 后再等安静' % pending['when'])
+        return {'queued': True, 'when': when, 'drill': pending['drill'],
+                'note': '交给监工了。起来以后结果在 restart_from_program；退回旧版本会马上叫你。'}, False
+
     def tool_peer_line(self, ep, call_id, args):
         from . import lines
         from .persona_model import timezone as persona_zone

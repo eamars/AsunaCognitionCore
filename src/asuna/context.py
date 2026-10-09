@@ -600,6 +600,9 @@ class ContextBuilder:
             from . import host_stops as _host_stops
             away=_host_stops.block(self.store,schedule_zone,moment)
             if away:context['host_from_program']=away
+            from . import restarts as _restarts
+            restarted=_restarts.block(self.store,schedule_zone,moment)
+            if restarted:context['restart_from_program']=restarted
         if note_kind!='consult':
             note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
             if note_places:context['note_places_from_program']=note_places

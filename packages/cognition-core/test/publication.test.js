@@ -132,6 +132,28 @@ test('a refused development call says what was wrong, with the values, and what 
   await assert.rejects(floor.call('development_run', { argv: Array(41).fill('a') }), /DEVELOPMENT_ARGV_INVALID: argv 有 41 项，最多 40 项/);
 });
 
+test('a repository candidate publishes only the project paths, not what a command left beside them', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-scope-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'), core = path.join(source, 'packages/cognition-core');
+  await fs.mkdir(path.join(core, 'src'), { recursive: true }); await fs.mkdir(path.join(source, 'src'));
+  await fs.writeFile(path.join(core, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module', exports: './src/index.js' }));
+  await fs.writeFile(path.join(core, 'src/index.js'), 'export const name = "probe"; export function apply() {}');
+  await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
+  await floor.call('development_write', { path: 'src/x.py', text: 'x = 2\n', overwrite: true });
+  // A nested command once installed a whole Python (docs with .js files) into the candidate's top folder.
+  const candidate = path.join(workspace, 'work/self-development/probe');
+  await fs.mkdir(path.join(candidate, 'Python/Doc'), { recursive: true });
+  await fs.writeFile(path.join(candidate, 'Python/Doc/searchindex.js'), 'var x;');
+  const published = await floor.call('development_publish', { reason: 'one Python change' });
+  assert.equal(published.state, 'APPLIED', JSON.stringify(published));
+  assert.deepEqual(published.changed_files, ['src/x.py']);
+  assert.equal(await fs.readFile(path.join(source, 'src/x.py'), 'utf8'), 'x = 2\n');
+  await assert.rejects(fs.stat(path.join(source, 'Python')), { code: 'ENOENT' });
+});
+
 test('ADR-021 D4: an unattended turn does not publish onto a change still waiting for a Host restart', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-wait-'));

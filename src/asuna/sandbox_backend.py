@@ -70,6 +70,9 @@ def environment(extra=None):
     keep = ('SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
             'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE')
     env = {key: os.environ[key] for key in keep if key in os.environ}
-    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1')
+    # A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
+    # Python into the working folder (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
+    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
+               PYTHON_MANAGER_AUTOMATIC_INSTALL='false')
     env.update(extra or {})
     return env

@@ -54,6 +54,8 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 ```
 
 - 退出码 0 才算绿；红的时候最后一行写着失败的用例名。
+- 只有 argv 第一项的 `python3` 会换成项目的 Python。脚本里用 subprocess 再起 Python，写 `sys.executable`，别写 `'python3'`：里面那层找到的不是项目的 Python，只会报「没有运行时」。
+- 发布只带认知核自己的路径（`src/`、`tests/`、`tools/`、`docs/`、`packages/cognition-core/` 和根上的几个清单文件）；日志、临时目录这些候选里的杂物不会发布。
 - 跑完会留 `__pycache__`，发布前清掉：`find . -name '__pycache__' -type d -prune -exec rm -rf {} +`
 - 这些覆盖不到真 Mongo、DSH 原生定时和界面实点；那些由主人在宿主侧跑 `tests/test_*.py`。
 - 已知坑：离线夹具把真文件复制进临时包；真文件新加一条同包 import，夹具的复制清单也要加，否则只会红在 `ModuleNotFoundError`。

@@ -96,13 +96,19 @@ async function files(root) {
   }
   await visit(root); return result;
 }
+/** A repository project is the core's own paths: only these are copied into its candidate and only these publish. */
+const REPOSITORY_PATHS = /^(src\/|packages\/cognition-core\/|docs\/|tests\/|tools\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|AGENTS.md|INSTALL.md|RUN_ASUNA.md|NATIVE_PLUGIN.md|RUNTIME_API.md)$)/;
+const inProject = (project, relative) => project.format !== 'repository' || REPOSITORY_PATHS.test(relative);
 const PYTHONS = new Set(['python3', 'python', 'python3.exe', 'python.exe']);
 /** What a sandboxed command inherits: enough for Windows and Python to start, no credentials (as sandbox_backend.py). */
 function commandEnvironment() {
   const keep = ['SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
     'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE'];
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.includes(key.toUpperCase())));
-  return { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1' };
+  // A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
+  // Python into the candidate (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
+  return { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
+    PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false' };
 }
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -216,7 +222,7 @@ export class PublicationFloor {
       }
     }
     for (const [relative, file] of sourceFiles) {
-      if (project.format === 'repository' && !/^(src\/|packages\/cognition-core\/|docs\/|tests\/|tools\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|AGENTS.md|INSTALL.md|RUN_ASUNA.md|NATIVE_PLUGIN.md|RUNTIME_API.md)$)/.test(relative)) continue;
+      if (!inProject(project, relative)) continue;
       const target = path.join(candidate, relative), prior = baseline[relative];
       const present = await exists(target), current = present ? hash(await fs.readFile(target)) : null;
       if (present && current !== prior || !present && prior) continue;
@@ -337,7 +343,8 @@ export class PublicationFloor {
       throw new Error(`DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 ${project.id} 上一次发布的改动还在等宿主重启，`
         + '重启前没人在场的自我开发回合不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
         + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
-    const current = await files(project.candidate), hashes = {};
+    // Anything else in the candidate (logs, scratch folders, a tool's own install) is work, not the project.
+    const current = new Map([...await files(project.candidate)].filter(([name]) => inProject(project, name))), hashes = {};
     for (const [name, file] of current) hashes[name] = hash(await fs.readFile(file));
     const changed = Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
     const deleted = Object.keys(project.baseline).filter(name => !(name in hashes));

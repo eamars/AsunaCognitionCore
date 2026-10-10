@@ -104,7 +104,8 @@ def test_a_hand_back_that_keeps_failing_goes_full_then_short_then_tells_the_deve
         assert given['feedback_state'] == 'DELIVERED', 'the short version reached her'
         short = store.db.episodes.find_one({'source_event_id': handover.result_event_id(task, True)})
         text = repr(short['context'])
-        assert '截断，原文 4000 字' in text, 'a cut report says it was cut'
+        assert '只给了开头，原文 4000 字共 1 页' in text and 'read_report' in text, 'a cut report says it was cut and how to read on'
+        assert 'read_report' in lane.calls[-1]['tools'], 'and that turn has the tool to read on'
         assert 'observations' not in text, 'the short version carries no tool records'
         assert [state for state, *_ in handbacks(entries)] == ['handing', 'missed', 'handing', 'missed', 'handing', 'taken']
         assert handbacks(entries)[-2] == ('handing', None, True, False)

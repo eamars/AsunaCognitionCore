@@ -344,7 +344,8 @@ class ContextBuilder:
                 '_input_time':{'$max':'$_inputs.received_at'}}},
             {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
             {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1}},
+                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1,
+                '_report_chars':{'$strLenCP':{'$ifNull':['$result.text','']}}}},
         ]))
         # Every open task (and every finished one whose result has not reached her), and only the last few others
         # (their results came back as their own turns).
@@ -353,8 +354,13 @@ class ContextBuilder:
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
         paused=any(task['state']=='PAUSED' for task in task_states)
         carried_on=_handover.continuations(self.store,[task['_id'] for task in task_states])
+        from .tasks import REPORT_CHARS, report_pages
         for task in task_states:
             task.pop('_active',None)
+            # A report longer than a page reached her as its first page; the rest she reads with read_report.
+            if task.pop('_report_chars',0)>REPORT_CHARS:
+                text=((self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1}) or {}).get('result') or {}).get('text') or ''
+                task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 read_report 翻读'%(len(report_pages(text)),len(text))
             # A task's title is what she called it; the old goal text only when there is no title.
             if task.get('title'):
                 task.pop('goal',None)

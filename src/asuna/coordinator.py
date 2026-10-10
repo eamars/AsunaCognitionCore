@@ -241,7 +241,7 @@ class Coordinator:
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
             issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
-                                         consult=kind=='consult')
+                                         consult=kind=='consult',home=(ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE)
             if issue is None and kind!='consult':
                 from . import stickers
                 issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces

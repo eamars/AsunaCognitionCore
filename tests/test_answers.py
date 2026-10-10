@@ -63,7 +63,8 @@ def test_a_thought_left_only_in_native_thinking_is_asked_again_in_the_same_turn(
     assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
     repair = lane.calls[1]['messages'][-1]['content']
     assert repair == ('程序检查：这回合还没写心里话：先调用 think，再把要说的话写出来。'
-                      '请在这一回合里改正，只修这个问题，不改变你的意思。')
+                      '这段还没发出去：请在这一回合里把要说的话整段重新写一遍，这次写的会整段代替上一段发出去；'
+                      '只改这个问题，不改变你的意思。')
     rejected = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'turn.rejected'})
     assert rejected['payload']['attempt'] == 0 and rejected['payload']['problem'].startswith('这回合还没写心里话')
     thought = store.db.memory_units.find_one({'_id': ep['monologue_refs'][0]})
@@ -144,3 +145,13 @@ def test_a_line_opened_with_a_label_and_no_at_is_handed_back(store):
     assert ep['state'] == 'COMMITTED' and ep['speech'] == '@[阿杰 #3] 你说得对。'
     assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
     assert '开头的「[阿杰 #3]」不会 @ 到人' in lane.calls[1]['messages'][-1]['content']
+
+
+def test_her_tools_are_a_topic_at_home_and_program_talk_elsewhere():
+    # 2026-10-11: on a developer's line she named read_image; the check took it for program talk, and her one-sentence
+    # repair went out in place of her whole answer. At home (the owner and his agents) tools are what they talk about.
+    said = LaneResult('旧居那条线上读图那两次，是看我自己画的图，read_image 拿掉没关系。')
+    assert answers.speech_problem(said, thought=True, home=True) is None
+    assert '提到了程序的事（「read_image」）' in answers.speech_problem(said, thought=True)
+    assert answers.speech_problem(LaneResult('{"a": 1}'), thought=True, home=True).startswith('你最后写的是一个 JSON 对象')
+    assert '整段重新写一遍' in answers.turn_note('x。')

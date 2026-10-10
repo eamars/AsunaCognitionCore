@@ -123,7 +123,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.selfSource': '自我来源：{source}', 'settings.waiting': '等待连接', 'settings.channelsFallback': '外部渠道',
       'settings.deployment.database': "数据库名", 'settings.deployment.allowed_databases': "允许的数据库",
       'settings.deployment.legacy_database': "旧数据库", 'settings.deployment.mongo_uri': "Mongo 连接",
-      'settings.deployment.embedding': "向量模型", 'settings.deployment.local_only': "仅本机",
+      'settings.deployment.embedding': "向量模型",
       'settings.deployment.workflow_timeout_seconds': "阶段超时（秒）",
       'settings.deployment.provider_idle_timeout_seconds': "模型空闲超时（秒）",
       'settings.deployment.publish_adapter': "发布适配器", 'settings.deployment.prompts_dir': "提示词目录",
@@ -269,7 +269,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.selfSource': 'Self from: {source}', 'settings.waiting': 'waiting for connection', 'settings.channelsFallback': 'Channels',
       'settings.deployment.database': "Database name", 'settings.deployment.allowed_databases': "Allowed databases",
       'settings.deployment.legacy_database': "Legacy database", 'settings.deployment.mongo_uri': "Mongo connection",
-      'settings.deployment.embedding': "Embedding model", 'settings.deployment.local_only': "Local only",
+      'settings.deployment.embedding': "Embedding model",
       'settings.deployment.workflow_timeout_seconds': "Stage timeout (seconds)",
       'settings.deployment.provider_idle_timeout_seconds': "Model idle timeout (seconds)",
       'settings.deployment.publish_adapter': "Publish adapter", 'settings.deployment.prompts_dir': "Prompts folder",
@@ -339,7 +339,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       [name, value && typeof value === 'object' ? say(t, value) : value])));
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'local_only', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'reasoning_effort', 'search']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'reasoning_effort', 'search']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 

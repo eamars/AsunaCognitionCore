@@ -1,5 +1,4 @@
 from __future__ import annotations
-import ipaddress
 import json
 import hashlib
 import os
@@ -119,13 +118,14 @@ def validate_database(config: dict, name: str) -> str:
 
 
 def validate_endpoint(url: str) -> None:
-    p = urlsplit(url)
-    if p.scheme not in ('http', 'https') or p.username or p.password or p.query or p.fragment:
-        raise ValueError('INVALID_LOCAL_ENDPOINT')
-    # Literal addresses only: no DNS rebinding or inferred localhost services.
-    ip = ipaddress.ip_address(p.hostname or '')
-    if not (ip.is_private or ip.is_loopback) or ip.is_unspecified:
-        raise ValueError('CLOUD_ROUTE_FORBIDDEN')
+    """The rule DSH's Models page applies to a provider address: an http or https URL with a host."""
+    try:
+        p = urlsplit(url)
+        p.port
+    except (TypeError, ValueError):
+        raise ValueError('INVALID_ENDPOINT') from None
+    if p.scheme not in ('http', 'https') or not p.hostname:
+        raise ValueError('INVALID_ENDPOINT')
 
 
 def redacted(config: dict) -> dict:

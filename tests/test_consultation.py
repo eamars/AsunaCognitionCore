@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from asuna import role_tools
 from asuna.coordinator import Coordinator
 from asuna.lanes import LaneResult
 from asuna.state import Denied
@@ -42,7 +43,10 @@ def test_consult_uses_bound_role_context_without_publication_or_new_task(store):
         assert result['internal'] and result['kind']=='character_interpretation'
         assert '资料不足' in result['answer']
         assert calls[0][0]=='demo:dm-a:1:P1:original-role-context'
-        assert calls[0][2]=='TURN' and calls[0][4]==['think','recall','answer_action'] and '323' in calls[0][3]
+        # The conversation's own list, as in its other turns; the question's turn may use only the answer (turn_tools).
+        asked=store.db.episodes.find_one({'episode_kind':'consult'})
+        assert calls[0][2]=='TURN' and calls[0][4]==role_tools.toolbox(store,asked) and '323' in calls[0][3]
+        assert asked['turn_tools']==['think','recall','answer_action']
         assert 'scene:dm-b' not in calls[0][3]
         assert store.db.episodes.find_one({'_id':ep['_id']})==ep
         # Her answer is a consult turn of her own (with her kept thought), not a message, task or publication.

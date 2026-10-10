@@ -21,6 +21,23 @@ def workspace_grant(config, scene_id, person_id, *, required=True):
     return {}
 
 
+def conversation_workspace(config, scene_id):
+    """Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it;
+    each turn still checks its own speaker with workspace_grant)."""
+    local = config.get('chat', {})
+    if scene_id == local.get('scene_id'):
+        return bool(local.get('person_id'))
+    for channel in config.get('channels', {}).values():
+        for route in channel.get('routes', {}).values():
+            if scene_id == route['scene_id']:
+                from .channels import route_members
+                if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
+                    continue
+                if any(sender not in channel.get('blocked_senders', []) for sender in route_members(route)):
+                    return True
+    return False
+
+
 def development_granted(store, scene, event, session_class=None):
     """Who may hand work with the development tools to the action brain (ADR-011 §6.1).
 

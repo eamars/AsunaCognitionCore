@@ -2,12 +2,15 @@
 
 The character brain thinks, remembers, feels, writes down, plans, hands work to the action brain,
 and speaks or stays silent. A turn is one native DSH turn: she calls `think` first, then any of
-the tools the program exposed for this turn, and her last text without a tool call is what she
-says. Every call reaches the worker (native_worker.py) on the coordinator's own thread, so effects
+the tools her conversation lists that the turn may use, and her last text without a tool call is
+what she says. Every call reaches the worker (native_worker.py) on the coordinator's own thread, so effects
 run one at a time, inside the turn's episode, exactly where the old DECIDE fields ran.
 
 Rules shared by every tool:
-- The program decides which tools a turn has (`exposed`); an unexposed tool is refused in words.
+- A conversation lists the same tools in every turn (`toolbox`): who she is with there and what the channel
+  carries decide them, never the turn, so the start of each request (system prompt and tools) stays what the
+  model has already read. The turn decides which of them it may use (`exposed`); a call outside that is
+  refused with when the tool can be used (`not_now`).
 - A refused call is a tool error she reads in the same turn (`Refused`): what was wrong and what she
   can do instead. It never fails the turn.
 - The native `tool_call_id` is the effect key: a replay of the same call after a crash returns the
@@ -205,10 +208,6 @@ TOOLS = {
         'parameters': {'key': _s('参数名', required=True), 'value': {'type': 'json', 'description': '新的值', 'required': True},
                        'reason': _s('为什么改', required=True)},
     },
-    'pin_memory': {
-        'description': '让一条记忆一直容易被想起（或取消）。memory_id 照抄 ref_index 里的记忆 id。',
-        'parameters': {'memory_id': _s('记忆 id', required=True), 'pinned': {'type': 'boolean', 'required': True}},
-    },
     'feel': {
         'description': ('记一笔心情（op=record，只用 how_to_record_from_program 里的词，不写数字）；事情了结用 close，'
                         '发现前提不成立用 void（必须写 why）；情感评估路由的提案用 adopt 逐条决定（accept/decline/edit）。'
@@ -396,18 +395,14 @@ def turn_kind(ep):
     return ep.get('turn_kind') or ep.get('episode_kind') or 'external'
 
 
-def long_report(context):
-    """Whether this turn carries a report longer than a page: one handed back now, or a recent task's."""
-    events = ((context.get('event') or {}).get('trusted_context_events')) or []
-    # A hand-back carries report_pages only when it gave her less than the whole report.
-    handed = any(isinstance(ev, dict) and ev.get('kind') == 'task_result'
-                 and 'report_pages' in (ev.get('value') if isinstance(ev.get('value'), dict) else ev)
-                 for ev in events)
-    return handed or any(isinstance(task, dict) and task.get('report') for task in context.get('task_state_from_program') or [])
-
-
 def exposed(store, ep):
-    """The tools this turn has, decided by the program from the turn's kind, scene and grants (§2.6)."""
+    """The tools this turn may use: the turn's own rules (its kind, context and grants, §2.6) within the
+    conversation's list (toolbox)."""
+    listed = toolbox(store, ep)
+    return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed]
+
+
+def _turn_rules(store, ep):
     context = ep.get('context') or {}
     kind = turn_kind(ep)
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
@@ -435,9 +430,7 @@ def exposed(store, ep):
         names += ['read_ideas', 'review_idea']           # the listing shows the first page; she reads on herself
     elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
         names += ['read_ideas', 'review_idea']
-    # A report longer than a page reached her as its first page: she turns the pages herself.
-    if long_report(context):
-        names.append('read_report')
+    names.append('read_report')         # a long report reaches her as its first page: she turns the pages herself
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
     if capabilities.get('available'):
@@ -455,8 +448,8 @@ def exposed(store, ep):
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
     if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
         names.append('write_document')
-    if cls == visibility.OWNER_PRIVATE and kind in ('external', 'task_feedback'):
-        names.append('credential')            # her credential vault: filed at home only (credentials.py)
+    if kind in ('external', 'task_feedback'):
+        names.append('credential')            # her credential vault: filed in the local chat only (toolbox)
     if scene_kind in ('group', 'dm') or context.get('watching_from_program'):
         names.append('watch')
     if scene_kind == 'group' and context.get('members_from_program'):
@@ -468,7 +461,7 @@ def exposed(store, ep):
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
-        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer', 'place_timezone', 'restart']
+        names += ['update_self', 'set_policy', 'message_developer', 'place_timezone', 'restart']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -481,7 +474,7 @@ def exposed(store, ep):
         names.append('promote_memory')
     if (context.get('lines_from_program') or {}).get('items'):
         names.append('peer_line')
-    # ADR-017: in a home conversation, whoever is talking to her may send her on an errand to another chat.
+    # ADR-017: in the owner's own conversations (toolbox), whoever is talking to her may send her on an errand.
     if cls == visibility.OWNER_PRIVATE and kind == 'external' and context.get('errand_places_from_program'):
         names.append('errand')
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
@@ -489,6 +482,114 @@ def exposed(store, ep):
         names.append('visit')
     # ADR-018: a note to another of her conversations, wherever there is somewhere it may go from this turn.
     return names + note_tool
+
+
+# Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
+# lists the same ones; `exposed` picks which of them the turn may use.
+EVERYWHERE = ('think', 'recall', 'stay_silent', 'note_idea', 'plan', 'private_words', 'understand_person')
+WITH_ACTION = ('delegate', 'message_action', 'stop_action', 'read_report', 'answer_action')
+# Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
+# herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
+AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'read_ideas', 'review_idea',
+           'message_developer', 'restart', 'place_timezone')
+IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member')
+# Her heartbeats, her nights and her vault are in the local chat.
+LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
+
+
+def toolbox(store, ep):
+    """The tools her conversation lists, the same in each of its turns: decided by its place, its channel and the
+    configuration, never by the turn's kind or context."""
+    from . import channel_kinds, group_admin, lines, outbound_media, stickers
+    from .affect import AffectLedger
+    from .grants import conversation_workspace
+    from .people import People
+    from .render import model_and_policy
+    from .vision import vision_capability
+    config = store.config
+    scene = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+    # Its place (visibility.place) from the class the program gave the conversation: one class per conversation.
+    cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
+    where = ('peer' if channel_kinds.home(ep['scene_id']) else 'home' if cls == visibility.OWNER_PRIVATE
+             else 'group' if scene.get('kind') == 'group' else 'dm')
+    local = ep['scene_id'] == (config.get('chat') or {}).get('scene_id')
+    platform = bool(scene.get('channel_id')) and where != 'peer'        # a group or a private chat on a platform
+    names = list(EVERYWHERE)
+    persona = ep.get('persona')
+    if persona and AffectLedger(store, persona, *model_and_policy(store, persona)).enabled:
+        names.append('feel')
+    if conversation_workspace(config, ep['scene_id']):
+        names += WITH_ACTION
+    if where in ('home', 'peer'):
+        names += AT_HOME
+        if lines.peer_lines(store):
+            names.append('peer_line')
+    else:
+        names += IN_GROUPS if where == 'group' else ('leave_note',)
+    if where == 'group' and persona and (group_admin.place(People(store, persona), scene) or {}).get('admin'):
+        names.append('group_action')
+    if platform:
+        names.append('watch')
+    if channel_kinds.sends_images(ep['scene_id']) and vision_capability(config, 'character')['supported']:
+        names.append('read_image')
+    if outbound_media.target_allowed(config, scene, cls)[0]:
+        names.append('attach_image')
+    if stickers.sends(scene) or local:
+        names.append('sticker')                 # in the local chat, to tidy her shelf
+    if where == 'home':
+        names.append('errand')
+    if local and where == 'home':
+        names += LOCAL_CHAT
+    order = {name: index for index, name in enumerate(TOOL_NAMES)}
+    return sorted(set(names), key=order.__getitem__)
+
+
+# When a tool her conversation lists can be used, for the turns that may not use it: the whole rule, so one refusal
+# teaches it (her ask, 2026-10-11).
+NOT_NOW = {
+    'answer_action': 'answer_action 只在行动脑问你话的那一回合用，现在没有它在等的问题；要跟在做事的行动脑说话，用 message_action。',
+    'read_image': '这个对话最近没有能看的图：图要在这个对话最近的几条消息里（过一阵就拉不到了），或者是列出来的你自己的图。',
+    'private_words': '这一回合不记名单。',
+    'read_ideas': ('想法本在自我改进的回合里读和定，或者家里有人跟你说话问起时；心跳、计划到点、夜间沉淀和便条叫醒的回合不翻，'
+                   '先记着，等自我改进那一轮。'),
+    'delegate': '这回合说话的人在这里没有交给行动脑的授权，这件事交不了；能直接答的就直接答，答不了就照实说。',
+    'message_action': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
+    'stop_action': '现在没有在做或暂停着的任务可停。',
+    'attach_image': ('这回合没有能带的图：能发的图列在 image_artifacts_from_program 里，这回合没有；'
+                     '要新图，先用 delegate 交代行动脑画，画好那回合再带。'),
+    'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀那一回合也不整理架子）；'
+                '在能发表情包的对话里，或者家里别的回合再用。'),
+    'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
+    'find_member': '这回合没有这个群的成员名单可查；照对话里的标签认人。',
+    'quote': 'quote 只在有人说话叫到你的那一回合用；串门、计划到点、心跳、夜间沉淀这几种回合没有要引的那条话。',
+    'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、串门、便条叫醒这几种回合），'
+                          '没有要更新理解的人；等对方下次开口再写。'),
+    'feel': '这回合没有情感账可记。',
+    'group_action': '你在这个群现在不是管理员，或者管理动作关着。',
+    'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
+    'peer_line': '这回合没有能开关的线。',
+    'errand': ('差事只在主人自己的对话里、有人跟你说话让你去办的那一轮接，去处列在 errand_places_from_program；'
+               '自己想去别处，用 visit。'),
+    'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
+    'pass_note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
+}
+NOT_NOW['review_idea'] = NOT_NOW['read_ideas']
+NOT_NOW['leave_note'] = NOT_NOW['pass_note']
+CONSULT_ONLY = '行动脑在问你话：这一回合只用 answer_action 回答它（think、recall 也能用），别的事等下一回合。'
+NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（note_idea），不做有后果的事；'
+             '想做的记进想法本，到自我改进时再定。')
+
+
+def not_now(store, ep, name):
+    """Why her conversation's tool `name` is not in this turn, and when it can be used."""
+    kind = turn_kind(ep)
+    if kind == CONSULT:
+        return CONSULT_ONLY
+    if kind == 'note' and name not in ('pass_note', 'leave_note', 'feel', 'watch', 'read_image'):
+        from . import notes
+        if (notes.opening(store, ep) or {}).get('trust') != notes.TRUSTED:
+            return NOTE_ONLY
+    return NOT_NOW.get(name, '这一回合用不了 %s。' % name)
 
 
 STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看：用 sticker 的 remember 记个名字和一句它在说什么'
@@ -585,9 +686,6 @@ WORDS = {
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
     'PERSONA_RENDER_OVER_BUDGET': '这样写完，每回合自动带上的人格和口吻会超出上限。',
-    'PIN_REQUIRES_OWNER_PRIVATE': '置顶记忆只能在家里（本机、主人私聊这类可信的对话）做。',
-    'PIN_MEMORY_NOT_READABLE': '这条记忆读不到或已经不在了；照抄 ref_index 里还在的记忆 id。',
-    'PIN_MEMORY_NOT_IN_CONTEXT': '只能置顶这回合 ref_index 里的记忆，或这回合 recall 想起来的。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（本机、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
@@ -700,8 +798,10 @@ class RoleTools:
                 raise Refused(done['refused'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
         try:
-            if name not in TOOLS or name not in (ep.get('turn_tools') or ()):
-                raise Refused('这回合没有 %s 这个工具。能用的是：%s。' % (name, '、'.join(ep.get('turn_tools') or ())))
+            if name not in TOOLS:
+                raise Refused('没有 %s 这个工具。' % name)
+            if name not in (ep.get('turn_tools') or ()):
+                raise Refused(not_now(self.store, ep, name))
             if not isinstance(args, dict):
                 raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
             if name != 'think' and not ep.get('turn_thought'):
@@ -1093,22 +1193,6 @@ class RoleTools:
                 result['note'] = ('心跳会安静到 %s，然后自己恢复。' % schedule_rules.local_moment(zone, until).strftime('%H:%M')
                                   if until else '心跳已经恢复。')
         return result, False
-
-    def tool_pin_memory(self, ep, call_id, args):
-        if self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Denied('PIN_REQUIRES_OWNER_PRIVATE')
-        memory_id = self._text(args, 'memory_id', 300)
-        pinned = args.get('pinned')
-        if not isinstance(pinned, bool):
-            raise Refused('pinned 是 true（置顶）或 false（取消）%s。' % _given(args, 'pinned'))
-        memory = self.store.db.memory_units.find_one({'_id': memory_id})
-        readable = {ep['scope_key'], 'global-safe', visibility.owner_private_scope(ep['persona'])}
-        if not memory or memory.get('status') != 'active' or memory.get('scope_key') not in readable:
-            raise Denied('PIN_MEMORY_NOT_READABLE: 「%s」' % memory_id)
-        if memory_id not in {*((ep.get('context') or {}).get('ref_index') or []), *(ep.get('recalled') or [])}:
-            raise Denied('PIN_MEMORY_NOT_IN_CONTEXT: 「%s」' % memory_id)
-        self.store.put('memory_units', {**memory, 'pinned': pinned}, expected=memory['revision'], stream=ep['_id'])
-        return {'memory_id': memory_id, 'pinned': pinned}, False
 
     def tool_feel(self, ep, call_id, args):
         from .affect import AffectLedger, kind_label

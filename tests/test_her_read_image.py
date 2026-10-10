@@ -54,7 +54,9 @@ def test_no_tool_without_a_picture_and_an_unknown_ref_is_refused_in_words(store,
     lane = FakeLane(store, [FakeTurn([THINK], '嗯。')])
     coordinator = Coordinator(store, lane)
     ep = coordinator.ingest({'event_id': 'm2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
-    assert 'read_image' not in lane.calls[0]['tools']
+    assert 'read_image' not in ep['turn_tools']
+    with pytest.raises(Refused, match='最近没有能看的图'):
+        coordinator.tools.call(ep['_id'], 'w', 'read_image', {'ref': 'att-unknownpicture'})
     store.db.episodes.update_one({'_id': ep['_id']}, {'$set': {'turn_tools': ['think', 'read_image']}})
     with pytest.raises(Refused, match='IMAGE_ATTACHMENT_NOT_IN_SCENE: att-unknownpicture'):
         coordinator.tools.call(ep['_id'], 'x', 'read_image', {'ref': 'att-unknownpicture'})

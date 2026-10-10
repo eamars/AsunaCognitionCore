@@ -204,6 +204,7 @@ class Coordinator:
     def _run_turn(self, ep):
         kind=role_tools.turn_kind(ep)
         names=role_tools.exposed(self.store,ep)
+        listed=role_tools.toolbox(self.store,ep)     # what the model sees: the conversation's list, every turn
         generation=int(ep.get('turn_generation') or 0)
         fresh=ep['state']=='PREPARED'
         changes={}
@@ -224,7 +225,7 @@ class Coordinator:
         seen=[]
         for attempt in range(answers.REPAIRS+1):
             value=self._deliver(ep,operation if not attempt else operation+':fix-'+str(attempt),
-                                instruction if not attempt else note,names,handler,first=not attempt)
+                                instruction if not attempt else note,listed,handler,first=not attempt)
             seen+=list(value.seen_inputs or ())
             ep=self.store.db.episodes.find_one({'_id':ep['_id']})
             if value.finish_reason not in answers.MODEL_FINISHES:
@@ -240,7 +241,7 @@ class Coordinator:
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
             issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
-                                         consult=kind=='consult')
+                                         consult=kind=='consult',home=(ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE)
             if issue is None and kind!='consult':
                 from . import stickers
                 issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces

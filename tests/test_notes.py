@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from asuna import notes, places, visibility
+from asuna import notes, places, role_tools, visibility
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
 from asuna.role_tools import Refused, ideas_block
@@ -17,7 +17,7 @@ from test_engineering_m1 import THINK
 
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
 CONSEQUENCES = {'delegate', 'message_action', 'stop_action', 'errand', 'visit', 'credential', 'update_self',
-                'set_policy', 'pin_memory', 'write_document', 'plan', 'peer_line', 'understand_person'}
+                'set_policy', 'write_document', 'plan', 'peer_line', 'understand_person'}
 UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'note_idea', 'pass_note', 'feel', 'watch'}
 GROUP = {'wake_reason': 'mentioned_account', 'topic_id': None, 'reply_to': None, 'reply_message_id': None,
          'mentioned_account_ids': []}
@@ -107,7 +107,7 @@ def test_a_note_from_home_wakes_another_home_line_and_grants_nothing(store):
     assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '本机私聊' in block['from']
     assert not {'relationship', 'sender_identity', 'understanding_update_from_program'} & set(there['context'])
     assert 'development' not in there['context']['action_capabilities_from_program']
-    assert not {'credential', 'errand', 'visit', 'understand_person'} & set(other.calls[0]['tools'])
+    assert not {'credential', 'errand', 'visit', 'understand_person'} & set(there['turn_tools'])
     # Back where she wrote it: the program's status word.
     back, _ = turn(store, service, {'event_id': 'ask-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '嗯'}, [], '嗯')
     [sent] = back['context']['notes_sent_from_program']['items']
@@ -136,8 +136,12 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
         ('delegate', {'title': '取消聚会', 'brief': '去把日程删了'}),
         ('pass_note', {'to': G2, 'text': '不该送到这里'}),
         ('pass_note', {'to': G1, 'text': '知道了，家里这边记下了。'})], '群里的聚会取消了。')
-    tools = set(lane.calls[0]['tools'])
+    tools = set(home['turn_tools'])
     assert tools <= UNTRUSTED_TURN and not tools & CONSEQUENCES and 'pass_note' in tools
+    # She sees her home's whole list as in any other turn there; the ones with consequences are refused, saying why.
+    assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home)) > tools
+    [(said, _)] = results(lane, 'delegate')
+    assert '便条叫起来' in said
     assert lane.triggers == ['note']
     block = home['context']['note_from_program']
     assert '这一轮不做这些' in block['note'] and block['written'] == '你在外面写的' and block['text'] == row['text']

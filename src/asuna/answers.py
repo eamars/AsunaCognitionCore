@@ -94,15 +94,15 @@ def json_list(text):
 
 
 # ── the end of a character turn (ADR-011 §3.5) ─────────────────────
-# Her last text without a tool call is sent as it is. Program words in it are a sign she is talking
-# about the turn instead of to the person: tool names (all of hers have an underscore) and the
-# context's program blocks.
+# Her last text without a tool call is sent as it is. Outside her home, program words in it are a sign she is
+# talking about the turn instead of to the person: tool names (all of hers have an underscore) and the context's
+# program blocks. At home (the owner and his agents) her tools are something they talk about.
 import re as _re
 PROGRAM_TALK = _re.compile(r'\b[a-z]+_(?:action|silent|image|document|self|person|policy|memory|idea)\b'
                            r'|_from_program\b|\btool_calls?\b|工具调用|调用工具')
 
 
-def speech_problem(value, *, thought, consult=False):
+def speech_problem(value, *, thought, consult=False, home=False):
     """What is wrong with the end of a turn, in words for her; None when it can be said."""
     text = (value.content or '').strip()
     if value.finish_reason == 'length':
@@ -120,12 +120,14 @@ def speech_problem(value, *, thought, consult=False):
             return '你最后写的是一个 JSON 对象，这段会原样发给对方：写成要说的话，或者用 stay_silent 结束。'
         except ValueError:
             pass
-    found = PROGRAM_TALK.search(text)
+    found = None if home else PROGRAM_TALK.search(text)
     if found:
         return '你最后写的这段会原样发给对方，里面提到了程序的事（「%s」）：只写要对对方说的话。' % found.group(0)
     return None
 
 
 def turn_note(issue):
-    """The program's words back to her, in the same turn."""
-    return '程序检查：' + issue + '请在这一回合里改正，只修这个问题，不改变你的意思。'
+    """The program's words back to her, in the same turn. What she writes next replaces the whole unsent text, so
+    she is asked for all of it: a corrected sentence alone would go out alone."""
+    return ('程序检查：' + issue + '这段还没发出去：请在这一回合里把要说的话整段重新写一遍，这次写的会整段代替上一段发出去；'
+            '只改这个问题，不改变你的意思。')

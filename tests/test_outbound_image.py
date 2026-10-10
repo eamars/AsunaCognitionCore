@@ -221,8 +221,10 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
         out, without an image row; the tool itself would refuse with the fence's reason."""
         coordinator, ep = turn(store, attach=attach, **where)
         assert ep['state'] == 'COMMITTED', ep.get('failure')
-        assert 'attach_image' not in coordinator.character.calls[0]['tools']
-        assert attach_calls(coordinator) == [('NOT_EXPOSED', False)]
+        assert 'attach_image' not in ep['turn_tools']
+        # Where pictures can go, the conversation lists attach_image and this turn refuses it saying when it works.
+        listed = 'attach_image' in coordinator.character.calls[0]['tools']
+        assert attach_calls(coordinator) == [(role_tools.NOT_NOW['attach_image'] if listed else 'NOT_EXPOSED', False)]
         rows = speak_rows(store, ep['_id'])
         assert rows and not any(row.get('attachment') for row in rows)
         return forced_attach(store, coordinator, ep, attach)

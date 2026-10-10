@@ -204,6 +204,7 @@ class Coordinator:
     def _run_turn(self, ep):
         kind=role_tools.turn_kind(ep)
         names=role_tools.exposed(self.store,ep)
+        listed=role_tools.toolbox(self.store,ep)     # what the model sees: the conversation's list, every turn
         generation=int(ep.get('turn_generation') or 0)
         fresh=ep['state']=='PREPARED'
         changes={}
@@ -224,7 +225,7 @@ class Coordinator:
         seen=[]
         for attempt in range(answers.REPAIRS+1):
             value=self._deliver(ep,operation if not attempt else operation+':fix-'+str(attempt),
-                                instruction if not attempt else note,names,handler,first=not attempt)
+                                instruction if not attempt else note,listed,handler,first=not attempt)
             seen+=list(value.seen_inputs or ())
             ep=self.store.db.episodes.find_one({'_id':ep['_id']})
             if value.finish_reason not in answers.MODEL_FINISHES:

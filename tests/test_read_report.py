@@ -1,6 +1,6 @@
 """A report longer than a page reaches her as its first page; she turns the other pages herself from the stored report
-(read_report) instead of asking the action brain to write it again. The tool is offered only when such a report is in
-the turn."""
+(read_report) instead of asking the action brain to write it again. The tool is in every turn of a conversation that
+can hand work over; the report's own footer says when to use it."""
 import pytest
 
 from asuna import role_tools, visibility
@@ -79,23 +79,14 @@ def test_she_turns_the_pages_of_a_report_in_this_conversation(store):
         tools.tool_read_report(ep, 'c5', {'task': 'task-long', 'page': 2, 'count': 3})
 
 
-def test_the_tool_is_offered_only_when_a_long_report_is_in_the_turn():
-    handed = {'event': {'trusted_context_events': [{'kind': 'task_result', 'value': {'text': '…', 'report_pages': 3}}]}}
-    # the short version gives 3,000 characters: a report of one 6,000-character page is cut there too
-    short_version = {'event': {'trusted_context_events': [{'kind': 'task_result', 'short': True, 'report_pages': 1}]}}
-    listed = {'task_state_from_program': [{'_id': 'task-long', 'report': '报告 3 页（原文 15000 字）'}]}
-    plain = {'event': {'trusted_context_events': [{'kind': 'task_result', 'value': {'text': '短报告'}}]},
-             'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]}
-    assert role_tools.long_report(handed) and role_tools.long_report(short_version) and role_tools.long_report(listed)
-    assert not role_tools.long_report(plain) and not role_tools.long_report({})
-
-
-def test_the_turn_offers_read_report_only_with_a_long_report(store):
+def test_read_report_is_in_every_turn_that_can_hand_work_over(store):
+    from test_adr009_p2 import owner
+    owner(store)
     turn = lambda context: role_tools.exposed(store, {
         '_id': 'ep-x', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': 'external',
-        'manifest': {'session_class': visibility.PUBLIC}, 'context': context})
+        'manifest': {'session_class': visibility.OWNER_PRIVATE}, 'context': context})
     assert 'read_report' in turn({'task_state_from_program': [{'_id': 'task-long', 'report': '报告 3 页'}]})
-    assert 'read_report' not in turn({'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]})
+    assert 'read_report' in turn({'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]})
 
 
 def test_a_turn_lists_the_long_report_and_offers_the_tool(store):

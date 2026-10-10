@@ -1,6 +1,7 @@
 """ADR-011: one character turn per episode, her mind's tools, and her work with the action brain."""
 import json
 
+from asuna import role_tools
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from asuna.tasks import TaskService
@@ -92,13 +93,13 @@ def test_text_without_any_thought_fails_closed_after_repairs(store):
 def test_a_tool_outside_this_turn_is_refused_in_words(store):
     coordinator, lane = run(store, FakeTurn([THINK], '好。'))
     ep = coordinator.ingest(event())
-    # answer_action belongs to the action brain's questions only.
-    assert 'answer_action' not in lane.calls[0]['tools']
+    # answer_action belongs to the action brain's questions only: listed in the conversation, not usable this turn.
+    assert 'answer_action' in lane.calls[0]['tools'] and 'answer_action' not in ep['turn_tools']
     from asuna.role_tools import Refused
     import pytest
     store.put('episodes', {**store.db.episodes.find_one({'_id': ep['_id']}), 'state': 'TURN'},
               expected=store.db.episodes.find_one({'_id': ep['_id']})['revision'], stream=ep['_id'])
-    with pytest.raises(Refused, match='没有 answer_action'):
+    with pytest.raises(Refused, match='只在行动脑问你话的那一回合用'):
         coordinator.tools.call(ep['_id'], 'x', 'answer_action', {'answer': 'a'})
 
 
@@ -185,6 +186,8 @@ def test_consult_answers_the_action_brain_without_publishing(store):
                                                               ('answer_action', {'answer': '查本地的就行。'})])])
     answer = coordinator.consult(task, 'call-1', {'question': '查哪个城市？'})
     assert answer['answer'] == '查本地的就行。' and answer['internal'] is True
-    assert lane.calls[0]['tools'] == ['think', 'recall', 'answer_action']
     asked = store.db.episodes.find_one({'episode_kind': 'consult'})
+    # The conversation's whole list, as in its other turns; the question's turn may use only these.
+    assert asked['turn_tools'] == ['think', 'recall', 'answer_action']
+    assert lane.calls[0]['tools'] == role_tools.toolbox(store, asked)
     assert asked['state'] == 'COMMITTED' and published(store, asked) == []

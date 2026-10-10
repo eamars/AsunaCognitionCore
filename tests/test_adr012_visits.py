@@ -116,7 +116,8 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
         assert home_only not in context, home_only
     seen = json.dumps([context, group.calls], ensure_ascii=False)
     assert 'HOME_SECRET_LINE' not in seen and '周末大家都在干嘛' in seen
-    assert not {'visit', 'understand_person', 'set_policy', 'update_self'} & set(group.calls[0]['tools'])
+    assert not {'visit', 'set_policy', 'update_self'} & set(group.calls[0]['tools'])     # home's tools: not listed here
+    assert 'understand_person' not in visit['turn_tools']                               # nobody spoke to her
     said = store.db.messages.find_one({'episode_id': visit['_id'], 'direction': 'outbound'})
     assert said['scene_id'] == 'g1' and said['target'] == {'type': 'group', 'id': 'G1'}
     # Brought home: what happened, then a second visit there waits (she was just there).

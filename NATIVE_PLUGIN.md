@@ -25,7 +25,7 @@ An incoming platform message is appended as an actual native user receipt before
 
 The native composer, Chat, Trajectory, attachments and model stream belong to DSH. The character brain, **行动脑** and **交流摘要** identify their responsibilities through native preset labels. New tasks and exchange summaries are actual native child agents of the relevant role conversation; they do not create workspace groups. An action retains its requester's authorized execution directory and is accessible through the native child catalog. Consultation retains the initiating task's identity. **Standard mode** remains an ordinary DSH session.
 
-Channel role agents have only the tools her turn exposes (her mind's tools) and use the deployment directory `.runtime/work/<channel>`; Local keeps its configured workspace. Scene, persona and policy context remain the authorization boundary, and every group turn checks its actual sender again.
+Channel role agents have only her mind's tools that her conversation lists (the worker refuses one the turn may not use) and use the deployment directory `.runtime/work/<channel>`; Local keeps its configured workspace. Scene, persona and policy context remain the authorization boundary, and every group turn checks its actual sender again.
 
 ## What Core adds to the page
 

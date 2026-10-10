@@ -673,7 +673,8 @@ export class CognitionCore {
     if (this.restartAgain) { this.restartAgain = false; await this.restart('a restart requested during the last one'); }
   }
 
-  /** The tools a stage exposes: her turn's (role_tools.exposed) or the action task's grant. */
+  /** The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use)
+   *  or the action task's grant. */
   exposed(lane, sessionId) {
     const state = this.state(sessionId);
     return lane === 'executor' ? state.allowed : lane === 'character' ? new Set(state.current?.tools ?? []) : new Set();
@@ -687,7 +688,7 @@ export class CognitionCore {
       const exposed = this.exposed(lane, exec.agent.session.id) ?? new Set();
       if (exposed.has(exec.name)) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
-      return lane === 'character' ? `这回合没有 ${exec.name} 这个工具；能用的是：${usable}。用其中一个，或者不用工具接着说。`
+      return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
         : `CAPABILITY_DENIED: 这个任务没有 ${exec.name} 这个工具；能用的是：${usable}。要用它，在报告里写明，让她另交一件授予它的任务。`;
     });
     scope.on('tools/pre-execute', async (exec, next) => {

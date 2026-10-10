@@ -513,8 +513,11 @@ class ToolBroker:
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
                 # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
+                # 按路径读盘上的图只在家里：会话类别按任务绑定现算（同 credentials.home_task 那条算法），
+                # /task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                result=self.vision.read_image(task,args)
+                scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。

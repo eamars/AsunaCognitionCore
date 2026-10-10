@@ -149,3 +149,115 @@ def test_an_expired_link_says_retrying_cannot_help_and_a_server_error_may_pass()
     expired = str(_fetch_failed(400, '{"retcode":-5503007,"retmsg":"download url has expired"}'))
     assert expired.startswith('IMAGE_FETCH_FAILED: 图片主机回了 HTTP 400') and '重试也一样' in expired
     assert '过一会儿再试一次' in str(_fetch_failed(503))
+
+
+# ── reading a picture off this machine's disk (home conversations only) ─────
+def session_class_of(store, scene_id, person):
+    """The program's own judgment for one conversation — the same call each entry point makes."""
+    from asuna import visibility
+    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    return visibility.session_class(store.config, store.db, scene, person)
+
+
+def task_in(scope):
+    return {'scene_id': scope[len('scene:'):], 'scope_key': scope, 'policy_epoch': 1}
+
+
+def test_at_home_a_picture_on_disk_is_read_by_its_absolute_path(store, tmp_path):
+    from asuna import outbound_media, visibility
+    from asuna.blobs import BlobStore
+    from asuna.vision import read_image_for_task
+    world(store, tmp_path)
+    sees(store)
+    picture_file = tmp_path / 'shelf' / 'cat.png'
+    picture_file.parent.mkdir()
+    picture_file.write_bytes(PNG)
+    cls = session_class_of(store, 'dm-a', 'A')
+    assert cls == visibility.OWNER_PRIVATE, "the owner's local scene is home"
+    result = read_image_for_task(store, BlobStore(store), task_in('scene:dm-a'), store.config, {'ref': str(picture_file)},
+                                 route='character', session_class=cls)
+    assert base64.b64decode(result['image']['data']) == PNG
+    assert result['pulled_via'] == 'local_file' and result['path'] == str(picture_file.resolve())
+    row = store.db.artifacts.find_one({'_id': result['blob_artifact']})
+    assert row['source_ids'] == ['file:' + str(picture_file.resolve())], 'where the bytes came from is recorded'
+    assert not outbound_media.produced(row), 'a picture read off disk is not one she may send in a group'
+
+
+def test_a_group_turn_refuses_a_disk_path_and_says_what_to_do_instead(store, tmp_path):
+    from asuna import visibility
+    from asuna.blobs import BlobStore
+    from asuna.role_tools import words
+    from asuna.vision import read_image_for_task
+    world(store, tmp_path)
+    sees(store)
+    picture_file = tmp_path / 'cat.png'
+    picture_file.write_bytes(PNG)
+    cls = session_class_of(store, 'g1', 'A')
+    assert cls == visibility.PUBLIC, 'a group is not home'
+    with pytest.raises(PermissionError) as refused:
+        read_image_for_task(store, BlobStore(store), task_in('scene:g1'), store.config, {'ref': str(picture_file)},
+                            route='character', session_class=cls)
+    said = words(refused.value)
+    assert 'IMAGE_PATH_HOME_ONLY' in said and '家里' in said, said
+    # 群里的 read_image 本身没有被收掉：消息里的图照旧走 att- 那条路（这里只是没有那样的消息）。
+    with pytest.raises(ValueError, match='IMAGE_ATTACHMENT_NOT_IN_SCENE'):
+        read_image_for_task(store, BlobStore(store), task_in('scene:g1'), store.config, {'ref': 'att-000000000000'},
+                            route='character', session_class=cls)
+
+
+def test_a_file_that_is_not_a_picture_is_refused_by_type(store, tmp_path):
+    from asuna.blobs import BlobStore
+    from asuna.vision import read_image_for_task
+    world(store, tmp_path)
+    sees(store)
+    note = tmp_path / 'notes.txt'
+    note.write_bytes('这不是图，是一段字。'.encode('utf-8'))
+    with pytest.raises(ValueError, match='IMAGE_TYPE_UNSUPPORTED'):
+        read_image_for_task(store, BlobStore(store), task_in('scene:dm-a'), store.config, {'ref': str(note)},
+                            route='character', session_class=session_class_of(store, 'dm-a', 'A'))
+    assert store.db.artifacts.count_documents({'kind': 'image'}) == 0, 'nothing was stored'
+
+
+def test_a_bare_file_name_still_comes_from_the_configured_image_dirs(store, tmp_path):
+    """老行为钉住：裸文件名在 vision.image_dirs 里找（不需要家里），带斜杠的名字仍然不当成路径。"""
+    from asuna.blobs import BlobStore
+    from asuna.vision import attachments_of, read_image_for_task, ref_of
+    world(store, tmp_path)
+    sees(store)
+    images = tmp_path / 'imgs'
+    (images / 'sub').mkdir(parents=True)
+    (images / 'cat.png').write_bytes(PNG)
+    (images / 'sub' / 'dog.png').write_bytes(PNG)
+    store.config.update(vision={'image_hosts': ['img.example.invalid'], 'image_dirs': [str(images)]})
+    store.put('messages', {'_id': 'in-disk', 'scene_id': 'dm-a', 'author': 'A', 'direction': 'inbound',
+                           'text': '[图片：cat.png][图片：sub/dog.png]', 'received_at': '2026-10-10T01:00:00+00:00',
+                           'policy_epoch': 1, 'scene_seq': 900,
+                           'event': {'event_id': 'q-disk', 'channel': {'id': 'qq'}, 'raw': {'asuna_media': {
+                               'count': 2, 'items': [{'type': 'image', 'file': 'cat.png', 'placeholder': '[图片：cat.png]'},
+                                                     {'type': 'image', 'file': 'sub/dog.png',
+                                                      'placeholder': '[图片：sub/dog.png]'}]}}}})
+    entries = attachments_of(store.db.messages.find_one({'_id': 'in-disk'}), config=store.config)
+    assert [entry['pullable'] for entry in entries] == [True, False]
+    assert entries[0]['pull_via'] == 'local_file'
+    assert 'no_source' in entries[1]['not_pullable_because']
+    read = read_image_for_task(store, BlobStore(store), task_in('scene:dm-a'), store.config, {'ref': ref_of('in-disk', 0)})
+    assert base64.b64decode(read['image']['data']) == PNG and read['pulled_via'] == 'local_file'
+    assert 'path' not in read['source'], 'a bare name is not reported as a path'
+
+
+def test_an_action_task_reads_its_own_workspace_by_its_task_path(store, tmp_path):
+    from asuna.blobs import BlobStore
+    from asuna.vision import read_image_for_task
+    world(store, tmp_path)
+    workspace = tmp_path / 'task'
+    (workspace / 'images').mkdir(parents=True)
+    (workspace / 'images' / 'shot.png').write_bytes(PNG)
+    cls = session_class_of(store, 'dm-a', 'A')
+    result = read_image_for_task(store, BlobStore(store), task_in('scene:dm-a'), store.config,
+                                 {'ref': '/task/images/shot.png'}, session_class=cls, task_dir=workspace)
+    assert base64.b64decode(result['image']['data']) == PNG
+    assert result['path'] == str((workspace / 'images' / 'shot.png').resolve())
+    # 没有任务目录的那一轮不把 /task/ 当成一个随便的本机路径去猜。
+    with pytest.raises(PermissionError, match='IMAGE_TASK_DIR_UNAVAILABLE'):
+        read_image_for_task(store, BlobStore(store), task_in('scene:dm-a'), store.config,
+                            {'ref': '/task/images/shot.png'}, session_class=cls)

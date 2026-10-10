@@ -629,6 +629,7 @@ WORDS = {
     'IMAGE_FETCH_FAILED': '这张图没拉下来。',
     'IMAGE_TOO_LARGE': '这张图太大，看不了。',
     'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
+    'IMAGE_PATH_HOME_ONLY': '按路径读图只在家里（本机、主人私聊这类可信的对话）能做；这里看消息里的图，ref 照抄图旁标的那个。',
     'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就交给行动脑，把 ref 一起交代。',
 }
 
@@ -894,7 +895,8 @@ class RoleTools:
         from .vision import read_image_for_task
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
-                                     route='character', offered=offered_pictures(self._fresh(ep)))
+                                     route='character', offered=offered_pictures(self._fresh(ep)),
+                                     session_class=self._cls(ep))        # 按路径读盘只在家里放行；这一轮没有任务目录
         ref = str((args or {}).get('ref') or '')
         if ref:                                       # what she looked at this turn (a candidate is kept only after)
             fresh = self._fresh(ep)

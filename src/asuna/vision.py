@@ -7,6 +7,11 @@
 读图范围与 A2 跨场景只读联动同一口径：本场景之外，还扫配置里那条有向边指向的场景
 （``context_links`` / 路由级 ``read_scenes``，现算自配置，不是工具参数）。放宽的只有**读**——
 字节仍按本任务的 scope_key 落盘，写、出站、场景成员资格都不因此放宽；删掉配置键就回到只扫本场景。
+
+ref 也可以是一个本机文件路径（绝对路径，或行动任务自己工作区的 ``/task/…``）：按路径读盘上的图只给
+owner_private 的会话（本机、主人私聊、可信 home 通道）与从它们派出的任务。判据用 ``visibility.session_class``，
+由两个入口各自算好后传进来（``session_class`` 参数），这里不另造一套判断。裸文件名 + ``vision.image_dirs``
+的老路一个字没改。
 """
 from __future__ import annotations
 import base64
@@ -16,7 +21,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from . import animated, channel_kinds
+from . import animated, channel_kinds, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -120,6 +125,29 @@ def sniff_media_type(data):
     return None
 
 
+# ref 也可以指本机盘上的一张图。只有这两种形状算路径，别的字符串照旧是附件 ref（att-…）或存好的图的 artifact_id（blob-…）。
+# 读盘只给家里的会话：会话类别由入口算好传进来（visibility.session_class），这个模块不自己判。
+PATH_CHARS = 500                       # 路径要放得下：80 字是文件名的上限，不是路径的
+FILE_NAME_CHARS = 120                  # 不变：消息元数据里一个裸文件名允许多长
+ABSOLUTE_PATH = re.compile(r'^([A-Za-z]:[\\/]|/)')
+TASK_PATH = '/task'                    # 她的工具和交代里怎么称呼行动任务自己的工作区
+
+
+def path_form(ref):
+    """'task' 是 /task/…（行动任务自己的工作区），'absolute' 是本机绝对路径，别的都不是路径。"""
+    if not isinstance(ref, str):
+        return None
+    value = ref.strip()
+    if value == TASK_PATH or value.startswith(TASK_PATH + '/') or value.startswith(TASK_PATH + '\\'):
+        return 'task'
+    return 'absolute' if ABSOLUTE_PATH.match(value) else None
+
+
+def file_field(value):
+    """消息写的那个文件：裸文件名照旧截到 120 字，路径形态留足长度（不然长路径会被截成另一个文件）。"""
+    return _clean(value, PATH_CHARS if path_form(value) else FILE_NAME_CHARS)
+
+
 LOCAL_UPLOAD = 'local-upload:'          # source of a picture the owner attached in her local chat (+ event id)
 
 
@@ -214,7 +242,7 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
             break
         message_id = (message or {}).get('_id') or (message or {}).get('event', {}).get('event_id') or 'message'
         url = _clean(item.get('url'), URL_LIMIT)
-        name = _clean(item.get('file'), 120)
+        name = file_field(item.get('file'))
         parsed = urlsplit(url) if url else None
         host = (parsed.hostname or '') if parsed else ''
         entry = {'ref': ref_of(message_id, index), 'type': 'image',
@@ -242,7 +270,10 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
             entry['url_host'] = host
         reason = None
         scheme_ok = bool(parsed and parsed.scheme in ('https', 'http') and not parsed.username and not parsed.password)
-        local_ok = bool(name and vision['image_dirs'] and '/' not in name and '\\' not in name)
+        # 裸文件名 + 配置的本机图片目录（老行为，一个字没改），或消息直接给了一个路径形态；
+        # 路径真能不能读由拉取那一侧按会话类别决定（群里调它吃 IMAGE_PATH_HOME_ONLY）。
+        local_ok = bool(name and ((bool(vision['image_dirs']) and '/' not in name and '\\' not in name)
+                                  or path_form(name)))
         if item.get('unreadable'):
             reason = 'unreadable（' + _clean(item['unreadable'], 80) + '）'
         elif 'image' not in vision['input_modalities']:
@@ -337,14 +368,18 @@ class _KeepInsideAllowList(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
+def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None):
     """按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 
     只用标准库：这条路径要能在没有第三方 HTTP 库的离线自检里真跑一次真实 socket，
     不能只对着替身断言。
+
+    local_file 有两种：裸文件名在 ``vision.image_dirs`` 里找（老行为，没改），或一个路径形态
+    （绝对路径 / ``/task/…``）就读那一个文件——路径只在 owner_private 的会话放行，判在 read_image_for_task。
     """
     vision = vision_capability(config)
     cap = min(int(max_bytes or vision['max_bytes']), HARD_MAX_BYTES)
+    path_source = ''                  # 字节来自本机某个文件时写它（source['path']，来源登记用它）
     if entry.get('pull_via') == 'url':
         url = _clean(entry.get('url'), URL_LIMIT)
         if not url:
@@ -387,26 +422,36 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
             raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {final_host or '未知主机'}，'
                              f'不在 vision.image_hosts 白名单里；{GIVE_UP}')
     elif entry.get('pull_via') == 'local_file':
-        name = _clean(entry.get('file'), 120)
-        if not name or '/' in name or '\\' in name:
-            raise ValueError('IMAGE_FILE_NAME_DENIED: 附件的文件名 %r 是空的或带路径分隔符，程序不按它找本机文件；%s'
-                             % (name, GIVE_UP))
-        data = None
-        for directory in vision['image_dirs']:
-            base = Path(directory)
-            candidate = (base / name)
-            try:
-                resolved = candidate.resolve()
-            except OSError:
-                continue
-            if not resolved.is_relative_to(base.resolve()) or not resolved.is_file():
-                continue
+        given = entry.get('file')
+        form = path_form(given) if session_class == visibility.OWNER_PRIVATE else None
+        if form:
+            # 路径形态：读那一个文件本身，不绕 image_dirs（只有家里的会话走到这一支）。
+            resolved = resolve_image_file(_clean(given, PATH_CHARS), form, task_dir=task_dir)
             if resolved.stat().st_size > cap:
                 raise _too_large(cap)
             data = resolved.read_bytes()
-            break
-        if data is None:
-            raise ValueError('IMAGE_FILE_NOT_AVAILABLE: 本机图片目录里没有 %s（可能已被清理）；%s' % (name, GIVE_UP))
+            path_source = str(resolved)
+        else:
+            name = _clean(given, FILE_NAME_CHARS)
+            if not name or '/' in name or '\\' in name:
+                raise ValueError('IMAGE_FILE_NAME_DENIED: 附件的文件名 %r 是空的或带路径分隔符，程序不按它找本机文件；%s'
+                                 % (name, GIVE_UP))
+            data = None
+            for directory in vision['image_dirs']:
+                base = Path(directory)
+                candidate = (base / name)
+                try:
+                    resolved = candidate.resolve()
+                except OSError:
+                    continue
+                if not resolved.is_relative_to(base.resolve()) or not resolved.is_file():
+                    continue
+                if resolved.stat().st_size > cap:
+                    raise _too_large(cap)
+                data = resolved.read_bytes()
+                break
+            if data is None:
+                raise ValueError('IMAGE_FILE_NOT_AVAILABLE: 本机图片目录里没有 %s（可能已被清理）；%s' % (name, GIVE_UP))
         content_type = ''
         final_host = ''
     else:
@@ -416,27 +461,59 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None):
         raise _not_a_picture(_clean(content_type, 80))
     if not data:
         raise ValueError('IMAGE_EMPTY: 拉回来是空的（0 字节）；' + TRY_LATER)
-    return data, media_type, entry.get('pull_via'), {'host': final_host, 'content_type': _clean(content_type, 80)}
+    source = {'host': final_host, 'content_type': _clean(content_type, 80)}
+    if path_source:
+        source['path'] = path_source
+    return data, media_type, entry.get('pull_via'), source
+
+
+def resolve_image_file(ref, form, *, task_dir=None):
+    """路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
+
+    不检查它落在 vision.image_dirs 里——按路径读本来就读目录之外；能不能走到这里由会话类别决定
+    （read_image_for_task 在家以外已经拒掉了）。文件不在就给 IMAGE_FILE_NOT_AVAILABLE，不去猜别的文件。
+    """
+    if form == 'task':
+        if not task_dir:
+            raise Denied('IMAGE_TASK_DIR_UNAVAILABLE: %s 里的 /task/ 是行动任务自己的工作区，这一轮没有任务目录；'
+                         '重试也一样：换成绝对路径，或把这件事交给行动任务' % ref)
+        relative = ref[len(TASK_PATH):].strip('/\\')
+        candidate = Path(task_dir) / relative if relative else Path(task_dir)
+    else:
+        candidate = Path(ref)
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        resolved = candidate
+    if not resolved.is_file():
+        raise ValueError('IMAGE_FILE_NOT_AVAILABLE: 本机没有这个图片文件 %s（路径写错，或它已经不在了）；%s'
+                         % (_clean(str(resolved), 300), GIVE_UP))
+    return resolved
 
 
 ARTIFACT_REF = re.compile(r'blob-[0-9a-f]{16,64}')
 
 
-def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=()):
+def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=(),
+                        session_class=visibility.PUBLIC, task_dir=None):
     """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 
     两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
     scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。
-    ref 也可以是一张已存好的图的 artifact_id（她画的、本场景存的、这一轮可发的 ``offered``），用来回看。"""
+    ref 也可以是一张已存好的图的 artifact_id（她画的、本场景存的、这一轮可发的 ``offered``），用来回看；
+    或是一个本机文件路径（绝对路径 / ``/task/…``）——那种只在 ``session_class`` 是 owner_private 时放行，
+    类别由两个入口各自算好传进来（角色脑用这一回合 manifest 里的，行动脑按任务绑定现算），``task_dir``
+    是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
         raise ValueError('READ_IMAGE_ARGUMENT_DENIED: 不认识的参数 %s；只收 ref' % '、'.join(sorted(unknown)))
     ref = args.get('ref')
-    if not isinstance(ref, str) or not 4 <= len(ref) <= 80:
-        raise ValueError('INVALID_READ_IMAGE_REF: ref 要是 4..80 字的字符串，给的是 %s；照抄图旁标的 ref（att-…），'
-                         '或一张存好的图的 artifact_id（blob-…）'
-                         % ('%d 字' % len(ref) if isinstance(ref, str) else '没给' if ref is None else type(ref).__name__))
+    if not isinstance(ref, str) or not 4 <= len(ref) <= PATH_CHARS:
+        raise ValueError('INVALID_READ_IMAGE_REF: ref 要是 4..%d 字的字符串，给的是 %s；照抄图旁标的 ref（att-…）、'
+                         '一张存好的图的 artifact_id（blob-…），或家里可用的本机图片路径'
+                         % (PATH_CHARS, '%d 字' % len(ref) if isinstance(ref, str)
+                            else '没给' if ref is None else type(ref).__name__))
     # The size cap is the program's (vision.max_bytes); DSH scales every picture for the model. A caller's own
     # max_bytes only refused pictures over its guess (2026-10-06: 20 KB-200 KB guesses on stickers), so an old
     # call that still sends one is read with the program's cap.
@@ -448,6 +525,9 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
                             '' if route == 'character' else '：不看图能做的先做，看不了的写进结果'))
     if ARTIFACT_REF.fullmatch(ref):
         return stored_image(store, blobs, task, config, ref, max_bytes, offered)
+    if path_form(ref):
+        # 按路径读盘上的图：只有家里的会话放行（错误码里说清该怎么做），task_dir 决定 /task/ 指哪儿。
+        return path_image(blobs, task, config, ref, max_bytes, session_class, task_dir)
     listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if not entry:
@@ -489,6 +569,32 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         payload['scene_note'] = ('这张图来自本场景按配置只读联动的另一个场景（同一个人在那边的入口）。'
                                  '放宽的只有读：字节按本任务的 scope 存，写与出站不因此放宽。')
     return payload
+
+
+def path_image(blobs, task, config, ref, max_bytes=None, session_class=visibility.PUBLIC, task_dir=None):
+    """Read a picture from this machine's disk (home conversations only): the bytes are this call's real
+    visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
+
+    读盘进来的图不算她自己做的图，也不进「群里可发」那份清单（outbound_media 只认 integration: 前缀）——
+    这是定好的，不是漏了。
+    """
+    if session_class != visibility.OWNER_PRIVATE:
+        raise Denied('IMAGE_PATH_HOME_ONLY: %s 是一个文件路径，按路径读图只在家里（本机、主人私聊这类可信的对话）允许；'
+                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一轮看，'
+                     '或交给家里交出去的行动任务' % ref)
+    data, media_type, via, source = pull_bytes({'ref': ref, 'pull_via': 'local_file', 'file': ref}, config,
+                                               max_bytes=max_bytes, session_class=session_class, task_dir=task_dir)
+    digest = sha(data)
+    shown, moving = animated.seen(data, media_type)
+    blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
+                      source_ids=['file:' + source['path']]) if blobs else None)
+    return {'ref': ref, 'scene_id': task['scene_id'], 'path': source['path'], 'media_type': media_type,
+            'bytes': len(data), 'sha256': digest, 'pulled_via': via, 'source': source,
+            'blob_artifact': (blob or {}).get('artifact_id'), 'blob_sha256': (blob or {}).get('sha256'),
+            'image': shown, **({'animated': moving} if moving else {}),
+            'visual': 'awaiting_attachment',
+            'note': '这张图是按本机文件路径读进来的（不是这条消息的附件）：字节来自 %s，路径已记进这张图的来源。'
+                    % source['path']}
 
 
 def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offered=()):
@@ -637,6 +743,8 @@ READ_IMAGE_TOOL = {
                     '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
                     'ref 也可以是一张已存好的图的 artifact_id（blob-…）：自己画的图（generate_image 回执里的 '
                     'artifact.artifact_id）、本场景存过的图、这一轮可发的图——画完或发之前用它亲眼看一遍。'
+                    '家里（本机、主人私聊这类可信的对话）还能按路径读盘上的图：ref 给绝对路径，或行动任务自己'
+                    '工作区的 /task/… 相对路径；在群里或别人的私聊里传路径会吃 IMAGE_PATH_HOME_ONLY，那里照旧只看消息里的图。'
                     '大小不用管：程序按自己的上限拉，给模型之前会自己缩放。'
                     '路由不支持图片、主机不在白名单、超过程序上限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
     'parameters': {'ref': {'type': 'string', 'required': True}}}
@@ -654,8 +762,10 @@ class VisionService:
         from .blobs import BlobStore
         self.blobs = BlobStore(store)
 
-    def read_image(self, task, args):
-        return read_image_for_task(self.store, self.blobs, task, self.store.config, args)
+    def read_image(self, task, args, *, session_class=visibility.PUBLIC, task_dir=None):
+        # 会话类别由任务那一侧算好传进来：按路径读盘只在家里放行，这里不另判一次。
+        return read_image_for_task(self.store, self.blobs, task, self.store.config, args,
+                                   session_class=session_class, task_dir=task_dir)
 
 
 def route_filtered_tool_names(tools, config):

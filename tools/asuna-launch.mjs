@@ -31,6 +31,44 @@ export async function packageManagerEnv(env, { nodeDir = path.dirname(process.ex
   return { ...env, [key]: [shimDir, ...dirs].join(path.delimiter), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' };
 }
 
+// One start's preparation runs as its own process from the code on disk (prepareFresh): the line it ends with names
+// the selection notes that the supervisor records.
+const NOTES_MARK = 'ASUNA_PREPARE_NOTES ';
+const spawnPrepare = argv => spawn(process.execPath, argv, { cwd: root, env: process.env, windowsHide: true,
+  stdio: ['ignore', 'pipe', 'pipe'] });
+
+/**
+ * Prepare one start (rung 0: sync the checkout and apply selections; rung 1: return selections to the previous
+ * running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her
+ * next restart without restarting this launcher (ADR-034). The output goes to the console and to `logFile`
+ * (<data>/restart/prepare.log, rewritten each start); a failure says its last lines and where the rest is.
+ * Returns the notes the preparation reports.
+ */
+export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrepare,
+  out = text => process.stdout.write(text), err = text => process.stderr.write(text) }) {
+  await fs.mkdir(path.dirname(logFile), { recursive: true });
+  const log = await fs.open(logFile, 'w');
+  let stdout = '', recent = '';
+  try {
+    await log.write(new Date().toISOString() + ' preparing a start, rung ' + rung + '\n');
+    const code = await new Promise((resolve, reject) => {
+      const child = spawnChild([fileURLToPath(import.meta.url), ...args, '--prepare', String(rung)]);
+      const take = (text, show) => { show(text); log.write(text); recent = (recent + text).slice(-4000); };
+      child.stdout.on('data', chunk => { const text = String(chunk); stdout = (stdout + text).slice(-200000); take(text, out); });
+      child.stderr.on('data', chunk => take(String(chunk), err));
+      child.once('error', reject);
+      child.once('close', status => resolve(status ?? 1));
+    });
+    if (code !== 0) {
+      const tail = recent.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(-4).join(' | ');
+      throw new Error('preparing failed (exit ' + code + '): ' + tail + ' — the whole output is in '
+        + path.relative(root, logFile).split(path.sep).join('/'));
+    }
+    const line = stdout.split(/\r?\n/).findLast(text => text.startsWith(NOTES_MARK));
+    return line ? JSON.parse(line.slice(NOTES_MARK.length)) : [];
+  } finally { await log.close(); }
+}
+
 // The checkout's own Python (uv sync), which runs the pack and install tools; the worker has its own (python-env.js).
 export const checkoutPython = (base = root, platform = process.platform) =>
   platform === 'win32' ? path.join(base, '.venv', 'Scripts', 'python.exe') : path.join(base, '.venv', 'bin', 'python');
@@ -152,7 +190,11 @@ async function main() {
         row.running ? 'answering' : 'not running'].join('  ') + '\n');
     return 0;
   }
-  const launch = await resolveLaunch(process.argv.slice(2));
+  // A fresh preparation process (prepareFresh) is this script with --prepare <rung> after the launcher's own arguments.
+  const at = process.argv.indexOf('--prepare');
+  const prepareRung = at > 1 ? Number(process.argv[at + 1]) : null;
+  const argv = at > 1 ? [...process.argv.slice(2, at), ...process.argv.slice(at + 2)] : process.argv.slice(2);
+  const launch = await resolveLaunch(argv);
   if (launch.dryRun) {
     process.stdout.write(JSON.stringify(launch) + '\n'); return 0;
   }
@@ -171,6 +213,19 @@ async function main() {
     child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
   });
   const host = ['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)];
+  if (prepareRung !== null) {
+    let notes = [];
+    if (prepareRung === 0) {
+      if (launch.sync) await syncCheckout(launch, exec);
+      // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
+      notes = (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
+    } else if (prepareRung === 1) {
+      const { revertSelections } = await import('./asuna-supervisor.mjs');
+      notes = await applySelection(launch, run, revertSelections);
+    }
+    process.stdout.write(NOTES_MARK + JSON.stringify(notes) + '\n');
+    return 0;
+  }
   if (launch.once) {
     if (launch.sync) await syncCheckout(launch, exec);
     await applySelection(launch, run, advanceSelection);
@@ -183,15 +238,10 @@ async function main() {
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   const supervisor = await import('./asuna-supervisor.mjs');
   const launchFile = path.join(launch.base, 'launch.json');
+  // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
+  const logFile = path.join(supervisor.restartFolder(env), 'prepare.log');
   await supervisor.supervise({
-    prepare: async rung => {
-      if (rung === 0) {
-        const fresh = await resolveLaunch(process.argv.slice(2));      // the install of a previous start rewrote launch.json
-        if (fresh.sync) await syncCheckout(fresh, exec);
-        // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
-        return (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
-      } else if (rung === 1) return applySelection(launch, run, supervisor.revertSelections);
-    },
+    prepare: async rung => rung < 2 ? prepareFresh(rung, argv, { logFile }) : [],
     spawnHost: () => spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },
       windowsHide: true, stdio: 'inherit', detached: process.platform !== 'win32' }),
     ready: since => supervisor.readySince(path.join(supervisor.dataRoot(env), 'reports'), since),

@@ -347,6 +347,13 @@ TOOLS = {
         'parameters': {'page': {'type': 'integer', 'description': '第几页，从 1 开始，可省略'},
                        'search': _s('只看带这几个字的想法（40 字以内），可省略')},
     },
+    'read_report': {
+        'description': ('翻读行动脑交回来的长报告：报告原文存在任务里，交给你时只给了第一页。读的是原文本身，一个字不改，'
+                        '不再叫行动脑重写，也不花一次行动。task 照抄任务的 id（交回来的结果里的 task，或 task_state_from_program '
+                        '里标着「报告 N 页」的那条），page 是第几页。'),
+        'parameters': {'task': _s('任务的 id', required=True),
+                       'page': {'type': 'integer', 'description': '第几页，从 1 开始', 'required': True}},
+    },
     'review_idea': {
         'description': ('自我改进时，对想法本里的一条写下处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、'
                         'defer 暂缓、drop 放弃。每条都写理由，会留档。'),
@@ -389,6 +396,16 @@ def turn_kind(ep):
     return ep.get('turn_kind') or ep.get('episode_kind') or 'external'
 
 
+def long_report(context):
+    """Whether this turn carries a report longer than a page: one handed back now, or a recent task's."""
+    events = ((context.get('event') or {}).get('trusted_context_events')) or []
+    # A hand-back carries report_pages only when it gave her less than the whole report.
+    handed = any(isinstance(ev, dict) and ev.get('kind') == 'task_result'
+                 and 'report_pages' in (ev.get('value') if isinstance(ev.get('value'), dict) else ev)
+                 for ev in events)
+    return handed or any(isinstance(task, dict) and task.get('report') for task in context.get('task_state_from_program') or [])
+
+
 def exposed(store, ep):
     """The tools this turn has, decided by the program from the turn's kind, scene and grants (§2.6)."""
     context = ep.get('context') or {}
@@ -418,6 +435,9 @@ def exposed(store, ep):
         names += ['read_ideas', 'review_idea']           # the listing shows the first page; she reads on herself
     elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
         names += ['read_ideas', 'review_idea']
+    # A report longer than a page reached her as its first page: she turns the pages herself.
+    if long_report(context):
+        names.append('read_report')
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
     if capabilities.get('available'):
@@ -1373,6 +1393,34 @@ class RoleTools:
                                                                         '带「%s」' % search if search else ''),
                 **({'more': '后面还有 %d 条：page=%d 接着看。' % (after, page + 1)} if after > 0 else {}),
                 'note': note}, False
+
+    def tool_read_report(self, ep, call_id, args):
+        from .tasks import report_pages
+        unknown = sorted(set(args) - {'task', 'page'})
+        if unknown:
+            raise Refused('read_report 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown))
+        task_id = self._text(args, 'task', 80)
+        try:
+            page = int(args.get('page'))
+        except (TypeError, ValueError):
+            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page')) from None
+        # At home every task of hers; anywhere else only the tasks this conversation sent (as reading a file by path).
+        home = self._cls(ep) == visibility.OWNER_PRIVATE
+        where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': ep['scene_id'], 'scope_key': ep['scope_key'],
+                                                'policy_epoch': ep['policy_epoch']}
+        task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1})
+        if not task:
+            raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。'
+                          % (task_id, '你' if home else '这个对话里'))
+        text = (task.get('result') or {}).get('text')
+        if not isinstance(text, str) or not text:
+            raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。')
+        pages = report_pages(text)
+        if not 1 <= page <= len(pages):
+            raise Refused('这份报告共 %d 页：page 写 1–%d。' % (len(pages), len(pages)))
+        return {'task': task_id, 'title': task.get('title') or task.get('goal'),
+                'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)), 'text': pages[page - 1],
+                'more': 'page=%d 接着读' % (page + 1) if page < len(pages) else '报告到这里完了'}, False
 
     def tool_review_idea(self, ep, call_id, args):
         idea_id = self._text(args, 'idea', 200)

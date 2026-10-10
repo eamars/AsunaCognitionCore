@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -37,12 +38,45 @@ OBSERVATIONS = 4
 OBSERVATION_CHARS = 600
 
 
+# A line that starts a section of a report: a Markdown heading, a line that is all bold, 【…】, or 一、/1. numbering.
+SECTION_START = re.compile(r'\n(?=#{1,6} |\*\*[^*\n]+\*\*[：:]?[ \t]*\n|【[^】\n]+】|[一二三四五六七八九十]+[、.．]|\d+[.、．] )')
+
+
+def report_pages(text, size=REPORT_CHARS):
+    """The action brain's report as pages of at most `size` characters. A page ends before the last section that
+    starts in its second half, so a section (her reason to read on) is not split; else at the last blank line, else
+    the last line break, in its last fifth. The hand-back gives her the first page; read_report reads the others."""
+    text, pages = str(text or ''), []
+    while len(text) > size:
+        window = text[:size]
+        sections = [m.start() + 1 for m in SECTION_START.finditer(window, size // 2)]
+        if sections:
+            cut = sections[-1]
+        else:
+            blank, line = window.rfind('\n\n', int(size * 0.8)), window.rfind('\n', int(size * 0.8))
+            cut = blank + 2 if blank > 0 else line + 1 if line > 0 else size
+        pages.append(text[:cut])
+        text = text[cut:]
+    return pages + [text]
+
+
+def page_note(task_id, page, pages, chars):
+    """What the end of a page says: where she is, how long the report is, and how to turn the page."""
+    if page >= pages:
+        return '（第 %d/%d 页，报告到这里完了）' % (page, pages)
+    return ('…（第 %d/%d 页，原文 %d 字；接着读用 read_report：task 写 %s，page=%d）'
+            % (page, pages, chars, task_id, page + 1))
+
+
 def bounded_result(result):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
         # The ids of its tool records are audit, not something she reads: a count says how much was done.
         refs = result.get('artifact_refs')
         value = {key: item for key, item in result.items() if key != 'artifact_refs'}
-        return {**value, 'text': excerpt(result['text'], REPORT_CHARS),
+        pages = report_pages(result['text'])
+        text = pages[0] if len(pages) == 1 else pages[0] + page_note(result.get('task_id'), 1, len(pages),
+                                                                       len(result['text']))
+        return {**value, 'text': text, **({'report_pages': len(pages)} if len(pages) > 1 else {}),
                 **({'tool_records': len(refs)} if isinstance(refs, list) else {})}
     return result
 
@@ -323,8 +357,15 @@ class TaskService:
         without the tool records."""
         from . import local_time
         result=current.get('result') or {}
+        text=result.get('text') or ''
+        report=report_pages(text,SHORT_REPORT_CHARS)[0]
+        if len(report)<len(text):
+            pages=len(report_pages(text))
+            report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 read_report：task 写 %s，从 page=1 读起）'
+                     % (len(text),pages,task['_id']))
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
-               'brief':task.get('brief') or task['goal'],'report':excerpt(result.get('text') or '',SHORT_REPORT_CHARS),
+               'brief':task.get('brief') or task['goal'],'report':report,
+               **({'report_pages':len(report_pages(text))} if len(report)<len(text) else {}),
                'finished_at':current.get('finished_at'),'uncertainties':result.get('uncertainties') or []}
         value=local_time.for_model(value,local_time.zone_of(self.store,task['scene_id']))
         return {'event_id':handover.result_event_id(task,True),

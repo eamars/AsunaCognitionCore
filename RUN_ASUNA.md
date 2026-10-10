@@ -102,6 +102,7 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 - A start that exits or is not up in time is stopped and the next one goes one rung down: the same packages again (with sync), then the previous running version of a selection being applied, then what is installed without syncing. The last rung is retried after 1, 5, 15 and 30 minutes, and every 30 minutes after that.
 - When DSH exits on its own, it is started again the same way.
 - When she asks for a restart (her `restart` tool), the worker writes `<data>/restart/request.json` once it is due; the launcher kills the DSH process tree (the stop is marked planned) and starts it again.
+- Each start is prepared (the checkout synced and installed, selections applied) by a fresh `asuna-launch.mjs --prepare <rung>` process from the code on disk, so a change to the launcher's preparation or the tools it runs takes effect at the next restart without restarting the launcher; the resident launcher only starts and watches DSH. The preparation's output goes to the console and to `<data>/restart/prepare.log`, rewritten each start; a failed one names its last lines in the record.
 - The record of each restart is `<data>/restart/last.json`: who asked and why, what it interrupted, each start and its rung, and what loaded (the checkout's commit, the installed packages, the selections).
 - Ctrl+C or a stop signal stops DSH and the launcher; nothing restarts. `--once` runs DSH once without the supervisor.
 

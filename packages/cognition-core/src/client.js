@@ -41,7 +41,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.attach_image': '配图', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数', 'tool.pin_memory': '置顶记忆',
       'tool.feel': '心情', 'tool.plan': '安排', 'tool.group_action': '群管理', 'tool.promote_memory': '沉淀记忆',
-      'tool.visit': '出门', 'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
+      'tool.visit': '出门', 'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.read_report': '翻读报告', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
       'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '草稿退回重写',
       'input.checking': '正在确认会话输入权限…', 'input.internal': '这是内部工作会话，请回到本地私聊。',
       'input.schedules': '这是定时提醒的投递会话，只用来送达她的计划和闹钟，在这里写的话她收不到；跟她说话请回到本地私聊。',
@@ -187,7 +187,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.stay_silent': 'Stay silent', 'tool.attach_image': 'Attach a picture', 'tool.write_document': 'Write document',
       'tool.update_self': 'Update self', 'tool.understand_person': 'Understand this person', 'tool.set_policy': 'Adjust a setting',
       'tool.pin_memory': 'Pin a memory', 'tool.feel': 'Feeling', 'tool.plan': 'Plan', 'tool.group_action': 'Group action',
-      'tool.promote_memory': 'Keep a memory', 'tool.visit': 'Go and see a group', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
+      'tool.promote_memory': 'Keep a memory', 'tool.visit': 'Go and see a group', 'tool.note_idea': 'Note an idea', 'tool.read_ideas': 'Read her ideas', 'tool.read_report': 'Read on in a report', 'tool.review_idea': 'Review an idea', 'tool.ask_character': 'Ask her',
       'tool.report_progress': 'Report progress', 'tool.refused': 'Refused', 'tool.preparing': 'Writing…',
       'repair.title': 'Draft sent back',
       'input.checking': 'Checking who may write here…', 'input.internal': 'This is an internal work conversation; go back to the local chat.',
@@ -613,7 +613,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     update_self: 'IconPersonalizationOutlineRegular', understand_person: 'IconUserOutlineRegular', set_policy: 'IconSlidersTwoOutlineRegular',
     pin_memory: 'IconPinOutlineRegular', feel: 'IconLikeOutlineRegular', plan: 'IconAlarmClockOutlineRegular',
     group_action: 'IconUsersOutlineRegular', promote_memory: 'IconArchiveOutlineRegular', note_idea: 'IconLightOutlineRegular',
-    read_ideas: 'IconListPenOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
+    read_ideas: 'IconListPenOutlineRegular', read_report: 'IconFlatListOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
     ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular' };
   // The argument that says what a call was about (her own words), and the one shown in full when opened.
   const TOOL_SUMMARY = { think: 'thought', recall: 'query', delegate: 'title', message_action: 'message', stop_action: 'reason',
@@ -1266,7 +1266,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
     ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
       name: 'conversation.input.permission', priority: -1, locale: 'permission.access',
-      inject: sessionId => shippedPermission()?.options.inject?.(sessionId) ?? {},
+      inject: sessionId => shippedPermission()?.inject?.(sessionId) ?? {},
     }, PermissionPicker));
 
     // ── a turn's trigger, titled in the viewer's language ─────────────

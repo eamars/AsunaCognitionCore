@@ -64,3 +64,13 @@ the supervisor, not her own report, decides that she is back.
 - The owner keeps every manual control: starting, stopping with Ctrl+C, `--no-sync`.
 - Tests drive the supervisor with a fake DSH that starts, fails to start, or never becomes ready; the drill is the
   live check.
+
+## Addendum 2026-10-11: each start is prepared fresh
+
+On 2026-10-10 her restarts kept failing ("Installing the checkout failed") although the checkout was clean: the
+resident launcher, started hours earlier, still ran old code that passed an option the new setup tool had dropped.
+Her own restarts can never replace the launcher, and the error went only to its console. Decision (owner): the
+resident launcher only starts and watches DSH; each start's preparation (sync, install, selections) runs as a fresh
+`asuna-launch.mjs --prepare <rung>` process from the code on disk, and its output is kept in
+`<data>/restart/prepare.log`, with a failure's last lines in the restart record she reads. What remains resident
+(the supervise loop in `asuna-supervisor.mjs`) still needs a launcher restart to change.

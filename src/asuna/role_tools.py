@@ -1249,6 +1249,12 @@ class RoleTools:
         desk = restarts.DESK
         if desk is None:
             raise Refused('这个宿主没有接重启请求的地方（不是正常起来的宿主）；要重启跟主人说。')
+        # A restart is consequential: an argument it does not know is refused, never dropped (2026-10-10 her `at`
+        # was silently ignored and the request fell back to an immediate quiet restart).
+        unknown = sorted(set(args) - {'op', 'why', 'when'})
+        if unknown:
+            raise Refused('restart 不认识参数 %s：只收 op、why、when（时刻写在 when 里，如 when=23:55）；这次什么都没做。'
+                          % '、'.join(unknown))
         model, policy = model_and_policy(self.store, ep['persona'])
         desk.zone = persona_zone(model, policy, self.store.config)[0]
         op = args.get('op')

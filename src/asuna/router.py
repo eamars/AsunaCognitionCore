@@ -43,12 +43,11 @@ class Router:
             if peer: trusted['raw']={'asuna_peer':peer}
         if event.get('channel') and 'group_context' in event:
             trusted['group_context'] = event['group_context']
-        if event.get('integration_profile'):
-            from .integration import event_granted
-            if event_granted(self.store.config, event): trusted['integration_profile'] = 'owner'
-        else:
-            from .integration import owner_dm_granted
-            if owner_dm_granted(getattr(self.store,'config',None),event): trusted['integration_profile']='owner'
+        from .integration import event_profile
+        # The scene decides which profile an event carries ('owner', or the narrow 'agent_home' of an
+        # agent line); integration_profile is not in `allowed`, so a channel payload never picks its own.
+        granted = event_profile(getattr(self.store, 'config', None), event, self.store)
+        if granted: trusted['integration_profile'] = granted
         if (event.get('development_profile')=='owner' and not event.get('channel')
                 and (event['scene_id'],event['person_id']) == (
                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])

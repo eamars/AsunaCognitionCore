@@ -477,10 +477,10 @@ class Coordinator:
 
     # ── working with the action brain (ADR-011 §4) ──────────────────
     def _grants(self, ep):
-        """(development, integration, capabilities) for a task delegated from this episode."""
+        """(development, integration profile, capabilities) for a task delegated from this episode."""
         from .tasks import WORKSPACE_TOOLS, ACTION_DSH_CAPABILITIES
         from .vision import route_filtered_tool_names
-        from .integration import event_granted, INTEGRATION_TOOLS
+        from .integration import event_profile, integration_tools
         from .grants import development_granted
         source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}
         event=source.get('event',{})
@@ -492,8 +492,8 @@ class Coordinator:
         if development:
             from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
             capabilities+=[*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
-        integration=event_granted(self.store.config,event)
-        if integration:capabilities+=INTEGRATION_TOOLS
+        integration=event_profile(self.store.config,event,self.store)          # 'owner' | 'agent_home' | None
+        if integration:capabilities+=integration_tools(integration)  # 按 profile 的白名单加，不整份 += INTEGRATION_TOOLS
         from .image_generation import available as image_available, GENERATE_IMAGE_TOOL
         if image_available(self.store.config):capabilities.append(GENERATE_IMAGE_TOOL)
         from . import svg_render
@@ -529,7 +529,7 @@ class Coordinator:
                     'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
-                    'integration_profile':'owner' if integration else None,'development_grant':development,
+                    'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'native_session_id':ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])
             self.crash('after_task_persist')
@@ -541,7 +541,7 @@ class Coordinator:
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
         development,integration,names=self._grants(ep)
-        if (bool(task.get('integration_profile'))!=bool(integration)
+        if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not development):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
             raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。')
@@ -576,7 +576,7 @@ class Coordinator:
                     'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,
                     'goal':task.get('title') or task['goal'],'title':task.get('title') or task['goal'],'brief':message,
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
-                    'integration_profile':'owner' if integration else None,'development_grant':development,
+                    'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])

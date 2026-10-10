@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import threading
 
 from .channels import route_for_scene, route_members
-from .integration import event_granted
+from .integration import event_profile
 from .state import Conflict, Denied, now
 
 try:                                  # 宿主按包加载
@@ -711,7 +711,10 @@ class ScheduleService:
                 'intent': intent.strip(), 'rule': rule,
                 'timezone': zone['name'], 'tz_source': zone['source'],
                 'next_fire_at': fire_at.isoformat(timespec='seconds'), 'plan_version': 1,
-                'integration_profile': 'owner' if not where and event_granted(self.app.config, (source or {}).get('event', {})) else None,
+                # 计划到期第一版不带窄授权（owner 2026-10-11 经 Claude 定）：agent_home 回合挂的计划，到期事件
+                # 里不带 integration_profile。这是定死的行为差异，不是漏改 —— 到期处（同一判断）一起定死。
+                'integration_profile': 'owner' if not where and event_profile(self.app.config, (source or {}).get('event', {}),
+                                                        getattr(self.app, 'store', None)) == 'owner' else None,
                 'status': 'CREATING', 'created_at': now()}, stream=plan_id)
         elif plan['source_episode_id'] != ep['_id'] or plan['intent'] != intent.strip() or plan['rule'] != rule:
             raise Denied('SCHEDULE_PLAN_CONTENT_CHANGED')
@@ -1009,8 +1012,10 @@ class ScheduleService:
                     event['group_context'] = {'wake_reason': 'scheduled_plan',
                         'topic_id': event['event_id'], 'reply_to': None,
                         'reply_message_id': None, 'mentioned_account_ids': []}
-                if plan.get('integration_profile') == 'owner' and event_granted(self.app.config,
-                        {**event, 'integration_profile': 'owner'}):
+                # 同上：只有 owner 那份全量授权随到期事件带过去；agent_home 不带（第一版定死，不是漏改）。
+                if plan.get('integration_profile') == 'owner' and event_profile(self.app.config,
+                        {**event, 'integration_profile': 'owner'},
+                        getattr(self.app, 'store', None)) == 'owner':
                     event['integration_profile'] = 'owner'
                 self.controller.receive(event)
                 outcome = 'ENQUEUED'

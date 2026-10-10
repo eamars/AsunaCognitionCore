@@ -749,8 +749,13 @@ class ContextBuilder:
             context['action_capabilities_from_program']['image_generation']=(
                 '行动脑能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
                 '外部公开的生图服务也能用，但那样只能给链接。')
-        from .integration import event_granted
-        if event_granted(self.store.config, event):
+        from .integration import event_profile
+        integration_profile = event_profile(self.store.config, event, self.store)
+        if integration_profile == 'agent_home':
+            context['action_capabilities_from_program']['integration'] = {
+                'grant': '这条线的家里回合带窄集成授权：只有 integration_start（只启用已发布的适配器版本）和 '
+                         'integration_status（只读）。没有试运行，也没有停止；RUNNING 不等于平台连上或发送成功。'}
+        elif integration_profile:
             context['action_capabilities_from_program']['integration'] = {
                 'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
         if event.get('episode_kind')=='visit':

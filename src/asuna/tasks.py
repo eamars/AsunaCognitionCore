@@ -15,7 +15,7 @@ from .evidence import canonical,sha
 from .sandbox import Sandbox
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
-from .integration import INTEGRATION_TOOLS, owner_profile
+from .integration import INTEGRATION_TOOLS, INTEGRATION_TOOL_BY_PROFILE, agent_home_profile, owner_profile
 from .integration_import import IMPORT_TOOL_NAME, integration_gated
 from . import outbound_media   # 导入图片时顺手登记成这一轮可引用的 image artifact（B7）
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
@@ -289,7 +289,8 @@ class TaskService:
                 event['native_session_id']=original['native_session_id']
             if source and source.get('event', {}).get('group_context'):
                 event['group_context'] = source['event']['group_context']
-            if task.get('integration_profile') == 'owner': event['integration_profile'] = 'owner'
+            # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 message_action 会被判成授权不一致。
+            if task.get('integration_profile'): event['integration_profile'] = task['integration_profile']
             if short:
                 event.update(self._short_event(task,current))
             else:
@@ -436,10 +437,19 @@ class ToolBroker:
             if tool in DEVELOPMENT_NAMES and not current.get('development_grant'):
                 raise Denied(DEVELOPMENT_GRANT)
             if integration_gated(tool):
-                if current.get('integration_profile') != 'owner':
-                    raise Denied('INTEGRATION_TASK_GRANT_REQUIRED: %s 只给继承 owner 工作域的任务用，这个任务不是；'
-                                 '重试也一样，在报告里写明需要它' % tool)
-                owner_profile(self.store.config, current['scene_id'], current['requester_id'])
+                # 值在允许集内，而且这个工具在该 profile 的白名单里。每次调用都从任务行重算这个场景这会儿
+                # 还配不配（照 native_worker 重算 session_class 的思路），写入那一刻的结论不算数。
+                profile = current.get('integration_profile')
+                allowed = INTEGRATION_TOOL_BY_PROFILE.get(profile)
+                if not allowed:
+                    raise Denied('INTEGRATION_TASK_GRANT_REQUIRED: %s 只给继承集成授权（owner 或 agent_home）的'
+                                 '任务用，这个任务没有；重试也一样，在报告里写明需要它' % tool)
+                if tool not in allowed:
+                    raise Denied('INTEGRATION_TASK_GRANT_REQUIRED: %s 不在 %s 授权的集成工具里（这个授权用得上的是 '
+                                 '%s）；重试也一样，在报告里写明需要它' % (tool, profile, '、'.join(allowed)))
+                # owner 照旧走 owner_profile；agent_home 走场景复核（kind==agent + 集成开着 + 绑定本机聊天）。
+                (owner_profile if profile == 'owner' else agent_home_profile)(
+                    self.store.config, current['scene_id'], current['requester_id'])
                 if not getattr(self, 'integration', None):
                     raise Denied('INTEGRATION_RUNNER_UNAVAILABLE: 集成运行器这会儿没启动（宿主没有沙箱或没装配它）；'+UNAVAILABLE)
             key='tool-'+sha(canonical([task['_id'],task['intent_revision'],call_id]))
@@ -639,6 +649,11 @@ class Executor:
         text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
+        if task.get('integration_profile') == 'agent_home':
+            text+='\n本任务继承 agent 线家里回合的窄集成授权（agent_home）：只有 integration_start 与 integration_status。'
+            text+='start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后恢复的也是当时已发布的版本；'
+            text+='status 只读，回的是真实进程状态与日志。RUNNING 不等于平台连上或发送成功。'
+            text+='没有 integration_test（试跑）、integration_stop（停止）和产物导入：那些要交回本机 owner 工作域的任务。'
         if 'render_svg' in task.get('allowed_capabilities',()):
             text+='\n要把 SVG 变成图（截图、预览、发出去）：write_file 写好 .svg，再用 render_svg；PNG 落进 /task/images 并登记成她自己的图，用 read_image 传 artifact_id 亲眼看过再交。SVG 链接的外部图片不会加载，要用就内嵌成 data: URI。'
         if 'generate_image' in task.get('allowed_capabilities',()):

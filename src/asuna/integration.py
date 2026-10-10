@@ -1,4 +1,4 @@
-"""Owner-granted, fixed-network integration lifecycle; contains no platform protocol."""
+"""Owner-granted (and, narrowly, agent-line) fixed-network integration lifecycle; contains no platform protocol."""
 from collections import deque
 import copy
 import hashlib
@@ -17,8 +17,11 @@ from .state import Denied
 from .queue import RuntimeLease
 from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
 
+# The channel kind whose scenes carry the narrow grant (ADR-033): named here, never read off an event.
+AGENT_HOME_KIND = 'agent'
+
 INTEGRATION_TOOLS = [
-    {'name': 'integration_test', 'description': 'Owner integration grant only. Run argv against a frozen copy of the adapter in the development candidate, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. The run reaches the configured endpoints directly with the real settings, so a test run can really act on a platform: test with reads, and leave sending to the outbox and the published adapter. In argv, /app is the frozen adapter, /data its writable folder (separate from enabled service data) and /integration/config.json its settings (also in $ASUNA_INTEGRATION_CONFIG and $ASUNA_INTEGRATION_DATA); python3 is Python 3.12 on this machine. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}], 'required': True}, 'timeout': {'type': 'integer'}}},
+    {'name': 'integration_test', 'description': 'Owner workspace grant only (the narrow agent_home grant does not get this tool). Run argv against a frozen copy of the adapter in the development candidate, up to 60 seconds. Edit the adapter with the development tools (its channel project); RUNTIME_API.md describes the actual host contract. The run reaches the configured endpoints directly with the real settings, so a test run can really act on a platform: test with reads, and leave sending to the outbox and the published adapter. In argv, /app is the frozen adapter, /data its writable folder (separate from enabled service data) and /integration/config.json its settings (also in $ASUNA_INTEGRATION_CONFIG and $ASUNA_INTEGRATION_DATA); python3 is Python 3.12 on this machine. Return real stdout/stderr and exit code. Never infer platform delivery from process startup.', 'parameters': {'argv': {'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}], 'required': True}, 'timeout': {'type': 'integer'}}},
     {'name': 'integration_start', 'description': 'Enable argv as a managed service from a frozen copy (/app) of the published adapter (development_publish of its channel project). Keeps running after the tool returns and restores the then-published adapter on host restart. /data persists. Unpublished edits never run here. Only use when the owner task asks for persistent operation. Return process state, not a platform acknowledgement.', 'parameters': {'argv': {'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}], 'required': True}}},
     {'name': 'integration_stop', 'description': 'Stop the enabled integration and disable restart; retain files and logs.', 'parameters': {}},
     {'name': 'integration_status', 'description': 'Read actual managed process state and bounded stdout/stderr. Running is not connection or delivery success.', 'parameters': {}},
@@ -26,6 +29,20 @@ INTEGRATION_TOOLS = [
 # 集成产物导入跟着同一道 owner 闸门走：只读配置里的端点，只写本次任务工作区。
 INTEGRATION_TOOLS.append(IMPORT_TOOL)
 
+# 两个集成授权（owner 2026-10-11 经 Claude 那条 agent 线定）：owner 拿全部，agent_home 只拿 start 和 status。
+# 白名单从 INTEGRATION_TOOLS 派生，不手抄字符串；test/stop/import 都不给窄授权。
+AGENT_HOME = 'agent_home'
+AGENT_HOME_TOOL_NAMES = ('integration_start', 'integration_status')
+INTEGRATION_TOOL_BY_PROFILE = {
+    'owner': [tool['name'] for tool in INTEGRATION_TOOLS],
+    AGENT_HOME: [tool['name'] for tool in INTEGRATION_TOOLS if tool['name'] in AGENT_HOME_TOOL_NAMES],
+}
+
+
+def integration_tools(profile):
+    """The integration tools one profile may use, in INTEGRATION_TOOLS' own order."""
+    names = INTEGRATION_TOOL_BY_PROFILE.get(profile) or ()
+    return [tool for tool in INTEGRATION_TOOLS if tool['name'] in names]
 
 
 def owner_dm(config, scene, person):
@@ -59,26 +76,108 @@ def owner_profile(config, scene, person):
     return profile
 
 
-def owner_dm_granted(config, event):
+def agent_home_scene(config, scene):
+    """A home round woken on an agent line (ADR-033): the scene's own channel kind is `agent`.
+
+    Computed from the installed kinds and the scene id, never from a channel field an event carried.
+    ``channel_kinds.home`` is not the test: dsh-peer declares HOME too, and that line is not this grant.
+    """
+    from . import channel_kinds
+    return (getattr(channel_kinds.of(scene), 'KIND', None) == AGENT_HOME_KIND
+            and AGENT_HOME_KIND in ((config or {}).get('channels') or {}))
+
+
+def agent_home_profile(config, scene, person):
+    """The narrow integration grant (start + status) for a home round on an agent line (owner 2026-10-11,
+    through Claude). The scene decides it — the person there names the agent, never the owner — plus the
+    same checks the owner grant leans on: integration enabled, the managed process able to run (checked
+    by event_profile), and the integration profile still bound to the local chat.
+
+    Not ``owner_profile``: that one requires the owner to be speaking and raises
+    INTEGRATION_OWNER_REQUIRED for an agent scene.
+    """
+    profile = (config or {}).get('integration', {})
+    local = (config or {}).get('chat', {})
+    if profile.get('enabled') is not True or not agent_home_scene(config, scene):
+        raise Denied('INTEGRATION_AGENT_HOME_REQUIRED: 窄授权（agent_home）只给通道 kind 是 agent 的场景，'
+                     '而且集成要开着；这个任务不满足，重试也一样：在报告里写明需要它')
+    if (local.get('scene_id'), local.get('person_id')) != (profile.get('scene_id'), profile.get('person_id')):
+        raise Denied('INTEGRATION_PROFILE_BINDING_MISMATCH: 集成配置绑定的对话和本机聊天对不上（配置问题，不是参数的问题）；'
+                     '重试也一样：在报告里写明')
+    return profile
+
+
+def owner_dm_granted(config, event, store=None):
     """The owner speaking in their own platform DM carries the owner's workspace grant (owner 2026-10-06): the route
     and the canonical person decide it, never anything the adapter sent. Decided the same way where the input is
     first stored and where it is handled, so both agree."""
     if not isinstance(event.get('channel'), dict) or not owner_dm(config or {}, event['scene_id'], event['person_id']):
         return False
     try:
-        return event_granted(config, {**event, 'integration_profile': 'owner'})
+        return event_granted(config, {**event, 'integration_profile': 'owner'}, store)
     except Denied:
         return False
 
 
-def event_granted(config, event):
-    if event.get('integration_profile') != 'owner':
+def agent_home_granted(config, event, store=None):
+    """A home round woken on an agent line carries the narrow integration grant (owner 2026-10-11, through
+    Claude): the scene's channel kind decides it, never anything the adapter sent. Decided the same way
+    where the input is first stored and where it is handled, so both agree."""
+    if not isinstance(event.get('channel'), dict) or not agent_home_scene(config or {}, event['scene_id']):
         return False
+    try:
+        return event_granted(config, {**event, 'integration_profile': AGENT_HOME}, store)
+    except Denied:
+        return False
+
+
+def _grant_refused(store, event, declared, exc):
+    """A refusal this decision swallows still leaves a trace: a broken integration binding would otherwise
+    mean 'no grant' that nobody can see. The decision itself stays a plain None.
+    """
+    if store is None:
+        return
+    problem = str(exc)
+    store.audit('integration', 'integration.grant_refused',
+                {'event_id': event.get('event_id'), 'scene_id': event.get('scene_id'),
+                 'person_id': event.get('person_id'), 'declared': declared,
+                 'reason': problem.split(':', 1)[0], 'error': problem[:300]},
+                'scene:' + event['scene_id'] if event.get('scene_id') else 'operator')
+
+
+def event_profile(config, event, store=None):
+    """The integration profile an event carries — `owner`, `agent_home` or None.
+
+    One decision, used where the input is first stored and where it is handled, so the two agree and a
+    redelivered event_id computes the same value (ingress compares the stored one). A value the envelope
+    already carries counts only when the scene earns it: a channel payload never picks its own grant.
+    A scene that does not earn it yields None instead of an exception; with a store at hand the refusal
+    is audited, so a broken binding is visible instead of silently ungranted.
+    """
+    config = config or {}
+    declared = event.get('integration_profile')
+    if declared not in (None, *INTEGRATION_TOOL_BY_PROFILE):
+        return None                       # an unknown value is no grant, not a partial one
     from . import sandbox_backend
     if not sandbox_backend.available(config):
-        return False                      # the managed process only runs in the sandbox (ADR-010 D5)
-    owner_profile(config, event['scene_id'], event['person_id'])
-    return True
+        return None                      # the managed process only runs in the sandbox (ADR-010 D5)
+    if declared is None:
+        # Nothing declared: the owner's own DM and an agent line each carry their own grant, by their scene.
+        if owner_dm_granted(config, event, store):
+            return 'owner'
+        return AGENT_HOME if agent_home_granted(config, event, store) else None
+    try:
+        (owner_profile if declared == 'owner' else agent_home_profile)(
+            config, event['scene_id'], event.get('person_id'))
+    except Denied as exc:
+        _grant_refused(store, event, declared, exc)
+        return None
+    return declared
+
+
+def event_granted(config, event, store=None):
+    """Whether an event carries an integration grant at all; which one it is, is `event_profile`."""
+    return event_profile(config, event, store) is not None
 
 
 def direct(adapter, endpoints):

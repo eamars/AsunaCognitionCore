@@ -22,7 +22,8 @@ MAX_PATH_CHARS = 512
 
 IMPORT_TOOL = {
     'name': IMPORT_TOOL_NAME,
-    'description': ('Owner integration grant only. Read one artifact from an endpoint alias already configured in '
+    'description': ('Owner workspace grant only (the narrow agent_home grant does not get this tool). Read one '
+                    'artifact from an endpoint alias already configured in '
                     '/integration/config.json and write the bytes into this task workspace at target_relative_path. '
                     'endpoint is a configured alias, never a URL or host:port; artifact_path is a path on that '
                     'endpoint (plain HTTP/1.1 GET over the configured relay, redirects are reported, not followed). '
@@ -42,7 +43,7 @@ IMPORT_TOOL = {
 
 
 def integration_gated(tool):
-    """True when only the owner-local integration grant may run this tool.
+    """True when only an integration grant (owner, or the narrow agent_home) may run this tool.
 
     The name of this tool does not start with `integration_`, so the broker must
     ask one predicate instead of trusting the prefix.

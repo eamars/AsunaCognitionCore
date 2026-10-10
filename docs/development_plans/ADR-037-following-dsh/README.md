@@ -59,3 +59,22 @@ or a stable release only makes each merge larger. Asuna's coupling to DSH:
   upstream; estimated one to two days. Later runs should take hours.
 - Live behavior the routine must watch: DSH's in-conversation system-prompt updates (alpha.1) touch how Asuna's
   turn context reaches the model and its prompt caching; check against real traffic after the switch.
+
+## First run (0.2.1-alpha.2, 2026-10-11)
+
+The owner chose alpha.2 for the first run, one day after its release, overriding D2 once. What the next run needs:
+
+- Work in a separate worktree of this repository: the live Host runs from the main checkout's `node_modules`.
+  The worktree needs its own `uv sync`, a copy of `config/local.json` with `dsh_home` inside the worktree, and
+  full control of its `.runtime` for the owner's account (DSH's Windows sandbox); without them pytest fails.
+- In the DSH checkout, pnpm comes through `corepack`; DSH's pre-push hook runs its full typecheck and needs `pnpm`
+  on PATH. Folders of packages that upstream removed keep their `node_modules` and break `tsdown`; delete them.
+- alpha.2 moved Chat rows into the `conversation.chat.flow` slot. The patch now renders fragments through it,
+  ungrouped and without Turn-process folding (a Turn's process group spans several of Asuna's work ranges).
+- alpha.2 replaced `subagents.start()` with activations whose local children DSH composes itself; her tasks are now
+  the worker's own catalogued children.
+- Review: `tools/fixtures/inline_brains.mjs` wrapped as a stand-in `@asuna/cognition-core` package (index.js
+  re-exports the fixture, client.js is the real client) in a profile with only the two patched UI packages, real
+  model providers disabled and `agent-default-model` set to `inline-fixture/synthetic-one`; then `dual-flow`.
+  The settings card is checked in the fresh-profile probe's home. The fixture has no context window, so the
+  brain meters cannot be seen there.

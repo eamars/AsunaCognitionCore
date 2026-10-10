@@ -22,7 +22,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import Subagents from '@deepseek-ai/dsh-subagent';
 import Persistence from '../src/persistence.js';
 import { CognitionCore } from '../src/index.js';
-import { PENDING_LINES, lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from '../src/navigation.js';
+import { PENDING_LINES, lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from '../src/navigation.js';
 
 test('native continuation preserves history and task children retain their actual execution directory', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-navigation-'));
@@ -82,6 +82,11 @@ test('native continuation preserves history and task children retain their actua
   await organizeNativeWorkspaces(core, { ...plan, first: false });
   await organizeNativeWorkspaces(core, { ...plan, first: false });
   assert.equal(ctx.sessionProjectionCache.cachedSnapshot(header).values.title, role.native_title);
+  // A group she lets rest is retitled while running (ADR-039), cold, without an Agent.
+  role.previous_native_title = role.native_title;
+  role.native_title = '💤 renamed';
+  await retitleSession(core, { session_id: role._id, binding: role });
+  assert.equal(ctx.sessionProjectionCache.cachedSnapshot(header).values.title, '💤 renamed');
   assert.equal(requests, 1, 'cold migration and title repair must not activate an Agent');
   const continued = await ctx.sessionPersistence.open(role._id, 'read');
   const { events } = await continued.read(); await continued.close();

@@ -164,6 +164,15 @@ async function titleExisting(ctx, id, binding) {
   }
 }
 
+/** A conversation's title changed while running (a group made active or resting): retitle it and show it. */
+export async function retitleSession(core, { session_id: id, binding }) {
+  await titleExisting(core.ctx, id, binding);
+  const catalog = await core.ctx.sessionController.list({}, new AbortController().signal);
+  const summary = catalog.items.find(row => row.sessionId === id);
+  if (summary) core.ctx.emit('api-session/added', summary);
+  return { session_id: id };
+}
+
 /** Native workspace/session migration. No client layout or alternate chat store. */
 export async function organizeNativeWorkspaces(core, plan) {
   const { ctx } = core;

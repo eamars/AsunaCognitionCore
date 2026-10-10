@@ -362,6 +362,8 @@ class BusinessWorker:
         credentials.attach(lambda args: self.host_call('credentials', args))
         from . import svg_render
         svg_render.attach(lambda args: self.host_call('render_svg', args))
+        from . import focus
+        focus.attach(self.retitle_scene)
         config['_native_apply_integrations'] = apply_integrations
         # The installed adapter release belongs to the channel plugin that ships it.
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
@@ -714,7 +716,8 @@ class BusinessWorker:
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or
-        peer name the platform last sent with a message in that scene, else the number."""
+        peer name the platform last sent with a message in that scene, else the number. A group she lets rest
+        starts with focus.RESTING_MARK."""
         group = route['target']['type'] == 'group'
         # A configured name; earlier automatic admissions stored the number itself here, which is no name.
         name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
@@ -725,7 +728,27 @@ class BusinessWorker:
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
         name = ' '.join(str(name or '').split())[:40] or route['target']['id']
-        return name
+        from . import focus
+        scene = self.app.store.db.scenes.find_one({'_id': route['scene_id']}) if group else None
+        return focus.RESTING_MARK + name if scene and not focus.active(self.app.store, scene) else name
+
+    def retitle_scene(self, scene_id):
+        """A group's conversation shows its state now (focus.RESTING_MARK): its binding's title, then the Host's."""
+        from .channels import route_members
+        config = self.app.config
+        route = next((route for channel in config.get('channels', {}).values()
+                      for route in channel.get('routes', {}).values() if route['scene_id'] == scene_id), None)
+        binding = self.app.store.db.sessions.find_one({'scene_id': scene_id, 'lane': 'character', 'native_host': True,
+                                                       'main_conversation': True})
+        if not route or not binding or not route_members(route):
+            return
+        title = self.channel_title(route)
+        if binding.get('native_title') == title:
+            return
+        record = self.bind_session(binding['_id'], {
+            **{key: binding[key] for key in ('lane', 'scene_id', 'person_id', 'persona', 'cwd', 'policy_epoch')},
+            'native_title': title, 'previous_native_title': binding.get('native_title')})
+        self.host_call('retitle', {'session_id': record['_id'], 'binding': record})
 
     def channel_input(self, row):
         """A real processed platform receipt, including quiet/error outcomes; never a model turn."""

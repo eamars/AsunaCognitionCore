@@ -42,6 +42,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `episode_finished`
   - `project_input`
   - `channel_title` — Conversation title a person can read (content only): the configured name, else the group name or peer name the platform last sent with a message in that scene, else the number.
+  - `retitle_scene` — A group's conversation shows its state now (focus.RESTING_MARK): its binding's title, then the Host's.
   - `channel_input` — A real processed platform receipt, including quiet/error outcomes; never a model turn.
   - `dispatch`
   - `close`

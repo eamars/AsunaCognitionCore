@@ -54,7 +54,7 @@ def test_receipt_is_visible_before_processing_and_replayed_until_native_ack(prod
     assert p.store.db.episodes.count_documents({}) == 0
     receipt = p.events[0]
     assert receipt['binding']['main_conversation']
-    assert receipt['binding']['native_title'] == '22220000'
+    assert receipt['binding']['native_title'] == '💤 22220000'  # a new group rests (ADR-039)
     assert receipt['binding']['scope_key'] == 'scene:qq:99990000:group:22220000'
     assert receipt['input']['id'] == 'in-' + result['episode_id']
     p.worker.dispatch('navigation.ready', {})
@@ -182,9 +182,31 @@ def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(prod
     p.channel.receive('qq', envelope(group='33330000', mid='n1', raw={'group_name': '读书会'}))
     route = next(r for r in p.store.config['channels']['qq']['routes'].values() if r['target']['id'] == '33330000')
     assert 'display_name' not in route
-    assert p.worker.channel_title(route) == '读书会'
+    # A new group rests until she makes it active (ADR-039); its title says so.
+    assert p.worker.channel_title(route) == '💤 读书会'
     # An admission stored earlier with the number as its name still reads by the group's name.
-    assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '读书会'
+    assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '💤 读书会'
+
+
+def test_a_group_made_active_or_resting_is_retitled_at_once(product, monkeypatch):
+    from asuna import focus
+    p = product
+    p.channel.receive('qq', envelope(group='33330000', mid='n1', raw={'group_name': '读书会'}))
+    binding = next(e['binding'] for e in p.events if 'binding' in e)
+    assert binding['native_title'] == '💤 读书会'
+    asked = []
+    monkeypatch.setattr(p.worker, 'host_call', lambda method, args: asked.append((method, args)))
+    monkeypatch.setattr(focus, '_changed', None)
+    focus.attach(p.worker.retitle_scene)
+    scene = p.store.db.scenes.find_one({'_id': binding['scene_id']})
+    focus.set_focus(p.store, {}, scene, True, 'xiaoman')
+    (method, args), = asked
+    assert method == 'retitle' and args['session_id'] == binding['_id']
+    assert args['binding']['native_title'] == '读书会' and args['binding']['previous_native_title'] == '💤 读书会'
+    focus.set_focus(p.store, {}, p.store.db.scenes.find_one({'_id': scene['_id']}), False, 'xiaoman')
+    assert asked[-1][1]['binding']['native_title'] == '💤 读书会'
+    stored = p.store.db.sessions.find_one({'_id': binding['_id']})
+    assert stored['native_title'] == '💤 读书会' and stored['previous_native_title'] == '读书会'
 
 
 def test_session_kinds_mark_her_platform_groups_and_dms_but_not_the_local_chat(product):

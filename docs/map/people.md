@@ -192,6 +192,7 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 
 Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
 
+- def `attach` — call(scene_id) after she makes a group active or lets it rest (the worker retitles its conversation).
 - def `soft_limit`
 - def `admin_here`
 - def `active` — Whether she is present in this group: her own choice, or her admin role there.

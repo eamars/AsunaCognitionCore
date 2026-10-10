@@ -22,7 +22,7 @@ import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
-import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput } from './navigation.js';
+import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
@@ -527,6 +527,7 @@ export class CognitionCore {
           : event.method === 'credentials' ? await this.credentialRecords(event.args)
           : event.method === 'render_svg' ? await renderSvg(event.args)
           : event.method === 'carry_session' ? await carrySession(this, event.args)
+          : event.method === 'retitle' ? await retitleSession(this, event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its

@@ -35,6 +35,9 @@ The owner wanted her present in a few groups she chooses rather than half-presen
   works, and the result says what it costs and lists the active groups with their last day's lines for her to
   review. It is a setting so that a model or API with more room can raise it.
 - **D6. She sees it.** Her heartbeat's view of each group says whether it is active.
+- **D7. The owner sees it.** A resting group's conversation title in the sidebar starts with 💤; active groups,
+  direct conversations, the peer and agent lines and the local chat carry no mark (owner, 2026-10-11: mark the
+  exception, not the rule). Her change retitles the conversation at once, unless the owner renamed it.
 
 Initial state: her admin group and the two groups she named active, one free choice within the usual four. She can
 let either of the two rest when they go quiet; the choice is hers.

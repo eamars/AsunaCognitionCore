@@ -16,6 +16,15 @@ ACTIVE_GROUPS = 4
 # What still wakes her in a resting group: words addressed to her, and the people she is waiting for.
 RESTING_WAKES = frozenset({'mentioned_account', 'reply_to_character', 'catchup_mention', 'awaited_answer', 'watched'})
 DAY = timedelta(days=1)
+# What a resting group's conversation title starts with in the sidebar; active groups and other conversations have none.
+RESTING_MARK = '💤 '
+_changed = None
+
+
+def attach(call):
+    """call(scene_id) after she makes a group active or lets it rest (the worker retitles its conversation)."""
+    global _changed
+    _changed = call
 
 
 def soft_limit(config):
@@ -83,6 +92,12 @@ def set_focus(store, ep, scene, on, persona):
         store.put('scenes', changed, expected=scene['revision'], stream=scene['_id'])
     except Conflict:
         raise ValueError('这个群的记录刚被别处改过，没改成；再来一次就行。') from None
+    if _changed:
+        try:
+            _changed(scene['_id'])
+        except Exception as exc:                 # the title catches up at the next start; her choice stands
+            import logging
+            logging.getLogger(__name__).warning('group title not updated: %s', exc)
     groups = listing(store, persona)
     result = {'done': ('这个群现在常驻：跟以前一样，群里的话会照常叫你。' if on else
                        '这个群现在歇着：只有 @ 你、回你的话、你在等的回话和 watch 的人会叫你；群里的话照存照能查，不再整理成小结。'),

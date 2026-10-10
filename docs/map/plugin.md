@@ -246,6 +246,7 @@ Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles
 - def `recordChannelInput` — Record a received platform message in her conversation without starting inference.
 - def `lineBeforeTurn` — The line a stage answers is in the conversation, or waiting in this agent's inbox, before that stage's turn begins.
 - def `workspaceTitle` — The title a workspace shows: the character's name, then the viewer's word for it (api.js) or its key, so every page says whose conversations these are (ADR-020 D3).
+- def `retitleSession` — A conversation's title changed while running (a group made active or resting): retitle it and show it.
 - def `organizeNativeWorkspaces` — Native workspace/session migration.
 
 ## `paths.js`

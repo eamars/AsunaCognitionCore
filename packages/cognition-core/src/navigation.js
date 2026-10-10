@@ -1,3 +1,5 @@
+/** Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the
+ * worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn. */
 import { projectionCacheDomainSpec } from '@deepseek-ai/dsh-session-projection-cache';
 import { localWorkspace } from './paths.js';
 

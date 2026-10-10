@@ -1,3 +1,8 @@
+"""File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder;
+`canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
+
+`LocalHttp` is the HTTP client retrieval uses for the embedding endpoint; it records every request and response.
+"""
 from __future__ import annotations
 import hashlib
 import json

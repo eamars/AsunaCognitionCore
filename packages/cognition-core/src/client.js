@@ -1,4 +1,5 @@
-/* Native DSH Client contribution. React and controls come from the Host bundle.
+/** The Web page's Asuna parts in DSH's browser client: the memory tab, the settings card, the two brains' thread,
+ * her tool rows, conversation marks and turn titles. React and controls come from the Host bundle.
  *
  * Every word this UI shows comes from the `asuna` locale namespace (zh, en) and follows DSH's
  * language setting; only her own content (what she says and thinks, her documents, her persona's

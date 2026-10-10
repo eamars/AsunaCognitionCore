@@ -1,3 +1,9 @@
+"""Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this profile's data folder), `LOCKS`,
+the allowed-database and endpoint rules, and credential redaction.
+
+`load` reads a settings file and its channel and integration siblings for the CLI, tools and tests; the native worker
+gets its settings from the Host instead. Small text helpers for context blocks (`excerpt`, `ago`) live here too.
+"""
 from __future__ import annotations
 import json
 import hashlib

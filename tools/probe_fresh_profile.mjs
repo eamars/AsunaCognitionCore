@@ -1,12 +1,14 @@
-// ADR-010 M1 acceptance: a brand-new DSH profile installs the released tarballs with `dsh plugin add` and takes
-// nothing else from this checkout. The probe prepares only what DSH itself owns — a synthetic model provider that
-// is never called, and the database URI in that profile's own credential store — then prints how to open the
-// profile. Asuna is configured afterwards on its settings page, like any user would.
-//
-//   node tools/probe_fresh_profile.mjs --home <empty dir> --persona @asuna/demo [--channel @asuna/napcat-qq]
-//     [--release <url or path of a released .tgz> ...] [--mongo-from config/local.json]
-// With --release, the core and channels come from those files or links (a GitHub Release) instead of this
-// checkout's pack; the persona still comes from the pack, since no persona is ever released.
+/** Sets up a brand-new DSH profile in an empty home that installs the packed or released tarballs with
+ * `dsh plugin add` and takes nothing else from this checkout.
+ *
+ * The probe prepares only what DSH itself owns — a synthetic model provider that is never called, and the database
+ * URI in that profile's own credential store — then prints how to open the profile. Asuna is configured afterwards on
+ * its settings page, like any user would.
+ *
+ *   node tools/probe_fresh_profile.mjs --home <empty dir> --persona @asuna/demo [--channel @asuna/napcat-qq]
+ *     [--release <url or path of a released .tgz> ...] [--mongo-from config/local.json]
+ * With --release, the core and channels come from those files or links (a GitHub Release) instead of this
+ * checkout's pack; the persona still comes from the pack, since no persona is ever released. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';

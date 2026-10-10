@@ -1,3 +1,8 @@
+"""Sends her accepted lines: `PublishService.publish` checks the turn is still current, then queues a platform line
+for its channel route or delivers a local-chat line with an idempotent receipt.
+
+`cancel_after` cancels the rest of a turn's speech once one part fails. The coordinator publishes; channels.py cancels.
+"""
 from __future__ import annotations
 import uuid
 from .state import Store, Denied, Conflict, now

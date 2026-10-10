@@ -1,5 +1,8 @@
-// Real DSH action scope, tool loop, attachment storage and cold session replay.
-// Only inference and the authorized image-byte business boundary are synthetic.
+/** Probe of a picture in the action brain's native tool loop: `read_image` returns an image that DSH stores as an
+ * attachment, the next model request carries it, and a cold reload of the session replays it unchanged.
+ *
+ * The DSH action scope, tool loop, attachment storage and session persistence are real; only inference and the
+ * worker's image answer are synthetic. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';

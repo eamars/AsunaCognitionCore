@@ -1,4 +1,4 @@
-/* Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.
+/** Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.
  *
  * Everything except the summary request is DSH's: thresholds, retained tail,
  * tool pairing, checkpoint framing and the shrink check. `summarize` is the

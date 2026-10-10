@@ -1,3 +1,5 @@
+/** The agent-line channel plugin: registers the channel kind `agent`, the lines coding agents use to talk with
+ * her; agents post and poll through the channel API themselves (tools/agent_line.py). */
 import { fileURLToPath } from 'node:url';
 
 export const name = 'asuna-agent-line';

@@ -1,3 +1,8 @@
+"""The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker`
+checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
+
+A hand-back shows her the report's first page (`report_pages`); she reads the rest with `read_report`.
+"""
 from __future__ import annotations
 import json
 import re

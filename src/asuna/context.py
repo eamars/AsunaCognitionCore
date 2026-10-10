@@ -1,3 +1,9 @@
+"""Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship,
+memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
+
+The coordinator calls it for every turn. `order_context` puts the blocks in the persona's recall order (`BLOCKS`),
+and long text is cut to the per-turn budget with a marker.
+"""
 from __future__ import annotations
 import json
 import traceback

@@ -1,5 +1,8 @@
-// Install real tarballs outside this checkout and exercise DSH's public resolver.
-// No Host, Python worker, Mongo database, model request or channel consumer starts.
+/** Probe of a clean install: the packed tarballs go into a new DSH profile outside this checkout, and every core
+ * export and persona package resolves and imports through DSH's public resolver.
+ *
+ * No Host, Python worker, Mongo database, model request or channel consumer starts. The result is written as
+ * evidence beside the packed artifacts. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';

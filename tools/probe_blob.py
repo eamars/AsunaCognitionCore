@@ -1,3 +1,8 @@
+"""Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and
+non-operator reads are refused, and deleting its memory removes it.
+
+It uses its own test database, drops it afterwards, and writes its evidence under reports/.
+"""
 import json,uuid
 from asuna.config import load,ROOT
 from asuna.state import Store,Denied

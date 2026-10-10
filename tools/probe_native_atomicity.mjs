@@ -1,5 +1,8 @@
-// E24: exercise the installed DSH session/compaction implementation. Only
-// the failing summarizer is substituted; this is not a live cognition test.
+/** Probe of DSH's installed compaction: a cut through a tool call and its result, or a summary that fails, leaves
+ * the session's history and its saved log unchanged.
+ *
+ * Only the summarizer is substituted (it always fails); no model is called and this is not a live cognition test.
+ * It writes `native-log.json` and `result.json` into the new folder given as its argument. */
 import assert from 'node:assert/strict';
 import { mkdirSync,writeFileSync,readFileSync } from 'node:fs';
 import { join } from 'node:path';

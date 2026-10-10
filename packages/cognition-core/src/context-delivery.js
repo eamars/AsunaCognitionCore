@@ -1,7 +1,7 @@
-/* Per-turn context delivery for the character brain (ADR-009 D-3, revised).
+/** Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only
+ * what her session does not still show is sent.
  *
- * The worker prepares the whole context every turn; this module decides what
- * the session still needs to be shown. A block, history row or memory is left
+ * A block, history row or memory is left
  * out only while an identical copy sits inside the newest REUSE_WINDOW_TOKENS
  * of the session surface. That stretch is inside DSH's retained tail, so any
  * compaction, including one that runs right before this message joins the

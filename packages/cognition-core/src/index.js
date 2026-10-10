@@ -1,3 +1,8 @@
+/** The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH
+ * sessions, with her role and action tools served by the worker.
+ *
+ * `apply` provides it as the `asuna` service that the preset plugins (role.js, action.js, ...) and channel packages
+ * use, and adds the `asunaApi` service, web search and fetch, and the /heartbeat command. */
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt';
 import { defineTool } from '@deepseek-ai/dsh-tools';

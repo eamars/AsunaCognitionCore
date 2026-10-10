@@ -49,25 +49,14 @@ change and installs again ([RUN_ASUNA.md](../RUN_ASUNA.md#start-review-stop)). T
 idle, and never run two instances on the same channel routes. Check the result on the Web page, in an isolated demo
 profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environment)).
 
-## Python modules by area
+## The project map
 
-- **Entry and hosting:** `native_worker` (the worker the Host plugin starts), `host`, `application`, `cli`, `config`,
-  `native_settings`, `lanes`, `queue`, `state` (the Mongo store), `audit`, `evidence`, `testing`.
-- **A turn:** `ingress`, `router`, `coordinator`, `context`, `context_budget`, `render`, `role_tools`, `tool_args`,
-  `answers`, `publish`, `lines`, `chat`.
-- **Groups and people:** `attend` (the relevance gate), `proactive`, `rhythm`, `people`, `peer_context`,
-  `familiarity`, `group_admin`, `watches`, `places`, `notes`, `scene_links`, `visibility`.
-- **Memory:** `memory`, `memory_indexer`, `retrieval`, `history_query`, `dialogue_summary`, `discussion_digest`,
-  `summary_trigger`, `summary_attribution`, `documents`, `self_state`, `affect`, `blobs`, `privacy`.
-- **Persona:** `persona_model`, `persona_data`, `persona_jobs`, `policy`, `skills`.
-- **Channels:** `channels` (the channel API), `channel_kinds`, `channel_admission`, `stickers`, `vision`,
-  `outbound_media`.
-- **Work and tools:** `tasks`, `grants`, `schedule`, `schedule_rules`, `sandbox`, `sandbox_backend`, `development`,
-  `credentials`, `image_generation`, `integration`, `integration_fetch`, `integration_image`, `integration_import`.
-- **The Web page's data:** `native_api`, `native_cognition`, `native_ui`.
-
-Each module's docstring says what it owns. The Host plugin's modules are in `packages/cognition-core/src/`
-(`index.js` composes them; `floor.js` is the publication floor; `client.js` the Web page contributions).
+[docs/map](map/README.md) answers how the main things are done (home and public kept apart, QQ to DSH and back, a
+turn, the action brain, memory, plans, publishing, state), with entry points and the deciding ADRs, and lists every
+module by area in one line. Its area pages give each module's description and public functions without code. The
+module lists come from each module's opening docstring or `/** */` header: `tools/project_map.py` writes them, and
+`tests/test_project_map.py` fails while the map is stale, while a module has no description or area, or while an
+answer names something the code does not have.
 
 ## Tests
 

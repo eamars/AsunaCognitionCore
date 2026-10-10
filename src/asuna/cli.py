@@ -1,3 +1,9 @@
+"""The `asuna` command line: `asuna ui` opens the native DSH Web profile; every other command is debug or
+maintenance only and needs `--debug`.
+
+The maintenance commands (db-init, seed, index, inspect, rollback, delete, cancel, replay) work on the store a
+settings file names. It runs from a development checkout and is not shipped with the package.
+"""
 from __future__ import annotations
 import argparse,json,sys,uuid
 from datetime import datetime,timezone

@@ -1,3 +1,8 @@
+"""Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk`
+cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
+
+Every write goes through the store's revision check. role_tools.py, memory_indexer.py and `asuna rollback` call it.
+"""
 from __future__ import annotations
 import copy
 import json

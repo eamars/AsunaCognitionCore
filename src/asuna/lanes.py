@@ -1,3 +1,8 @@
+"""The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said),
+and `FakeLane` is the scripted stand-in tests use instead of a model.
+
+The live lane is `NativeLane` in native_worker.py, which runs each turn in a native DSH session.
+"""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol

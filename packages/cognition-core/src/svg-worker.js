@@ -1,4 +1,5 @@
-// One SVG rendered by resvg in a worker thread (svg.js), so a heavy picture cannot hold up the Host.
+/** Renders one SVG to PNG with resvg in a worker thread (started by svg.js), so a heavy picture cannot hold up the
+ * Host. */
 import { parentPort, workerData } from 'node:worker_threads';
 import { Resvg } from '@resvg/resvg-js';
 

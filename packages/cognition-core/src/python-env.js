@@ -1,13 +1,14 @@
+/** Builds the worker's Python environment on first start: a venv in the profile's data folder, installed from the
+ * package's `requirements.lock` with uv, or with any Python 3.12+ and pip.
+ *
+ * The lock is the exact dependency closure the worker was tested with; uv is used when it is on PATH (it can also
+ * fetch a Python itself). A built environment is reused until the lock changes. Nothing is installed at
+ * plugin-install time, so DSH's ban on install scripts is never in the way. */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/** The worker's Python environment, built on first start in the profile's data folder (ADR-010 D2). The installed
- * package carries the worker's source and `requirements.lock`, the exact dependency closure it was tested with; this
- * builds a venv from that lock with uv when it is on PATH (uv can also fetch a Python itself), otherwise with any
- * Python 3.12+ and pip. A built environment is reused until the lock changes. Nothing is installed at plugin-install
- * time, so DSH's ban on install scripts is never in the way. */
 const MARKER = 'asuna-environment.json';
 
 function run(command, args, { cwd, timeout = 15 * 60_000 } = {}) {

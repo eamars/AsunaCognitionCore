@@ -1,3 +1,9 @@
+"""The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a
+hash-chained audit stream.
+
+`migrate` creates the collections and indexes, `get` refuses reads outside the caller's scope, and `mutate` writes
+her relationship and scene-affect revisions only from sources she may read.
+"""
 from __future__ import annotations
 from datetime import datetime, timezone
 import copy

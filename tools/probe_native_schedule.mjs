@@ -1,5 +1,8 @@
-// Executable native-timer probe: actual DSH scheduler, loop, JSON storage and
-// JSONL sessions. No model request, Mongo connection, channel or message sink.
+/** Probe of her reminders on DSH's own scheduler: a timer created through the scheduler session fires, reaches the
+ * worker boundary once without a model step, and is still recorded once after the session reloads.
+ *
+ * DSH's scheduler, agent loop, JSON storage and JSONL sessions are real; no model request, Mongo connection, channel
+ * or message sink is involved. */
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';

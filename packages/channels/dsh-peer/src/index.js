@@ -1,3 +1,5 @@
+/** The DSH peer channel plugin: registers the channel kind `dsh` and, when a peer session is configured, runs the
+ * bridge (bridge.js) between her and one session of another DSH Web server. */
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { PeerBridge } from './bridge.js';

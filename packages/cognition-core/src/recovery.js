@@ -1,3 +1,5 @@
+/** The recovery preset plugin: a repair session limited to the project development tools, which runs through the
+ * publication floor even while the cognition worker is down. */
 import fs from 'node:fs/promises';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt';

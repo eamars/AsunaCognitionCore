@@ -1,3 +1,5 @@
+/** The QQ channel plugin: registers the channel kind `qq` with Core, with its kind module (`napcat_qq`), the
+ * NapCat adapter her integration tools develop and run, and its skills. */
 import { fileURLToPath } from 'node:url';
 
 export const name = 'asuna-napcat-qq';

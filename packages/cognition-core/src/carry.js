@@ -1,4 +1,4 @@
-/* A conversation that no longer fits the model's window continues in a new session (ADR-028).
+/** A conversation that no longer fits the model's window continues in a new session (ADR-028).
  *
  * DSH's compaction tries one overflow compaction before a request rejected for its context window fails the turn.
  * When the turn still fails that way, the plugin reports it with the session's last compaction summary; the worker

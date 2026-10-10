@@ -1,4 +1,4 @@
-/* An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) with its name and description
+/** An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) with its name and description
  * declared per language. DSH shows a declared preset name exactly as written, so the row registers the words of the
  * language the program's names follow (ui-language.js, the browser that last opened the Web UI) through DSH's preset
  * registry at start; a language without words uses English. A switch of language shows at the next start. */

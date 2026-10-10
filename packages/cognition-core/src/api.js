@@ -1,3 +1,7 @@
+/** The `asunaApi` remote service the Web page calls: worker and model status, the settings card's save and apply,
+ * her memory pages, brain context views, session kinds and titles, and persona jobs.
+ *
+ * DSH's Gateway carries each call; a method reads the plugin core (index.js) or asks the worker. client.js calls it. */
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol';
 import { editSettings } from './settings.js';
 import { workspaceTitle } from './navigation.js';

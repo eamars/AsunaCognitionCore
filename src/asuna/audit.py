@@ -1,3 +1,8 @@
+"""Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares
+stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
+
+`render_html` writes a readable trace page. `asuna inspect` and `asuna replay` (cli.py) and the tests use this module.
+"""
 from __future__ import annotations
 import copy
 import difflib

@@ -1,3 +1,6 @@
+/** Runs the Python business worker (`asuna.native_worker`) as a child process in the profile's data folder and
+ * talks to it in JSON lines: `call` sends a request and waits for its answer; a line without an id is an event for
+ * index.js. */
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';

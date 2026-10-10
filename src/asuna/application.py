@@ -1,3 +1,8 @@
+"""Wires the worker's services together: `Application` opens the store, starts retrieval and the action brain's
+tool broker, then the model lanes, the coordinator, the executor and the router.
+
+`RuntimeHost` (host.py) owns one for the worker's lifetime; its lanes come from `NativeLane` in native_worker.py.
+"""
 from contextlib import ExitStack
 from .state import Store
 from .context import ContextBuilder

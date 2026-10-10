@@ -1,4 +1,4 @@
-/* The language of the names the program gives what DSH shows as plain text: her rhythm tasks in the task page and the
+/** The language of the names the program gives what DSH shows as plain text: her rhythm tasks in the task page and the
  * scheduler session's title. DSH translates only its own shipped names, so these follow the language of the browser
  * that last opened the Web UI (client.js reports it, and again on a switch). The words are this package's own
  * (locale/<language>.json, `asuna.titles`); a language without a file falls back to English. The choice is kept

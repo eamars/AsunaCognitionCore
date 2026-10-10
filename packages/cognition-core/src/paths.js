@@ -1,3 +1,5 @@
+/** Where a profile's files live: `dataRoot` (the profile's data folder, which the worker also gets as
+ * ASUNA_DATA_ROOT), the local chat's working folder and the publication floor's state folder. */
 import path from 'node:path';
 
 /** This profile's data folder (ADR-010 D3): the dataRoot setting, otherwise the profile's own folder in the DSH

@@ -8,13 +8,16 @@ is the original one.
 
 - When: once the adapter is READY, and whenever the event socket comes back after a drop.
 - Where: only the routes `adapter.catchup.routes` names (route ids, `auto-group-<id>` / `auto-dm-<id>` under
-  automatic admission, or "all" for the configured ones); none by default.
+  automatic admission), or "all": the configured routes and every admitted route with a cursor; none by
+  default.
 - From: a cursor per route, the time (and platform seq) of the newest message seen there, push or caught
   up, kept in `<data>/catchup/cursors.json`.  The cursor is a time, not a message number: message ids are
-  not monotonic.  Without a cursor, or with one older than `lookback_hours` (at most 6), the look back
-  stops at that window.
+  not monotonic.  The cursor comes first, however old; only a route without one looks back
+  `lookback_hours` (at most 24).
 - How: from the cursor's seq forward (a page includes its anchor and goes newer), at most MAX_PAGES pages;
-  without a seq, the newest page.  Rows are fed oldest first, so a reply finds the line it quotes.
+  when those run out the newest page is taken as well, so a long gap loses lines in its middle, never the
+  ones just before now.  Without a seq, the newest page.  Rows are fed oldest first, so a reply finds the
+  line it quotes.
   `disable_get_url` is always on: an old picture's link has expired anyway.  Her own lines are dropped.
 - Duplicates: a row already seen in this process is dropped by the local LRU; one seen before a restart
   has the same message id and send time (`occurred_at`), which the host answers as a duplicate.
@@ -30,7 +33,7 @@ from datetime import datetime, timezone
 CATCHUP_KEY = "asuna_catchup"
 PAGE = 100
 MAX_PAGES = 5
-MAX_LOOKBACK_HOURS = 6
+MAX_LOOKBACK_HOURS = 24
 FLUSH_SECONDS = 30
 ROUTE_PAUSE = 0.5
 
@@ -51,6 +54,7 @@ class Catchup:
         self.cfg, self.onebot, self.on_event, self.counters, self.log, self.clock = \
             cfg, onebot, on_event, counters, log, clock
         self.routes = cfg.catchup_routes                     # the route ids catch-up runs for (empty: off)
+        self.every = getattr(cfg, "catchup_every", False)    # "all": also every route with a cursor
         self.lookback = min(cfg.catchup_lookback_hours, MAX_LOOKBACK_HOURS) * 3600
         self.path = os.path.join(data_dir, "catchup", "cursors.json")
         self._lock = threading.Lock()
@@ -107,7 +111,7 @@ class Catchup:
     # ---- triggers ---------------------------------------------------------
     def request(self, reason):
         """Ask for one run (coalesced): 'startup' or 'reconnect'."""
-        if not self.routes:
+        if not self.routes and not self.every:
             return
         self._reason = self._reason or reason
         self._due.set()
@@ -130,7 +134,9 @@ class Catchup:
     def run(self, reason):
         started = self.clock()
         totals = {"routes": 0, "rows": 0, "fed": 0}
-        for route_id in sorted(self.routes):
+        with self._lock:
+            seen = set(self._cursors) if self.every else set()
+        for route_id in sorted(set(self.routes) | seen):
             route = self.cfg.route_by_id(route_id)
             if route is None:
                 self.log("CATCHUP_ROUTE_SKIPPED route=%s (blocked, or no longer admitted)" % route_id)
@@ -157,12 +163,23 @@ class Catchup:
         return totals
 
     def _missed(self, route, now):
-        """(rows newer than the route's cursor and inside the look-back window, oldest first; truncated)."""
+        """(rows from the route's cursor on, or inside the look-back window without one, oldest first; truncated)."""
         account = self.cfg.napcat["account_id"]
         cursor = self.cursor(route.route_id)
-        floor = max(now - self.lookback, _int(cursor.get("time")) or 0)
-        anchor = _int(cursor.get("seq")) if (_int(cursor.get("time")) or 0) >= now - self.lookback else None
+        since = _int(cursor.get("time"))
+        floor = since if since is not None else now - self.lookback
+        anchor = _int(cursor.get("seq")) if since is not None else None
         found, truncated, pages = {}, False, 0
+
+        def take(row):
+            if not isinstance(row, dict) or row.get("post_type") != "message":
+                return
+            sender = (row.get("sender") or {}).get("user_id") if isinstance(row.get("sender"), dict) else None
+            if account in (str(row.get("user_id")), str(sender)):
+                return                             # her own line (a DM's history has both sides)
+            moment = _int(row.get("time"))
+            if moment is not None and moment >= floor:
+                found[str(row.get("message_id"))] = row
         while pages < MAX_PAGES:
             page = self._page(route, anchor)
             pages += 1
@@ -172,15 +189,7 @@ class Catchup:
                     continue
                 break
             for row in page:
-                if not isinstance(row, dict) or row.get("post_type") != "message":
-                    continue
-                sender = (row.get("sender") or {}).get("user_id") if isinstance(row.get("sender"), dict) else None
-                if account in (str(row.get("user_id")), str(sender)):
-                    continue                       # her own line (a DM's history has both sides)
-                moment = _int(row.get("time"))
-                if moment is None or moment < floor:
-                    continue
-                found[str(row.get("message_id"))] = row
+                take(row)
             if anchor is None:
                 # the newest page only: it may not reach back to the floor
                 oldest = min((_int(r.get("time")) or 0 for r in page if isinstance(r, dict)), default=0)
@@ -193,6 +202,8 @@ class Catchup:
             anchor = next_anchor
         else:
             truncated = True
+            for row in self._page(route, None) or []:     # the lines just before now are kept, the middle is lost
+                take(row)
         rows = sorted(found.values(), key=lambda r: (_int(r.get("time")) or 0, _int(r.get("message_seq")) or 0))
         return rows, truncated
 

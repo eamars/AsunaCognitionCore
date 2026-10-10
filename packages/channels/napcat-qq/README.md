@@ -15,9 +15,10 @@ with Core (`registerChannel`).
   cache windows, at most three lookups per message) and ride on the event as `raw.asuna_mentioned`.
 - After a gap (the adapter starting, or its event socket coming back) the messages missed on the routes
   `adapter_config.catchup.routes` names are fetched from history (`get_group_msg_history` /
-  `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder, at most
-  `lookback_hours` back, 1–6) and fed oldest first through the usual inbound path, marked `raw.asuna_catchup`.
-  Off by default.
+  `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder however old it is; a
+  route without one looks back `lookback_hours`, 1–24) and fed oldest first through the usual inbound path,
+  marked `raw.asuna_catchup`. At most 5 pages of 100 forward from the cursor, then the newest page: a longer gap
+  loses lines in its middle, not the ones just before the adapter came back. Off by default.
 - Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
@@ -62,7 +63,8 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
    - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
      catch-up after a gap for those routes (the keys of `channels.qq.routes`; under automatic admission a group or DM
-     without one is `auto-group-<id>` / `auto-dm-<id>`; `"all"` means the configured routes).
+     without one is `auto-group-<id>` / `auto-dm-<id>`; `"all"` means the configured routes and every admitted
+     route the adapter has a cursor for).
    With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
    restarts with her from then on; after an `integration_stop` it stays stopped until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.

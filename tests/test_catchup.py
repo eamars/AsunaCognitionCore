@@ -46,12 +46,12 @@ class History:
         return {'status': 'ok', 'retcode': 0, 'data': {'messages': [dict(r) for r in page]}}
 
 
-def catchup(tmp_path, api, routes=('group-900000001',), hours=6):
+def catchup(tmp_path, api, routes=('group-900000001',), hours=6, every=False):
     route = SimpleNamespace(route_id='group-900000001', message_type='group', target_id='900000001')
     dm = SimpleNamespace(route_id='owner-dm', message_type='private', target_id='900000010')
     known = {r.route_id: r for r in (route, dm)}
     cfg = SimpleNamespace(routes=known, napcat={'account_id': ACCOUNT}, route_by_id=known.get,
-                          catchup_routes=frozenset(routes), catchup_lookback_hours=hours)
+                          catchup_routes=frozenset(routes), catchup_lookback_hours=hours, catchup_every=every)
     fed = []
     return Catchup(cfg, str(tmp_path), api, fed.append, Counters(), log=lambda _m: None, clock=lambda: NOW), fed
 
@@ -76,7 +76,9 @@ def test_the_owner_names_the_routes_and_nothing_runs_by_default():
     assert cfg.catchup_routes == {'auto-group-900000077'} and cfg.route_by_id('auto-group-900000077').target_id == '900000077'
     assert cfg.route_by_id('group-900000001').route_id == 'group-900000001' and cfg.route_by_id('auto-dm-x') is None
     raw['adapter']['catchup'] = {'routes': 'all', 'lookback_hours': 24}
-    with pytest.raises(ConfigError, match='1..6'):
+    assert Config(raw, 'x').catchup_every and 'catchup=all/24h' in Config(raw, 'x').describe()
+    raw['adapter']['catchup'] = {'routes': 'all', 'lookback_hours': 25}
+    with pytest.raises(ConfigError, match='1..24'):
         Config(raw, 'x')
 
 
@@ -114,12 +116,34 @@ def test_a_route_not_named_is_never_fetched_and_cursors_survive_a_restart(tmp_pa
     assert again.cursor('owner-dm')['seq'] == 77 and not api.calls
 
 
-def test_paging_stops_at_its_limit_and_says_so(tmp_path):
+def test_paging_stops_at_its_limit_says_so_and_keeps_the_newest_lines(tmp_path):
     rows = [history_row(i, NOW - 3000 + i) for i in range(PAGE * (MAX_PAGES + 2))]
     job, fed = catchup(tmp_path, History(rows))
     job.note('group-900000001', rows[0])
     job.run('startup')
-    assert len(fed) <= PAGE * MAX_PAGES and job.counters.snapshot().get('catchup_truncated') == 1
+    seqs = [r['message_seq'] for r in fed]
+    assert job.counters.snapshot().get('catchup_truncated') == 1 and seqs == sorted(seqs)
+    newest = [r['message_seq'] for r in rows[-PAGE:]]
+    assert seqs[-PAGE:] == newest and seqs[0] == 0 and len(seqs) < len(rows)  # the lines just before now are there
+
+
+def test_the_cursor_comes_first_however_old(tmp_path):
+    rows = [history_row(100 + i, NOW - 30 * 3600 + i * 60) for i in range(50)]   # a gap of more than a day
+    job, fed = catchup(tmp_path, History(rows))
+    job.note('group-900000001', rows[10])
+    job.run('reconnect')
+    assert [r['message_seq'] for r in fed] == [r['message_seq'] for r in rows[10:]]
+
+
+def test_all_also_catches_up_every_route_with_a_cursor(tmp_path):
+    api = History([history_row(1, NOW - 60)])
+    job, fed = catchup(tmp_path, api, routes=(), every=True)
+    job.note('group-900000001', history_row(1, NOW - 120))
+    job.note('auto-group-123456', {'time': NOW - 100, 'message_id': 5})         # no longer admitted: skipped
+    job.request('startup')
+    assert job._due.is_set()
+    job.run('startup')
+    assert [params.get('group_id') for _, params in api.calls] == [900000001]
 
 
 def test_the_host_keeps_the_mark_and_shows_when_it_was_said(store):

@@ -126,8 +126,8 @@ class Config:
         self.host = self._host(adapter.get("host"))
         self.routes = self._routes(adapter.get("routes"))
         self.media_mode = self._media_mode(adapter.get("media_mode"))
-        self.catchup_routes, self.catchup_lookback_hours = self._catchup(adapter.get("catchup"), self.routes,
-                                                                         self.admission)
+        self.catchup_routes, self.catchup_lookback_hours, self.catchup_every = self._catchup(
+            adapter.get("catchup"), self.routes, self.admission)
         self._cross_check()
 
     # ---- sections -------------------------------------------------------
@@ -142,11 +142,12 @@ class Config:
 
     @staticmethod
     def _catchup(node, routes, admission):
-        """(route ids caught up after a gap, look-back hours); absent means off (catchup.py). Under automatic
-        admission a target without a configured route is named by its automatic route id (auto-group-<id>,
-        auto-dm-<id>); "all" means the configured routes."""
+        """(route ids caught up after a gap, look-back hours, every); absent means off (catchup.py). Under
+        automatic admission a target without a configured route is named by its automatic route id
+        (auto-group-<id>, auto-dm-<id>); "all" means the configured routes and every admitted route the
+        adapter has seen a message on."""
         if node is None:
-            return frozenset(), 6
+            return frozenset(), 6, False
         if not isinstance(node, dict):
             raise ConfigError("adapter.catchup must be an object {routes, lookback_hours}")
         wanted = node.get("routes", [])
@@ -164,9 +165,9 @@ class Config:
         else:
             raise ConfigError('adapter.catchup.routes must be "all" or a list of route ids')
         hours = node.get("lookback_hours", 6)
-        if isinstance(hours, bool) or not isinstance(hours, int) or not 1 <= hours <= 6:
-            raise ConfigError("adapter.catchup.lookback_hours %r unsupported (need an integer 1..6)" % (hours,))
-        return chosen, hours
+        if isinstance(hours, bool) or not isinstance(hours, int) or not 1 <= hours <= 24:
+            raise ConfigError("adapter.catchup.lookback_hours %r unsupported (need an integer 1..24)" % (hours,))
+        return chosen, hours, wanted == "all"
 
     @staticmethod
     def _endpoints(node):
@@ -348,7 +349,8 @@ class Config:
                 ",".join(self.allowed_groups) or "-",
                 ",".join("%s:%d" % (r.route_id, r.member_count) for r in sorted(group_routes, key=lambda r: r.route_id)) or "-",
                 self.media_mode,
-                ("%s/%dh" % (",".join(sorted(self.catchup_routes)), self.catchup_lookback_hours)
+                ("all/%dh" % self.catchup_lookback_hours if self.catchup_every
+                 else "%s/%dh" % (",".join(sorted(self.catchup_routes)), self.catchup_lookback_hours)
                  if self.catchup_routes else "off"),
             )
         )

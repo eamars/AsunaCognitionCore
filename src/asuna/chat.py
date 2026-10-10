@@ -238,7 +238,7 @@ class Chat:
                     self.app.evidence.record('host.input_projection_error', {
                         'input_id': row['_id'], 'traceback': redact(traceback.format_exc(), self.app.config)})
             episode = row['episode_id']
-            if row['ingress_state'] == 'ACCEPTED' and episode not in self.enqueued:
+            if row.get('ingress_state') == 'ACCEPTED' and episode not in self.enqueued:
                 self.enqueued.add(episode)
                 self.pending.put((row['event'], episode))
             self.latest = episode

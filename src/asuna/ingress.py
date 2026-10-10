@@ -51,7 +51,9 @@ def persist_input(store, event, *, managed=False):
                'direction': 'inbound', 'delivery_state': 'RECEIVED',
                'occurred_at': event.get('occurred_at', now()), 'received_at': now(),
                'character_context': scene.get('character_context', 'initial'),
-               'event': event, 'host_managed': managed, 'ingress_state': 'ACCEPTED'}
+               'event': event, 'host_managed': managed,
+               # The Host's input queue tracks only the inputs it manages (input_state); the others have no queue state.
+               **({'ingress_state': 'ACCEPTED'} if managed else {})}
     if internal:
         message['direction'] = 'internal'
         message['author'] = 'asuna:internal'

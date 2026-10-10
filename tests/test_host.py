@@ -123,6 +123,14 @@ def test_receive_persists_without_context_or_worker_and_dedupes(store, tmp_path)
         chat.receive(event(text='changed'))
 
 
+def test_only_an_input_the_host_queue_manages_has_a_queue_state(store):
+    # A task result handed back, or a fixture fed straight to the router, is not in the Host's queue: nothing would
+    # ever move it on from ACCEPTED, so it has no queue state at all.
+    queued, _ = persist_input(store, event('queued', 'queued-input'), managed=True)
+    direct, _ = persist_input(store, event('direct', 'direct-input'))
+    assert queued['ingress_state'] == 'ACCEPTED' and 'ingress_state' not in direct
+
+
 def test_persisted_current_and_future_inputs_do_not_leak_into_history(store):
     coordinator = Coordinator(store, FakeLane(store, responses()))
     first, _ = persist_input(store, event('first', 'first-input'), managed=True)

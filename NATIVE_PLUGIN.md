@@ -1,6 +1,6 @@
 # Native DSH plugins
 
-How Asuna's packages compose inside DSH **0.2.0-rc.2** (release commit `639ed015397290b3745d163aafe02ffee4aa3f84`): what each package contributes, what the Web page shows, and where execution and state live. Installing and running are in [RUN_ASUNA.md](RUN_ASUNA.md) (from a checkout) and [INSTALL.md](INSTALL.md) (released plugins); the channel and tool contracts are in [RUNTIME_API.md](RUNTIME_API.md).
+How Asuna's packages compose inside DSH **0.2.1-alpha.2** (release commit `d743267388641bc76f17c45ce8b4c231aed1d32c`): what each package contributes, what the Web page shows, and where execution and state live. Installing and running are in [RUN_ASUNA.md](RUN_ASUNA.md) (from a checkout) and [INSTALL.md](INSTALL.md) (released plugins); the channel and tool contracts are in [RUNTIME_API.md](RUNTIME_API.md).
 
 ## The packages
 

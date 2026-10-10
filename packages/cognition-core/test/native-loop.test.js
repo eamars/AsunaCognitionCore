@@ -14,7 +14,6 @@ import Loader, { Group } from '@deepseek-ai/cordis-plugin-loader';
 import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import Commands from '@deepseek-ai/dsh-commands';
-import { serviceForAgent } from '@deepseek-ai/dsh-agent-preset-registry';
 import fs from 'node:fs/promises';
 import YAML from 'yaml';
 import { CognitionCore, pictureParts } from '../src/index.js';

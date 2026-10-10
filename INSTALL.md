@@ -5,7 +5,7 @@ order; every step says how to check it worked.
 
 ## What you need
 
-- **DSH 0.2.0-rc.2** with a Web profile (`dsh --profile <name>`). The plugins pin this exact version.
+- **DSH 0.2.1-alpha.2** with a Web profile (`dsh --profile <name>`). The plugins pin this exact version.
 - **MongoDB with vector search** that the profile can reach, and a database name for Asuna. Asuna keeps all of its
   state there, and its memory recall uses Atlas Vector Search: MongoDB Atlas, the `mongodb/mongodb-atlas-local` image,
   or MongoDB Community with its search process (mongot). A plain `mongod` runs, but memory is never indexed.
@@ -65,9 +65,10 @@ Everything the profile writes goes to its data folder, `$DSH_HOME/asuna/<profile
 By default the action brain's work opens in DSH's own subagent view (the work row's "open the full process" link).
 Showing it inline in the main conversation needs two patched DSH UI packages, built locally — they are not published:
 
-1. Check out DSH at tag `dsh-v0.2.0-rc.2` (commit `639ed015397290b3745d163aafe02ffee4aa3f84`) in a dedicated folder.
+1. Clone the branch and commit named in [`tools/dsh-inline/source.json`](tools/dsh-inline/source.json) (DSH with
+   the two patch commits) into a dedicated folder.
 2. In a checkout of this repository: `node tools/build_dsh_inline.mjs --source <that folder>`. It refuses any other
-   base commit or local changes and writes two `.tgz` files to `.runtime/adr008/packages/`.
+   commit or local changes and writes two `.tgz` files to `.runtime/adr008/packages/`.
 3. `dsh plugin --profile <name> add <the two .tgz files>`, then restart the profile.
 
 Check: an action brain's work row expands to its tool calls in place. Asuna detects the patched Chat by itself;

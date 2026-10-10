@@ -1,6 +1,6 @@
 # QQ through NapCat — Asuna channel plugin
 
-A channel package for `@asuna/cognition-core` 0.2.x in DSH **0.2.0-rc.2**. It registers the channel kind `qq`
+A channel package for `@asuna/cognition-core` 0.2.x in DSH **0.2.1-alpha.2**. It registers the channel kind `qq`
 with Core (`registerChannel`).
 
 - `python/napcat_qq/` is the kind module the worker imports: QQ person ids `qq:<account>` and scene ids

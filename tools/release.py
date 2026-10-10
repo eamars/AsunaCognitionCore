@@ -104,7 +104,7 @@ def main():
         raise SystemExit(1)
     (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='utf-8')
     assets = '\n'.join('- `%s`' % line.split('  ')[1] for line in sums)
-    (out / 'NOTES.md').write_text(f'''Asuna {tag} for DeepSeek Harness 0.2.0-rc.2.
+    (out / 'NOTES.md').write_text(f'''Asuna {tag} for DeepSeek Harness 0.2.1-alpha.2.
 
 Install with DSH's own installer, using the links of the files below; then configure Asuna on its settings card.
 INSTALL.md in the repository is written for the agent or person doing the install.

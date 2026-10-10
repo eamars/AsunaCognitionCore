@@ -1,6 +1,6 @@
 # Asuna Cognition Core
 
-The home of an Asuna character: a native DSH **0.2.0-rc.2** plugin with its Python business worker. It names no
+The home of an Asuna character: a native DSH **0.2.1-alpha.2** plugin with its Python business worker. It names no
 persona and no platform; a persona package and any channel packages register with it.
 
 Install its `.tgz` with `dsh plugin --profile <web-profile> add <artifact>` (see [INSTALL.md](../../INSTALL.md)). The

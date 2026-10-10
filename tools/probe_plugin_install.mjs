@@ -45,6 +45,7 @@ try {
   const imported = [];
   for (const [subpath, target] of Object.entries(manifest.exports)) {
     if (subpath === './client') continue; // Native browser module, reviewed in the Web UI.
+    if (!target.endsWith('.js')) continue; // Package metadata and locale files, read by DSH, not imported.
     await import(pathToFileURL(path.join(coreRoot, target)).href);
     imported.push(subpath);
   }
@@ -55,7 +56,7 @@ try {
   for (const name of personaPackages) {
     await import(pathToFileURL(path.join(profileDir, 'node_modules', name, 'src/index.js')).href);
   }
-  const result = { passed: true, profile: profileDir, hostVersion: '0.2.0-rc.2',
+  const result = { passed: true, profile: profileDir, hostVersion: '0.2.1-alpha.2',
     coreExports: imported, nativePeers: Object.keys(manifest.peerDependencies).length,
     artifacts: artifacts.map(({ name, sha256 }) => ({ name, sha256 })),
     liveConsumersStarted: false };

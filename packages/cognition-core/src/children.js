@@ -1,9 +1,8 @@
-/** Genuine task delegation through the shipped DSH subagent runtime. */
-import { nativeRoute } from './settings.js';
+/** Her action brain's children: tasks (catalogued DSH subagents) and the worker's own hidden stages. */
 
 export class NativeChildren {
   constructor(core) {
-    this.core = core; this.pending = new WeakMap(); this.runs = new Set();
+    this.core = core; this.runs = new Set();
     this.admissions = new Map(); this.closed = false;
   }
 
@@ -43,31 +42,22 @@ export class NativeChildren {
         return;
       }
     }
-    if (stage.lane === 'executor' && !this.registered) {
-      this.registered = ctx.subagents.registerProvider({ name: 'asuna-worker', inheritsParentContext: false,
-        capabilities: { agentOptions: true, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
-        start: request => this.create(this.pending.get(request.prompt), request) });
-    }
     const binding = await core.worker.call('session', { session_id: stage.binding.parent_session_id });
     const parent = await core.ensureAgent({ session_id: binding._id, lane: 'character', binding });
-    const prompt = [{ type: 'text', text: stage.text }];
-    this.pending.set(prompt, stage);
-    const request = { parent, prompt,
-      label: stage.title ?? stage.task?.title ?? stage.binding.task_id ?? stage.binding.scene_id,
-      signal: new AbortController().signal, agentOptions: nativeRoute(core.routeFor('action')) };
-    const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data;
-    // Resume the owned native source for a crash recovery or a successor task
-    // on this execution binding. Its first descriptor and catalog remain intact.
-    // Each foreground business run owns/disposes its handle; generic native
-    // human continuation is deliberately unavailable on this action preset.
-    const catalogued = parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog'
-      && event.data.childId === stage.session_id);
-    // Only a task is a delegation. A summary, attention gate or appraisal is the worker's own
-    // machinery: a hidden child session (its header keeps it out of the sidebar) without a catalog
-    // entry, so the conversation's subagent list shows her tasks only (ADR-011 §4).
-    const run = stage.lane !== 'executor' || (descriptor && catalogued) ? await this.create(stage, { ...request, descriptor })
-      : await ctx.subagents.start('asuna-worker', request);
-    this.pending.delete(prompt);
+    const label = stage.title ?? stage.task?.title ?? stage.binding.task_id ?? stage.binding.scene_id;
+    // Only a task is a delegation: a child that carries a subagent descriptor and enters its parent's catalog,
+    // which DSH's subagent list and view read. A summary, attention gate or appraisal is the worker's own
+    // machinery: a hidden child session (its header keeps it out of the sidebar) without a catalog entry, so the
+    // conversation's subagent list shows her tasks only (ADR-011 §4). The worker owns the child either way; DSH's
+    // subagent runtime composes its own children from the parent's preset, not her action brain.
+    const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data ?? (stage.lane === 'executor'
+      ? { version: 3, mode: 'one-shot', provider: 'asuna-worker', label } : undefined);
+    const run = await this.create(stage, parent, descriptor);
+    if (stage.lane === 'executor' && !parent.session.snapshotEvents().some(event => event.type === 'subagent/catalog'
+      && event.data.childId === stage.session_id)) {
+      parent.session.append('subagent/catalog', { version: 0, childId: stage.session_id, mode: 'one-shot', label,
+        childCreatedAt: ctx.agents.get(stage.session_id).session.header.createdAt });
+    }
     this.runs.add(run);
     // The business worker consumes stage results. Complete native teardown
     // before another business operation acquires this same source session.
@@ -75,31 +65,19 @@ export class NativeChildren {
     finally { await run.dispose(); this.runs.delete(run); }
   }
 
-  async create(stage, request) {
-    if (!stage) throw new Error('ASUNA_DELEGATION_NOT_PREPARED');
+  async create(stage, parent, descriptor) {
     const core = this.core;
-    request.signal.throwIfAborted();
-    const agent = await core.ensureAgent(stage, request.parent, request.descriptor);
+    const agent = await core.ensureAgent(stage, parent, descriptor);
     const handle = core.handles.get(agent.id);
-    const cancel = () => agent.cancel({ kind: 'user' });
-    request.signal.addEventListener('abort', cancel, { once: true });
     const state = core.state(agent.id);
     state.current = stage; state.system = stage.system;
     await core.collab.start(stage);
     agent.followup(core.message(stage));
-    const result = agent.whenIdle().then(() => {
-      const events = agent.session.snapshotEvents();
-      const end = events.findLast(event => event.type === 'turn/end');
-      const last = events.findLast(event => event.type === 'assistant/message');
-      return { output: last?.data.message.content ?? [], stopReason:
-        end?.data.reason.kind === 'completed' ? 'completed' : end?.data.reason.kind === 'aborted' ? 'aborted' : 'error' };
-    });
     // Freeze the visible range only after the native Turn end is durable.
-    const settled = result.then(async value => { await core.collab.finish(stage); return value; });
+    const result = agent.whenIdle().then(() => core.collab.finish(stage));
     let disposed = false;
-    return { id: agent.id, localAgent: agent, result: settled, dispose: async () => {
+    return { result, dispose: async () => {
       if (disposed) return; disposed = true;
-      request.signal.removeEventListener('abort', cancel);
       await handle.dispose(); core.handles.delete(agent.id);
     } };
   }

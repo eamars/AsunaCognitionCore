@@ -31,7 +31,7 @@ uv sync --frozen --quiet
 # 4. LAN access as the owner's existing DSH container has it (ADR-019 §6.1 Q6): no login token.
 node /opt/asuna/lan-login.mjs "$checkout"
 
-# 5. The reviewed native rendering extension (tools/dsh-inline), built once from DSH's public release tag.
+# 5. The reviewed native rendering extension (tools/dsh-inline), built once from the pinned commit on the DSH fork.
 inline_current() {
   .venv/bin/python - <<'PY'
 import hashlib, json, pathlib, sys
@@ -40,17 +40,19 @@ try:
     built = json.loads((folder / 'native-inline-manifest.json').read_text(encoding='utf-8'))
 except (OSError, ValueError):
     sys.exit(1)
-patch = hashlib.sha256(pathlib.Path('tools/dsh-inline/rc2-inline.patch').read_bytes()).hexdigest()
-current = built and all(item['patchSha256'] == patch and pathlib.Path(item['path']).is_file()
+pinned = json.loads(pathlib.Path('tools/dsh-inline/source.json').read_text(encoding='utf-8'))['commit']
+current = built and all(item.get('sourceCommit') == pinned and pathlib.Path(item['path']).is_file()
                         and hashlib.sha256(pathlib.Path(item['path']).read_bytes()).hexdigest() == item['sha256']
                         for item in built)
 sys.exit(0 if current else 1)
 PY
 }
 if ! inline_current; then
-  echo "Asuna: building the native rendering extension from DSH's release"
+  echo "Asuna: building the native rendering extension from the DSH fork"
   source="$(mktemp -d)"
-  git clone --quiet --depth 1 --branch dsh-v0.2.0-rc.2 https://github.com/deepseek-ai/deepseek-harness.git "$source/dsh"
+  repository="$(node -p "require('./tools/dsh-inline/source.json').repository")"
+  branch="$(node -p "require('./tools/dsh-inline/source.json').branch")"
+  git clone --quiet --depth 1 --branch "$branch" "$repository" "$source/dsh"
   node tools/build_dsh_inline.mjs --source "$source/dsh"
   rm -rf "$source"
 fi

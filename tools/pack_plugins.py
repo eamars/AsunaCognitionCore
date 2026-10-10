@@ -134,9 +134,9 @@ def main():
     # The native inline extension (tools/dsh-inline) is optional and built separately; pack only a current build.
     built = DESTINATION / 'native-inline-manifest.json'
     native = json.loads(built.read_text(encoding='utf-8')) if built.exists() else []
-    patch_digest = hashlib.sha256((ROOT / 'tools/dsh-inline/rc2-inline.patch').read_bytes()).hexdigest()
+    pinned = json.loads((ROOT / 'tools/dsh-inline/source.json').read_text(encoding='utf-8'))['commit']
     for artifact in native:
-        if artifact['patchSha256'] != patch_digest or hashlib.sha256(Path(artifact['path']).read_bytes()).hexdigest() != artifact['sha256']:
+        if artifact.get('sourceCommit') != pinned or hashlib.sha256(Path(artifact['path']).read_bytes()).hexdigest() != artifact['sha256']:
             raise ValueError('Rebuild the current native inline extension before packing plugins')
     bundle_python()
     artifacts = list(native)

@@ -1,4 +1,4 @@
-/** Build the reviewed native rendering extension from the exact ADR-008 DSH release. */
+/** Build the reviewed native rendering extension from the pinned commit of the Asuna branch on the DSH fork. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -8,36 +8,28 @@ import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const baseCommit = '639ed015397290b3745d163aafe02ffee4aa3f84';
-const version = '0.2.0-rc.2-asuna.1';
+const pin = JSON.parse(await fs.readFile(path.join(root, 'tools/dsh-inline/source.json'), 'utf8'));
+const version = pin.dsh + '-asuna.1';
 const { values } = parseArgs({ options: { source: { type: 'string' } } });
-if (!values.source) throw new Error('Usage: node tools/build_dsh_inline.mjs --source <dedicated DSH rc.2 checkout>');
+if (!values.source) throw new Error('Usage: node tools/build_dsh_inline.mjs --source <dedicated checkout of ' + pin.branch + '>');
 const source = path.resolve(values.source);
 const destination = path.join(root, '.runtime/adr008/packages');
 await fs.mkdir(destination, { recursive: true });
-const patchPath = path.join(root, 'tools/dsh-inline/rc2-inline.patch');
-const patch = await fs.readFile(patchPath, 'utf8');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const git = args => {
   const result = spawnSync('git', args, { cwd: source, encoding: 'utf8', windowsHide: true });
   if (result.status !== 0) throw new Error(result.stderr || 'Native source Git check failed');
   return result.stdout;
 };
-if (git(['rev-parse', 'HEAD']).trim() !== baseCommit) throw new Error('Native extension requires the pinned DSH release commit');
-const status = git(['status', '--porcelain']).trim();
-if (!status) {
-  git(['apply', '--check', patchPath]); git(['apply', patchPath]);
-  git(['add', '--intent-to-add', 'packages/client/ui-chat/src/client/chat/ChatContent.tsx']);
-}
-// A fixed hash length: a shallow clone (as a container builds from) abbreviates index lines differently (ADR-019).
-const diff = git(['-c', 'core.abbrev=10', 'diff', '--binary', '--no-ext-diff']).replaceAll('\r\n', '\n');
-if (diff !== patch.replaceAll('\r\n', '\n')) throw new Error('Source changes differ from the reviewed inline patch; use a dedicated clean checkout');
-const untracked = git(['ls-files', '--others', '--exclude-standard']).trim();
-if (untracked) throw new Error('Unexpected files in the native source checkout: ' + untracked);
+if (git(['rev-parse', 'HEAD']).trim() !== pin.commit) throw new Error('Native extension requires commit ' + pin.commit + ' (' + pin.branch + ')');
+if (git(['status', '--porcelain']).trim()) throw new Error('The native source checkout has changes; use a dedicated clean checkout');
+process.env.COREPACK_ENABLE_DOWNLOAD_PROMPT = '0';
 
 // PowerShell quotes each argv literally on Windows; no shell interpolation of paths.
 function run(command, args, cwd, step) {
   if (process.platform === 'win32' && command === 'npm') command = 'npm.cmd';
+  // DSH pins its pnpm through corepack, which ships with Node.
+  if (command === 'pnpm') [command, args] = ['corepack', ['pnpm', ...args]];
   const quote = value => "'" + value.replaceAll("'", "''") + "'";
   const result = process.platform === 'win32'
     ? spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
@@ -51,9 +43,11 @@ function run(command, args, cwd, step) {
 }
 await run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts'], source, 'inline-install');
 await run('pnpm', ['exec', 'tsc', '-b', 'tsconfig.host.json', '--pretty', 'false'], source, 'inline-host-types');
-await run('pnpm', ['exec', 'tsdown', '--env.DSH_BUILD_FACE', 'host'], source, 'inline-host-build');
+await run('pnpm', ['exec', 'tsdown', '--config-loader', 'native', '--env.DSH_BUILD_FACE', 'host'], source, 'inline-host-build');
 await run('pnpm', ['exec', 'tsc', '-b', 'packages/client/ui-chat/tsconfig.json', '--pretty', 'false'], source, 'inline-client-types');
-await run('pnpm', ['--filter', '@deepseek-ai/dsh-client-ui-chat', '--filter', '@deepseek-ai/dsh-client-ui-renderer', 'bundle'], source, 'inline-client-build');
+// One package per call: pnpm refuses one filtered run over the two packages, which depend on each other.
+for (const name of ['ui-renderer', 'ui-chat'])
+  await run('pnpm', ['--filter', '@deepseek-ai/dsh-client-' + name, 'bundle'], source, 'inline-client-build-' + name);
 
 const staging = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-native-inline-pack-'));
 const artifacts = [];
@@ -63,7 +57,7 @@ for (const name of ['ui-chat', 'ui-renderer']) {
   await fs.mkdir(folder);
   // Released manifests have concrete dependency versions, unlike workspace manifests.
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'node_modules', packageName, 'package.json'), 'utf8'));
-  if (manifest.version !== '0.2.0-rc.2') throw new Error('Installed DSH differs from the reviewed release');
+  if (manifest.version !== pin.dsh) throw new Error('Installed DSH differs from the pinned release ' + pin.dsh);
   manifest.version = version;
   await fs.writeFile(path.join(folder, 'package.json'), JSON.stringify(manifest, null, 2));
   await fs.cp(path.join(source, 'packages/client', name, 'lib'), path.join(folder, 'lib'), { recursive: true });
@@ -75,7 +69,7 @@ for (const name of ['ui-chat', 'ui-renderer']) {
   const artifact = original.replace(/\.tgz$/, '-' + sha256.slice(0, 12) + '.tgz');
   await fs.copyFile(original, artifact);
   artifacts.push({ name: packageName, path: artifact, sha256, integrity: packed.integrity,
-    kind: 'native-rendering-extension', sourceCommit: baseCommit, patchSha256: digest(patch),
+    kind: 'native-rendering-extension', sourceRepository: pin.repository, sourceBranch: pin.branch, sourceCommit: pin.commit,
     files: packed.files.map(row => row.path) });
 }
 await fs.writeFile(path.join(destination, 'native-inline-manifest.json'), JSON.stringify(artifacts, null, 2));

@@ -1,4 +1,4 @@
-/** DSH 0.2.0-rc.2 compatibility seam for informational plugin event envelopes.
+/** DSH 0.2.1-alpha.2 compatibility seam for informational plugin event envelopes.
  * Session.append cannot set ignorable yet. The public persistence handle can.
  * All storage, leases, sequence validation, compression and reads remain native.
  */

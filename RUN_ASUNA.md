@@ -7,7 +7,7 @@ contracts are in [RUNTIME_API.md](RUNTIME_API.md); working on the code is in [do
 
 ## How Asuna is put together
 
-Asuna runs as plugins in one native DSH **0.2.0-rc.2** Web Host:
+Asuna runs as plugins in one native DSH **0.2.1-alpha.2** Web Host:
 
 - `@asuna/cognition-core` (`packages/cognition-core`) supplies cognition, task/channel authorization, the business worker, and publication tools. It names no persona and no platform.
 - **One persona package** (`packages/personas/*`) supplies the persona baseline, selected skills and its role preset. Any persona package can replace another; `tests/fixtures/personas/demo` is a synthetic one.
@@ -22,7 +22,7 @@ The core and the channel packages are licensed under the GNU General Public Lice
 
 ## Install from a checkout
 
-You need Node (the version DSH 0.2.0-rc.2 supports), Python **3.12+** through [uv](https://docs.astral.sh/uv/), MongoDB with vector search (Atlas, Atlas Local, or Community with mongot; see [INSTALL.md](INSTALL.md#what-you-need)), and a model server for each brain (both may share one). Model and embedding services run independently of Asuna. Commands run under DSH's own sandbox.
+You need Node (the version DSH 0.2.1-alpha.2 supports), Python **3.12+** through [uv](https://docs.astral.sh/uv/), MongoDB with vector search (Atlas, Atlas Local, or Community with mongot; see [INSTALL.md](INSTALL.md#what-you-need)), and a model server for each brain (both may share one). Model and embedding services run independently of Asuna. Commands run under DSH's own sandbox.
 
 First write `config/local.json` from [config/local.example.json](config/local.example.json) (see [Settings and private files](#settings-and-private-files)). Then pack the packages and install them into the profile. Pass the persona package and **every** channel package you want to both the packer and the installer:
 
@@ -31,7 +31,7 @@ First write `config/local.json` from [config/local.example.json](config/local.ex
 ```powershell
 npm.cmd ci
 .\.venv\Scripts\uv.exe sync
-node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
+node tools/build_dsh_inline.mjs --source <dedicated-DSH-inline-checkout>
 .\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\personas\xiaoman --channel packages\channels\napcat-qq
 .\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\personas\xiaoman --channel-package packages\channels\napcat-qq
 .\start-asuna.cmd
@@ -46,7 +46,7 @@ The steps are the same; only the shell differs: Asuna uses DSH's platform layer 
 ```bash
 npm ci
 uv sync
-node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
+node tools/build_dsh_inline.mjs --source <dedicated-DSH-inline-checkout>
 .venv/bin/python tools/pack_plugins.py --persona packages/personas/xiaoman --channel packages/channels/napcat-qq --channel packages/channels/dsh-peer
 .venv/bin/python tools/setup_native_profile.py --persona-package packages/personas/xiaoman --channel-package packages/channels/napcat-qq --channel-package packages/channels/dsh-peer
 ./start-asuna.sh

@@ -2,24 +2,26 @@
 
 Optional. Shows the action brain's original records inside the main conversation instead of DSH's subagent view.
 
-Stock DSH rc.2 gives one owner the `conversation.chat.node` slot and rejects reuse of the same factory under a
-different session. `rc2-inline.patch` adds a Session-scoped native Chat factory and permits different authorized
-source bindings while keeping cycle protection. Native messages, tools, attachments, disclosures, history and
-context ownership stay native. A fragment renders the source Session's grouped Chat entries through the main
-Chat's own list, so an action turn folds, groups tool calls and discloses thinking exactly as the character brain's
-turn does. Fragment anchors do not enter main-session navigation. The extension changes rendering only.
+Stock DSH lets one owner declare the `conversation.chat.flow` slot and rejects reuse of the same factory under a
+different session. Two commits on the Asuna branch of the DSH fork add a Session-scoped native Chat factory,
+`conversation.chat.content`, and permit different authorized source bindings while keeping cycle protection. Native
+messages, tools, attachments, disclosures, history and context ownership stay native. A fragment renders the
+source Session's grouped Chat entries through DSH's own Chat flow, so an action turn folds, groups tool calls and
+discloses thinking exactly as the character brain's turn does. Fragment anchors do not enter main-session
+navigation. The extension changes rendering only.
 
 ## Build
 
-The patch applies only to DSH commit `639ed015397290b3745d163aafe02ffee4aa3f84` (`dsh-v0.2.0-rc.2`). Build in a
-**dedicated checkout**, with Node and pnpm:
+[`source.json`](source.json) names the fork, the branch (`asuna/<DSH version>`: the DSH release tag plus the two
+commits), the exact commit, and the DSH version it extends. Build in a **dedicated checkout** of that commit, with
+Node (pnpm comes through corepack):
 
 ```bash
-git clone --branch dsh-v0.2.0-rc.2 --depth 1 https://github.com/deepseek-ai/deepseek-harness.git <dsh-inline-checkout>
+git clone --branch <branch> --depth 1 https://github.com/eamars/deepseek-harness.git <dsh-inline-checkout>
 node tools/build_dsh_inline.mjs --source <dsh-inline-checkout>
 ```
 
-The builder refuses a different base commit or unrelated source changes. It installs frozen dependencies without
+The builder refuses a different commit or local changes. It installs frozen dependencies without
 lifecycle scripts, builds Host Remote contributions before client typechecking, and packages only the two changed
 native packages. Hashes and provenance go to `.runtime/adr008/packages/native-inline-manifest.json`.
 

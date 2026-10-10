@@ -78,3 +78,10 @@ The owner chose alpha.2 for the first run, one day after its release, overriding
   model providers disabled and `agent-default-model` set to `inline-fixture/synthetic-one`; then `dual-flow`.
   The settings card is checked in the fresh-profile probe's home. The fixture has no context window, so the
   brain meters cannot be seen there.
+- Before switching, rehearse one start against a copy of the live DSH home (another port, synthetic models).
+  A fresh profile missed a startup race: alpha.2's Web ships its own Schedule service, which can still be starting
+  when the worker looks for it, and the first live start mounted a second one and failed (fixed on main 92e263f1).
+- npm 11 runs a dependency's install scripts only when `allowScripts` in the root `package.json` names it. It
+  lists node-pty and koffi (native builds or prebuilds), the spawn-helper chmod of `dsh-subprocess-local` (it
+  matters on Linux and in Docker) and protobufjs; a DSH alpha that adds an install script shows up as an
+  `allow-scripts` warning in `npm ci`, to approve or deny there.

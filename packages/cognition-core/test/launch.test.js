@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { packageManagerEnv } from '../../../tools/asuna-launch.mjs';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { packageManagerEnv, prepareFresh } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -104,5 +106,43 @@ test('ADR-020: a profile starts on its own recorded Web port unless this start n
     assert.equal((await resolveLaunch(['ui', '--profile', profile, '--dry-run'], {})).port, 8780);   // as before
   } finally {
     await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+
+// A child of the launcher script, as prepareFresh spawns it: writes some lines, then exits with `code`.
+function fakeChild(lines, code, seen) {
+  return argv => {
+    seen.push(argv);
+    const child = new EventEmitter();
+    child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    setImmediate(() => {
+      for (const [stream, text] of lines) child[stream].write(text);
+      child.stdout.end(); child.stderr.end();
+      setImmediate(() => child.emit('close', code));
+    });
+    return child;
+  };
+}
+
+test('ADR-034: each start is prepared by a fresh process from the code on disk; its output is kept in a log', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-prepare-'));
+  try {
+    const logFile = path.join(dir, 'restart', 'prepare.log'), seen = [], shown = [];
+    const quiet = { out: text => shown.push(text), err: text => shown.push(text) };
+    const notes = await prepareFresh(0, ['ui', '--profile', 'asuna-native'], { logFile, ...quiet,
+      spawnChild: fakeChild([['stdout', 'Asuna: installing the checkout (@asuna/cognition-core)\n'],
+        ['stdout', 'ASUNA_PREPARE_NOTES ["core: returned to the previous running selection"]\n']], 0, seen) });
+    assert.deepEqual(notes, ['core: returned to the previous running selection']);
+    assert.match(seen[0][0], /asuna-launch\.mjs$/);
+    assert.deepEqual(seen[0].slice(1), ['ui', '--profile', 'asuna-native', '--prepare', '0'], 'its own arguments, then the rung');
+    assert.match(await fs.readFile(logFile, 'utf8'), /rung 0\n.*installing the checkout/s);
+    assert.ok(shown.join('').includes('installing the checkout'), 'the console still sees it');
+    await assert.rejects(prepareFresh(0, [], { logFile, ...quiet, spawnChild: fakeChild([['stderr',
+      'setup_native_profile.py: error: unrecognized arguments: --shared-action-model\n']], 2, seen) }),
+      /preparing failed \(exit 2\): setup_native_profile\.py: error: unrecognized arguments: --shared-action-model .*prepare\.log/);
+    assert.match(await fs.readFile(logFile, 'utf8'), /unrecognized arguments/, 'rewritten for this start');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
   }
 });

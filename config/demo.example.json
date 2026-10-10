@@ -5,59 +5,6 @@
   ],
   "mongo_uri": "mongodb://127.0.0.1:27017/?directConnection=true",
   "dsh_home": ".runtime/demo/asuna-dsh",
-  "character": {
-    "base_url": "http://127.0.0.1:8083/v1",
-    "model": "<character-model>",
-    "sampling": {
-      "temperature": 0.7,
-      "top_p": 0.95,
-      "seed": 20260919
-    },
-    "max_tokens": 4096,
-    "context_window": 68608,
-    "token_counter": "llama_cpp",
-    "reasoning_effort": "high",
-    "reasoning_efforts": {
-      "high": "high",
-      "off": null
-    },
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": false,
-      "thinkingFormat": "chat-template",
-      "chatTemplateKwargs": {
-        "enable_thinking": false
-      },
-      "maxTokensField": "max_tokens"
-    }
-  },
-  "executor": {
-    "base_url": "http://127.0.0.1:8084/v1",
-    "model": "<action-model>",
-    "input_modalities": [
-      "text",
-      "image"
-    ],
-    "sampling": {
-      "temperature": 0.2,
-      "top_p": 0.95,
-      "seed": 20260919
-    },
-    "max_tokens": 32768,
-    "context_window": 262144,
-    "token_counter": "anthropic_count",
-    "reasoning_effort": "high",
-    "reasoning_efforts": {
-      "high": "xhigh",
-      "off": null
-    },
-    "compat": {
-      "supportsDeveloperRole": false,
-      "supportsReasoningEffort": true,
-      "thinkingFormat": "qwen",
-      "maxTokensField": "max_tokens"
-    }
-  },
   "embedding": {
     "base_url": "http://127.0.0.1:1234/v1",
     "model": "<embedding-model>",

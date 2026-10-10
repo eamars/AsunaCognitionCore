@@ -143,7 +143,7 @@ def test_runtime_error_preserves_traceback_and_worker_accepts_next_message(store
 
 
 def test_diagnostics_redact_credentials(store, tmp_path):
-    config = {'mongo_uri': 'mongodb://user:secret@127.0.0.1', 'character': {'api_key': 'sensitive-key'}}
+    config = {'mongo_uri': 'mongodb://user:secret@127.0.0.1', 'embedding': {'api_key': 'sensitive-key'}}
     result = redact('failure mongodb://user:secret@127.0.0.1 sensitive-key original-error', config)
     assert 'secret' not in result and 'sensitive-key' not in result
     assert 'original-error' in result

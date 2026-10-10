@@ -105,6 +105,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
      
       'settings.route': '{brain} · {field}', 'settings.route.provider': '模型服务', 'settings.route.model': '模型',
       'settings.route.reasoningEffort': '推理强度', 'settings.route.maxTokens': '最大输出 token',
+      'settings.route.attendEffort': '要不要接话时的推理强度', 'settings.route.groupEffort': '群聊里的推理强度',
+      'settings.routeEffort': '同这个脑的推理强度',
       'settings.newSecrets': '新增或更新凭据（JSON）', 'settings.overridden': '已覆盖', 'settings.reset': '恢复默认',
       'settings.choose': '请选择', 'settings.unavailableValue': '{value}（当前不可用）',
       'settings.admission.automatic': '自动接入私聊、群及新成员', 'settings.admission.explicit': '仅接入已配置身份',
@@ -132,7 +134,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.integration': "设备集成", 'settings.deployment.channels': "外部渠道",
       'settings.deployment.channel_port': "渠道端口", 'settings.deployment.context_links': "关联对话",
       'settings.deployment.canonical_persons': "同一个人的账号", 'settings.deployment.vision': "看图",
-      'settings.deployment.reasoning_effort': "推理强度", 'settings.deployment.search': "网页搜索",
+      'settings.deployment.search': "网页搜索",
       'settings.state.unconfigured': "未配置", 'settings.state.inert': "未启用", 'settings.state.starting': "启动中",
       'settings.state.ready': "就绪", 'settings.state.failed': "失败", 'settings.state.preparing': "准备中",
       'settings.state.restarting': "重启中", 'settings.step.uv': "用 uv 建 Python 环境",
@@ -250,6 +252,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
      
       'settings.route': '{brain} · {field}', 'settings.route.provider': 'Model service', 'settings.route.model': 'Model',
       'settings.route.reasoningEffort': 'Reasoning effort', 'settings.route.maxTokens': 'Max output tokens',
+      'settings.route.attendEffort': 'Reasoning effort when deciding whether to reply', 'settings.route.groupEffort': 'Reasoning effort in groups',
+      'settings.routeEffort': "Same as this brain's reasoning effort",
       'settings.newSecrets': 'Add or update credentials (JSON)', 'settings.overridden': 'Overridden', 'settings.reset': 'Reset to default',
       'settings.choose': 'Choose', 'settings.unavailableValue': '{value} (unavailable now)',
       'settings.admission.automatic': 'Admit direct chats, groups and new members automatically', 'settings.admission.explicit': 'Admit configured identities only',
@@ -279,7 +283,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.channel_port': "Channel port",
       'settings.deployment.context_links': "Linked conversations",
       'settings.deployment.canonical_persons': "One person's accounts", 'settings.deployment.vision': "Vision",
-      'settings.deployment.reasoning_effort': "Reasoning effort", 'settings.deployment.search': "Web search",
+      'settings.deployment.search': "Web search",
       'settings.state.unconfigured': "not configured", 'settings.state.inert': "inactive",
       'settings.state.starting': "starting", 'settings.state.ready': "ready", 'settings.state.failed': "failed",
       'settings.state.preparing': "preparing", 'settings.state.restarting': "restarting",
@@ -339,7 +343,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       [name, value && typeof value === 'object' ? say(t, value) : value])));
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'reasoning_effort', 'search']);
+  const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort'];
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 
@@ -792,7 +797,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         const fields = [], add = (path, label, type = 'text') => fields.push({ path, label, type, field: JSON.stringify(path) });
         for (const key of ['persona', 'channelAdmission', 'python'])
           add([key], { key: 'settings.' + key }, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
-        for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens'])
+        // The character route also carries the effort of her relevance gate and of her group turns.
+        for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
+          ...(lane === 'character' ? ['attendEffort', 'groupEffort'] : [])])
           add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + (lane === 'character' ? 'character' : 'executor') },
             field: { key: 'settings.route.' + key } } }, key === 'maxTokens' ? 'number' : 'choice');
         // Business values use the shipped settings fields. Structured settings
@@ -859,7 +866,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           parse: text => { try {
             // An empty reasoning choice explicitly uses the provider default;
             // clearing an override would instead re-inherit a previous effort.
-            if (field.path[2] === 'reasoningEffort') return { kind: 'set', value: text };
+            if (EFFORTS.includes(field.path[2])) return { kind: 'set', value: text };
             if (field.type === 'choice') return text ? { kind: 'set', value: text } : undefined;
             if (!text.trim()) return { kind: 'clear' };
             const value = ['json', 'number'].includes(field.type) ? JSON.parse(text) : text;
@@ -879,7 +886,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         const provider = providers.find(provider => provider.id === routeValue(lane, 'provider'));
         if (key === 'model') return (provider?.models ?? []).map(model => [model.id, model.name || model.id]);
         const model = provider?.models.find(model => model.id === routeValue(lane, 'model'));
-        return model ? [['', t('settings.providerDefault')], ...(model.reasoning?.efforts ?? []).map(effort => [effort.id, effort.name])] : [];
+        // DSH's levels for this model, under DSH's own names.
+        return model ? [['', t(key === 'reasoningEffort' ? 'settings.providerDefault' : 'settings.routeEffort')],
+          ...(model.reasoning?.efforts ?? []).map(effort => [effort.id, effort.name])] : [];
       };
       const choose = (field, value) => {
         editor.actions.edit(field.field, value);
@@ -891,8 +900,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           if (!model && provider?.models.length === 1) model = provider.models[0];
           editor.actions.edit(JSON.stringify(['routes', lane, 'model']), model?.id ?? '');
         }
-        if (!model?.reasoning?.efforts.some(effort => effort.id === routeValue(lane, 'reasoningEffort')))
-          editor.actions.edit(JSON.stringify(['routes', lane, 'reasoningEffort']), '');
+        for (const effort of EFFORTS) if (state.fields[JSON.stringify(['routes', lane, effort])]
+            && !model?.reasoning?.efforts.some(offered => offered.id === routeValue(lane, effort)))
+          editor.actions.edit(JSON.stringify(['routes', lane, effort]), '');
       };
       React.useEffect(() => () => editor.model.dispose(), [editor]);
       React.useEffect(() => {

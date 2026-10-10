@@ -78,14 +78,14 @@ if [[ ! -f "$config" && -n "${ASUNA_CONFIG_JSON:-}" ]]; then
 fi
 # The demo profile (the default) needs only MongoDB's address. Its config is made the usual way
 # (tools/make_demo_config.py, its own database, no channels) from the tracked example, with every model route on a
-# closed local port: this stack never calls a model until a real config is given (AGENTS.md: synthetic inference).
+# closed local port and no model provider of its own: this stack never calls a model until one is added on DSH's
+# Models page (AGENTS.md: synthetic inference).
 if [[ ! -f "$config" && "$profile" == asuna-demo && -n "${ASUNA_MONGO_URI:-}" ]]; then
   .venv/bin/python - "$state/demo-source.json" <<'PY'
 import json, os, sys
 value = json.load(open('config/local.example.json', encoding='utf-8'))
 value['mongo_uri'] = os.environ['ASUNA_MONGO_URI']
-for lane in ('character', 'executor', 'embedding'):
-    value[lane]['base_url'] = 'http://127.0.0.1:9/v1'          # the discard port: nothing answers
+value['embedding']['base_url'] = 'http://127.0.0.1:9/v1'          # the discard port: nothing answers
 json.dump(value, open(sys.argv[1], 'w', encoding='utf-8'), indent=2)
 PY
   .venv/bin/python tools/make_demo_config.py --local "$state/demo-source.json" --out "$config"
@@ -125,7 +125,6 @@ if ! installed_as_configured; then
     pack+=(--channel "$channel")
     install+=(--channel-package "$channel")
   done
-  [[ "${ASUNA_SHARED_ACTION_MODEL:-0}" == 1 ]] && install+=(--shared-action-model)
   [[ -n "${ASUNA_CHANNEL_ADMISSION:-}" ]] && install+=(--channel-admission "$ASUNA_CHANNEL_ADMISSION")
   .venv/bin/python tools/pack_plugins.py "${pack[@]}"
   .venv/bin/python tools/setup_native_profile.py "${install[@]}"

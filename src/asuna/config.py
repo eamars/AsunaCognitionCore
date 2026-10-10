@@ -47,7 +47,7 @@ def schema(name: str) -> dict:
 
 def redact_text(text: str, config: dict) -> str:
     values = [config.get('mongo_uri', '')]
-    values += [config.get(lane, {}).get('api_key', '') for lane in ('character', 'executor', 'embedding')]
+    values += [config.get('embedding', {}).get('api_key', '')]
     values += [channel.get('token', '') for channel in config.get('channels', {}).values()]
     def credentials(value):
         if isinstance(value, dict):
@@ -66,16 +66,11 @@ def redact_text(text: str, config: dict) -> str:
 
 def load(path: str | Path = 'config/local.json') -> dict:
     value = json.loads(Path(path).read_text(encoding='utf-8'))
-    from .model_settings import settings_path, validate
-    override = settings_path(path)
-    if override.exists():
-        models = json.loads(override.read_text(encoding='utf-8'))
-        if set(models) != {'character', 'executor'}:
-            raise ValueError('INVALID_MODEL_SETTINGS')
-        value.update({lane: validate(models[lane]) for lane in models})
+    # The two brains' models are DSH providers chosen on the settings card, never settings of Asuna's own.
     for lane in ('character', 'executor'):
-        value[lane] = validate(value[lane])
-    value['_model_settings_path'] = str(override)
+        if lane in value:
+            raise ValueError('MODEL_ROUTES_ARE_DSH_PROVIDERS: remove "%s" from %s; add the model on DSH\'s Models page '
+                             'and choose it on the Asuna settings card' % (lane, path))
     # Channel and integration grants live in sibling files of the owner's main
     # config only. Any other profile (e.g. the demo) names them explicitly, so
     # a second config in the same folder never inherits real QQ routes.
@@ -97,8 +92,7 @@ def load(path: str | Path = 'config/local.json') -> dict:
             if key in channels:
                 value[key] = channels[key]
     validate_database(value, value['database'])
-    for lane in ('character', 'executor', 'embedding'):
-        validate_endpoint(value[lane]['base_url'])
+    validate_endpoint(value['embedding']['base_url'])
     value.setdefault('provider_idle_timeout_seconds',1800)
     value.setdefault('workflow_timeout_seconds',1800)
     for key in ('dsh_home',):

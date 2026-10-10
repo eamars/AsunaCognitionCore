@@ -63,7 +63,7 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
   try {
     const python = path.join(dir, 'python'), manifest = path.join(dir, 'manifest.json');
     await fs.writeFile(python, '');
-    const launch = { config: 'config/local.json', profile: 'asuna-native', sharedActionModel: true,
+    const launch = { config: 'config/local.json', profile: 'asuna-native',
       setup: { persona_package: 'tests/fixtures/personas/demo', channel_packages: ['packages/channels/napcat-qq'] },
       installed: { '@asuna/cognition-core': 'aa', '@asuna/demo': 'bb' } };
     const calls = [], notes = [];
@@ -77,7 +77,7 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     assert.equal(await syncCheckout(launch, record, note => notes.push(note), { python, manifest }), 'INSTALLED');
     assert.match(notes.at(-1), /installing the checkout \(@asuna\/cognition-core\)/);
     assert.deepEqual(installArgs, ['tools/setup_native_profile.py', '--config', 'config/local.json', '--profile', 'asuna-native',
-      '--persona-package', 'tests/fixtures/personas/demo', '--channel-package', 'packages/channels/napcat-qq', '--shared-action-model']);
+      '--persona-package', 'tests/fixtures/personas/demo', '--channel-package', 'packages/channels/napcat-qq']);
     assert.equal(await syncCheckout({ ...launch, setup: undefined }, exec, note => notes.push(note), { python, manifest }), 'UNKNOWN');
     assert.equal(await syncCheckout(launch, exec, note => notes.push(note), { python: path.join(dir, 'none'), manifest }), 'NO_PYTHON');
     await assert.rejects(syncCheckout(launch, async () => 1, () => {}, { python, manifest }), /--no-sync/);

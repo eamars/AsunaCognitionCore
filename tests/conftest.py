@@ -161,6 +161,11 @@ def drop_database(config,name):
 @pytest.fixture
 def store(request):
     config=load();config['character_id']='demo'  # Synthetic persona of the fixture world.
+    # The brains' models as the worker receives them from DSH's catalog (native_settings.runtime_settings).
+    # The action brain sees pictures; a test whose character brain should, says so.
+    for lane,modalities in (('character',['text']),('executor',['text','image'])):
+        config[lane]={'model':'fixture-'+lane,'provider':'fixture','max_tokens':4096,'context_window':65536,
+                      'input_modalities':modalities,'token_counter':'native-host'}
     config['_host_sandbox']={'available':HOST_SANDBOX,'reason':None if HOST_SANDBOX else 'no Host sandbox runner in tests'}
     pooled=Store.seed is _ORIGINAL_SEED
     name=_POOL.pop() if pooled and _POOL else isolated_database('asuna_v2_test_M1')

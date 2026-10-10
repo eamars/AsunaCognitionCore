@@ -33,7 +33,7 @@ npm.cmd ci
 .\.venv\Scripts\uv.exe sync
 node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
 .\.venv\Scripts\python.exe tools\pack_plugins.py --persona packages\personas\xiaoman --channel packages\channels\napcat-qq
-.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\personas\xiaoman --channel-package packages\channels\napcat-qq --shared-action-model
+.\.venv\Scripts\python.exe tools\setup_native_profile.py --persona-package packages\personas\xiaoman --channel-package packages\channels\napcat-qq
 .\start-asuna.cmd
 ```
 
@@ -48,7 +48,7 @@ npm ci
 uv sync
 node tools/build_dsh_inline.mjs --source <dedicated-DSH-rc.2-checkout>
 .venv/bin/python tools/pack_plugins.py --persona packages/personas/xiaoman --channel packages/channels/napcat-qq --channel packages/channels/dsh-peer
-.venv/bin/python tools/setup_native_profile.py --persona-package packages/personas/xiaoman --channel-package packages/channels/napcat-qq --channel-package packages/channels/dsh-peer --shared-action-model
+.venv/bin/python tools/setup_native_profile.py --persona-package packages/personas/xiaoman --channel-package packages/channels/napcat-qq --channel-package packages/channels/dsh-peer
 ./start-asuna.sh
 ```
 
@@ -78,9 +78,8 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 
 - It installs through DSH's official plugin installer, then checks every installed file against its content-addressed tarball. Artifacts and hashes are in `.runtime/adr008/packages/manifest.json`. Nothing is published to npm.
 - It does not initialize, reset, copy or replace Mongo.
-- `--shared-action-model` routes both brains to the configured action model. Omit it on a new profile to seed separate routes.
 - `--channel-admission automatic` admits new DMs, groups and members on a profile that has not saved its own choice (the default is `explicit`).
-- Reinstalling keeps the profile's saved settings; after the first install, change routes on the settings card.
+- It writes no model provider, key or route: add models on DSH's Models page and choose each brain's on the settings card. Reinstalling keeps the profile's saved settings.
 - It records the package list in `.runtime/adr008/launch.json` (`setup`), which later starts reuse (below).
 - A configured channel (`channels.qq`) needs its channel package installed; Core reports `CHANNEL_PLUGIN_NOT_INSTALLED` otherwise.
 
@@ -186,14 +185,13 @@ Recall ranking forgets by time and by volume (persona model `memory.forgetting`,
 All of these are ignored by git. Templates are tracked next to them as `*.example.*`.
 
 - `config/local.json` (template `config/local.example.json`): migration source for Mongo, workspace and business configuration. Set `timezone` (an IANA name) here; without it clocks and schedules are shown in UTC and say so — the core has no built-in time zone.
-- Adjacent `*.models.local.json`: deployment seed routes and model credentials. After installation, active model references belong to the native profile.
 - Adjacent `asuna-channel.local.json` (template `config/asuna-channel.example.json`): initial authenticated routes, identities, grants and A2 read links; imported only when `enabled`.
 - Adjacent `integration.local.json` (template `config/integration.example.json`): initial managed adapter configuration and approved network endpoints.
 - These two sibling files belong to `config/local.json` only. Any other config file names them explicitly with `channel_config` / `integration_config`, so a second config never inherits real routes.
 - `config/personal-denylist.local.txt` (template `config/personal-denylist.example.txt`): your own account names, host names and similar literals for `tools/check_staged_secrets.py --personal`.
 - `.runtime/adr008/home/profiles/asuna-native/cordis.patch.yml`: editable native provider and Asuna settings. Do not pass it again as a command-line overlay.
 
-A thinking model needs a thinking budget, or one step can think through its whole output limit and say nothing. Give its provider `compat` `"supportsThinkingTokenBudget": true` and the field its server reads (`"thinkingTokenBudgetField": "thinking_token_budget"`, `thinking_budget` or `thinking_budget_tokens`). DSH then sends a per-effort budget, capped so at least 1,024 tokens stay for the answer: by default minimal 1,024, low 2,048, medium 8,192, high (and xhigh) 16,384; a model's `thinking_budgets` in the models file (all four efforts, in tokens) replaces them, and the installer writes it as that model's `thinkingBudgets`. The server must end its thinking at that budget; one that ignores the field gets no protection from it.
+Models are DSH providers. A provider pi-ai knows (OpenAI, DeepSeek, OpenRouter and the others in its catalog, or a custom provider at such a service's address) needs only its key on DSH's Models page. A self-hosted server is not recognizable by its address, so how it switches reasoning is stated in that provider's `compat` in the `llm-pi-ai` settings of the profile (`cordis.patch.yml`), which the Models page form does not show: `thinkingFormat` (`qwen`, `chat-template` with `chatTemplateKwargs`, …), `maxTokensField`, `supportsDeveloperRole`, and its `reasoningEfforts` per model. A thinking model needs a thinking budget, or one step can think through its whole output limit and say nothing: give its provider `compat` `"supportsThinkingTokenBudget": true` and the field its server reads (`"thinkingTokenBudgetField": "thinking_token_budget"`, `thinking_budget` or `thinking_budget_tokens`). DSH then sends a per-effort budget, capped so at least 1,024 tokens stay for the answer: by default minimal 1,024, low 2,048, medium 8,192, high (and xhigh) 16,384; the provider's `thinkingBudgets` (all four efforts, in tokens) replaces them. The server must end its thinking at that budget; one that ignores the field gets no protection from it.
 
 After migration the native profile's `deployment` is authoritative and its secrets are in DSH's credential store (the setup tool moves them there; the settings keep only `ASUNA_…` references); editing the old JSON files does not silently override saved settings. DSH's native Models page owns provider definitions and model API keys. No launcher environment override shadows keys changed there.
 
@@ -260,7 +258,7 @@ Manual Web checks of new behavior use a synthetic persona and a separate databas
 .\start-asuna.cmd --profile asuna-demo --config config\demo.local.json --port 8790
 ```
 
-`make_demo_config.py` copies only the Mongo URI and model routes from `config/local.json` into the ignored `config/demo.local.json` (database `asuna_v2_demo_main`, persona `demo`, no channels, integrations or QQ routes, self-development off). Add `--shared-action-model` to the setup command when only the action model is running.
+`make_demo_config.py` copies only the Mongo URI and embedding route from `config/local.json` into the ignored `config/demo.local.json` (database `asuna_v2_demo_main`, persona `demo`, no channels, integrations or QQ routes, self-development off). Its brains use the models chosen on its own settings card (or DSH's default model).
 
 ## Maintenance and checks
 

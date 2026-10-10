@@ -1,6 +1,6 @@
 """Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
 
-Copies only the Mongo URI and the model/embedding routes from your local config;
+Copies only the Mongo URI and the embedding route from your local config (the brains' models are DSH providers);
 the demo never inherits channels, integrations, QQ routes or real databases.
 """
 import argparse
@@ -14,8 +14,7 @@ def build(template: dict, local: dict) -> dict:
     value = json.loads(json.dumps(template))
     value.pop('_comment', None)
     value['mongo_uri'] = local['mongo_uri']
-    for lane in ('character', 'executor', 'embedding'):
-        value[lane] = local[lane]
+    value['embedding'] = local['embedding']
     for key in ('channels', 'integration', 'context_links', 'canonical_persons'):
         value.pop(key, None)
     # Paths become absolute under this checkout (the Host and the worker run from different directories).

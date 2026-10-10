@@ -38,14 +38,18 @@ export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
   'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
-const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number() });
+// attendEffort and groupEffort (character route only): the effort of her relevance gate and of her group turns, one of
+// the levels the model offers; empty is the route's own effort.
+const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number(),
+  attendEffort: z.string(), groupEffort: z.string() });
 export const Config = z.object({ python: z.string().volatile(), persona: z.string().volatile(),
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
   mountSchedule: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
   channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
-  routes: z.object({ character: Route, action: Route, appraiser: Route.required(false) }).volatile() });
+  routes: z.object({ character: Route.required(false), action: Route.required(false), appraiser: Route.required(false) })
+    .volatile() });
 
 // Responsibility routes are configured independently; a lane name never implies a model.
 // The relevance gate (attend) is her own judgment, so it uses the character route.
@@ -205,7 +209,7 @@ export class CognitionCore {
       if (!this.config.deployment) throw unconfigured('Fill in the deployment settings');
       const python = await this.workerPython(this.config);
       this.lifecycle.state = 'starting';
-      const models = await this.resolveRoutes(this.config.routes);
+      const models = await this.resolveRoutes();
       this.efforts = await this.stageEfforts();
       this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
       const schedule = await this.attachSchedule();
@@ -223,7 +227,8 @@ export class CognitionCore {
       const channels = await this.channelPlugins(this.config.deployment);
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
         skill_directories: await this.skillDirectories(persona, channels),
-        routes: Object.fromEntries(Object.entries(this.config.routes).map(([lane, route]) => [lane, nativeRoute(route)])), models,
+        routes: Object.fromEntries(['character', 'action', 'appraiser'].filter(lane => this.routeFor(lane))
+          .map(lane => [lane, nativeRoute(this.routeFor(lane))])), models,
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
@@ -270,11 +275,20 @@ export class CognitionCore {
     return true;
   }
 
-  async resolveRoutes(routes) {
+  /** A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser has none). */
+  routeFor(lane) {
+    const own = this.config.routes?.[lane];
+    if (own?.provider || lane === 'appraiser') return own;
+    const fallback = this.ctx.get('agentDefaultModel')?.currentSelection();
+    return fallback ? { ...own, provider: fallback.provider, model: fallback.model } : own;
+  }
+
+  async resolveRoutes() {
     const models = {};
     for (const lane of ['character', 'action', 'appraiser']) {
-      if (!routes[lane]?.provider && lane === 'appraiser') continue;   // optional: the affect appraiser is off when unset
-      const route = nativeRoute(routes[lane]);
+      if (!this.routeFor(lane)?.provider && lane === 'appraiser') continue;   // optional: the affect appraiser is off when unset
+      const route = nativeRoute(this.routeFor(lane));
+      if (!route?.provider) throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
         throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
@@ -292,14 +306,19 @@ export class CognitionCore {
     return models;
   }
 
-  /** Per-stage effort on the character route, from what its model offers: the gate thinks briefly
-   * (default low), and group turns may think less than the local chat (deployment.reasoning_effort.group). */
+  /** Per-stage effort on the character route, as chosen on the settings card from the levels its model offers:
+   * the relevance gate (attendEffort) and her group turns (groupEffort). Empty is the route's own effort. */
   async stageEfforts() {
-    const route = nativeRoute(this.config.routes.character);
+    const route = this.routeFor('character');
     const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
     const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
-    const wanted = { attend: 'low', ...(this.config.deployment?.reasoning_effort ?? {}) };
-    return Object.fromEntries(Object.entries(wanted).filter(([, id]) => offered.has(id)));
+    const efforts = {};
+    for (const [stage, key] of [['attend', 'attendEffort'], ['group', 'groupEffort']]) {
+      if (!route[key]) continue;
+      if (!offered.has(route[key])) throw new Error('INVALID_REASONING_EFFORT: character ' + key);
+      efforts[stage] = route[key];
+    }
+    return efforts;
   }
 
   effortFor(lane, stage) {
@@ -581,7 +600,7 @@ export class CognitionCore {
         return next();
       });
     };
-    const options = nativeRoute(this.config.routes?.[routeOf(stage.lane)]);
+    const options = nativeRoute(this.routeFor(routeOf(stage.lane)));
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
     const handle = persisted
       ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, parentAgent, agentOptions: options, setup })
@@ -760,7 +779,7 @@ export class CognitionCore {
       // A deliberate native model selection remains authoritative for this
       // session. The plugin routes are defaults for sessions without one.
       const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
-      const route = selected ?? this.config.routes?.[routeOf(lane)];
+      const route = selected ?? this.routeFor(routeOf(lane));
       const effort = selected ? undefined : this.effortFor(lane, stage);
       return nativeRoute({ ...request, ...route, reasoningEffort: effort ?? route?.reasoningEffort });
     });

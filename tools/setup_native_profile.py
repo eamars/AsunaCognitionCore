@@ -1,8 +1,8 @@
 """Install the core, one persona package and its channel packages into a local-only native Web profile.
 
 Does not start a model turn or consume platform routes. Preserves saved profile values.
-Run after tools/pack_plugins.py --persona <dir> --channel <dir>. Local providers retain independent
-lane routes. Persona and channel packages are arguments; the core names neither.
+Run after tools/pack_plugins.py --persona <dir> --channel <dir>. Models are DSH providers (its Models page); the
+brains are chosen on the Asuna settings card. Persona and channel packages are arguments; the core names neither.
 """
 import argparse
 import json
@@ -109,43 +109,22 @@ def move_secrets(core):
     return moved
 
 
-def profile_patch(config, config_path, persona, shared_action_model=False, profile='asuna-native', channels=(),
-                  channel_admission=None):
-    providers, routes = {}, {}
-    for lane, source in (('character', 'executor' if shared_action_model else 'character'), ('action', 'executor')):
-        model = config[source]
-        provider = 'asuna-' + lane
-        providers[provider] = {
-            'api': model['api'], 'baseURL': model['base_url'], 'compat': model['compat'],
-            'apiKeyEnv': 'ASUNA_NATIVE_' + lane.upper() + '_KEY',
-            'timeoutMs': config['provider_idle_timeout_seconds'] * 1000,
-            'streamIdleTimeoutMs': config['provider_idle_timeout_seconds'] * 1000,
-            'models': [{'id': model['model'], 'contextWindow': model['context_window'],
-                        'maxTokens': model['max_tokens'], 'reasoningEfforts': model['reasoning_efforts'],
-                        'input': model.get('input_modalities', ['text']),
-                        # Thinking per effort (pi-ai's defaults otherwise: 1024/2048/8192/16384; xhigh counts as high).
-                        **({'thinkingBudgets': model['thinking_budgets']} if model.get('thinking_budgets') else {})}],
-        }
-        routes[lane] = {'provider': provider, 'model': model['model'],
-                        'reasoningEffort': model['reasoning_effort'], 'maxTokens': model['max_tokens']}
+def profile_patch(config, config_path, persona, profile='asuna-native', channels=(), channel_admission=None):
     data_root, state_dir = data_folder(profile)
     return [
-        {'id': 'llm-pi-ai', 'config': {'providers': providers}},
-        {'id': 'agent-default-model', 'config': {key: routes['character'][key]
-            for key in ('provider', 'model', 'reasoningEffort')}},
         {'id': 'session-title-llm', 'disabled': True},
         # Her web_search and web_fetch go through the cognition core's providers (search.js, fetch.js).
         {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'asuna-fetch'}},
         {'id': 'agent-preset-registry', 'config': {'default': persona['preset']}},
         {'id': 'asuna-publication-floor', 'config': {
             'dataRoot': str(data_root), 'python': sys.executable,
-            'defaultProject': persona['project'], 'route': routes['action'],
+            'defaultProject': persona['project'],
             **({'stateDir': state_dir} if state_dir else {}),
             'projects': [{'id': persona['project'], 'root': str(persona['root']), 'format': 'package'},
                          *({'id': c['project'], 'root': str(c['root']), 'format': 'package'} for c in channels),
                          {'id': 'core', 'root': str(ROOT), 'format': 'repository'}]}},
         {'id': 'asuna-cognition-core', 'config': {
-            'python': sys.executable, 'persona': config['chat']['persona'], 'routes': routes,
+            'python': sys.executable, 'persona': config['chat']['persona'],
             'deployment': export_settings(config)['deployment'],
             # A first choice only: a value saved on the settings card wins over these defaults.
             **({'channelAdmission': channel_admission} if channel_admission else {})}},
@@ -160,7 +139,6 @@ def main():
     parser.add_argument('--channel-package', type=Path, action='append', default=[],
                         help='channel package directory, e.g. packages/channels/napcat-qq (repeatable; packed like the persona)')
     parser.add_argument('--profile', default='asuna-native', help='DSH profile name (asuna-demo for the demo environment)')
-    parser.add_argument('--shared-action-model', action='store_true', help='Route both brains to the configured action model')
     parser.add_argument('--port', type=int, help='Web port this profile starts on (recorded; default: as before, else 8780)')
     parser.add_argument('--channel-admission', choices=('explicit', 'automatic'),
                         help='channel admission for a profile that has not saved one (default explicit)')
@@ -202,8 +180,7 @@ def main():
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
     prior = yaml.safe_load(editable.read_text(encoding='utf-8')) if editable.exists() else []
-    defaults = profile_patch(config, args.config, persona, args.shared_action_model, args.profile, channels,
-                             args.channel_admission)
+    defaults = profile_patch(config, args.config, persona, args.profile, channels, args.channel_admission)
     stored = {}
     def merge(base, override):
         if isinstance(base, dict) and isinstance(override, dict):
@@ -240,10 +217,8 @@ def main():
         if row.get('id') == 'web':
             row['config'] = dict(next(r for r in defaults if r['id'] == 'web')['config'])
     editable.write_text(yaml.safe_dump(merged, allow_unicode=True, sort_keys=False), encoding='utf-8')
-    credential_values = {'ASUNA_NATIVE_' + lane.upper() + '_KEY': config[source].get('api_key') or 'local-no-auth'
-        for lane, source in (('character', 'executor' if args.shared_action_model else 'character'), ('action', 'executor'))}
-    # Business secrets go to the same store; existing values there are kept (import_native_credentials.mjs).
-    credential_values.update(export_settings(config)['secrets'])
+    # Business secrets go to DSH's credential store; existing values there are kept (import_native_credentials.mjs).
+    credential_values = dict(export_settings(config)['secrets'])
     credential_values.update(stored)
     subprocess.run(['node', str(ROOT / 'tools/import_native_credentials.mjs')], cwd=ROOT,
                    input=json.dumps({'home': str(home), 'values': credential_values}), text=True,
@@ -281,7 +256,7 @@ def main():
     except (OSError, ValueError):
         port = args.port
     (base / 'launch.json').write_text(json.dumps({'config': str(args.config.resolve()), **({'port': port} if port else {}),
-        'profile': args.profile, 'shared_action_model': args.shared_action_model, 'native_credentials': True,
+        'profile': args.profile,
         'setup': {'persona_package': relative(args.persona_package),
                   'channel_packages': [relative(directory) for directory in args.channel_package]},
         'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}}, indent=2), encoding='utf-8')

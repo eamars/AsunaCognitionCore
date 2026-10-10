@@ -61,8 +61,7 @@ export async function syncCheckout(launch, exec, report = text => process.stderr
   if (changed && !changed.length) return 'UP_TO_DATE';
   report('Asuna: installing the checkout (' + (changed ?? ['all packages']).join(', ') + ')');
   const install = ['tools/setup_native_profile.py', '--config', launch.config, '--profile', launch.profile,
-    '--persona-package', setup.persona_package, ...(setup.channel_packages ?? []).flatMap(d => ['--channel-package', d]),
-    ...(launch.sharedActionModel ? ['--shared-action-model'] : [])];
+    '--persona-package', setup.persona_package, ...(setup.channel_packages ?? []).flatMap(d => ['--channel-package', d])];
   if (await exec(python, install) !== 0) throw new Error('Installing the checkout failed; start with --no-sync to run what is installed');
   return 'INSTALLED';
 }
@@ -118,14 +117,11 @@ export async function resolveLaunch(argv, env = process.env) {
   const config = path.resolve(root, options.config ?? launch.config ?? 'config/local.json');
   if (launch.config && path.resolve(launch.config) !== config)
     throw new Error('Profile ' + options.profile + ' was installed for a different local configuration');
-  // Native settings own the credentials once imported; the local file is then only a migration source.
-  const local = await read(config, launch.native_credentials ? {} : undefined);
+  const local = await read(config, {});
   return { profile: options.profile, base, home: path.join(base, 'home'), config, database: local.database,
     // The profile's own port (ADR-020): this start's --port, else the one its install recorded, else 8780.
     port: options.port ?? launch.port ?? 8780, dryRun: options.dryRun, sync: options.sync, once: options.once,
-    setup: launch.setup, installed: launch.installed,
-    sharedActionModel: Boolean(launch.shared_action_model),
-    nativeCredentials: Boolean(launch.native_credentials), local };
+    setup: launch.setup, installed: launch.installed };
 }
 
 /** Every installed profile of this checkout: its persona, Web port, database and whether something answers there. */
@@ -158,14 +154,9 @@ async function main() {
   }
   const launch = await resolveLaunch(process.argv.slice(2));
   if (launch.dryRun) {
-    const { local, ...visible } = launch;
-    process.stdout.write(JSON.stringify(visible) + '\n'); return 0;
+    process.stdout.write(JSON.stringify(launch) + '\n'); return 0;
   }
-  const models = await read(launch.config.replace(/\.json$/, '.models.local.json'), {});
   const env = await packageManagerEnv({ ...process.env, DSH_HOME: launch.home, DSH_TELEMETRY_DISABLED: '1' });
-  if (!launch.nativeCredentials)
-    for (const [lane, source] of [['character', launch.sharedActionModel ? 'executor' : 'character'], ['action', 'executor']])
-      env['ASUNA_NATIVE_' + lane.toUpperCase() + '_KEY'] = (models[source] || launch.local[source]).api_key || 'local-no-auth';
   const dsh = path.join(root, 'node_modules/@deepseek-ai/dsh/lib/bin.js');
   const run = args => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [dsh, ...args], { cwd: root, env, windowsHide: true, stdio: 'inherit' });

@@ -54,7 +54,7 @@ export class NativeChildren {
     this.pending.set(prompt, stage);
     const request = { parent, prompt,
       label: stage.title ?? stage.task?.title ?? stage.binding.task_id ?? stage.binding.scene_id,
-      signal: new AbortController().signal, agentOptions: nativeRoute(core.config.routes.action) };
+      signal: new AbortController().signal, agentOptions: nativeRoute(core.routeFor('action')) };
     const descriptor = stored.find(event => event.type === 'subagent/descriptor')?.data;
     // Resume the owned native source for a crash recovery or a successor task
     // on this execution binding. Its first descriptor and catalog remain intact.

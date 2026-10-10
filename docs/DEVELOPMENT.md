@@ -52,7 +52,7 @@ profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environm
 ## Python modules by area
 
 - **Entry and hosting:** `native_worker` (the worker the Host plugin starts), `host`, `application`, `cli`, `config`,
-  `native_settings`, `model_settings`, `lanes`, `queue`, `state` (the Mongo store), `audit`, `evidence`, `testing`.
+  `native_settings`, `lanes`, `queue`, `state` (the Mongo store), `audit`, `evidence`, `testing`.
 - **A turn:** `ingress`, `router`, `coordinator`, `context`, `context_budget`, `render`, `role_tools`, `tool_args`,
   `answers`, `publish`, `lines`, `chat`.
 - **Groups and people:** `attend` (the relevance gate), `proactive`, `rhythm`, `people`, `peer_context`,

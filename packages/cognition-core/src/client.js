@@ -345,7 +345,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
   const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort'];
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 

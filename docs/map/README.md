@@ -131,6 +131,23 @@ Decided in ADR-011.
     take effect through `development_publish` (the publication floor,
     [floor.js](../../packages/cognition-core/src/floor.js)).
   - A change the Host must load needs a restart. She asks with `restart` (`restarts`).
+- **The states of a publication.** `development_publish` (`PublicationFloor.publish` in
+  [floor.js](../../packages/cognition-core/src/floor.js)) checks the candidate, probes that it boots and packs it, then
+  selects it in `.runtime/adr008/activation.json`:
+  - **HOST_RESTART_REQUIRED:** JavaScript, package or lock files changed. Nothing runs it yet. At the next start the
+    launcher installs it (`applySelection` in [asuna-launch.mjs](../../tools/asuna-launch.mjs)), which makes it APPLIED.
+    An unattended self-improvement turn cannot publish on top of one still waiting.
+  - **APPLIED:** installed. The worker loads it when it next starts.
+  - **ACTIVE:** running. `PublicationFloor.workerReady` sets it when the worker has started on it; the Host plugin
+    calls it once the worker is ready ([index.js](../../packages/cognition-core/src/index.js), which tells the worker
+    `publication.activated`).
+  - A selection that has not become ACTIVE after two starts goes back to the last ACTIVE one (`advanceSelection` in
+    asuna-launch.mjs; the supervisor does the same when it falls back).
+  - So "published" is not "running": running is ACTIVE, after a start.
+- **Protected files.** The publication floor cannot be changed by her own publishing: the launcher and start scripts,
+  the pack and install tools, floor.js and the modules it imports, and the runtime manifest (`protectedPaths` in
+  floor.js). Writing one in a candidate is refused, and so is publishing a candidate that changed one
+  (`DEVELOPMENT_FLOOR_PROTECTED`). Only the owner, or his coding agents, change them in the checkout.
 - **The launcher.** It prepares each start from the code on disk
   ([asuna-launch.mjs](../../tools/asuna-launch.mjs)), and its supervisor falls back to the previous version when a
   start fails ([asuna-supervisor.mjs](../../tools/asuna-supervisor.mjs)).

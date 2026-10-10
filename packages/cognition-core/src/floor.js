@@ -146,17 +146,21 @@ export class PublicationFloor {
     return () => { if (this.coreProbe === probe) this.coreProbe = null; };
   }
 
+  /** The selection record (activation.json): each project's published selection (`projects`) and the one that last ran (`active`). */
   async selected() { return json(this.activationFile, { projects: {}, active: {} }); }
 
+  /** What runs for a project now: its selection once installed (APPLIED or ACTIVE), else the one that last ran. */
   async effective(id) {
     const selected = await this.selected(), pending = selected.projects[id];
     return pending && pending.state !== 'HOST_RESTART_REQUIRED' ? pending : selected.active?.[id];
   }
 
+  /** The worker's Python package: the core selection's, else this package's own. */
   async workerPath() {
     return (await this.effective('core'))?.workerPath ?? path.join(packageRoot, 'python');
   }
 
+  /** The persona package's skill folders, from its selected artifact. */
   async skillPaths(persona) {
     return (await this.persona(persona)).skill_directories;
   }
@@ -173,6 +177,7 @@ export class PublicationFloor {
     return resolveChannel(channel, root ?? channel.resource_root);
   }
 
+  /** The worker has started on the selections: each APPLIED one becomes ACTIVE, the one that last ran (index.js calls this once the worker is ready). */
   async workerReady(projectId) {
     const selected = await this.selected(); selected.active ??= {};
     const activated = [];
@@ -195,6 +200,7 @@ export class PublicationFloor {
     return directory;
   }
 
+  /** A development project by id, refused in words when this Host has no such project. */
   async ensure(id = this.config.defaultProject) {
     const project = this.projects.get(id);
     if (!project || !/^[a-z][a-z0-9-]{0,50}$/.test(id)) {
@@ -233,6 +239,7 @@ export class PublicationFloor {
     return { ...project, source, candidate, baselineFile, baseline };
   }
 
+  /** One development_* tool call on a project's candidate copy. */
   async call(tool, args = {}, origin = {}) {
     const execute = async () => {
       const project = await this.ensure(args.project);
@@ -337,6 +344,7 @@ export class PublicationFloor {
     const pending = this.serial.then(execute); this.serial = pending.catch(() => {}); return pending;
   }
 
+  /** Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED. */
   async publish(project, reason, origin = {}) {
     // An unattended self-improvement turn never stacks a change on one that has not run yet (ADR-021 D4).
     if (origin.unattended && (await this.selected()).projects?.[project.id]?.state === 'HOST_RESTART_REQUIRED')
@@ -398,6 +406,7 @@ export class PublicationFloor {
     return { ...value, activated: false };
   }
 
+  /** Check and pack a frozen candidate: its package.json, exports and composition against the running ones, and a boot probe that imports it. */
   async prepare(project, frozen) {
     const target = project.format === 'repository' ? path.join(frozen, 'packages/cognition-core') : frozen;
     // A file of the package as her development tools name it (relative to the project).

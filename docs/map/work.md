@@ -12,17 +12,35 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 
 - def `report_pages` — The action brain's report as pages of at most `size` characters.
 - def `page_note` — What the end of a page says: where she is, how long the report is, and how to turn the page.
-- def `bounded_result` — …
+- def `bounded_result`
 - class `FeedbackStale` — The action result no longer authorizes a pending role continuation.
-- def `require_current_feedback` — …
+- def `require_current_feedback`
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - def `workspace_reason` — Why a file operation failed and what to do, in her words (the traceback stays in stderr).
 - def `stale_reason` — Why a call's task no longer holds its authority, as the program sees it.
-- class `TaskService` — … Methods: `collab`, `claim`, `valid`, `cancel`, `pause_for_restart`, `keepalive`, `feedback`, `handback`, `record_handback_failure`, `give_up_handback`, `close_orphan`.
-- def `given_text` — …
-- class `ToolBroker` — Trusted host process; no DB/publication credentials enter model or child tools. Methods: `specs`, `bind`, `call`, `close`.
+- class `TaskService`
+  - `collab` — One entry of the two brains' thread in her conversation (coordinator.collab); a view only.
+  - `claim`
+  - `valid`
+  - `cancel`
+  - `pause_for_restart` — Preserve old work and receipts; only a new local request can resume.
+  - `keepalive` — Renew only this live worker's fenced lease while it waits on a model.
+  - `feedback` — Hand a finished task's result back to her in a turn of her own.
+  - `handback` — Where the task's result stands on its way back to her character brain, for the thread's view: handing, taken (her turn on it finished) or missed (cause: report, turn or restart; final once the watchdog stops).
+  - `record_handback_failure` — A hand-back failed before her turn (ADR-030 D4): counted, so the watchdog knows what to try next.
+  - `give_up_handback` — Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told.
+  - `close_orphan` — A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such.
+- def `given_text`
+- class `ToolBroker` — Trusted host process; no DB/publication credentials enter model or child tools.
+  - `specs`
+  - `bind`
+  - `call`
+  - `close`
 - def `workspace_lock_path` — The lease file that keeps two task workers out of one workspace.
-- class `Executor` — … Methods: `run`, `pending_messages`, `delivered`.
+- class `Executor`
+  - `run`
+  - `pending_messages`
+  - `delivered`
 
 ## `grants`
 
@@ -30,7 +48,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 
 Host-owned resource grants, never inferred from a message or model role.
 
-- def `workspace_grant` — …
+- def `workspace_grant`
 - def `conversation_workspace` — Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it; each turn still checks its own speaker with workspace_grant).
 - def `development_granted` — Who may hand work with the development tools to the action brain (ADR-011 §6.1).
 
@@ -44,8 +62,27 @@ Business ownership for native DSH reminders; no host time wheel.
 - def `night_stage_busy` — Why a night stage would stack on an earlier one, or None: a self-development turn or its task still at work, or one of her publications still being activated.
 - def `waiting_restart` — Her publications that run only once the Host restarts: [(project, published_at)], oldest first.
 - def `set_titles` — The Host's words for her rhythm tasks; keys it does not know are ignored.
-- def `plan_title` — …
-- class `ScheduleService` — … Methods: `close`, `zone_of`, `ensure_self_development`, `ensure_night_development`, `ensure_presence`, `pause_presence`, `watch_rhythm`, `ensure_settlement`, `next_beat`, `beat_now`, `visit`, `errand`, `note`, `create`, `update`, `cancel`, `reconcile`, `retitle`, `deliver`.
+- def `plan_title`
+- class `ScheduleService`
+  - `close`
+  - `zone_of` — 这个场景/这条计划用哪个钟面。计划上已落库的时区优先：改配置不追改旧安排。
+  - `ensure_self_development` — Register one native recurring opportunity, with no second host clock.
+  - `ensure_night_development` — ADR-021: a native tick every NIGHT_TICK_SECONDS; each tick asks whether a night stage is due (_night_stage), so her own window and pace apply at once, with no record to re-arm.
+  - `ensure_presence` — Heartbeat needs the persona model (heartbeat.enabled) and the owner's local target scene.
+  - `pause_presence` — Her heartbeat.pause_min: beats keep ticking but skip until then, and resume by themselves.
+  - `watch_rhythm` — Watchdog (ADR-012 §4.3): a heartbeat that went quiet for two beats is rebuilt, and she is told.
+  - `ensure_settlement` — Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date.
+  - `next_beat` — When DSH will next deliver her heartbeat (its own record), or None.
+  - `beat_now` — The owner's /heartbeat (ADR-012 §8): one beat now through the same path, without the gates.
+  - `visit` — Her visit (ADR-012 §4.2): checked against the same rules her places view shows, then a public turn in that group.
+  - `errand` — An errand someone at home gave her (ADR-017): a turn in that chat sees only that chat and the words she was given, named as whose they are.
+  - `note` — A note of hers to another of her conversations (ADR-018).
+  - `create` — where: {scene_id, person_id} of a peer line when she plans from home into that line (role_tools checks the turn is home); the plan then lives, fires and is changed in that line.
+  - `update` — 改期/改内容：在**同一条 plans** 下换掉底层原生提醒，只有当前版本会产生行动。
+  - `cancel`
+  - `reconcile`
+  - `retitle` — Her rhythm tasks renamed after the Host gave new words (set_titles); her own plans keep their wording.
+  - `deliver`
 
 ## `schedule_rules`
 
@@ -53,12 +90,12 @@ Business ownership for native DSH reminders; no host time wheel.
 
 ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——纯换算，不碰网络也不碰 Mongo。
 
-- def `now_utc` — …
+- def `now_utc`
 - def `scene_timezone` — 这个场景（或这条计划创建时）用哪个时区。计划上已落库的时区优先，改配置不追改旧计划。
-- def `offset_minutes` — …
+- def `offset_minutes`
 - def `wall_to_utc` — 本地墙钟 → UTC 瞬间，并说明这段本地时间是什么情况。
 - def `normalize_rule` — 校验并规范化一条时间安排；只认四种计时，别的都明确拒绝（不静默降级成"大概十分钟"）。
-- def `rule_kind` — …
+- def `rule_kind`
 - def `rearms_after_fire` — 到期后要不要由宿主再挂一次原生单次：每日／每周要；原生自己重复的 every 不要。
 - def `next_fire` — 下一次绝对时刻（aware UTC）。时间已过／本地不存在都抛 ValueError，不静默当成已完成。
 - def `local_moment` — The moment on the wall clock of an IANA zone (rhythm, settlement dates).
@@ -66,7 +103,7 @@ ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——�
 - def `is_iana` — An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept.
 - def `native_recurring` — Clock rules in an IANA zone map to native daily/weekly (weekday 0…6 → ISO 1…7); else None.
 - def `native_payload` — 给原生 /schedule/create 的载荷：固定间隔交给原生重复，其余一律换算成"多少秒之后"的单次。
-- def `describe` — …
+- def `describe`
 - def `project` — 把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。
 - def `local_clock` — 给角色的现场钟面：她换算"明天下午三点"要用，不让她猜自己在哪个时区。
 - def `line_stamp` — When one stored line was said, on her clock face (month/day hour:minute); '' when unknown.
@@ -80,7 +117,9 @@ A task's commands, run under DSH's sandbox (sandbox_backend.py): writes stay in 
 
 - def `command_problem` — What is wrong with this argv, in her words, or None.
 - def `launch_problem` — Why the sandbox could not start her command, and what to do.
-- class `Sandbox` — … Methods: `native`, `run`.
+- class `Sandbox`
+  - `native` — Her argv as this machine runs it: python3 is the worker's Python, /task is the task folder.
+  - `run` — ``env``: extra variables for this one command (her credentials, credentials.environment).
 - def `run_bounded` — Run a wrapped command: its output capped, its time bounded, stdin never the worker's own (the Host's request pipe).
 
 ## `sandbox_backend`
@@ -90,10 +129,10 @@ A task's commands, run under DSH's sandbox (sandbox_backend.py): writes stay in 
 Where commands the worker does not write itself run: DSH's own sandbox (owner 2026-10-06).
 
 - def `attach` — The worker's way to ask the Host: confine(argv, root) -> wrapped argv.
-- def `validate` — …
+- def `validate`
 - def `chosen` — {'backend', 'reason', 'reason_code'} for this worker: a reason the program words has a code the settings card shows in the viewer's language; the Host's own reason is passed as it is.
-- def `available` — …
-- def `require` — …
+- def `available`
+- def `require`
 - def `confine` — The Host's wrapped argv that runs `argv` with writes confined to `root`.
 - def `environment` — What a confined command inherits: enough for Windows and Python to start, no credentials.
 
@@ -111,10 +150,10 @@ Schemas for the native Host publication floor; no second publisher.
 Her credentials (owner 2026-10-07): secrets a home task may use without any brain holding the value.
 
 - def `attach` — The Host's credential requests: call({'op': 'list'|'read'|'write'|'delete', ...}).
-- def `available` — …
+- def `available`
 - def `listing` — What a home turn or task may see: [{name, note, env: [variable names]}].
 - def `keep` — File a credential (a new one, or new values for a name already filed).
-- def `drop` — …
+- def `drop`
 - def `environment` — The variables of these credentials, for one sandboxed command.
 - def `scrub` — The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts).
 - def `home_task` — Whether this task came from home (credentials are for home tasks only).
@@ -127,7 +166,7 @@ Pictures from the configured local image service, for any task (owner 2026-10-06
 
 - def `available` — The tool exists for a task only when the integration runs and has an `image` endpoint.
 - def `validate` — (request, None) or (None, error): what the namespace script may do is decided here.
-- def `extension` — …
+- def `extension`
 - def `generate` — One picture into the workspace; failures are the service's or the transport's own words.
 
 ## `svg_render`
@@ -137,7 +176,7 @@ Pictures from the configured local image service, for any task (owner 2026-10-06
 render_svg (ADR-027): an SVG file in the task folder made into a PNG she can look at and send.
 
 - def `attach` — The Host's renderer: render({svg, width, background}) -> {png (base64), width, height}.
-- def `available` — …
+- def `available`
 - def `safe_svg` — (svg, dropped links) or raises ValueError: links to pictures outside the file removed; no entity declarations.
 - def `render` — One SVG from the task folder rendered to a PNG in it, registered as her picture.
 
@@ -157,11 +196,21 @@ Owner-granted (and, narrowly, agent-line) fixed-network integration lifecycle; c
 - def `event_profile` — The integration profile an event carries — `owner`, `agent_home` or None.
 - def `event_granted` — Whether an event carries an integration grant at all; which one it is, is `event_profile`.
 - def `direct` — The run's view of its endpoints: each alias at the device's own address.
-- def `valid_argv` — …
+- def `valid_argv`
 - def `native_argv` — An adapter argv as this machine runs it: python3 is the worker's Python; /app, /data and /integration/config.json (how the adapter and its manual name them) are the run's own folders and file.
-- class `ManagedProcess` — One adapter (or trusted one-shot) process under the Host's sandbox (sandbox_backend.py): it may write only its data folder, and reaches its endpoints directly (owner 2026-10-06: no network rule). Methods: `snapshot`, `stop`.
+- class `ManagedProcess` — One adapter (or trusted one-shot) process under the Host's sandbox (sandbox_backend.py): it may write only its data folder, and reaches its endpoints directly (owner 2026-10-06: no network rule).
+  - `snapshot`
+  - `stop`
 - def `validate_profile` — Shared startup/settings validation with no process, lease or filesystem writes.
-- class `IntegrationRunner` — … Methods: `restore`, `service_argv`, `release`, `call`, `import_artifact`, `generate_image`, `status`, `close`.
+- class `IntegrationRunner`
+  - `restore`
+  - `service_argv` — The resident command of the channel this adapter serves (its kind's SERVICE_ARGV), or None.
+  - `release` — The published adapter: the only code a managed service runs (ADR-011 §5.2, one publish path).
+  - `call`
+  - `import_artifact` — Read one artifact from a configured endpoint; the platform writes it into the task workspace.
+  - `generate_image` — One picture from the image endpoint (image_generation); only that relay is reachable.
+  - `status`
+  - `close`
 
 ## `integration_fetch`
 
@@ -170,7 +219,7 @@ Owner-granted (and, narrowly, agent-line) fixed-network integration lifecycle; c
 Trusted one-shot artifact fetcher, run by the managed integration (integration.py) for one configured endpoint.
 
 - def `http_get` — One GET over a configured relay.
-- def `main` — …
+- def `main`
 
 ## `integration_image`
 
@@ -178,17 +227,19 @@ Trusted one-shot artifact fetcher, run by the managed integration (integration.p
 
 Trusted one-shot image generation, run only inside the managed integration namespace.
 
-- class `Failure` — …
-- class `Service` — … Methods: `request`, `json`.
-- def `clip` — …
+- class `Failure`
+- class `Service`
+  - `request` — One request; returns (status, headers, bytes).
+  - `json`
+- def `clip`
 - def `guidance` — How this workflow wants to be prompted and what it is for, in the service's own words.
-- def `list_workflows` — …
-- def `text_to_image` — …
+- def `list_workflows`
+- def `text_to_image`
 - def `choose_workflow` — The named workflow when it is ready and draws from text; otherwise the service's own choice.
 - def `parameters` — Only the fields the workflow declares; anything else is refused here, as the service would.
-- def `first_view` — …
-- def `run` — …
-- def `main` — …
+- def `first_view`
+- def `run`
+- def `main`
 
 ## `integration_import`
 

@@ -12,14 +12,51 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
 
 - def `prune_host_reports` — Each worker start writes its evidence to a new reports folder; only the newest few are kept.
 - class `ContextOverflow` — A stage of her conversation was refused because the session no longer fits the model's window, after DSH's own overflow compaction (ADR-028).
-- class `NativeLane` — … Methods: `child_title`, `generate`, `turn_done`, `wait`, `close`.
-- class `BusinessWorker` — … Methods: `host_call`, `emit`, `initialize`, `prepare_navigation`, `channel_workspace`, `role_session_id`, `continued_session`, `earlier_sessions`, `carry_session`, `action_session_id`, `watch_host`, `resolve_role_session`, `status`, `read_only_note`, `bind_session`, `session`, `task_fenced`, `parent_session`, `collab`, `action_message`, `episode_finished`, `project_input`, `channel_title`, `channel_input`, `dispatch`, `close`.
-- class `NativeScheduleLane` — Only transports business operations to the Host's native scheduler. Methods: `schedule`, `close`.
-- class `NativeDevelopmentBridge` — Keep source publication available even when this worker cannot import. Methods: `call`.
-- def `error_text` — …
-- class `Dispatcher` — … Methods: `respond`, `handle`, `close`.
+- class `NativeLane`
+  - `child_title` — A child session's title: content only (her task's title, or the conversation it serves), since DSH shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8).
+  - `generate` — One stage of a native turn.
+  - `turn_done` — Her turn has no further stage (coordinator._turn): the plugin ends the native turn.
+  - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
+  - `close`
+- class `BusinessWorker`
+  - `host_call`
+  - `emit`
+  - `initialize`
+  - `prepare_navigation` — Bind real native conversations; the Host owns their logs and workspaces.
+  - `channel_workspace` — The shared native workspace of one platform's conversations (<data>/work/<kind>).
+  - `role_session_id`
+  - `continued_session` — The session a conversation continues in now: its successors followed to the last one.
+  - `earlier_sessions` — This session and every session it continued from (their successors lead to it).
+  - `carry_session` — Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that carries the old one's last summary, and the old binding names it as successor.
+  - `action_session_id` — One native context per authorized execution binding, including old logs.
+  - `watch_host`
+  - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
+  - `status`
+  - `read_only_note`
+  - `bind_session`
+  - `session`
+  - `task_fenced`
+  - `parent_session` — Her role session the task belongs to: where its collaboration thread is drawn.
+  - `collab` — One entry of the two brains' thread (ADR-011 §7.1); the plugin appends it to her conversation.
+  - `action_message` — Her words for a running action session: steered in at its next step (ADR-011 §4).
+  - `episode_finished`
+  - `project_input`
+  - `channel_title` — Conversation title a person can read (content only): the configured name, else the group name or peer name the platform last sent with a message in that scene, else the number.
+  - `channel_input` — A real processed platform receipt, including quiet/error outcomes; never a model turn.
+  - `dispatch`
+  - `close`
+- class `NativeScheduleLane` — Only transports business operations to the Host's native scheduler.
+  - `schedule`
+  - `close`
+- class `NativeDevelopmentBridge` — Keep source publication available even when this worker cannot import.
+  - `call`
+- def `error_text`
+- class `Dispatcher`
+  - `respond`
+  - `handle`
+  - `close`
 - def `serve` — The Host's requests, one JSON line each.
-- def `main` — …
+- def `main`
 
 ## `host`
 
@@ -29,7 +66,7 @@ Long-lived owner of Application, queues and adapter listeners; Web is a client.
 
 - def `prepare_channels` — Explicit DM/group identities and disjoint per-member resource grants.
 - def `write_route_keys` — Each route of a ROUTE_KEYS channel gets its key in <data>/private/route-keys/<channel>-<route>.json, ignored by git, for the agent on that line to read (ADR-033 D4).
-- class `RuntimeHost` — …
+- class `RuntimeHost`
 
 ## `application`
 
@@ -45,7 +82,7 @@ Wires the worker's services together: `Application` opens the store, starts retr
 
 The `asuna` command line: `asuna ui` opens the native DSH Web profile; every other command is debug or maintenance only and needs `--debug`.
 
-- def `main` — …
+- def `main`
 
 ## `config`
 
@@ -56,13 +93,13 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `local_workspace` — The local chat's working folder: one per profile, in its data folder.
 - def `database_lock` — The lock file that keeps one Host per database (server address and name; never its credentials).
 - def `character_id` — Stable persisted identity supplied by the selected persona contribution.
-- def `prompt_path` — …
-- def `schema` — …
-- def `redact_text` — …
-- def `load` — …
-- def `validate_database` — …
+- def `prompt_path`
+- def `schema`
+- def `redact_text`
+- def `load`
+- def `validate_database`
 - def `validate_endpoint` — The rule DSH's Models page applies to a provider address: an http or https URL with a host.
-- def `redacted` — …
+- def `redacted`
 - def `ago` — How long ago, as she and the owner read it: 刚才, N 分钟前, N 小时前, N 天前.
 - def `excerpt` — Bounded text for a context block; a cut always says so and how long the original was.
 
@@ -73,9 +110,9 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 Native DSH settings migration and model-free runtime validation.
 
 - def `credential_ref` — The credential store's name for the secret at this settings path: ASUNA_EMBEDDING_API_KEY.
-- def `export_settings` — …
-- def `resolve_secrets` — …
-- def `runtime_settings` — …
+- def `export_settings`
+- def `resolve_secrets`
+- def `runtime_settings`
 
 ## `lanes`
 
@@ -83,10 +120,12 @@ Native DSH settings migration and model-free runtime validation.
 
 The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said), and `FakeLane` is the scripted stand-in tests use instead of a model.
 
-- class `LaneResult` — …
-- class `Lane` — … Methods: `generate`.
+- class `LaneResult`
+- class `Lane`
+  - `generate`
 - class `FakeTurn` — A scripted character turn for FakeLane: tool calls in order, then the final text.
-- class `FakeLane` — Deterministic engineering test double only; never selected for live runs. Methods: `generate`.
+- class `FakeLane` — Deterministic engineering test double only; never selected for live runs.
+  - `generate`
 
 ## `queue`
 
@@ -94,10 +133,10 @@ The model-lane contract: `LaneResult` is what one turn returns (its text, tool c
 
 Process-wide and cross-process endpoint serialization, without cloud routes.
 
-- class `EndpointLock` — …
-- class `RuntimeLease` — …
-- def `effects_lock_path` — …
-- def `database_effects_lock` — …
+- class `EndpointLock`
+- class `RuntimeLease`
+- def `effects_lock_path`
+- def `database_effects_lock`
 
 ## `state`
 
@@ -105,13 +144,25 @@ Process-wide and cross-process endpoint serialization, without cloud routes.
 
 The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
 
-- def `content_digest` — …
+- def `content_digest`
 - def `commit_payload` — state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
 - def `content_ref` — {content_sha256, bytes} for model output kept elsewhere (receipt or native transcript).
-- def `now` — …
-- class `Conflict` — …
-- class `Denied` — …
-- class `Store` — … Methods: `migrate`, `audit`, `put`, `recover_commits`, `get`, `authorize`, `identity`, `seed`, `init_head`, `head`, `mutate`, `public_messages`.
+- def `now`
+- class `Conflict`
+- class `Denied`
+- class `Store`
+  - `migrate`
+  - `audit`
+  - `put`
+  - `recover_commits`
+  - `get`
+  - `authorize`
+  - `identity`
+  - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
+  - `init_head`
+  - `head`
+  - `mutate`
+  - `public_messages`
 
 ## `audit`
 
@@ -119,13 +170,13 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
 
 Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 
-- def `reconcile_calls` — …
-- def `verify` — …
+- def `reconcile_calls`
+- def `verify`
 - def `verify_documents` — Compare each document's latest audited commit with the collection (ADR-009 D-4).
 - def `trace_contents` — {content_sha256: document} for reference commits that still match the collection; exported with a trace.
-- def `replay` — …
-- def `projection` — …
-- def `render_html` — …
+- def `replay`
+- def `projection`
+- def `render_html`
 
 ## `evidence`
 
@@ -133,11 +184,13 @@ Checks and replays the store's audit trail: `verify` walks each stream's hash ch
 
 File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 
-- def `canonical` — …
-- def `sha` — …
-- def `write_json` — …
-- class `Evidence` — One immutable directory per attempt. Methods: `record`.
-- class `LocalHttp` — Captures the exact serialized HTTP body submitted to a literal local endpoint. Methods: `request`.
+- def `canonical`
+- def `sha`
+- def `write_json`
+- class `Evidence` — One immutable directory per attempt.
+  - `record`
+- class `LocalHttp` — Captures the exact serialized HTTP body submitted to a literal local endpoint.
+  - `request`
 
 ## `testing`
 
@@ -156,9 +209,17 @@ Explicit teardown for databases owned by isolated tests and probes.
 Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supervisor.mjs).
 
 - def `supervised` — Whether this Host runs under the supervisor; without it nobody would take a request.
-- def `folder` — …
-- def `last` — …
-- class `Desk` — … Methods: `preview`, `request`, `cancel`, `quiet`, `due`, `go`, `start`, `close`.
+- def `folder`
+- def `last`
+- class `Desk`
+  - `preview`
+  - `request`
+  - `cancel`
+  - `quiet`
+  - `due`
+  - `go` — Hand the due request to the supervisor: the stop is planned, and what it interrupts is recorded now.
+  - `start`
+  - `close`
 - def `block` — restart_from_program for a home turn: the supervisor's latest record, for a day.
 - def `call_after_fallback` — Once, right after a restart that fell back: a home turn tells her she runs the previous version.
 
@@ -179,7 +240,8 @@ When the Host was taken away from outside (小满's ask, 2026-10-08): she should
 One running Host per database, across machines (ADR-020 M1).
 
 - def `host_id` — This deployment's identity, created once in its data folder.
-- class `DatabaseLease` — … Methods: `acquire`.
+- class `DatabaseLease`
+  - `acquire`
 - def `mark_planned` — Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the next start then records a planned restart, not an external termination.
 
 ## `local_time`
@@ -188,7 +250,7 @@ One running Host per database, across machines (ADR-020 M1).
 
 Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
 
-- def `is_time_key` — …
+- def `is_time_key`
 - def `stamp` — One time on the local clock, `YYYY-MM-DD HH:MM`; the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).

@@ -66,7 +66,8 @@ def python_entry(path):
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith('_'):
             kind = 'class' if isinstance(node, ast.ClassDef) else 'def'
-            methods = [item.name for item in node.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            methods = [(item.name, first_sentence(ast.get_docstring(item))) for item in node.body
+                       if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
                        and not item.name.startswith('_')] if kind == 'class' else []
             symbols.append((kind, node.name, first_sentence(ast.get_docstring(node)), methods))
     return ast.get_docstring(tree) or '', symbols
@@ -74,6 +75,20 @@ def python_entry(path):
 
 JSDOC = re.compile(r'/\*\*(.*?)\*/', re.S)
 EXPORT = re.compile(r'(?:/\*\*((?:(?!\*/).)*?)\*/\s*)?export\s+(?:default\s+)?(?:async\s+)?(function|class|const)\s+(\w+)', re.S)
+# A class method at the class body's indent, with the /** */ right above it when there is one.
+METHOD = re.compile(r'(?:/\*\*((?:(?!\*/).)*?)\*/\s*\n)?^  (?:static\s+)?(?:async\s+)?(?:get\s+|set\s+)?(\w+)\s*\([^)]*\)\s*\{',
+                    re.S | re.M)
+
+
+def js_methods(source, name):
+    """The public methods of class `name`: its body runs to the next line that closes at column 0."""
+    start = re.search(r'^(?:export\s+)?(?:default\s+)?class\s+%s\b[^\n]*\n' % name, source, re.M)
+    if not start:
+        return []
+    end = re.search(r'^\}', source[start.end():], re.M)
+    body = source[start.end():start.end() + (end.start() if end else len(source))]
+    return [(method, first_sentence(js_text(comment or ''))) for comment, method in METHOD.findall(body)
+            if method not in ('constructor', 'if', 'for', 'while', 'switch', 'catch') and not method.startswith('_')]
 
 
 def js_text(comment):
@@ -84,7 +99,8 @@ def js_entry(path):
     source = path.read_text(encoding='utf-8')
     head = JSDOC.match(source.lstrip())
     doc = js_text(head.group(1)) if head else ''
-    symbols = [('class' if kind == 'class' else 'def', name, first_sentence(js_text(comment or '')), [])
+    symbols = [('class' if kind == 'class' else 'def', name, first_sentence(js_text(comment or '')),
+                js_methods(source, name) if kind == 'class' else [])
                for comment, kind, name in EXPORT.findall(source)]
     return doc, symbols
 
@@ -134,8 +150,8 @@ def render():
             lines += ['## `%s`' % name, '', '[%s](%s)' % (path.relative_to(ROOT).as_posix(), target), '',
                       first_paragraph(doc) or '(no description)', '']
             for kind, symbol, said, methods in symbols:
-                more = (' Methods: ' + ', '.join('`%s`' % method for method in methods) + '.') if methods else ''
-                lines.append('- %s `%s` — %s%s' % (kind, symbol, said or '…', more))
+                lines.append('- %s `%s`%s' % (kind, symbol, ' — ' + said if said else ''))
+                lines += ['  - `%s`%s' % (method, ' — ' + told if told else '') for method, told in methods]
             lines.append('')
         pages[key + '.md'] = '\n'.join(lines).rstrip() + '\n'
     return pages, '\n'.join(index).strip()

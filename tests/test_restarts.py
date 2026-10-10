@@ -77,6 +77,17 @@ def test_quiet_waits_for_nothing_running_at_most_half_an_hour_and_a_time_waits_f
     assert d.cancel()['why'] == 'now' and not d.due()
 
 
+def test_a_waiting_request_survives_a_restart_before_it_is_due(store, tmp_path, monkeypatch):
+    monkeypatch.setenv('ASUNA_SUPERVISED', '1')
+    monkeypatch.setattr(restarts.Desk, 'start', lambda self: None)
+    d = desk(store, tmp_path, [T0])
+    d.request('drill', when='04:30', drill=True)
+    again = desk(store, tmp_path, [T0])                               # the Host was restarted by someone else
+    assert again.pending == d.pending and again.pending['drill'] is True
+    again.cancel()
+    assert desk(store, tmp_path, [T0]).pending is None
+
+
 def test_a_due_request_goes_to_the_supervisor_as_a_planned_stop(store, tmp_path, monkeypatch):
     monkeypatch.setenv('ASUNA_SUPERVISED', '1')
     marked = []

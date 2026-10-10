@@ -63,10 +63,24 @@ class Desk:
     def __init__(self, app, controller, *, root=None, zone='UTC', clock=None):
         self.app, self.controller, self.root, self.zone = app, controller, root, zone
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.pending = None
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = None
+        # Her request waits in <data>/restart/pending.json, so a restart by someone else before it is due keeps it.
+        try:
+            self.pending = json.loads((folder(root) / 'pending.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            self.pending = None
+        if self.pending and supervised():
+            self.start()
+
+    def _keep(self, pending):
+        target = folder(self.root) / 'pending.json'
+        if pending is None:
+            target.unlink(missing_ok=True)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
 
     # ── what a restart would interrupt ─────────────────────────────
     def preview(self):
@@ -110,6 +124,7 @@ class Desk:
         with self.lock:
             self.pending = {'asked': asked, 'why': why, 'when': when, 'drill': bool(drill),
                             'requested_at': moment.isoformat(), 'not_before': at.isoformat()}
+            self._keep(self.pending)
         self.start()
         return self.pending
 
@@ -129,6 +144,7 @@ class Desk:
     def cancel(self):
         with self.lock:
             had, self.pending = self.pending, None
+            self._keep(None)
         return had
 
     def quiet(self):
@@ -154,6 +170,7 @@ class Desk:
         """Hand the due request to the supervisor: the stop is planned, and what it interrupts is recorded now."""
         with self.lock:
             pending, self.pending = self.pending, None
+            self._keep(None)
         if not pending:
             return None
         request = {**pending, 'interrupted': self.preview()['interrupts'], 'go_at': self.clock().isoformat()}

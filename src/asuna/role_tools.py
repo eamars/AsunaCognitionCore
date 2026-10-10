@@ -446,9 +446,9 @@ def exposed(store, ep):
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
-        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer', 'place_timezone']
-        if kind in ('external', 'self_development', 'presence'):
-            names.append('restart')              # the Host supervisor (ADR-034); her home turns only
+        # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
+        # to restart is when she needs it most.
+        names += ['update_self', 'set_policy', 'pin_memory', 'message_developer', 'place_timezone', 'restart']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')

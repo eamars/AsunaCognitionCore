@@ -148,6 +148,18 @@ def test_a_fallback_calls_her_once(store, tmp_path):
     assert seen['result'] == restarts.RESULT_WORDS['fell_back'] and seen['reverted']
 
 
+def test_every_home_turn_has_the_tool_whatever_woke_her(store):
+    """2026-10-10: a turn woken by her own plan or note had no restart, and her planned restart never went out."""
+    from asuna import role_tools, visibility
+    store.config['chat'] = {**store.config.get('chat', {}), 'scene_id': 'dm-a', 'person_id': 'A'}
+    turn = lambda cls, kind: role_tools.exposed(store, {
+        '_id': 'ep-x', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': kind,
+        'manifest': {'session_class': cls}, 'context': {}})
+    for kind in ('external', 'scheduled', 'presence', 'self_development', 'settlement', 'task_feedback'):
+        assert 'restart' in turn(visibility.OWNER_PRIVATE, kind), kind
+    assert 'restart' not in turn(visibility.PUBLIC, 'scheduled')
+
+
 def test_at_home_she_previews_and_asks_with_the_tool(store, tmp_path, monkeypatch):
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn

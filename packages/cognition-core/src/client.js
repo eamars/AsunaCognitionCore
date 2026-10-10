@@ -1266,7 +1266,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
     ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
       name: 'conversation.input.permission', priority: -1, locale: 'permission.access',
-      inject: sessionId => shippedPermission()?.options.inject?.(sessionId) ?? {},
+      inject: sessionId => shippedPermission()?.inject?.(sessionId) ?? {},
     }, PermissionPicker));
 
     // ── a turn's trigger, titled in the viewer's language ─────────────

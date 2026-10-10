@@ -64,7 +64,8 @@ or a stable release only makes each merge larger. Asuna's coupling to DSH:
 
 The owner chose alpha.2 for the first run, one day after its release, overriding D2 once. What the next run needs:
 
-- Work in a separate worktree of this repository: the live Host runs from the main checkout's `node_modules`.
+- Work in a fresh worktree at the main checkout's `.runtime/wt-<name>` and remove it when done: the live Host runs
+  from the main checkout's `node_modules`. The DSH fork clone stays as the inline build source.
   The worktree needs its own `uv sync`, a copy of `config/local.json` with `dsh_home` inside the worktree, and
   full control of its `.runtime` for the owner's account (DSH's Windows sandbox); without them pytest fails.
 - In the DSH checkout, pnpm comes through `corepack`; DSH's pre-push hook runs its full typecheck and needs `pnpm`

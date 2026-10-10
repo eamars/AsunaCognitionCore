@@ -135,6 +135,19 @@ def test_the_cursor_comes_first_however_old(tmp_path):
     assert [r['message_seq'] for r in fed] == [r['message_seq'] for r in rows[10:]]
 
 
+def test_a_run_waits_for_the_api_socket_and_asks_again_instead_of_failing_every_route(tmp_path):
+    api = History([history_row(1, NOW - 60)])
+    up = []
+    api.wait_up = lambda path, timeout: bool(up)
+    job, fed = catchup(tmp_path, api)
+    job.note('group-900000001', history_row(1, NOW - 120))
+    assert job.run('reconnect') is None and not api.calls and job._due.is_set()
+    assert job.counters.snapshot().get('catchup_waiting_api') == 1 and not job.counters.snapshot().get('catchup_api_error')
+    up.append(True)
+    job._due.clear()
+    assert job.run(job._reason)['routes'] == 1 and len(api.calls) == 1
+
+
 def test_all_also_catches_up_every_route_with_a_cursor(tmp_path):
     api = History([history_row(1, NOW - 60)])
     job, fed = catchup(tmp_path, api, routes=(), every=True)

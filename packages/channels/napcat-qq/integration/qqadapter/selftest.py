@@ -1432,6 +1432,7 @@ def _check_catchup(rep, gcfg, root):
         calls.append((action, dict(params or {})))
         return {"retcode": 0, "data": {"messages": [dict(r) for r in sorted(page, key=lambda r: r["message_seq"])]}}
     adapter.onebot.api_call = history
+    adapter.onebot.wait_up = lambda path, timeout: True           # the recorded page stands in for a live API socket
     adapter.catchup.routes = frozenset([route])
     adapter.catchup.run("startup")
     spooled = [adapter.journal.read_json(p)["envelope"] for p in adapter.journal.spool_list("inbound")]

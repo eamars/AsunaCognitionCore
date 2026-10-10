@@ -36,6 +36,7 @@ MAX_PAGES = 5
 MAX_LOOKBACK_HOURS = 24
 FLUSH_SECONDS = 30
 ROUTE_PAUSE = 0.5
+API_WAIT_SECONDS = 60
 
 
 def utc_iso(ts=None):
@@ -132,6 +133,14 @@ class Catchup:
 
     # ---- one run ----------------------------------------------------------
     def run(self, reason):
+        # The event socket can come back before the API socket; a run then would fail every route and the gap
+        # would stay missed. It waits for the API and, still down, asks for itself again.
+        wait_up = getattr(self.onebot, "wait_up", None)
+        if wait_up is not None and not wait_up("/api", API_WAIT_SECONDS):
+            self.counters.inc("catchup_waiting_api")
+            self.log("CATCHUP_WAITING_API reason=%s" % reason)
+            self.request(reason)
+            return None
         started = self.clock()
         totals = {"routes": 0, "rows": 0, "fed": 0}
         with self._lock:

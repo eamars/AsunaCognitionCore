@@ -44,6 +44,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.visit': '出门', 'tool.note_idea': '记想法', 'tool.read_ideas': '读想法本', 'tool.review_idea': '处理想法', 'tool.ask_character': '问她', 'tool.report_progress': '报进展',
       'tool.refused': '被退回', 'tool.preparing': '正在写…', 'repair.title': '草稿退回重写',
       'input.checking': '正在确认会话输入权限…', 'input.internal': '这是内部工作会话，请回到本地私聊。',
+      'input.schedules': '这是定时提醒的投递会话，只用来送达她的计划和闹钟，在这里写的话她收不到；跟她说话请回到本地私聊。',
       'input.readOnly': '{platform} 会话仅供查看，请在 {platform} 中回复。', 'input.readOnlyLocal': '这个会话仅供查看。',
       'markdown.copy': '复制', 'markdown.copied': '已复制', 'markdown.footnotes': '来源',
       'memory.tab': '记忆', 'memory.guide': '当前角色、场景与授权来源', 'memory.aria': 'Asuna 记忆',
@@ -188,6 +189,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.report_progress': 'Report progress', 'tool.refused': 'Refused', 'tool.preparing': 'Writing…',
       'repair.title': 'Draft sent back',
       'input.checking': 'Checking who may write here…', 'input.internal': 'This is an internal work conversation; go back to the local chat.',
+      'input.schedules': 'This conversation only delivers her plans and alarms; nothing written here reaches her. Talk to her in the local chat.',
       'input.readOnly': '{platform} conversations are read-only here; reply in {platform}.', 'input.readOnlyLocal': 'This conversation is read-only.',
       'markdown.copy': 'Copy', 'markdown.copied': 'Copied', 'markdown.footnotes': 'Sources',
       'memory.tab': 'Memory', 'memory.guide': 'The character, this scene and its authorized sources', 'memory.aria': 'Asuna memory',
@@ -355,6 +357,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       unconfirmed.delete(id);
     };
     const reasonOf = policy => policy.key === 'internal' ? t('input.internal')
+      : policy.key === 'schedules' ? t('input.schedules')
       : policy.platform ? t('input.readOnly', { platform: policy.platform }) : t('input.readOnlyLocal');
     const update = () => {
       const list = ctx.sessions.list.getSnapshot();

@@ -95,3 +95,15 @@ test('reminders queued in the scheduler session are removed once read; one arriv
   assert.deepEqual(queue.map(m => m.id), ['arrived-meanwhile']);
   assert.ok(delivered.length >= 2, 'both queued reminders were delivered from the log');
 });
+
+test('the schedule session is read-only: it only delivers her plans and alarms', async () => {
+  const { AsunaApi } = await import('../src/api.js');
+  const headers = { 'asuna-scheduler-1': { cwd: '/data', agentPreset: 'asuna-scheduler' }, chat: { cwd: '/data' } };
+  const sent = [];
+  const core = { ready: async () => {},
+    ctx: { sessions: { get: id => ({ header: headers[id] }) }, sessionPersistence: { stat: async () => null } },
+    worker: { call: async (method, args) => { sent.push(args); return { chat: { key: 'internal' } }; } } };
+  const policies = await AsunaApi.prototype.inputPolicies.call({ core }, ['asuna-scheduler-1', 'chat']);
+  assert.deepEqual(policies, { 'asuna-scheduler-1': { key: 'schedules' }, chat: { key: 'internal' } });
+  assert.deepEqual(sent[0].sessions, [{ id: 'asuna-scheduler-1', cwd: '/data' }, { id: 'chat', cwd: '/data' }]);
+});

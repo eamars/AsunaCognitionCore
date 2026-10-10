@@ -48,9 +48,12 @@ export class AsunaApi extends TypertRemoteService {
     const sessions = await Promise.all(sessionIds.map(async id => {
       const header = this.core.ctx.sessions.get(id)?.header
         ?? (await this.core.ctx.sessionPersistence.stat(id))?.header;
-      return { id, cwd: header?.cwd };
+      return { id, cwd: header?.cwd, preset: header?.agentPreset };
     }));
-    return this.core.worker.call('input_policies', { sessions });
+    const policies = await this.core.worker.call('input_policies', { sessions: sessions.map(({ id, cwd }) => ({ id, cwd })) });
+    // The schedule session only delivers her plans and alarms; nothing written there reaches her.
+    for (const session of sessions) if (session.preset === 'asuna-scheduler') policies[session.id] = { key: 'schedules' };
+    return policies;
   }
 
   /** For a character session: the context projections of its latest action session, exactly as DSH's

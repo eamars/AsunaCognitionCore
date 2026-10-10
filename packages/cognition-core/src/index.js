@@ -6,7 +6,6 @@ import * as webTool from '@deepseek-ai/dsh-tool-web';
 import * as skillTool from '@deepseek-ai/dsh-tool-skill';
 import * as skillFilesystem from '@deepseek-ai/dsh-skill-filesystem';
 import SkillService from '@deepseek-ai/dsh-skill';
-import ScheduleService from '@deepseek-ai/dsh-schedule';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
@@ -262,16 +261,14 @@ export class CognitionCore {
     return this.initializing;
   }
 
-  // Schedule is optional in the stock Web profile. Reuse it if installed; otherwise mount that
-  // same native service once in this Host, unless mountSchedule is false (then plans are off).
+  // DSH Web ships the Schedule service, which may still be starting when the worker starts: plans use it once it is
+  // there (mounting a second one collides with it). mountSchedule false turns plans off.
   async attachSchedule() {
-    if (!this.ctx.get('schedule')) {
-      if (this.config.mountSchedule === false) return false;
-      if (!this.scheduleMounted) { this.scheduleMounted = true; await this.ctx.plugin(ScheduleService, {}); }
-    }
-    await new Promise(resolve => { this.ctx.inject(['schedule'], ctx => {
-      this.schedules.ctx = ctx; resolve();
-    }); });
+    if (!this.ctx.get('schedule') && this.config.mountSchedule === false) return false;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("DSH's Schedule service did not start; her plans need it")), 60_000);
+      this.ctx.inject(['schedule'], ctx => { clearTimeout(timer); this.schedules.ctx = ctx; resolve(); });
+    });
     return true;
   }
 

@@ -14,8 +14,8 @@ bytecode or Node dependencies are distributed.
   on first start in the data folder from the included `python/requirements.lock` (uv when on PATH, otherwise
   `python -m venv` and pip) and reuses it until the lock changes. Set `python` to use an interpreter of your own.
 - **`asuna-cognition-core`:** `persona`, `deployment`, and independent `routes.character` / `routes.action` native
-  provider/model references. Optional `mountSchedule` (default `true`) lets Core mount DSH Schedule when the Host
-  has none.
+  provider/model references. Core uses DSH Web's Schedule service for her plans;
+  `mountSchedule: false` (default `true`) turns plans off.
 - **`asuna-publication-floor`:** the authorized writable source projects, Python path and recovery route.
 - **Data folder:** everything Asuna writes for a profile goes to the floor's `dataRoot`, by default
   `$DSH_HOME/asuna/<profile>/`. The installed package is never written.

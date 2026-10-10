@@ -105,10 +105,17 @@ CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_p
 
 def catch_up(store, scene, rows, now_ts=None):
     """A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke
-    there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines."""
+    there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines. A group she
+    lets rest gives its lines of the last day instead."""
     from datetime import datetime, timezone
     from .config import character_id
+    from . import focus
     now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    if not focus.active(store, scene):
+        # ADR-039: she has not been following a resting group; what was said there in the last day (at most the
+        # MAX_LINES the query read) tells her what an @ is about.
+        day = now_ts - focus.DAY.total_seconds()
+        return [row for row in rows if (attend._seconds(caught_up.said_at(row)) or day) >= day]
     mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': character_id(store.config),
                                              'delivery_state': 'DELIVERED'}, {'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
     since = (mine or {}).get('scene_seq') or 0

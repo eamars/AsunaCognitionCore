@@ -186,6 +186,19 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `record` — The plan's ledger after one visit (newest last, bounded); today's count is read from it.
 - def `elsewhere` — elsewhere_from_program: per other conversation in the last hours (groups, others' chats and her other home lines alike; `home` is the one she is in), what she said, sent and handed over.
 
+## `focus`
+
+[src/asuna/focus.py](../../src/asuna/focus.py)
+
+Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
+
+- def `soft_limit`
+- def `admin_here`
+- def `active` — Whether she is present in this group: her own choice, or her admin role there.
+- def `wake` — The wake reason a line keeps in this group: unchanged when active; in a resting group only RESTING_WAKES.
+- def `listing` — Her groups by state, with the last day's lines, in words for her.
+- def `set_focus` — She makes a group active or lets it rest.
+
 ## `notes`
 
 [src/asuna/notes.py](../../src/asuna/notes.py)

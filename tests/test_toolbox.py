@@ -64,7 +64,8 @@ def test_each_kit_is_where_its_place_needs_it(store):
     assert {'await_answer', 'quote', 'find_member', 'leave_note', 'watch', 'write_document'} <= group
     assert {'leave_note', 'watch'} <= other_qq and not {'write_document', 'await_answer'} & other_qq
     for public in (group, other_qq):
-        assert not set(role_tools.AT_HOME) - {'write_document'} & public and not {'errand', 'credential'} & public
+        assert not set(role_tools.AT_HOME) - {'write_document', 'group_focus'} & public
+        assert not {'errand', 'credential'} & public
     assert 'pin_memory' not in role_tools.TOOLS
 
 

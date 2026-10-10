@@ -262,6 +262,9 @@ class Chat:
         scene = self.app.store.db.scenes.find_one({'_id': event['scene_id']})
         if not scene or scene.get('kind') != 'group' or not row:
             return None, None, None
+        from . import focus
+        if not focus.active(self.app.store, scene):
+            return None, None, None          # ADR-039: a resting group offers no chance to chime in
         return proactive, scene, row
 
     def _sticker_pool(self, event, episode):

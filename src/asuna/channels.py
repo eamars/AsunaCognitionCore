@@ -320,6 +320,13 @@ class Channels:
             event['watched'] = watched['_id']
             if 'group_context' in event and not event['group_context']['wake_reason']:
                 event['group_context']['wake_reason'] = 'watched'     # one look, through the relevance gate
+        if 'group_context' in event:
+            # ADR-039: in a group she lets rest, only what is meant for her wakes her (focus.RESTING_WAKES).
+            from . import focus
+            reason = event['group_context']['wake_reason']
+            kept = focus.wake(self.store, self.store.db.scenes.find_one({'_id': route['scene_id']}), reason)
+            if kept != reason:
+                event['group_context'].update(wake_reason=kept, resting=reason)
         return self.controller.receive(event)
 
     def _valid_publication(self, message, channel_id):

@@ -516,7 +516,7 @@ def _iso(moment):
 def _scene(scene_id, kind, members, start_seq, sequence):
     return {'_id': scene_id, 'kind': kind, 'members': members, 'scope_key': 'scene:' + scene_id,
             'policy_epoch': EPOCH, 'sequence': sequence, 'summary_start_seq': start_seq,
-            'revision': 1}
+            'revision': 1, **({'focus_active': True} if kind == 'group' else {})}   # an active group (ADR-039)
 
 
 def _in(scene, seq, author, text, at, event=None, **extra):

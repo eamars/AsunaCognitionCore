@@ -113,6 +113,9 @@ class DialogueSummarizer:
         scene = self.store.db.scenes.find_one({'_id': scene_id})
         if not scene or scene.get('kind') not in self.SCENE_KINDS or 'summary_start_seq' not in scene:
             return None
+        from . import focus
+        if not focus.active(self.store, scene):
+            return None                      # ADR-039: a resting group's lines stay as they are, searchable
         rows = self._pending(scene)
         if not rows:
             return None

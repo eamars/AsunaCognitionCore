@@ -62,7 +62,8 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - The server is `channels.ChannelServer`; `channels.Channels.receive` admits new groups and people
      (`channel_admission.admit`) and hands the line to the queue.
    - `ingress.persist_input` stores it, and the scene's queue takes it in order (`chat.Chat`).
-   - In a group, the relevance gate (`attend`) decides whether she joins in.
+   - In a group, the relevance gate (`attend`) decides whether she joins in. In a group she lets rest, only an @,
+     a reply to her, her awaited answers and watched people wake her (`focus.wake`).
 3. **Asuna → DSH.** The line becomes input to the conversation's DSH role session.
    - The worker emits `channel_input` (`native_worker`); the Host plugin ([index.js](../../packages/cognition-core/src/index.js))
      puts it into the session's inbox.
@@ -220,6 +221,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`group_members`](../../src/asuna/group_members.py) — Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed.
 - [`watches`](../../src/asuna/watches.py) — Her watchlist (owner 2026-10-06): people she wants to hear about when they speak, in any conversation.
 - [`places`](../../src/asuna/places.py) — Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what a visit sees.
+- [`focus`](../../src/asuna/focus.py) — Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
 - [`notes`](../../src/asuna/notes.py) — Notes between her own conversations (ADR-018, owner 2026-10-07).
 - [`scene_links`](../../src/asuna/scene_links.py) — 跨场景只读联动（A2）：一条有向边 + 一个 canonical person，配置是唯一真相。
 - [`visibility`](../../src/asuna/visibility.py) — Session class and data visibility (ADR-009 §2).

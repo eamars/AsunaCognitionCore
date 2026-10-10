@@ -378,7 +378,9 @@ def places_block(store, persona, model, policy, plan, moment, date):
         notes = [section.get('heading') for section in (docs.read(notes_slug(scene_id))[1] or {}).get('sections', [])
                  if section.get('heading')][:NOTE_HEADINGS]
         visit = last_visit(store, plan, scene_id)
+        from . import focus
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
+               'focus': '常驻' if focus.active(store, scene, persona) else '歇着（只有叫你的话会叫你）',
                'now': _tier(ACTIVITY, here['lines']) + ('，上一句是%s' % _ago(moment, here['last_line_at'])
                                                         if here['last_line_at'] else '，还没见过有人说话'),
                'people': '最近一小时说话的有' + _tier(VOICES, here['voices']),

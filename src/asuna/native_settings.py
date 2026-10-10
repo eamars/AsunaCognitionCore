@@ -46,6 +46,7 @@ def export_settings(config):
     value.setdefault('context_links', {})
     value.setdefault('canonical_persons', {})
     value.setdefault('channel_port', 8766)
+    value.setdefault('active_groups', 4)
     return {'deployment': visit(value), 'secrets': secrets}
 
 
@@ -90,6 +91,8 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         raise ValueError('EMBEDDING_MODEL_REQUIRED')
     if type(value.get('channel_port', 8766)) is not int or not 1024 <= value.get('channel_port', 8766) <= 65535:
         raise ValueError('INVALID_CHANNEL_PORT')
+    if type(value.get('active_groups', 4)) is not int or not 1 <= value.get('active_groups', 4) <= 100:
+        raise ValueError('INVALID_ACTIVE_GROUPS: a whole number from 1 to 100')
     for key in ('provider_idle_timeout_seconds', 'workflow_timeout_seconds'):
         value.setdefault(key, 1800)
         if type(value[key]) not in (int, float) or not 1 <= value[key] <= 86400:

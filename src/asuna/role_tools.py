@@ -310,6 +310,14 @@ TOOLS = {
                        'op': _s('开还是关', required=True, enum=['open', 'close']),
                        'close_for': _s('op=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
     },
+    'group_focus': {
+        'description': ('你在哪些群常驻：常驻的群跟平常一样；歇着的群只有 @ 你、回你的话、你在等的回话和 watch 的人会叫你，'
+                        '群里的话照存照能查，不再整理成小结。op=list 列出常驻和歇着的群和它们这一天说了多少句；'
+                        'op=active 让一个群常驻，op=rest 让它歇着（place 照抄 list 或 places_from_program 里的 place；'
+                        '在群里不写 place 就是这个群）。你当管理员的群一直常驻。常驻多了有代价，超过平常的数目时结果里会说。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest']),
+                       'place': _s('哪个群：place，可省略（在群里就是这个群）')},
+    },
     'place_timezone': {
         'description': ('你在的群各在哪个时区：设了以后，「那边是不是夜里」按那个群的钟算，你在那个群定的计划也按它。'
                         'op=list 列出每个群设了什么、那边现在几点；op=set 给一个群设（place 照抄 list 或 places_from_program '
@@ -455,13 +463,13 @@ def _turn_rules(store, ep):
     if scene_kind == 'group' and context.get('members_from_program'):
         names.append('find_member')
     if scene_kind == 'group':
-        names.append('await_answer')
+        names += ['await_answer', 'group_focus']
         if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
             names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
-        names += ['update_self', 'set_policy', 'message_developer', 'place_timezone', 'restart']
+        names += ['update_self', 'set_policy', 'message_developer', 'place_timezone', 'restart', 'group_focus']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -491,8 +499,8 @@ WITH_ACTION = ('delegate', 'message_action', 'stop_action', 'read_report', 'answ
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'read_ideas', 'review_idea',
-           'message_developer', 'restart', 'place_timezone')
-IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member')
+           'message_developer', 'restart', 'place_timezone', 'group_focus')
+IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
@@ -1420,6 +1428,32 @@ class RoleTools:
             return private_words.run(args), False
         except private_words.PrivateWordsError as exc:
             raise Refused(str(exc)) from exc
+
+    def tool_group_focus(self, ep, call_id, args):
+        from . import focus, places
+        op = args.get('op')
+        if op not in ('list', 'active', 'rest'):
+            raise Refused('op 是 list、active 或 rest%s。' % _given(args, 'op'))
+        if op == 'list':
+            return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
+                    focus.soft_limit(self.store.config)}, False
+        place = self._text(args, 'place', 40, required=False)
+        here = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        if place:
+            found = places.find(self.store.config, place)
+            if not found:
+                raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % place)
+            scene = self.store.db.scenes.find_one({'_id': found[0]})
+        elif (here or {}).get('kind') == 'group':
+            scene = here
+        else:
+            raise Refused('在家里要写 place：照抄 group_focus 的 list 或 places_from_program 里的 place。')
+        if not scene:
+            raise Refused('这个群还没有记录（还没人在那儿说过话）；等有人说话以后再改。')
+        try:
+            return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
+        except ValueError as exc:
+            raise Refused(str(exc)) from None
 
     def tool_place_timezone(self, ep, call_id, args):
         from datetime import datetime, timezone

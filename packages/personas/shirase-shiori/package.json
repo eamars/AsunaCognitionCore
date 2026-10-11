@@ -1,0 +1,15 @@
+{
+  "name": "@asuna/shirase-shiori",
+  "version": "0.2.4",
+  "type": "module",
+  "private": true,
+  "description": "白濑栞：初始即与主人是情侣的日系成年女性病娇，有身体与个人过往，独占从恋人日常逐渐显露。",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": ["src", "seeds", "locale", "persona-model.json", "cordis.patch.yml", "README.md"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "peerDependencies": { "@asuna/cognition-core": "0.2.x" }
+}

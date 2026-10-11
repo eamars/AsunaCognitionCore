@@ -69,6 +69,7 @@
 | `src/index.js` | 标准人格注册入口，标识为 `shirase-shiori`。 |
 | `cordis.patch.yml` | 标准角色预设 `asuna-shirase-shiori`，使用核心角色、摘要与工具结果裁剪设施。 |
 | `locale/` | 原生界面的中英文元数据；人格与口吻保持中文。 |
+| `icon.png` | 256×256 的人物图标，由 `package.json` 的 `icon` 字段声明并随包交付，大小低于原生插件元数据的 256 KiB 上限。 |
 
 ## 运行方式
 
@@ -103,7 +104,7 @@ Windows 使用 `start-asuna.cmd`，参数相同。在目标 profile 的核心设
 
 种子只补充该人格缺失的文档，不会覆盖已有的人格、口吻或活账。需要采用包内更新的种子时，使用核心现有的文档种子采用流程。文档和状态以人格 ID 分开；选择 `shirase-shiori` 不会自动迁移或清除其他人格 ID 的数据。
 
-从本包目录运行 `npm pack --ignore-scripts` 可生成 `asuna-shirase-shiori-0.2.4.tgz`。`private: true` 阻止公共 npm 发布，允许本地打包与安装。项目启动器管理的 profile 使用上述项目安装流程，使包选择与启动器记录保持一致。
+从本包目录运行 `npm pack --ignore-scripts` 可生成 `asuna-shirase-shiori-0.2.5.tgz`。`private: true` 阻止公共 npm 发布，允许本地打包与安装。项目启动器管理的 profile 使用上述项目安装流程，使包选择与启动器记录保持一致。
 
 ## 对话观察
 

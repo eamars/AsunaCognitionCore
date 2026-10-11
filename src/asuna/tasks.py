@@ -519,12 +519,12 @@ class ToolBroker:
             self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
-        # Integration callbacks and role consultations can need host resources.
-        # Never hold the effects lock across either wait; leases and cancellation
-        # must remain available. A later cancellation still
-        # fences new calls; recording this accepted call cannot revive the task.
+        # Integration callbacks, role consultations and commands can wait on things outside this process.
+        # Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent lines)
+        # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
+        # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg','private_words','sandbox_run') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(DEVELOPMENT_GRANT)
@@ -621,6 +621,7 @@ class ToolBroker:
                     result=sandbox.run(args['argv'],env=credentials.environment(args['credentials']))
                 else:
                     result=sandbox.run(args['argv'])
+                with self.service.lock:self.service.valid(task)
             else:
                 raise Denied('UNKNOWN_TOOL: %s 不是这里能执行的工具；重试也一样，换用工具清单里的工具' % str(tool)[:60])
             if tool!=READ_IMAGE_TOOL_NAME:

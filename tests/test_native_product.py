@@ -188,6 +188,18 @@ def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(prod
     assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '💤 读书会'
 
 
+def test_a_private_chat_the_platform_names_no_one_in_is_titled_by_the_name_this_profile_keeps(product):
+    from asuna.people import People
+    p = product
+    p.channel.receive('qq', envelope(sender='11110000', mid='a'))
+    route = p.store.config['channels']['qq']['routes']['auto-dm-11110000']
+    assert p.worker.channel_title(route) == '11110000'          # nothing known: the platform's id
+    p.store.db.identities.update_one({'_id': 'qq:11110000'}, {'$set': {'display_name': '小林'}}, upsert=True)
+    assert p.worker.channel_title(route) == '小林'
+    p.store.config['canonical_persons'] = {'qq:11110000': 'owner'}
+    assert p.worker.channel_title(route) == People(p.store).owner_label
+
+
 def test_a_group_made_active_or_resting_is_retitled_at_once(product, monkeypatch):
     from asuna import focus
     p = product

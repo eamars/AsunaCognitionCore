@@ -716,8 +716,9 @@ class BusinessWorker:
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or
-        peer name the platform last sent with a message in that scene, else the number. A group she lets rest
-        starts with focus.RESTING_MARK."""
+        peer name the platform last sent with a message in that scene, else, for a private chat, the name this
+        profile keeps for that person (a saved identity name, or the owner's label), else the platform's id. A
+        group she lets rest starts with focus.RESTING_MARK."""
         group = route['target']['type'] == 'group'
         # A configured name; earlier automatic admissions stored the number itself here, which is no name.
         name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
@@ -727,6 +728,14 @@ class BusinessWorker:
                 {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
+        if not name and not group:
+            # A platform that sends no name with private messages (an OpenID platform) still names someone
+            # this profile knows: their saved name, or the owner's label for the owner.
+            from .people import People
+            people = People(self.app.store)
+            person = people.person(route.get('person_id'))
+            saved = self.app.store.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+            name = (saved or {}).get('display_name') or (people.owner_label if person and person == people.owner else None)
         name = ' '.join(str(name or '').split())[:40] or route['target']['id']
         from . import focus
         scene = self.app.store.db.scenes.find_one({'_id': route['scene_id']}) if group else None

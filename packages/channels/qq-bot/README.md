@@ -42,8 +42,7 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
    - Its event delivery mode must be **WebSocket**.
    - The IP allowlist, when one is set, must hold the address this Host calls from.
 2. **Install the package** with the persona: `--channel packages/channels/qq-bot` to `tools/pack_plugins.py` and
-   `--channel-package packages/channels/qq-bot` to `tools/setup_native_profile.py`. In Docker, add it to
-   `ASUNA_CHANNEL_PACKAGES`.
+   `--channel-package packages/channels/qq-bot` to `tools/setup_native_profile.py`.
 3. **Configure the channel** (`channels.qqbot` on the settings card, or the `channels` block of the channel settings
    on a first install):
 

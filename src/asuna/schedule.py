@@ -477,8 +477,8 @@ class ScheduleService:
         if not worker:
             return 'SKIPPED:NO_HOST'
 
-        def compact(session_id, scene_id):
-            return worker.host_call('compact_session', {'session_id': session_id, 'scene_id': scene_id})
+        def compact(session_id, scene_id, cwd):
+            return worker.host_call('compact_session', {'session_id': session_id, 'scene_id': scene_id, 'cwd': cwd})
 
         def run():
             try:

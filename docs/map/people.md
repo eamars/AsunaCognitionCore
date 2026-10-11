@@ -222,7 +222,7 @@ Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its
 - def `night_there`
 - def `due` — Whether a marked group may be condensed now.
 - def `size_words`
-- def `main_session` — The character session this group's conversation continues in now (native_worker.resolve_role_session).
+- def `main_session` — The character session this group's conversation continues in now (native_worker.resolve_role_session): (session id, its working folder), or None.
 - def `mark`
 - def `unmark`
 - def `marked`

@@ -640,13 +640,13 @@ export class CognitionCore {
    * Never during a turn there. It runs DSH's own `/compact` for that session through the commands service, as the
    * Web UI does: the compaction service lives in each agent's scope (her character preset), not on this plugin's, and
    * the session's log shows the command and its result. */
-  async compactSession({ session_id: id, scene_id: scene }) {
+  async compactSession({ session_id: id, scene_id: scene, cwd }) {
     const commands = this.ctx.get('commands');
     if (!commands) return { compacted: false, reason: 'no_commands_service' };
     if (this.states.get(id)?.current) return { compacted: false, reason: 'busy' };
     try {
       const agent = this.ctx.agents.get(id)
-        ?? await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene } });
+        ?? await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene, cwd } });
       const done = await commands.execute(agent, '/compact', [], new AbortController().signal);
       if (!done) return { compacted: false, reason: 'no_compact_command' };
       const { kind, text = '' } = done.result;

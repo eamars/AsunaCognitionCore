@@ -69,14 +69,14 @@ def test_condensing_is_her_choice_on_a_visit_or_at_home_never_mid_conversation(s
 def test_a_look_condenses_a_due_group_once_and_she_is_told_until_she_speaks(store):
     scene = group(store, character_context='ctx-1')
     store.db.sessions.insert_one({'_id': 'role-g-a', 'schema_version': 1, 'native_host': True, 'main_conversation': True, 'scene_id': 'g-a',
-                                  'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1'})
+                                  'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1', 'cwd': 'C:/w/g-a'})
     lines(store, 'g-a', 40, last_minutes_ago=45)
     condense.mark(store, scene, {'_id': 'ep-v', 'scope_key': 'scene:g-a', 'episode_kind': 'visit'}, NOW)
     asked = []
-    busy = lambda session_id, scene_id: asked.append(session_id) or {'compacted': False, 'reason': 'busy'}
+    busy = lambda session_id, scene_id, cwd: asked.append((session_id, cwd)) or {'compacted': False, 'reason': 'busy'}
     assert condense.look(store, 'P1', busy, NOW) == [] and condense.marked(store)       # tried again next look
-    done = lambda session_id, scene_id: asked.append(session_id) or {'compacted': True, 'items': 12}
-    assert condense.look(store, 'P1', done, NOW) == ['g-a'] and asked == ['role-g-a', 'role-g-a']
+    done = lambda session_id, scene_id, cwd: asked.append((session_id, cwd)) or {'compacted': True, 'items': 12}
+    assert condense.look(store, 'P1', done, NOW) == ['g-a'] and asked == [('role-g-a', 'C:/w/g-a')] * 2
     assert not condense.marked(store)
     scene = store.db.scenes.find_one({'_id': 'g-a'})
     assert '压过了' in condense.condensed_block(store, scene, NOW + timedelta(minutes=5))

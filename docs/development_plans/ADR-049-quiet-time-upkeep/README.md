@@ -126,3 +126,9 @@ and whether at all, is the owner's decision.
   where it is not (each agent's scope carries it, from her character preset), so every look answered
   `no_compaction_service`. It now runs the session's own `/compact` through the commands service, the Web UI's path,
   and a Host that cannot condense takes the mark back instead of retrying every five minutes.
+- Second live finding, after her restart: reopening a session that was not loaded failed without its working folder
+  (the request now carries the session's `cwd`), and a persona preset must carry `@deepseek-ai/dsh-command-compact` in
+  its compaction group for `/compact` to exist in her conversations, as the core presets do. Hers did not, so the
+  look answered `no_compact_command` and, as designed, took the mark back. Adding that row is a change to her persona
+  package, published by her.
+

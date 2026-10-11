@@ -108,7 +108,8 @@ def size_words(scene):
 
 
 def main_session(store, scene, persona):
-    """The character session this group's conversation continues in now (native_worker.resolve_role_session)."""
+    """The character session this group's conversation continues in now (native_worker.resolve_role_session):
+    (session id, its working folder), or None."""
     primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True, 'scene_id': scene['_id'],
                                           'persona': persona, 'policy_epoch': scene.get('policy_epoch'),
                                           'character_context': scene.get('character_context')})
@@ -118,7 +119,8 @@ def main_session(store, scene, persona):
     while True:
         successor = (store.db.sessions.find_one({'_id': session_id}, {'successor_id': 1}) or {}).get('successor_id')
         if not successor or successor in seen:
-            return session_id
+            row = store.db.sessions.find_one({'_id': session_id}, {'cwd': 1}) or {}
+            return session_id, row.get('cwd') or primary.get('cwd')
         seen.add(successor)
         session_id = successor
 
@@ -149,20 +151,21 @@ def marked(store):
 
 # ---- the plan's look --------------------------------------------------------------------------------------------
 def look(store, persona, compact, moment=None):
-    """Condense every marked group that is due. compact(session_id, scene_id) → the plugin's answer dict."""
+    """Condense every marked group that is due. compact(session_id, scene_id, cwd) → the plugin's answer dict."""
     from .state import now
     moment = moment or datetime.now(timezone.utc)
     done = []
     for scene in marked(store):
         if not due(store, scene, moment):
             continue
-        session_id = main_session(store, scene, persona)
-        if not session_id:
+        found = main_session(store, scene, persona)
+        if not found:
             store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
             store.audit('condense', 'condense.no_conversation', {'scene_id': scene['_id']})
             continue
         try:
-            answer = compact(session_id, scene['_id']) or {}
+            session_id, cwd = found
+            answer = compact(session_id, scene['_id'], cwd) or {}
         except Exception as exc:              # the next look tries again
             store.audit('condense', 'condense.failed', {'scene_id': scene['_id'], 'error': str(exc)[:200]})
             continue
@@ -174,7 +177,7 @@ def look(store, persona, compact, moment=None):
                 '$set': {'condensed_at': now(), **({'conversation_tokens': None} if answer.get('compacted') else {})},
                 '$unset': {'condense_wanted': ''}})
             done.append(scene['_id'])
-        store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': session_id,
+        store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': found[0],
                                                     **{k: answer.get(k) for k in ('compacted', 'items', 'tokens', 'reason')}})
     return done
 

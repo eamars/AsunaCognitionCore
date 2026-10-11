@@ -1,7 +1,7 @@
 # ADR-048: Thinking effort by what she is doing, not by the conversation
 
-Status: **Proposed 2026-10-12.** Drafted by Claude from the owner's request; Xiaoman reviews. Nothing is built. Step 3
-depends on a model-server setting that is the owner's decision.
+Status: **Proposed 2026-10-12.** Drafted by Claude from the owner's request; Xiaoman reviews. Nothing is built. No
+server change is needed; the probe in step 4 needs the owner's GPU time.
 
 ## Context
 
@@ -25,6 +25,12 @@ with the default effort at the top, and a different effort follows in a short sy
 a switch keeps the cache. The thinking budget (`thinking_token_budget`) is a request field and never touches the
 prompt.
 
+The model-server session's review of that placement (2026-10-12, from the server code and its upstream issue): the
+default at the top is the model's highest level, so every conversation would carry "think carefully" at the top and a
+medium or low request would add a contradicting sentence at the end. Whether the model lets the later one win is not
+measured anywhere; if it does not, her group conversations, medium today, would think at the highest level and
+answer more slowly. Turning it on also needs a server restart, after which each conversation is read once more.
+
 ## Decision (proposed)
 
 1. **Effort follows the operation.** Each stage the program opens names an effort class, and the plugin maps the class
@@ -38,20 +44,25 @@ prompt.
    - delegated action tasks: the action route's level for now; by task kind only if measurement asks.
 2. **Hers to raise, later and only if she wants it:** a categorical choice that makes the rest of one turn, or one
    delegated task, think harder. Not in the first step.
-3. **Only cache-safe with the effort at the end.** Before step 1 is switched on, the owner turns on
-   `effort_position: "end"` on the model server. Each conversation then reads itself once more on its first request
-   after the switch (a group's top changes from no sentence to the default one), and never again for an effort
-   change. Without it, a different effort inside a shared conversation costs two full re-reads per switch; the
-   fallback is to keep effort per conversation, as today, and vary it only where an operation has its own session
-   (the gate, delegated tasks).
-4. **Settings.** The levels live with the route, like `attendEffort` and `groupEffort`. A `studyEffort` field on the
+3. **How the level reaches the model, without touching the cache.** The effort sentence at the top stays as it is
+   per conversation. Inside a conversation the operation changes only what sits at the end of the prompt:
+   - the thinking budget of the request (a cap: it can make a reply think less, not more than the model would);
+   - a short line in the turn's own stage text, which is already at the end ("这次是来学的，想透了再写"): it stays in
+     the history, so the cache holds.
+
+   Both need no server change. The server's effort-at-the-end placement is the fallback, only if these do not move
+   her thinking and only after a measurement shows the model follows a level given at the end.
+4. **Measure first, off the live server.** The model-server session proposed a short probe (about 15 minutes of GPU
+   when the owner says it is free; test requests on the live server would push her conversations out of the cache):
+   group-chat replies and hard questions with exact answers, at the native levels, with a budget cap, with the stage
+   line, and with the level at the end, comparing thinking length and correctness.
+5. **Settings.** The levels live with the route, like `attendEffort` and `groupEffort`. A `studyEffort` field on the
    existing route settings card is a UI addition and needs the owner's approval; until then it is profile
    configuration only.
-5. **Measure before and after:** cache misses by idle time in group conversations must not rise; the step time of a
-   study visit at high; what the visit produced (notes written, nothing, a line said).
+6. **Measure live before and after:** cache misses by idle time in group conversations must not rise; thinking length
+   and step time on study visits; what the visit produced (notes written, nothing, a line said).
 
 ## Open questions
 
-- Does the model follow an effort given in a short system turn at the end as well as one at the top? A server-side
-  probe, asked of the model-server session together with its cache deep dive.
+- Whether the owner gives the GPU time for the probe in step 4.
 - Which operations Xiaoman wants deeper, and whether she wants the choice in step 2 at all.

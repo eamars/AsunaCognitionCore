@@ -61,9 +61,18 @@ reply time it is found by plain string matching, without a model call.
 
 The server can save a conversation to disk and restore it (about 2 s for 150k tokens against about 20 s read cold),
 but only on a client's request for whatever its one slot holds at that moment, behind the same request queue, with
-files of about 3 GB that nothing deletes. Driven from Asuna it can save the wrong conversation when another request
-gets in first. An engine that spills the conversations it drops to disk by itself, and restores them by prefix, would
-hold her whole working set with no change here; that is an upstream request.
+files of about 3 GB that nothing deletes. Driven from Asuna as it stands, a save can store the wrong conversation
+when another request gets in first. Two ways out, both needing the server's save folder (`slot_save_path`) turned
+on:
+
+- **Automatic, upstream:** the engine writes a conversation it evicts to a capped spill folder and restores the
+  longest matching file by prefix. Nothing changes here. An engine change, to be requested upstream.
+- **Atomic, a local server patch:** a request carries "save after this answer" (and "restore before reading"), done
+  while the server still holds that request's turn in its queue, so it is always the right conversation. Asuna would
+  then name the files, decide when a restore is worth it (idle for more than about five minutes), re-save after a
+  condensing, and clean up within a disk cap of about 3 GB per group.
+
+Which way, and whether at all, is the owner's decision.
 
 ## Open questions for Xiaoman
 

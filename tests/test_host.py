@@ -347,9 +347,11 @@ def test_returned_task_feedback_queue_continues_failed_role_stage_without_new_ep
     assert len(lane.calls)==3
     assert [call['phase'] for call in lane.calls]==['TURN','TURN','TURN']
     assert lane.calls[2]['messages'][0]==lane.calls[1]['messages'][0]
-    # The resumed turn continues the same episode: its note names the original error, not a new instruction.
+    # The resumed turn continues the same episode, not a new instruction. This chat is someone else's, not home, so
+    # the note says only that the turn did not finish: the stored error stays out (ADR-050).
     resumed_note=lane.calls[2]['messages'][-1]['content']
-    assert '宿主上次中断了这一回合（不是新的用户指令' in resumed_note and 'TURN_NOT_FINISHED' in resumed_note
+    assert '这一回合上次没做完（不是新的消息' in resumed_note
+    assert 'TURN_NOT_FINISHED' not in resumed_note and '宿主' not in resumed_note.rsplit('\n',1)[-1]
     assert 'TURN_NOT_FINISHED' not in lane.calls[1]['messages'][-1]['content']
     # Same episode, same prepared context: the result is not ingested again as a new input.
     assert resumed_note.split('\n',1)[0]==lane.calls[1]['messages'][-1]['content'].split('\n',1)[0]

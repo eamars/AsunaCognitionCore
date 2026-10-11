@@ -58,6 +58,7 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 Who is who in a scene, as the character reads it.
 
 - def `speech_problem` — What she is about to say that would show the group a label's number or a tag that tags nobody, handed back in the same turn; None when there is none.
+- def `said_line` — One line of what someone wrote, as she reads it: a leading > (the mark of the program's quote and thought lines) is shown full-width, so a message cannot pass for a quote of someone else or for her own past thought.
 - def `safe_name` — A shown name she can read safely: one line, visible characters only, no label characters.
 - def `name_key` — What a name looks like, for spotting look-alikes: its letters only (no digits, spaces, symbols or case).
 - class `People` — Labels for the people of this store's scenes.
@@ -291,7 +292,7 @@ Words that point at real people and places, kept per deployment and never commit
 - def `problem` — Why an entry can't be kept, in words; None when it can.
 - def `pattern` — A Latin word matches as a whole word (case-insensitive); other text matches where it appears.
 - def `find` — [(entry line number, category)] of the entries found in a text, each once.
-- def `add` — Keep an entry; the same word is kept once (its category and reason are replaced).
+- def `add` — Keep an entry; the same word is kept once (at home its category and reason are replaced).
 - def `remove`
 - def `summary` — How many entries per category; never the words.
 - def `run` — The tool, for either brain: what it did, never a listed word.

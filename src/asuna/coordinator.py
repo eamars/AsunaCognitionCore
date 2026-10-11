@@ -170,7 +170,12 @@ class Coordinator:
         instruction=prompt_path(self.store.config,'turn.md').read_text(encoding='utf-8')
         extra=prompt_path(self.store.config,'turn_consult.md').read_text(encoding='utf-8') if kind=='consult' else ''
         if ep.get('resume_diagnostic'):
-            extra+='\n宿主上次中断了这一回合（不是新的用户指令；继续原来的事）：'+ep['resume_diagnostic'][:1200]
+            # The stored failure (often a traceback with paths) is read only at home; elsewhere she is told plainly
+            # that the turn did not finish, in words she could repeat without giving away the machine (ADR-050).
+            if (ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE:
+                extra+='\n宿主上次中断了这一回合（不是新的用户指令；继续原来的事）：'+ep['resume_diagnostic'][:1200]
+            else:
+                extra+='\n这一回合上次没做完（不是新的消息；接着把原来的事做完）。'
             done=[call['tool'] for call in sorted((ep.get('tool_calls') or {}).values(),key=lambda c:c['seq']) if 'result' in call]
             if done:
                 extra+='\n这一回合中断前已经生效的工具调用（不用再做一遍）：'+'、'.join(done)

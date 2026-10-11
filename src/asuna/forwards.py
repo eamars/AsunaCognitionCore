@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+from .people import safe_name
+
 KEY = 'asuna_forward'
 DOC = 'forward'
 REF = re.compile(r'^f[0-9a-f]{8}$')
@@ -31,9 +33,11 @@ def kept(raw):
             if not isinstance(node, dict):
                 continue
             when = node.get('time')
-            nodes.append({'name': _text(node.get('name'), 42), 'user_id': _text(node.get('user_id'), 64),
+            # A forward's names and texts are whatever its sender wrote: names as any shown name, each text one line,
+            # so a node cannot add a line that reads as another node or another speaker.
+            nodes.append({'name': safe_name(_text(node.get('name'), 42)), 'user_id': _text(node.get('user_id'), 64),
                           'time': when if isinstance(when, (int, float)) and not isinstance(when, bool) else None,
-                          'text': str(node.get('text') or '')[:MAX_NODE_CHARS]})
+                          'text': ' '.join(str(node.get('text') or '')[:MAX_NODE_CHARS].split())})
         blocks.append({'ref': block['ref'], 'count': len(nodes), 'nodes': nodes,
                        'source': _text(block.get('source'), 12)})
     return blocks or None

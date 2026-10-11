@@ -105,8 +105,11 @@ def _write(target, entries_text):
     os.replace(temporary, target)
 
 
-def add(category, word, why):
-    """Keep an entry; the same word is kept once (its category and reason are replaced)."""
+def add(category, word, why, home=True):
+    """Keep an entry; the same word is kept once (at home its category and reason are replaced).
+
+    Outside home a listed entry stays as it is and the answer is the same whether or not the word was listed:
+    a conversation with others can neither learn from it what is on the list nor rewrite an entry."""
     category, word, why = str(category or '').strip(), str(word or '').strip(), str(why or '').strip()
     issue = problem(category, word, why)
     if issue:
@@ -116,8 +119,11 @@ def add(category, word, why):
         lines = target.read_text(encoding='utf-8').splitlines() if target.is_file() else HEADER.splitlines()
         kept = [line for line in lines if not _same(line, word)]
         replaced = len(kept) != len(lines)
-        kept.append('%s|%s|%s' % (category, word, why))
-        _write(target, '\n'.join(kept) + '\n')
+        if not (replaced and not home):
+            kept.append('%s|%s|%s' % (category, word, why))
+            _write(target, '\n'.join(kept) + '\n')
+    if not home:
+        return {'kept': True, 'category': category}
     return {'kept': True, 'replaced': replaced, 'category': category, 'line': len(kept)}
 
 
@@ -157,7 +163,8 @@ PRIVATE_WORDS_TOOL = {
                     '局域网地址、邮箱）。名单只存在这台机器的数据目录里，永远不进代码仓库；仓库的提交检查、技能自检和插件打包都拿它'
                     '拦，任何要进仓库或发出去的文件里出现名单上的词就拦下。op=add 记一条（category、word、why 都要写；同一个词再记'
                     '一次就是改它）；op=remove 删一条（word 逐字一致）；op=summary 看每类各有几条。名单上的词不会再显示给你，'
-                    '也不会出现在任何输出里：命中只说是哪一类、第几条。称呼词、你自己的名字、技术词不用记。'),
+                    '也不会出现在任何输出里：命中只说是哪一类、第几条。称呼词、你自己的名字、技术词不用记。'
+                    '在家以外只能记新的：不删不改，回答也不说这个词原来在不在名单上。'),
     'parameters': {
         'op': {'type': 'string', 'enum': ['add', 'remove', 'summary'], 'description': 'add、remove 或 summary',
                'required': True},
@@ -169,13 +176,19 @@ PRIVATE_WORDS_TOOL = {
 }
 
 
-def run(args):
-    """The tool, for either brain: what it did, never a listed word."""
+HOME_ONLY = '删一条只在家里做；在这里只能记新的。'
+
+
+def run(args, home=True):
+    """The tool, for either brain: what it did, never a listed word. Outside home (``home`` False) it only adds,
+    and its answer does not tell whether the word was already listed."""
     args = args or {}
     op = args.get('op')
     if op == 'add':
-        return add(args.get('category'), args.get('word'), args.get('why'))
+        return add(args.get('category'), args.get('word'), args.get('why'), home=home)
     if op == 'remove':
+        if not home:
+            raise PrivateWordsError(HOME_ONLY)
         return remove(args.get('word'))
     if op == 'summary':
         return summary()

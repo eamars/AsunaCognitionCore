@@ -593,7 +593,8 @@ class ToolBroker:
             elif tool=='private_words':
                 # Her list lives with the deployment's data, outside the task folder (private_words.py).
                 from . import private_words
-                try:result=private_words.run(args)
+                from . import credentials
+                try:result=private_words.run(args,home=credentials.home_task(self.store,task))
                 except private_words.PrivateWordsError as exc:raise Denied('PRIVATE_WORDS_REFUSED: '+str(exc)) from exc
             elif tool=='render_svg':
                 # The Host renders; this side reads the SVG, drops links to outside pictures and keeps the PNG as hers.

@@ -1442,7 +1442,7 @@ class RoleTools:
     def tool_private_words(self, ep, call_id, args):
         from . import private_words
         try:
-            return private_words.run(args), False
+            return private_words.run(args, home=self._cls(ep) == visibility.OWNER_PRIVATE), False
         except private_words.PrivateWordsError as exc:
             raise Refused(str(exc)) from exc
 

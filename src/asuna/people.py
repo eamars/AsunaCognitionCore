@@ -68,6 +68,13 @@ UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
 
 
+def said_line(line):
+    """One line of what someone wrote, as she reads it: a leading > (the mark of the program's quote and thought
+    lines) is shown full-width, so a message cannot pass for a quote of someone else or for her own past thought."""
+    stripped = line.lstrip()
+    return line[:len(line) - len(stripped)] + '＞' + stripped[1:] if stripped.startswith('>') else line
+
+
 def safe_name(value, limit=NAME_LIMIT):
     """A shown name she can read safely: one line, visible characters only, no label characters."""
     text = unicodedata.normalize('NFKC', value if isinstance(value, str) else '')
@@ -478,7 +485,7 @@ class People:
                 if then:
                     lines.append('  > （你说那句时心里想的：%s）' % ' '.join(then.split()))
         body = self.mentions(scene, row.get('text') or '', account)
-        lines += ['  ' + line for line in body.split('\n')]
+        lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
         from .stickers import PICTURE_FETCH_SECONDS, recognized
         from .vision import line_refs, media_source, pull_bytes
         task = {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'), 'policy_epoch': scene.get('policy_epoch')}

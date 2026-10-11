@@ -27,15 +27,17 @@ const client = patch('client.js', source => {
 
 const server = patch('index.js', source => {
   let out = source;
-  const replaceMethod = (name, params, body) => {
-    const start = out.indexOf('\n\t' + name + '(' + params + ') {');
-    const end = start < 0 ? -1 : out.indexOf('\n\t}', start);
-    if (start < 0 || end < 0) throw new Error('lan-login: ' + name + ' changed in this DSH; update the patch');
-    out = out.slice(0, start) + '\n\t' + name + '(' + params + ') {\n\t\t' + body + '\n\t}' + out.slice(end + 3);
+  // The first class method of that name (the browser authenticator; later ones delegate to it), whatever parameters
+  // DSH gives it: its first parameter keeps its name, the body is replaced.
+  const replaceMethod = (name, body) => {
+    const found = new RegExp('\\n\\t' + name + '\\(([A-Za-z_$][\\w$]*)[^)\\n]*\\) \\{').exec(out);
+    const end = found ? out.indexOf('\n\t}', found.index) : -1;
+    if (!found || end < 0) throw new Error('lan-login: ' + name + ' changed in this DSH; update the patch');
+    out = out.slice(0, found.index) + found[0] + '\n\t\t' + body(found[1]) + '\n\t}' + out.slice(end + 3);
   };
-  replaceMethod('authenticatedUrl', 'baseUrl', 'const url = new URL(baseUrl); url.search = ""; url.hash = ""; return url.href;');
-  replaceMethod('authorizeIndex', 'req, res', 'return true;');
-  replaceMethod('isAuthenticated', 'request', 'return true;');
+  replaceMethod('authenticatedUrl', url => 'const clean = new URL(' + url + '); clean.search = ""; clean.hash = ""; return clean.href;');
+  replaceMethod('authorizeIndex', () => 'return true;');
+  replaceMethod('isAuthenticated', () => 'return true;');
   return out;
 });
 

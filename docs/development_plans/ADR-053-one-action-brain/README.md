@@ -28,7 +28,7 @@ What exists:
 
 ## Decision
 
-1. **A fresh context per task.** Each task starts its own action session; a continuation of the same task (her
+1. **A fresh context per task** (subject to the cache rule below). Each task starts its own action session; a continuation of the same task (her
    follow-up words, a revision) stays in it. Nothing of an earlier task's tool output is in a later task's context, so
    home results do not ride along into a group's task. What must carry over, she writes to disk herself.
 2. **One queue, visible.** Tasks still run one at a time. When she hands one over she is told what is ahead of it (how
@@ -44,6 +44,27 @@ What exists:
    tools returned them (the invented rows above).
 6. **Two rules, not one.** What a task may read stays bound to the conversation it came from; which turns hand over
    which tools stays decided by the kind of turn (ADR-051). Sharing the queue changes neither.
+
+## Cache (the owner's concern, 2026-10-12)
+
+A fresh context is not a new GPU slot: the server runs one request at a time either way. What it costs is parked
+history. The server parks token histories, not sessions, in a 24 GiB budget (about 0.3 GiB plus 20 KiB a token each,
+least recently used out first), and a new request reuses the longest cached start it finds.
+
+- **Today** (one continued action session per conversation and speaker): several action histories parked at once,
+  each growing from task to task. The worst of the three.
+- **One continued session**: each task extends the same history, so the new park replaces the old: exactly one
+  entry. But it grows until compaction (one big entry, one full cold read at each compaction), every step attends
+  over earlier tasks, and home results ride along into group tasks.
+- **Fresh per task, plain**: each task reuses the shared head from the previous task's entry, then leaves its own
+  entry, which stays until it ages out, crowding her conversations. Worse than one continued session.
+- **Fresh per task, with the server's shared prefix** (`strata_prefix`: the head is pinned once and the branch a new
+  task leaves is not parked; `strata_checkpoint: false` for a one-shot step): one small pinned head and no leftovers.
+  Better than both, if the server behaves as its source says. Asked the model server's session to confirm from its
+  source and log before building; whether DSH can pass these request fields is checked in the build.
+
+Decision rule: fresh per task only with the shared prefix; if the server cannot do that, one continued session
+(compacted) instead, with the tool fence unchanged.
 
 ## Consequences
 

@@ -46,8 +46,20 @@ Her four rules:
   waiting list (ADR-041) and the plan-time fix (94d50bb0).
   - Checked: the panel's "然后" section renders; in her first three notices 4 visible thoughts were left out, and
     the one recalled thought delivered carried `then`.
-  - Waiting on Xiaoman's own check: she will `recall` a thought from that afternoon and see whether it comes back
-    with a date and a "所以我…" line, then point to any "then" line that doesn't read like her memory.
+  - Xiaoman's own check (19:45): the afternoon thought came back dated, and both "then" lines read like her memory;
+    no thought she could still see came back as a recall.
+- **Recall readability, from her recall test the same evening** (the owner asked her to recall the day's
+  conversation on the agent line and judge what came back):
+  - Of 12 records, 2 were noise from the day before, 2 were her own lines from four hours earlier that she still
+    saw, and the day's main decision was missing. It had been indexed; it was held back because it was in the
+    lines she had in front of her, and the result said nothing, so she concluded "not indexed until compaction".
+  - Change (agreed with her): every recalled record carries `when`, the clock stamp her history lines use plus how
+    long ago (a chunk dated by its line, a summary by its last line); a recall says how many related records it
+    held back for being in view and that they are in the conversation in front of her, from the earliest one's
+    time; with nothing else found it no longer says she remembers nothing. Her last three thoughts count as in
+    view too, since they reach every turn; older ones that may be compacted away do not.
+  - Kept: lines beyond the delivered history come back even when her session still shows them, because
+    compaction may drop them. She agreed: better given twice than lost.
 - **Baseline to compare against** (10-10 → 10-11, before batch 1):
   - Notices averaged 15,121 characters; `memories` about 2,000 of that, `recent_thoughts_from_program` about 590
     in every notice, `unchanged_from_program` about 530.

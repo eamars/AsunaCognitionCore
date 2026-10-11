@@ -229,7 +229,8 @@ class Retrieval:
             current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
             if not current or current.get('expires_at', '9999')<=now():
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
-            if current.get('kind')!='monologue' and set(current.get('source_event_ids',[])) & set(exclude_sources):
+            # In view: a record from a line she still sees, or one of her last thoughts (by its own id).
+            if key in exclude_sources or (current.get('kind')!='monologue' and set(current.get('source_event_ids',[])) & set(exclude_sources)):
                 excluded.append({'id':key,'reason':'source_in_recent_tail'});continue
             if key in stepped:
                 excluded.append({'id':key,'reason':'faded_and_summarized'});continue
@@ -244,6 +245,11 @@ class Retrieval:
             if m['_id'] in seen:continue
             seen.add(m['_id']);selected.append(m)
             if len(selected)==6:break
+        # Records that would have made the cut but whose source she still sees (the recent tail): counted, so a
+        # recall can say where the rest is instead of reading as "not found".
+        position={key:i for i,key in enumerate(ordered)}
+        cut=max((position[m['_id']] for m in selected),default=-1) if len(selected)==6 else len(ordered)
+        in_view=[e['id'] for e in excluded if e['reason']=='source_in_recent_tail' and position[e['id']]<cut]
         for m in selected:
             m['historical_sources']=[]
             for old_id in m.get('supersedes',[])[:8]:
@@ -264,7 +270,7 @@ class Retrieval:
             self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{
                 'salience.last_ref_at':moment,'salience.last_ref_seq':sequences.get(m['scope_key'])}})
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
-                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'pending_backread':[m['_id'] for m in pending]}
+                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',
                         recent_source_ids=[m['_id'] for m in recent_sources], lexical_candidate_count=len(rows), lexical_candidate_limit=4096,
                         cache_disabled_for_bounded_sample=not cacheable)

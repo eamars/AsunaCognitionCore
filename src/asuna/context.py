@@ -229,6 +229,33 @@ class ContextBuilder:
                         **({'when':ago(hours)} if hours is not None else {}),**({'then':then} if then else {})})
         return out
 
+    def said_at(self, unit):
+        """When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line."""
+        if unit.get('kind')=='monologue':
+            return unit.get('formed_at')
+        seq=unit.get('scene_seq')
+        if seq is None:
+            seq=(unit.get('source_window') or [None])[-1]
+        scope=unit.get('scope_key') or ''
+        if seq is not None and scope.startswith('scene:'):
+            row=self.store.db.messages.find_one({'scene_id':scope[len('scene:'):],'scene_seq':seq},
+                                                {'received_at':1,'receipt_at':1,'occurred_at':1,'event.raw':1,'event.occurred_at':1})
+            said=row and caught_up.said_at(row)
+            if said:
+                return said
+        return unit.get('occurred_at') or unit.get('formed_at') or unit.get('generated_at')
+
+    def when(self, unit, zone, moment):
+        """A recalled record's time as her history lines show it, and how long ago: '10/11 19:16（3 小时前）'."""
+        from datetime import datetime
+        from .config import ago
+        said=self.said_at(unit)
+        stamp=schedule_rules.line_stamp(zone,said)
+        if not stamp:
+            return None
+        hours=(moment-datetime.fromisoformat(str(said).replace('Z','+00:00'))).total_seconds()/3600
+        return '%s（%s）'%(stamp,ago(hours))
+
     def prepare(self, event: dict, persona='P1', recall=False):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
@@ -297,6 +324,9 @@ class ContextBuilder:
             # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
             row['delivery_state']=UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state'))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
+        # Her last few thoughts here reach every turn (recent_thoughts, or still on screen): in view like these lines.
+        tail_sources.update(m['_id'] for m in self.store.db.memory_units.find(
+            {'kind':'monologue','scope_key':scope,'status':'active'},{'_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
         if source:
             for queued in self.store.db.messages.find({'scene_id':scene['_id'], 'direction':'inbound',
                                                        'scene_seq':{'$gte':source['scene_seq']}},
@@ -342,19 +372,17 @@ class ContextBuilder:
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
         units={m['_id']:m for m in memories}
+        memory_zone=schedule_rules.scene_timezone(self.store.config,scene)
         for fact in facts:
             # The whole unit stays readable through recall/read; the turn carries a bounded excerpt.
             fact['body_markdown']=excerpt(fact.get('body_markdown'),MEMORY_CHARS)
+            unit=units.get(fact['_id']) or {}
+            # When it was said, on the same clock face as her history lines, so today and yesterday read apart.
+            when=self.when(unit,memory_zone,moment)
+            if when:fact['when']=when
             if fact.get('kind')=='monologue':
-                # One of her past thoughts: when she had it, and what she did then (reasons.py).
-                from datetime import datetime as _dt
+                # One of her past thoughts: what she did then (reasons.py).
                 from . import reasons
-                from .config import ago as _ago
-                unit=units.get(fact['_id']) or {}
-                try:
-                    fact['when']=_ago((moment-_dt.fromisoformat(unit['formed_at'])).total_seconds()/3600)
-                except (KeyError,TypeError,ValueError):
-                    pass
                 then=reasons.then(self.store,unit)
                 if then:fact['then']=then
             if fact.get('invented'):
@@ -422,8 +450,16 @@ class ContextBuilder:
         plans=[schedule_rules.project(row,schedule_rules.scene_timezone(self.store.config,scene,row),
                                       moment) for row in plan_rows]
         # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
+        # A recall she asked for says what it held back because she still sees it, and where that is.
+        in_view=(retrieval_manifest.get('in_view') or []) if recall else []
+        held_back=None
+        if in_view:
+            said=sorted(filter(None,(self.said_at(u) for u in self.store.db.memory_units.find(
+                {'_id':{'$in':in_view}},{'kind':1,'scene_seq':1,'source_window':1,'scope_key':1,'occurred_at':1,'formed_at':1,'generated_at':1}))))
+            earliest=schedule_rules.line_stamp(memory_zone,said[0]) if said else ''
+            held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
         coverage_block=None
-        if retrieval_manifest.get('coverage')=='insufficient':
+        if retrieval_manifest.get('coverage')=='insufficient' and not (held_back and not memories):
             coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
                             else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
@@ -444,6 +480,8 @@ class ContextBuilder:
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
+        if held_back:
+            context['held_back_from_program']=held_back
         thoughts=self.recent_thoughts(scope,moment)
         if thoughts:
             context['recent_thoughts_from_program']={'items':thoughts,

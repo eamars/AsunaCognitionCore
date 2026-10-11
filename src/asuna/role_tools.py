@@ -920,6 +920,8 @@ class RoleTools:
         result = {'query': query, 'memories': recalled.get('memories') or []}
         if recalled.get('coverage_from_program'):
             result['coverage'] = recalled['coverage_from_program']
+        if recalled.get('held_back_from_program'):
+            result['held_back'] = recalled['held_back_from_program']
         if documents:
             result['documents'] = documents
         if missing:

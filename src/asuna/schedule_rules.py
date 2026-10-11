@@ -339,7 +339,11 @@ def project(plan, zone, moment=None):
                               'SUSPENDED': plan.get('last_outcome') or '已暂停'}[plan['status']]
         return row
     try:
-        fire = next_fire(plan['rule'], tz, moment)
+        # The time set when it was armed (kept in step with the native scheduler), not recomputed: "N seconds
+        # after" counted from now would move later at every read.
+        stored = plan.get('next_fire_at')
+        fire = (_aware(datetime.fromisoformat(str(stored).replace('Z', '+00:00'))) if stored
+                else next_fire(plan['rule'], tz, moment))
     except ValueError as exc:
         row['local'] = None
         row['next_fire_at'] = plan.get('scheduled_at')

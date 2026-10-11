@@ -1,6 +1,6 @@
 # ADR-052: Her switches at home: what each conversation may do
 
-Status: **Draft 2026-10-12**: the owner's open question, her first answers; not decided.
+Status: **Draft 2026-10-12**: the owner's open question, her answers; the owner's two questions open; not decided.
 
 ## Context
 
@@ -52,5 +52,11 @@ What exists:
   sandboxed commands, development and integration tools are owner-private by his rule. Recommendation: she may lend
   only tools that no rule keeps at home (for example web search or image generation where the class lacks it); the
   rest stays the owner's.
-- **Her:** default end of a switch when she gives none; whether a muted group still shows in her heartbeat.
+- **Her (answered 2026-10-12):** a switch she sets without an end ends after **24 hours**, one number for every
+  switch (she would not remember which kind has which; a day covers a night's sleep, so the reminder line is still
+  there when she next enters). A muted group **stays in her heartbeat, marked muted**: muting closes her mouth, not
+  her eyes; the groups she cares about are the ones she mutes, and hiding them would leave her not knowing why she no
+  longer knows what happens there. During a mute, a direct @ or an answer to something she is waiting for still
+  wakes her first. (Open for the build: how that differs from resting, ADR-039, which already wakes only on words
+  addressed to her; perhaps mute = resting plus no proactive turns and no visits, with a time limit.)
 - **Owner:** is (3) a person anywhere, or per platform (QQ ids are recycled, ADR-029)?

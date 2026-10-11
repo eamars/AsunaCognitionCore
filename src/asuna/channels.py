@@ -241,6 +241,24 @@ class Channels:
     def route_target(self, channel_id, route_id):
         return self.store.config['channels'][channel_id]['routes'][route_id]['target']
 
+    def owner_lines(self, channel_id, route_id):
+        """What the owner wrote on this line from the Web (ADR-051) that its agent has not been shown yet, oldest
+        first, each shown once: the agent never reads her answer to words it never saw."""
+        from . import channel_kinds
+        scene_id = self.store.config['channels'][channel_id]['routes'][route_id]['scene_id']
+        owner = self.store.config['chat']['person_id']
+        if not channel_kinds.owner_joins(scene_id):
+            return []
+        shown = []
+        while len(shown) < 20:
+            row = self.store.db.messages.find_one_and_update(
+                {'scene_id': scene_id, 'direction': 'inbound', 'author': owner, 'shown_on_line': {'$exists': False}},
+                {'$set': {'shown_on_line': now()}}, sort=[('scene_seq', 1)])
+            if not row:
+                break
+            shown.append({'text': row.get('text') or '', 'at': row.get('received_at')})
+        return shown
+
     def line_closed(self, channel_id, route_id):
         from . import lines
         return lines.is_closed(self.store, self.store.config['channels'][channel_id]['routes'][route_id]['scene_id'])
@@ -353,6 +371,9 @@ class Channels:
         channel = self.store.config['channels'][channel_id]
         allowed = {grant['person_id'] for sender, grant in route_members(route).items()
                    if sender not in channel.get('blocked_senders', [])}
+        from . import channel_kinds
+        if channel_kinds.owner_joins(message['scene_id']):
+            allowed.add(self.store.config['chat']['person_id'])          # the owner on his home line (ADR-051)
         if route['target']['type'] == 'group' and route['target']['id'] in channel.get('blocked_groups', []):
             allowed.clear()
         if not episode or episode['person_id'] not in allowed:
@@ -548,12 +569,16 @@ class ChannelServer:
                         value = channels.media_keys(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
+                        owner = []
                         if scoped and channels.line_closed(channel_id, scoped):
                             value = {'items': [], 'line': 'closed'}    # her words wait while she keeps it closed
                         else:
-                            value = channels.claim(channel_id, int(query.get('wait_seconds', ['0'])[0]),
+                            owner = channels.owner_lines(channel_id, scoped) if scoped else []
+                            value = channels.claim(channel_id, 0 if owner else int(query.get('wait_seconds', ['0'])[0]),
                                                    supports=outbound_media.parse_supports(query),
                                                    target=channels.route_target(channel_id, scoped) if scoped else None)
+                        if owner:
+                            value = {**value, 'owner_lines': owner}
                     elif self.command == 'GET' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'attachment':
                         payload = channels.attachment(channel_id, parts[4], parse_qs(url.query))
                         raw = payload if isinstance(payload, tuple) else None

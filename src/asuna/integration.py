@@ -45,6 +45,13 @@ def integration_tools(profile):
     return [tool for tool in INTEGRATION_TOOLS if tool['name'] in names]
 
 
+def owner_line(config, scene, person):
+    """The owner writing on a home line he joins from the Web (ADR-051): the line's kind and the local owner decide."""
+    from . import channel_kinds
+    owner = (config.get('chat') or {}).get('person_id')
+    return bool(owner) and person == owner and channel_kinds.owner_joins(scene)
+
+
 def owner_dm(config, scene, person):
     """The owner's own direct chat on a platform: a dm route to the owner, and the owner speaking (canonical
     persons by configuration; a name never decides it)."""
@@ -66,7 +73,8 @@ def owner_profile(config, scene, person):
     The profile itself stays bound to the local chat."""
     profile = config.get('integration', {})
     local = config.get('chat', {})
-    here = (scene, person) == (local.get('scene_id'), local.get('person_id')) or owner_dm(config, scene, person)
+    here = ((scene, person) == (local.get('scene_id'), local.get('person_id')) or owner_dm(config, scene, person)
+            or owner_line(config, scene, person))
     if profile.get('enabled') is not True or not here:
         raise Denied('INTEGRATION_OWNER_REQUIRED: 集成工具只给 owner 在本机聊天或自己私聊里交代的任务用，而且集成要开着；'
                      '这个任务不满足，重试也一样：在报告里写明需要它')

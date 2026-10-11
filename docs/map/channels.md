@@ -23,6 +23,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
 - class `Channels`
   - `authenticate` — (channel, route id) for the bearer: the channel's own token opens all of it (route None); a route key opens that route alone, on a kind that declares ROUTE_KEYS.
   - `route_target`
+  - `owner_lines` — What the owner wrote on this line from the Web (ADR-051) that its agent has not been shown yet, oldest first, each shown once: the agent never reads her answer to words it never saw.
   - `line_closed`
   - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
   - `members`
@@ -50,6 +51,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `person_ids` — Every platform person id a bare account number could be (qq:<account>, …).
 - def `faces_of` — The platform faces (name -> id) of the kind a scene id belongs to; empty when it has none.
 - def `home` — A scene or person of a kind whose conversations are trusted home ones (ADR-017).
+- def `owner_joins` — A scene of a kind the owner joins from the Web (ADR-051): a home line only.
 - def `sends_images`
 - def `sends_stickers`
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).

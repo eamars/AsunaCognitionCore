@@ -90,12 +90,12 @@ def test_an_agent_talks_to_her_and_polls_only_its_own_line(served):
     assert cli.send(theirs, '我是另一个助手')['status'] == 'accepted'
     event = served.store.db.messages.find_one({'scene_id': SCENE, 'direction': 'inbound'})
     assert event['author'] == 'agent:claude-code' and event['text'] == '我是 Claude，在吗'
-    got, state = cli.poll(mine, 0)
-    assert (got, state) == (['收到，我在。'], 'open')                                  # not the other line's answer
+    got, state, owner = cli.poll(mine, 0)
+    assert (got, state, owner) == (['收到，我在。'], 'open', [])                                  # not the other line's answer
     row = served.store.db.messages.find_one({'scene_id': SCENE, 'direction': 'outbound'})
     assert row['delivery_state'] == 'DELIVERED'
     assert served.store.db.messages.find_one({'scene_id': OTHER, 'direction': 'outbound'})['delivery_state'] == 'QUEUED_EXTERNAL'
-    assert cli.poll(theirs, 0) == (['你好。'], 'open')
+    assert cli.poll(theirs, 0) == (['你好。'], 'open', [])
 
 
 def test_a_route_key_opens_nothing_else(served):
@@ -121,9 +121,9 @@ def test_when_she_closes_the_line_it_shuts_at_once(served):
     cli.send(mine, '在吗')
     lines.set_line(served.store, SCENE, closed=True, choice='until_reopened')
     assert cli.send(mine, '还在吗')['status'] == 'line_closed'
-    assert cli.poll(mine, 0) == ([], 'closed')                                     # her words wait
+    assert cli.poll(mine, 0) == ([], 'closed', [])                                     # her words wait
     lines.set_line(served.store, SCENE, closed=False)
-    assert cli.poll(mine, 0) == (['收到，我在。'], 'open')
+    assert cli.poll(mine, 0) == (['收到，我在。'], 'open', [])
 
 
 def test_an_agent_line_lists_read_image_though_it_carries_no_pictures(store, tmp_path):
@@ -136,3 +136,36 @@ def test_an_agent_line_lists_read_image_though_it_carries_no_pictures(store, tmp
     assert 'read_image' in role_tools.toolbox(store, ep)
     store.config['character']['input_modalities'] = ['text']
     assert 'read_image' not in role_tools.toolbox(store, ep), 'not when her model cannot see'
+
+
+def test_the_owner_joins_a_line_without_starting_it_over(store, tmp_path, monkeypatch):
+    """ADR-051: the owner is a member of each agent line; joining keeps the conversation (no new policy epoch)."""
+    with_lines(store, tmp_path)
+    monkeypatch.setattr(host, 'DATA', tmp_path)
+    host.prepare_channels(store)
+    owner = store.config['chat']['person_id']
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    assert scene['members'] == ['agent:claude-code', owner] and scene['policy_epoch'] == 1
+    assert channel_kinds.owner_joins(SCENE) and not channel_kinds.owner_joins('qq:1:dm:2')
+
+
+def test_the_owner_on_a_line_is_his_own_voice_and_the_agent_sees_it(served, monkeypatch):
+    """What the owner writes on a line from the Web is his, gets her answer there, and the line's agent sees it once."""
+    from asuna.integration import owner_line
+    store, mine = served.store, served.keys['claude-code']
+    owner = store.config['chat']['person_id']
+    store.db.scenes.update_one({'_id': SCENE}, {'$push': {'members': owner}})
+    assert owner_line(store.config, SCENE, owner) and not owner_line(store.config, SCENE, 'agent:claude-code')
+    assert not owner_line(store.config, store.config['chat']['scene_id'], owner)          # the home chat is not a line
+    Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': '主人来了。'})], '主人好。')])).ingest(
+        {'event_id': 'web-1', 'scene_id': SCENE, 'person_id': owner, 'text': '这条线上的事我也看着'}, persona='P1')
+    row = store.db.messages.find_one({'scene_id': SCENE, 'direction': 'inbound'})
+    assert row['author'] == owner
+    assert cli.poll(mine, 0) == (['主人好。'], 'open', ['这条线上的事我也看着'])        # her answer passes the publication check
+    assert cli.poll(mine, 0) == ([], 'open', [])                                     # each owner line once
+    lines.set_line(store, SCENE, closed=True, choice='until_reopened')
+    store.db.messages.insert_one({'_id': 'in-web-2', 'schema_version': 1, 'scene_id': SCENE, 'direction': 'inbound', 'author': owner,
+                                  'text': '还有一件', 'scene_seq': 99})
+    assert cli.poll(mine, 0) == ([], 'closed', [])                                   # a closed line shows the agent nothing
+    lines.set_line(store, SCENE, closed=False)
+    assert cli.poll(mine, 0) == ([], 'open', ['还有一件'])

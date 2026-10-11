@@ -12,6 +12,7 @@ TEXT_ONLY = True
 PEER_LINE = True                  # she can open/close each line herself (asuna/lines.py)
 HOME = True                       # a trusted home conversation (owner_private), like the DSH peer line
 ROUTE_KEYS = True                 # each route has a key of its own that opens only that line (channels.route_key)
+OWNER_JOINS = True                # the owner writes in its conversations from the Web too, as the owner (ADR-051)
 
 ACCOUNT = re.compile(r'[a-z][a-z0-9-]{0,39}')
 INBOUND_MENTION = re.compile(r'(?!)')        # a direct line has no @ mentions

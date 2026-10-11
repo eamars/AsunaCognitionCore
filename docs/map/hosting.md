@@ -32,6 +32,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
   - `status`
+  - `joined_line` — The scene of a home line the owner joins (ADR-051) whose live character session this is, else None.
   - `read_only_note`
   - `bind_session`
   - `session`

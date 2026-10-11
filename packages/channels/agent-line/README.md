@@ -2,7 +2,8 @@
 
 Coding agents on this machine (Claude Code, or another) as an Asuna channel. Each agent has one direct line to her:
 a trusted home conversation, like the DSH peer line, that she can close herself. Who speaks is its own person
-(`agent:<route>`), never the owner.
+(`agent:<route>`), never the owner. The owner is a member of every line too (`OWNER_JOINS`): he writes there in the
+Web composer, as himself, with his own grants. Closing a line shuts out its agent, not the owner.
 
 The package only registers the kind (`agent`, `HOME`, `TEXT_ONLY`, `PEER_LINE`, `ROUTE_KEYS`). Nothing runs in the
 Host for it: the agent posts and polls through the channel API with `tools/agent_line.py`.
@@ -35,7 +36,8 @@ python tools/agent_line.py poll claude-code --wait 120
 python tools/agent_line.py status claude-code
 ```
 
-`poll` prints her answers on that line and confirms each; an answer nobody polls stays queued. The key opens only
+`poll` prints what the owner wrote on that line since the last poll (marked as the owner's), then her answers on
+it, and confirms each answer; an answer nobody polls stays queued. The key opens only
 its own line: posting as that route, claiming and confirming her words there. Anything on the machine can read the
 key file, so the line's boundary is the machine; what it opens is one agent's voice in her home, never the owner's
-chat.
+voice or chat.

@@ -151,13 +151,14 @@ class Chat:
                 if self.on_turn_finished:
                     self.on_turn_finished()
 
-    def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None, media=None):
+    def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None, media=None, scene_id=None):
+        """The owner's words from the Web: in the home chat, or on a home line he joins (scene_id, ADR-051)."""
         if media:
             # Pictures the owner attached (vision.local_uploads): their placeholders lead the text, as a
             # platform's do, so history and recall know a picture came even after her session compacts.
             marks = ' '.join(item['placeholder'] for item in media['items'])
             text = marks + ('\n' + text if text else '')
-        event = {'event_id': event_id or str(uuid.uuid4()), 'scene_id': self.settings['scene_id'],
+        event = {'event_id': event_id or str(uuid.uuid4()), 'scene_id': scene_id or self.settings['scene_id'],
                  'person_id': self.settings['person_id'], 'text': text}
         if media:
             event['raw'] = {'asuna_media': media}
@@ -166,10 +167,11 @@ class Chat:
         config=self.app.config
         identity=(event['scene_id'],event['person_id'])
         local=config.get('chat',{})
-        if identity==(local.get('scene_id'),local.get('person_id')):
+        from .integration import owner_line
+        if identity==(local.get('scene_id'),local.get('person_id')) or owner_line(config,*identity):
             profile=config.get('integration',{})
             if (profile.get('enabled') is True and
-                    identity==(profile.get('scene_id'),profile.get('person_id'))):
+                    (local.get('scene_id'),local.get('person_id'))==(profile.get('scene_id'),profile.get('person_id'))):
                 event['integration_profile']='owner'
             if config.get('self_development',{}).get('enabled') is True:
                 event['development_profile']='owner'

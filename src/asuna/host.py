@@ -7,6 +7,7 @@ import threading
 import time
 import traceback
 
+from . import channel_kinds
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
 from .chat import Chat, local_settings, prepare_local_scene
@@ -106,6 +107,10 @@ def prepare_channels(store, *, dry_run=False):
                 # words, and her first written understanding creates it (familiarity.py, memory.py).
                 if not dry_run:
                     workspace.mkdir(parents=True, exist_ok=True)
+            # The owner joins a line of a kind that lets him (ADR-051): he writes there from the Web.
+            joins = channel_kinds.owner_joins(scene_id) and local.get('person_id') not in people
+            if joins:
+                people.append(local['person_id'])
             scene = store.db.scenes.find_one({'_id': scene_id})
             if scene is None:
                 put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
@@ -120,7 +125,9 @@ def prepare_channels(store, *, dry_run=False):
                     # In automatic mode, another participant in the same QQ
                     # group is covered by the existing admission policy.
                     revoked = set(scene['members']) - set(people)
-                    bump = bool(revoked) or channel.get('admission') != 'automatic'
+                    # The owner joining his own home line opens it to nobody else: the conversation goes on.
+                    joined = set(people) - set(scene['members']) - ({local['person_id']} if joins else set())
+                    bump = bool(revoked) or (channel.get('admission') != 'automatic' and bool(joined))
                     put('scenes', {**scene, 'members': people,
                         'policy_epoch': scene['policy_epoch'] + int(bump)},
                         expected=scene['revision'], stream='channel-membership:' + scene_id)

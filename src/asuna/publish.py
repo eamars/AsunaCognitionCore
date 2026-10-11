@@ -80,6 +80,7 @@ class PublishService:
             if msg['delivery_state'] in ('QUEUED_EXTERNAL', 'SENDING'):
                 return msg
             from .channels import route_for_scene
+            from .integration import owner_line
             route = route_for_scene(self.store.config, scene['channel_id'], scene['_id'])
             source_ep = ep
             # Feedback inherits the original transport target, including continued tasks.
@@ -99,7 +100,9 @@ class PublishService:
                 ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') in ('visit', 'note'))
                 # One of her plans that came due here: the scheduler's notice for a plan of this conversation.
                 or (origin.get('episode_kind') == 'scheduled' and origin.get('adapter_id') == 'scheduler'
-                    and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1})))
+                    and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1}))
+                # The owner's words on a home line he joins from the Web (ADR-051): her answer goes to the line.
+                or ((source or {}).get('direction') == 'inbound' and owner_line(self.store.config, scene['_id'], origin.get('person_id'))))
             if not channel and core_notice:
                 # No platform input to answer: she speaks to the conversation on its own route.
                 channel = {'id': scene['channel_id'], 'target': route['target'], 'platform_event_id': None,

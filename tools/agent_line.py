@@ -7,6 +7,7 @@
 The route's key is read from <data>/private/route-keys/agent-<route>.json (ASUNA_DATA_ROOT, else .runtime), written
 by the Host at start. The key opens only this line: posting as this route, and claiming and confirming her words on it.
 A poll confirms each answer it prints; an answer nobody polls stays queued, shown in her history as not yet delivered.
+A poll also prints, once each, what the owner wrote on this line from the Web, marked as the owner's.
 """
 import argparse
 import json
@@ -59,13 +60,15 @@ def send(line, text):
 
 
 def poll(line, wait):
-    """Claim her words on this line until none is left, waiting up to `wait` seconds for the first."""
-    got, deadline = [], time.monotonic() + max(0, wait)
+    """Claim her words on this line until none is left, waiting up to `wait` seconds for the first. Returns her
+    answers, the line's state, and the owner's lines shown on the way."""
+    got, owner, deadline = [], [], time.monotonic() + max(0, wait)
     while True:
         left = deadline - time.monotonic()
         answer = call(line, 'GET', '/outbox?wait_seconds=%d' % (max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
+        owner += [item.get('text') or '' for item in answer.get('owner_lines') or []]
         if answer.get('line') == 'closed':
-            return got, 'closed'
+            return got, 'closed', owner
         items = answer.get('items') or []
         for item in items:
             call(line, 'POST', '/outbox/%s/receipt' % item['publication_id'],
@@ -73,7 +76,7 @@ def poll(line, wait):
                   'platform_message_id': 'agent-' + uuid.uuid4().hex, 'response': {'by': 'agent_line'}})
             got.append(item.get('text') or '')
         if not items and (got or time.monotonic() >= deadline):
-            return got, 'open'
+            return got, 'open', owner
 
 
 def main(argv=None):
@@ -92,10 +95,13 @@ def main(argv=None):
         print({'line_closed': 'line closed: she is not taking messages on this line now'}.get(
             result.get('status'), result.get('status', 'sent')))
     elif args.command == 'poll':
-        got, state = poll(line, args.wait)
+        got, state, owner = poll(line, args.wait)
         if args.json:
-            print(json.dumps({'line': state, 'messages': got}, ensure_ascii=False))
+            print(json.dumps({'line': state, 'messages': got, 'owner_lines': owner}, ensure_ascii=False))
         else:
+            for text in owner:
+                print('[the owner, on this line from the Web] ' + text)
+                print('---')
             for text in got:
                 print(text)
                 print('---')

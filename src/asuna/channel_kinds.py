@@ -11,6 +11,8 @@ A kind module knows one platform's id formats and adapter conventions:
   FACES, STICKERS (optional)                   the platform's own faces by name -> id; whether it sends stickers
   HOME (optional)                              its conversations are trusted home ones (owner_private); default public
   TEXT_ONLY (optional)                         it carries text only, no pictures; default False
+  OWNER_JOINS (optional)                       the owner is a member of each of its conversations and writes there
+                                               from the Web as the owner; default False
   SERVICE_ARGV (optional)                      its managed adapter's resident command, started by itself once
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
@@ -71,6 +73,11 @@ def faces_of(identifier):
 def home(identifier):
     """A scene or person of a kind whose conversations are trusted home ones (ADR-017)."""
     return bool(getattr(of(identifier), 'HOME', False))
+
+
+def owner_joins(identifier):
+    """A scene of a kind the owner joins from the Web (ADR-051): a home line only."""
+    return home(identifier) and bool(getattr(of(identifier), 'OWNER_JOINS', False))
 
 
 def sends_images(identifier):

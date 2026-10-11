@@ -237,3 +237,33 @@ def test_a_worker_start_keeps_only_the_newest_host_reports(tmp_path, monkeypatch
     prune_host_reports()
     kept = sorted(p.name for p in reports.iterdir())
     assert kept == ['native-host-%02d' % i for i in range(3, KEPT_HOST_REPORTS + 3)] + ['other-run']
+
+
+@pytest.mark.parametrize('member', [True, False])
+def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
+    """ADR-051: the composer is open on an agent line whose members include the owner; his words go to that line."""
+    from asuna import channel_kinds
+    channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'agent-line' / 'python', 'module': 'agent_line'}])
+    line = {'native_host': True, '_id': 'line', 'scene_id': 'agent:home:dm:claude-code', 'person_id': 'agent:claude-code',
+            'lane': 'character', 'cwd': str(tmp_path / 'agent')}
+    qq = {'native_host': True, '_id': 'qq', 'scene_id': 'qq:bot:dm:one', 'lane': 'character', 'cwd': str(tmp_path / 'qq')}
+    rows = {'line': line, 'qq': qq}
+    members = ['agent:claude-code'] + (['owner'] if member else [])
+    worker = BusinessWorker()
+    worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}},
+        store=SimpleNamespace(db=SimpleNamespace(
+            sessions=SimpleNamespace(find=lambda _: list(rows.values()), find_one=lambda query: rows.get(query['_id'])),
+            scenes=SimpleNamespace(find_one=lambda *_: {'members': members}))))
+    accepted = []
+    worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append((text, kw['scene_id'])))
+    policies = worker.dispatch('input_policies', {'sessions': [{'id': 'line', 'cwd': line['cwd']}, {'id': 'qq'}]})
+    assert 'qq' in policies and ('line' not in policies) == member
+    args = {'session_id': 'line', 'cwd': line['cwd'], 'text': '我也在', 'message_ids': ['m1']}
+    if member:
+        worker.dispatch('input', args)
+        assert accepted == [('我也在', 'agent:home:dm:claude-code')]
+    else:
+        with pytest.raises(Denied, match='NATIVE_INPUT_WORKSPACE_MISMATCH'):
+            worker.dispatch('input', args)
+    with pytest.raises(Denied, match='NATIVE_INPUT_WORKSPACE_MISMATCH'):
+        worker.dispatch('input', {**args, 'session_id': 'qq', 'cwd': qq['cwd']})

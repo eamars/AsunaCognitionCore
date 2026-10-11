@@ -48,9 +48,11 @@ class Router:
         # agent line); integration_profile is not in `allowed`, so a channel payload never picks its own.
         granted = event_profile(getattr(self.store, 'config', None), event, self.store)
         if granted: trusted['integration_profile'] = granted
+        from .integration import owner_line
         if (event.get('development_profile')=='owner' and not event.get('channel')
-                and (event['scene_id'],event['person_id']) == (
+                and ((event['scene_id'],event['person_id']) == (
                     self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
+                    or owner_line(self.store.config,event['scene_id'],event['person_id']))
                 and self.store.config.get('self_development',{}).get('enabled')):
             trusted['development_profile']='owner'
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':event.get('adapter_id') or ('channel' if event.get('channel') else 'local')},scene['scope_key'])

@@ -1,6 +1,7 @@
 # ADR-051: The owner speaks on an agent line
 
-Status: **Approved by the owner 2026-10-12** (direction and Web change); details pending Xiaoman's review, then built.
+Status: **Approved by the owner 2026-10-12** (direction and Web change); her ruling on closed lines taken; built
+2026-10-12, live after her next restart. Her review of the full text is pending.
 
 ## Context
 
@@ -33,7 +34,13 @@ No prompt rule narrowing what she does where: he wants her to do more developmen
    the owner's line there carries the owner's grants as in his home chat (integration and development profile), so
    a task handed over from it is his request, and its result comes back to that line.
 4. **The agent sees the whole conversation.** Its poll shows the owner's lines on its line as well as her answers,
-   marked as the owner's, so it never answers a reply to words it never saw. It still cannot post as him.
+   marked as the owner's, each once, so it never answers a reply to words it never saw. It still cannot post as him.
+
+How (for the record): the channel kind declares `OWNER_JOINS`; at start the owner becomes a member of each such line
+without a new policy epoch (a new epoch would start the line's conversation over); the worker takes Web input from a
+live character session of such a line where the owner is a member, in that session's own folder; the owner's
+integration and development grants accept such a line (`integration.owner_line`); her answer to the owner publishes
+to the line's route; the route key's outbox claim carries `owner_lines`.
 5. **Her answers go to the line as now.** One answer reaches everyone on the line: the agent by its poll, the owner
    in the Web conversation.
 
@@ -41,8 +48,13 @@ No change to the home chat, the developer inbox, or what she may do where.
 
 ## For her
 
-A line is no longer one agent's alone: the owner may join it. Her answer there is read by both. A line she closed
-stays closed to the agent; whether a closed line also refuses the owner is her call in review.
+A line is no longer one agent's alone: the owner may join it. Her answer there is read by both.
+
+Her ruling (2026-10-12): closing a line shuts out its agent, not the owner. She closes a line to stop an agent's
+chatter; the owner is the one she works for, not a source of noise. Shutting out everyone would be muting the
+conversation, a different switch (ADR-052), and must not be folded into closing a line, or wanting quiet would mean
+locking the owner out. While a line is closed the agent is shown nothing, the owner's lines included; it sees them
+when she opens the line again.
 
 ## Not in this ADR
 

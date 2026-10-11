@@ -628,6 +628,14 @@ class BusinessWorker:
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,
                 'active_task': self.controller.active_task if self.controller else None}
 
+    def joined_line(self, session):
+        """The scene of a home line the owner joins (ADR-051) whose live character session this is, else None."""
+        if not session or session.get('lane') != 'character' or session.get('successor_id') or session.get('retired') \
+                or not session.get('cwd') or not channel_kinds.owner_joins(session.get('scene_id')):
+            return None
+        scene = self.app.store.db.scenes.find_one({'_id': session['scene_id']}, {'members': 1}) or {}
+        return session['scene_id'] if self.app.config['chat']['person_id'] in scene.get('members', ()) else None
+
     @staticmethod
     def read_only_note(platform):
         return {'key': 'read_only', **({'platform': platform.TITLE} if platform else {})}
@@ -876,15 +884,19 @@ class BusinessWorker:
             local = self.app.config['chat']
             ids = [row['id'] for row in args['sessions']]
             # Keys of the client's input words (ADR-011 §2.8): a platform's read-only view, or an internal session.
+            rows = list(self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True}))
             policies = {row['_id']: (self.read_only_note(channel_kinds.of(row['scene_id'])) if row['scene_id'] != local['scene_id']
                 else {'key': 'internal'})
-                for row in self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True})
+                for row in rows
                 if row['scene_id'] != local['scene_id'] or row['lane'] != 'character'
                 or row.get('successor_id') or row.get('retired')}
             for row in args['sessions']:
                 for platform in channel_kinds.kinds():
                     if row.get('cwd') and Path(row['cwd']).resolve() == (DATA / 'work' / platform.KIND).resolve():
                         policies[row['id']] = self.read_only_note(platform)
+            for row in rows:                 # the owner writes on a home line he joins (ADR-051)
+                if self.joined_line(row):
+                    policies.pop(row['_id'], None)
             return policies
         if method == 'heartbeat_now':
             # The owner's /heartbeat command (ADR-012 §8): one beat now, and when the next one is due.
@@ -902,22 +914,26 @@ class BusinessWorker:
             session_id = args['session_id']
             existing = self.app.store.db.sessions.find_one({'_id': session_id})
             local = self.app.config['chat']
-            if not args.get('cwd') or Path(args['cwd']).resolve() != Path(local['workspace']).resolve():
-                raise Denied('NATIVE_INPUT_WORKSPACE_MISMATCH')
             if existing and existing.get('successor_id'):
                 raise Denied('NATIVE_CONVERSATION_CONTINUED: ' + existing['successor_id'])
             if existing and existing.get('retired'):
                 raise Denied('NATIVE_CONVERSATION_RETIRED')
-            if existing and (existing['scene_id'], existing['person_id'], existing['lane']) != (
+            # A home line the owner joins (ADR-051): its own character session, in its own folder.
+            line = self.joined_line(existing)
+            workspace = existing['cwd'] if line else local['workspace']
+            if not args.get('cwd') or not workspace or Path(args['cwd']).resolve() != Path(workspace).resolve():
+                raise Denied('NATIVE_INPUT_WORKSPACE_MISMATCH')
+            if existing and not line and (existing['scene_id'], existing['person_id'], existing['lane']) != (
                     local['scene_id'], local['person_id'], 'character'):
                 raise Denied('NATIVE_INPUT_SOURCE_MISMATCH')
+            scene_id = line or local['scene_id']
             media = None
             if args.get('images'):
                 # Pictures the owner attached: DSH shows them to her; the program keeps its own record.
                 from .vision import local_uploads
-                scene = self.app.store.db.scenes.find_one({'_id': local['scene_id']}, {'scope_key': 1})
+                scene = self.app.store.db.scenes.find_one({'_id': scene_id}, {'scope_key': 1})
                 media = local_uploads(self.app.store, scene['scope_key'], args['images'], args['message_ids'][0])
-            return self.controller.submit(args['text'], event_id=args['message_ids'][0],
+            return self.controller.submit(args['text'], event_id=args['message_ids'][0], scene_id=scene_id,
                 native_session_id=session_id, native_message_ids=args['message_ids'], media=media)
         if method == 'result':
             with self.pending_lock:

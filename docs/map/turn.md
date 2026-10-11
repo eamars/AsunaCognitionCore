@@ -223,7 +223,7 @@ Shared local controller reused by the native Web host; there is no terminal adap
 - def `seed_documents` — Seeds only fill missing document heads (ADR-009 §5.4).
 - def `prepare_local_scene` — Initialize only missing local state; never reseed memories or revisions.
 - class `Chat`
-  - `submit`
+  - `submit` — The owner's words from the Web: in the home chat, or on a home line he joins (scene_id, ADR-051).
   - `offer_internal` — Queue a heartbeat or settlement opportunity in an owner-private scene (ADR-009 §10), her visit to a group (ADR-012 §4.2), which carries what she went there for and wakes the group as a scene tick, or a note of hers to a home conversation (A
   - `offer_self_development` — Queue a host-origin opportunity in the owner's existing role scene.
   - `receive` — Trusted host envelope only; adapters must use the bound channel API.

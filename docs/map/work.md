@@ -188,6 +188,7 @@ render_svg (ADR-027): an SVG file in the task folder made into a PNG she can loo
 Owner-granted (and, narrowly, agent-line) fixed-network integration lifecycle; contains no platform protocol.
 
 - def `integration_tools` — The integration tools one profile may use, in INTEGRATION_TOOLS' own order.
+- def `owner_line` — The owner writing on a home line he joins from the Web (ADR-051): the line's kind and the local owner decide.
 - def `owner_dm` — The owner's own direct chat on a platform: a dm route to the owner, and the owner speaking (canonical persons by configuration; a name never decides it).
 - def `owner_profile` — The owner's workspace grant: the owner in the local chat, or in their own platform DM (owner 2026-10-06).
 - def `agent_home_scene` — A home round woken on an agent line (ADR-033): the scene's own channel kind is `agent`.

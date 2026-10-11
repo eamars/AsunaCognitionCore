@@ -12,5 +12,10 @@
   },
   "files": ["src", "seeds", "locale", "persona-model.json", "cordis.patch.yml", "README.md", "icon.png"],
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
-  "peerDependencies": { "@asuna/cognition-core": "0.2.x" }
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-command-compact": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.2.1-alpha.2"
+  }
 }

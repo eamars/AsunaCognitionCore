@@ -9,17 +9,17 @@ function core(services) {
   return new CognitionCore(ctx, { routes: { character: route }, deployment: {} });
 }
 
-test('ADR-049: a conversation is condensed on request through DSH compaction, never during a turn there', async () => {
+test('ADR-049: a conversation is condensed through its own /compact command, never during a turn there', async () => {
   const calls = [];
   const agent = { id: 'role-g' };
-  const compaction = { compactNow: async (target, signal) => {
-    calls.push([target, signal instanceof AbortSignal]);
-    return { shadowedSeqs: [1, 2, 3], shadowedTokenCount: 4096 };
+  const commands = { execute: async (target, line, attachments, signal) => {
+    calls.push([target, line, attachments.length, signal instanceof AbortSignal]);
+    return { commandId: 'c1', result: { kind: 'success', text: 'Compacted 3 history items (~4096 tokens).' } };
   } };
-  const asuna = core({ compaction, agents: { 'role-g': agent } });
+  const asuna = core({ commands, agents: { 'role-g': agent } });
   assert.deepEqual(await asuna.compactSession({ session_id: 'role-g', scene_id: 'g' }),
     { compacted: true, items: 3, tokens: 4096 });
-  assert.deepEqual(calls, [[agent, true]]);
+  assert.deepEqual(calls, [[agent, '/compact', 0, true]]);
 
   asuna.states.set('role-g', { current: { token: 'turn-1' } });
   assert.deepEqual(await asuna.compactSession({ session_id: 'role-g', scene_id: 'g' }),
@@ -27,12 +27,16 @@ test('ADR-049: a conversation is condensed on request through DSH compaction, ne
   assert.equal(calls.length, 1, 'a running turn is never cut into');
 });
 
-test('ADR-049: without a compaction service, or with nothing to condense, it says so', async () => {
+test('ADR-049: no commands service, no /compact for the session, nothing to condense, or a failure: it says which', async () => {
   assert.deepEqual(await core({}).compactSession({ session_id: 's', scene_id: 'g' }),
-    { compacted: false, reason: 'no_compaction_service' });
-  const empty = core({ compaction: { compactNow: async () => null }, agents: { s: {} } });
-  assert.deepEqual(await empty.compactSession({ session_id: 's', scene_id: 'g' }),
+    { compacted: false, reason: 'no_commands_service' });
+  const answer = result => core({ commands: { execute: async () => result }, agents: { s: {} } })
+    .compactSession({ session_id: 's', scene_id: 'g' });
+  assert.deepEqual(await answer(undefined), { compacted: false, reason: 'no_compact_command' });
+  assert.deepEqual(await answer({ result: { kind: 'success', text: 'No compactable history yet.' } }),
     { compacted: false, reason: 'nothing_to_compact' });
+  assert.deepEqual(await answer({ result: { kind: 'error', text: 'Compaction cancelled.' } }),
+    { compacted: false, reason: 'Compaction cancelled.' });
 });
 
 test('ADR-049: a stage result carries how long the conversation was on that request', () => {

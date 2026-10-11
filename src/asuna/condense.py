@@ -25,6 +25,7 @@ QUIET_TIERS = ((100, 10), (30, 15), (0, 30))
 WEEK_DAYS = 7
 NIGHT_HOURS = (1, 7)                  # local night in the group's own clock: condensing waits for no quiet there
 PLAN_ID = 'plan-asuna-condense'
+UNAVAILABLE = ('no_commands_service', 'no_compact_command')   # the Host has no way to condense: not retried
 LOOK_EVERY_SECONDS = 300
 # How long a conversation was on its latest request → words (never the number).
 SIZE_WORDS = ((40000, '短'), (90000, '中等'), (150000, '长'), (None, '很长'))
@@ -165,6 +166,9 @@ def look(store, persona, compact, moment=None):
         except Exception as exc:              # the next look tries again
             store.audit('condense', 'condense.failed', {'scene_id': scene['_id'], 'error': str(exc)[:200]})
             continue
+        if answer.get('reason') in UNAVAILABLE:
+            # This Host cannot condense at all: the mark is taken back rather than tried every few minutes.
+            store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
         if answer.get('compacted') or answer.get('reason') == 'nothing_to_compact':
             store.db.scenes.update_one({'_id': scene['_id']}, {
                 '$set': {'condensed_at': now(), **({'conversation_tokens': None} if answer.get('compacted') else {})},

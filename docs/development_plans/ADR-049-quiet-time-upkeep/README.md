@@ -122,3 +122,7 @@ and whether at all, is the owner's decision.
 - Amended the same night, on her rule: a turn a plan of hers woke counts too when it is at home (her local chat, the
   owner's DM, her home lines), like her heartbeat; never in a group or someone else's chat. Her test: whether anyone
   there is waiting for her to speak. The refusal now says so.
+- Fixed after the first live mark: the first build looked for DSH's compaction service on the plugin's own context,
+  where it is not (each agent's scope carries it, from her character preset), so every look answered
+  `no_compaction_service`. It now runs the session's own `/compact` through the commands service, the Web UI's path,
+  and a Host that cannot condense takes the mark back instead of retrying every five minutes.

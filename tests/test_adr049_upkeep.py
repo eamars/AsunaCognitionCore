@@ -85,6 +85,16 @@ def test_a_look_condenses_a_due_group_once_and_she_is_told_until_she_speaks(stor
     assert condense.condensed_block(store, scene, NOW + timedelta(minutes=20)) is None
 
 
+def test_a_host_that_cannot_condense_takes_the_mark_back_instead_of_retrying(store):
+    scene = group(store, character_context='ctx-1')
+    store.db.sessions.insert_one({'_id': 'role-g-a', 'schema_version': 1, 'native_host': True, 'main_conversation': True,
+                                  'scene_id': 'g-a', 'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1'})
+    lines(store, 'g-a', 40, last_minutes_ago=45)
+    condense.mark(store, scene, {'_id': 'ep-v', 'scope_key': 'scene:g-a', 'episode_kind': 'visit'}, NOW)
+    assert condense.look(store, 'P1', lambda *_: {'compacted': False, 'reason': 'no_compact_command'}, NOW) == []
+    assert not condense.marked(store)
+
+
 def test_size_reaches_her_as_words_only(store):
     assert condense.size_words({'conversation_tokens': 160000})['length'].endswith('很长')
     assert condense.size_words({'conversation_tokens': 30000})['length'].endswith('短')

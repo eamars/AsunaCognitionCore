@@ -637,16 +637,22 @@ export class CognitionCore {
   }
 
   /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
-   * Never during a turn there. The summary is written by the session's own compaction (compaction.js). */
+   * Never during a turn there. It runs DSH's own `/compact` for that session through the commands service, as the
+   * Web UI does: the compaction service lives in each agent's scope (her character preset), not on this plugin's, and
+   * the session's log shows the command and its result. */
   async compactSession({ session_id: id, scene_id: scene }) {
-    const compaction = this.ctx.get('compaction');
-    if (!compaction) return { compacted: false, reason: 'no_compaction_service' };
+    const commands = this.ctx.get('commands');
+    if (!commands) return { compacted: false, reason: 'no_commands_service' };
     if (this.states.get(id)?.current) return { compacted: false, reason: 'busy' };
     try {
       const agent = this.ctx.agents.get(id)
         ?? await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene } });
-      const result = await compaction.compactNow(agent, new AbortController().signal);
-      return result ? { compacted: true, items: result.shadowedSeqs.length, tokens: result.shadowedTokenCount }
+      const done = await commands.execute(agent, '/compact', [], new AbortController().signal);
+      if (!done) return { compacted: false, reason: 'no_compact_command' };
+      const { kind, text = '' } = done.result;
+      if (kind !== 'success') return { compacted: false, reason: text.slice(0, 200) || kind };
+      const counted = /Compacted (\d+) history items \(~(\d+) tokens\)/.exec(text);
+      return counted ? { compacted: true, items: Number(counted[1]), tokens: Number(counted[2]) }
         : { compacted: false, reason: 'nothing_to_compact' };
     } catch (error) {
       return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };

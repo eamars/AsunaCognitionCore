@@ -328,9 +328,10 @@ condense, place}` marks a group (`condense_wanted` on its scene) and `op: keep` 
 at home (`plan-asuna-condense`, every 5 minutes, not in her plan list) condenses each marked group once someone other
 than her last spoke there long enough ago for how busy the group is (average incoming lines a day over the last week:
 100 or more 10 minutes, 30 to 100 15 minutes, fewer 30 minutes; her own lines never restart the wait), or at once
-during the group's local night (01:00 to 07:00, its time zone). It asks the Host to run DSH's compaction on that
-group's main character session (`compact_session`), which the plugin refuses while a turn of hers runs there; the next
-look tries again. A condensed group's scene gets `condensed_at` and loses the mark, and the plan retires when nothing
+during the group's local night (01:00 to 07:00, its time zone). It asks the Host to run DSH's `/compact` on that
+group's main character session through the commands service (`compact_session`; the session's log shows the command
+and its result), which the plugin refuses while a turn of hers runs there; the next look tries again. A Host with no
+commands service or no `/compact` for that session takes the mark back instead of trying again. A condensed group's scene gets `condensed_at` and loses the mark, and the plan retires when nothing
 is marked. Until she next speaks there, or for a day, a turn in that group carries `condensed_from_program`, saying the
 conversation was condensed and the summary at its start is what is left. Each character turn's result reports how
 long the conversation was on its latest request (`prompt_tokens`); the scene keeps it (`conversation_tokens`), and a

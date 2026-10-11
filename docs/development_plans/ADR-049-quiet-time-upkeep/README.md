@@ -22,6 +22,11 @@ Measured 2026-10-11 (her session logs and the model server's own figures):
   tokens a second); one served from the cache about 3 s. Her first line after an @ took a median 17 s before 10-09
   and 27 s since, as her conversations grew.
 - The cost of a cold start grows with the conversation: at 50k tokens it would be about 8 s.
+- The model server's deep dive (2026-10-12, from its engine log): the server keeps the conversations it leaves in a
+  fixed RAM budget and drops the least recently used. Bytes, not slots, are the limit: a kept conversation costs about
+  0.3 GiB plus 20 KiB a token (150k tokens about 3.1 GiB, 100k about 2.2 GiB), so about seven long ones fit; at 100k
+  about ten would. Cold reads were 57% of all prompt time. A conversation read again right after a compaction is
+  always cold.
 
 What exists: visits with intent `write_notes` ("只是看看，把看到的写进群笔记"); her group notes (`doc` `group_notes`, written
 and read in that group); her night turns; DSH's on-demand compaction (`ctx.compaction.compactNow`, the path of its
@@ -43,11 +48,22 @@ reply time it is found by plain string matching, without a model call.
    DSH's on-demand compaction for that conversation as soon as the group has had no new line for a few minutes and no
    turn of hers is running there, while the cache is likely still warm, so the summary is cheap and the next cold
    start reads a smaller conversation. What she reads to decide is in words: how long the conversation is (short,
-   medium, long, very long), and that a long one takes a while to read again after a quiet spell.
+   medium, long, very long), and that a long one takes a while to read again after a quiet spell. Right after
+   condensing, while the GPU is idle, the program sends the condensed conversation once with a one-token answer, so
+   the server reads it then and not on the next real turn. That helps only while the server still keeps it; GPU
+   time when everything is quiet costs nothing, so a warm-up that goes to waste is cheap.
 3. **Notes before condensing.** On a `write_notes` visit she writes first and condenses after, so what she wants to
    keep is in her notes before the summary replaces the old part.
 4. **Measure, per group, before and after:** conversation size, her first-line delay after an @, how often the next
    request finds the cache cold, and what the condensed summaries keep.
+
+## Server side (the owner's; not part of this decision)
+
+The server can save a conversation to disk and restore it (about 2 s for 150k tokens against about 20 s read cold),
+but only on a client's request for whatever its one slot holds at that moment, behind the same request queue, with
+files of about 3 GB that nothing deletes. Driven from Asuna it can save the wrong conversation when another request
+gets in first. An engine that spills the conversations it drops to disk by itself, and restores them by prefix, would
+hold her whole working set with no change here; that is an upstream request.
 
 ## Open questions for Xiaoman
 

@@ -278,9 +278,10 @@ TOOLS = {
                         '某个人的私聊。to 照抄 note_places_from_program 里的 place。那边的回合会读到它，知道是你在家里写的，'
                         '不会当成那边有人说的话；那边的人看不到便条，但那一轮的你可能照着说出来，所以只写你愿意在那边说的。'
                         'mode=wake 马上叫醒那边（排在那边手上的事后面，不插队）；next_time 等那边下次有回合时看到。'
-                        '不写 mode 按那个地方的默认。叫醒一个群算一次出门。300 字以内，一回合最多两张。'),
+                        '不写 mode 按那个地方的默认。叫醒一个群算一次出门。送到家里的另一条线 1500 字以内，'
+                        '送到群和私聊 300 字以内；一回合最多两张。'),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place', required=True),
-                       'text': _s('便条：你自己的话，300 字以内', required=True),
+                       'text': _s('便条：你自己的话；家里的线 1500 字以内，群和私聊 300 字以内', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time'])},
     },
     'leave_note': {

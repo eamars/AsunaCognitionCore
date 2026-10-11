@@ -232,9 +232,15 @@ def test_two_notes_a_turn_and_the_caps_by_direction(store):
     with pytest.raises(notes.NoteRefused, match='两个群之间'):
         notes.prepare(store, {'_id': 'ep-g', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
                       {'to': G2, 'text': '再来一张'}, 'c1')
-    with pytest.raises(notes.NoteRefused, match='最多 300 字'):
+    with pytest.raises(notes.NoteRefused, match='送到群的便条最多 300 字'):
         notes.prepare(store, {'_id': 'ep-h', 'persona': 'P1', 'scene_id': 'dm-a'}, visibility.OWNER_PRIVATE,
                       {'to': G1, 'text': '长' * 301}, 'c2')
+    # From home to another home line nothing crosses the boundary: room for the context (ADR-018 §12).
+    notes.prepare(store, {'_id': 'ep-i', 'persona': 'P1', 'scene_id': 'dm-a'}, visibility.OWNER_PRIVATE,
+                  {'to': OWNER_DM, 'text': '长' * notes.HOME_NOTE_CHARS}, 'c3')
+    with pytest.raises(notes.NoteRefused, match='送到家里的便条最多 1500 字'):
+        notes.prepare(store, {'_id': 'ep-j', 'persona': 'P1', 'scene_id': 'dm-a'}, visibility.OWNER_PRIVATE,
+                      {'to': OWNER_DM, 'text': '长' * (notes.HOME_NOTE_CHARS + 1)}, 'c4')
 
 
 def test_a_note_waits_behind_the_scene_queue_and_comes_back_after_a_restart(store):

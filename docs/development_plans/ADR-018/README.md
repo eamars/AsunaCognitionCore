@@ -71,7 +71,7 @@ Appendix B has the full mechanics.
 
 ## 4. Concepts
 
-- **Note:** a short text (≤300 characters) that one of her conversations (the sender) writes to another of her conversations (the receiver). It is **in her own words**. It is not a forward of someone else's message.
+- **Note:** a short text (≤300 characters; ≤1,500 from home to another home line, see §12) that one of her conversations (the sender) writes to another of her conversations (the receiver). It is **in her own words**. It is not a forward of someone else's message.
 - **Trusted / untrusted:** decided **by the program from the sender's session class**, never from the content and never from the model's own claim. Sender at home = trusted. Sender in public = untrusted.
 - **Message / request to act:**
   - A message is something that self should **know**: "I promised someone I'd look at a picture tomorrow", "this group is arguing, stay out for now", "the owner says he's out tonight".
@@ -284,6 +284,16 @@ How it differs from §5, and why:
 Verification: `pytest` (370, including 8 in `test_notes.py`), the P3 offline check, `npm run test:native` (49), and every character tool spec run through DSH's own `defineTool`. M5 is the owner's review on the live Web page.
 
 ---
+
+## 12. Home-to-home notes (2026-10-11)
+
+The 300-character cap guards the boundary between outside and home: what reaches home from outside stays short and in
+her own words. A note from home to another home line (the old-home line, an agent line) crosses no boundary, and
+there the cap cost context: four of her last five home notes to the agent line ended at 291–299 characters, written
+as compressed lists the receiving self had to fill in by guessing. Owner's request; Xiaoman chose the number over a
+document-plus-pointer scheme ("a note wakes; a document only helps if remembered"), and keeps long material in
+documents herself. A trusted note to a home line may now carry 1,500 characters (`notes.HOME_NOTE_CHARS`); every
+note that crosses between home and outside keeps 300.
 
 ## Appendix A: every mechanism that moves information between her conversations
 

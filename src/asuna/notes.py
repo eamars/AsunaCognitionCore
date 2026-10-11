@@ -25,7 +25,8 @@ from .state import now
 from . import visibility
 
 TABLES_VERSION = 1
-NOTE_CHARS = 300
+NOTE_CHARS = 300                 # a note that crosses between home and outside
+HOME_NOTE_CHARS = 1500           # from home to another home line: no boundary to guard, room for the context
 PER_TURN = 2
 PER_DAY = 40                     # every direction
 PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation
@@ -210,10 +211,11 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     text = str(args.get('text') or '').strip()
     if not text:
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
-    if len(text) > NOTE_CHARS:
+    limit = HOME_NOTE_CHARS if trust == TRUSTED and kind == 'home' else NOTE_CHARS
+    if len(text) > limit:
         from .role_tools import COUNTED
-        raise NoteRefused('NOTE_TOO_LONG', '便条最多 %d 字，现在 %d 字，超了 %d 字（%s）；写短一点。'
-                          % (NOTE_CHARS, len(text), len(text) - NOTE_CHARS, COUNTED))
+        raise NoteRefused('NOTE_TOO_LONG', '送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字（%s）；写短一点。'
+                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, COUNTED))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:

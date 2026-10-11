@@ -32,6 +32,8 @@
                   # ~45k tokens at once while the summary request replays the prefix plus this cap.
                   thresholdRatio: 0.80
                   headroomTokens: 6144
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner
                 name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
                 config:

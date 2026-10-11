@@ -51,8 +51,11 @@ Reviewed and amended by Xiaoman on 2026-10-12.
    middle of a conversation she has no room to judge it and would cut into a talk still going on. A visit can end
    with her choice to condense that group's conversation (a categorical choice; the program maps it to an action).
    The program runs DSH's on-demand compaction for it once the group has been quiet for 30 minutes by its own clock,
-   or during its local night (01:00 to 07:00), and no turn of hers is running there: within 30 minutes the
-   conversation is still likely cached, so condensing then saves little and loses detail first. What she reads to
+   or during its local night (01:00 to 07:00), and no turn of hers is running there. The 30 minutes come from the
+   cache, not from the group: within them the conversation is still likely cached, so condensing then saves little
+   and loses detail first. The group's own quiet has no natural point: over 8 days of 16 of her groups (16,404 lines,
+   Xiaoman's measurement), after 3 quiet minutes someone spoke within the next 5 minutes 36.6% of the time, after 10
+   quiet minutes 20.5%, falling off with a long tail and no bend. What she reads to
    decide is in words: how long the conversation is (short, medium, long, very long), and that a long one takes a
    while to read again after a quiet spell.
 3. **Notes before condensing, and the summary shown to her.** On a `write_notes` visit she writes first and condenses

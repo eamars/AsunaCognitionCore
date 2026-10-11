@@ -51,8 +51,11 @@ What already exists and fits:
 1. **All in the skill, no new tools** (owner, 2026-10-12). The skill (hers, in her persona package) holds the
    catalog of framework behaviours, the procedure, the readings to take and the social rules. Both halves run on the
    tools she and the action brain already have.
-2. **Passive readings from the record, by the action brain with its existing tools.** Per person and group, from the
-   lines the history search returns with their times and from the member list (join and last spoke): how fast they
+2. **Passive readings from the record, by the action brain with its existing tools.** The history search reads only
+   the conversation a task was handed over in (and its configured links), so a task from home cannot reach a group's
+   lines: the readings come from a task she hands over in a turn in that group, a reply there or a `write_notes`
+   visit, and the offline replay of point 8 runs the same way, group by group. Per person and group, from the lines
+   the history search returns with their times and from the member list (join and last spoke): how fast they
    answer when addressed; bursts (several lines in seconds with no one in between); whether they ever speak
    unaddressed; the hours they are active; exact repeats of their own or others' lines; command-prefixed lines;
    regularity of length and format; the catalog's fixed texts. The skill says how to take each one and how to word

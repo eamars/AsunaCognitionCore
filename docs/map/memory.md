@@ -142,6 +142,14 @@ Role-owned self descriptions, stored in the existing revision ledger.
   - `read`
   - `commit` — Her own update_self call (ADR-011 §6.1): in an owner-private turn, like her documents.
 
+## `night`
+
+[src/asuna/night.py](../../src/asuna/night.py)
+
+What her night turns changed, for her first heartbeat after them.
+
+- def `block` — night_from_program: what her night turns changed since the last heartbeat; None when nothing.
+
 ## `affect`
 
 [src/asuna/affect.py](../../src/asuna/affect.py)

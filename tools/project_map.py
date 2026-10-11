@@ -34,7 +34,7 @@ AREAS = {
         'watches', 'waiting', 'places', 'focus', 'notes', 'scene_links', 'visibility', 'understanding', 'private_words']),
     'memory': ('Memory', 'What she remembers, how it is recalled, her documents, mood and blobs.', [
         'memory', 'memory_indexer', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest',
-        'summary_trigger', 'summary_attribution', 'documents', 'self_state', 'affect', 'blobs', 'privacy']),
+        'summary_trigger', 'summary_attribution', 'documents', 'self_state', 'night', 'affect', 'blobs', 'privacy']),
     'persona': ('Persona', 'The persona package, its model and policies, her skills and ideas.', [
         'persona_model', 'persona_data', 'persona_jobs', 'policy', 'skills']),
     'channels': ('Channels and pictures', 'The channel API, platform kinds, stickers, seeing and sending pictures.', [

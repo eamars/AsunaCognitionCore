@@ -61,7 +61,7 @@ RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scen
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
-    'self_state': ('self_state_from_program', 'recent_thoughts_from_program'),
+    'self_state': ('self_state_from_program', 'recent_thoughts_from_program', 'night_from_program'),
     'affect': ('affect_from_program', 'how_to_record_from_program'),
     'affect_proposals': ('affect_proposals_from_program',),
     'relationship': ('relationship', 'relationship_shared_from_program'),
@@ -519,6 +519,13 @@ class ContextBuilder:
             visits=places.last_visits_block(self.store,persona,plan,moment)
             if visits:
                 context['last_visits_from_program']=visits
+            if event.get('episode_kind')=='presence':
+                # what her night turns changed since the last heartbeat (night.py)
+                from . import night as _night
+                from .ingress import episode_id as _night_episode
+                changed=_night.block(self.store,persona,schedule_zone,moment,_night_episode(event))
+                if changed:
+                    context['night_from_program']=changed
             # who she still waits for in her groups (waiting.py): at home is where she thinks about it
             from . import waiting as _waiting
             still=_waiting.block(self.store,[sid for sid,_,_ in places.groups(self.store.config)],moment,persona,home=True)

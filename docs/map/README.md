@@ -243,6 +243,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`summary_attribution`](../../src/asuna/summary_attribution.py) — ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实行算出来，不让模型自己认领。
 - [`documents`](../../src/asuna/documents.py) — Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 - [`self_state`](../../src/asuna/self_state.py) — Role-owned self descriptions, stored in the existing revision ledger.
+- [`night`](../../src/asuna/night.py) — What her night turns changed, for her first heartbeat after them.
 - [`affect`](../../src/asuna/affect.py) — Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 - [`blobs`](../../src/asuna/blobs.py) — Scoped, hash-verified GridFS storage for bounded-document overflow.
 - [`privacy`](../../src/asuna/privacy.py) — Explicit operator erasure, with scope invalidation and auditable redaction roots.

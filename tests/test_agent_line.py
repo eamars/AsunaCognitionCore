@@ -124,3 +124,15 @@ def test_when_she_closes_the_line_it_shuts_at_once(served):
     assert cli.poll(mine, 0) == ([], 'closed')                                     # her words wait
     lines.set_line(served.store, SCENE, closed=False)
     assert cli.poll(mine, 0) == (['收到，我在。'], 'open')
+
+
+def test_an_agent_line_lists_read_image_though_it_carries_no_pictures(store, tmp_path):
+    """At home a ref from any of her conversations is readable (owner 2026-10-11): the line's toolbox has the tool."""
+    from asuna import role_tools
+    with_lines(store, tmp_path)
+    store.config.update(character={**store.config.get('character', {}), 'input_modalities': ['text', 'image']})
+    ep = {'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'person_id': 'agent:claude-code', 'persona': 'P1',
+          'manifest': {'session_class': role_tools.visibility.OWNER_PRIVATE}, 'context': {}}
+    assert 'read_image' in role_tools.toolbox(store, ep)
+    store.config['character']['input_modalities'] = ['text']
+    assert 'read_image' not in role_tools.toolbox(store, ep), 'not when her model cannot see'

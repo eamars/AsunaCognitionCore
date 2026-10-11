@@ -540,7 +540,10 @@ def toolbox(store, ep):
         names.append('group_action')
     if platform:
         names.append('watch')
-    if channel_kinds.sends_images(ep['scene_id']) and vision_capability(config, 'character')['supported']:
+    # Where the channel carries pictures, and in every home conversation: at home a ref from any of her
+    # conversations is readable (owner 2026-10-11), though the line itself carries none (an agent line).
+    sees = vision_capability(config, 'character')['supported']
+    if sees and (channel_kinds.sends_images(ep['scene_id']) or cls == visibility.OWNER_PRIVATE):
         names.append('read_image')
     if outbound_media.target_allowed(config, scene, cls)[0]:
         names.append('attach_image')

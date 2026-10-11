@@ -700,8 +700,12 @@ class ContextBuilder:
             plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
                 'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
                 'policy_epoch':scene['policy_epoch']},
-                {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1})
+                {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1,'source_episode_id':1})
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
+            # Why she set it: her thought when she made the plan, as she wrote it (reasons.py, ADR-043).
+            from . import reasons as _reasons
+            then=_reasons.for_call(self.store,plan.pop('source_episode_id',None),'plan_id',plan['_id'])
+            if then:plan['your_thought_then']=then
             context['scheduled_plan_from_program']=plan
         target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
                      + ('（只在这个对话里看得到）' if not target['shared'] else

@@ -1,14 +1,20 @@
-"""The reasons behind her actions: what she did after each thought.
+"""The reasons behind her actions: what she did after each thought, and the thought behind each action.
 
 A thought (`think`, a `monologue` memory) belongs to the turn she wrote it in; what she did after it in that turn,
 before her next thought, is what it led to: her words or her silence, and the tool calls with consequences. Read back
 from the turn's records, never summarised: her words and her silence's reason as she wrote them (shortened), the
 actions in plain first-person words, one per line, with no field names or ids. Lookups (recall, reading a picture,
 listing) and her other thoughts are not actions.
+
+The other way round: each call with consequences is recorded with her newest thought in the turn (`reason_ref`), and
+that thought comes back, as she wrote it, with what the call made when it returns to her: a plan firing, a task's
+result, a reply to her line, the night block (`for_call`, `for_message`). One table decides what has consequences
+(`_action`).
 """
 from __future__ import annotations
 
 SAID_CHARS = 40
+THOUGHT_CHARS = 400        # a thought is at most 360 characters; longer old ones keep the excerpt mark
 ARG_CHARS = 30
 DOC_WORDS = {'persona': '人格设定', 'voice': '说话方式', 'work_log': '工作记录', 'group_notes': '群笔记'}
 DECISIONS = {'adopt': '采纳了', 'defer': '先放着了', 'drop': '不要了'}
@@ -116,3 +122,50 @@ def then(store, unit):
         if said:
             lines.append('所以我说了「%s」' % said)
     return lines
+
+
+def consequential(tool, args):
+    """Whether a call has consequences (the one table: _action)."""
+    return isinstance(args, dict) and _action(tool, args) is not None
+
+
+def newest(episode, before=None):
+    """The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left
+    no memory."""
+    calls = sorted((episode.get('tool_calls') or {}).items(), key=lambda item: item[1].get('seq', 0))
+    for call_id, call in reversed(calls):
+        if before is not None and call.get('seq', 0) >= before:
+            continue
+        if call.get('tool') == 'think' and 'refused' not in call:
+            return 'mono-%s:%s' % (episode['_id'], call_id)
+    return None
+
+
+def reason_of(episode, call_id):
+    """The thought a call came from: as recorded, or by the same rule for a call recorded before reasons were."""
+    call = ((episode or {}).get('tool_calls') or {}).get(call_id) or {}
+    return call.get('reason_ref') or (newest(episode, call.get('seq', 0)) if call else None)
+
+
+def thought(store, ref):
+    """Her thought as she wrote it (the excerpt mark if ever cut), or None."""
+    from .config import excerpt
+    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'monologue'}, {'body_markdown': 1}) if ref else None
+    return excerpt(unit['body_markdown'], THOUGHT_CHARS) if unit and unit.get('body_markdown') else None
+
+
+def for_call(store, episode_id, field, value):
+    """The thought behind the call in that turn whose result carries field=value (a plan, a task), or None."""
+    episode = store.db.episodes.find_one({'_id': episode_id}, {'tool_calls': 1}) if episode_id else None
+    for call_id, call in ((episode or {}).get('tool_calls') or {}).items():
+        if isinstance(call.get('result'), dict) and call['result'].get(field) == value:
+            return thought(store, reason_of(episode, call_id))
+    return None
+
+
+def for_message(store, message_id):
+    """The thought behind a line she delivered: her last thought in the turn that spoke it, or None."""
+    row = store.db.messages.find_one({'_id': message_id, 'direction': 'outbound'}, {'monologue_refs': 1})
+    refs = (row or {}).get('monologue_refs') or []
+    return thought(store, refs[-1]) if refs else None
+

@@ -844,12 +844,17 @@ class RoleTools:
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
         calls = dict(ep.get('tool_calls') or {})
+        # A call with consequences keeps the thought it came from: her newest in the turn (reasons.py, ADR-043).
+        from . import reasons
+        reason = None if refused or not reasons.consequential(name, args) else reasons.newest(ep)
         calls[call_id] = {'tool': name, 'args_sha256': sha(canonical(args)), 'seq': len(calls),
                           **({'refused': refused} if refused else {'result': result}),
+                          **({'reason_ref': reason} if reason else {}),
                           **({'conclude': True} if conclude else {})}
         c._update(ep, tool_calls=calls)
         self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': args,
-                                              **({'refused': refused} if refused else {'result': result})},
+                                              **({'refused': refused} if refused else {'result': result}),
+                                              **({'reason_ref': reason} if reason else {})},
                          ep['scope_key'])
 
     def _fresh(self, ep):

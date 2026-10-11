@@ -67,7 +67,20 @@ Her four rules:
   - Measure again after a day of traffic: notice size, thoughts left out, how often the last-3 block still goes
     out, and the share of thoughts among recalled memories.
 
-## Batch 2: binding and returning (next, its own restart)
+## Batch 2: binding and returning (built 2026-10-11, its own restart)
+
+Built as designed, with three simplifications found while building:
+
+- **One place binds.** `reason_ref` is stored where every call is recorded (`RoleTools._record`: the episode's
+  `tool_calls` and the `role_tool` audit), not copied onto plans, tasks, notes and revisions. A plan and a task
+  already name the turn that made them, so their thought is read from that turn's call whose result names them
+  (`reasons.for_call`); a delivered line's is the last of its turn's `monologue_refs` (`reasons.for_message`).
+- **One table.** `reasons._action` decides what has consequences; the night block counts by it too, so it now also
+  lists hand-offs, notes, visits and the rest, with the thought where she wrote no reason.
+- **The reply return rides on the line itself.** In a native session the replying line enters her conversation as
+  text, so her thought is a `> （你说那句时心里想的：…）` line under the `> 回复` line, not a context field.
+
+The original design, for reference:
 
 Each action records the thought it came from, and the reason comes back with the thing, in her words (rule 1).
 

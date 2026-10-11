@@ -466,10 +466,16 @@ class People:
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')]
         parent_id = group.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1}) if parent_id else None
+                                           {'author': 1, 'text': 1, 'direction': 1}) if parent_id else None
         if parent:
             quote = ' '.join(self.mentions(scene, parent.get('text'), account).split())
             lines.append('  > 回复 %s：%s' % (self.speaker(scene, parent.get('author')), excerpt(quote, REPLY_EXCERPT)))
+            if parent.get('direction') == 'outbound':
+                # A reply to her own line: what she thought when she said it, as she wrote it (reasons.py, ADR-043).
+                from .reasons import for_message
+                then = for_message(self.store, parent['_id'])
+                if then:
+                    lines.append('  > （你说那句时心里想的：%s）' % ' '.join(then.split()))
         body = self.mentions(scene, row.get('text') or '', account)
         lines += ['  ' + line for line in body.split('\n')]
         from .stickers import PICTURE_FETCH_SECONDS, recognized

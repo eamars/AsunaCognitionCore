@@ -86,6 +86,13 @@ def bounded_result(result):
     return result
 
 
+
+def _why_then(store,task):
+    """Her thought when she handed the task over, as she wrote it (reasons.py, ADR-043); {} without one."""
+    from . import reasons
+    then=reasons.for_call(store,task.get('episode_id'),'task',task['_id'])
+    return {'your_thought_then':then} if then else {}
+
 class FeedbackStale(Denied):
     """The action result no longer authorizes a pending role continuation."""
 
@@ -322,7 +329,7 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 message_action。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 message_action。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             if original.get('native_session_id'):
                 event['native_session_id']=original['native_session_id']
@@ -369,7 +376,7 @@ class TaskService:
             report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 read_report：task 写 %s，从 page=1 读起）'
                      % (len(text),pages,task['_id']))
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
-               'brief':task.get('brief') or task['goal'],'report':report,
+               **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
                **({'report_pages':len(report_pages(text))} if len(report)<len(text) else {}),
                'finished_at':current.get('finished_at'),'uncertainties':result.get('uncertainties') or []}
         value=local_time.for_model(value,local_time.zone_of(self.store,task['scene_id']))

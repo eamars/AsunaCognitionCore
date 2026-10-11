@@ -250,6 +250,12 @@ ADR-030: the program's watchdog over handovers between the brains.
 
 [src/asuna/reasons.py](../../src/asuna/reasons.py)
 
-The reasons behind her actions: what she did after each thought.
+The reasons behind her actions: what she did after each thought, and the thought behind each action.
 
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
+- def `consequential` — Whether a call has consequences (the one table: _action).
+- def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.
+- def `reason_of` — The thought a call came from: as recorded, or by the same rule for a call recorded before reasons were.
+- def `thought` — Her thought as she wrote it (the excerpt mark if ever cut), or None.
+- def `for_call` — The thought behind the call in that turn whose result carries field=value (a plan, a task), or None.
+- def `for_message` — The thought behind a line she delivered: her last thought in the turn that spoke it, or None.

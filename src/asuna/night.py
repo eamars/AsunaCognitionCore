@@ -2,9 +2,9 @@
 
 Her night turns (self-improvement and settlement, by kind, not by the clock) can change things her daytime self
 then does not know about. The first home heartbeat after them lists what they changed: when, what, and the reason
-she wrote then. Group focus, settings, self, restart requests, plans, her peer line, idea decisions, watches and
-document sections count, each listed. Her work log is a running record, so only its section names are listed.
-Lookups and refused calls do not count. Computed from the audit each time; nothing is kept. A later heartbeat
+she wrote then, or, for a call without one, the thought it came from (reasons.py). What counts is the one table of
+calls with consequences (`reasons.consequential`). Her work log is a running record, so only its section names are
+listed. Lookups and refused calls do not count. Computed from the audit each time; nothing is kept. A later heartbeat
 starts after the earlier one, so the block appears once, and not at all after a night with no changes.
 """
 from __future__ import annotations
@@ -15,26 +15,14 @@ NIGHT_KINDS = ('self_development', 'settlement')
 LOOKBACK = timedelta(hours=48)
 SHOWN = 12
 JOURNAL = 'work_log'
-COUNTED = {'group_focus': ('active', 'rest'), 'set_policy': None, 'update_self': None,
-           'restart': ('request', 'drill', 'cancel'), 'plan': ('create', 'update', 'cancel'),
-           'peer_line': ('open', 'close'), 'review_idea': None, 'watch': ('on', 'off'), 'write_document': None}
-NOTE = '夜里那几轮（自我改进、夜间沉淀）里你改过的东西，按时间先后；why 是你当时写的理由。work_log 只列节名，要看就 recall 那一节。'
+NOTE = ('夜里那几轮（自我改进、夜间沉淀）里你做过的事，按时间先后；why 是你当时写的理由，'
+        '没写理由的带 your_thought_then，是你当时的心里话。work_log 只列节名，要看就 recall 那一节。')
 DECISIONS = {'adopt': '采纳', 'defer': '先放着', 'drop': '不要了'}
 
 
 def _short(value, limit=40):
     text = ' '.join(str(value or '').split())
     return text if len(text) <= limit else text[:limit] + '…'
-
-
-def _counted(tool, args):
-    ops = COUNTED.get(tool, False)
-    if ops is False:
-        return False
-    if ops is None:
-        return True
-    op = args.get('op') or ('create' if tool == 'plan' and not args.get('plan_id') and args.get('intent') else None)
-    return op in ops
 
 
 def _what(store, persona, tool, args):
@@ -70,7 +58,8 @@ def _what(store, persona, tool, args):
             scene = store.db.scenes.find_one({'_id': found[0]}) if found else None
             doc = '%s的群笔记' % (People(store, persona).scene_title(scene) if scene else '一个群')
         return '%s 的「%s」：%s' % (doc, _short(args.get('heading') or args.get('sid'), 30), args.get('op'))
-    return tool
+    from .reasons import _action
+    return _action(tool, args) or tool
 
 
 def _kinds(store, ids):
@@ -92,15 +81,16 @@ def block(store, persona, zone, moment, current):
     """night_from_program: what her night turns changed since the last heartbeat; None when nothing."""
     from .schedule_rules import line_stamp
     since = _last_heartbeat(store, current, (moment - LOOKBACK).isoformat())
+    from . import reasons
     calls = [row for row in store.db.audit_events.find(
-        {'type': 'role_tool', 'occurred_at': {'$gt': since}, 'payload.tool': {'$in': list(COUNTED)},
-         'payload.refused': {'$exists': False}}, {'stream_id': 1, 'occurred_at': 1, 'payload': 1}).sort('occurred_at', 1)]
+        {'type': 'role_tool', 'occurred_at': {'$gt': since}, 'payload.refused': {'$exists': False}},
+        {'stream_id': 1, 'occurred_at': 1, 'payload': 1}).sort('occurred_at', 1)]
     kinds = _kinds(store, {row['stream_id'] for row in calls})
     items, journal = [], []
     for row in calls:
         payload = row.get('payload') or {}
         tool, args = payload.get('tool'), payload.get('args') or {}
-        if not isinstance(args, dict) or not _counted(tool, args) or kinds.get(row['stream_id']) not in NIGHT_KINDS:
+        if not reasons.consequential(tool, args) or kinds.get(row['stream_id']) not in NIGHT_KINDS:
             continue
         if tool == 'write_document' and args.get('doc') == JOURNAL:
             heading = args.get('heading') or args.get('sid')
@@ -111,6 +101,12 @@ def block(store, persona, zone, moment, current):
         why = args.get('why') or args.get('reason')
         if why:
             item['why'] = _short(why, 80)
+        else:
+            ref = payload.get('reason_ref') or reasons.reason_of(
+                store.db.episodes.find_one({'_id': row['stream_id']}, {'tool_calls': 1}), payload.get('call_id'))
+            then = reasons.thought(store, ref)
+            if then:
+                item['your_thought_then'] = then
         items.append(item)
     if not items and not journal:
         return None

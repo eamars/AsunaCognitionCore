@@ -796,6 +796,11 @@ ATTACH_REASONS = {'scene_has_no_channel_route': '这个对话没接到平台', '
                   'channel_carries_text_only': '这个平台只能发文字', 'target_not_dm': '这里既不是私聊，也不是你在的群'}
 
 
+# A task of this conversation that another person asked for (RoleTools._own_task).
+OTHERS_TASK = ('「%s」是 %s 叫你做的那件事：只有在 ta 叫你的那一轮里才能给它补话或叫停。这一轮是别人叫你的，'
+               '所以这次动不了它，不是你抄错了。要停，等 ta 再叫你时停，或者在这里跟大家说一声它还在做。')
+
+
 class RoleTools:
     """Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock)."""
 
@@ -1009,6 +1014,15 @@ class RoleTools:
         task = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
                                              'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
         if not task:
+            # A task of this conversation that someone else asked for: say whose it is and when it can be steered or
+            # stopped, rather than that it is not here (it is listed in task_state_from_program).
+            theirs = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
+                                                   'policy_epoch': ep['policy_epoch']}, {'requester_id': 1})
+            if theirs:
+                from .people import People
+                scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
+                raise Refused(OTHERS_TASK % (task_id, who))
             close = [row['_id'] for row in self.store.db.tasks.find(
                 {'scene_id': ep['scene_id'], 'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch'],
                  '_id': {'$regex': '^' + __import__('re').escape(task_id[:12])}}, {'_id': 1}).limit(3)]

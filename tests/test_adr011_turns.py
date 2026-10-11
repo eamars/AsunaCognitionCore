@@ -1,4 +1,5 @@
 """ADR-011: one character turn per episode, her mind's tools, and her work with the action brain."""
+import pytest
 import json
 
 from asuna import role_tools
@@ -166,6 +167,19 @@ def test_stop_action_closes_a_task_a_restart_paused(store):
     coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('stop_action', {'task': task_id, 'reason': '那件事已经收尾了'})], '关掉了。')])
     coordinator.ingest(event('e2', text='那条暂停的关掉吧'))
     assert store.db.tasks.find_one({'_id': task_id})['state'] == 'CANCELLED'
+
+
+def test_a_task_someone_else_asked_for_is_refused_with_whose_it_is(store):
+    """The task is in this conversation's list, so the refusal says whose it is and when she can act on it."""
+    coordinator, _ = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
+    ep = coordinator.ingest(event())
+    task_id = ep['task_ids'][0]
+    other = {**ep, 'person_id': 'B'}                  # the same conversation, a turn someone else opened
+    with pytest.raises(role_tools.Refused) as refused:
+        role_tools.RoleTools(coordinator).tool_stop_action(other, 'c-stop', {'task': task_id, 'reason': '不用了'})
+    words = str(refused.value)
+    assert '叫你做的那件事' in words and '不是你抄错了' in words and '不是这个对话里的任务' not in words
+    assert store.db.tasks.find_one({'_id': task_id})['state'] != 'CANCELLED'
 
 
 def test_a_mistyped_task_id_is_refused_with_candidates(store):

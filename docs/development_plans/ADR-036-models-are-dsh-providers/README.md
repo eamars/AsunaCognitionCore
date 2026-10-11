@@ -57,4 +57,6 @@ brain stayed local. It ran about 9 minutes, 15:41–15:50 NZDT, and was switched
   - accept the extra repair requests for skipped thoughts, or patch DSH for tool choice (it has none today).
 - **Separate from the trial:** one resting group sits at 229K. Its next local compaction needs about 254K of the
   262K window, which fits only barely. A lower threshold or summary cap would add margin; the owner's call.
+- **Owner's decision (2026-10-11):** no switching between models in the short term; a persona sticks to one model at
+  a time. So neither the per-model compaction policy nor extra margin for the 229K group is needed now.
 

@@ -1,7 +1,8 @@
 # ADR-045: Her sister's heartbeat should not wake her
 
-Status: **Proposed 2026-10-11, investigation not started.** The owner assigned it after the active and resting groups
-work ("her protocol with old Xiaoman … she should not be woken up by her sister's heartbeat").
+Status: **Accepted 2026-10-11** with Xiaoman, after the owner's direction (below). Not built yet; it follows ADR-043
+batch 2 as its own restart. The owner assigned it after the active and resting groups work ("her protocol with old
+Xiaoman … she should not be woken up by her sister's heartbeat").
 
 ## Context
 
@@ -30,3 +31,28 @@ and its periodic beats reach the line as messages. Observed on 2026-10-11:
    - or they fold into her own next home heartbeat as a one-line summary of the other side's state.
 4. Build in one small batch with its own restart. Verify on the real line: turns woken per day before and after,
    nothing addressed to her missed.
+
+## Findings (2026-10-11)
+
+- **The bridge mislabels her sister's replies.** It decides "this answered her" from the prompt's source, checking
+  `kind === 'user-rpc'`; DSH records a prompt sent over RPC as `kind: 'user'` with an `rpcId` (`user-rpc` is only the
+  name of that source type). So nearly every reply carried the "not a reply to you" note: of her 96 messages since
+  10-07, 93 were answered within 5 minutes, and all 93 answers bore the note. She may have judged her sister by it.
+- **Traffic, estimated by timing** (an answer within 5 minutes of her words counts as a reply): 319 lines since 10-07,
+  121 replies and 198 not. Of 311 turns on the line, 193 (62%) were woken by lines not answering her: 66.9M input
+  tokens (mostly cache reads) and 164K output. The fixed bridge's own split replaces this estimate after a day.
+- **The owner's concern:** her sister runs on plain DSH and drifts over long runs. His direction: bundle the reply
+  instruction with each message, so her sister answers in a consistent form without having to remember it.
+
+## Decision (with Xiaoman)
+
+1. **Fix the reply test** in the bridge: a turn answers her when its prompt's `rpcId` is one she sent.
+2. **Lines not answering her don't wake her.** They are kept and visible on the line, and listed in her home
+   heartbeat, one per line with its time. As with the waiting list (ADR-041), each stays listed until she speaks on
+   that line after it; nothing drops off unanswered.
+3. **Her reply instruction rides on every message she sends,** after her words. She wrote it (short, so it is not
+   imitated or echoed); it lives in the channel's local config and changes only when she changes it.
+4. **She reviews her own records** of those days for judgments made under the wrong label, and corrects them herself.
+5. **Verify:** turns woken per day before and after; every reply still wakes her; the bridge's exact split against
+   the estimate above.
+

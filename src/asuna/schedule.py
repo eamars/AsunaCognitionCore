@@ -577,7 +577,8 @@ class ScheduleService:
             can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
                                           intent='note')
             if not can:
-                raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', '现在叫不醒那个群：%s。可以改成 next_time，下次在那边看到。' % why)
+                raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', ('现在叫不醒那个群：%s。想晚点叫醒就用 plan 定个时间，到时再递；'
+                                                        '或者改成 next_time，下次在那边有回合时看到（那个群歇着的话可能要等很久，三天没读就过期）。') % why)
             counted = (plan, date)
         person = notes.receiver(self.app.config, draft['to_scene'])
         if draft['mode'] == notes.WAKE and not person:

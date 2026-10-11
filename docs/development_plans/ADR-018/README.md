@@ -117,7 +117,7 @@ Code changes on this path: `offer_internal` accepts `note` (`chat.py:178`). `INT
 | Direction | Default | `wake` allowed? |
 | --- | --- | --- |
 | Home → home | `wake` | Yes |
-| Home → public group | `next_time` | Yes, but it counts as a visit (intent `note`) under the existing visit limits (`places.eligibility`: per day, cooldown, quiet, night). Going out is the same act however it starts |
+| Home → public group | `wake` (since 2026-10-11, §12) | Yes, but it counts as a visit (intent `note`) under the existing visit limits (`places.eligibility`: per day, cooldown, quiet, night). Going out is the same act however it starts |
 | Home → public DM | `next_time` | No. Opening an unprompted turn in someone's DM is what `errand` covers when she is asked to |
 | Public → home | `wake` | Always. This is rule 2: real time, not delayed |
 | Public → another public group | `wake` | Always (owner decision 2026-10-07). Volume is bounded by the note caps (§5.6), not by visit limits, since she is already out |
@@ -294,6 +294,14 @@ as compressed lists the receiving self had to fill in by guessing. Owner's reque
 document-plus-pointer scheme ("a note wakes; a document only helps if remembered"), and keeps long material in
 documents herself. A trusted note to a home line may now carry 1,500 characters (`notes.HOME_NOTE_CHARS`); every
 note that crosses between home and outside keeps 300.
+
+Same day, the owner asked whether a note from home to a public conversation should wake it; he, Xiaoman and Claude
+agreed. **A note from home to a group now wakes it by default.** Since ADR-039 a resting group may not give her a turn
+for days, while an unread note expires after 72 hours: a `next_time` note there was written for nothing. Writing to
+a group from home is her decision, like setting an alarm for a promise ("a note that doesn't wake is an alarm that
+never rings"). It still counts as a visit and is refused at night there; the refusal offers a timed `plan` or
+`next_time`. **A note to someone else's DM still waits** (`next_time` only): waking it would mean speaking first to
+that person, which is `errand`'s job, with its account of on whose behalf.
 
 ## Appendix A: every mechanism that moves information between her conversations
 

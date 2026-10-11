@@ -42,7 +42,7 @@ TRUSTED, UNTRUSTED = 'trusted', 'untrusted'
 WAKE, NEXT_TIME = 'wake', 'next_time'
 FINISHED = ('COMMITTED', 'WAITING_TASK')
 # Directions (ADR-018 §5.2): the default and what may be chosen, by sender class and receiving kind.
-MODES = {visibility.OWNER_PRIVATE: {'home': (WAKE, (WAKE, NEXT_TIME)), 'group': (NEXT_TIME, (NEXT_TIME, WAKE)),
+MODES = {visibility.OWNER_PRIVATE: {'home': (WAKE, (WAKE, NEXT_TIME)), 'group': (WAKE, (WAKE, NEXT_TIME)),
                                     'dm': (NEXT_TIME, (NEXT_TIME,))},
          visibility.PUBLIC: {'home': (WAKE, (WAKE,)), 'group': (WAKE, (WAKE,))}}
 KIND_WORDS = {'home': '家里', 'group': '群', 'dm': '私聊'}

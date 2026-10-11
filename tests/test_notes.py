@@ -150,7 +150,7 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     (wrong, ok_wrong), (_, ok_reply) = results(lane, 'pass_note')
     assert not ok_wrong and ok_reply
     reply = store.db.notes.find_one({'from_episode': home['_id']})
-    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'next_time', 'trusted')
+    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'trusted')   # to a group: wakes it
     # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},
@@ -203,7 +203,7 @@ def test_a_note_from_one_group_wakes_her_in_another_as_her_own_note(store):
 def test_a_note_to_a_group_from_home_is_a_visit_and_a_dm_waits_for_her_next_turn_there(store):
     service = world(store)
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '去说'}, [
-        ('pass_note', {'to': G1, 'text': '在一群里问问大家周末去哪儿玩。', 'mode': 'wake'}),
+        ('pass_note', {'to': G1, 'text': '在一群里问问大家周末去哪儿玩。'}),               # a group wakes by default
         ('pass_note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。', 'mode': 'wake'}),
         ('pass_note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。'})], '好')
     (_, ok_group), (refused, ok_wake_dm), (_, ok_dm) = results(lane, 'pass_note')

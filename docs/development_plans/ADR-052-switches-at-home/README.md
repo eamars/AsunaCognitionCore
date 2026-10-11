@@ -1,6 +1,6 @@
 # ADR-052: Her switches at home: what each conversation may do
 
-Status: **Draft 2026-10-12**: the owner's open question, her answers; the owner's two questions open; not decided.
+Status: **Draft 2026-10-12**: her side settled (defaults, mute); waiting on the owner's two questions below, then built.
 
 ## Context
 
@@ -35,10 +35,11 @@ What exists:
 1. **One tool at home, `switches`**: list, set, clear. Only in owner-private conversations (her local chat and her
    home lines), as the owner asked for a switch at home. Each switch names a conversation (or a person), what it
    does, and an end: a time (an hour, tonight, three days) or `until I clear it`.
-2. **Mute** a public conversation (her middle level): it closes her mouth, not her eyes. A direct @ or an answer she
-   is waiting for still wakes her, and awake she may choose not to speak; lines are kept and searchable, and the
-   group stays in her heartbeat marked muted. A third level where nothing wakes her at all is a separate switch, not
-   folded into mute; her default is the middle one.
+2. **Mute** a public conversation (her middle level): it closes her mouth, not her eyes. Mute = **resting**
+   (ADR-039: only words addressed to her wake her, so an @ waking her is the same rule, not an exception) **plus** she
+   does not speak first there and does not visit, plus the end and the reminder line every switch has. Awake she may
+   choose not to speak; the group stays in her heartbeat marked muted. A third level where nothing wakes her at all
+   is a separate switch, not folded into mute; her default is the middle one.
 3. **Block** a person: their lines wake her nowhere and do not count as being addressed to her; still kept, so she
    can see what she missed. Unlike `blocked_senders` it is hers, reversible at once, and does not change admission.
 4. **Tools off** in a conversation: listed tools leave that conversation's toolbox; the action brain's handover
@@ -59,6 +60,5 @@ What exists:
   there when she next enters). A muted group **stays in her heartbeat, marked muted**: muting closes her mouth, not
   her eyes; the groups she cares about are the ones she mutes, and hiding them would leave her not knowing why she no
   longer knows what happens there. During a mute, a direct @ or an answer to something she is waiting for still
-  wakes her first. (Open for the build: how that differs from resting, ADR-039, which already wakes only on words
-  addressed to her; perhaps mute = resting plus no proactive turns and no visits, with a time limit.)
+  wakes her first. Mute against resting is settled in (2).
 - **Owner:** is (3) a person anywhere, or per platform (QQ ids are recycled, ADR-029)?

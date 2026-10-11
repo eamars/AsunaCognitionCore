@@ -75,12 +75,13 @@ TOOLS = {
         'parameters': {'thought': _s('心里话', required=True)},
     },
     'recall': {
-        'description': ('回想：按一句话搜你的记忆，或读自己文档里某一节的原文。每回合最多 %d 次。'
+        'description': ('回想：按一句话搜你的记忆，或读自己文档里某一节的原文；这个对话里一条合并转发的全文也这样读'
+                        '（doc 写 forward，sid 照抄那行里的 ref）。每回合最多 %d 次。'
                         '记不起来就直说，不要编。' % RECALLS_PER_TURN),
         'parameters': {'query': _s('想找什么，用一句话说', required=True),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
-                                        'doc': _s('文档，如 persona、voice', required=True),
+                                        'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
                                         'sid': _s('节的 sid', required=True)}}}},
     },
     'delegate': {
@@ -1632,8 +1633,13 @@ def _seed_text(store, slug):
 
 def read_sections(store, ep, items, cls):
     """recall with sections: readable section text, and what could not be read (in words)."""
+    from . import forwards
     docs, out, missing = DocumentStore(store, ep['persona']), [], []
     for item in items:
+        if item['doc'] == forwards.DOC:
+            section, why = forwards.read(store, ep['scene_id'], item['sid'])
+            out.append(section) if section else missing.append(why)
+            continue
         _, content = docs.read(item['doc'])
         section = next((s for s in (content or {}).get('sections', []) if s['sid'] == item['sid']), None)
         if not section:

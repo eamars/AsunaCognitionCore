@@ -151,6 +151,18 @@ Built-in placeholder fixtures for the offline self checks.
 - def `first_member`
 - def `describe` — One line saying what the fixture deployment looks like (no secrets).
 
+## `napcat-qq/integration/qqadapter/forward.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/forward.py](../../packages/channels/napcat-qq/integration/qqadapter/forward.py)
+
+Merged forwards (合并转发): the messages a forward carried, brought to the host as raw.asuna_forward.
+
+- def `ref_of` — The short handle she copies to read a forward in full.
+- def `segments` — The forward segments' data of one OneBot message, in order, at most MAX_FORWARDS.
+- def `read` — (nodes, source) of one forward segment's data; raises when it cannot be read.
+- def `preview` — The text that stands in for the placeholder: count, ref, and the first PREVIEW messages.
+- def `attach` — Read the envelope's forwards into raw.asuna_forward and put their previews in its text.
+
 ## `napcat-qq/integration/qqadapter/hostapi.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/hostapi.py](../../packages/channels/napcat-qq/integration/qqadapter/hostapi.py)

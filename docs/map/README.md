@@ -264,6 +264,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`channel_kinds`](../../src/asuna/channel_kinds.py) — Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq).
 - [`channel_admission`](../../src/asuna/channel_admission.py) — Owner-configured channel admission.
 - [`caught_up`](../../src/asuna/caught_up.py) — Lines caught up after a gap: a channel adapter fetched them from the platform's history once it was back.
+- [`forwards`](../../src/asuna/forwards.py) — Merged forwards in her conversations (QQ 合并转发): what a forward carried, kept on the line that brought it.
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).
 - [`vision`](../../src/asuna/vision.py) — 入站图片元数据与行动脑 DSH ``read_image`` 接线。
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
@@ -352,6 +353,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/config.py`](../../packages/channels/napcat-qq/integration/qqadapter/config.py) — Load and validate /integration/config.json.
 - [`napcat-qq/integration/qqadapter/faces.py`](../../packages/channels/napcat-qq/integration/qqadapter/faces.py) — QQ's own faces (小黄脸): id <-> name, from faces.json next to this file.
 - [`napcat-qq/integration/qqadapter/fixtures.py`](../../packages/channels/napcat-qq/integration/qqadapter/fixtures.py) — Built-in placeholder fixtures for the offline self checks.
+- [`napcat-qq/integration/qqadapter/forward.py`](../../packages/channels/napcat-qq/integration/qqadapter/forward.py) — Merged forwards (合并转发): the messages a forward carried, brought to the host as raw.asuna_forward.
 - [`napcat-qq/integration/qqadapter/hostapi.py`](../../packages/channels/napcat-qq/integration/qqadapter/hostapi.py) — HTTP client for the runtime host channel API (stdlib only).
 - [`napcat-qq/integration/qqadapter/inbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/inbound.py) — OneBot message event -> host envelope, with the authorization gate.
 - [`napcat-qq/integration/qqadapter/journal.py`](../../packages/channels/napcat-qq/integration/qqadapter/journal.py) — Disk-backed spool, journals and counters.

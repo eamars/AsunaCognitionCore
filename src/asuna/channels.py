@@ -43,7 +43,7 @@ def route_members(route):
 def kept_raw(event, raw, mentioned=None):
     """What of the adapter's raw event the host keeps: the sender profile verified against this
     authenticated sender and group, the profiles of the people it @-mentions (each bound to a mentioned
-    account and this group), the normalized media block, and the group's name. The platform event
+    account and this group), the normalized media block, the messages of a merged forward, and the group's name. The platform event
     itself (and anything else an adapter puts there) is never stored."""
     from .peer_context import MENTIONED_KEY, snapshot_event, snapshot_mentioned
     from .vision import MEDIA_KEY
@@ -57,6 +57,10 @@ def kept_raw(event, raw, mentioned=None):
         kept[MENTIONED_KEY] = profiles
     if isinstance(raw.get(MEDIA_KEY), dict):
         kept[MEDIA_KEY] = raw[MEDIA_KEY]
+    from . import forwards
+    forwarded = forwards.kept(raw)
+    if forwarded:
+        kept[forwards.KEY] = forwarded                     # what a merged forward carried (forwards.py)
     if isinstance(raw.get('group_name'), str) and raw['group_name'].strip():
         kept['group_name'] = ' '.join(raw['group_name'].split())[:60]
     from .caught_up import CATCHUP_KEY, mark

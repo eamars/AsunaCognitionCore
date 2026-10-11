@@ -10,6 +10,7 @@ import signal
 import threading
 import time
 
+from . import forward as forward_mod
 from . import inbound as inbound_mod
 from .catchup import Catchup
 from .members import Members
@@ -204,6 +205,13 @@ class Adapter:
                 self.log("PEER_MENTION person=%s group=%s display=%r verified=%s"
                          % (profile["person_id"], profile.get("group_id", "-"), profile["display"],
                             profile["verified"]))
+        try:
+            # a merged forward's messages, inline or fetched once, bounded (forward.py)
+            forward_mod.attach(envelope, lambda action, params: self.onebot.api_call(
+                action, params, timeout=forward_mod.TIMEOUT, meta={"forward": envelope.get("event_id")}), log=self.log)
+        except Exception as exc:
+            self.counters.inc("forward_errors")
+            self.log("FORWARD_ERROR type=%s" % type(exc).__name__)
         if envelope.get("group_id"):
             try:
                 self.self_roles.attach(envelope, self.onebot)

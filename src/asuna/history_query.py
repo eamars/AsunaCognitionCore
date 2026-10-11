@@ -106,6 +106,7 @@ def _group_token_local(value):
 
 
 TEXT_FIELD = "text"
+FORWARD_TEXT_FIELD = "event.raw.asuna_forward.nodes.text"     # forwards.NODE_TEXT
 EPOCH_FIELD = "policy_epoch"
 DIRECTION_FIELD = "direction"        # ingress.py / coordinator.py 都写这个，取值如下
 INBOUND = "inbound"
@@ -563,7 +564,8 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
         inbound[INBOUND_TIME_FIELD] = dict(bounds)
         outbound[OUTBOUND_TIME_FIELD] = dict(bounds)
     if pattern is not None:
-        inbound[text_field] = dict(pattern)
+        # a received line matches by its text or by the messages of a merged forward it carried (forwards.py)
+        inbound["$or"] = [{text_field: dict(pattern)}, {FORWARD_TEXT_FIELD: dict(pattern)}]
         outbound[text_field] = dict(pattern)
     clause = person_filter(parts, person)
     if clause:
@@ -604,6 +606,14 @@ def outbound_fallback_filter(parts, query="", *, author=None, case_sensitive=Tru
     return flt
 
 
+def _forward_text(doc):
+    try:
+        from .forwards import search_text
+    except ImportError:
+        return ""
+    return search_text(doc)
+
+
 def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
     body = doc.get(text_field)
     full = body if isinstance(body, str) else ""      # 原样，不动空白
@@ -620,6 +630,9 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
             "side": SIDE_OUTBOUND if _text(doc.get(DIRECTION_FIELD), 16) == OUTBOUND else SIDE_INBOUND,
             "speaker": author,          # 发言者只认记录里的 author，不拿身份块自称顶替
             "text": full, "chars": len(full), "verbatim": bool(full)}
+    forwarded = _forward_text(doc)
+    if forwarded:
+        base["forward"] = forwarded
     if doc.get(DIRECTION_FIELD) == ARCHIVED:
         labeler = (parts or {}).get('archive_labeler')
         who = labeler(doc) if callable(labeler) else doc.get('historical_display_name') or author
@@ -1015,6 +1028,9 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
         stamp = _clock(hit["at"], zone) if hit["at"] else "无时间戳"
         if hit.get("time_source") == TIME_SOURCE_SINK:
             stamp += "⟨本机送达回执⟩"          # 不是平台 ack，行首就说清
+        if hit.get("forward"):
+            forwarded = hit["forward"]
+            body += "\n〔合并转发的内容〕" +(forwarded[:snippet] + "…" if len(forwarded) > snippet else forwarded)
         note = hit.get("attachment")
         lines.append("- %s %s#%s｜%s｜%s：%s%s%s" % (
             stamp, hit["scene_id"], hit.get("scene_seq"), hit.get("side") or hit["direction"],

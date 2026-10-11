@@ -75,6 +75,17 @@ Lines caught up after a gap: a channel adapter fetched them from the platform's 
 - def `said_at` — When a stored line was said: a caught-up line's original time, any other line's arrival.
 - def `stale` — Whether an incoming line is caught up and older than STALE_SECONDS.
 
+## `forwards`
+
+[src/asuna/forwards.py](../../src/asuna/forwards.py)
+
+Merged forwards in her conversations (QQ 合并转发): what a forward carried, kept on the line that brought it.
+
+- def `kept` — The forward blocks an adapter sent, checked and bounded; None when there are none.
+- def `lines` — Each forwarded message as one line for her: who, when (her clock), what.
+- def `read` — A forward in this conversation as a section {doc, sid, heading, body, next?}, or the words why not.
+- def `search_text` — The forwarded messages of a stored line, for a history hit ('' when it carried none).
+
 ## `stickers`
 
 [src/asuna/stickers.py](../../src/asuna/stickers.py)

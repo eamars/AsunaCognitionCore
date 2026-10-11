@@ -19,6 +19,12 @@ with Core (`registerChannel`).
   route without one looks back `lookback_hours`, 1–24) and fed oldest first through the usual inbound path,
   marked `raw.asuna_catchup`. At most 5 pages of 100 forward from the cursor, then the newest page: a longer gap
   loses lines in its middle, not the ones just before the adapter came back. Off by default.
+- A merged forward (合并转发) is read before the event is posted: from the messages NapCat includes in the segment,
+  else with one `get_forward_msg` call (8 s), a forward inside it one level deep, at most 3 forwards a message, 100
+  messages and 20,000 characters a forward. They ride on the event as `raw.asuna_forward` (`ref`, `count`, `nodes`
+  with name, account, time and text, `source` `inline` or `fetched`), and the line shows `[合并转发｜N 条｜ref]` with
+  the first three messages, one short line each. One that cannot be read keeps its placeholder. The log names the
+  segment's fields, the source and the count, never the text.
 - Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,

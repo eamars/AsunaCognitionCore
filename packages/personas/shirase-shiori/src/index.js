@@ -5,7 +5,7 @@ export const inject = ['asuna'];
 
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'shirase-shiori', character_id: 'shirase-shiori', display_name: '白濑栞', version: '0.2.4',
+    id: 'shirase-shiori', character_id: 'shirase-shiori', display_name: '白濑栞', version: '0.2.5',
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     model: 'persona-model.json',
     seeds: [

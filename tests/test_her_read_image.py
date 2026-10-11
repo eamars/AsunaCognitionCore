@@ -55,8 +55,9 @@ def test_at_home_the_tool_is_there_without_a_picture_and_an_unknown_ref_is_refus
     coordinator = Coordinator(store, lane)
     ep = coordinator.ingest({'event_id': 'm2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
     assert 'read_image' in ep['turn_tools'], 'at home a ref from any of her conversations can be read'
-    with pytest.raises(Refused, match='IMAGE_ATTACHMENT_NOT_IN_SCENE: att-unknownpicture 不在你所有对话最近 7 天的图里'):
+    with pytest.raises(Refused, match='IMAGE_ATTACHMENT_NOT_IN_SCENE: att-unknownpicture 不在你所有对话最近 7 天的图里：超过 7 天的图 ref 找不回') as refused:
         coordinator.tools.call(ep['_id'], 'x', 'read_image', {'ref': 'att-unknownpicture'})
+    assert '最近 50 条' not in str(refused.value), 'at home the search covered all her conversations, not this one'
 
 
 def test_a_platform_line_names_its_readable_pictures(store, tmp_path):

@@ -28,7 +28,7 @@ What exists:
 
 ## Decision
 
-1. **A fresh context per task** (subject to the cache rule below). Each task starts its own action session; a continuation of the same task (her
+1. **A fresh context per task** (cache: see below). Each task starts its own action session; a continuation of the same task (her
    follow-up words, a revision) stays in it. Nothing of an earlier task's tool output is in a later task's context, so
    home results do not ride along into a group's task. What must carry over, she writes to disk herself.
 2. **One queue, visible.** Tasks still run one at a time. When she hands one over she is told what is ahead of it (how
@@ -48,23 +48,27 @@ What exists:
 ## Cache (the owner's concern, 2026-10-12)
 
 A fresh context is not a new GPU slot: the server runs one request at a time either way. What it costs is parked
-history. The server parks token histories, not sessions, in a 24 GiB budget (about 0.3 GiB plus 20 KiB a token each,
-least recently used out first), and a new request reuses the longest cached start it finds.
+history in the server's 24 GiB budget (about 316 MiB plus 19.8 KiB a token per entry, least recently used out first).
+The model server's session read the engine's source at the running commit and its log (2026-10-12):
 
-- **Today** (one continued action session per conversation and speaker): several action histories parked at once,
-  each growing from task to task. The worst of the three.
-- **One continued session**: each task extends the same history, so the new park replaces the old: exactly one
-  entry. But it grows until compaction (one big entry, one full cold read at each compaction), every step attends
-  over earlier tasks, and home results ride along into group tasks.
-- **Fresh per task, plain**: each task reuses the shared head from the previous task's entry, then leaves its own
-  entry, which stays until it ages out, crowding her conversations. Worse than one continued session.
-- **Fresh per task, with the server's shared prefix** (`strata_prefix`: the head is pinned once and the branch a new
-  task leaves is not parked; `strata_checkpoint: false` for a one-shot step): one small pinned head and no leftovers.
-  Better than both, if the server behaves as its source says. Asked the model server's session to confirm from its
-  source and log before building; whether DSH can pass these request fields is checked in the build.
+- A request resumes only from an entry, or one of its checkpoints, that its prompt fully extends; checkpoints sit at
+  the end of a long system prompt (the tool list renders inside it), at each assistant turn and every 16K tokens.
+- **Fresh per task:** the next task resumes from the previous task's head checkpoint; the previous task's branch is
+  parked first as its own entry (a 40K task about 1.1 GiB), and the next task usually takes that entry and rewinds it
+  (0.1–0.3 s). Steady state: about one dead task entry at a time; if her conversations push it out, the next task
+  reads the ~15K head again (about 2.5 s). A task interrupted by one of her turns resumes its own parked branch: no
+  re-reading per step.
+- **One continued session:** grows by tens of thousands of tokens a task, its entry with it; needs compaction; every
+  task carries the earlier ones. Worse.
+- **Pinning the head** (`strata_prefix`): keeps a whole task branch out of eviction for good and only helps
+  back-to-back tasks, which already resume cheaply. Not used.
+- **`strata_checkpoint: false`** stops a request from leaving an entry, but must be set before the request, and a
+  task's last step is known only afterwards; on every step it would make each step re-read the task. Used only for
+  truly one-shot requests.
 
-Decision rule: fresh per task only with the shared prefix; if the server cannot do that, one continued session
-(compacted) instead, with the tool fence unchanged.
+Decision: fresh per task, no pin. (4) matters here: home and public tasks share the head checkpoint only if their
+system prompts are identical. A related saving outside this ADR: her group relevance gates are about a fifth of all
+requests and each parks a ~0.3 GiB entry; marking them one-shot would free that at about 0.6 s per gate.
 
 ## Consequences
 

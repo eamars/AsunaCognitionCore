@@ -1681,6 +1681,23 @@ def read_sections(store, ep, items, cls):
     return out, missing
 
 
+def _from_home(store, persona, source_ids, episodes):
+    """Whether any source of a promotion was said in an owner-private conversation: a source turn's class, or a
+    memory unit kept in her home scope."""
+    home_scope = visibility.owner_private_scope(persona)
+    if store.db.memory_units.find_one({'_id': {'$in': list(source_ids)}, 'scope_key': home_scope}, {'_id': 1}):
+        return True
+    for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'manifest.session_class': 1, 'scene_id': 1,
+                                                                          'person_id': 1}):
+        cls = (row.get('manifest') or {}).get('session_class')
+        if cls is None:
+            scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+            cls = visibility.session_class(store.config, store.db, scene, row.get('person_id'))
+        if cls == visibility.OWNER_PRIVATE:
+            return True
+    return False
+
+
 def promote(store, ep, item, *, key):
     """Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources."""
     from .config import character_id
@@ -1714,6 +1731,10 @@ def promote(store, ep, item, *, key):
         raise Denied('PROMOTION_SOURCES_INSUFFICIENT: 这些来源只来自 %d 个回合、%d 个日期，要至少 %d 个回合、%d 个日期；'
                      '在 promotion_candidates 里再加别的回合、别的日子的 id，凑不够就先不提升'
                      % (len(episodes), len(dates), need_roots, need_dates))
+    if item.get('visibility') == 'public' and _from_home(store, ep['persona'], item['source_ids'], episodes):
+        # A public memory shows in every conversation; one built on anything said at home stays at home (ADR-050).
+        raise Denied('PROMOTION_NOT_PUBLIC: 这条的来源里有家里的对话，置公开会把家里的话带到每个群和私聊里；'
+                     '要提升就把 visibility 写成 private，留在家里')
     scope = 'global-safe' if item.get('visibility') == 'public' else visibility.owner_private_scope(ep['persona'])
     body = f"事实：{item['fact']}\n评价：{item['appraisal']}\n信号：{item['signal']}"
     doc = {'_id': 'mu-' + sha(canonical([ep['_id'], 'promote', key])), 'kind': 'memory_unit', 'scope_key': scope,

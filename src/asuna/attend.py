@@ -18,7 +18,7 @@ from .config import ago, character_id, excerpt, prompt_path
 # Why she is being asked, in words; any other wake reason runs the full turn as before.
 GATED = {
     'proactive_unprompted': '群里在聊，没人叫你；按群里的节奏，这会儿可以插一句',
-    'reply_in_active_topic': '有人在你说过话的那条线里接话，不是回你',
+    'reply_in_active_topic': '有人在一串刚叫过你的对话里接话（那串里不一定有你说的话），不是回你',
     'name_called': '有人提到了你的名字，但没有 @ 你',
     'chain': '群里在跟队形：好几个人接连发了同一句或同一张，没人叫你',
     'awaited_answer': '你刚在这里问了人、说了在等回话；这句没 @ 你也没引用你，可能是在回你，也可能不是',

@@ -195,6 +195,28 @@ def test_a_silent_heartbeat_is_rebuilt_once_and_she_is_told_once(store):
     assert service.watch_rhythm() is None                               # the owner turned it off: nothing to keep
 
 
+def test_a_memory_built_on_anything_said_at_home_cannot_be_made_public(store):
+    """ADR-050: a public memory shows in every conversation, so every source must be from outside home."""
+    from asuna.role_tools import promote
+    from asuna import visibility
+    scheduler(store)                                  # the persona model with a promotion quota
+    ep = {'_id': 'ep-night', 'persona': 'P1', 'episode_kind': 'settlement', 'tool_calls': {}}
+    for i, cls in ((1, visibility.PUBLIC), (2, visibility.OWNER_PRIVATE), (3, visibility.PUBLIC)):
+        store.db.episodes.insert_one({'_id': 'pe-%d' % i, 'schema_version': 1, 'scene_id': 'g-%d' % i,
+                                      'source_event_id': 'in-p%d' % i, 'episode_kind': 'external',
+                                      'manifest': {'session_class': cls}})
+        store.db.audit_events.insert_one({'_id': 'pctx-%d' % i, 'schema_version': 1, 'type': 'context.prepared',
+                                          'stream_id': 'pe-%d' % i, 'occurred_at': '2026-10-0%dT12:00:00+00:00' % i})
+    item = {'fact': '群里周五晚上常开黑', 'appraisal': '是他们固定的热闹', 'signal': '周五晚上可以聊游戏',
+            'why': '两周都这样', 'visibility': 'public'}
+    with pytest.raises(Denied, match='PROMOTION_NOT_PUBLIC'):
+        promote(store, ep, {**item, 'source_ids': ['pe-1', 'pe-2']}, key='p1')
+    kept = promote(store, ep, {**item, 'source_ids': ['pe-1', 'pe-3']}, key='p2')
+    assert store.db.memory_units.find_one({'_id': kept['memory_id']})['scope_key'] == 'global-safe'
+    home = promote(store, ep, {**item, 'visibility': 'private', 'source_ids': ['pe-1', 'pe-2']}, key='p3')
+    assert store.db.memory_units.find_one({'_id': home['memory_id']})['scope_key'] != 'global-safe'
+
+
 def test_T5_3_settlement_comes_once_a_night_and_promotion_keeps_its_guards(store):
     from asuna.role_tools import promote
     service = scheduler(store, rhythm={'settle_at': '04:00'})

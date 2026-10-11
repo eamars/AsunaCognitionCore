@@ -27,8 +27,14 @@ Xiaoman's first points (from her note to the developer inbox, then the agent lin
 3. Probes cost something socially: an @ to the wrong person must be wrapped up, a cold group may leave it hanging.
 4. Validate offline first: replay group history for a hit rate before any live probe.
 
-And one more: a conclusion written to her notes on a person must say it is undecided and comes from probing, because
-the person layer can surface in another group, and an unmarked guess becomes fact within days.
+And two more, after reading the first draft:
+
+5. A conclusion stays in that group's notes, marked undecided and from probing, until she signs it; only then does
+   it move to her notes on the person everywhere. The person layer can surface in another group, and an unsigned
+   guess there becomes fact within days. The group layer also fits a member who is a bot only in that group (a person
+   and their bot may share a name).
+6. Silence is weak evidence. No answer says whether someone is there, not whether they are a bot: people go quiet
+   when stuck too, and treating silence as a bot sign means recognising new bots by old bots' flaws.
 
 What already exists and fits:
 
@@ -57,12 +63,14 @@ What already exists and fits:
 4. **The active loop uses what exists.** She posts a friendly line to the person (an @ and something she would say
    anyway); the program waits and wakes her with the reply and its time. She delegates once per person ("is X a
    bot?") with the reply; each later step is a `message_action` to the same task, so the task carries the step,
-   the earlier probes and the answers. Silence is a reading too: no answer within three minutes, or within the hour.
+   the earlier probes and the answers. Silence (no answer within three minutes, or within the hour) is one weak
+   reading in the mechanical column and never decides anything on its own.
 5. **Two columns, never merged.** The mechanical column (program readings plus catalog matches) is what the action
    brain reports; the semantic column (does the person take a joke, does the text feel templated) is hers. The action
    brain writes observations, never a verdict.
-6. **Conclusions go to her notes on the person,** layer `person`, marked undecided and probe-only until she decides
-   otherwise. Never announced in a group; what she does with a conclusion is hers.
+6. **Conclusions go to that group's notes first,** layer `here`, marked 「未定·仅试探」 (undecided, probe only).
+   They move to layer `person` only when she signs them. Never announced in a group; what she does with a conclusion
+   is hers.
 7. **Social rules, in the skill.** Friendly only. At most one probe line per person per day, and a few steps per
    session. Never in a group that has gone quiet, never at someone she has not seen speak. Stop at the first clear sign
    of a person. A probe that lands on a person gets a natural wrap-up, not an explanation of the test.
@@ -81,4 +89,3 @@ What already exists and fits:
 - Her list of known bots and known people: the ground truth for the offline replay, and where it lives.
 - The tiers and words for each passive reading.
 - The probe lines themselves: her voice, so hers to write.
-- Whether `here`-layer notes suit groups where a bot is only a bot there (a person and their bot may share a name).

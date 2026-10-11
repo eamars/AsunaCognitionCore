@@ -103,7 +103,8 @@ async function setup() {
   const peer = await fakePeer(), host = await fakeHost();
   const statePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-peer-')), 'state.json');
   const bridge = new PeerBridge({ peer: { url: peer.url, sessionId: SESSION, routeId: 'peer-dm', senderId: 'peer',
-    label: '[from home]', ownerNote: '(not to you)' }, endpoint: host.endpoint, statePath, retryMs: 50 });
+    label: '[from home]', ownerNote: '(not to you)', replyNote: '(answer me in a few lines)' },
+    endpoint: host.endpoint, statePath, retryMs: 50 });
   await bridge.start();
   await until(() => peer.streamId);
   return { peer, host, bridge, done: () => { bridge.stop(); peer.close(); host.close(); } };
@@ -116,7 +117,8 @@ test('a new bridge starts from the present and forwards a completed reply as a m
     for (const event of turn(11, 4, { kind: 'user' }, 'hello there')) peer.send({ type: 'event', event });
     await until(() => host.events.length === 1);
     assert.deepEqual({ ...host.events[0], occurred_at: undefined }, { route_id: 'peer-dm', account_id: 'home', sender_id: 'peer',
-      event_id: SESSION + ':turn:4:14', text: '(not to you)\nhello there', occurred_at: undefined });
+      event_id: SESSION + ':turn:4:14', text: '(not to you)\nhello there', occurred_at: undefined,
+      raw: { asuna_aside: true } });                         // not answering her: kept, does not wake her
     for (const event of turn(15, 5, { kind: 'user' }, 'cut off', 'aborted')) peer.send({ type: 'event', event });
     await new Promise(r => setTimeout(r, 150));
     assert.equal(host.events.length, 1);                       // an unfinished turn is not a reply
@@ -131,12 +133,14 @@ test('her words reach the peer labelled, are receipted, and the answer to them c
     const prompt = peer.prompts[0];
     assert.equal(prompt.sessionId, SESSION);
     assert.equal(prompt.mode, 'queue');
-    assert.deepEqual(prompt.content, [{ type: 'text', text: '[from home]\nhi, it is me' }]);
+    assert.deepEqual(prompt.content, [{ type: 'text', text: '[from home]\n(answer me in a few lines)\n\nhi, it is me' }]);
     assert.deepEqual(host.receipts[0], { attempt_id: 'att-1', status: 'platform_accepted', response: { accepted: true },
       platform_message_id: prompt.requestId });
-    for (const event of turn(11, 6, { kind: 'user-rpc', rpcId: prompt.requestId }, 'welcome')) peer.send({ type: 'event', event });
+    // DSH records a prompt sent over RPC as {kind: 'user', rpcId} ('user-rpc' names the source type, not its kind).
+    for (const event of turn(11, 6, { kind: 'user', rpcId: prompt.requestId }, 'welcome')) peer.send({ type: 'event', event });
     await until(() => host.events.length === 1);
     assert.equal(host.events[0].text, 'welcome');
+    assert.equal(host.events[0].raw, undefined, 'an answer to her wakes her');
   } finally { done(); }
 });
 

@@ -40,6 +40,10 @@ def route_members(route):
     raise Denied('CHANNEL_TARGET_TYPE_DENIED')
 
 
+# A line the adapter knows is not addressed to her (a peer's turn that did not answer her): stored, no turn.
+ASIDE_KEY = 'asuna_aside'
+
+
 def kept_raw(event, raw, mentioned=None):
     """What of the adapter's raw event the host keeps: the sender profile verified against this
     authenticated sender and group, the profiles of the people it @-mentions (each bound to a mentioned
@@ -66,6 +70,8 @@ def kept_raw(event, raw, mentioned=None):
     from .caught_up import CATCHUP_KEY, mark
     if mark(raw):
         kept[CATCHUP_KEY] = mark(raw)                         # a line fetched from history after a gap (caught_up.py)
+    if raw.get(ASIDE_KEY) is True:
+        kept[ASIDE_KEY] = True                                # not addressed to her: kept, does not wake her (ADR-045)
     own = raw.get('asuna_self')
     if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
             and own.get('role') in ('owner', 'admin', 'member'):

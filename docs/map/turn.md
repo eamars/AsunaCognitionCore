@@ -205,6 +205,7 @@ Sends her accepted lines: `PublishService.publish` checks the turn is still curr
 Her own open/close of a peer line (ADR-013 §6).
 
 - def `peer_lines` — [{scene_id, person_id, label}] of the configured peer-line routes.
+- def `asides` — peer_asides_from_program: on each peer line, the lines not addressed to her since she last spoke there (ADR-045), newest last, at most ASIDES_SHOWN with how many more; None when there are none.
 - def `closed_until` — None when open; a datetime when closed until then; ``'reopen'`` when closed until she reopens it.
 - def `is_closed`
 - def `set_line`

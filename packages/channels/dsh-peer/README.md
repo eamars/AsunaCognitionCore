@@ -5,12 +5,14 @@ Web server; she talks with it in one direct-message conversation of her own.
 
 - **Inbound:** the bridge follows that session (`session/follow` over `/api/remote.mux`). The peer's final
   reply of each completed turn becomes a direct message from the peer.
-  - A reply that did not answer her gets `ownerNote` as its first line. Such a reply answered someone else in
-    that session.
+  - A turn answers her when its prompt is one she sent (DSH records it as `{kind: 'user', rpcId}`). A reply that
+    did not answer her gets `ownerNote` as its first line and `raw.asuna_aside: true`: the host keeps it without
+    waking her, and her home turns list it until she speaks on the line.
   - A new bridge starts from the session's present; it never replays history.
   - `occurred_at` uses the peer event's timestamp. A peer event without a timestamp omits it; forwarding time is not substituted.
 - **Outbound:** her words leave through the channel outbox. The bridge sends them as prompts to the session,
-  with `label` as the first line, and records the platform receipt (`platform_message_id` = the prompt's
+  with `label` as the first line and `replyNote` (her own words on how to answer her) before her text, and records
+  the platform receipt (`platform_message_id` = the prompt's
   `requestId`).
 - **Scope:** only `session/follow` and `session/prompt`, only on the configured session.
 
@@ -35,6 +37,7 @@ Then configure this plugin's row in the profile's editable patch:
     senderId: peer                 # that route's sender_id
     label: '[from …]'              # who is speaking, first line of her messages there
     ownerNote: '(not a reply to you)'
+    replyNote: '(how she asks to be answered)'   # opens every message of hers; her words
     insecureTls: true              # a LAN service behind its own local CA
     closedUntil: '2026-01-01T09:00:00+13:00'   # optional: line closed until then, reopens by itself
 ```

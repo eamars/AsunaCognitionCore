@@ -14,6 +14,7 @@ export const inject = ['asuna', 'asunaFloor'];
  *   routeId / senderId   the channel route and sender this peer is configured as (channels.dsh in Asuna's settings)
  *   label      first line of every message she sends there, saying who speaks
  *   ownerNote  first line of a peer reply that did not answer her (it answered someone else in that session)
+ *   replyNote  how she asks to be answered: opens every message of hers after the label, her own words (changed only by her)
  *   insecureTls  the peer is a LAN service behind its own local CA
  *   closedUntil  ISO time until which the line is closed (replies passed over, her words wait); reopens by itself
  */
@@ -30,7 +31,7 @@ export function apply(ctx, config = {}) {
   }
   const bridge = new PeerBridge({
     peer: { url: config.url, sessionId: config.sessionId, routeId: config.routeId, senderId: config.senderId,
-            label: config.label ?? '', ownerNote: config.ownerNote ?? '', insecureTls: config.insecureTls === true,
+            label: config.label ?? '', ownerNote: config.ownerNote ?? '', replyNote: config.replyNote ?? '', insecureTls: config.insecureTls === true,
             closedUntil: config.closedUntil ?? null },
     endpoint: () => ctx.asuna.channelEndpoint('dsh'),
     statePath: path.join(ctx.asunaFloor.dataRoot, 'bridges', 'dsh-' + config.routeId + '.json'),

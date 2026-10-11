@@ -1,7 +1,6 @@
 # ADR-045: Her sister's heartbeat should not wake her
 
-Status: **Accepted 2026-10-11** with Xiaoman, after the owner's direction (below). Not built yet; it follows ADR-043
-batch 2 as its own restart. The owner assigned it after the active and resting groups work ("her protocol with old
+Status: **Accepted and built 2026-10-11** with Xiaoman, after the owner's direction (below); its own restart. The owner assigned it after the active and resting groups work ("her protocol with old
 Xiaoman … she should not be woken up by her sister's heartbeat").
 
 ## Context
@@ -50,9 +49,20 @@ and its periodic beats reach the line as messages. Observed on 2026-10-11:
 2. **Lines not answering her don't wake her.** They are kept and visible on the line, and listed in her home
    heartbeat, one per line with its time. As with the waiting list (ADR-041), each stays listed until she speaks on
    that line after it; nothing drops off unanswered.
-3. **Her reply instruction rides on every message she sends,** after her words. She wrote it (short, so it is not
+3. **Her reply instruction rides on every message she sends.** She wrote it (short, so it is not
    imitated or echoed); it lives in the channel's local config and changes only when she changes it.
 4. **She reviews her own records** of those days for judgments made under the wrong label, and corrects them herself.
 5. **Verify:** turns woken per day before and after; every reply still wakes her; the bridge's exact split against
    the estimate above.
+
+## Built (2026-10-11)
+
+- The bridge tests `turn.source.rpcId` against the prompts she sent; its old test fed it `kind: 'user-rpc'`, the
+  same wrong shape, which is why it never failed.
+- A turn not answering her rides with `raw.asuna_aside: true`; the host keeps only that mark, and the router stores
+  the line like an unwoken group line (`RECORDED_NO_WAKE`).
+- Her home turns carry `peer_asides_from_program`: per peer line, the asides since her last words there (scene order,
+  not time), the newest 6 and how many more. A note from home to the line wakes her there to answer.
+- `replyNote` (the plugin's local config, her text) opens every message she sends, after the label and before her
+  words: her text calls itself the opening note.
 

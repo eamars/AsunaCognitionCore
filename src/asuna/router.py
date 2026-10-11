@@ -55,7 +55,10 @@ class Router:
             trusted['development_profile']='owner'
         self.store.audit('router','event.received',{'event_id':event['event_id'],'scene':scene['_id'],'adapter':event.get('adapter_id') or ('channel' if event.get('channel') else 'local')},scene['scope_key'])
         wake = event.get('group_context', {}).get('wake_reason') if event.get('channel') else (event.get('mentioned') or event.get('scene_tick'))
-        if scene['kind']=='group' and not wake and event.get('episode_kind') != 'task_feedback':
+        # A line not addressed to her (ADR-045: her sister's turn that did not answer her) is kept like an unwoken
+        # group line: no turn; her home heartbeat lists it until she speaks on that line (lines.asides).
+        aside=bool(event.get('channel')) and ((event.get('raw') or {}).get('asuna_aside') is True)
+        if (scene['kind']=='group' and not wake or aside) and event.get('episode_kind') != 'task_feedback':
             from .ingress import persist_input
             row, _ = persist_input(self.store, event, managed=True)
             self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])

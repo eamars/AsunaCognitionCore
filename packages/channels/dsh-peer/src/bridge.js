@@ -106,7 +106,9 @@ const textOf = content => (content ?? []).filter(block => block?.type === 'text'
 
 export class PeerBridge {
   /**
-   * @param peer {url, sessionId, routeId, senderId, label, ownerNote, insecureTls, closedUntil}
+   * @param peer {url, sessionId, routeId, senderId, label, ownerNote, replyNote, insecureTls, closedUntil}
+   *   replyNote: how she asks to be answered, opening every message of hers after the label (her words, changed
+   *   only by her).
    *   closedUntil: until this time (ISO) the line is closed: the peer's replies are passed over, not delivered,
    *   and her words wait in the outbox. It reopens by itself.
    * @param endpoint async () => {url, channelId, accountId, token} | null — the channel API (core.channelEndpoint)
@@ -212,10 +214,12 @@ export class PeerBridge {
       const said = turn?.texts.at(-1);
       if (said && data.reason?.kind === 'completed' && this.closedFor()) this.log('line closed: a reply was passed over');
       else if (said && data.reason?.kind === 'completed') {
-        const ours = turn.source?.kind === 'user-rpc' && this.state.sent.includes(turn.source.rpcId);
+        // A turn answers her when its prompt is one she sent: DSH records it as {kind: 'user', rpcId}.
+        const ours = Boolean(turn.source?.rpcId) && this.state.sent.includes(turn.source.rpcId);
         const text = ((ours || !this.peer.ownerNote) ? '' : this.peer.ownerNote + '\n') + said;
         this.state.pending.push({ event_id: this.peer.sessionId + ':turn:' + data.turn + ':' + event.seq,
           text: text.length > TEXT_LIMIT ? text.slice(0, TEXT_LIMIT - 1) + '…' : text,
+          ...(ours ? {} : { raw: { asuna_aside: true } }),       // not answering her: kept, does not wake her
           ...(event.time == null ? {} : { occurred_at: new Date(event.time).toISOString() }) });
       }
     }
@@ -285,7 +289,8 @@ export class PeerBridge {
     await this.save();
     try {
       await this.rpc('session/prompt', { request: { requestId, sessionId: this.peer.sessionId, mode: 'queue',
-        content: [{ type: 'text', text: (this.peer.label ? this.peer.label + '\n' : '') + item.text }] } });
+        content: [{ type: 'text', text: (this.peer.label ? this.peer.label + '\n' : '')
+          + (this.peer.replyNote ? this.peer.replyNote + '\n\n' : '') + item.text }] } });
       await receipt('platform_accepted', { accepted: true }, requestId);
     } catch (error) {
       // A refusal is a definite failure; a transport error may or may not have reached the peer.

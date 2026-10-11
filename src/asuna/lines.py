@@ -31,6 +31,34 @@ def peer_lines(store):
     return out
 
 
+ASIDES_SHOWN = 6
+ASIDE_EXCERPT = 80
+ASIDES_NOTE = ('另一头不是在回你的话（她自己那边的心跳、自言自语、主动找你），不叫醒你，先记在这里；'
+               '你在那条线上开口之后，那之前的就不再列。要回就从家里 pass_note 到那条线。')
+
+
+def asides(store, zone):
+    """peer_asides_from_program: on each peer line, the lines not addressed to her since she last spoke there
+    (ADR-045), newest last, at most ASIDES_SHOWN with how many more; None when there are none. Computed."""
+    from .config import excerpt
+    from .schedule_rules import line_stamp
+    out = []
+    for line in peer_lines(store):
+        mine = store.db.messages.find_one({'scene_id': line['scene_id'], 'direction': 'outbound', 'phase': 'SPEAK'},
+                                          {'scene_seq': 1}, sort=[('scene_seq', -1)])
+        query = {'scene_id': line['scene_id'], 'direction': 'inbound', 'event.raw.asuna_aside': True,
+                 **({'scene_seq': {'$gt': mine['scene_seq']}} if mine else {})}
+        count = store.db.messages.count_documents(query)
+        if not count:
+            continue
+        rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1}).sort('scene_seq', -1).limit(ASIDES_SHOWN))
+        out.append({'line': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
+                                                     'text': excerpt(' '.join((row.get('text') or '').split()), ASIDE_EXCERPT)}
+                                                    for row in reversed(rows)],
+                    **({'more': '更早还有 %d 条' % (count - len(rows))} if count > len(rows) else {})})
+    return {'lines': out, 'note': ASIDES_NOTE} if out else None
+
+
 def _row(store, scene_id):
     return store.db.artifacts.find_one({'_id': 'peer-line:' + scene_id})
 

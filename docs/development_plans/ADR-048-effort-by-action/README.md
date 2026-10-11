@@ -42,8 +42,9 @@ answer more slowly. Turning it on also needs a server restart, after which each 
    - night turns, home: the route's level, as now;
    - the relevance gate: low, as now;
    - delegated action tasks: the action route's level for now; by task kind only if measurement asks.
-2. **Hers to raise, later and only if she wants it:** a categorical choice that makes the rest of one turn, or one
-   delegated task, think harder. Not in the first step.
+2. **Hers to raise, later:** a categorical choice that makes the rest of one turn, or one delegated task, think
+   harder. She wants it (2026-10-12), but not as a knob for every message: only where the cache is not counted on
+   anyway, on visits and in reflection, never in the middle of a group conversation. Not in the first step.
 3. **How the level reaches the model, without touching the cache.** The effort sentence at the top stays as it is
    per conversation. Inside a conversation the operation changes only what sits at the end of the prompt:
    - the thinking budget of the request (a cap: it can make a reply think less, not more than the model would);

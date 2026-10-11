@@ -42,7 +42,9 @@ reply time it is found by plain string matching, without a model call.
    turn for a group, the program gives her a short list of candidate phrases: said by at least three different people
    there since her last look, and not yet in that group's notes; as words, with roughly how many people used each.
    She writes what a phrase means, or what a habit is, into the group's notes, or skips it. Her group notes are the
-   store; nothing new is kept. These turns run at the study effort of ADR-048 once that exists.
+   store; nothing new is kept. Her conditions (2026-10-12): at most about five candidates a visit ("thirty is a chore,
+   five is help"); a meaning belongs to one group and carries the date she worked it out, so last week's meaning is
+   not taken for this week's. These turns run at the study effort of ADR-048 once that exists.
 2. **She decides to condense early.** A group turn or a visit can end with her choice to condense the conversation
    once the group has gone quiet (a categorical choice; the program maps it to an action). The program then runs
    DSH's on-demand compaction for that conversation as soon as the group has had no new line for a few minutes and no
@@ -76,7 +78,9 @@ Which way, and whether at all, is the owner's decision.
 
 ## Open questions for Xiaoman
 
-- The quiet threshold, and whether the choice to condense belongs on every group turn or only on visits.
+- Whether the choice to condense belongs on every group turn or only on visits.
 - The candidate rule (three people? since her last look, or a fixed window?) and how many candidates a visit shows.
-- Whether matching a phrase at reply time (MaiBot's plain string match against her notes) is wanted once her notes
-  grow, or whether her notes in the turn are enough.
+- Matching a phrase at reply time (MaiBot's plain string match against her notes): she has reservations, because a
+  plain match can attach last week's meaning to this week's use of the same word. If it comes, each match carries
+  the group and the date she inferred it, and says she may drop it on the spot.
+- The quiet threshold: she will give a number from the times of the lines in her groups.

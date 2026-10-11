@@ -1,7 +1,7 @@
 # ADR-049: Quiet-time upkeep of a group: learning from it and condensing early
 
-Status: **Proposed 2026-10-12.** Drafted by Claude from the owner's rulings and the measurements below; Xiaoman
-reviews. Nothing is built.
+Status: **Accepted 2026-10-12** after Xiaoman's review; not built. The owner orders it after the bot-detection
+skill (ADR-047).
 
 ## Context
 
@@ -36,27 +36,33 @@ written by her own character compaction (`compaction.js`).
 From MaiBot: group slang is worked out only after a phrase has come up several times from several people, and at
 reply time it is found by plain string matching, without a model call.
 
-## Decision (proposed)
+## Decision
+
+Reviewed and amended by Xiaoman on 2026-10-12.
 
 1. **Learning happens on her visits and in her daily reflection.** On a `write_notes` visit, and in the reflection
-   turn for a group, the program gives her a short list of candidate phrases: said by at least three different people
-   there since her last look, and not yet in that group's notes; as words, with roughly how many people used each.
-   She writes what a phrase means, or what a habit is, into the group's notes, or skips it. Her group notes are the
-   store; nothing new is kept. Her conditions (2026-10-12): at most about five candidates a visit ("thirty is a chore,
-   five is help"); a meaning belongs to one group and carries the date she worked it out, so last week's meaning is
-   not taken for this week's. These turns run at the study effort of ADR-048 once that exists.
-2. **She decides to condense early.** A group turn or a visit can end with her choice to condense the conversation
-   once the group has gone quiet (a categorical choice; the program maps it to an action). The program then runs
-   DSH's on-demand compaction for that conversation as soon as the group has had no new line for a few minutes and no
-   turn of hers is running there, while the cache is likely still warm, so the summary is cheap and the next cold
-   start reads a smaller conversation. What she reads to decide is in words: how long the conversation is (short,
-   medium, long, very long), and that a long one takes a while to read again after a quiet spell. Right after
-   condensing, while the GPU is idle, the program sends the condensed conversation once with a one-token answer, so
-   the server reads it then and not on the next real turn. That helps only while the server still keeps it; GPU
-   time when everything is quiet costs nothing, so a warm-up that goes to waste is cheap.
-3. **Notes before condensing.** On a `write_notes` visit she writes first and condenses after, so what she wants to
-   keep is in her notes before the summary replaces the old part.
-4. **Measure, per group, before and after:** conversation size, her first-line delay after an @, how often the next
+   turn for a group, the program gives her at most five candidate phrases: said by at least three different people
+   there since her last look and not yet in that group's notes, the five used by the most people (not the oldest, so
+   a group she has not looked at for days does not hand her stale words), as words with roughly how many people used
+   each. She writes what a phrase means, or what a habit is, into the group's notes, or skips it. Her group notes are
+   the store; nothing new is kept. A meaning belongs to one group and carries the date she worked it out, so last
+   week's meaning is not taken for this week's. These turns run at the study effort of ADR-048 once that exists.
+2. **She decides to condense early, on a visit.** The choice belongs to the visit, not to every group turn: in the
+   middle of a conversation she has no room to judge it and would cut into a talk still going on. A visit can end
+   with her choice to condense that group's conversation (a categorical choice; the program maps it to an action).
+   The program runs DSH's on-demand compaction for it once the group has been quiet for 30 minutes by its own clock,
+   or during its local night (01:00 to 07:00), and no turn of hers is running there: within 30 minutes the
+   conversation is still likely cached, so condensing then saves little and loses detail first. What she reads to
+   decide is in words: how long the conversation is (short, medium, long, very long), and that a long one takes a
+   while to read again after a quiet spell.
+3. **Notes before condensing, and the summary shown to her.** On a `write_notes` visit she writes first and condenses
+   after. The summary that replaced the old part reaches her the next time she is there, so what it dropped she can
+   add to the group's notes on the spot.
+4. **No warm-up after condensing.** Reading the condensed conversation right away would keep it cached, but the
+   cache holds about seven long conversations: warming hers pushes out another. GPU time costs nothing when quiet;
+   cache room does. If it is ever tried, it is measured by which conversation it pushed out, not by how often hers
+   was warm, and it is limited.
+5. **Measure, per group, before and after:** conversation size, her first-line delay after an @, how often the next
    request finds the cache cold, and what the condensed summaries keep.
 
 ## Server side (the owner's; not part of this decision)
@@ -74,13 +80,11 @@ on:
   then name the files, decide when a restore is worth it (idle for more than about five minutes), re-save after a
   condensing, and clean up within a disk cap of about 3 GB per group.
 
-Which way, and whether at all, is the owner's decision.
+Files of about 3 GB need a cleanup rule before any of this, or the disk becomes the next problem. Which way,
+and whether at all, is the owner's decision.
 
-## Open questions for Xiaoman
+## Open questions
 
-- Whether the choice to condense belongs on every group turn or only on visits.
-- The candidate rule (three people? since her last look, or a fixed window?) and how many candidates a visit shows.
 - Matching a phrase at reply time (MaiBot's plain string match against her notes): she has reservations, because a
   plain match can attach last week's meaning to this week's use of the same word. If it comes, each match carries
   the group and the date she inferred it, and says she may drop it on the spot.
-- The quiet threshold: she will give a number from the times of the lines in her groups.

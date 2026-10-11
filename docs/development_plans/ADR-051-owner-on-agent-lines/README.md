@@ -41,9 +41,14 @@ No prompt rule narrowing what she does where: he wants her to do more developmen
 4. **The agent sees the whole conversation.** Its poll shows the owner's lines on its line as well as her answers,
    marked as the owner's, each once, so it never answers a reply to words it never saw. It still cannot post as him.
 5. **Her answers go to the line as now.** One answer reaches everyone on the line: the agent by its poll, the owner
-   in the Web conversation. Both read the same thing (her ruling): the same message, the same text, nothing cut
-   short for one of them; a line of a text-only kind carries no pictures to either reader beyond their placeholders.
-   The owner's lines reach the agent whole too, so the agent never answers words she never said to it.
+   in the Web conversation. What each reader gets, as built (her ruling: say exactly what each sees, promise
+   nothing the code does not do):
+   - **Her answer.** The agent gets the published message's text, the same text the Web conversation shows as her
+     words; an agent line is text-only, so a picture of hers reaches neither reader there. The owner also sees her
+     turn around it in the Web (her thoughts, tool calls), which the agent does not.
+   - **The owner's lines.** The agent gets each one's text and its time, whole; a picture he attached arrives as its
+     placeholder in the text, nothing more. A poll hands over at most 20 of his lines per request, oldest first; the
+     rest come with the next poll, none is dropped.
 
 No change to the home chat, the developer inbox, or what she may do where.
 
@@ -60,8 +65,9 @@ A line is no longer one agent's alone: the owner may join it. Her answer there i
 Her ruling (2026-10-12): closing a line shuts out its agent, not the owner. She closes a line to stop an agent's
 chatter; the owner is the one she works for, not a source of noise. Shutting out everyone would be muting the
 conversation, a different switch (ADR-052), and must not be folded into closing a line, or wanting quiet would mean
-locking the owner out. While a line is closed the agent is shown nothing, the owner's lines included; it sees them
-when she opens the line again.
+locking the owner out. While a line is closed the agent is shown nothing, the owner's lines included. When she opens
+it again, the agent's next polls hand over every owner line it has not been shown, oldest first, at most 20 per
+request; her answers kept while the line was closed follow as before.
 
 ## Not in this ADR
 

@@ -362,17 +362,25 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
             'vision': vision_capability(config)}
 
 
-def attachment_by_ref(store, task, config, ref):
+def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC):
     """(entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation
-    and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first."""
+    and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first.
+
+    At home (owner_private, owner 2026-10-11) the fence does not hold her back: a ref from any of her conversations
+    is found, marked `home_reach`. Elsewhere it holds, so nothing at home is read from outside."""
     listing = scene_attachments(store, task, config)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
     from datetime import datetime, timedelta, timezone
     cutoff = (datetime.now(timezone.utc) - timedelta(days=REF_DAYS)).isoformat()
-    for scope in readable_image_scenes(store, task, config):
-        rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': task['policy_epoch'],
+    scopes = [{**scope, 'policy_epoch': task['policy_epoch']} for scope in readable_image_scenes(store, task, config)]
+    if session_class == visibility.OWNER_PRIVATE:
+        fenced = {scope['scene_id'] for scope in scopes}
+        scopes += [{'scene_id': doc['_id'], 'linked': True, 'home_reach': True, 'policy_epoch': doc.get('policy_epoch')}
+                   for doc in store.db.scenes.find({}, {'_id': 1, 'policy_epoch': 1}) if doc['_id'] not in fenced]
+    for scope in scopes:
+        rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': scope['policy_epoch'],
                                        'direction': 'inbound', 'received_at': {'$gte': cutoff},
                                        'event.raw.' + MEDIA_KEY: {'$exists': True}},
                                       {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1, 'text': 1,
@@ -381,7 +389,7 @@ def attachment_by_ref(store, task, config, ref):
             for found in attachments_of(row, config=config):
                 if found['ref'] == ref:
                     found.update(scene_seq=row.get('scene_seq'), scene_id=row.get('scene_id'),
-                                 linked_scene=bool(scope['linked']))
+                                 linked_scene=bool(scope['linked']), **({'home_reach': True} if scope.get('home_reach') else {}))
                     return found, listing
     return None, listing
 
@@ -566,12 +574,13 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     if path_form(ref):
         # 按路径读盘上的图：只有家里的会话放行（错误码里说清该怎么做），task_dir 决定 /task/ 指哪儿。
         return path_image(blobs, task, config, ref, max_bytes, session_class, task_dir)
-    entry, listing = attachment_by_ref(store, task, config, ref)
+    entry, listing = attachment_by_ref(store, task, config, ref, session_class)
     if not entry:
         # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
         recent = [item['ref'] for item in listing['attachments']]
-        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
-                         % (ref, REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
+        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在%s最近 %d 天的图里；%s'
+                         % (ref, '你所有对话' if session_class == visibility.OWNER_PRIVATE else '这个对话', REF_DAYS,
+                            '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'
@@ -704,10 +713,14 @@ def media_source_url(store, task, config, entry):
     """The link as stored on its message. 回读走与清单同一道围栏：条目写着哪个场景就回那个场景读，
     不在本任务可读集合里就返回空。"""
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
-    if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
+    epoch = task['policy_epoch']
+    if entry.get('home_reach'):
+        # Found from home by attachment_by_ref (owner_private only): read back in its own scene and epoch.
+        epoch = (store.db.scenes.find_one({'_id': scene_id}, {'policy_epoch': 1}) or {}).get('policy_epoch')
+    elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''
     row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
-                                      'policy_epoch': task['policy_epoch']})
+                                      'policy_epoch': epoch})
     block = media_block(row)
     if not block:
         return ''
@@ -784,11 +797,11 @@ READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
     'description': ('按需拉取本授权场景某条消息里的图片附件，并把它变成这一轮真实的视觉输入（Pull 模式：'
                     '入站只带元数据与占位符，没调用就等于没看过）。ref 照抄附件清单（attachments、media_from_program）'
-                    '或对话里图片旁标出的 ref；只认这个对话最近的几张图。'
+                    '或对话里图片旁标出的 ref；抄下来的 ref 7 天内都认。'
                     '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
                     'ref 也可以是一张已存好的图的 artifact_id（blob-…）：自己画的图（generate_image 回执里的 '
                     'artifact.artifact_id）、本场景存过的图、这一轮可发的图——画完或发之前用它亲眼看一遍。'
-                    '家里（本机、主人私聊这类可信的对话）还能按路径读盘上的图：ref 给绝对路径，或行动任务自己'
+                    '家里（本机、主人私聊这类可信的对话）还能看你其他对话（群、别人的私聊）里 7 天内的图，ref 照抄那张图旁标的；也能按路径读盘上的图：ref 给绝对路径，或行动任务自己'
                     '工作区的 /task/… 相对路径；在群里或别人的私聊里传路径会吃 IMAGE_PATH_HOME_ONLY，那里照旧只看消息里的图。'
                     '大小不用管：程序按自己的上限拉，给模型之前会自己缩放。'
                     '路由不支持图片、主机不在白名单、超过程序上限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),

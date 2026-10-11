@@ -57,3 +57,9 @@ Pictures in her QQ groups often could not be read a while after they were posted
   50 inbound lines, so a busy group's picture was out of reach within hours even with a valid key. A ref is now found
   among the last 7 days of pictures in the same scenes; the listing a turn shows stays the newest few (owner
   2026-10-11: 7 days, no more effort).
+- **Home reaches every conversation** (owner 2026-10-11: "IMAGE_ATTACHMENT_NOT_IN_SCENE should not be the safe guard
+  for home channels"). At home (owner-private conversations and their tasks) a ref from any of her conversations
+  within the 7 days is found and read back in its own scene, and her home turns always offer `read_image`. It fits
+  ADR-017: a public picture reaches home only by her own deliberate, audited read. The fence still holds the other
+  way: a group never reads a home picture or another group's.
+

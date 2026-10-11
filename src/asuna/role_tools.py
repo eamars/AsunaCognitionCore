@@ -558,7 +558,7 @@ def toolbox(store, ep):
 # teaches it (her ask, 2026-10-11).
 NOT_NOW = {
     'answer_action': 'answer_action 只在行动脑问你话的那一回合用，现在没有它在等的问题；要跟在做事的行动脑说话，用 message_action。',
-    'read_image': '这个对话最近没有能看的图：图要在这个对话最近的几条消息里（过一阵就拉不到了），或者是列出来的你自己的图。',
+    'read_image': '这个对话最近没有能看的图：图要在这个对话 7 天内的消息里，或者是列出来的你自己的图；在家里，你其他对话里 7 天内的图也能看。',
     'private_words': '这一回合不记名单。',
     'read_ideas': ('想法本在自我改进的回合里读和定，或者家里有人跟你说话问起时；心跳、计划到点、夜间沉淀和便条叫醒的回合不翻，'
                    '先记着，等自我改进那一轮。'),
@@ -619,6 +619,8 @@ def her_pictures(store, ep):
     from .vision import scene_attachments, vision_capability
     if not vision_capability(store.config, 'character')['supported']:
         return False
+    if (ep.get('manifest') or {}).get('session_class') == visibility.OWNER_PRIVATE:
+        return True                       # at home a ref from any of her conversations is readable (owner 2026-10-11)
     if offered_pictures(ep) or ((ep.get('context') or {}).get('your_pictures_from_program') or {}).get('items'):
         return True                       # she can look before she sends, and at her own pictures at home
     if (ep.get('context') or {}).get('stickers_from_program') and store.db.sticker_pool.find_one({}, {'_id': 1}):

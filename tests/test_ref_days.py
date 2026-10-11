@@ -31,3 +31,20 @@ def test_an_older_picture_is_found_by_its_ref_within_the_days_and_never_across_t
     assert entry and entry['ref'] == three_days and entry['scene_id'] == 'dm-a'
     assert attachment_by_ref(store, task, store.config, too_old)[0] is None
     assert attachment_by_ref(store, task, store.config, elsewhere)[0] is None
+
+
+def test_at_home_a_ref_from_any_of_her_conversations_is_found_and_read_back_and_elsewhere_the_fence_holds(store):
+    from asuna import visibility
+    from asuna.vision import media_source_url
+    home = store.db.scenes.find_one({'_id': 'dm-a'})
+    task = {'scene_id': 'dm-a', 'scope_key': home['scope_key'], 'policy_epoch': home['policy_epoch']}
+    group_ref = picture(store, 'g1', 7, 2)
+    entry, _ = attachment_by_ref(store, task, store.config, group_ref, visibility.OWNER_PRIVATE)
+    assert entry and entry['scene_id'] == 'g1' and entry.get('home_reach')
+    assert media_source_url(store, task, store.config, entry).startswith('https://multimedia.nt.qq.com.cn/')
+    assert attachment_by_ref(store, task, store.config, group_ref, visibility.PUBLIC)[0] is None
+    group = store.db.scenes.find_one({'_id': 'g1'})
+    from_group = {'scene_id': 'g1', 'scope_key': group['scope_key'], 'policy_epoch': group['policy_epoch']}
+    home_ref = picture(store, 'dm-a', 8, 1)
+    assert attachment_by_ref(store, from_group, store.config, home_ref, visibility.PUBLIC)[0] is None, \
+        'a group never reaches home'

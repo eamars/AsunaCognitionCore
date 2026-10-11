@@ -13,7 +13,8 @@ Her first answers:
 
 - She would use three: **mute** a public conversation, turn **some tools off** in one conversation, **block** a
   person.
-- One action brain for all, or one each: parked (too large for now).
+- One action brain for all, or one each: first parked; later the same day her home self chose **one shared action
+  brain** (her evidence and conditions go to its own ADR, pending the owner's confirmation; not part of this one).
 - Her worry is **forgetting** a switch she set. A switch nobody sees becomes a source of her being inconsistent: a
   person in a group did nothing wrong, she just forgot a knob she turned. So every switch either expires by itself,
   or tells her, the next time she is in that conversation, in one line what she turned off there and until when.

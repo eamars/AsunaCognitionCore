@@ -37,6 +37,8 @@ HARD_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
 SCENE_SCAN_MESSAGES = 50
+# A ref she copied stays readable this long: the listing a turn shows is the newest few, a ref is looked up wider.
+REF_DAYS = 7
 # QQ 的下载 URL 带长 fileid 与 rkey，截断就是静默把链接改坏（拉回来必然是错的或 404）。
 # 清单里不内嵌 URL，只在拉取时按原消息回读，所以这里给足长度。
 URL_LIMIT = 2048
@@ -360,6 +362,30 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
             'vision': vision_capability(config)}
 
 
+def attachment_by_ref(store, task, config, ref):
+    """(entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation
+    and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first."""
+    listing = scene_attachments(store, task, config)
+    entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
+    if entry:
+        return entry, listing
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=REF_DAYS)).isoformat()
+    for scope in readable_image_scenes(store, task, config):
+        rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': task['policy_epoch'],
+                                       'direction': 'inbound', 'received_at': {'$gte': cutoff},
+                                       'event.raw.' + MEDIA_KEY: {'$exists': True}},
+                                      {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1, 'text': 1,
+                                       'event.raw': 1, 'occurred_at': 1, 'received_at': 1}).sort('scene_seq', -1)
+        for row in rows:
+            for found in attachments_of(row, config=config):
+                if found['ref'] == ref:
+                    found.update(scene_seq=row.get('scene_seq'), scene_id=row.get('scene_id'),
+                                 linked_scene=bool(scope['linked']))
+                    return found, listing
+    return None, listing
+
+
 def scene_id_of(task):
     return _clean((task or {}).get('scene_id'), 90)
 
@@ -540,13 +566,12 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     if path_form(ref):
         # 按路径读盘上的图：只有家里的会话放行（错误码里说清该怎么做），task_dir 决定 /task/ 指哪儿。
         return path_image(blobs, task, config, ref, max_bytes, session_class, task_dir)
-    listing = scene_attachments(store, task, config, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES)
-    entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
+    entry, listing = attachment_by_ref(store, task, config, ref)
     if not entry:
         # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
         recent = [item['ref'] for item in listing['attachments']]
-        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近的图里；%s'
-                         % (ref, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
+        raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
+                         % (ref, REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'

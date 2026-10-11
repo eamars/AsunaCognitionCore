@@ -53,4 +53,7 @@ Pictures in her QQ groups often could not be read a while after they were posted
   known yet; add it when one is seen), `IMAGE_SIGNATURE_UNAVAILABLE`. An unsigned link fails as before.
 - **To verify after install:** the adapter log shows `MEDIA_KEYS posted=qq-group,qq-private`; Xiaoman re-reads a
   group picture several days old.
-
+- **How far back a ref reaches** (found in the same test): a ref resolved only among the newest 8 pictures of the last
+  50 inbound lines, so a busy group's picture was out of reach within hours even with a valid key. A ref is now found
+  among the last 7 days of pictures in the same scenes; the listing a turn shows stays the newest few (owner
+  2026-10-11: 7 days, no more effort).

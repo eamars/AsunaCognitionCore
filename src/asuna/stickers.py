@@ -106,7 +106,7 @@ def keep(store, blobs, ep, persona, args, config):
     """Put a sticker on her shelf: an att- ref of a sticker in this conversation, or a blob- id of a picture
     she made herself."""
     from .outbound_media import produced, sniff_media_type
-    from .vision import ARTIFACT_REF, media_source, pull_bytes, scene_attachments
+    from .vision import ARTIFACT_REF, attachment_by_ref, media_source, pull_bytes
     name, when = _name(args.get('name')), _when(args.get('when'))
     ref = str(args.get('ref') or '').strip()
     if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
@@ -124,8 +124,7 @@ def keep(store, blobs, ep, persona, args, config):
                    picture=_picture_of(store, ref))
     else:
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
-        listing = scene_attachments(store, scene, config)
-        entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
+        entry, _ = attachment_by_ref(store, scene, config, ref)
         if not entry:
             raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
         if not entry.get('sticker'):
@@ -662,7 +661,7 @@ def recognized(store, persona, entries, fetch=None):
 
 def remember(store, ep, persona, args, config):
     """She looked at a posted sticker or a candidate this turn and names it, without keeping it."""
-    from .vision import scene_attachments
+    from .vision import attachment_by_ref
     name, when = _name(args.get('name')), _when(args.get('when'))
     looked = ep.get('looked') or []
     candidate = str(args.get('candidate') or '').strip()
@@ -678,7 +677,7 @@ def remember(store, ep, persona, args, config):
         return {'remembered': name}
     ref = str(args.get('ref') or '').strip()
     scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
-    entry = next((item for item in scene_attachments(store, scene, config)['attachments'] if item['ref'] == ref), None)
+    entry, _ = attachment_by_ref(store, scene, config, ref)
     if not entry:
         raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
     if not entry.get('sticker'):

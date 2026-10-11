@@ -145,6 +145,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `attachments_of` — 一条消息 → 有界附件清单（只列图片；其它类型只保留占位符事实）。
 - def `readable_image_scenes` — 本任务能读图的范围：本场景（围栏照旧）+ 配置声明的只读联动场景（A2 同一口径）。
 - def `scene_attachments` — 本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
+- def `attachment_by_ref` — (entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation and its linked scenes (the same fence as scene_attachments), or (None, listing).
 - def `scene_id_of`
 - def `pull_bytes` — 按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 - def `resolve_image_file` — 路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。

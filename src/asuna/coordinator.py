@@ -317,6 +317,9 @@ class Coordinator:
         self.store.audit(ep['_id'],'turn.output',{'operation':operation,**content_ref(value.content),
             'reasoning':content_ref(value.reasoning),'finish_reason':value.finish_reason,'diagnostic':value.diagnostic,
             'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
+        if getattr(value,'prompt_tokens',None):
+            # ADR-049: words about the conversation's length come from this; the number is never shown to her.
+            self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'conversation_tokens':int(value.prompt_tokens)}})
         require_current_feedback(self.store, ep)
         return value
 

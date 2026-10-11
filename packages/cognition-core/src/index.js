@@ -535,6 +535,7 @@ export class CognitionCore {
           : event.method === 'render_svg' ? await renderSvg(event.args)
           : event.method === 'carry_session' ? await carrySession(this, event.args)
           : event.method === 'retitle' ? await retitleSession(this, event.args)
+          : event.method === 'compact_session' ? await this.compactSession(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its
@@ -635,9 +636,30 @@ export class CognitionCore {
     return handle.agent;
   }
 
+  /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
+   * Never during a turn there. The summary is written by the session's own compaction (compaction.js). */
+  async compactSession({ session_id: id, scene_id: scene }) {
+    const compaction = this.ctx.get('compaction');
+    if (!compaction) return { compacted: false, reason: 'no_compaction_service' };
+    if (this.states.get(id)?.current) return { compacted: false, reason: 'busy' };
+    try {
+      const agent = this.ctx.agents.get(id)
+        ?? await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene } });
+      const result = await compaction.compactNow(agent, new AbortController().signal);
+      return result ? { compacted: true, items: result.shadowedSeqs.length, tokens: result.shadowedTokenCount }
+        : { compacted: false, reason: 'nothing_to_compact' };
+    } catch (error) {
+      return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };
+    }
+  }
+
   result(stage, sessionId, last, finishReason) {
+    // How long the conversation was on this request, for words about its size (ADR-049); never shown as a number.
+    const usage = last.data.usage ?? {};
+    const promptTokens = (usage.inputTokens ?? 0) + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
     return {
       content: textOf(last.data.message), finish_reason: finishReason,
+      ...(promptTokens ? { prompt_tokens: promptTokens } : {}),
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
       receipt: stage.token, request_refs: [sessionId + ':' + last.seq],

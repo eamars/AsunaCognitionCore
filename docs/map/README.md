@@ -226,6 +226,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`waiting`](../../src/asuna/waiting.py) — Who she is still waiting for: her lines of the last hour in a group that called someone with an @, or asked for an answer with `await_answer` wait=yes, whose people have not spoken there since.
 - [`places`](../../src/asuna/places.py) — Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what a visit sees.
 - [`focus`](../../src/asuna/focus.py) — Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
+- [`condense`](../../src/asuna/condense.py) — Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation early.
 - [`notes`](../../src/asuna/notes.py) — Notes between her own conversations (ADR-018, owner 2026-10-07).
 - [`scene_links`](../../src/asuna/scene_links.py) — 跨场景只读联动（A2）：一条有向边 + 一个 canonical person，配置是唯一真相。
 - [`visibility`](../../src/asuna/visibility.py) — Session class and data visibility (ADR-009 §2).

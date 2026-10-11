@@ -42,6 +42,7 @@ IDEA_CHARS = 500
 IDEAS_PAGE = 20                 # one page of her notebook (read_ideas pages and searches the rest)
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
+CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')   # ADR-049: where she decides it
 # Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
@@ -316,8 +317,10 @@ TOOLS = {
         'description': ('你在哪些群常驻：常驻的群跟平常一样；歇着的群只有 @ 你、回你的话、你在等的回话和 watch 的人会叫你，'
                         '群里的话照存照能查，不再整理成小结。op=list 列出常驻和歇着的群和它们这一天说了多少句；'
                         'op=active 让一个群常驻，op=rest 让它歇着（place 照抄 list 或 places_from_program 里的 place；'
-                        '在群里不写 place 就是这个群）。你当管理员的群一直常驻。常驻多了有代价，超过平常的数目时结果里会说。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest']),
+                        '在群里不写 place 就是这个群）。你当管理员的群一直常驻。常驻多了有代价，超过平常的数目时结果里会说。'
+                        'op=condense：等这个群安静下来，把它的对话压一压（前面变成一段摘要，之后读回来快）；只在出门看群'
+                        '的那一轮、或在家里的心跳和反思里用；op=keep 收回这个选择。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep']),
                        'place': _s('哪个群：place，可省略（在群里就是这个群）')},
     },
     'place_timezone': {
@@ -1463,8 +1466,10 @@ class RoleTools:
     def tool_group_focus(self, ep, call_id, args):
         from . import focus, places
         op = args.get('op')
-        if op not in ('list', 'active', 'rest'):
-            raise Refused('op 是 list、active 或 rest%s。' % _given(args, 'op'))
+        if op not in ('list', 'active', 'rest', 'condense', 'keep'):
+            raise Refused('op 是 list、active、rest、condense 或 keep%s。' % _given(args, 'op'))
+        if op in ('condense', 'keep') and turn_kind(ep) not in CONDENSE_TURNS:
+            raise Refused('压不压一个群的对话，只在出门看群的那一轮、或在家里的心跳和反思里定；正聊着的时候不定。')
         if op == 'list':
             return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
                     focus.soft_limit(self.store.config)}, False
@@ -1481,6 +1486,17 @@ class RoleTools:
             raise Refused('在家里要写 place：照抄 group_focus 的 list 或 places_from_program 里的 place。')
         if not scene:
             raise Refused('这个群还没有记录（还没人在那儿说过话）；等有人说话以后再改。')
+        if op in ('condense', 'keep'):
+            from . import condense
+            if scene.get('kind') != 'group':
+                raise Refused('只有群的对话能这样压。')
+            if op == 'keep':
+                return condense.unmark(self.store, scene, ep), False
+            answer = condense.mark(self.store, scene, ep)
+            scheduler = getattr(self.coordinator, 'scheduler', None)
+            if scheduler:                     # the home plan that looks every few minutes while a group is marked
+                scheduler.ensure_condense()
+            return answer, False
         try:
             return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
         except ValueError as exc:

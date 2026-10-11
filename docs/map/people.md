@@ -210,6 +210,27 @@ Her active and resting groups (ADR-039): she stays present in a few groups and l
 - def `listing` — Her groups by state, with the last day's lines, in words for her.
 - def `set_focus` — She makes a group active or lets it rest.
 
+## `condense`
+
+[src/asuna/condense.py](../../src/asuna/condense.py)
+
+Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation early.
+
+- def `per_day` — Average incoming lines a day there over the last week.
+- def `quiet_minutes` — How long the group must be quiet before condensing, by how busy it is.
+- def `last_line` — When someone other than her last spoke there; her own lines never restart the wait.
+- def `night_there`
+- def `due` — Whether a marked group may be condensed now.
+- def `size_words`
+- def `main_session` — The character session this group's conversation continues in now (native_worker.resolve_role_session).
+- def `mark`
+- def `unmark`
+- def `marked`
+- def `look` — Condense every marked group that is due.
+- def `condensed_block` — Once after condensing: until she next speaks there, or for a day.
+- def `last_look` — When she last visited this group before this visit (the heartbeat plan's ledger), or None.
+- def `phrases` — At most five phrases of this group for a write_notes visit: used by at least three people there over the last week, on at least three different days (a group's own words come back; a day's topic does not), at least once since her last look,
+
 ## `notes`
 
 [src/asuna/notes.py](../../src/asuna/notes.py)

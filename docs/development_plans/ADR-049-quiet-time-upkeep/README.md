@@ -1,7 +1,7 @@
 # ADR-049: Quiet-time upkeep of a group: learning from it and condensing early
 
-Status: **Accepted 2026-10-12** after Xiaoman's review; not built. The owner orders it after the bot-detection
-skill (ADR-047).
+Status: **Accepted and built 2026-10-12** after Xiaoman's review; the owner moved it to the same night. Live after
+her next restart.
 
 ## Context
 
@@ -101,3 +101,21 @@ and whether at all, is the owner's decision.
 - Matching a phrase at reply time (MaiBot's plain string match against her notes): she has reservations, because a
   plain match can attach last week's meaning to this week's use of the same word. If it comes, each match carries
   the group and the date she inferred it, and says she may drop it on the spot.
+
+## Built (2026-10-12)
+
+- `condense.py`: the quiet tiers, the local night, her mark (`group_focus` op `condense` / `keep`, in visit, heartbeat,
+  self-improvement and settlement turns), the look that condenses due groups, the once-only note after condensing, the
+  size words, and the phrases for a `write_notes` visit.
+- The home plan `plan-asuna-condense` (every 5 minutes, only while a group is marked) runs each look off the scheduler
+  thread; the plugin's `compact_session` Host request runs DSH's own compaction on the group's main session and
+  refuses during a turn there.
+- Each turn's result carries the prompt length of its latest request; the scene keeps it for the size words.
+- Phrases, tried on her four busiest groups' real week before building: the first rule (three people since her last
+  look) surfaced a day's topic in five overlapping pieces and ordinary words; requiring three different days, leaving
+  out what two people use in two other groups, pieces of pure function characters and overlaps gave each group's own
+  vocabulary (accounts and quotas in one, gear in another, API relays in a third), with a few common words left for
+  her to skip. About 2.5 s a visit.
+- Not built: the reflection-turn phrases (her reflection runs at home, and other people's words reach home only
+  through her reviewed paths, ADR-017); matching phrases at reply time (her reservation stands).
+- Tests: `tests/test_adr049_upkeep.py`, `packages/cognition-core/test/condense.test.js`.

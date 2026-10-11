@@ -22,7 +22,7 @@ except Exception:                     # 同目录平铺加载（离线自检）�
 
 # Her rhythm plans belong to the program (ADR-012 §4.3): she never sees them in her plan list, so she cannot
 # cancel or retime them there; she sets the heartbeat's pace through her policy keys.
-RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
+RHYTHM_KINDS = ('presence', 'settlement', 'self_development', 'condense')
 # ADR-021: night self-development stages ride one native tick; each tick decides whether a stage is due.
 NIGHT_PLAN = 'plan-asuna-self-development-night'
 NIGHT_TICK_SECONDS = 600
@@ -71,11 +71,11 @@ HEARTBEAT_GRACE_SECONDS = 300         # a heartbeat silent for two beats and thi
 # Her rhythm tasks' names in DSH's task page, in the language of the browser that last opened the Web UI: the Host
 # gives them from the core's locale files (ui-language.js, set_titles). The night tick only asks whether a night stage
 # is due (ADR-021), so it is named apart from the daily turn.
-RHYTHM_TITLES = {'presence': 'Heartbeat', 'settlement': 'Nightly settlement',
+RHYTHM_TITLES = {'presence': 'Heartbeat', 'settlement': 'Nightly settlement', 'condense': 'Condense quiet groups',
                  'self_development': 'Daily self-improvement', 'self_development_night': 'Night self-improvement check'}
 
 
-RHYTHM_KINDS = ('presence', 'settlement', 'self_development')
+RHYTHM_KINDS = ('presence', 'settlement', 'self_development', 'condense')
 
 
 def set_titles(titles):
@@ -120,7 +120,7 @@ class ScheduleService:
         self.reconcile()
         self.ensure_self_development()
         self.ensure_night_development()
-        for ensure in (self.ensure_presence, self.ensure_settlement):
+        for ensure in (self.ensure_presence, self.ensure_settlement, self.ensure_condense):
             try:
                 ensure()
             except Exception as exc:          # a refused heartbeat/settlement plan never blocks the host
@@ -326,7 +326,8 @@ class ScheduleService:
         if not plan:
             plan = self.store.put('plans', {'_id': plan_id, 'kind': kind, 'scene_id': scene['_id'], 'person_id': person,
                 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'], 'status': 'CREATING',
-                'intent': {'presence': '在场机会（心跳）', 'settlement': '夜间沉淀'}[kind], 'rule': rule,
+                'intent': {'presence': '在场机会（心跳）', 'settlement': '夜间沉淀', 'condense': '安静了的群压一压对话'}[kind],
+                'rule': rule,
                 'plan_version': 1, 'created_at': now(), **(extra or {})}, stream=plan_id)
         creates, _, deleted = self._grouped(self._native_events())
         live = plan.get('schedule_id') in creates and plan['schedule_id'] not in deleted
@@ -452,6 +453,43 @@ class ScheduleService:
         rule = {'clock': {'time': settle_at}, 'settlement_zone': zone}
         return self._rhythm_plan('plan-asuna-settlement', 'settlement', scene, person, rule,
                                  {'daily': {'time': settle_at + ':00', 'time_zone': zone}}, {'timezone': zone})
+
+    def ensure_condense(self):
+        """ADR-049: a home plan that looks every few minutes, only while some group is marked to be condensed."""
+        from . import condense
+        from .persona_data import persona_runtime
+        if not condense.marked(self.store):
+            self._retire(condense.PLAN_ID, 'no group marked to condense')
+            return None
+        persona, _, _ = self._persona()
+        target = persona_runtime(self.app.config, persona).get('internal_scene') or self.app.config['chat']['scene_id']
+        scene, person = self._owner_private_target(target, 'CONDENSE')
+        every = condense.LOOK_EVERY_SECONDS
+        with self.rhythm_lock:
+            return self._rhythm_plan(condense.PLAN_ID, 'condense', scene, person, {'every_seconds': every},
+                                     {'every_seconds': every})
+
+    def _condense(self, plan, occurrence):
+        """One look: condense the marked groups that are due, off this thread (a summary takes a while)."""
+        from . import condense
+        persona, _, _ = self._persona()
+        worker = getattr(self.lane, 'worker', None)
+        if not worker:
+            return 'SKIPPED:NO_HOST'
+
+        def compact(session_id, scene_id):
+            return worker.host_call('compact_session', {'session_id': session_id, 'scene_id': scene_id})
+
+        def run():
+            try:
+                condense.look(self.store, persona, compact)
+            finally:
+                try:
+                    self.ensure_condense()            # retires itself once nothing is marked
+                except Exception as exc:
+                    self.store.audit('condense', 'condense.plan_failed', {'error': str(exc)[:200]})
+        threading.Thread(target=run, name='asuna-condense', daemon=True).start()
+        return 'LOOKING'
 
     def next_beat(self):
         """When DSH will next deliver her heartbeat (its own record), or None."""
@@ -996,6 +1034,8 @@ class ScheduleService:
                 outcome = self._presence(plan, occurrence)
             elif plan.get('kind') == 'settlement':
                 outcome = self._settlement(plan, occurrence)
+            elif plan.get('kind') == 'condense':
+                outcome = self._condense(plan, occurrence)
             else:
                 # A due plan is a core notice, not a platform input: it carries no channel envelope (that would
                 # be re-checked as a member's message and shown as one in the conversation). It wakes as a

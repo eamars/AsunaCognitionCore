@@ -102,7 +102,7 @@ class Desk:
             items.append('还没确认送到的话 %d 条：在发的那条会变成「没给准话」，不会自动重发' % unsent)
         soon = (moment + timedelta(minutes=PLANS_AHEAD_MINUTES)).isoformat()
         for plan in store.db.plans.find({'status': 'ACTIVE', 'next_fire_at': {'$lte': soon},
-                                         'kind': {'$nin': ['presence', 'settlement', 'self_development']}},
+                                         'kind': {'$nin': ['presence', 'settlement', 'self_development', 'condense']}},
                                         {'intent': 1, 'next_fire_at': 1}).limit(5):
             items.append('%s 要响的计划「%s」：停着的时候到点，起来后补响' % (line_stamp(_zone(self.zone), plan['next_fire_at']), str(plan.get('intent', ''))[:30]))
         record = last(self.root)

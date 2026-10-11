@@ -440,7 +440,7 @@ class ContextBuilder:
         plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
             'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
             # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
-            'kind':{'$nin':['self_development','presence','settlement']},
+            'kind':{'$nin':['self_development','presence','settlement','condense']},
             'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
             {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
              'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,
@@ -606,7 +606,7 @@ class ContextBuilder:
                 if _line['scene_id']==event['scene_id']:
                     continue
                 _rows=list(self.store.db.plans.find({'scene_id':_line['scene_id'],'status':{'$in':['CREATING','ACTIVE']},
-                    'kind':{'$nin':['self_development','presence','settlement']}}).sort('created_at',-1).limit(3))
+                    'kind':{'$nin':['self_development','presence','settlement','condense']}}).sort('created_at',-1).limit(3))
                 if _rows:
                     _scene=self.store.db.scenes.find_one({'_id':_line['scene_id']}) or {'_id':_line['scene_id']}
                     _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
@@ -863,6 +863,18 @@ class ContextBuilder:
             # event only authorizes the turn, so no block speaks of a current speaker.
             from . import places
             context['visit_from_program']=places.visit_block(self.store,scene,event.get('visit') or {},moment)
+            # ADR-049: how long this conversation is, and on a write_notes visit the phrases to work out.
+            from . import condense
+            upkeep={}
+            if condense.size_words(scene):
+                upkeep['conversation']=condense.size_words(scene)
+            if (event.get('visit') or {}).get('intent')=='write_notes':
+                found=condense.phrases(self.store,scene,persona,condense.last_look(self.store,scene['_id'],
+                                                                                   event.get('event_id')),moment)
+                if found:
+                    upkeep['phrases']=found
+            if upkeep:
+                context['visit_from_program']['upkeep']=upkeep
             for key in ('relationship','sender_identity','understanding_update_from_program'):
                 context.pop(key,None)
         if event.get('episode_kind')=='note':
@@ -873,6 +885,9 @@ class ContextBuilder:
             # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
             from . import places
             context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
+            from . import condense
+            if condense.condensed_block(self.store,scene,moment):
+                context['condensed_from_program']=condense.condensed_block(self.store,scene,moment)
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

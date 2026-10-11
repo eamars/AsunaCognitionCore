@@ -226,6 +226,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `relay` — Her words for a running action session (collab.js), marked so its claim can be acknowledged.
   - `onEvent`
   - `ensureAgent`
+  - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
   - `result`
   - `workerFailed`
   - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data, since the Host's own log is not kept.

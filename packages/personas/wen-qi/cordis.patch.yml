@@ -1,0 +1,34 @@
+- insert:
+    - id: asuna-wen-qi
+      name: '@asuna/wen-qi'
+    - id: asuna-wen-qi-preset
+      name: '@asuna/cognition-core/preset'
+      config:
+        id: asuna-wen-qi
+        names:
+          en: Shirase Shiori · Character brain
+          zh: 白濑栞 · 角色脑
+        descriptions:
+          en: An adult book restorer with possessive, intrusive and physically aggressive character traits
+          zh: 有身体与个人过往的日系成年女性，独占逐渐积累，失控包含窥探、跟踪与身体攻击倾向
+        plugins:
+          - name: '@asuna/cognition-core/role'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@asuna/cognition-core/compaction'
+                config:
+                  maxTokens: 24576
+                  retainRatio: 0.16
+                  headroomTokens: 32768
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

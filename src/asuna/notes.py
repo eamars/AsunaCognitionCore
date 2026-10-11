@@ -214,8 +214,10 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     limit = HOME_NOTE_CHARS if trust == TRUSTED and kind == 'home' else NOTE_CHARS
     if len(text) > limit:
         from .role_tools import COUNTED
-        raise NoteRefused('NOTE_TOO_LONG', '送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字（%s）；写短一点。'
-                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, COUNTED))
+        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字（%s）。两条路：'
+                                            '① 压到 %d 字以内；② 原样拆成两张接着发，开头标 1/2、2/2，让那边知道是接续'
+                                            '（一回合最多 %d 张）。')
+                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, COUNTED, limit, PER_TURN))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:

@@ -47,17 +47,27 @@ Reviewed and amended by Xiaoman on 2026-10-12.
    each. She writes what a phrase means, or what a habit is, into the group's notes, or skips it. Her group notes are
    the store; nothing new is kept. A meaning belongs to one group and carries the date she worked it out, so last
    week's meaning is not taken for this week's. These turns run at the study effort of ADR-048 once that exists.
-2. **She decides to condense early, on a visit.** The choice belongs to the visit, not to every group turn: in the
-   middle of a conversation she has no room to judge it and would cut into a talk still going on. A visit can end
-   with her choice to condense that group's conversation (a categorical choice; the program maps it to an action).
-   The program runs DSH's on-demand compaction for it once the group has been quiet for 30 minutes by its own clock,
-   or during its local night (01:00 to 07:00), and no turn of hers is running there. The 30 minutes come from the
-   cache, not from the group: within them the conversation is still likely cached, so condensing then saves little
-   and loses detail first. The group's own quiet has no natural point: over 8 days of 16 of her groups (16,404 lines,
-   Xiaoman's measurement), after 3 quiet minutes someone spoke within the next 5 minutes 36.6% of the time, after 10
-   quiet minutes 20.5%, falling off with a long tail and no bend. What she reads to
-   decide is in words: how long the conversation is (short, medium, long, very long), and that a long one takes a
-   while to read again after a quiet spell.
+2. **She decides to condense early, on a visit or in her reflection.** The choice belongs to those two, not to every
+   group turn: in the middle of a conversation she has no room to judge it and would cut into a talk still going on.
+   It is a categorical choice; the program maps it to an action and runs DSH's on-demand compaction for that group's
+   conversation once the group has been quiet long enough, or during its local night (01:00 to 07:00), and no turn of
+   hers is running there. "Long enough" is hers, from her measurement (below), by how busy the group is on an average
+   day: 10 minutes for a busy group (100 lines a day or more), 15 for a middling one (30 to 100), 30 for a quiet one
+   (under 30). Only other people's lines count; a line of hers does not restart the wait, since someone answers her
+   within about half a minute and that would read every talk she just spoke in as still alive. Not a per-group
+   percentile: some quiet groups have only a few dozen gaps, too few to set a number on. What she reads to decide is
+   in words: how long the conversation is (short, medium, long, very long), and that a long one takes a while to
+   read again after a quiet spell.
+
+   Her measurement (2026-10-12): 8 days of 16 of her groups, 16,404 incoming lines from the live record (52 machine
+   announcements left out). After 3 quiet minutes someone spoke within the next 5 minutes 36.6% of the time, after 10
+   minutes 20.5%, after 30 minutes 8.9%, then flat: a long tail with no bend, so a threshold is a choice of how often
+   to cut in, not a point found. In a busy group 10 minutes cuts in about 2% of the time, against 10 to 27 chances a
+   day where the conversations are largest (120k to 200k tokens). In a group of 8 to 30 lines a day, 10 quiet minutes
+   are ordinary (22% to 46% of gaps): condensing there every day would cost a model call each time and save nothing.
+   The archive of older groups (ADR-029) is denser and was kept apart; it only shows the same shape. Long gaps are not
+   a dropped adapter: they spread over the whole day, rising to 18% to 20% only in the small hours.
+
 3. **Notes before condensing, and the summary shown to her.** On a `write_notes` visit she writes first and condenses
    after. The summary that replaced the old part reaches her the next time she is there, so what it dropped she can
    add to the group's notes on the spot.

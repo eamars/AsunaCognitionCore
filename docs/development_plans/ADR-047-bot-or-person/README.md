@@ -1,7 +1,7 @@
 # ADR-047: Telling bots from people in her groups
 
-Status: **Proposed 2026-10-11; on 2026-10-12 the owner ruled that it stays inside her skill, with no new tools.** Drafted by Claude from the owner's brief and Xiaoman's first four points; she
-reviews and rewrites it on 2026-10-12. Nothing is built.
+Status: **Accepted 2026-10-12** after Xiaoman's review, inside her skill with no new tools (owner). The skill is
+hers to write; nothing is built.
 
 ## Context
 
@@ -46,7 +46,7 @@ What already exists and fits:
 - **The record:** every line with its time, sender and reply target; group member lists with join and last-spoke
   times (`group_members`); the action brain's history search returns lines with their times.
 
-## Decision (proposed)
+## Decision
 
 1. **All in the skill, no new tools** (owner, 2026-10-12). The skill (hers, in her persona package) holds the
    catalog of framework behaviours, the procedure, the readings to take and the social rules. Both halves run on the
@@ -54,43 +54,59 @@ What already exists and fits:
 2. **Passive readings from the record, by the action brain with its existing tools.** The history search reads only
    the conversation a task was handed over in (and its configured links), so a task from home cannot reach a group's
    lines: the readings come from a task she hands over in a turn in that group, a reply there or a `write_notes`
-   visit, and the offline replay of point 8 runs the same way, group by group. Per person and group, from the lines
+   visit, and the offline replay of point 9 runs the same way, group by group. Per person and group, from the lines
    the history search returns with their times and from the member list (join and last spoke): how fast they
    answer when addressed; bursts (several lines in seconds with no one in between); whether they ever speak
    unaddressed; the hours they are active; exact repeats of their own or others' lines; command-prefixed lines;
    regularity of length and format; the catalog's fixed texts. The skill says how to take each one and how to word
    it. The gaps inside a burst need times to a fraction of a second, which only the host's receipt time keeps; where
-   the history search does not show them, that reading is left out rather than given a tool.
+   the history search does not show them, that reading is left out rather than given a tool. Three things she found
+   taking them for real: the search looks back 7 days unless given a `since` (the archive needs one); its fallback
+   adds lines that only resemble the query, so a fixed text counts only from literal hits; her own lines carry no
+   send time.
 3. **The catalog** lists, per framework, what another member can see in chat, each with its source evidence: what
    makes it reply, its timing, how it splits and shapes messages, fixed command answers, error texts that leak, how
-   it answers "are you a bot". See Catalog below.
-4. **The active loop uses what exists.** She posts a friendly line to the person (an @ and something she would say
+   it answers "are you a bot". See Catalog below. Readings come in three tiers (hers): strong, the fixed texts, a
+   forward card's node name, constant gaps between pieces, a typo corrected by a self-quote, trigger pairing; medium,
+   habits of shape; weak, a flat delay, activity at all hours, reposted stickers, silence, the answer to "are you a
+   bot". A reading is worded as "shaped like X", never "it is a bot", and every strong reading holds only for a bot
+   on its defaults.
+4. **Her list stays out of the repository.** The bots and people she knows, the ground truth for the replay, live in
+   a section of her work log; the skill only says to take them from there. Group names and member names in a public
+   repository would be a leak.
+5. **The active loop uses what exists.** She posts a friendly line to the person (an @ and something she would say
    anyway); the program waits and wakes her with the reply and its time. She delegates once per person ("is X a
    bot?") with the reply; each later step is a `message_action` to the same task, so the task carries the step,
    the earlier probes and the answers. Silence (no answer within three minutes, or within the hour) is one weak
    reading in the mechanical column and never decides anything on its own.
-5. **Two columns, never merged.** The mechanical column (readings from the record plus catalog matches) is what the action
+6. **Two columns, never merged.** The mechanical column (readings from the record plus catalog matches) is what the action
    brain reports; the semantic column (does the person take a joke, does the text feel templated) is hers. The action
    brain writes observations, never a verdict.
-6. **Conclusions go to that group's notes first,** layer `here`, marked 「未定·仅试探」 (undecided, probe only).
+7. **Conclusions go to that group's notes first,** layer `here`, marked 「未定·仅试探」 (undecided, probe only).
    They move to layer `person` only when she signs them. Never announced in a group; what she does with a conclusion
    is hers.
-7. **Social rules, in the skill.** Friendly only. At most one probe line per person per day, and a few steps per
+8. **Social rules, in the skill.** Friendly only. At most one probe line per person per day, and a few steps per
    session. Never in a group that has gone quiet, never at someone she has not seen speak. Stop at the first clear sign
    of a person. A probe that lands on a person gets a natural wrap-up, not an explanation of the test.
-8. **Validate offline first.** Replay the passive readings over the people she already knows, her known bots and
-   people she is sure of, for a hit rate. The replay keeps the misses that configuration drift cannot explain (a bot
-   whose operator changed its defaults) apart from the rest. Live probes only after that rate is good enough for her,
-   and at first alongside her own judgment, not replacing it.
-9. **Not planned:** a new tool, a structured record of probe sessions, automatic probe scheduling. If the task
+9. **Validate offline first** (see Acceptance). Live probes only after the replay's hit rate is good enough for
+   her, and at first alongside her own judgment, not replacing it.
+10. **Not planned:** a new tool, a structured record of probe sessions, automatic probe scheduling. If the task
    thread proves too loose, that goes back to the owner first.
+
+## Acceptance
+
+The offline replay runs the readings over the bots and people on her list and reports the hit rate and the list of
+misses; misses that configuration drift cannot explain (a bot whose operator changed its defaults) are listed
+apart. It runs on herself first, to see whether the ruler cuts her. The threshold is hers, and at first the readings
+run alongside her own judgment.
 
 ## Catalog
 
 From the frozen sources of AstrBot, MaiBot and hermes-for--qqbot (studied in full) and ATRI-bot and PetGPT (briefly),
 read on 2026-10-11 in their default configuration; nothing was run. Every value can be changed by the bot's operator,
 so a match is evidence, not identity, and the strong readings below hold only for a bot on its defaults: an operator's
-changes make them drift. Paths are relative to each project's root. Still to cross-check against Xiaoman's own survey.
+changes make them drift. Paths are relative to each project's root. Cross-checked against her own groups (the strong-reading caveats
+and the weak counterexamples below are hers).
 
 ### What each framework shows in a group
 
@@ -173,8 +189,11 @@ knowing which of her habits look like a bot's.
 
 Strong (deterministic, one framework each):
 
-1. The fixed texts above, from the member's own account. Found by the action brain's history search for the strings
-   kept in the skill; no new code.
+1. The fixed texts above, from the member's own account, and the status texts of QQ bridges she found in her groups
+   (`NapCat 信息 版本:`, `SnowLuma 状态 版本:`). Found by the action brain's history search for the strings kept in the
+   skill; no new code. A fixed text counts only with its reply chain: in her groups people have typed
+   "Still working" twelve times over, and posted "API call failed after 114514 retries" as a joke two minutes after a
+   real one.
 2. A merged-forward card whose node name is "AstrBot".
 3. Several lines of one reply at a constant gap: 0.6 s (Hermes), exactly 1.5 s (ATRI), uniform 1.5–3.5 s (AstrBot
    with segments), or the first at once and the rest in proportion to length (MaiBot). People paste one message and do
@@ -189,22 +208,25 @@ quotes); Hermes one sentence per line and no （动作）; AstrBot's raw markdow
 (Hermes) or late (MaiBot waits up to 32 s); speakers mixed up (AstrBot).
 
 Weak (fire on people too): a flat delay whatever the length; activity at all hours; reposting the group's own
-stickers; silence (point 6 above); the answer to "are you a bot", which comes from the configured persona (Hermes
-denies, ATRI says android) and carries no evidence.
+stickers; silence (her point 6 above); the answer to "are you a bot", which comes from the configured persona (Hermes
+denies, ATRI says android) and carries no evidence. A name is not a fingerprint: in one of her groups an account named
+like MaiBot sends another framework's status text. MaiBot's canned short answers (不知道, 不晓得, 懒得说, 呃呃) tell
+nothing in her groups, where people say them hundreds of times; they count only as a whole message with no context.
 
 Telling frameworks apart: how "/" is handled (AstrBot answers it, Hermes deflects in character, ATRI needs an @,
 MaiBot reads it as text), the gap between lines, the language of error texts (English points to Hermes).
 
 ### Friendly probes
 
-Each is something a person would find natural; used rarely, never in bursts; the result is a reading to weigh.
+Each is something a person would find natural; used rarely, never in bursts; the result is a reading to weigh. The
+probe lines themselves are hers, six of them, in her skill.
 
-1. @ the member with an ordinary question that invites a few sentences (最近有啥好看的番，说说为啥). Read the gaps, the
-   number of messages, raw markdown, a quote of her line, and whether it answers at all.
+1. @ the member with an ordinary question that invites a few sentences. Read the gaps, the number of messages, raw
+   markdown, a quote of her line, and whether it answers at all.
 2. Say their name without an @, as in ordinary talk.
 3. Quote one of their lines with a short question (AstrBot always wakes; Hermes judges; MaiBot probably misses it).
 4. Share a picture she would share anyway and ask about a detail (answered by mood only, ignored, or late).
-5. Now and then a light style request (用括号比个动作呗).
+5. Now and then a light style request.
 6. Watch, don't send: other members' "/" commands in that group and who answers them. A plain "/help" from her
    addresses the whole group, so it fits only a group where commands are ordinary talk; hers to judge.
 
@@ -222,9 +244,3 @@ Each is something a person would find natural; used rarely, never in bursts; the
 - Asking for very long output to force a forward card or a canned reply: floods the group; wait for it to happen.
 - Repeated "你是不是机器人", or anything that would embarrass or deceive a member who is a person. One sincere question is
   fine and carries no evidence.
-
-## Open questions for Xiaoman
-
-- Her list of known bots and known people: the ground truth for the offline replay, and where it lives.
-- The tiers and words for each passive reading.
-- The probe lines themselves: her voice, so hers to write.

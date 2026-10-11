@@ -1,7 +1,8 @@
 # ADR-048: Thinking effort by what she is doing, not by the conversation
 
-Status: **Proposed 2026-10-12.** Drafted by Claude from the owner's request; Xiaoman reviews. Nothing is built. No
-server change is needed; the probe in step 4 needs the owner's GPU time.
+Status: **Proposed 2026-10-12; on hold until the full benchmark** (owner: the most cache hits first). Drafted by
+Claude from the owner's request, with Xiaoman's condition. Nothing is built. No server change is needed; the probe in
+step 4 needs the owner's GPU time.
 
 ## Context
 

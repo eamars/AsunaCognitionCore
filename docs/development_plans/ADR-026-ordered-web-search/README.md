@@ -1,7 +1,8 @@
 # ADR-026: Her web search tries the owner's SearXNG first
 
 Status: **Accepted and built** 2026-10-08. The owner's proposal; the owner decided each open point from measured
-options. **Amended** 2026-10-08: a Gemini backend between SearXNG and Exa (§4), accepted, not built.
+options. **Amended** 2026-10-08: a Gemini backend between SearXNG and Exa (§4), accepted and built, then out of the live
+order the same day (§4.5).
 
 ## 1. Context
 

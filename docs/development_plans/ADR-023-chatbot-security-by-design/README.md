@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: Draft proposal for review. No implementation or change of security policy is approved by this document.
+Status: **Not adopted** (owner, 2026-10-10; below). No implementation or change of security policy comes from this document.
 
 ## Owner decision (2026-10-10): not adopted
 

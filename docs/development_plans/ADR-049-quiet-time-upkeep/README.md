@@ -1,0 +1,57 @@
+# ADR-049: Quiet-time upkeep of a group: learning from it and condensing early
+
+Status: **Proposed 2026-10-12.** Drafted by Claude from the owner's rulings and the measurements below; Xiaoman
+reviews. Nothing is built.
+
+## Context
+
+The owner's rulings, 2026-10-12, after a study of other QQ bots (AstrBot, MaiBot, a Hermes-based bot, ATRI-bot,
+PetGPT):
+
+- What she learns from a group (its slang and other habits) goes into her daily reflection or her group visits, not
+  into a new pipeline.
+- She may decide to condense (compact) a conversation early, in a quiet period.
+- No deliberate typos or other simulated human slips while she runs on the current local model: the harness comes
+  first.
+- The model server's cache cannot grow: its RAM is reserved for other services.
+
+Measured 2026-10-11 (her session logs and the model server's own figures):
+
+- Her group conversations run at 120k–200k tokens. After 5–30 idle minutes about half of them have left the server's
+  cache, after 30 minutes nearly all. A request that must read the conversation again takes about 25 s (about 6k
+  tokens a second); one served from the cache about 3 s. Her first line after an @ took a median 17 s before 10-09
+  and 27 s since, as her conversations grew.
+- The cost of a cold start grows with the conversation: at 50k tokens it would be about 8 s.
+
+What exists: visits with intent `write_notes` ("只是看看，把看到的写进群笔记"); her group notes (`doc` `group_notes`, written
+and read in that group); her night turns; DSH's on-demand compaction (`ctx.compaction.compactNow`, the path of its
+`/compact` command), which keeps the recent part of a conversation and replaces the older part with one summary, here
+written by her own character compaction (`compaction.js`).
+
+From MaiBot: group slang is worked out only after a phrase has come up several times from several people, and at
+reply time it is found by plain string matching, without a model call.
+
+## Decision (proposed)
+
+1. **Learning happens on her visits and in her daily reflection.** On a `write_notes` visit, and in the reflection
+   turn for a group, the program gives her a short list of candidate phrases: said by at least three different people
+   there since her last look, and not yet in that group's notes; as words, with roughly how many people used each.
+   She writes what a phrase means, or what a habit is, into the group's notes, or skips it. Her group notes are the
+   store; nothing new is kept. These turns run at the study effort of ADR-048 once that exists.
+2. **She decides to condense early.** A group turn or a visit can end with her choice to condense the conversation
+   once the group has gone quiet (a categorical choice; the program maps it to an action). The program then runs
+   DSH's on-demand compaction for that conversation as soon as the group has had no new line for a few minutes and no
+   turn of hers is running there, while the cache is likely still warm, so the summary is cheap and the next cold
+   start reads a smaller conversation. What she reads to decide is in words: how long the conversation is (short,
+   medium, long, very long), and that a long one takes a while to read again after a quiet spell.
+3. **Notes before condensing.** On a `write_notes` visit she writes first and condenses after, so what she wants to
+   keep is in her notes before the summary replaces the old part.
+4. **Measure, per group, before and after:** conversation size, her first-line delay after an @, how often the next
+   request finds the cache cold, and what the condensed summaries keep.
+
+## Open questions for Xiaoman
+
+- The quiet threshold, and whether the choice to condense belongs on every group turn or only on visits.
+- The candidate rule (three people? since her last look, or a fixed window?) and how many candidates a visit shows.
+- Whether matching a phrase at reply time (MaiBot's plain string match against her notes) is wanted once her notes
+  grow, or whether her notes in the turn are enough.

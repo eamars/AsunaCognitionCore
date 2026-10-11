@@ -42,7 +42,12 @@ IDEA_CHARS = 500
 IDEAS_PAGE = 20                 # one page of her notebook (read_ideas pages and searches the rest)
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
-CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')   # ADR-049: where she decides it
+# ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
+# nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
+CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')
+CONDENSE_AT_HOME = ('scheduled',)
+CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一轮定，或在家里（本机、跟主人的私聊、家里的几条线）你自己的'
+                    '心跳、反思、沉淀、或你的计划到点的那一轮定。群里和别人的私聊里有人在等你说话，那儿不定。')
 # Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
@@ -1468,8 +1473,9 @@ class RoleTools:
         op = args.get('op')
         if op not in ('list', 'active', 'rest', 'condense', 'keep'):
             raise Refused('op 是 list、active、rest、condense 或 keep%s。' % _given(args, 'op'))
-        if op in ('condense', 'keep') and turn_kind(ep) not in CONDENSE_TURNS:
-            raise Refused('压不压一个群的对话，只在出门看群的那一轮、或在家里的心跳和反思里定；正聊着的时候不定。')
+        if op in ('condense', 'keep') and not (turn_kind(ep) in CONDENSE_TURNS or (
+                turn_kind(ep) in CONDENSE_AT_HOME and self._cls(ep) == visibility.OWNER_PRIVATE)):
+            raise Refused(CONDENSE_REFUSED)
         if op == 'list':
             return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
                     focus.soft_limit(self.store.config)}, False

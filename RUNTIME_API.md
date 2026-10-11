@@ -321,9 +321,10 @@ The owner sees her reminders in DSH's own task page (the Automation tasks entry;
 
 Her groups are active or resting (`focus.py`). An active group works as described here. In a resting group a line wakes her only for `mentioned_account` or `reply_to_character` (no gate) and, through the gate, `catchup_mention`, `awaited_answer` or `watched`; any other reason is cleared at the channel intake and kept on the line as `group_context.resting`. A resting group has no proactive chance, its lines are kept and searchable but not summarized, and her turn there carries its lines of the last day (at most 40) instead of the last hour's. A group is active when its scene has `focus_active`, or when she is an owner or admin there (`people.self_role`); new groups rest. She chooses with `group_focus {op: list|active|rest, place}`: making a group active moves its `summary_start_seq` to now; resting an admin group is refused. The deployment setting `active_groups` (default 4) is the usual number of active groups: going past it works, and the result says what it costs and lists the active groups with their last day's lines. Her heartbeat's view of each group says whether it is active. A resting group's conversation title in the sidebar starts with `💤 ` (`focus.RESTING_MARK`); a change retitles it at once (the Host's `retitle` request).
 
-A group's conversation can be condensed early, on her choice (`condense.py`). In a visit turn, or at home in a
-heartbeat, self-improvement or settlement turn, `group_focus {op: condense, place}` marks a group (`condense_wanted` on
-its scene) and `op: keep` takes the mark back; any other turn is refused. While some group is marked, a program plan
+A group's conversation can be condensed early, on her choice (`condense.py`). In a visit turn, at home in a
+heartbeat, self-improvement or settlement turn, or in an owner-private turn a plan of hers woke, `group_focus {op:
+condense, place}` marks a group (`condense_wanted` on its scene) and `op: keep` takes the mark back; any other turn
+(a group, someone else's chat: someone there is waiting for her to speak) is refused. While some group is marked, a program plan
 at home (`plan-asuna-condense`, every 5 minutes, not in her plan list) condenses each marked group once someone other
 than her last spoke there long enough ago for how busy the group is (average incoming lines a day over the last week:
 100 or more 10 minutes, 30 to 100 15 minutes, fewer 30 minutes; her own lines never restart the wait), or at once

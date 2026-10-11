@@ -119,3 +119,6 @@ and whether at all, is the owner's decision.
 - Not built: the reflection-turn phrases (her reflection runs at home, and other people's words reach home only
   through her reviewed paths, ADR-017); matching phrases at reply time (her reservation stands).
 - Tests: `tests/test_adr049_upkeep.py`, `packages/cognition-core/test/condense.test.js`.
+- Amended the same night, on her rule: a turn a plan of hers woke counts too when it is at home (her local chat, the
+  owner's DM, her home lines), like her heartbeat; never in a group or someone else's chat. Her test: whether anyone
+  there is waiting for her to speak. The refusal now says so.

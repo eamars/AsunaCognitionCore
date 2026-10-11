@@ -50,8 +50,14 @@ def test_condensing_is_her_choice_on_a_visit_or_at_home_never_mid_conversation(s
     coordinator = Coordinator(store, FakeLane(store, []))
     tools = role_tools.RoleTools(coordinator)
     talking = {'_id': 'ep-1', 'persona': 'P1', 'scene_id': 'g-a', 'scope_key': 'scene:g-a', 'episode_kind': 'external'}
-    with pytest.raises(role_tools.Refused, match='正聊着的时候不定'):
+    with pytest.raises(role_tools.Refused, match='有人在等你说话'):
         tools.tool_group_focus(talking, 'c1', {'op': 'condense'})
+    # A turn a plan of hers woke counts at home (nobody is waiting for her there), never in a group or a DM.
+    planned_home = {**talking, '_id': 'ep-p', 'episode_kind': 'scheduled', 'manifest': {'session_class': 'owner_private'}}
+    planned_out = {**planned_home, '_id': 'ep-q', 'manifest': {'session_class': 'public'}}
+    with pytest.raises(role_tools.Refused, match='有人在等你说话'):
+        tools.tool_group_focus(planned_out, 'c0', {'op': 'condense'})
+    tools.tool_group_focus(planned_home, 'c0b', {'op': 'keep'})   # the rule passes; where is the turn's own group here
     visiting = {**talking, '_id': 'ep-2', 'episode_kind': 'visit'}
     answer, _ = tools.tool_group_focus(visiting, 'c2', {'op': 'condense'})
     assert '安静' in answer['done'] and store.db.scenes.find_one({'_id': 'g-a'})['condense_wanted']

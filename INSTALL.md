@@ -76,8 +76,8 @@ removing the packages returns it to the subagent view without errors.
 
 ## 5. Optional: a channel
 
-A channel package connects her to a platform: `@asuna/napcat-qq` for QQ through NapCat, `@asuna/dsh-peer` for an
-agent in another DSH. Install the package first, then configure it; a configured channel without its package stops
+A channel package connects her to a platform: `@asuna/napcat-qq` for QQ through NapCat, `@asuna/qq-bot` for QQ
+through the official QQ Bot open platform, `@asuna/dsh-peer` for an agent in another DSH. Install the package first, then configure it; a configured channel without its package stops
 the worker (`CHANNEL_PLUGIN_NOT_INSTALLED`).
 
 1. `dsh plugin --profile <name> add <release-url>/asuna-napcat-qq-<version>.tgz`, then restart the profile.
@@ -85,6 +85,7 @@ the worker (`CHANNEL_PLUGIN_NOT_INSTALLED`).
    with a managed adapter) and its tokens to the credential fields. **Save**, then **Apply saved settings**.
 
 What each channel needs, field by field, is in its README: [QQ](packages/channels/napcat-qq/README.md#setting-up-qq),
+[QQ Bot](packages/channels/qq-bot/README.md#setting-up-the-bot),
 [DSH peer](packages/channels/dsh-peer/README.md#configuration-owner-local). The channel API the adapters use is in
 [RUNTIME_API.md](RUNTIME_API.md).
 

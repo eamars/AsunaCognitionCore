@@ -11,7 +11,7 @@ Asuna runs as plugins in one native DSH **0.2.1-alpha.2** Web Host:
 
 - `@asuna/cognition-core` (`packages/cognition-core`) supplies cognition, task/channel authorization, the business worker, and publication tools. It names no persona and no platform.
 - **One persona package** (`packages/personas/*`) supplies the persona baseline, selected skills and its role preset. Any persona package can replace another; `tests/fixtures/personas/demo` is a synthetic one.
-- **Any number of channel packages** (`packages/channels/*`) supply a platform's id formats, its adapter and the adapter's skill: `napcat-qq` for QQ through NapCat, `dsh-peer` for an agent in another DSH.
+- **Any number of channel packages** (`packages/channels/*`) supply a platform's id formats, its adapter and the adapter's skill: `napcat-qq` for QQ through NapCat, `qq-bot` for QQ through the official QQ Bot open platform (either or both), `dsh-peer` for an agent in another DSH.
 - Optionally, the **inline rendering extension** (`tools/dsh-inline`): two patched DSH UI packages, built locally, that show the action brain's work inside the main conversation.
 
 DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker owns the Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
@@ -122,7 +122,7 @@ Optional packages are channel packages, a different persona package, and the inl
 
 1. **Stop the Host** (Ctrl+C).
 2. **Pack and install with the full list**: the persona and every channel the profile should have, the new one included. Use the same commands as [the first install](#install-from-a-checkout), for example adding `--channel packages/channels/dsh-peer` and `--channel-package packages/channels/dsh-peer`. The installer records the new list in `launch.json`; every later start keeps it.
-3. **Configure it.** For a channel, open **Plugins → @asuna/cognition-core** and add `channels.<id>` (and, for a channel with a managed adapter, `integration`) to the deployment fields; credential fields take its tokens. The channel package's README lists exactly what it needs: [QQ](packages/channels/napcat-qq/README.md#setting-up-qq), [DSH peer](packages/channels/dsh-peer/README.md#configuration-owner-local). **Save**, then **Apply saved settings**.
+3. **Configure it.** For a channel, open **Plugins → @asuna/cognition-core** and add `channels.<id>` (and, for a channel with a managed adapter, `integration`) to the deployment fields; credential fields take its tokens. The channel package's README lists exactly what it needs: [QQ](packages/channels/napcat-qq/README.md#setting-up-qq), [QQ Bot](packages/channels/qq-bot/README.md#setting-up-the-bot), [DSH peer](packages/channels/dsh-peer/README.md#configuration-owner-local). **Save**, then **Apply saved settings**.
 4. **Start** with the usual command and check the Plugins page lists the package, and the card's status line is `ready`.
 
 To replace the persona, pass the other persona package in step 2. Rather than switching the persona of a live profile, give a different persona its own profile and database, as the demo environment and the Docker stack do.

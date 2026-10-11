@@ -27,9 +27,9 @@ def _int(value):
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
-def _member(raw):
+def _member(raw, account):
     user = str(raw.get('user_id') if isinstance(raw, dict) else '')
-    if not user.isdigit() or not 4 <= len(user) <= 20:
+    if not account.fullmatch(user):
         return None
     role = raw.get('role') if raw.get('role') in ROLES else 'member'
     out = {'user_id': user, 'nickname': safe_name(raw.get('nickname'))[:60], 'card': safe_name(raw.get('card'))[:60],
@@ -48,12 +48,13 @@ def receive(store, channel_id, body):
     route = next((r for r in channel.get('routes', {}).values()
                   if r['target']['type'] == 'group' and r['target']['id'] == group), None)
     if not route or group in channel.get('blocked_groups', []):
-        raise PermissionError('MEMBERS_GROUP_NOT_ROUTED: 群 %s 没有已准入的路由；只收已准入群的名单' % group[:20])
+        raise PermissionError('MEMBERS_GROUP_NOT_ROUTED: 群 %s 没有已准入的路由；只收已准入群的名单' % group[:64])
     members = body.get('members')
     if not isinstance(members, list) or not 1 <= len(members) <= MAX_MEMBERS:
         raise ValueError('MEMBERS_INVALID: members 要是 1..%d 人的列表（给的是 %s）'
                          % (MAX_MEMBERS, len(members) if isinstance(members, list) else type(members).__name__))
-    rows = [row for row in map(_member, members) if row]
+    account = channel_kinds.of_channel(channel_id).ACCOUNT
+    rows = [row for row in (_member(raw, account) for raw in members) if row]
     scene = store.db.scenes.find_one({'_id': route['scene_id']}, {'scope_key': 1})
     if not scene:
         raise PermissionError('MEMBERS_SCENE_UNKNOWN: 这个群还没有对话记录；有人说过话以后再送')

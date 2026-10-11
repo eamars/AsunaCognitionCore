@@ -166,16 +166,23 @@ export class CognitionCore {
   }
 
   /** A channel plugin that is its own adapter (it runs in this Host, not in the integration sandbox) reaches the
-   *  channel API like any adapter: HTTP on this machine with its channel's token (RUNTIME_API.md). Null when the
-   *  channel is not configured. */
+   *  channel API like any adapter: HTTP on this machine with its channel's token (RUNTIME_API.md). `settings` is the
+   *  channel's own settings with their credential references resolved (a platform's app secret, for one). Null when
+   *  the channel is not configured. */
   async channelEndpoint(kind) {
     const deployment = this.config.deployment ?? {};
     const channel = deployment.channels?.[kind];
     if (!channel) return null;
-    const token = typeof channel.token === 'string' ? channel.token
-      : (await this.credentialValues({ token: channel.token }))[channel.token?.$secret];
+    const values = await this.credentialValues(channel);
+    const resolve = value => {
+      if (Array.isArray(value)) return value.map(resolve);
+      if (!value || typeof value !== 'object') return value;
+      if (typeof value.$secret === 'string' && Object.keys(value).length === 1) return values[value.$secret] ?? null;
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolve(item)]));
+    };
+    const settings = resolve(channel);
     return { url: 'http://127.0.0.1:' + (deployment.channel_port ?? 8766), channelId: kind,
-             accountId: channel.account_id, token: token ?? null };
+             accountId: channel.account_id, token: settings.token ?? null, settings };
   }
 
   channelOf(sceneId) {

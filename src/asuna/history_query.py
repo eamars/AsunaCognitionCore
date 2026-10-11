@@ -281,7 +281,7 @@ def bind_people(store, scene, scene_doc, person):
         roster = list(people.roster(scene['_id']).values())
         ids = {people.person(person), *channel_kinds.person_ids(person),
                *(scene_doc.get('person_aliases') or [])}
-        if person.isdigit():
+        if channel_kinds.person_ids(person):
             ids.add(people.account_person(scene['_id'], person))
         numbered = re.fullmatch(r'\[?[^#\[\]]*#\s*(\d{1,6})\s*\]?', person)
         matches = [doc for doc in roster if doc.get('person') in ids
@@ -517,12 +517,12 @@ def person_clause(person, aliases=()):
     text = _text(person, 60)
     if not text:
         return None
-    values = {text.lower(), *channel_kinds.person_ids(text)}
+    values = {text, text.lower(), *channel_kinds.person_ids(text)}
     for alias in aliases or ():
         alias = _text(alias, 60)
         if not alias:
             continue
-        values |= {alias.lower(), *channel_kinds.person_ids(alias)}
+        values |= {alias, alias.lower(), *channel_kinds.person_ids(alias)}
     ors = []
     for key in PERSON_KEYS:
         for value in sorted(values):
@@ -618,7 +618,7 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
     body = doc.get(text_field)
     full = body if isinstance(body, str) else ""      # 原样，不动空白
     peer, ok, reason = _identity_of(doc)
-    author = _text(doc.get("author"), 40)
+    author = _text(doc.get("author"), 80)
     stamp = _stamp(doc.get(time_field)) if at is None else _text(at, 32)
     classes = (parts or {}).get("person_classes") or {}
     same_person = {member.lower() for key in (author,) for member in classes.get(key, [])}
@@ -665,7 +665,7 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         bits.append({"owner": "群主", "admin": "管理员", "member": "成员"}.get(role, role))
     if not peer.get("verified"):
         bits.append("未核实")
-    person_id = _text(peer.get("person_id"), 40)
+    person_id = _text(peer.get("person_id"), 80)
     names = set([person_id.lower(), display.lower(), author.lower()])
     names |= same_person | {member.lower() for member in classes.get(person_id, [])}
     for value in (card, nickname):

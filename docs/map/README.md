@@ -374,6 +374,9 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/python/napcat_qq/__init__.py`](../../packages/channels/napcat-qq/python/napcat_qq/__init__.py) — QQ through NapCat, as a channel kind of the Asuna core (asuna/channel_kinds.py).
 - [`napcat-qq/skills/qq-napcat-adapter/decode_log.py`](../../packages/channels/napcat-qq/skills/qq-napcat-adapter/decode_log.py) — 把 qq-napcat-adapter 的日志行翻成人话摘要（离线，只读 stdin 或文件）。
 - [`napcat-qq/src/index.js`](../../packages/channels/napcat-qq/src/index.js) — The QQ channel plugin: registers the channel kind `qq` with Core, with its kind module (`napcat_qq`), the NapCat adapter her integration tools develop and run, and its skills.
+- [`qq-bot/python/qq_bot/__init__.py`](../../packages/channels/qq-bot/python/qq_bot/__init__.py) — QQ through the official QQ Bot open platform, as a channel kind of the Asuna core (asuna/channel_kinds.py).
+- [`qq-bot/src/bridge.js`](../../packages/channels/qq-bot/src/bridge.js) — The bridge between Asuna's channel API and the official QQ Bot open platform (ADR-046).
+- [`qq-bot/src/index.js`](../../packages/channels/qq-bot/src/index.js) — The QQ Bot channel plugin: registers the channel kind `qqbot` and, once the channel is configured, runs the bridge (bridge.js) between her and the official QQ Bot open platform.
 
 ### [Tools](tools.md)
 

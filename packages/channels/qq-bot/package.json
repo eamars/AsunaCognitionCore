@@ -1,0 +1,28 @@
+{
+  "name": "@asuna/qq-bot",
+  "version": "0.2.0",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "description": "QQ through the official QQ Bot open platform as an Asuna channel: its ids and the bridge in this Host",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": [
+    "src",
+    "python",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "locale"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "0.2.x"
+  }
+}

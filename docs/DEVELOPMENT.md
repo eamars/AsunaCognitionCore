@@ -100,8 +100,9 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 6. `npm install` (records the workspace in `package-lock.json`), then `npm run test:native`.
 7. Install it in a demo profile ([RUN_ASUNA.md](../RUN_ASUNA.md#demo-environment)) with its own database.
 
-**A channel package:** start from `packages/channels/dsh-peer` (adapter in the Host process) or
-`packages/channels/napcat-qq` (managed adapter in the sandbox).
+**A channel package:** start from `packages/channels/dsh-peer` or `packages/channels/qq-bot` (adapter in the Host
+process; `ctx.asuna.channelEndpoint(kind)` gives the channel API and the channel's settings with credentials
+resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, which reaches only local addresses).
 
 1. `src/index.js` calls `registerChannel({kind, title, project, resource_root, python, module,
    integration_directory, skill_directories})`.

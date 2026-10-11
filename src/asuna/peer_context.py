@@ -19,6 +19,11 @@ MENTIONED_KEY = "asuna_mentioned"
 MAX_MENTIONED = 10
 CHANGE_LABEL = {"nickname": "昵称", "card": "群名片", "role": "身份", "title": "头衔"}
 MAX_NAME = 60
+# A platform id (an account or a group) is as long as its channel kind allows (an OpenID is 32); a person or scene id
+# carries its kind and that id.
+MAX_ID = 64
+MAX_PERSON = 80
+ID_FIELDS = ("person_id", "account_id", "scene", "group_id")
 MAX_ALIASES = 4
 
 
@@ -61,7 +66,7 @@ def verify_peer(peer, channel, expected_person_id=None):
         return False, "no_block"
     if not isinstance(channel, dict):
         return False, "no_channel"
-    sender = _clean(channel.get("sender_id"), 32)
+    sender = _clean(channel.get("sender_id"), MAX_ID)
     if not sender:
         return False, "no_sender"
     # The platform comes from the host's side: the route's person, else the authenticated channel.
@@ -69,20 +74,20 @@ def verify_peer(peer, channel, expected_person_id=None):
     if platform is None:
         return False, "no_platform"
     person_id = expected_person_id or platform.person_id(sender)
-    if _clean(peer.get("person_id"), 40) != person_id or person_id != platform.person_id(sender):
+    if _clean(peer.get("person_id"), MAX_PERSON) != person_id or person_id != platform.person_id(sender):
         return False, "person_mismatch"
-    if _clean(peer.get("account_id"), 32) != sender:
+    if _clean(peer.get("account_id"), MAX_ID) != sender:
         return False, "account_mismatch"
     target = channel.get("target")
     if not isinstance(target, dict):
         return False, "no_target"
     kind = target.get("type")
     if kind == "group":
-        group = _clean(target.get("id"), 20)
-        if not group or _clean(peer.get("group_id"), 20) != group or _clean(peer.get("scene"), 40) != "group:%s" % group:
+        group = _clean(target.get("id"), MAX_ID)
+        if not group or _clean(peer.get("group_id"), MAX_ID) != group or _clean(peer.get("scene"), MAX_PERSON) != "group:%s" % group:
             return False, "scene_mismatch"
     elif kind == "dm":
-        if _clean(peer.get("scene"), 40) != "dm" or _clean(peer.get("group_id"), 20):
+        if _clean(peer.get("scene"), MAX_PERSON) != "dm" or _clean(peer.get("group_id"), MAX_ID):
             return False, "scene_mismatch"
     else:
         return False, "no_target"
@@ -97,7 +102,7 @@ def snapshot_event(event):
         return None
     fields = ("person_id", "account_id", "scene", "group_id", "display", "nickname", "card",
               "role", "title", "relation", "known_since", "source", "profile_at")
-    profile = {key: _clean(peer.get(key), 80 if key in ("known_since", "profile_at") else MAX_NAME)
+    profile = {key: _clean(peer.get(key), 80 if key in ("known_since", "profile_at") + ID_FIELDS else MAX_NAME)
                for key in fields if peer.get(key) is not None}
     profile["verified"] = peer.get("verified") is True
     aliases = peer.get("aliases")
@@ -128,17 +133,17 @@ def snapshot_mentioned(event, raw, mentioned):
     platform = channel_kinds.get(channel.get("id"))
     if platform is None:
         return []
-    group = _clean(target.get("id"), 20)
+    group = _clean(target.get("id"), MAX_ID)
     wanted = {str(account) for account in mentioned or []}
     kept = {}
     for item in items[:MAX_MENTIONED]:
         if not isinstance(item, dict):
             continue
-        account = _clean(item.get("account_id"), 32)
-        if (account not in wanted or account in kept or _clean(item.get("person_id"), 40) != platform.person_id(account)
-                or _clean(item.get("group_id"), 20) != group or _clean(item.get("scene"), 40) != "group:%s" % group):
+        account = _clean(item.get("account_id"), MAX_ID)
+        if (account not in wanted or account in kept or _clean(item.get("person_id"), MAX_PERSON) != platform.person_id(account)
+                or _clean(item.get("group_id"), MAX_ID) != group or _clean(item.get("scene"), MAX_PERSON) != "group:%s" % group):
             continue
-        profile = {key: _clean(item.get(key), 80 if key == "profile_at" else MAX_NAME)
+        profile = {key: _clean(item.get(key), 80 if key in ("profile_at",) + ID_FIELDS else MAX_NAME)
                    for key in ("person_id", "account_id", "scene", "group_id", "display", "nickname", "card", "role",
                                "source", "profile_at") if item.get(key) is not None}
         profile["verified"] = item.get("verified") is True

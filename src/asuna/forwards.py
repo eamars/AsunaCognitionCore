@@ -31,7 +31,7 @@ def kept(raw):
             if not isinstance(node, dict):
                 continue
             when = node.get('time')
-            nodes.append({'name': _text(node.get('name'), 42), 'user_id': _text(node.get('user_id'), 20),
+            nodes.append({'name': _text(node.get('name'), 42), 'user_id': _text(node.get('user_id'), 64),
                           'time': when if isinstance(when, (int, float)) and not isinstance(when, bool) else None,
                           'text': str(node.get('text') or '')[:MAX_NODE_CHARS]})
         blocks.append({'ref': block['ref'], 'count': len(nodes), 'nodes': nodes,

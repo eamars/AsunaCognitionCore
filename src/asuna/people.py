@@ -353,7 +353,8 @@ class People:
         number = re.fullmatch(r'\[?[^#\[\]]*#\s*(\d{1,6})\s*\]?', text)
         if number:
             return [d for d in docs if str(d.get('handle')) == number.group(1)]
-        ids = {self.person(text)} | ({self.person(self.account_person(scene['_id'], text))} if text.isdigit() else set())
+        ids = {self.person(text)} | ({self.person(self.account_person(scene['_id'], text))}
+                                     if channel_kinds.person_ids(text) else set())
         by_id = [d for d in docs if d.get('person') in ids]
         if by_id:
             return by_id

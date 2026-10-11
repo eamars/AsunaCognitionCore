@@ -399,3 +399,62 @@ The QQ channel plugin: registers the channel kind `qq` with Core, with its kind 
 - def `name`
 - def `inject`
 - def `apply`
+
+## `qq-bot/python/qq_bot/__init__.py`
+
+[packages/channels/qq-bot/python/qq_bot/__init__.py](../../packages/channels/qq-bot/python/qq_bot/__init__.py)
+
+QQ through the official QQ Bot open platform, as a channel kind of the Asuna core (asuna/channel_kinds.py).
+
+- def `person_id`
+- def `account_of` — The OpenID inside a qqbot:<openid> person id, else None.
+- def `scene_id`
+- def `scene_parts` — (bot AppID, 'dm' or 'group', target OpenID) of a qqbot scene id, else None.
+- def `outbound_mention`
+- def `adapter_config` — No sandboxed adapter serves this channel; nothing is derived.
+- def `strip_derived`
+
+## `qq-bot/src/bridge.js`
+
+[packages/channels/qq-bot/src/bridge.js](../../packages/channels/qq-bot/src/bridge.js)
+
+The bridge between Asuna's channel API and the official QQ Bot open platform (ADR-046).
+
+- def `INTENTS`
+- def `TOKEN_URL`
+- def `API_BASE`
+- def `REPLY_WINDOW`
+- def `inboundText` — The platform's mention markup as the core reads a real @ (`@<openid>`), and its faces as a plain placeholder.
+- def `outboundText` — Her words for the platform: her @ of a person (`@qqbot:<openid>`) becomes the platform's mention in a group; a private chat has no mentions, so there the tag is left out.
+- class `QQBotApi` — The platform's OpenAPI with an access token kept fresh.
+  - `token` — The current access token.
+  - `forget`
+  - `call`
+- class `QQBotBridge`
+  - `start`
+  - `stop`
+  - `sleep` — A wait that stop() ends at once.
+  - `save`
+  - `host` — The channel API, this bot's credentials and its platform client; null while the channel is not configured.
+  - `gatewayLoop`
+  - `session` — One connection, until it closes; resolves with the close code.
+  - `dispatch`
+  - `routeFor` — The route a message belongs to: the configured route for this conversation, else the one admission names.
+  - `receive`
+  - `remember` — A received message she may answer as a reply while the platform takes replies to it.
+  - `flush`
+  - `flushLoop`
+  - `outboundLoop`
+  - `replyTo` — The received message to answer as a reply: the one she answers when the platform still takes a reply to it, else the newest such one in that conversation; null when none is left (her words go out as her own message).
+  - `deliver`
+  - `upload` — The picture the item declares: read from the channel API, checked against its digest, uploaded for this conversation; returns the platform's file_info.
+
+## `qq-bot/src/index.js`
+
+[packages/channels/qq-bot/src/index.js](../../packages/channels/qq-bot/src/index.js)
+
+The QQ Bot channel plugin: registers the channel kind `qqbot` and, once the channel is configured, runs the bridge (bridge.js) between her and the official QQ Bot open platform.
+
+- def `name`
+- def `inject`
+- def `apply` — The bridge reads its bot (the channel's `account_id`, the AppID, and `app_secret`) from the channel settings (`channels.qqbot`) each time it connects, so it waits idle until they are applied.

@@ -406,7 +406,7 @@ def _peer_of(doc):
         return "", "", "", False, "author"
     display = (_norm(peer.get("card"), 60) or _norm(peer.get("nickname"), 60)
                or _norm(peer.get("display"), 60))
-    return (_norm(peer.get("person_id"), 40), display or "未取到名字",
+    return (_norm(peer.get("person_id"), 80), display or "未取到名字",
             _norm(peer.get("role"), 16), bool(peer.get("verified")), "peer")
 
 
@@ -414,9 +414,9 @@ def _peer_of(doc):
 def _row(hit, doc):
     peer_id, display, role, verified, identity = _peer_of(doc)
     speaker = _norm(hit.get("speaker"), 200)
-    if speaker and speaker != _norm(hit.get("author"), 40):
+    if speaker and speaker != _norm(hit.get("author"), 80):
         display = speaker          # the fixed label, when people.py named the writer (otherwise speaker is the bare author id)
-    author = _norm(hit.get("author"), 40)
+    author = _norm(hit.get("author"), 80)
     body = hit.get("text") if isinstance(hit.get("text"), str) else ""
     seq = hit.get("scene_seq")
     doc = doc if isinstance(doc, dict) else {}
@@ -438,7 +438,7 @@ def _canonical_of(row, canonical_map):
     """这一行的发言人该归到哪个 canonical person；配置没认定同一个人就返回空（照原样归并）。"""
     for key in (row.get("person_id"), row.get("author")):
         if key and key in canonical_map:
-            return _norm(canonical_map[key], 40)
+            return _norm(canonical_map[key], 80)
     return ""
 
 

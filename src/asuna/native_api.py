@@ -446,6 +446,9 @@ class NativeMemory:
                         result['body'] = paragraphs(result['body'], label('readback', path=str(window.get('path')),
                                           **{'from': window.get('line_from'), 'to': window.get('line_to')}), excerpt)
                 result['usage'] = self.cognition.usage(identifier)
+                if row.get('kind') == 'monologue':
+                    from . import reasons
+                    result['then'] = reasons.then(self.store, row)       # what she did after this thought
         elif kind == 'source':
             row = self.store.db.messages.find_one({**self.message_query, '_id': key},
                 {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1})

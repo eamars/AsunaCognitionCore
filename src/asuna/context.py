@@ -214,15 +214,19 @@ class ContextBuilder:
     def recent_thoughts(self, scope, moment):
         from datetime import datetime
         from .config import ago
+        from . import reasons
         rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
-            {'body_markdown':1,'formed_at':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+            {'body_markdown':1,'formed_at':1,'episode_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
         out=[]
         for row in reversed(rows):
             try:
                 hours=(moment-datetime.fromisoformat(row['formed_at'])).total_seconds()/3600
             except (KeyError,TypeError,ValueError):
                 hours=None
-            out.append({'thought':excerpt(row.get('body_markdown'),MEMORY_CHARS),**({'when':ago(hours)} if hours is not None else {})})
+            # _id lets the Host leave out a thought her session still shows where she wrote it (context-delivery.js).
+            then=reasons.then(self.store,row)
+            out.append({'_id':row['_id'],'thought':excerpt(row.get('body_markdown'),MEMORY_CHARS),
+                        **({'when':ago(hours)} if hours is not None else {}),**({'then':then} if then else {})})
         return out
 
     def prepare(self, event: dict, persona='P1', recall=False):
@@ -337,9 +341,22 @@ class ContextBuilder:
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
+        units={m['_id']:m for m in memories}
         for fact in facts:
             # The whole unit stays readable through recall/read; the turn carries a bounded excerpt.
             fact['body_markdown']=excerpt(fact.get('body_markdown'),MEMORY_CHARS)
+            if fact.get('kind')=='monologue':
+                # One of her past thoughts: when she had it, and what she did then (reasons.py).
+                from datetime import datetime as _dt
+                from . import reasons
+                from .config import ago as _ago
+                unit=units.get(fact['_id']) or {}
+                try:
+                    fact['when']=_ago((moment-_dt.fromisoformat(unit['formed_at'])).total_seconds()/3600)
+                except (KeyError,TypeError,ValueError):
+                    pass
+                then=reasons.then(self.store,unit)
+                if then:fact['then']=then
             if fact.get('invented'):
                 # Fixed mark on every injection of persona-authored, not shared, history (MEMORY §5).
                 fact['body_markdown']=INVENTED_MARK+fact['body_markdown']

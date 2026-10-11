@@ -59,3 +59,23 @@ test('lines waiting for a conversation\'s first turn are not repeated in its fir
   assert.deepEqual(first.context.delivered_history, [{ _id: 'in-3', direction: 'inbound', text: '叫她的话' }]);
   assert.equal(first.omitted.history_rows, 2);
 });
+
+test('her own thoughts the session still shows where she wrote them are not repeated', () => {
+  const thought = id => ({ type: 'assistant/message', data: { content: [
+    { type: 'tool-call', id, name: 'think', arguments: { thought: '心里话' } }] } });
+  const recent = { items: [{ _id: 'mono-ep-1:call_a', thought: '旧的' }, { _id: 'mono-ep-2:call_b', thought: '新的' }],
+    note: '此前的心里话' };
+  const recalled = [{ _id: 'mono-ep-1:call_a', kind: 'monologue', body_markdown: '旧的' },
+    { _id: 'mono-ep-9:call_z', kind: 'monologue', body_markdown: '很早以前的', then: ['所以我说了「好」'] },
+    { _id: 'm1', body_markdown: '记忆' }];
+  const composed = composeContext(context([], { memories: recalled, recent_thoughts_from_program: recent }),
+    visibleCarried(surface([thought('call_a'), thought('call_b')])));
+  assert.deepEqual(composed.context.memories.map(m => m._id), ['mono-ep-9:call_z', 'm1']);
+  assert.equal(composed.context.recent_thoughts_from_program, undefined, 'every recent thought is still visible');
+  assert.equal(composed.omitted.thoughts, 3);
+  assert.equal(composed.context.repeated_from_program.your_thoughts, 3);
+  // After a compaction (nothing visible) they all come back.
+  const fresh = composeContext(context([], { memories: recalled, recent_thoughts_from_program: recent }), visibleCarried(surface([])));
+  assert.equal(fresh.context.recent_thoughts_from_program.items.length, 2);
+  assert.equal(fresh.context.memories.length, 3);
+});

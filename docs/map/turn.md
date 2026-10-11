@@ -243,3 +243,11 @@ ADR-030: the program's watchdog over handovers between the brains.
 - def `next_step` — FULL, SHORT or GIVE_UP for a lost result, from what the database says happened to it.
 - def `cause` — Why the result is lost, for the card: report, turn or restart.
 - def `status_words` — What she reads about one task: where its run and its result stand.
+
+## `reasons`
+
+[src/asuna/reasons.py](../../src/asuna/reasons.py)
+
+The reasons behind her actions: what she did after each thought.
+
+- def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.

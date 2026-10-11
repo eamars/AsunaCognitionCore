@@ -90,7 +90,9 @@ no platform. Decided in ADR-005 and ADR-016; the adapter's own manual is
    told to her in the same turn.
 5. **Publish.** `publish` sends what passes.
 
-Context that has not changed since she last saw it is not sent again (`context-delivery.js`). The tool list is the
+Context that has not changed since she last saw it is not sent again (`context-delivery.js`), nor is one of her own
+thoughts she can still read where she wrote it. A past thought she does get back says when she had it and what she
+did then (`reasons.then`). The tool list is the
 same in every turn of a conversation, so the model keeps the conversation cached (ADR-038).
 
 ### How does the action brain get a job and hand it back?
@@ -206,6 +208,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`lines`](../../src/asuna/lines.py) — Her own open/close of a peer line (ADR-013 §6).
 - [`chat`](../../src/asuna/chat.py) — Shared local controller reused by the native Web host; there is no terminal adapter.
 - [`handover`](../../src/asuna/handover.py) — ADR-030: the program's watchdog over handovers between the brains.
+- [`reasons`](../../src/asuna/reasons.py) — The reasons behind her actions: what she did after each thought.
 
 ### [Groups and people](people.md)
 

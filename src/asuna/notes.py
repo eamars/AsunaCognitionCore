@@ -28,7 +28,6 @@ TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
 HOME_NOTE_CHARS = 1500           # from home to another home line: no boundary to guard, room for the context
 PER_TURN = 2
-PER_DAY = 40                     # every direction
 PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
@@ -232,10 +231,10 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     if sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
                           % (sent_here, PER_TURN))
+    # No cap over all directions: a note is read in real time, so nothing piles up; only what comes from public
+    # conversations is counted per day (owner, 2026-10-12).
     since = (moment - timedelta(days=1)).isoformat()
     day = {'persona': persona, 'created_at': {'$gte': since}}
-    if store.db.notes.count_documents(day) >= PER_DAY:
-        raise NoteRefused('NOTE_DAY_LIMIT', '今天的便条（%d 张）写满了，明天再写。' % PER_DAY)
     if trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
             {**day, 'from_scene': ep['scene_id'], 'kind': 'home'}) >= PUBLIC_HOME_PER_SCENE:
         raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往家里写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)

@@ -241,6 +241,13 @@ def test_two_notes_a_turn_and_the_caps_by_direction(store):
     with pytest.raises(notes.NoteRefused, match='送到家里的便条最多 1500 字'):
         notes.prepare(store, {'_id': 'ep-j', 'persona': 'P1', 'scene_id': 'dm-a'}, visibility.OWNER_PRIVATE,
                       {'to': OWNER_DM, 'text': '长' * (notes.HOME_NOTE_CHARS + 1)}, 'c4')
+    # Notes are read in real time, so no cap over all directions: a busy day of home notes goes on (owner, 2026-10-12).
+    for index in range(45):
+        store.db.notes.insert_one({'_id': 'busy-%d' % index, 'schema_version': 1, 'persona': 'P1', 'from_scene': 'dm-a',
+                                   'to_scene': 'owner-dm', 'kind': 'home', 'trust': 'trusted', 'hop': 1, 'text': 'x',
+                                   'created_at': stamp, 'seen_in': []})
+    notes.prepare(store, {'_id': 'ep-k', 'persona': 'P1', 'scene_id': 'dm-a'}, visibility.OWNER_PRIVATE,
+                  {'to': OWNER_DM, 'text': '又一张'}, 'c5')
 
 
 def test_a_note_waits_behind_the_scene_queue_and_comes_back_after_a_restart(store):

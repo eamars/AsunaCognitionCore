@@ -257,6 +257,10 @@ class Channels:
         from . import group_members
         return group_members.receive(self.store, channel_id, body)
 
+    def media_keys(self, channel_id, body):
+        from . import media_keys
+        return media_keys.receive(channel_id, body)
+
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
         with self.controller.ingress_lock:
@@ -310,6 +314,8 @@ class Channels:
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
+        from . import media_keys
+        media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
         if route['target']['type'] == 'group':
             event['group_context'] = group_context(self.store, route, body, event_id, member['person_id'])
         if 'occurred_at' in body:
@@ -532,6 +538,8 @@ class ChannelServer:
                         value = channels.receive(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['members']:
                         value = channels.members(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['media_keys']:
+                        value = channels.media_keys(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         if scoped and channels.line_closed(channel_id, scoped):

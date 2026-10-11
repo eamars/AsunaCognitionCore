@@ -26,6 +26,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `line_closed`
   - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
   - `members`
+  - `media_keys`
   - `receive`
   - `claim`
   - `attachment` — 字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
@@ -54,6 +55,11 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
 - def `sticker_md5` — The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind).
 - def `image_hosts` — The media hosts the installed platforms deliver images from (vision's default allowlist).
+- def `media_key_name` — The name of the key a platform signs this media link with, or None for a link that needs none (media_keys.py).
+- def `media_key_in` — (name, key) a freshly arrived link is signed with, or None.
+- def `sign_media`
+- def `media_refusal` — 'expired' (the link's signature), 'gone' (the picture) or None, as the link's platform reads its host's refusal.
+- def `media_key_names` — The key names a channel's adapter may post (its kind's MEDIA_KEYS).
 
 ## `channel_admission`
 
@@ -146,7 +152,8 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `path_image` — Read a picture from this machine's disk (home conversations only): the bytes are this call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
 - def `stored_image` — Look again at a picture already stored as an image artifact: one in this scene's own scope, one she made herself (her own generator, any scene), or one this turn was offered to send.
 - def `local_upload_bytes` — A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the program's own local input (no platform envelope), and the artifact must be in that row's scope with that input as its source — a platform m
-- def `media_source_url` — URL 不进清单（避免把带 rkey 的临时链接长期抄进上下文），拉取时按原消息回读。
+- def `media_source` — {'url', 'signature'} to pull an entry from: the link read back from its message, signed again with the platform's current key when the platform signs it (media_keys.sign; signature None, renewed or unavailable).
+- def `media_source_url` — The link as stored on its message.
 - def `task_attachment_context` — 行动任务输入里的附件段：让她知道有什么可拉、ref 是什么、没拉过就是没看过。
 - def `line_refs` — The refs of a platform line's readable pictures, as a short note under the line in her conversation: the placeholder says a picture was there, the ref is what read_image takes.
 - def `media_note` — 给角色现场的附件元数据：不把图片字节放进上下文。
@@ -154,6 +161,18 @@ Her sticker shelf and the platform's own faces (ADR-016).
   - `read_image`
 - def `route_filtered_tool_names` — 任务能力清单按行动路由的真实能力裁剪：路由不收图时 read_image 不进清单。
 - def `inline_summary` — 写进 artifacts 回执的有界副本：字节已在 GridFS，回执里不留 base64（普通 BSON 行 1 MiB 上限）。
+
+## `media_keys`
+
+[src/asuna/media_keys.py](../../src/asuna/media_keys.py)
+
+Current signatures for a platform's media links (ADR-035).
+
+- def `receive` — The adapter's current keys: {'keys': [{'name', 'key', 'seconds'}]}.
+- def `saw` — An inbound event's media links: a signed one that just arrived carries a current key.
+- def `current`
+- def `sign` — (url, signature): signature None for a link that carries none, 'renewed' once signed with the current key, 'unavailable' when no current key is known (the link goes out as stored).
+- def `forget` — Tests: start from no keys.
 
 ## `outbound_media`
 

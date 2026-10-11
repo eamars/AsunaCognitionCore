@@ -38,7 +38,7 @@ AREAS = {
     'persona': ('Persona', 'The persona package, its model and policies, her skills and ideas.', [
         'persona_model', 'persona_data', 'persona_jobs', 'policy', 'skills']),
     'channels': ('Channels and pictures', 'The channel API, platform kinds, stickers, seeing and sending pictures.', [
-        'channels', 'channel_kinds', 'channel_admission', 'caught_up', 'forwards', 'stickers', 'vision', 'outbound_media', 'animated']),
+        'channels', 'channel_kinds', 'channel_admission', 'caught_up', 'forwards', 'stickers', 'vision', 'media_keys', 'outbound_media', 'animated']),
     'work': ('Work and tools', 'The action brain\'s tasks, grants, schedules, sandbox, development and integrations.', [
         'tasks', 'grants', 'schedule', 'schedule_rules', 'sandbox', 'sandbox_backend', 'development', 'credentials',
         'image_generation', 'svg_render', 'integration', 'integration_fetch', 'integration_image',

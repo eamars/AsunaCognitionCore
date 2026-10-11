@@ -113,6 +113,13 @@ class HostApi:
             res = Result("accepted", res.code, res.obj)
         return res
 
+    def post_media_keys(self, body):
+        """NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them."""
+        res = self._request("POST", "/v1/channels/%s/media_keys" % self.channel_id, body, timeout=15)
+        if res.kind == "ok" and isinstance(res.obj, dict) and res.obj.get("status") == "stored":
+            res = Result("accepted", res.code, res.obj)
+        return res
+
     def claim_outbox(self, wait_seconds=25, timeout=None, supports=CAPABILITIES):
         path = "/v1/channels/%s/outbox?wait_seconds=%d" % (self.channel_id, int(wait_seconds))
         caps = [str(c) for c in (supports or ()) if c]

@@ -67,11 +67,23 @@ def _not_a_picture(declared=''):
                       % ('，主机声明的是 ' + declared if declared else '', GIVE_UP))
 
 
-def _fetch_failed(status, detail=''):
-    """An HTTP refusal: a 4xx (an expired platform link among them) stays one; a 5xx or 408/429 may pass."""
+def _fetch_failed(status, detail='', url='', signature=None):
+    """An HTTP refusal: a 4xx (an expired platform link among them) stays one; a 5xx or 408/429 may pass.
+
+    For a link its platform signs (media_keys.py), the refusal says which of three it is: the signature expired
+    though the current key was put in, the picture is gone, or no current key was known to put in."""
     said = 'IMAGE_FETCH_FAILED: 图片主机回了 HTTP %s%s' % (status, '（' + detail + '）' if detail else '')
     if status in (408, 425, 429) or status >= 500:
         return ValueError(said + '，是那边暂时的问题；' + TRY_LATER)
+    meaning = channel_kinds.media_refusal(url, status, detail) if signature else None
+    if meaning == 'gone':
+        return ValueError('IMAGE_GONE: 图片主机说这张图已经不在了（HTTP %s）；%s，真需要就请对方重发' % (status, GIVE_UP))
+    if meaning == 'expired' and signature == 'renewed':
+        return ValueError('IMAGE_LINK_EXPIRED: 程序已经给链接换上平台现在的签名，图片主机还是说过期了；%s，真需要就请对方重发'
+                          % GIVE_UP)
+    if meaning == 'expired':
+        return ValueError('IMAGE_SIGNATURE_UNAVAILABLE: 这张图的下载签名过期了，程序眼下没有平台现在的签名可换'
+                          '（通道适配器还没送来，最近几分钟也没有新图带来）；' + TRY_LATER)
     return ValueError(said + '，这个链接已经拉不到了（平台的下载链接会过期）；' + GIVE_UP + '，真需要就请对方重发')
 
 
@@ -393,7 +405,7 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
             with opener.open(request, timeout=timeout or vision['timeout_seconds']) as response:
                 status = getattr(response, 'status', None) or 200
                 if status != 200:
-                    raise _fetch_failed(status)
+                    raise _fetch_failed(status, '', url, entry.get('signature'))
                 final_host = (urlsplit(response.geturl()).hostname or '').lower()
                 content_type = response.headers.get('content-type', '') or ''
                 chunks = []
@@ -414,7 +426,7 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
                 detail = _error_detail(exc.read(512) or b'')
             except Exception:  # noqa: BLE001 读不到原因也要报状态码
                 detail = ''
-            raise _fetch_failed(exc.code, detail) from exc
+            raise _fetch_failed(exc.code, detail, url, entry.get('signature')) from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             raise ValueError(f'IMAGE_FETCH_FAILED: 连不上图片主机（{type(exc).__name__}，限时 '
                              f'{timeout or vision["timeout_seconds"]:g} 秒）；{TRY_LATER}') from exc
@@ -544,8 +556,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         data, blob = local_upload_bytes(store, blobs, task, config, entry, max_bytes)
         media_type, via, source = sniff_media_type(data), 'blob', {'host': '', 'content_type': ''}
     else:
-        full = dict(entry)
-        full['url'] = (media_source_url(store, task, config, entry))
+        full = {**entry, **media_source(store, task, config, entry)}
         data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
         blob = None
     digest = sha(data)
@@ -653,11 +664,20 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     return data, {'artifact_id': artifact['_id'], 'sha256': artifact['sha256']}
 
 
-def media_source_url(store, task, config, entry):
-    """URL 不进清单（避免把带 rkey 的临时链接长期抄进上下文），拉取时按原消息回读。
+def media_source(store, task, config, entry):
+    """{'url', 'signature'} to pull an entry from: the link read back from its message, signed again with the
+    platform's current key when the platform signs it (media_keys.sign; signature None, renewed or unavailable).
 
-    回读走与清单同一道围栏：条目写着哪个场景就回那个场景读，不在本任务可读集合里就返回空。
+    URL 不进清单（避免把带 rkey 的临时链接长期抄进上下文），拉取时按原消息回读。
     """
+    from . import media_keys
+    url, signature = media_keys.sign(media_source_url(store, task, config, entry))
+    return {'url': url, 'signature': signature}
+
+
+def media_source_url(store, task, config, entry):
+    """The link as stored on its message. 回读走与清单同一道围栏：条目写着哪个场景就回那个场景读，
+    不在本任务可读集合里就返回空。"""
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
     if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''

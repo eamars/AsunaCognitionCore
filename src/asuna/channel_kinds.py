@@ -104,3 +104,40 @@ def sticker_md5(item):
 def image_hosts():
     """The media hosts the installed platforms deliver images from (vision's default allowlist)."""
     return [host for kind in _KINDS.values() for host in getattr(kind, 'IMAGE_HOSTS', ())]
+
+
+def _signer(url):
+    for kind in _KINDS.values():
+        found = getattr(kind, 'media_key_name', None)
+        if found and found(url):
+            return kind
+    return None
+
+
+def media_key_name(url):
+    """The name of the key a platform signs this media link with, or None for a link that needs none (media_keys.py)."""
+    kind = _signer(url)
+    return kind.media_key_name(url) if kind else None
+
+
+def media_key_in(url):
+    """(name, key) a freshly arrived link is signed with, or None."""
+    kind = _signer(url)
+    return kind.media_key_in(url) if kind else None
+
+
+def sign_media(url, key):
+    kind = _signer(url)
+    return kind.sign_media(url, key) if kind else url
+
+
+def media_refusal(url, status, detail):
+    """'expired' (the link's signature), 'gone' (the picture) or None, as the link's platform reads its host's refusal."""
+    kind = _signer(url)
+    return kind.media_refusal(status, detail) if kind else None
+
+
+def media_key_names(channel_id):
+    """The key names a channel's adapter may post (its kind's MEDIA_KEYS)."""
+    kind = _KINDS.get(channel_id)
+    return set((getattr(kind, 'MEDIA_KEYS', None) or {}).values()) if kind else set()

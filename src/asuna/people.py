@@ -473,12 +473,12 @@ class People:
         body = self.mentions(scene, row.get('text') or '', account)
         lines += ['  ' + line for line in body.split('\n')]
         from .stickers import PICTURE_FETCH_SECONDS, recognized
-        from .vision import line_refs, media_source_url, pull_bytes
+        from .vision import line_refs, media_source, pull_bytes
         task = {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'), 'policy_epoch': scene.get('policy_epoch')}
 
         def fetch(entry):               # a sticker whose md5 she does not know: the program matches its picture
-            url = media_source_url(self.store, task, self.config, entry)
-            return pull_bytes({**entry, 'url': url}, self.config, timeout=PICTURE_FETCH_SECONDS)[0]
+            source = media_source(self.store, task, self.config, entry)
+            return pull_bytes({**entry, **source}, self.config, timeout=PICTURE_FETCH_SECONDS)[0]
         refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries, fetch))
         if refs:
             lines.append('  ' + refs)

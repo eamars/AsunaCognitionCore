@@ -29,6 +29,12 @@ with Core (`registerChannel`).
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
   and posted to Core's `members` endpoint only when it changed.
+- Picture links from the NT media host are signed (`rkey`) for minutes; the picture stays. Every 4 minutes (a
+  minute after a failed round) the adapter asks NapCat for its current download keys — `get_rkey`, else
+  `nc_get_rkey`, else `get_rkey_server` — and posts them to Core's `media_keys` endpoint as `qq-group` (appid 1407)
+  and `qq-private` (appid 1406) with the seconds each still lasts. Core signs a stored link again with them before
+  fetching it. The keys are never logged or written to disk; the log says which names were posted, for how long,
+  and which action answered.
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.

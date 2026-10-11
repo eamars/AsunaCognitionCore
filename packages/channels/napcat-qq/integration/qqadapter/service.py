@@ -13,6 +13,7 @@ import time
 from . import forward as forward_mod
 from . import inbound as inbound_mod
 from .catchup import Catchup
+from .media_keys import MediaKeys
 from .members import Members
 from .hostapi import HostApi
 from .journal import Counters, Journal
@@ -75,6 +76,8 @@ class Adapter:
         self.catchup = Catchup(cfg, data_dir, self.onebot, self.on_event, self.counters, log=self.log)
         # who is in each admitted group, posted to the host when it changed (members.py)
         self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, log=self.log)
+        # the current picture-link keys, posted to the host every few minutes (media_keys.py)
+        self.media_keys = MediaKeys(self.onebot, self.host, self.counters, log=self.log)
         self.onebot.on_up = lambda path, gap: (self.catchup.request("reconnect")
                                                if path == "/event" and gap is not None else None)
         self.stop = threading.Event()
@@ -348,6 +351,7 @@ class Adapter:
         threading.Thread(target=self._health_loop, name="health", daemon=True).start()
         threading.Thread(target=self.catchup.loop, args=(self.stop,), name="catchup", daemon=True).start()
         threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
+        threading.Thread(target=self.media_keys.loop, args=(self.stop,), name="media_keys", daemon=True).start()
         self.catchup.request("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"
                  % (os.getpid(), self.identity.get("user_id"),

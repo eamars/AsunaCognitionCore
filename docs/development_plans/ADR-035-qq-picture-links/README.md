@@ -1,7 +1,7 @@
 # ADR-035: QQ picture links are re-signed when fetched
 
-Status: **Accepted 2026-10-10**, decided by Xiaoman and Claude (the owner left the decision to them). To be built
-after her read-by-path change (published the same night), on top of it.
+Status: **Accepted 2026-10-10**, decided by Xiaoman and Claude (the owner left the decision to them). **Built
+2026-10-11** at the owner's request, on top of her read-by-path change (44ef49b2); see Built below.
 
 ## Context
 
@@ -35,3 +35,22 @@ Pictures in her QQ groups often could not be read a while after they were posted
 
 - Old group pictures, days back, can be read again by her and by the action brain.
 - The fix depends on NapCat's key interface and QQ's current signing; D3 makes a change there visible at once.
+
+## Built (2026-10-11)
+
+- **Keys from NapCat.** NapCat has three key actions: `get_rkey` (a list of type, rkey, created_at, ttl),
+  `nc_get_rkey` (the raw form) and `get_rkey_server` (one pair with an expiry). The adapter asks them in that order
+  every 4 minutes and posts `qq-group` / `qq-private` with the seconds left. The test-run relay keeps refusing every
+  `*rkey*` action (owner ruling 2026-10-05); only the published adapter asks.
+- **Memory only.** The host holds the keys in the worker's memory, never in Mongo: `store.put` copies documents
+  into the append-only audit, which would keep a session secret forever. After a restart the adapter posts within
+  minutes, and a signed link that arrives gives its key for 5 minutes in the meantime (D2's fallback), noted as the
+  event is received rather than queried (734K messages, no index on arrival time).
+- **Where.** One place signs: `vision.media_source`, used by her `read_image`, the action brain's, her turn's
+  pictures and sticker matching. The platform rules (signed host, appid to key name, the expired retcode) are in
+  the QQ channel kind; the core names no platform.
+- **D3's three answers:** `IMAGE_LINK_EXPIRED`, `IMAGE_GONE` (404/410: QQ's own code for a removed picture is not
+  known yet; add it when one is seen), `IMAGE_SIGNATURE_UNAVAILABLE`. An unsigned link fails as before.
+- **To verify after install:** the adapter log shows `MEDIA_KEYS posted=qq-group,qq-private`; Xiaoman re-reads a
+  group picture several days old.
+

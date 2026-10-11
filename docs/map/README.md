@@ -272,6 +272,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`forwards`](../../src/asuna/forwards.py) — Merged forwards in her conversations (QQ 合并转发): what a forward carried, kept on the line that brought it.
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).
 - [`vision`](../../src/asuna/vision.py) — 入站图片元数据与行动脑 DSH ``read_image`` 接线。
+- [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 
@@ -362,6 +363,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/hostapi.py`](../../packages/channels/napcat-qq/integration/qqadapter/hostapi.py) — HTTP client for the runtime host channel API (stdlib only).
 - [`napcat-qq/integration/qqadapter/inbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/inbound.py) — OneBot message event -> host envelope, with the authorization gate.
 - [`napcat-qq/integration/qqadapter/journal.py`](../../packages/channels/napcat-qq/integration/qqadapter/journal.py) — Disk-backed spool, journals and counters.
+- [`napcat-qq/integration/qqadapter/media_keys.py`](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py) — The current picture-link signatures for the host (ADR-035).
 - [`napcat-qq/integration/qqadapter/members.py`](../../packages/channels/napcat-qq/integration/qqadapter/members.py) — Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 - [`napcat-qq/integration/qqadapter/onebot.py`](../../packages/channels/napcat-qq/integration/qqadapter/onebot.py) — Forward WebSocket client: one read-only /event connection, one /api call connection, with echo correlation and late-ack tolerance.
 - [`napcat-qq/integration/qqadapter/outbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/outbound.py) — Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.

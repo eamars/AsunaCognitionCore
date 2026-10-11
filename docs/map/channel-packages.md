@@ -173,6 +173,7 @@ HTTP client for the runtime host channel API (stdlib only).
 - class `HostApi`
   - `post_event`
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
+  - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `post_receipt`
@@ -217,6 +218,18 @@ Disk-backed spool, journals and counters.
   - `read_health`
   - `acquire_lock` — Refuse to run twice against the same data dir.
   - `release_lock` — Unlock and close.
+
+## `napcat-qq/integration/qqadapter/media_keys.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/media_keys.py](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py)
+
+The current picture-link signatures for the host (ADR-035).
+
+- def `parse` — [{'name', 'key', 'seconds'}] from any of the three answers; keys whose time is up are left out.
+- class `MediaKeys`
+  - `loop`
+  - `fetch` — (action, rows) from the first action that answers with keys; (None, []) when none does.
+  - `run`
 
 ## `napcat-qq/integration/qqadapter/members.py`
 
@@ -357,6 +370,10 @@ QQ through NapCat, as a channel kind of the Asuna core (asuna/channel_kinds.py).
 
 - def `sticker_of` — A media item stored before the adapter marked stickers (0.6): a store sticker comes from the shop host, a custom one is a picture with sub_type 1 (7 for the small named ones); a photo is 0.
 - def `sticker_md5`
+- def `media_key_name`
+- def `media_key_in` — (name, key) a link that arrived minutes ago is signed with.
+- def `sign_media`
+- def `media_refusal` — What the media host's refusal means: 'expired' (the signature), 'gone' (the picture), or None.
 - def `person_id`
 - def `account_of` — The account inside a qq:<account> person id, else None.
 - def `scene_id`

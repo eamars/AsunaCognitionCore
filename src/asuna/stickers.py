@@ -106,7 +106,7 @@ def keep(store, blobs, ep, persona, args, config):
     """Put a sticker on her shelf: an att- ref of a sticker in this conversation, or a blob- id of a picture
     she made herself."""
     from .outbound_media import produced, sniff_media_type
-    from .vision import ARTIFACT_REF, media_source_url, pull_bytes, scene_attachments
+    from .vision import ARTIFACT_REF, media_source, pull_bytes, scene_attachments
     name, when = _name(args.get('name')), _when(args.get('when'))
     ref = str(args.get('ref') or '').strip()
     if store.db.stickers.count_documents({'persona': persona}) >= STICKER_SHELF:
@@ -137,7 +137,7 @@ def keep(store, blobs, ep, persona, args, config):
         else:
             if not entry.get('pullable'):
                 raise Denied('STICKER_NOT_REACHABLE: %s；重试也一样' % (entry.get('not_pullable_because') or '「%s」' % ref))
-            data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, scene, config, entry)}, config)
+            data, media_type, _, _ = pull_bytes({**entry, **media_source(store, scene, config, entry)}, config)
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
                        media_type=media_type or sniff_media_type(data), identity='sha:' + stored['sha256'],
@@ -338,7 +338,7 @@ POOL_NOTE = ('这些是群里有人发过的表情包，程序先替你存着（
 def pool_seen(store, blobs, config, message_id):
     """A group message's stickers join the pool (bytes saved now); returns how many new candidates."""
     from .state import Conflict
-    from .vision import attachments_of, media_source_url, pull_bytes
+    from .vision import attachments_of, media_source, pull_bytes
     row = store.db.messages.find_one({'_id': message_id})
     if not row or row.get('direction') != 'inbound':
         return 0
@@ -354,7 +354,7 @@ def pool_seen(store, blobs, config, message_id):
         if fingerprint and store.db.sticker_memory.find_one(_by_key(fingerprint), {'_id': 1}):
             continue                                   # she knows it already: kept once, or looked and let go
         try:
-            data, media_type, _, _ = pull_bytes({**entry, 'url': media_source_url(store, task, config, entry)}, config)
+            data, media_type, _, _ = pull_bytes({**entry, **media_source(store, task, config, entry)}, config)
         except Exception:
             continue                                   # gone already: nothing to save
         stored = blobs.put_once(data, SCOPE, 'image', source_ids=[POOL_SOURCE + message_id])

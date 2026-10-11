@@ -6,6 +6,7 @@ conventions and the adapter's derived settings is here; the adapter itself is in
 import json
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 KIND = 'qq'                       # scene ids qq:<bot>:<dm|group>:<target>; person ids qq:<account>
 TITLE = 'QQ'                      # the sidebar workspace its conversations live in
@@ -36,6 +37,49 @@ MD5_FILE = re.compile(r'([0-9A-Fa-f]{32})\.[A-Za-z0-9]{2,5}')
 def sticker_md5(item):
     match = MD5_FILE.fullmatch(str(item.get('file') or '').strip())
     return match.group(1) if match else None
+
+
+# A picture link from the NT media host carries a signature (`rkey`) that expires within minutes; the picture stays.
+# The adapter posts NapCat's current keys under these names, and a stored link is signed again with the key of its
+# kind before it is fetched (asuna/media_keys.py): appid 1407 group pictures, 1406 private ones.
+SIGNED_HOST = 'multimedia.nt.qq.com.cn'
+MEDIA_KEYS = {'1407': 'qq-group', '1406': 'qq-private'}
+RKEY = re.compile(r'([?&]rkey=)([^&#]*)')
+APPID = re.compile(r'[?&]appid=(\d+)')
+
+
+def _signed(url):
+    """The key name a signed link needs and its current signature, or None."""
+    url = str(url or '')
+    if urlsplit(url).hostname != SIGNED_HOST:
+        return None
+    appid, rkey = APPID.search(url), RKEY.search(url)
+    name = MEDIA_KEYS.get(appid.group(1)) if appid else None
+    return (name, rkey.group(2)) if name and rkey else None
+
+
+def media_key_name(url):
+    found = _signed(url)
+    return found[0] if found else None
+
+
+def media_key_in(url):
+    """(name, key) a link that arrived minutes ago is signed with."""
+    found = _signed(url)
+    return found if found and found[1] else None
+
+
+def sign_media(url, key):
+    return RKEY.sub(lambda match: match.group(1) + key, str(url), count=1)
+
+
+def media_refusal(status, detail):
+    """What the media host's refusal means: 'expired' (the signature), 'gone' (the picture), or None."""
+    if '-5503007' in detail or 'expired' in detail.lower():
+        return 'expired'
+    if status in (404, 410):
+        return 'gone'
+    return None
 
 
 ACCOUNT = re.compile(r'[0-9]{4,20}')

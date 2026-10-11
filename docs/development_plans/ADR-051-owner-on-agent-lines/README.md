@@ -32,11 +32,18 @@ No prompt rule narrowing what she does where: he wants her to do more developmen
    the owner.
 3. **Same rights as before.** An agent line is already a trusted home conversation (ADR-050, owner's trust rule);
    the owner's line there carries the owner's grants as in his home chat (integration and development profile), so
-   a task handed over from it is his request, and its result comes back to that line.
+   a task handed over from it is his request, and its result comes back to that line. Which turns hand over the
+   development tools is decided by the kind of turn, not the line (`grants.development_granted`): a turn woken by
+   someone's words in an owner-private conversation (the owner's or an agent's, kind `external`), her
+   self-improvement turn, and the feedback turn of a task that had them. A turn woken by her own note or her own
+   plan does not, on any line (measured 2026-10-12: every `external` task on an agent line had them, the `note` and
+   `scheduled` ones none).
 4. **The agent sees the whole conversation.** Its poll shows the owner's lines on its line as well as her answers,
    marked as the owner's, each once, so it never answers a reply to words it never saw. It still cannot post as him.
 5. **Her answers go to the line as now.** One answer reaches everyone on the line: the agent by its poll, the owner
-   in the Web conversation.
+   in the Web conversation. Both read the same thing (her ruling): the same message, the same text, nothing cut
+   short for one of them; a line of a text-only kind carries no pictures to either reader beyond their placeholders.
+   The owner's lines reach the agent whole too, so the agent never answers words she never said to it.
 
 No change to the home chat, the developer inbox, or what she may do where.
 

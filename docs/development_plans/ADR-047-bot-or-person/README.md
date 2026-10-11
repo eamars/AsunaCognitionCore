@@ -1,6 +1,6 @@
 # ADR-047: Telling bots from people in her groups
 
-Status: **Proposed 2026-10-11.** Drafted by Claude from the owner's brief and Xiaoman's first four points; she
+Status: **Proposed 2026-10-11; on 2026-10-12 the owner ruled that it stays inside her skill, with no new tools.** Drafted by Claude from the owner's brief and Xiaoman's first four points; she
 reviews and rewrites it on 2026-10-12. Nothing is built.
 
 ## Context
@@ -48,16 +48,16 @@ What already exists and fits:
 
 ## Decision (proposed)
 
-1. **One skill, two halves.** The skill (hers, in her persona package) holds the catalog of framework behaviours, the
-   procedure and the social rules. The program supplies the passive half as computed readings; she runs the active
-   half.
-2. **Passive readings are computed by the program, not guessed by a model.** Per person and group, from stored lines:
-   how fast they answer when addressed; bursts (several lines in seconds with no one in between) and whether the gaps
-   inside a burst are constant or follow length (measured from host receipt time, which keeps the fraction of a
-   second); whether they ever speak unaddressed; the hours they are active; exact repeats of their own or others'
-   lines; command-prefixed lines; regularity of length and format; join date and last spoke. They reach the action brain only as interpreted words in tiers (AGENTS.md: program
-   statistics reach a model as text, never raw numbers). First form: a read-only action-brain tool that returns one
-   person's readings in one group.
+1. **All in the skill, no new tools** (owner, 2026-10-12). The skill (hers, in her persona package) holds the
+   catalog of framework behaviours, the procedure, the readings to take and the social rules. Both halves run on the
+   tools she and the action brain already have.
+2. **Passive readings from the record, by the action brain with its existing tools.** Per person and group, from the
+   lines the history search returns with their times and from the member list (join and last spoke): how fast they
+   answer when addressed; bursts (several lines in seconds with no one in between); whether they ever speak
+   unaddressed; the hours they are active; exact repeats of their own or others' lines; command-prefixed lines;
+   regularity of length and format; the catalog's fixed texts. The skill says how to take each one and how to word
+   it. The gaps inside a burst need times to a fraction of a second, which only the host's receipt time keeps; where
+   the history search does not show them, that reading is left out rather than given a tool.
 3. **The catalog** lists, per framework, what another member can see in chat, each with its source evidence: what
    makes it reply, its timing, how it splits and shapes messages, fixed command answers, error texts that leak, how
    it answers "are you a bot". See Catalog below.
@@ -66,7 +66,7 @@ What already exists and fits:
    bot?") with the reply; each later step is a `message_action` to the same task, so the task carries the step,
    the earlier probes and the answers. Silence (no answer within three minutes, or within the hour) is one weak
    reading in the mechanical column and never decides anything on its own.
-5. **Two columns, never merged.** The mechanical column (program readings plus catalog matches) is what the action
+5. **Two columns, never merged.** The mechanical column (readings from the record plus catalog matches) is what the action
    brain reports; the semantic column (does the person take a joke, does the text feel templated) is hers. The action
    brain writes observations, never a verdict.
 6. **Conclusions go to that group's notes first,** layer `here`, marked 「未定·仅试探」 (undecided, probe only).
@@ -79,8 +79,8 @@ What already exists and fits:
    people she is sure of, for a hit rate. The replay keeps the misses that configuration drift cannot explain (a bot
    whose operator changed its defaults) apart from the rest. Live probes only after that rate is good enough for her,
    and at first alongside her own judgment, not replacing it.
-9. **Only if measurement asks:** a small structured record of probe sessions (who, step, deadline) if the task thread
-   proves too loose; automatic probe scheduling.
+9. **Not planned:** a new tool, a structured record of probe sessions, automatic probe scheduling. If the task
+   thread proves too loose, that goes back to the owner first.
 
 ## Catalog
 

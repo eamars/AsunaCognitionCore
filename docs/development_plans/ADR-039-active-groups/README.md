@@ -49,3 +49,14 @@ let either of the two rest when they go quiet; the choice is hers.
 - A resting group's newer events are not in her memory until she is woken there, visits, or makes it active;
   `recall` and the history search still find its lines.
 - Measure after a day: evictions in the engine log, and cache hits on her first steps.
+
+## Measured after the first night (2026-10-11 morning)
+
+- Summaries ran only in her four active groups and at home: about 52 in 7.7 hours, against about 290 for the same
+  span before.
+- Engine log: 52% of parks evicted a conversation (97 of 188), against 78% before (311 of 400). Tiny requests fell
+  from 64% to 39% of parks.
+- First-step cache hits: home 67% (16% before), old-home line 77%, active groups about 64%. A 0% remains after a
+  long gap.
+- She made a fourth group active herself at 03:07 in a self-improvement turn, with the reason in her work log.
+

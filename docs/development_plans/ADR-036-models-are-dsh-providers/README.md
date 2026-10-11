@@ -33,3 +33,28 @@ where DSH already has them, is a red flag; Asuna should inherit DSH's settings a
 - The live profile's two providers stay as ordinary DSH providers; nothing was migrated. Its stage efforts moved from
   `deployment.reasoning_effort` to the character route (gate low, groups medium, as before).
 - A config that still names `character` or `executor` is refused with `MODEL_ROUTES_ARE_DSH_PROVIDERS`.
+
+## Trial: DeepSeek V4.1 Flash as the character brain (2026-10-11)
+
+At the owner's request her character route was switched on the settings card to DSH's `deepseek-official` provider,
+model `deepseek-flash`: effort High, gate Low, groups following High because the model offers no Medium. Her action
+brain stayed local. It ran about 9 minutes, 15:41–15:50 NZDT, and was switched back early on the owner's call.
+
+- **It works with the harness:** about 40 requests and no tool errors. From the second request in each
+  conversation, about 99.9% of each prompt was read from cache. Its token counts for her content are within 1% of
+  the local model's.
+- **Her words were unchanged, but the "think first" habit was not:** 6 of 12 turns skipped `think` and were
+  repaired automatically, against about 3.5% of turns on the local model. Her own reading: "what I say is mine;
+  following the rule depends on the model."
+- **Context is the risk when switching back.** DeepSeek's window is 1M, so her conversations don't compact until
+  about 800K. The local model compacts at about 210K and can compact nothing past about 235K: replaying the prefix
+  plus the 24,576-token summary cap must fit 262K. The agent line reached 225K and compacted on its first local
+  turn, at the edge.
+- **Before a longer run:**
+  - add a per-model compaction policy for `deepseek-official/deepseek-flash` (`modelPolicies` in
+    `dsh-compaction-basic`), compacting near 200K and keeping a tail the size the local model keeps;
+  - close or watch fast-growing lines;
+  - accept the extra repair requests for skipped thoughts, or patch DSH for tool choice (it has none today).
+- **Separate from the trial:** one resting group sits at 229K. Its next local compaction needs about 254K of the
+  262K window, which fits only barely. A lower threshold or summary cap would add margin; the owner's call.
+

@@ -40,11 +40,54 @@ Her four rules:
   covers all old thoughts without migration.
 - The memory side panel shows the same "然后" lines under each thought.
 
-**Batch 2, binding and returning (next):** each action with consequences records the thought it came from. Where
-the thing comes back (a plan firing, a task result, a reply to her line, the night block), its reason comes with it,
-in her words.
+## Status (2026-10-11)
 
-**Later, if measurement asks:** one-step turns (a step with `think` and her words ends the turn), and a
-post-compaction "what I did and why" block.
+- **Batch 1 built and live:** commit 66ad7006, installed by her restart at 19:30 NZDT, together with the one-hour
+  waiting list (ADR-041) and the plan-time fix (94d50bb0).
+  - Checked: the panel's "然后" section renders; in her first three notices 4 visible thoughts were left out, and
+    the one recalled thought delivered carried `then`.
+  - Waiting on Xiaoman's own check: she will `recall` a thought from that afternoon and see whether it comes back
+    with a date and a "所以我…" line, then point to any "then" line that doesn't read like her memory.
+- **Baseline to compare against** (10-10 → 10-11, before batch 1):
+  - Notices averaged 15,121 characters; `memories` about 2,000 of that, `recent_thoughts_from_program` about 590
+    in every notice, `unchanged_from_program` about 530.
+  - 91 of 205 recalled thoughts had their `think` call still visible; memories re-sent while visible were 8%.
+  - Measure again after a day of traffic: notice size, thoughts left out, how often the last-3 block still goes
+    out, and the share of thoughts among recalled memories.
 
-No new tool and no prompt change (ADR-038).
+## Batch 2: binding and returning (next, its own restart)
+
+Each action records the thought it came from, and the reason comes back with the thing, in her words (rule 1).
+
+- **Bind.** When a call with consequences is recorded (`RoleTools._record`, `role_tools.py`), store `reason_ref`:
+  the id of her newest thought in the turn at that moment. Store the same on what the call produced and what comes
+  back later:
+  - delivered messages (they already carry `monologue_refs`; `reason_ref` names the one thought);
+  - tasks, plans, notes, ideas, and self or document revisions.
+  - "With consequences" is one shared table. `reasons._action` already names those tools; `night.COUNTED` is a
+    smaller copy, so merge the two rather than keep both.
+- **Return,** each at the tail of the turn it comes back in, as her original thought text, shortened only with
+  the excerpt mark, never summarised (rule 1):
+  - a plan firing (the `scheduled` turn's `scheduled_plan_from_program`): "你当时为什么定它";
+  - a task result (`task_feedback` notice);
+  - an inbound line that replies to or quotes her delivered line (`context.py` already resolves the parent row
+    for the reply): what she thought when she wrote it;
+  - the night block (ADR-042), for tools without a `why` argument (`group_focus`, notes, `delegate`, `peer_line`,
+    `errand`).
+- **No new tool and no `why` argument on tools:** the bound thought is the why.
+- **Measure:** returned reasons per day by kind, and any "ownership unknown" incident per week (the goal is zero).
+  Real-page test: the owner picks five actions from the audit (two plans, a task, a self edit, a group change) and
+  asks her for the reason behind each, before and after.
+
+## Later, only if measurement asks
+
+- **One-step turns.** A step carrying `think` and her words ends the turn, saving the second request. The
+  think-only first step is a median 12 s of a 24 s turn and 56% of its output tokens. Two DSH behaviours need
+  checking first: whether several calls in one step run in order, and whether the step's text can be read while its
+  tools run.
+- **A post-compaction "what I did and why" block** (ADR-042 generalised), only if reasons are still lost inside a
+  compacted span that batches 1 and 2 don't cover.
+- **Not pursued:** Kazusa's residue; a `why` on every tool; forcing the first call with tool choice (DSH's LLM layer
+  has no tool-choice option, so it would need a fork patch; reconsider only if a route that skips `think` often,
+  such as DeepSeek V4.1 Flash at 6 of 12, goes live).
+

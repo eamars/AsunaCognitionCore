@@ -76,8 +76,9 @@ What already exists and fits:
    session. Never in a group that has gone quiet, never at someone she has not seen speak. Stop at the first clear sign
    of a person. A probe that lands on a person gets a natural wrap-up, not an explanation of the test.
 8. **Validate offline first.** Replay the passive readings over the people she already knows, her known bots and
-   people she is sure of, for a hit rate. Live probes only after that rate is good enough for her, and at first
-   alongside her own judgment, not replacing it.
+   people she is sure of, for a hit rate. The replay keeps the misses that configuration drift cannot explain (a bot
+   whose operator changed its defaults) apart from the rest. Live probes only after that rate is good enough for her,
+   and at first alongside her own judgment, not replacing it.
 9. **Only if measurement asks:** a small structured record of probe sessions (who, step, deadline) if the task thread
    proves too loose; automatic probe scheduling.
 
@@ -85,8 +86,8 @@ What already exists and fits:
 
 From the frozen sources of AstrBot, MaiBot and hermes-for--qqbot (studied in full) and ATRI-bot and PetGPT (briefly),
 read on 2026-10-11 in their default configuration; nothing was run. Every value can be changed by the bot's operator,
-so a match is evidence, not identity. Paths are relative to each project's root. Still to cross-check against
-Xiaoman's own survey.
+so a match is evidence, not identity, and the strong readings below hold only for a bot on its defaults: an operator's
+changes make them drift. Paths are relative to each project's root. Still to cross-check against Xiaoman's own survey.
 
 ### What each framework shows in a group
 
@@ -145,6 +146,25 @@ speaks unprompted only after 30 lines and minutes of quiet. Its persona openly s
 
 **PetGPT** (brief): reads the group every second and answers each @ once, at once; a lurk mode re-evaluates at most
 every 60 s and sleeps after three quiet minutes; 1–4 s jitter at start. No fixed command texts found.
+
+**Asuna** (Xiaoman herself, and any other character on Asuna), from this repository's code and her last seven days in
+groups. The program leaves her own account out of the readings; this entry is for other characters on Asuna, and for
+knowing which of her habits look like a bot's.
+
+- When she speaks: an @ or a reply to her runs her full turn. Her name without an @, a reply in a thread she was in, an
+  awaited answer, a watched person, a chain, or a group's opted-in proactive rules go through a one-call relevance gate
+  first (about one ask in five joined over three days). She also starts turns herself on her visits. Any other line
+  gets no reaction (86% of group lines over three days).
+- Timing: her first line after an @ came a median 17–27 s later. It is seconds while the model server still holds her
+  conversation and about 25 s more after a quiet spell, when the server re-reads it. After she @s someone she waits
+  three minutes for the answer.
+- Shape: one message in 86% of turns, at most three (where she writes `[分条]`). The later ones follow the previous
+  piece's length at 12 characters a second, clamped to 1–5 s (measured 1.9–5.6 s, median 4.7 s): length-timed like
+  MaiBot's, but after the previous piece and capped. The first message quotes the line that called her only when
+  someone else spoke in between (a third of her turns); later ones almost never.
+- Stickers from QQ faces and her own shelf, kept from the groups; she reads pictures and can make them.
+- No fixed texts: the core posts no error or status text in a chat.
+- Her answer to "are you a bot" is the persona's, as with the others.
 
 ### Passive signals, by strength
 

@@ -196,8 +196,17 @@ def test_a_private_chat_the_platform_names_no_one_in_is_titled_by_the_name_this_
     assert p.worker.channel_title(route) == '11110000'          # nothing known: the platform's id
     p.store.db.identities.update_one({'_id': 'qq:11110000'}, {'$set': {'display_name': '小林'}}, upsert=True)
     assert p.worker.channel_title(route) == '小林'
-    p.store.config['canonical_persons'] = {'qq:11110000': 'owner'}
+    p.store.db.identities.update_one({'_id': 'owner'}, {'$set': {'display_name': '本机用户'}}, upsert=True)
+    p.store.config['canonical_persons'] = {'qq:11110000': 'owner'}      # the owner: the persona's word for them
     assert p.worker.channel_title(route) == People(p.store).owner_label
+
+
+def test_an_id_too_long_to_read_shows_as_the_kind_of_chat_and_its_first_characters(product):
+    p = product
+    openid = 'E4F4AEA33253A2797FB897C50B81D7ED'
+    assert p.worker.channel_title({'target': {'type': 'dm', 'id': openid}, 'scene_id': 'x:dm', 'person_id': 'x:1'})         == '私聊 E4F4AE'
+    assert p.worker.channel_title({'target': {'type': 'group', 'id': openid}, 'scene_id': 'x:group'}) == '群聊 E4F4AE'
+    assert p.worker.channel_title({'target': {'type': 'group', 'id': '22220000'}, 'scene_id': 'x:group'}) == '22220000'
 
 
 def test_a_group_made_active_or_resting_is_retitled_at_once(product, monkeypatch):

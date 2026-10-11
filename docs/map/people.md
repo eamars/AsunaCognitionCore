@@ -153,7 +153,7 @@ Her watchlist (owner 2026-10-06): people she wants to hear about when they speak
 
 [src/asuna/waiting.py](../../src/asuna/waiting.py)
 
-Who she is still waiting for: her lines of the last day in a group that called someone with an @, or asked for an answer with `await_answer` wait=yes, whose people have not spoken there since.
+Who she is still waiting for: her lines of the last hour in a group that called someone with an @, or asked for an answer with `await_answer` wait=yes, whose people have not spoken there since.
 
 - def `pending` — [{scene_id, person (None: anyone), doc, at, text}] newest first: who she still waits for in these groups.
 - def `block` — waiting_from_program: who she still waits for, in words; None when nobody.

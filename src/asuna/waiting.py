@@ -1,4 +1,4 @@
-"""Who she is still waiting for: her lines of the last day in a group that called someone with an @, or asked for an
+"""Who she is still waiting for: her lines of the last hour in a group that called someone with an @, or asked for an
 answer with `await_answer` wait=yes, whose people have not spoken there since.
 
 Computed each time from the stored lines; nothing is kept. A person drops off the list when they speak in that
@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-HORIZON = timedelta(hours=24)
+HORIZON = timedelta(hours=1)
 SHOWN_HOME = 5
 EXCERPT = 30
 ANYONE = '这里任何人'
-NOTE = '你点过名（@ 或 wait=yes）、到现在还没在那边开口的人，一天以内的。对方一开口就不再列；不想等了不用管，过一天自己消失。'
+NOTE = '你点过名（@ 或 wait=yes）、到现在还没在那边开口的人，一小时以内的。对方一开口就不再列；过了一小时自己消失。'
 
 
 def _ago(moment, stamp):

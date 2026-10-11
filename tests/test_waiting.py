@@ -38,15 +38,15 @@ def line(store, scene, seq, text, minutes_ago, episode=None, choice=None, mine=T
 
 def test_she_sees_who_she_still_waits_for_and_nobody_else(store):
     world(store)
-    line(store, G1, 1, '@[A同学 #1] 你周末来吗', 120)                 # called A: A never spoke since
-    line(store, G1, 2, '@[B同学 #2] 那本书呢', 90)                   # called B: B answered
-    line(store, G1, 3, '好的', 80, mine=False)                        # B speaks (author qq:B)
-    line(store, G1, 4, '随口一句 @[A同学 #1]', 60, choice={'off': True})  # wait=no: never counts
+    line(store, G1, 1, '@[A同学 #1] 你周末来吗', 50)                  # called A: A never spoke since
+    line(store, G1, 2, '@[B同学 #2] 那本书呢', 45)                   # called B: B answered
+    line(store, G1, 3, '好的', 40, mine=False)                        # B speaks (author qq:B)
+    line(store, G1, 4, '随口一句 @[A同学 #1]', 35, choice={'off': True})  # wait=no: never counts
     line(store, G1, 5, '这只是一句回话', 30)                           # a plain reply/remark: no call, no wait
-    line(store, G1, 6, '有人知道吗', 26 * 60, choice={'why': '想问路'})    # older than a day: gone
+    line(store, G1, 6, '有人知道吗', 70, choice={'why': '想问路'})        # older than an hour: gone
     line(store, G2, 7, '谁有空帮个忙', 10, choice={'why': '找人帮忙'})     # wait=yes, nobody called: anyone here
     here = waiting.block(store, [G1], NOW, 'P1')
-    assert [(i['who'], i['waiting']) for i in here['items']] == [('[A同学 #1]', '挂了 2 小时')]
+    assert [(i['who'], i['waiting']) for i in here['items']] == [('[A同学 #1]', '挂了 50 分钟')]
     assert here['items'][0]['your_line'] == '@A同学 你周末来吗'
     home = waiting.block(store, [G1, G2], NOW, 'P1', home=True)
     assert [(i['group'] != '', i['who']) for i in home['items']] == [(True, waiting.ANYONE), (True, '[A同学 #1]')]

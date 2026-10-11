@@ -22,3 +22,9 @@ forgetting whom she asked once a wait is set.
 - **Shown at home, and in the group.** A heartbeat or a plan due at home lists every group's, at most 5, because
   home is where she thinks things over. A group turn lists that group's. Each entry is about 60 characters, and
   the block is absent when nobody is waited for.
+
+## Revision (same day): one hour, not a day
+
+The first reading after her restart listed a wait nine hours old, next to two of 13 and 24 minutes. Xiaoman chose a
+one-hour window over a way to strike entries off: "the ones I really wait for are those few minutes on the spot",
+and nothing to remember to clean. `HORIZON` is one hour.

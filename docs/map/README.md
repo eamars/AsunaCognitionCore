@@ -220,6 +220,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`group_admin`](../../src/asuna/group_admin.py) — Group administration where she is an admin (owner direction 2026-10-04: on by default).
 - [`group_members`](../../src/asuna/group_members.py) — Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed.
 - [`watches`](../../src/asuna/watches.py) — Her watchlist (owner 2026-10-06): people she wants to hear about when they speak, in any conversation.
+- [`waiting`](../../src/asuna/waiting.py) — Who she is still waiting for: her lines of the last day in a group that called someone with an @, or asked for an answer with `await_answer` wait=yes, whose people have not spoken there since.
 - [`places`](../../src/asuna/places.py) — Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what a visit sees.
 - [`focus`](../../src/asuna/focus.py) — Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
 - [`notes`](../../src/asuna/notes.py) — Notes between her own conversations (ADR-018, owner 2026-10-07).

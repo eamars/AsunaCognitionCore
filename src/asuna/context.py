@@ -75,7 +75,7 @@ BLOCKS = {
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
     'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
               'stickers_from_program', 'faces_from_program'),
-    'group_continuity': ('group_continuity_from_program', 'watched_from_program'),
+    'group_continuity': ('group_continuity_from_program', 'watched_from_program', 'waiting_from_program'),
     'notes': ('note_from_program', 'notes_from_program', 'notes_sent_from_program', 'note_places_from_program'),
     'sender_identity': ('sender_identity',),
 }
@@ -519,6 +519,11 @@ class ContextBuilder:
             visits=places.last_visits_block(self.store,persona,plan,moment)
             if visits:
                 context['last_visits_from_program']=visits
+            # who she still waits for in her groups (waiting.py): at home is where she thinks about it
+            from . import waiting as _waiting
+            still=_waiting.block(self.store,[sid for sid,_,_ in places.groups(self.store.config)],moment,persona,home=True)
+            if still:
+                context['waiting_from_program']=still
         # ADR-013 §6: her peer lines and whether she has them open, at home and in the line's own conversation.
         from . import lines as _lines
         peer_lines=_lines.peer_lines(self.store)
@@ -599,6 +604,10 @@ class ContextBuilder:
         if watching:context['watching_from_program']=watching
         watched=_watches.watched_block(self.store,event,session_class)
         if watched:context['watched_from_program']=watched
+        if scene.get('kind')=='group':
+            from . import waiting as _waiting
+            still=_waiting.block(self.store,[scene['_id']],moment,persona)
+            if still:context['waiting_from_program']=still
         # ADR-018: notes between her conversations -- the one that opened this turn, the others written to here,
         # what came of the ones she wrote here, and where a note from here can go.
         from . import notes as _notes

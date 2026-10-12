@@ -1,7 +1,8 @@
-# ADR-053: One action brain: a shared queue, a fresh context per task, tools fenced per task
+# ADR-053: Action brains: one per conversation, discarded when idle; a visible queue; tools fenced per task
 
-Status: **Approved 2026-10-12**: her decision (home turn), the owner confirmed after weighing the leak between home
-and public; the tool fence is the owner's guard rail. Not built.
+Status: **Approved 2026-10-12**, revised the same day by the owner (keep one action brain per conversation, discard
+it when idle) after the cache review; the tool fence is the owner's guard rail. Xiaoman chose one shared brain first;
+her agreement to the revision is pending. Not built.
 
 ## Context
 
@@ -28,22 +29,32 @@ What exists:
 
 ## Decision
 
-1. **A fresh context per task** (cache: see below). Each task starts its own action session; a continuation of the same task (her
-   follow-up words, a revision) stays in it. Nothing of an earlier task's tool output is in a later task's context, so
-   home results do not ride along into a group's task. What must carry over, she writes to disk herself.
+Revised by the owner the same day, after the cache review below: keep one action brain per conversation as today,
+and let it drop its history after an idle limit. That is a smaller change and does nearly what one shared brain
+would: measured over 7 days (256 tasks), when a task started, one conversation had used the action brain in the
+past 30 minutes in 61% of cases, two in 35%, three in 4%; with the limit, at most two or three action histories are
+alive at once, and none outlives its use. Home and public never share one.
+
+1. **One action brain per conversation, discarded when idle.** A conversation's action context carries on from task
+   to task while it is in use; once it has been idle longer than the route's limit (default 30 minutes, tuned per
+   route from measurement, below), the next task there starts a fresh context, carrying the task's brief, and for a
+   continuation its last report and her new words. What must carry over longer, she writes to disk herself. Same
+   rule on the local server and on any API.
 2. **One queue, visible.** Tasks still run one at a time. When she hands one over she is told what is ahead of it (how
    many, which conversation, long or short), so a quick group request is not stuck behind a scan without her knowing.
-3. **Tools fenced per task (the owner's guard rail).** Information cannot be fenced once it is in the action brain;
-   tools can. The tool list the model is shown is the same for every task (cache: every task shares one warm
-   prefix); which of them this task may use is said in text at the start of the task, by the conversation it came
-   from, and enforced by the program as today (the plugin's guard and the broker). A task from a public conversation
-   cannot run commands, develop, use integrations or anything else the class does not give, whatever it reads.
-4. **One system prompt.** `executor.md` is the same for every task; the class's values move into the task's opening
-   text, next to its tool list, so the shared prefix is the same for home and public tasks.
-5. **Reports stay with their sources.** A report says how much it scanned and from which root, and quotes rows as the
+3. **Tools fenced per task (the owner's guard rail), one tool list per context.** The tool list a context is shown
+   stays the same from task to task (the tool list is part of the cached head: today 71 of 241 consecutive tasks in
+   one conversation changed it, which makes the whole carried context read cold again); which tools this task may
+   use is said in text at its start and enforced by the program as today (the plugin's guard and the broker). A task
+   from a public conversation cannot run commands, develop, use integrations or anything else the class does not
+   give, whatever it reads.
+4. **Reports stay with their sources.** A report says how much it scanned and from which root, and quotes rows as the
    tools returned them (the invented rows above).
-6. **Two rules, not one.** What a task may read stays bound to the conversation it came from; which turns hand over
-   which tools stays decided by the kind of turn (ADR-051). Sharing the queue changes neither.
+5. **Two rules, not one.** What a task may read stays bound to the conversation it came from; which turns hand over
+   which tools stays decided by the kind of turn (ADR-051).
+
+Dropped from the first draft: a fresh context for every task and one system prompt for all (a conversation's class
+does not change, so its system prompt is already stable).
 
 ## Cache (the owner's concern, 2026-10-12)
 
@@ -66,8 +77,9 @@ The model server's session read the engine's source at the running commit and it
   task's last step is known only afterwards; on every step it would make each step re-read the task. Used only for
   truly one-shot requests.
 
-Decision: fresh per task, no pin. (4) matters here: home and public tasks share the head checkpoint only if their
-system prompts are identical. A related saving outside this ADR: her group relevance gates are about a fifth of all
+The review's answer at the time: fresh per task, no pin; the owner's revision (Decision) keeps a conversation's
+context while in use instead, which on this server costs one entry per conversation used within the idle limit,
+replaced in place as the context grows, and nothing once the limit passes. No pin either way. A related saving outside this ADR: her group relevance gates are about a fifth of all
 requests and each parks a ~0.3 GiB entry; marking them one-shot would free that at about 0.6 s per gate.
 
 ## Any endpoint, and an idle limit (owner, 2026-10-12)
@@ -76,12 +88,9 @@ The design must suit any OpenAI-compatible endpoint (DeepSeek and others), not o
 taken to cache without a space limit, as long as an entry has not expired: there **time** decides what is cached; on
 the local server **space** does. Nothing here depends on one server's request fields.
 
-- **Fresh per task suits both.** Every task starts with the same head (one system prompt, one tool list), which an
-  API caches by prefix and the local server by its head checkpoint; a task's prompt carries no earlier task, so an
-  API bills fewer input tokens per step and the local server holds at most one leftover task entry.
-- **An idle limit for an action context (the owner's idea), 30 minutes by default.** A continuation of a task (her
-  follow-up, a revision) goes on in the task's own context only if that context was used within the limit;
-  otherwise it starts a fresh context that carries the task's brief, its last report and her new words. After that
+- **An idle limit for an action context (the owner's idea), 30 minutes by default.** A conversation's action
+  context goes on only if it was used within the limit; otherwise the next task starts a fresh one, carrying its
+  brief (and for a continuation the last report and her new words). After that
   long both kinds of endpoint have most likely dropped the cache, so carrying on would read the whole old context
   cold, at full price and with no benefit over a shorter fresh start. The limit is one setting, not tied to a model.
 - **The limit is set per route, from measurement (owner: on the local server space matters more than time).**
@@ -97,8 +106,8 @@ the local server **space** does. Nothing here depends on one server's request fi
 
 ## Consequences
 
-- The model server holds one action context at a time instead of one per conversation; the warm prefix (system
-  prompt and tool list) is shared by all tasks.
+- The model server holds at most the action contexts used in the last idle period (measured: usually one or two)
+  instead of every conversation's, each with a head that stays the same from task to task.
 - The model sees tools a task may not use; a call to one is refused with the list of what it may use (as today),
   costing a step, not a breach.
-- Old per-conversation action sessions stay as history; new tasks do not continue them.
+- An action session idle past the limit stays as history; the next task in that conversation starts a new one.

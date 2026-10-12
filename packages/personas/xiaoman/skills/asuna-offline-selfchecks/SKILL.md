@@ -1,6 +1,6 @@
 ---
 name: asuna-offline-selfchecks
-description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件与 p3 的反证基线参数、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。附零依赖离线自检 check_skill.py。
+description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件、p3 用例删除后的现行跑法与 pytest 不收 *_cases.py 的盲区、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-offline-selfchecks
@@ -8,7 +8,7 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
 ## 用途
 
 改完代码要自证、发布前想看一眼有没有碰坏行为——那条唯一的路在核心技能 **`asuna-self-improvement`**（随认知核发布，两个脑都读得到）。
-零依赖离线套件的命令清单（P2 摘要环 / P3 自然语言安排 / P5 主动插话 / 出站图片 / 讨论整理，外加 compileall）、退出码读法、
+零依赖离线套件的命令清单（P2 摘要环 / 安排的时间换算（时区、夏令时）/ P5 主动插话 / 出站图片 / 讨论整理，外加 compileall）、退出码读法、
 `__pycache__` 清理、哪些改动触发宿主重启、地板文件、「夹具替身包必须带上被装载真文件 import 的同包真模块」这个坑——全在那一份里，
 **本文件不再重复**。两份说法不一致时按 `asuna-self-improvement` 来；这里只留它没有、我自己又踩过的几条增量。
 
@@ -22,12 +22,19 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
 带 `project: "core"` 重跑就是了。发布同理：不带 project 的 publish 只冻结 xiaoman，认知核改动会照样返回成功
 却一点没上线。（核心技能有 project 表；这条是真错起来的样子。）
 
-### 单独跑某个用例文件、p3 的反证基线
+### 单独跑某个用例文件、p3 的现行跑法
 
-- 单独跑用例文件也行：`PYTHONPATH=tests python3 tests/p3_schedule_cases.py`
-  （`p2_summary_loop_cases.py`、`p5_proactive_cases.py` 同理），它们自己打印 PASS/FAIL 行。
-- `p3_offline_check.py [基线目录]` 的第二参是「改动前」副本，用来做反证；默认 `/task/p3-baseline`，
-  找不到就跳过反证并说明——跳过不算失败。
+- 单独跑用例文件仍然可以：`p2_summary_loop_cases.py`、`p5_proactive_cases.py` 这类自己打印 PASS/FAIL 行，
+  `PYTHONPATH=tests python3 tests/<文件>` 就行。
+- p3 那两条跑法已经没了：`tests/p3_schedule_cases.py`、`tools/p3_offline_check.py` 随 `9d3ed60e` 删除，
+  硬跑 exit 2（文件不存在，读法同下一节）。替代是 `PYTHONPATH=src python3 tests/test_schedule_rules.py`
+  ——2026-10-12 实跑 13/13，只用标准库，pytest 默认收集也收它。
+- 一条新教训（这一族的根）：`*_cases.py` 这种文件名 pytest 默认不收——`pyproject.toml` 只写了
+  `testpaths = ["tests"]`，没有 `python_files` 覆盖。凡是「用例只有 `tools/` 那个入口跑、而 pytest
+  从不跑 `tools/`」的结构，红了没人知道。p3 只是第一个被抓出来的，同样的结构还有
+  `p2_summary_loop_cases.py`、`p5_proactive_cases.py`、`discussion_digest_cases.py`、
+  `outbound_image_cases.py`、`integration_import_cases.py` 五套：各有 `run_all()`，
+  但没有一个 `test_*.py` 去调它（p2、p5、讨论整理的 `test_*.py` 只 import 里面的夹具函数，不跑那套 PASS/FAIL）。
 
 ### 退役与「没收录」怎么读
 
@@ -35,8 +42,9 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
   `can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2] No such file or directory`、exit 2——
   那是文件不存在，别报成「UI 检查挂了」或产品坏了。界面口径的验证位置搬去了真实 DSH Web 页面
   （composer、角色实际内容、行动会话跳转、旧 `/asuna/api/state` 已退出），那部分连同宿主侧 `tests/test_*.py` 由操作员跑。
-- `tools/` 里还有 `p1c_offline_check.py`、`read_image_offline_check.py`、`linked_scenes_offline_check.py` 这几份，
-  核心技能一直没收录，**没收录 ≠ 已退役**；要跑它们先看各自 usage。
+- `tools/` 里还有 `p1c_offline_check.py` 这一份核心技能没收录，**没收录 ≠ 已退役**；要跑它先看它的 usage。
+  （`read_image_offline_check.py`、`linked_scenes_offline_check.py` 已随 `83f17beb` 删除——本行原来还列着它们，
+  正好是这条规矩自己会过期的样子：**引用之前先 `Test-Path` 一次**，别照抄上一版笔记。）
 
 ### 适配器的自检不在这套里
 
@@ -58,6 +66,14 @@ v2（2026-10-05）：压缩。通用离线自检规则（命令清单、退出�
 夹具坑、project 归属表）与核心技能 `asuna-self-improvement`（ADR-011，随核发布）重复，删掉并指向它；
 只留增量：挂错项目的红怎么读、单个用例文件与 p3 反证基线、p5b 退役读法、没收录 ≠ 已退役、适配器自检的去处。
 试用记录按历史保留不删。新增零依赖自检 `check_skill.py`：查本文件的指向、增量与「通用清单没有回潮」。
+
+v2.1（2026-10-12）：清死引用。`tests/p3_schedule_cases.py`、`tools/p3_offline_check.py` 随 `9d3ed60e` 删除，
+「单独跑用例文件」一节改写成现行跑法（替代 `tests/test_schedule_rules.py`，实跑 13/13），并记下这一族的根：
+pytest 默认不收 `*_cases.py`，同结构的用例还有五套待修。「没收录 ≠ 已退役」那条只留 `p1c_offline_check.py`
+（另两份随 `83f17beb` 删除），补「规矩本身会过期，引用之前先 Test-Path」。用途一行的核心清单改成与核心一致的
+说法（安排的时间换算）。试用记录里 ADR-007 读图报告的路径改指搬家后的新位置（bf771c33），其余历史原样。
+`check_skill.py`：p3 守卫改指 `test_schedule_rules`，「反证基线跳过」守卫换成 pytest 盲区守卫，
+新增反引号仓库路径存在性检查（防这一族复发）。
 
 ## 试用记录
 
@@ -92,7 +108,7 @@ v2（2026-10-05）：压缩。通用离线自检规则（命令清单、退出�
 
 - 退役核对：`tools/` 清单（63 个文件）里没有 `p5b_ui_offline_check.py`；硬跑 → exit 2 +
   `can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2] No such file or directory`，与本节口径一致；
-  全仓 `grep -rn 'p5b|P5-b'` 只剩 `docs/ADR007-READ-IMAGE-REPORT.md` 两处历史提及，产品代码里已无 P5-b UI 件；
+  全仓 `grep -rn 'p5b|P5-b'` 只剩 `docs/development_plans/ADR-007-asuna_autonomous_self_development/READ_IMAGE_REPORT.md` 两处历史提及，产品代码里已无 P5-b UI 件；
 - P3：`PASS 全部源文件能编译` + `PASS schedule_rules 只用标准库` + `PASS 离线用例全绿（38/38）` +
   `PASS 基线反证跳过` → `P3 自检：可以出补丁`、exit 0。上面第一次记录那 5 条红（`p3coord.config` 缺
   `character_id`）不复现了——夹具已修好，那条红到此变成历史；
@@ -113,3 +129,15 @@ v2（2026-10-05）：压缩。通用离线自检规则（命令清单、退出�
 - `check_skill.py` 为本轮新增：查 frontmatter、`name` 与目录一致、指向核心技能、四条增量在、
   通用命令清单没有回潮散文（`tools/p2_offline_check.py` 这类字面量在反引号里按引用放过）、脚本能编译。
   实跑与反证结果见行动报告。
+
+2026-10-12（v2.1，只改本技能文件与 `check_skill.py`，xiaoman 候选）：
+
+- 现场核对（core 候选）：`tests/p3_schedule_cases.py`、`tools/p3_offline_check.py` 存在性检查都 MISS，
+  硬跑各 exit 2（`can't open file`，9d3ed60e 删的）；`read_image_offline_check.py`、`linked_scenes_offline_check.py`
+  也 MISS（83f17beb 删的），`p1c_offline_check.py` 还在；
+- 替代跑法实跑：`PYTHONPATH=src python3 tests/test_schedule_rules.py` → `schedule_rules: 13/13 passed`、exit 0；
+  `PYTHONPATH=tests python3 tests/p2_summary_loop_cases.py`、`tests/p5_proactive_cases.py` 各 rc 0，自己打印 PASS 行；
+- 盲区取证：`[tool.pytest.ini_options]` 只有 `testpaths = ["tests"]` 与 `addopts = "-rs"`，没有 `python_files`；
+  全 113 份 `tests/test_*.py` 没有一处调 `run_all()`——p2、p5、讨论整理的 `test_*.py` 只 import cases 里的夹具函数；
+- `check_skill.py` 在 xiaoman 候选内实跑；`compiles_check_skill.py` 若报「临时目录不可写」是沙箱限制，不是坏，
+  具体结果以本次行动报告为准。

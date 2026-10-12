@@ -48,3 +48,12 @@ def test_ref_index_holds_this_turns_ids_and_the_document_sections_have_a_block_o
     assert context['doc_refs_from_program'] and all(ref.startswith('doc:') for ref in context['doc_refs_from_program'])
     assert set(context['doc_refs_from_program']) <= set(refs(context)), 'still citable'
     assert 'doc_refs_from_program' in block_guide.guide(store.config)
+
+
+def test_her_rhythm_does_not_repeat_the_clock(store):
+    """ADR-063 D11: rhythm.local_time said the same moment as clock.now_local on the same clock."""
+    owner(store)
+    lane = FakeLane(store, [FakeTurn([THINK], '在呢。')])
+    context = Coordinator(store, lane).ingest(event('e-clock'))['context']
+    assert 'now_local' in context['clock_from_program']
+    assert 'in_sleep_window' in context['rhythm_from_program'] and 'local_time' not in context['rhythm_from_program']

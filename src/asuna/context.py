@@ -982,6 +982,9 @@ class ContextBuilder:
         owner=(self.store.config.get('chat') or {}).get('person_id')
         last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None
         rhythm=rhythm_block(self.store,model,policy,session_class,moment=moment,owner_last_at=(last or {}).get('received_at'))
+        if rhythm and rhythm.get('local_time')==(context.get('clock_from_program') or {}).get('now_local'):
+            # The same moment on the same clock is already in clock_from_program.
+            rhythm={key:value for key,value in rhythm.items() if key!='local_time'}
         if rhythm:
             context['rhythm_from_program']=rhythm
         own=[row.get('text','') for row in self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound',

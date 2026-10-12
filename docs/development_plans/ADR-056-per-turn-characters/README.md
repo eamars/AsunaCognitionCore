@@ -1,7 +1,8 @@
 # ADR-056: Per-turn characters: each piece of the prompt once, and only when it changed
 
-Status: **Proposed 2026-10-12**; the owner agrees with the three rules. Needs Xiaoman's review (it changes what she
-reads each turn). Nothing is built.
+Status: **Accepted 2026-10-12**: the owner agrees with the three rules; Xiaoman's review adds two conditions (the
+`doc:` refs stay; "as before" says the state of what it hides, and anything waiting on her is never hidden). The owner:
+weigh it for any API's prompt cache, not one local server.
 
 ## Context
 
@@ -57,9 +58,10 @@ Where each rule bites (characters today; how many sends):
    (`clock_from_program`), so "10-12 20:15" reads as well, and a block then changes only when its content does; the
    existing fingerprint test does the rest. (`config.ago` stays for single facts said once, such as a refusal.)
 3. **Lists are delivered item by item**, as history and memories already are: only new or changed items are sent,
-   with a line saying how many others are as before and where (`unchanged_from_program`). `ref_index` is kept by the
-   program for checking `feel`'s `ref` and the appraiser; the notice shows this turn's own ids, and a wrong `ref` is
-   refused saying where ids are found.
+   with a line saying how many others are as before, and in what state when the items have one ("其余 4 条同前：读了
+   没回 3"). An item marked as waiting on her (an unanswered note, a line that wakes her) is always sent: hidden as
+   "as before", it would read as not there (her condition). `ref_index` shows the `doc:` refs she copies for `feel`
+   and this turn's own ids; the memory and task ids it repeated are already in their blocks and still count as refs.
 
 ## Open
 

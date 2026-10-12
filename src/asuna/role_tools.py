@@ -90,7 +90,7 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆，或读自己文档里某一节的原文；这个对话里一条合并转发的全文也这样读'
                         '（doc 写 forward，sid 照抄那行里的 ref）。每回合最多 %d 次。'
-                        '记不起来就直说，不要编。对话里说过的话用 recall 想起来，不交给行动脑。' % RECALLS_PER_TURN),
+                        '记不起来就直说，不要编。对话里说过的话用 recall 想起来，不交给行动脑。在家里还会带上你在群里那时自己的心里话。' % RECALLS_PER_TURN),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说', required=True),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
@@ -937,9 +937,15 @@ class RoleTools:
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
         _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True)
         documents, missing = read_sections(self.store, ep, sections, self._cls(ep))
+        # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
+        elsewhere = []
+        if self._cls(ep) == visibility.OWNER_PRIVATE and query:
+            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+            elsewhere = c.context.own_thoughts_elsewhere(scene, query)
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
-                  recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []]])
+                  recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []],
+                            *[m['_id'] for m in elsewhere]])
         # Every recall is kept (ADR-032): what she asked, what came back, in which kind of turn and place, so a later
         # review counts her real reads and misses from records, not from memory.
         from .visibility import place
@@ -948,6 +954,7 @@ class RoleTools:
             'query': query, 'sections_asked': sections,
             'sections_read': [{'doc': d.get('doc'), 'sid': d.get('sid')} for d in documents or []],
             'sections_missing': missing or [], 'memories': [m.get('_id') for m in recalled.get('memories') or []],
+            'own_thoughts_elsewhere': [m['_id'] for m in elsewhere],
             'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store.db, scene, ep['person_id'])},
             ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
@@ -959,6 +966,8 @@ class RoleTools:
             result['documents'] = documents
         if missing:
             result['not_read'] = missing
+        if elsewhere:
+            result['own_thoughts_in_groups'] = [{k: v for k, v in m.items() if k != '_id'} for m in elsewhere]
         return result, False
 
     def tool_stay_silent(self, ep, call_id, args):

@@ -38,6 +38,7 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
   - `embed`
   - `index_pending`
   - `ensure_index`
+  - `own_thoughts` — Her own thoughts (kind monologue) in the given conversations [(scope_key, policy_epoch)] matching the query, best first: vector and lexical ranks fused, each read back under the same filter.
   - `search`
   - `close`
 

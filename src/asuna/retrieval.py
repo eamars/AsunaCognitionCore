@@ -98,11 +98,16 @@ class Retrieval:
         return 0
 
     def ensure_index(self, timeout=45):
+        # kind: her own thoughts in other conversations are searched apart from their talk (own_thoughts).
         definition={'fields':[{'type':'vector','path':'embedding','numDimensions':self.dim,'similarity':'cosine'},
-                              *[{'type':'filter','path':key} for key in ('scope_key','character_id','status','policy_epoch','embedding_revision')]]}
+                              *[{'type':'filter','path':key} for key in ('scope_key','character_id','status','policy_epoch','embedding_revision','kind')]]}
         current=list(self.store.db.memory_units.list_search_indexes(self.index_name))
         if not current:
             self.store.db.memory_units.create_search_index(SearchIndexModel(name=self.index_name,type='vectorSearch',definition=definition))
+        elif ({f.get('path') for f in (current[0].get('latestDefinition') or {}).get('fields') or [] if f.get('type')=='filter'}
+              !={f['path'] for f in definition['fields'] if f['type']=='filter'}):
+            # An index made with an older definition is brought up to this one; the old keeps serving meanwhile.
+            self.store.db.memory_units.update_search_index(self.index_name,definition)
         until=time.monotonic()+timeout
         while True:
             rows=list(self.store.db.memory_units.list_search_indexes(self.index_name))
@@ -158,6 +163,38 @@ class Retrieval:
             if automatic and freshness < floor and row.get('kind') == 'chat_chunk' and source.get('summary_batch_id'):
                 stepped.add(key)
         return stepped
+
+    def own_thoughts(self, scopes, query, limit=3):
+        """Her own thoughts (kind monologue) in the given conversations [(scope_key, policy_epoch)] matching the query,
+        best first: vector and lexical ranks fused, each read back under the same filter. Only her thoughts, never
+        the talk around them; callers decide where she may read them (at home)."""
+        if not scopes:
+            return []
+        auth={'$or':[{'scope_key':scope,'policy_epoch':epoch} for scope,epoch in scopes],'kind':'monologue',
+              'character_id':character_id(self.store.config),'status':'active'}
+        try:
+            v=self.embed([query],'query')[0]
+            vector=list(self.store.db.memory_units.aggregate([
+                {'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':96,'limit':12,
+                                  'filter':{**auth,'embedding_revision':self.revision}}},{'$project':{'_id':1}}]))
+        except Exception:
+            vector=[]
+        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('formed_at',-1),('_id',-1)]).limit(2048))
+        qterms=terms(query)
+        scored=sorted(((len(qterms & terms(m.get('body_markdown') or '')),m['_id']) for m in rows),reverse=True)
+        lexical=[key for hits,key in scored if hits][:12]
+        ranks={}
+        for candidates in ([row['_id'] for row in vector],lexical):
+            for rank,key in enumerate(candidates,1):
+                ranks[key]=ranks.get(key,0)+1/(60+rank)
+        out=[]
+        for key in sorted(ranks,key=lambda k:(-ranks[k],k)):
+            current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
+            if current:
+                out.append(current)
+            if len(out)==limit:
+                break
+        return out
 
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None,
                coverage_floor=0.0, forgetting=None, record_use=False, automatic=True):

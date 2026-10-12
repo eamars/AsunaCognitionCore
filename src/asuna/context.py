@@ -230,6 +230,29 @@ class ContextBuilder:
                         **({'when':ago(hours)} if hours is not None else {}),**({'then':then} if then else {})})
         return out
 
+    def own_thoughts_elsewhere(self, scene, query):
+        """At home, what she herself thought in her groups about this (her monologue there, never their talk):
+        each with the group's name and the time she thought it."""
+        if not self.retrieval:
+            return []
+        from datetime import datetime, timezone
+        from . import reasons
+        groups={s['scope_key']:s for s in self.store.db.scenes.find({'kind':'group'},{'scope_key':1,'policy_epoch':1,'kind':1,'channel_id':1})}
+        units=self.retrieval.own_thoughts([(key,s.get('policy_epoch',1)) for key,s in groups.items()],query)
+        people=People(self.store)
+        zone=schedule_rules.scene_timezone(self.store.config,scene)
+        moment=datetime.now(timezone.utc)
+        out=[]
+        for unit in units:
+            item={'_id':unit['_id'],'where':people.scene_title(groups.get(unit['scope_key'])),
+                  'thought':excerpt(unit.get('body_markdown'),MEMORY_CHARS)}
+            when=self.when(unit,zone,moment)
+            if when:item['when']=when
+            then=reasons.then(self.store,unit)
+            if then:item['then']=then
+            out.append(item)
+        return out
+
     def said_at(self, unit):
         """When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line."""
         if unit.get('kind')=='monologue':

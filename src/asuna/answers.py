@@ -108,7 +108,7 @@ def speech_problem(value, *, thought, consult=False, home=False):
     if value.finish_reason == 'length':
         return '上一段到了长度上限还没写完。'
     if consult:
-        return '你还没回答行动脑：用 answer_action 写下回答；这里写的正文不会发给任何人。'
+        return '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。'
     if not thought:
         return '这回合还没写心里话：先调用 think，再把要说的话写出来。'
     if not text:

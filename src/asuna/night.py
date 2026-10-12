@@ -46,8 +46,9 @@ def _what(store, persona, tool, args):
         return {'create': '定了计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + '：' + _short(intent, 30)
     if tool == 'peer_line':
         return '旧居那条线：' + ('开了' if op == 'open' else '关了')
-    if tool == 'review_idea':
-        idea = (store.db.ideas.find_one({'_id': args.get('idea')}, {'idea': 1}) or {}).get('idea')
+    from .role_tools import ability
+    if ability(tool, args) == 'ideas.review':          # its id was `idea` under the old name
+        idea = (store.db.ideas.find_one({'_id': args.get('id', args.get('idea'))}, {'idea': 1}) or {}).get('idea')
         return '想法%s：%s' % (DECISIONS.get(args.get('decision'), args.get('decision')), _short(idea, 30))
     if tool == 'watch':
         return '%s盯 %s' % ('开始' if op == 'on' else '不再', _short(args.get('person'), 20))

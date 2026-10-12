@@ -65,12 +65,13 @@ class FakeLane:
 
     def _run_turn(self, operation, turn, tools, handler):
         """Each scripted call reaches the coordinator's handler, as a native turn's calls do."""
-        from .role_tools import Refused
+        from .role_tools import Refused, aliases
         made=[]
         for index,(name,args) in enumerate(turn.calls):
             call_id=operation+'#'+str(index)
             made.append({'type':'tool-call','name':name,'id':call_id})
-            if name not in (tools or ()):
+            # As the plugin's guard: a listed tool, or an old name of one (role_tools.aliases).
+            if name not in (tools or ()) and aliases().get(name) not in (tools or ()):
                 self.tool_results.append((operation,call_id,name,args,'NOT_EXPOSED',False))
                 continue
             try:

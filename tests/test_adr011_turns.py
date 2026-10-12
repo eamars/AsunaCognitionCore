@@ -94,14 +94,14 @@ def test_text_without_any_thought_fails_closed_after_repairs(store):
 def test_a_tool_outside_this_turn_is_refused_in_words(store):
     coordinator, lane = run(store, FakeTurn([THINK], '好。'))
     ep = coordinator.ingest(event())
-    # answer_action belongs to the action brain's questions only: listed in the conversation, not usable this turn.
-    assert 'answer_action' in lane.calls[0]['tools'] and 'answer_action' not in ep['turn_tools']
+    # task's answer belongs to the action brain's questions only: listed in the conversation, not usable this turn.
+    assert 'task' in lane.calls[0]['tools'] and 'task.answer' not in ep['turn_tools']
     from asuna.role_tools import Refused
     import pytest
     store.put('episodes', {**store.db.episodes.find_one({'_id': ep['_id']}), 'state': 'TURN'},
               expected=store.db.episodes.find_one({'_id': ep['_id']})['revision'], stream=ep['_id'])
     with pytest.raises(Refused, match='只在行动脑问你话的那一回合用'):
-        coordinator.tools.call(ep['_id'], 'x', 'answer_action', {'answer': 'a'})
+        coordinator.tools.call(ep['_id'], 'x', 'task', {'op': 'answer', 'answer': 'a'})
 
 
 def test_a_replayed_call_id_returns_the_recorded_result(store):
@@ -124,47 +124,47 @@ def test_delegate_creates_a_task_whose_first_message_is_her_brief(store):
     assert published(store, ep) == ['我让行动脑去查了。']
 
 
-def test_message_action_continues_a_finished_task_in_the_same_session(store):
+def test_task_message_continues_a_finished_task_in_the_same_session(store):
     coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())
     first = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
     store.put('tasks', {**first, 'state': 'RETURNED', 'feedback_state': 'DELIVERED', 'result': {'text': '明天有雨'},
                         'execution_binding': 'task:x'}, expected=first['revision'], stream=first['_id'])
-    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': first['_id'], 'message': '再看看后天'})], '让它接着看后天。')])
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'message', 'task': first['_id'], 'message': '再看看后天'})], '让它接着看后天。')])
     second = coordinator.ingest(event('e2', text='那后天呢'))
     continued = store.db.tasks.find_one({'_id': second['task_ids'][0]})
     assert continued['continues_task_id'] == first['_id'] and continued['execution_binding'] == 'task:x'
     assert continued['thread'] == first['thread'] and continued['brief'] == '再看看后天'
 
 
-def test_message_action_to_a_running_task_is_steered_not_a_new_task(store):
+def test_task_message_to_a_running_task_is_steered_not_a_new_task(store):
     coordinator, _ = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())
     steered = []
     coordinator.on_action_message = lambda task, message: steered.append((task['_id'], message['text']))
-    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': ep['task_ids'][0], 'message': '顺便看看风'})], '好。')])
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'message', 'task': ep['task_ids'][0], 'message': '顺便看看风'})], '好。')])
     second = coordinator.ingest(event('e2', text='还有风'))
     assert not second.get('task_ids') and steered == [(ep['task_ids'][0], '顺便看看风')]
     row = store.db.task_messages.find_one({'task_id': ep['task_ids'][0]})
     assert row['from'] == 'character' and row['delivered'] is False
 
 
-def test_stop_action_cancels_a_running_task(store):
+def test_task_stop_cancels_a_running_task(store):
     coordinator, _ = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())
     task_id = ep['task_ids'][0]
-    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('stop_action', {'task': task_id, 'reason': '他说不用了'})], '好，不查了。')])
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'stop', 'task': task_id, 'reason': '他说不用了'})], '好，不查了。')])
     coordinator.ingest(event('e2', text='不用查了'))
     assert store.db.tasks.find_one({'_id': task_id})['state'] == 'CANCELLED'
 
 
-def test_stop_action_closes_a_task_a_restart_paused(store):
+def test_task_stop_closes_a_task_a_restart_paused(store):
     from asuna.tasks import TaskService
     coordinator, _ = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())
     task_id = ep['task_ids'][0]
     TaskService(store).pause_for_restart(task_id)
-    coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('stop_action', {'task': task_id, 'reason': '那件事已经收尾了'})], '关掉了。')])
+    coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'stop', 'task': task_id, 'reason': '那件事已经收尾了'})], '关掉了。')])
     coordinator.ingest(event('e2', text='那条暂停的关掉吧'))
     assert store.db.tasks.find_one({'_id': task_id})['state'] == 'CANCELLED'
 
@@ -176,7 +176,7 @@ def test_a_task_someone_else_asked_for_is_refused_with_whose_it_is(store):
     task_id = ep['task_ids'][0]
     other = {**ep, 'person_id': 'B'}                  # the same conversation, a turn someone else opened
     with pytest.raises(role_tools.Refused) as refused:
-        role_tools.RoleTools(coordinator).tool_stop_action(other, 'c-stop', {'task': task_id, 'reason': '不用了'})
+        role_tools.RoleTools(coordinator).tool_task_stop(other, 'c-stop', {'task': task_id, 'reason': '不用了'})
     words = str(refused.value)
     assert '叫你做的那件事' in words and '不是你抄错了' in words and '不是这个对话里的任务' not in words
     assert store.db.tasks.find_one({'_id': task_id})['state'] != 'CANCELLED'
@@ -185,7 +185,7 @@ def test_a_task_someone_else_asked_for_is_refused_with_whose_it_is(store):
 def test_a_mistyped_task_id_is_refused_with_candidates(store):
     coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
     ep = coordinator.ingest(event())
-    coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('stop_action', {'task': ep['task_ids'][0][:14] + 'zz', 'reason': 'x'})], '好。')])
+    coordinator.character = lane = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'stop', 'task': ep['task_ids'][0][:14] + 'zz', 'reason': 'x'})], '好。')])
     coordinator.ingest(event('e2', text='不用了'))
     refusal = lane.tool_results[1][4]
     assert '不是这个对话里的任务' in refusal and ep['task_ids'][0] in refusal
@@ -197,12 +197,12 @@ def test_consult_answers_the_action_brain_without_publishing(store):
     service = TaskService(store)
     task = service.claim(ep['task_ids'][0])
     coordinator.character = lane = FakeLane(store, [FakeTurn([('think', {'thought': '他应该是问本地。'}),
-                                                              ('answer_action', {'answer': '查本地的就行。'})])])
+                                                              ('task', {'op': 'answer', 'answer': '查本地的就行。'})])])
     answer = coordinator.consult(task, 'call-1', {'question': '查哪个城市？'})
     assert answer['answer'] == '查本地的就行。' and answer['internal'] is True
     asked = store.db.episodes.find_one({'episode_kind': 'consult'})
     # The conversation's whole list, as in its other turns; the question's turn may use only these.
-    assert asked['turn_tools'] == ['think', 'recall', 'answer_action']
+    assert asked['turn_tools'] == ['think', 'recall', 'task.answer']
     assert lane.calls[0]['tools'] == role_tools.toolbox(store, asked)
     assert asked['state'] == 'COMMITTED' and published(store, asked) == []
 
@@ -229,11 +229,11 @@ def test_a_continuation_after_the_idle_limit_starts_a_fresh_context_with_the_las
     store.put('tasks', {**first, 'state': 'RETURNED', 'feedback_state': 'DELIVERED', 'result': {'text': '明天有雨'},
                         'execution_binding': 'task:x', 'finished_at': old}, expected=first['revision'], stream=first['_id'])
     store.config['action_idle_minutes'] = 60
-    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': first['_id'], 'message': '再看看后天'})], '好。')])
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'message', 'task': first['_id'], 'message': '再看看后天'})], '好。')])
     second = coordinator.ingest(event('e2', text='那后天呢'))
     continued = store.db.tasks.find_one({'_id': second['task_ids'][0]})
     assert continued['execution_binding'] != 'task:x' and continued['fresh_context']['after_minutes'] >= 94
-    said = next(r[4] for r in coordinator.character.tool_results if r[2] == 'message_action')
+    said = next(r[4] for r in coordinator.character.tool_results if r[2] == 'task')
     assert '新开一份上下文' in said['action_brain'] and '写全' in said['action_brain'] and 'queue' in said
     text = opening_text(store, continued)
     assert '新开的上下文' in text and '明天有雨' in text and text.endswith('她接着交代：\n再看看后天')

@@ -233,7 +233,7 @@ A backend whose credential reference has no stored value is passed over; the wor
 
 `development_files/read/write/run/publish` target the selected persona package by default; `project="core"` selects the cognition source, and a channel package is its own project (`napcat-qq`). Skills live in the candidate too and change only through these tools; native discovery uses the selected immutable artifact. Core updates do not overwrite existing self heads.
 
-Only two sources hand work with these tools to the action brain: the owner asking in a private chat (the local chat or the owner's DM) and her own self-improvement turns, with `self_development.enabled`. Anyone else's request can only become an entry in her improvement-idea notebook (`note_idea`, from either brain), which she reads and decides (`review_idea`, with reasons kept) in her self-improvement turns or when the owner asks in private (`read_ideas`). Core ships the persona-agnostic skill `asuna-self-improvement`.
+Only two sources hand work with these tools to the action brain: the owner asking in a private chat (the local chat or the owner's DM) and her own self-improvement turns, with `self_development.enabled`. Anyone else's request can only become an entry in her improvement-idea notebook (`ideas` op `note` for her, `note_idea` for the action brain), which she reads and decides (`ideas` op `read` and `review`, with reasons kept) in her self-improvement turns or when the owner asks in private. Core ships the persona-agnostic skill `asuna-self-improvement`.
 
 `development_publish` builds a frozen artifact and reports its actual state:
 

@@ -91,7 +91,7 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
             assert store.db.artifacts.find_one({'_id': ref, 'task_id': done['_id'], 'state': 'DONE'})
         assert (work / '便条.txt').read_text(encoding='utf-8') == '原文保持不变'
         # Her message to the finished task continues it in the same action session.
-        turn = FakeTurn([THINK, ('message_action', {'task': done['_id'], 'message': '继续这份便条'})], '继续原会话')
+        turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': done['_id'], 'message': '继续这份便条'})], '继续原会话')
         follow = Coordinator(store, FakeLane(store, [turn])).ingest(
             {'event_id':'continue','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作'})
         continuation = store.db.tasks.find_one({'_id': follow['task_ids'][0]})
@@ -106,11 +106,11 @@ def test_only_explicit_current_scene_decision_can_cancel_task(store):
     try:
         task = service.claim(ep['task_ids'][0])
         broker.bind('workspace', task, work)
-        stop = ('stop_action', {'task': task['_id'], 'reason': '他说刚才的任务先停下'})
-        # Another conversation without tasks of its own has no stop_action at all.
+        stop = ('task', {'op': 'stop', 'task': task['_id'], 'reason': '他说刚才的任务先停下'})
+        # Another conversation without a workspace has no task tool at all.
         foreign = FakeLane(store, [FakeTurn([THINK, stop], '这不是我能停的。')])
         other = Coordinator(store, foreign).ingest({'event_id': 'foreign-cancel', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '停止别人的任务。'})
-        assert 'stop_action' not in foreign.calls[0]['tools'] and foreign.tool_results[1][4:] == ('NOT_EXPOSED', False)
+        assert 'task' not in foreign.calls[0]['tools'] and foreign.tool_results[1][4:] == ('NOT_EXPOSED', False)
         assert other['state'] == 'COMMITTED'
         # With a task of its own it has the tool, but naming another conversation's task is refused in words.
         store.config['channels']['fixture']['routes']['dm-b'] = {'scene_id': 'dm-b', 'sender_id': 'B', 'person_id': 'B',
@@ -120,9 +120,9 @@ def test_only_explicit_current_scene_decision_can_cancel_task(store):
         other = Coordinator(store, foreign)
         own = other.ingest({'event_id': 'foreign-own', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '看看工作区。'})
         other = other.ingest({'event_id': 'foreign-stop', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '也停掉 A 的任务。'})
-        assert own['state'] == 'WAITING_TASK' and 'stop_action' in foreign.calls[1]['tools']
+        assert own['state'] == 'WAITING_TASK' and 'task' in foreign.calls[1]['tools']
         refused = foreign.tool_results[-1]
-        assert refused[2] == 'stop_action' and not refused[5] and '不是这个对话里的任务' in refused[4]
+        assert refused[2] == 'task' and not refused[5] and '不是这个对话里的任务' in refused[4]
         assert other['state'] == 'COMMITTED'
         assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'RUNNING'
         # Her explicit stop in the task's own conversation cancels and fences it.
@@ -143,7 +143,7 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
     try:
         task = service.claim(ep['task_ids'][0])
         paused = service.pause_for_restart(task['_id'])
-        turn = FakeTurn([THINK, ('message_action', {'task': task['_id'], 'message': '继续原目标，先核实已有结果。'})],
+        turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': '继续原目标，先核实已有结果。'})],
                         '旧行动仍暂停。')
         lane = FakeLane(store, [turn])
         incoming = {'event_id': 'paused-continue', 'scene_id': 'dm-a', 'person_id': 'A',
@@ -154,7 +154,7 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
         assert store.db.tasks.find_one({'_id': task['_id']})['state'] == 'PAUSED'
         assert '「做到一半宿主重启停了」的是重启后等待操作者决定' in lane.calls[0]['messages'][-1]['content']
         _, _, tool, _, outcome, ok = lane.tool_results[1]
-        assert tool == 'message_action'
+        assert tool == 'task'
         if internal:
             assert not ok and '只有本机主人明确要继续时才能接着做' in outcome
             assert result['state'] == 'COMMITTED' and not result.get('task_ids')
@@ -171,13 +171,13 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
 
 @pytest.mark.parametrize('running', [False, True])
 def test_her_message_reaches_a_live_task_in_place_without_a_new_revision(store, running):
-    """ADR-011 §4: message_action to a READY/RUNNING task is steered into its action session, not a revision."""
+    """ADR-011 §4: task op message to a READY/RUNNING task is steered into its action session, not a revision."""
     work, first, service, broker = setup_workspace(store)
     task = store.db.tasks.find_one({'_id': first['task_ids'][0]})
     message = '优先核对另一份；原文仍然只读。'
     notices, steered, seen, said = [], [], [], {}
     service.on_fenced = lambda row, reason: notices.append((row['_id'], row['intent_revision'], reason))
-    turn = FakeTurn([THINK, ('message_action', {'task': task['_id'], 'message': message})], '我跟它说了。')
+    turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': message})], '我跟它说了。')
     role = Coordinator(store, FakeLane(store, [turn]), task_service=service)
     role.on_action_message = lambda row, sent: steered.append((row['_id'], sent['text']))
     event = {'event_id':'redirect-live','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作，优先核对另一份。'}

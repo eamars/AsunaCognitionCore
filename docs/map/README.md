@@ -103,8 +103,8 @@ same in every turn of a conversation, so the model keeps the conversation cached
    ([children.js](../../packages/cognition-core/src/children.js)), and the Web page shows it inline under her turn.
    Every tool call goes through `tasks.ToolBroker` and is checked against the task's grant.
 3. **Handing back.** The report comes back to her conversation as a task result. A long report comes as its first
-   page, and she turns the rest with `read_report`. She can talk to a running task (`message_action`), stop it
-   (`stop_action`), and answer its questions (`answer_action`).
+   page, and she turns the rest with `task` op `page`. With `task` she also talks to a task (`message`), stops it
+   (`stop`), and answers its questions (`answer`).
 
 Decided in ADR-011.
 

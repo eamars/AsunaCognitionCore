@@ -1019,6 +1019,9 @@ class BusinessWorker:
         if method == 'role_tool_specs':
             from .role_tools import all_specs
             return all_specs()
+        if method == 'role_tool_aliases':
+            from .role_tools import aliases
+            return aliases()
         if method == 'role_tool':
             # Her call in a character turn (ADR-011 §3): answered by the coordinator's own thread, which is
             # waiting on this very turn (NativeLane.wait). A refusal is her own to correct, not an error.

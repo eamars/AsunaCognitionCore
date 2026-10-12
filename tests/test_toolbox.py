@@ -46,7 +46,8 @@ def test_a_conversation_lists_the_same_tools_in_every_turn_and_each_turn_uses_so
             for context in CONTEXTS:
                 ep = turn(scene, cls, kind, context)
                 assert role_tools.toolbox(store, ep) == listed, (scene, kind)
-                assert set(role_tools.exposed(store, ep)) <= set(listed), (scene, kind)
+                assert set(role_tools.exposed(store, ep)) <= set(role_tools.abilities(store, ep)), (scene, kind)
+                assert {name.split('.')[0] for name in role_tools.exposed(store, ep)} <= set(listed), (scene, kind)
         assert listed == sorted(listed, key=role_tools.TOOL_NAMES.index)       # one order, the registration's
 
 
@@ -54,9 +55,9 @@ def test_each_kit_is_where_its_place_needs_it(store):
     listed = {scene: set(role_tools.toolbox(store, turn(scene, cls))) for scene, cls in conversations(store).items()}
     local, line, group, owner_qq, other_qq = (listed[s] for s in (LOCAL, LINE, GROUP, OWNER_QQ, OTHER_QQ))
     # The local chat: her heartbeats, nights and vault; her shelf to tidy; the owner may send her on errands.
-    assert {'visit', 'promote_memory', 'credential', 'errand', 'sticker', 'restart', 'read_report'} <= local
+    assert {'visit', 'promote_memory', 'credential', 'errand', 'sticker', 'restart', 'task'} <= local
     # A trusted line is text only and not the owner: about herself yes, his errands, vault and outings no.
-    assert {'restart', 'update_self', 'read_ideas', 'write_document', 'pass_note'} <= line
+    assert {'restart', 'update_self', 'ideas', 'write_document', 'pass_note'} <= line
     assert not {'credential', 'errand', 'visit', 'sticker', 'read_image', 'attach_image', 'watch'} & line
     # The owner's QQ chat: his errands and watching people there; no vault (a password does not travel through QQ).
     assert {'errand', 'watch', 'sticker', 'restart'} <= owner_qq and not {'credential', 'visit'} & owner_qq
@@ -79,4 +80,4 @@ def test_a_listed_tool_outside_its_turn_is_refused_with_when_it_works(store):
     # The action brain's question: the conversation's list as always, only the answer usable.
     assert role_tools.not_now(store, turn(LOCAL, visibility.OWNER_PRIVATE, 'consult'), 'plan') == role_tools.CONSULT_ONLY
     with pytest.raises(role_tools.Refused, match='只在行动脑问你话'):
-        Coordinator(store, lane).tools.call(ep['_id'], 'y', 'answer_action', {'answer': 'a'})
+        Coordinator(store, lane).tools.call(ep['_id'], 'y', 'task', {'op': 'answer', 'answer': 'a'})

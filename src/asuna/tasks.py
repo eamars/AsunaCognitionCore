@@ -1,7 +1,7 @@
 """The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker`
 checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
 
-A hand-back shows her the report's first page (`report_pages`); she reads the rest with `read_report`.
+A hand-back shows her the report's first page (`report_pages`); she reads the rest with `task` op `page`.
 """
 from __future__ import annotations
 import json
@@ -50,7 +50,7 @@ SECTION_START = re.compile(r'\n(?=#{1,6} |\*\*[^*\n]+\*\*[：:]?[ \t]*\n|【[^�
 def report_pages(text, size=REPORT_CHARS):
     """The action brain's report as pages of at most `size` characters. A page ends before the last section that
     starts in its second half, so a section (her reason to read on) is not split; else at the last blank line, else
-    the last line break, in its last fifth. The hand-back gives her the first page; read_report reads the others."""
+    the last line break, in its last fifth. The hand-back gives her the first page; task op page reads the others."""
     text, pages = str(text or ''), []
     while len(text) > size:
         window = text[:size]
@@ -69,7 +69,7 @@ def page_note(task_id, page, pages, chars):
     """What the end of a page says: where she is, how long the report is, and how to turn the page."""
     if page >= pages:
         return '（第 %d/%d 页，报告到这里完了）' % (page, pages)
-    return ('…（第 %d/%d 页，原文 %d 字；接着读用 read_report：task 写 %s，page=%d）'
+    return ('…（第 %d/%d 页，原文 %d 字；接着读用 task 的 page：task 写 %s，page=%d）'
             % (page, pages, chars, task_id, page + 1))
 
 
@@ -392,13 +392,13 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 message_action。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             if original.get('native_session_id'):
                 event['native_session_id']=original['native_session_id']
             if source and source.get('event', {}).get('group_context'):
                 event['group_context'] = source['event']['group_context']
-            # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 message_action 会被判成授权不一致。
+            # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 task 的 message 会被判成授权不一致。
             if task.get('integration_profile'): event['integration_profile'] = task['integration_profile']
             if short:
                 event.update(self._short_event(task,current))
@@ -436,7 +436,7 @@ class TaskService:
         report=report_pages(text,SHORT_REPORT_CHARS)[0]
         if len(report)<len(text):
             pages=len(report_pages(text))
-            report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 read_report：task 写 %s，从 page=1 读起）'
+            report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 task 的 page：task 写 %s，从 page=1 读起）'
                      % (len(text),pages,task['_id']))
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
                **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
@@ -446,7 +446,7 @@ class TaskService:
         return {'event_id':handover.result_event_id(task,True),
                 'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
                        '只有你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'
-                       '要核实或接着做就用 message_action。',
+                       '要核实或接着做就用 task 的 message。',
                 'trusted_context_events':[value]}
 
     def handback(self,task,state,cause=None,error=None,short=False,final=False):

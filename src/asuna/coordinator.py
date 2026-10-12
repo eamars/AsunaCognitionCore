@@ -118,7 +118,7 @@ class Coordinator:
 
     # ── the action brain asks her (ask_character) ────────────────────
     def consult(self, task, call_key, args):
-        """One internal turn in her role session: she answers the action brain with answer_action.
+        """One internal turn in her role session: she answers the action brain with task op answer.
 
         No publication, no task claim, no new authority. Serialized with her other turns; the action
         brain's tool waits for the answer, never holding the task/effects lock (tasks.py).

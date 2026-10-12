@@ -1,5 +1,5 @@
 """A report longer than a page reaches her as its first page; she turns the other pages herself from the stored report
-(read_report) instead of asking the action brain to write it again. The tool is in every turn of a conversation that
+(task op page) instead of asking the action brain to write it again. The tool is in every turn of a conversation that
 can hand work over; the report's own footer says when to use it."""
 import pytest
 
@@ -28,7 +28,7 @@ def test_the_hand_back_gives_the_first_page_and_says_how_to_turn_it():
     value = bounded_result({'task_id': 'task-1', 'text': text, 'artifact_refs': ['a', 'b']})
     assert value['text'].startswith(pages[0]) and value['report_pages'] == len(pages) and value['tool_records'] == 2
     assert '第 1/%d 页，原文 %d 字' % (len(pages), len(text)) in value['text']
-    assert 'read_report：task 写 task-1，page=2' in value['text']
+    assert 'task 的 page：task 写 task-1，page=2' in value['text']
     short = bounded_result({'task_id': 'task-1', 'text': '短报告'})
     assert short['text'] == '短报告' and 'report_pages' not in short
 
@@ -60,33 +60,33 @@ def test_she_turns_the_pages_of_a_report_in_this_conversation(store):
     task_row(store, text)
     tools = Coordinator(store, FakeLane(store, [])).tools
     ep = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
-    second, _ = tools.tool_read_report(ep, 'c1', {'task': 'task-long', 'page': 2})
+    second, _ = tools.tool_task_page(ep, 'c1', {'task': 'task-long', 'page': 2})
     assert second['text'] == pages[1] and second['page'] == '第 2/%d 页（原文 %d 字）' % (len(pages), len(text))
     assert second['more'] == 'page=3 接着读' and second['title'] == '照抄一份长文档'
-    last, _ = tools.tool_read_report(ep, 'c2', {'task': 'task-long', 'page': len(pages)})
+    last, _ = tools.tool_task_page(ep, 'c2', {'task': 'task-long', 'page': len(pages)})
     assert last['more'] == '报告到这里完了'
     with pytest.raises(Refused, match='共 %d 页' % len(pages)):
-        tools.tool_read_report(ep, 'c3', {'task': 'task-long', 'page': len(pages) + 1})
+        tools.tool_task_page(ep, 'c3', {'task': 'task-long', 'page': len(pages) + 1})
     elsewhere = {**ep, 'scene_id': 'g1', 'scope_key': 'scene:g1'}
     with pytest.raises(Refused, match='不是这个对话里的任务'):
-        tools.tool_read_report(elsewhere, 'c4', {'task': 'task-long', 'page': 1})
+        tools.tool_task_page(elsewhere, 'c4', {'task': 'task-long', 'page': 1})
     at_home = {**elsewhere, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
-    assert tools.tool_read_report(at_home, 'c6', {'task': 'task-long', 'page': 1})[0]['text'] == pages[0], \
+    assert tools.tool_task_page(at_home, 'c6', {'task': 'task-long', 'page': 1})[0]['text'] == pages[0], \
         'at home every task of hers'
     with pytest.raises(Refused, match='不是你的任务'):
-        tools.tool_read_report(at_home, 'c7', {'task': 'task-none', 'page': 1})
+        tools.tool_task_page(at_home, 'c7', {'task': 'task-none', 'page': 1})
     with pytest.raises(Refused, match='只收 task 和 page'):
-        tools.tool_read_report(ep, 'c5', {'task': 'task-long', 'page': 2, 'count': 3})
+        tools.tool_task_page(ep, 'c5', {'task': 'task-long', 'page': 2, 'count': 3})
 
 
-def test_read_report_is_in_every_turn_that_can_hand_work_over(store):
+def test_task_page_is_in_every_turn_that_can_hand_work_over(store):
     from test_adr009_p2 import owner
     owner(store)
     turn = lambda context: role_tools.exposed(store, {
         '_id': 'ep-x', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': 'external',
         'manifest': {'session_class': visibility.OWNER_PRIVATE}, 'context': context})
-    assert 'read_report' in turn({'task_state_from_program': [{'_id': 'task-long', 'report': '报告 3 页'}]})
-    assert 'read_report' in turn({'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]})
+    assert 'task.page' in turn({'task_state_from_program': [{'_id': 'task-long', 'report': '报告 3 页'}]})
+    assert 'task.page' in turn({'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]})
 
 
 def test_a_turn_lists_the_long_report_and_offers_the_tool(store):
@@ -107,10 +107,10 @@ def test_a_turn_lists_the_long_report_and_offers_the_tool(store):
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '看看。'})], '嗯。')])
     ep = Coordinator(store, lane).ingest({'event_id': 'n1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
     rows = {row['_id']: row for row in ep['context']['task_state_from_program']}
-    assert rows['task-long']['report'] == '报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 read_report 翻读' % (
+    assert rows['task-long']['report'] == '报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读' % (
         len(report_pages(text)), len(text))
     assert 'report' not in rows['task-brief']
-    assert 'read_report' in lane.calls[0]['tools']
+    assert 'task' in lane.calls[0]['tools']
 
 
 def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():

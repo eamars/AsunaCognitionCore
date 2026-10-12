@@ -36,7 +36,7 @@ One character turn per episode (ADR-011 §3).
 - class `SessionCarried` — Her conversation no longer fit the model's window and continues in a new session (ADR-028).
 - class `Coordinator`
   - `ingest`
-  - `consult` — One internal turn in her role session: she answers the action brain with answer_action.
+  - `consult` — One internal turn in her role session: she answers the action brain with task op answer.
   - `advance`
   - `recover`
   - `delegate` — A new task: the action brain's first message is her brief (§4).
@@ -108,12 +108,18 @@ Role system prompt rendering (ADR-009 §8.1).
 Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
+- def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
+- def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').
+- def `named` — An option as she reads it: 'task 的 message'.
+- def `renamed` — An old name's call as its tool and arguments: the option added, review_idea's idea (an id) as id.
 - def `specs` — The worker-side tool specs the plugin registers (name, description, parameters).
-- def `all_specs`
+- def `all_specs` — Her tools, and each old name registered but never listed, so a call by it still reaches the worker.
+- def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
 - def `turn_kind`
-- def `exposed` — The tools this turn may use: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (toolbox).
-- def `toolbox` — The tools her conversation lists, the same in each of its turns: decided by its place, its channel and the configuration, never by the turn's kind or context.
-- def `not_now` — Why her conversation's tool `name` is not in this turn, and when it can be used.
+- def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
+- def `toolbox` — The tools her conversation lists, the same in each of its turns (what the model is shown).
+- def `abilities` — What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and the configuration, never by the turn's kind or context.
+- def `not_now` — Why her conversation's tool or option `name` is not in this turn, and when it can be used.
 - def `offered_pictures` — The artifact ids her turn may send (image_artifacts_from_program): she may also look at them.
 - def `her_pictures` — Whether she can look at a picture this turn: her own route takes images and the conversation's recent pictures (the same window read_image reads) include one that can be pulled.
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
@@ -127,10 +133,10 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_credential`
   - `tool_watch`
   - `tool_await_answer`
-  - `tool_answer_action`
+  - `tool_task_answer`
   - `tool_delegate`
-  - `tool_message_action`
-  - `tool_stop_action`
+  - `tool_task_message`
+  - `tool_task_stop`
   - `tool_read_image`
   - `tool_attach_image`
   - `tool_sticker`
@@ -147,15 +153,15 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_leave_note`
   - `tool_restart`
   - `tool_peer_line`
-  - `tool_note_idea`
+  - `tool_ideas_note`
   - `tool_private_words`
   - `tool_group_focus`
   - `tool_place_timezone`
   - `tool_find_member`
   - `tool_message_developer`
-  - `tool_read_ideas`
-  - `tool_read_report`
-  - `tool_review_idea`
+  - `tool_ideas_read`
+  - `tool_task_page`
+  - `tool_ideas_review`
   - `tool_promote_memory`
 - def `note_idea` — One entry in her improvement-idea notebook, from either brain; read only in her self-improvement turns.
 - def `idea_rows` — Her undecided ideas in reading order: open ones first (oldest first), then deferred ones, so ideas she put off never crowd out new ones.

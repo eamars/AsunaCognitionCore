@@ -17,15 +17,15 @@ def thought(store, ep_id, call_id, text):
 def test_an_action_keeps_her_newest_thought_and_a_lookup_or_a_refused_call_keeps_none(store):
     turn = FakeTurn([('think', {'thought': '他嫌我回得太长'}), ('recall', {'query': '回复长短'}),
                      ('think', {'thought': '那就记一条，以后短点'}),
-                     ('note_idea', {'idea': '群里说话可以更短', 'why': '有人嫌长'})], '好，我记下了。')
+                     ('ideas', {'op': 'note', 'idea': '群里说话可以更短', 'why': '有人嫌长'})], '好，我记下了。')
     ep = Coordinator(store, FakeLane(store, [turn])).ingest(event('e-b2'))
     calls = sorted(ep['tool_calls'].items(), key=lambda item: item[1]['seq'])
     by_tool = {call['tool']: (call_id, call) for call_id, call in calls}
     second_thought = [call_id for call_id, call in calls if call['tool'] == 'think'][1]
-    assert by_tool['note_idea'][1]['reason_ref'] == 'mono-%s:%s' % (ep['_id'], second_thought)
+    assert by_tool['ideas'][1]['reason_ref'] == 'mono-%s:%s' % (ep['_id'], second_thought)
     assert 'reason_ref' not in by_tool['recall'][1], 'a lookup has no consequences'
-    audit = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'role_tool', 'payload.tool': 'note_idea'})
-    assert audit['payload']['reason_ref'] == by_tool['note_idea'][1]['reason_ref']
+    audit = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'role_tool', 'payload.tool': 'ideas'})
+    assert audit['payload']['reason_ref'] == by_tool['ideas'][1]['reason_ref']
     assert reasons.thought(store, audit['payload']['reason_ref']) == '那就记一条，以后短点'
 
 

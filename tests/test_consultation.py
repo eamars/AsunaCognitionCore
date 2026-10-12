@@ -1,7 +1,7 @@
 """Local contracts; real DSH/model/Web evidence is in ADR003-CONSULT-REPORT.md.
 
 ADR-011 §4: the action brain asks her with ask_character; she answers in a consult turn of her
-role session with answer_action. The answer is advice, never a publication or a new grant."""
+role session with task op answer. The answer is advice, never a publication or a new grant."""
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,7 +17,7 @@ from test_workspace_tasks import setup_workspace
 def answers(handler, operation, answer):
     """Her consult turn: think first, then answer the action brain."""
     handler(operation + '#0', 'think', {'thought': '它问我怎么呈现；我手上的资料不多。'})
-    handler(operation + '#1', 'answer_action', {'answer': answer})
+    handler(operation + '#1', 'task', {'op': 'answer', 'answer': answer})
     return LaneResult('')
 
 
@@ -46,7 +46,7 @@ def test_consult_uses_bound_role_context_without_publication_or_new_task(store):
         # The conversation's own list, as in its other turns; the question's turn may use only the answer (turn_tools).
         asked=store.db.episodes.find_one({'episode_kind':'consult'})
         assert calls[0][2]=='TURN' and calls[0][4]==role_tools.toolbox(store,asked) and '323' in calls[0][3]
-        assert asked['turn_tools']==['think','recall','answer_action']
+        assert asked['turn_tools']==['think','recall','task.answer']
         assert 'scene:dm-b' not in calls[0][3]
         assert store.db.episodes.find_one({'_id':ep['_id']})==ep
         # Her answer is a consult turn of her own (with her kept thought), not a message, task or publication.

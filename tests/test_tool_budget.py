@@ -12,7 +12,7 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (37, 21500)
+CHARACTER = (32, 20900)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -44,7 +44,7 @@ def test_the_action_brain_stays_within_its_tool_budget():
 COPIED = {('think', 'thought'), ('attach_image', 'artifact_id'), ('set_policy', 'key'), ('feel', 'event_id'),
           ('feel', 'proposal_id'), ('feel', 'why'), ('plan', 'line'), ('plan', 'plan_id'), ('visit', 'place'),
           ('errand', 'place'), ('peer_line', 'line'), ('place_timezone', 'place'), ('place_timezone', 'timezone'),
-          ('read_report', 'task'), ('review_idea', 'idea')}
+          ('task', 'task'), ('ideas', 'id')}
 SAFETY_CAP = 20000          # limits this large are a guard, never a length she writes toward
 
 
@@ -57,9 +57,11 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
     unstated = []
     for method in re.split(r'\n    def ', source):
         head = re.match(r'tool_([a-z_]+)\(', method)
-        if not head or head.group(1) not in role_tools.TOOLS:
+        # tool_<tool>, or tool_<tool>_<op> for a tool with options (role_tools.OPS)
+        tool = head and next((name for name in (head.group(1), head.group(1).split('_')[0])
+                              if name in role_tools.TOOLS), None)
+        if not tool:
             continue
-        tool = head.group(1)
         params = role_tools.TOOLS[tool].get('parameters') or {}
         for field, limit in re.findall(r"_text\(args, '([a-z_]+)', ([A-Z_0-9]+)\)", method):
             if limit.isdigit():

@@ -39,7 +39,7 @@ RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
-IDEAS_PAGE = 20                 # one page of her notebook (read_ideas pages and searches the rest)
+IDEAS_PAGE = 20                 # one page of her notebook (ideas op read pages and searches the rest)
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
@@ -101,23 +101,20 @@ TOOLS = {
         'description': ('把一件要在世界里做的事交给行动脑：查资料、查完整原话、跑代码、改文件、生图、改能力。'
                         'title 是简短标题；brief 是给行动脑的完整交代：要什么、为什么、有什么限制和要注意的。'
                         '行动脑看不到你的上下文，只看到 brief 和对方的原话。交出去以后你可以照常聊天，'
-                        '结果回来会再叫你；没做完的事不要说成做完了。已经交出去的那件要补话、改或接着做，用 message_action，不要再 delegate 一件。'),
+                        '结果回来会再叫你；没做完的事不要说成做完了。已经交出去的那件要补话、改或接着做，用 task 的 message，不要再 delegate 一件。'),
         'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
     },
-    'message_action': {
-        'description': ('给已经交给行动脑的一件事补话：补充信息、改目标，或者让已经做完的事接着做。'
-                        'task 照抄 task_state_from_program 里那件事的 _id。还在做的，行动脑下一步就看到；'
-                        '已经做完的，会接着原来的过程再做一轮，结果回来会再叫你。'),
-        'parameters': {'task': _s('任务 _id', required=True), 'message': _s('要对行动脑说的话', required=True)},
-    },
-    'stop_action': {
-        'description': '叫停一件还在做或暂停着的事。只在对方明确要取消、或你确定不该再做时用；转换话题、说不急都不是取消。',
-        'parameters': {'task': _s('任务 _id', required=True), 'reason': _s(limit=1000, description='为什么叫停', required=True)},
-    },
-    'answer_action': {
-        'description': ('回答行动脑刚才问你的问题。这是给行动脑的回答，不会发给任何人。'
-                        '缺什么资料、拿不准，就照实说。回答后这回合结束。只在行动脑问你话的那一回合用；看它交回的结果用 read_report；不是回人用的。'),
-        'parameters': {'answer': _s('你的回答', required=True)},
+    'task': {
+        'description': ('已经交给行动脑的事，op 选一样：message 给交出去的那件补话——补充信息、改目标，或者让做完的接着做一轮；'
+                        'answer 回答行动脑刚才问你的问题，只在它问你话的那一回合用，回答只给行动脑看、不是回人，答完这回合结束；'
+                        'stop 叫停一件还在做或暂停着的事，只在对方明确要取消、或你确定不该再做时用，转换话题、说不急都不是取消；'
+                        'page 翻读它交回来的长报告原文，一个字不改，不回答它，也不花一次行动。交一件新的事用 delegate。'),
+        'parameters': {'op': _s('做哪一样', required=True, enum=['message', 'answer', 'stop', 'page']),
+                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page 要）'),
+                       'message': _s('要对行动脑说的话（message 要）'),
+                       'answer': _s('你的回答（answer 要）'),
+                       'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
+                       'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'}},
     },
     'stay_silent': {
         'description': ('不再说话，直接结束回合：这回合已经写在正文里的话照常发出，没写就一个字都不发；'
@@ -353,37 +350,25 @@ TOOLS = {
         'parameters': {'level': _s('wake（要他尽快来）或 note（等他下次来看）', required=True, enum=['wake', 'note']),
                        'text': _s('留言：什么事、卡在哪、要他做什么，800 字以内', required=True)},
     },
+    'ideas': {
+        'description': ('你的「改进想法」本，op 选一样：note 记下一个改进自己的想法——能力、技能、做事方式上可以更好的地方，'
+                        '灵感从哪来都行；用你自己的话写，不抄别人的原话，不带别人的个人信息；只记下来，不当场去改，'
+                        '自我改进时再拿出来由你定（别人叫你改代码，最多也只是记一条）。read 读出还没处理完的想法：'
+                        '先没处理的、再暂缓的，旧的在前，一页 %d 条。review 对一条写下处理结果：adopt 采纳（接着用 delegate '
+                        '交代行动脑去做）、defer 暂缓、drop 放弃，都写理由，会留档。' % IDEAS_PAGE),
+        'parameters': {'op': _s('做哪一样', required=True, enum=['note', 'read', 'review']),
+                       'idea': _s(limit=IDEA_CHARS, description='想法：想把什么变得怎样（note 要）'),
+                       'why': _s(limit=IDEA_CHARS, description='为什么想到这个，或者这样处理的理由（note、review 要）'),
+                       'id': _s('想法的 _id，照抄 ideas_from_program 或 read 读出来的（review 要）'),
+                       'decision': _s('处理结果（review 要）', enum=['adopt', 'defer', 'drop']),
+                       'page': {'type': 'integer', 'description': '第几页，从 1 开始，可省略（read）'},
+                       'search': _s('只看带这几个字的想法（40 字以内），可省略（read）')},
+    },
     'find_member': {
         'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多列 10 个，最近说过话的在前。'
                         'members_from_program 只列了一部分，别的人用这个找。找到的人给的是标签，照抄就能 @；'
                         '没在这里说过话的人进了这个群的名册，会标着「你查名单找来要叫的」，名册里的人不会被挤掉。'),
         'parameters': {'name': _s(limit=20, description='名字里的几个字', required=True)},
-    },
-    'note_idea': {
-        'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
-                        '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
-                        '只记下来，不当场去改；它会在你的自我改进时间里再拿出来，由你决定做不做。别人叫你改代码，最多也只是记一条想法。'),
-        'parameters': {'idea': _s(limit=IDEA_CHARS, description='想法：想把什么变得怎样', required=True), 'why': _s(limit=IDEA_CHARS, description='为什么想到这个', required=True)},
-    },
-    'read_ideas': {
-        'description': ('读出想法本里还没处理完的想法（之后用 review_idea 逐条决定）：先没处理的、再暂缓的，旧的在前，'
-                        '一页 %d 条。page 翻页；search 写几个字，只列想法或理由里带这几个字的。' % IDEAS_PAGE),
-        'parameters': {'page': {'type': 'integer', 'description': '第几页，从 1 开始，可省略'},
-                       'search': _s('只看带这几个字的想法（40 字以内），可省略')},
-    },
-    'read_report': {
-        'description': ('翻读行动脑交回来的长报告：报告原文存在任务里，交给你时只给了第一页。读的是原文本身，一个字不改，'
-                        '不再叫行动脑重写，也不花一次行动。task 照抄任务的 id（交回来的结果里的 task，或 task_state_from_program '
-                        '里标着「报告 N 页」的那条），page 是第几页。只读它交回的原文，不回答它。'),
-        'parameters': {'task': _s('任务的 id', required=True),
-                       'page': {'type': 'integer', 'description': '第几页，从 1 开始', 'required': True}},
-    },
-    'review_idea': {
-        'description': ('自我改进时，对想法本里的一条写下处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、'
-                        'defer 暂缓、drop 放弃。每条都写理由，会留档。'),
-        'parameters': {'idea': _s('想法的 _id（ideas_from_program 或 read_ideas 里的）', required=True),
-                       'decision': _s('处理结果', required=True, enum=['adopt', 'defer', 'drop']),
-                       'why': _s(limit=IDEA_CHARS, description='理由', required=True)},
     },
     'promote_memory': {
         'description': ('夜间沉淀时，把值得长期记住的事实提升为长期记忆；配额与来源要求由程序检查。'
@@ -405,6 +390,46 @@ TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
 TOOL_NAMES = tuple(TOOLS)
+# ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
+# and a turn may use is kept by option ('task.message'); the model is shown the tools.
+OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review')}
+# The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
+RENAMED = {'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
+           'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review'}
+RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
+# A field only one option takes says which option a call without op is (as plan's create, ADR-054).
+OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page'},
+             'ideas': {'idea': 'note', 'id': 'review', 'decision': 'review', 'search': 'read', 'page': 'read'}}
+
+
+def infer_op(name, args):
+    """The option a call without op plainly is, by its fields; None when they say none or several."""
+    ops = {OP_FIELDS[name][key] for key in args if key in OP_FIELDS[name]}
+    return ops.pop() if len(ops) == 1 else None
+
+
+def ability(tool, args=None):
+    """What a call does: its tool, or for a tool with options the option ('task.message'). An old name is its option,
+    so records of either kind read the same."""
+    if tool in RENAMED:
+        return RENAMED[tool]
+    if tool in OPS:
+        return '%s.%s' % (tool, (args or {}).get('op'))
+    return tool
+
+
+def named(can):
+    """An option as she reads it: 'task 的 message'."""
+    return ' 的 '.join(can.split('.', 1))
+
+
+def renamed(name, args):
+    """An old name's call as its tool and arguments: the option added, review_idea's idea (an id) as id."""
+    tool, op = RENAMED[name].split('.')
+    args = dict(args)
+    if name == 'review_idea' and 'idea' in args and 'id' not in args:
+        args['id'] = args.pop('idea')
+    return tool, {**args, 'op': op}
 
 
 def specs(names):
@@ -413,7 +438,18 @@ def specs(names):
 
 
 def all_specs():
-    return specs(TOOL_NAMES)
+    """Her tools, and each old name registered but never listed, so a call by it still reaches the worker."""
+    def unlisted(old, can):
+        tool = can.split('.')[0]
+        return {'name': old, 'description': RENAMED_NOTE % ((old,) + tuple(can.split('.'))),
+                'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
+                               for key, spec in TOOLS[tool]['parameters'].items() if key != 'op'}}
+    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()]
+
+
+def aliases():
+    """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
+    return {old: can.split('.')[0] for old, can in RENAMED.items()}
 
 
 def turn_kind(ep):
@@ -421,9 +457,9 @@ def turn_kind(ep):
 
 
 def exposed(store, ep):
-    """The tools this turn may use: the turn's own rules (its kind, context and grants, §2.6) within the
-    conversation's list (toolbox)."""
-    listed = toolbox(store, ep)
+    """What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the
+    conversation's list (abilities)."""
+    listed = abilities(store, ep)
     return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed]
 
 
@@ -433,10 +469,10 @@ def _turn_rules(store, ep):
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
     names = ['think', 'recall']
     if kind == CONSULT:
-        return names + ['answer_action']
+        return names + ['task.answer']
     if her_pictures(store, ep):
         names.append('read_image')
-    names += ['stay_silent', 'note_idea']
+    names += ['stay_silent', 'ideas.note']
     note_tool = ['pass_note' if cls == visibility.OWNER_PRIVATE else 'leave_note'] \
         if context.get('note_places_from_program') else []
     if kind == 'note':
@@ -452,20 +488,20 @@ def _turn_rules(store, ep):
     names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
-        names += ['read_ideas', 'review_idea']           # the listing shows the first page; she reads on herself
+        names += ['ideas.read', 'ideas.review']          # the listing shows the first page; she reads on herself
     elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
-        names += ['read_ideas', 'review_idea']
-    names.append('read_report')         # a long report reaches her as its first page: she turns the pages herself
+        names += ['ideas.read', 'ideas.review']
+    names.append('task.page')           # a long report reaches her as its first page: she turns the pages herself
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
     if capabilities.get('available'):
         names.append('delegate')
         if tasks:
-            names.append('message_action')
+            names.append('task.message')
     # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
     if tasks and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
                                           'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
-        names.append('stop_action')
+        names.append('task.stop')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
@@ -511,11 +547,11 @@ def _turn_rules(store, ep):
 
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
 # lists the same ones; `exposed` picks which of them the turn may use.
-EVERYWHERE = ('think', 'recall', 'stay_silent', 'note_idea', 'plan', 'private_words', 'understand_person')
-WITH_ACTION = ('delegate', 'message_action', 'stop_action', 'read_report', 'answer_action')
+EVERYWHERE = ('think', 'recall', 'stay_silent', 'ideas.note', 'plan', 'private_words', 'understand_person')
+WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
-AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'read_ideas', 'review_idea',
+AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'ideas.read', 'ideas.review',
            'message_developer', 'restart', 'place_timezone', 'group_focus')
 IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
@@ -523,8 +559,13 @@ LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
 
 def toolbox(store, ep):
-    """The tools her conversation lists, the same in each of its turns: decided by its place, its channel and the
-    configuration, never by the turn's kind or context."""
+    """The tools her conversation lists, the same in each of its turns (what the model is shown)."""
+    return list(dict.fromkeys(name.split('.')[0] for name in abilities(store, ep)))
+
+
+def abilities(store, ep):
+    """What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and
+    the configuration, never by the turn's kind or context."""
     from . import channel_kinds, group_admin, lines, outbound_media, stickers
     from .affect import AffectLedger
     from .grants import conversation_workspace
@@ -569,20 +610,22 @@ def toolbox(store, ep):
     if local and where == 'home':
         names += LOCAL_CHAT
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
-    return sorted(set(names), key=order.__getitem__)
+    return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
+                                                OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
+                                                if '.' in name else 0))
 
 
 # When a tool her conversation lists can be used, for the turns that may not use it: the whole rule, so one refusal
 # teaches it (her ask, 2026-10-11).
 NOT_NOW = {
-    'answer_action': 'answer_action 只在行动脑问你话的那一回合用，现在没有它在等的问题；要跟在做事的行动脑说话，用 message_action。',
+    'task.answer': 'task 的 answer 只在行动脑问你话的那一回合用，现在没有它在等的问题；要跟在做事的行动脑说话，用 task 的 message。',
     'read_image': '这个对话最近没有能看的图：图要在这个对话 7 天内的消息里，或者是列出来的你自己的图；在家里，你其他对话里 7 天内的图也能看。',
     'private_words': '这一回合不记名单。',
-    'read_ideas': ('想法本在自我改进的回合里读和定，或者家里有人跟你说话问起时；心跳、计划到点、夜间沉淀和便条叫醒的回合不翻，'
+    'ideas.read': ('想法本在自我改进的回合里读和定，或者家里有人跟你说话问起时；心跳、计划到点、夜间沉淀和便条叫醒的回合不翻，'
                    '先记着，等自我改进那一轮。'),
     'delegate': '这回合说话的人在这里没有交给行动脑的授权，这件事交不了；能直接答的就直接答，答不了就照实说。',
-    'message_action': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
-    'stop_action': '现在没有在做或暂停着的任务可停。',
+    'task.message': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
+    'task.stop': '现在没有在做或暂停着的任务可停。',
     'attach_image': ('这回合没有能带的图：能发的图列在 image_artifacts_from_program 里，这回合没有；'
                      '要新图，先用 delegate 交代行动脑画，画好那回合再带。'),
     'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀那一回合也不整理架子）；'
@@ -601,15 +644,15 @@ NOT_NOW = {
     'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
     'pass_note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
 }
-NOT_NOW['review_idea'] = NOT_NOW['read_ideas']
+NOT_NOW['ideas.review'] = NOT_NOW['ideas.read']
 NOT_NOW['leave_note'] = NOT_NOW['pass_note']
-CONSULT_ONLY = '行动脑在问你话：这一回合只用 answer_action 回答它（think、recall 也能用），别的事等下一回合。'
-NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（note_idea），不做有后果的事；'
+CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
+NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（ideas 的 note），不做有后果的事；'
              '想做的记进想法本，到自我改进时再定。')
 
 
 def not_now(store, ep, name):
-    """Why her conversation's tool `name` is not in this turn, and when it can be used."""
+    """Why her conversation's tool or option `name` is not in this turn, and when it can be used."""
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY
@@ -617,7 +660,7 @@ def not_now(store, ep, name):
         from . import notes
         if (notes.opening(store, ep) or {}).get('trust') != notes.TRUSTED:
             return NOTE_ONLY
-    return NOT_NOW.get(name, '这一回合用不了 %s。' % name)
+    return NOT_NOW.get(name, '这一回合用不了 %s。' % named(name))
 
 
 STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看：用 sticker 的 remember 记个名字和一句它在说什么'
@@ -828,6 +871,12 @@ class RoleTools:
         """(result, concludes_turn). Raises Refused for a call she can correct herself."""
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
+        called_as = None
+        if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
+            called_as, (name, args) = name, renamed(name, args)
+        inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
+        if inferred:
+            args = {**args, 'op': inferred}
         done = (ep.get('tool_calls') or {}).get(call_id)
         if done:
             if done['tool'] != name or done['args_sha256'] != sha(canonical(args)):
@@ -838,25 +887,32 @@ class RoleTools:
         try:
             if name not in TOOLS:
                 raise Refused('没有 %s 这个工具。' % name)
-            if name not in (ep.get('turn_tools') or ()):
-                raise Refused(not_now(self.store, ep, name))
             if not isinstance(args, dict):
                 raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
+            if name in OPS and args.get('op') not in OPS[name]:
+                raise Refused('%s 的 op 是 %s 之一%s。' % (name, '、'.join(OPS[name]), _given(args, 'op')))
+            can = ability(name, args)
+            if can not in (ep.get('turn_tools') or ()):
+                raise Refused(not_now(self.store, ep, can))
             if name != 'think' and not ep.get('turn_thought'):
                 raise Refused('先用 think 写下这回合的心里话，再做别的。')
             if len(ep.get('tool_calls') or {}) >= CALLS_PER_TURN:
                 raise Refused('这回合的工具调用已经到上限（%d 次）：这回合先到这里，写下要说的话或用 stay_silent 结束。'
                               % CALLS_PER_TURN)
-            result, conclude = getattr(self, 'tool_' + name)(ep, call_id, args)
+            result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
         except Refused as exc:
-            self._record(ep_id, call_id, name, args, refused=str(exc))
+            self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as)
             raise
         except (Denied, Conflict, DocumentError, ValueError) as exc:
             message = words(exc)
-            self._record(ep_id, call_id, name, args, refused=message)
+            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as)
             raise Refused(message) from None
+        if called_as and isinstance(result, dict):
+            result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED[called_as].split('.')))}
+        if inferred and isinstance(result, dict):
+            result = {**result, 'op': '没写 op：按你写的字段当作 %s 办了。' % inferred}
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
-        self._record(ep_id, call_id, name, args, conclude=conclude,
+        self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as,
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
 
@@ -865,7 +921,7 @@ class RoleTools:
         from . import local_time
         return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
 
-    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False):
+    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None):
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
         calls = dict(ep.get('tool_calls') or {})
@@ -873,11 +929,14 @@ class RoleTools:
         from . import reasons
         reason = None if refused or not reasons.consequential(name, args) else reasons.newest(ep)
         calls[call_id] = {'tool': name, 'args_sha256': sha(canonical(args)), 'seq': len(calls),
+                          **({'op': args.get('op')} if name in OPS and isinstance(args, dict) else {}),
+                          **({'called_as': called_as} if called_as else {}),
                           **({'refused': refused} if refused else {'result': result}),
                           **({'reason_ref': reason} if reason else {}),
                           **({'conclude': True} if conclude else {})}
         c._update(ep, tool_calls=calls)
         self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': args,
+                                              **({'called_as': called_as} if called_as else {}),
                                               **({'refused': refused} if refused else {'result': result}),
                                               **({'reason_ref': reason} if reason else {})},
                          ep['scope_key'])
@@ -1012,7 +1071,7 @@ class RoleTools:
         self.coordinator._update(self._fresh(ep), await_answer={'why': why})
         return {'note': '这句发出去后约三分钟里，你 @ 的人、你回的人（都没有时这里任何人）下一句没 @ 你也会叫你看一眼。'}, False
 
-    def tool_answer_action(self, ep, call_id, args):
+    def tool_task_answer(self, ep, call_id, args):
         answer = self._text(args, 'answer', 20000)
         self.coordinator._update(self._fresh(ep), answer=answer)
         return {'answered': True}, True
@@ -1057,7 +1116,7 @@ class RoleTools:
                           % (task_id, '；可能是：' + '、'.join(close) if close else ''))
         return task
 
-    def tool_message_action(self, ep, call_id, args):
+    def tool_task_message(self, ep, call_id, args):
         self._depth(ep)
         task = self._own_task(ep, args.get('task'))
         from . import credentials
@@ -1065,7 +1124,7 @@ class RoleTools:
         outcome = self.coordinator.message_action(ep, call_id, task, message)
         return outcome, False
 
-    def tool_stop_action(self, ep, call_id, args):
+    def tool_task_stop(self, ep, call_id, args):
         task = self._own_task(ep, args.get('task'))
         reason = self._text(args, 'reason', 1000)
         if task['state'] not in ('READY', 'RUNNING', 'PAUSED'):
@@ -1484,10 +1543,11 @@ class RoleTools:
         return {'line': line['label'], 'state': lines.describe(lines.closed_until(self.store, line['scene_id']), zone)}, False
 
     # ── her improvement ideas (ADR-011 §6.2) ────────────────────────
-    def tool_note_idea(self, ep, call_id, args):
+    def tool_ideas_note(self, ep, call_id, args):
         idea = self._text(args, 'idea', IDEA_CHARS)
         why = self._text(args, 'why', IDEA_CHARS)
-        noted = [call for call in (ep.get('tool_calls') or {}).values() if call.get('tool') == 'note_idea' and 'result' in call]
+        noted = [call for call in (ep.get('tool_calls') or {}).values()
+                 if ability(call.get('tool'), call) == 'ideas.note' and 'result' in call]
         if len(noted) >= IDEAS_PER_TURN:
             raise Refused('这回合已经记了 %d 条想法（上限 %d 条），先到这里；别的下回合再记。' % (len(noted), IDEAS_PER_TURN))
         row = note_idea(self.store, ep['persona'], idea, why, key=[ep['_id'], call_id],
@@ -1577,7 +1637,7 @@ class RoleTools:
         return {'left': row['_id'], 'note': ('留好了。他开着的时候大约一小时内会看到，回话在本机聊天里；不开着就等他下次来。'
                                             if level == developer_inbox.WAKE else '留好了，他下次来会看到。')}, False
 
-    def tool_read_ideas(self, ep, call_id, args):
+    def tool_ideas_read(self, ep, call_id, args):
         from . import schedule_rules
         try:
             page = int(args.get('page') or 1)
@@ -1593,17 +1653,17 @@ class RoleTools:
         if not items:
             note = ('没有带「%s」的、还没处理完的想法。' % search) if search else '想法本里没有还没处理完的想法。'
         else:
-            note = '逐条用 review_idea 写下处理结果；采纳的用 delegate 交代行动脑去做。'
+            note = '逐条用 ideas 的 review 写下处理结果；采纳的用 delegate 交代行动脑去做。'
         return {'items': items, 'page': '第 %d 页，共 %d 页（%d 条%s）' % (page, pages, total,
                                                                         '带「%s」' % search if search else ''),
                 **({'more': '后面还有 %d 条：page=%d 接着看。' % (after, page + 1)} if after > 0 else {}),
                 'note': note}, False
 
-    def tool_read_report(self, ep, call_id, args):
+    def tool_task_page(self, ep, call_id, args):
         from .tasks import report_pages
-        unknown = sorted(set(args) - {'task', 'page'})
+        unknown = sorted(set(args) - {'op', 'task', 'page'})
         if unknown:
-            raise Refused('read_report 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown))
+            raise Refused('task 的 page 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown))
         task_id = self._text(args, 'task', 80)
         try:
             page = int(args.get('page'))
@@ -1627,15 +1687,15 @@ class RoleTools:
                 'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)), 'text': pages[page - 1],
                 'more': 'page=%d 接着读' % (page + 1) if page < len(pages) else '报告到这里完了'}, False
 
-    def tool_review_idea(self, ep, call_id, args):
-        idea_id = self._text(args, 'idea', 200)
+    def tool_ideas_review(self, ep, call_id, args):
+        idea_id = self._text(args, 'id', 200)
         decision = args.get('decision')
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
         row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
         if not row or row.get('state') not in ('open', 'deferred'):
-            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 read_ideas 里的原样抄 _id。' % idea_id)
+            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。' % idea_id)
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
         self.store.put('ideas', {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
@@ -1705,7 +1765,7 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
 def ideas_left(store, persona, shown):
     """Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None."""
     waiting = store.db.ideas.count_documents({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
-    return ('还有 %d 条没列出：read_ideas 翻页（page）或按字找（search），处理掉几条也会轮到它们。' % (waiting - shown)
+    return ('还有 %d 条没列出：ideas 的 read 翻页（page）或按字找（search），处理掉几条也会轮到它们。' % (waiting - shown)
             if waiting > shown else None)
 
 

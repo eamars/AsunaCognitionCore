@@ -16,9 +16,9 @@ from test_adr009_p5_rhythm import scheduler
 from test_engineering_m1 import THINK
 
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
-CONSEQUENCES = {'delegate', 'message_action', 'stop_action', 'errand', 'visit', 'credential', 'update_self',
+CONSEQUENCES = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self',
                 'set_policy', 'write_document', 'plan', 'peer_line', 'understand_person'}
-UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'note_idea', 'pass_note', 'feel', 'watch'}
+UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'pass_note', 'feel', 'watch'}
 GROUP = {'wake_reason': 'mentioned_account', 'topic_id': None, 'reply_to': None, 'reply_message_id': None,
          'mentioned_account_ids': []}
 
@@ -140,7 +140,8 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     tools = set(home['turn_tools'])
     assert tools <= UNTRUSTED_TURN and not tools & CONSEQUENCES and 'pass_note' in tools
     # She sees her home's whole list as in any other turn there; the ones with consequences are refused, saying why.
-    assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home)) > tools
+    assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home))
+    assert set(role_tools.abilities(store, home)) > tools
     [(said, _)] = results(lane, 'delegate')
     assert '便条叫起来' in said
     assert lane.triggers == ['note']
@@ -288,7 +289,7 @@ def test_the_side_paths_say_where_they_were_written_and_loops_stop(store):
     from asuna.affect import AffectLedger
     service = world(store)
     ep, _ = turn(store, service, group_line('g-1', '你们这功能能不能改改'),
-                 [('note_idea', {'idea': '群里有人想要更好的搜索', 'why': '有人提了'}), ('stay_silent', {'reason': '记下'})])
+                 [('ideas', {'op': 'note', 'idea': '群里有人想要更好的搜索', 'why': '有人提了'}), ('stay_silent', {'reason': '记下'})])
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
     assert idea['where'] == places_title(store, 'g1')
     row = {'why': '等他回话', 'set_class': visibility.PUBLIC, 'set_in': 'g1'}

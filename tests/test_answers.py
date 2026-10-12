@@ -126,8 +126,8 @@ def test_a_mistyped_task_id_is_told_with_the_real_one(store):
     store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'DELIVERED', 'result': {'text': '明天有雨'}},
               expected=task['revision'], stream=real)
     garbled = real[:16] + 'f0f0f0f0'
-    lane = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': garbled, 'message': '再看看后天'}),
-                                      ('message_action', {'task': real, 'message': '再看看后天'})], '好，接着看后天。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'message', 'task': garbled, 'message': '再看看后天'}),
+                                      ('task', {'op': 'message', 'task': real, 'message': '再看看后天'})], '好，接着看后天。')])
     ep = Coordinator(store, lane).ingest(event('second', text='那后天呢'))
     refused, fixed = lane.tool_results[1], lane.tool_results[2]
     assert not refused[5]

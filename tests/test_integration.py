@@ -167,18 +167,18 @@ def test_continuation_cannot_inherit_previous_integration_grant(store, runtime_w
     assert first['integration_profile']=='owner'
     returned(store,first,'runner checked',[])
     # An ordinary turn cannot continue the owner-granted work; she is told so and hands over new work instead.
-    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('message_action',{'task':first['_id'],'message':'ordinary check'}),
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'op': 'message', 'task':first['_id'],'message':'ordinary check'}),
         ('delegate',{'title':'check','brief':'ordinary check'})],'我另交了一件。')])
     revised=router.receive({'event_id':'revision','scene_id':'dm-a','person_id':'A','text':'ordinary check'})
     _,_,tool,_,refusal,ok=lane.tool_results[1]
-    assert tool=='message_action' and not ok and '授权和原来那件事不一样' in refusal
+    assert tool=='task' and not ok and '授权和原来那件事不一样' in refusal
     assert not store.db.tasks.find_one({'continues_task_id':first['_id']})
     task=store.db.tasks.find_one({'_id':revised['task_ids'][0]})
     assert task['integration_profile'] is None
     assert not any(t.startswith('integration_') or t=='import_integration_artifact'
                    for t in task['allowed_capabilities']), task['allowed_capabilities']
     # The same grant again continues it, still owner-granted.
-    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('message_action',{'task':first['_id'],'message':'check again'})],'接着看。')])
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'op': 'message', 'task':first['_id'],'message':'check again'})],'接着看。')])
     again=router.receive({'event_id':'owner-again','scene_id':'dm-a','person_id':'A','text':'check again','integration_profile':'owner'})
     continued=store.db.tasks.find_one({'_id':again['task_ids'][0]})
     assert lane.tool_results[1][5] and continued['continues_task_id']==first['_id']
@@ -366,13 +366,13 @@ def test_a_narrow_task_answered_on_its_own_line_is_not_refused(store, runtime_wo
         line_event('agent-continue', AGENT_SCENE, AGENT_PERSON, 'agent', '看看适配器'), work)
     done = returned(store, service.claim(task['_id']), '适配器在跑，日志里没有报错。', [])
     coordinator.character = FakeLane(store, [FakeTurn(
-        [THINK, ('message_action', {'task': task['_id'], 'message': '再看一眼状态'})], '我让它再看一眼。')])
+        [THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': '再看一眼状态'})], '我让它再看一眼。')])
     feedback = service.feedback(done, coordinator)
     # 补话开了新任务，那一回合就挂在它上面：关键是没被当成授权不一致拒掉。
     assert feedback['state'] in ('COMMITTED', 'WAITING_TASK'), feedback['state']
     said = store.db.messages.find_one({'event.episode_kind': 'task_feedback', 'scene_id': AGENT_SCENE})
     assert said['event']['integration_profile'] == 'agent_home'         # 反馈回合拿得到同一个值
-    actions = [entry for entry in coordinator.character.tool_results if entry[2] == 'message_action']
+    actions = [entry for entry in coordinator.character.tool_results if entry[2] == 'task']
     assert actions and actions[0][5] is True, actions                     # 544 不再判成授权不一致
     continued = store.db.tasks.find_one({'continues_task_id': task['_id']})
     assert continued and continued['integration_profile'] == 'agent_home', continued

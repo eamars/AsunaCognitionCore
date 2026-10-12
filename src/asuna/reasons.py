@@ -39,12 +39,14 @@ def _doc(name):
 
 def _action(tool, args):
     """One action in her words, or None when the call is not an action with consequences."""
+    from .role_tools import ability
     op = args.get('op')
+    can = ability(tool, args)                  # a tool's option ('task.stop'), an old name read as its option
     if tool == 'delegate':
         return '交给行动脑去做「%s」' % _short(args.get('title'))
-    if tool == 'message_action':
+    if can == 'task.message':
         return '跟行动脑补了一句'
-    if tool == 'stop_action':
+    if can == 'task.stop':
         return '叫停了行动脑手上那件事'
     if tool == 'plan' and (op in ('create', 'update', 'cancel') or (not op and not args.get('plan_id') and args.get('intent'))):
         return {'create': '定了个计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + (
@@ -73,9 +75,9 @@ def _action(tool, args):
         return ('开始留意' if op == 'on' else '不再留意') + _short(args.get('person'), 20)
     if tool == 'peer_line' and op in ('open', 'close'):
         return '把那条线' + ('打开了' if op == 'open' else '关了')
-    if tool == 'review_idea':
+    if can == 'ideas.review':
         return '把一个想法%s' % DECISIONS.get(args.get('decision'), '处理了')
-    if tool == 'note_idea':
+    if can == 'ideas.note':
         return '记下一个想法：%s' % _short(args.get('idea'))
     if tool == 'restart' and op in ('request', 'drill', 'cancel'):
         if op == 'cancel':

@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.more': '展开全文', 'collab.less': '收起', 'collab.progress': '进展',
       'duration.seconds': '{n} 秒', 'duration.minutes': '{n} 分钟', 'duration.hours': '{h} 小时 {m} 分钟',
       'tool.think': '心里话', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
-      'tool.stop_action': '叫停', 'tool.answer_action': '回答行动脑', 'tool.stay_silent': '不说话',
+      'tool.stop_action': '叫停', 'tool.answer_action': '回答行动脑', 'tool.task': '行动脑的事', 'tool.ideas': '想法本', 'tool.stay_silent': '不说话',
       'tool.attach_image': '配图', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数',
       'tool.feel': '心情', 'tool.plan': '安排', 'tool.group_action': '群管理', 'tool.promote_memory': '沉淀记忆',
@@ -185,7 +185,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.more': 'Show all', 'collab.less': 'Show less', 'collab.progress': 'Progress',
       'duration.seconds': '{n}s', 'duration.minutes': '{n} min', 'duration.hours': '{h} h {m} min',
       'tool.think': 'Thought', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
-      'tool.message_action': 'Message the action brain', 'tool.stop_action': 'Stop a task', 'tool.answer_action': 'Answer the action brain',
+      'tool.message_action': 'Message the action brain', 'tool.stop_action': 'Stop a task', 'tool.answer_action': 'Answer the action brain', 'tool.task': 'A task', 'tool.ideas': 'Her ideas',
       'tool.stay_silent': 'Stay silent', 'tool.attach_image': 'Attach a picture', 'tool.write_document': 'Write document',
       'tool.update_self': 'Update self', 'tool.understand_person': 'Understand this person', 'tool.set_policy': 'Adjust a setting',
       'tool.feel': 'Feeling', 'tool.plan': 'Plan', 'tool.group_action': 'Group action',
@@ -617,7 +617,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     feel: 'IconLikeOutlineRegular', plan: 'IconAlarmClockOutlineRegular',
     group_action: 'IconUsersOutlineRegular', promote_memory: 'IconArchiveOutlineRegular', note_idea: 'IconLightOutlineRegular',
     read_ideas: 'IconListPenOutlineRegular', read_report: 'IconFlatListOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
-    ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular' };
+    ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular',
+    task: 'IconPaperPlaneOutlineRegular', ideas: 'IconLightOutlineRegular' };
+  // A tool with options (role_tools.OPS) shows each option as the row its old name had; a record by the old name
+  // shows the same row.
+  const OPTION_ROWS = { 'task.message': 'message_action', 'task.answer': 'answer_action', 'task.stop': 'stop_action',
+    'task.page': 'read_report', 'ideas.note': 'note_idea', 'ideas.read': 'read_ideas', 'ideas.review': 'review_idea' };
   // The argument that says what a call was about (her own words), and the one shown in full when opened.
   const TOOL_SUMMARY = { think: 'thought', recall: 'query', delegate: 'title', message_action: 'message', stop_action: 'reason',
     answer_action: 'answer', stay_silent: 'reason', attach_image: 'why', write_document: 'doc', update_self: 'target',
@@ -1168,10 +1173,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
     // ── her tool rows and the action brain's ways to reach her ────────
     function RoleToolRow(props) {
-      const t = props.t, name = props.toolName;
+      const t = props.t;
       const disclosure = props.useDisclosure();
       const raw = props.phase === 'start' ? props.block.argsRaw : props.phase === 'result' ? props.block.call?.argsRaw : '';
       const args = parseArgs(raw);
+      const name = OPTION_ROWS[props.toolName + '.' + args.op] ?? props.toolName;
       const refused = props.phase === 'result' && props.block.isError;
       const said = args[TOOL_SUMMARY[name]];
       const summary = name === 'think' ? firstSentence(said) : typeof said === 'string' ? said : said === undefined ? '' : JSON.stringify(said);

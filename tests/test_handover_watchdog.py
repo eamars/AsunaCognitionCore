@@ -104,8 +104,8 @@ def test_a_hand_back_that_keeps_failing_goes_full_then_short_then_tells_the_deve
         assert given['feedback_state'] == 'DELIVERED', 'the short version reached her'
         short = store.db.episodes.find_one({'source_event_id': handover.result_event_id(task, True)})
         text = repr(short['context'])
-        assert '只给了开头，原文 4000 字共 1 页' in text and 'read_report' in text, 'a cut report says it was cut and how to read on'
-        assert 'read_report' in lane.calls[-1]['tools'], 'and that turn has the tool to read on'
+        assert '只给了开头，原文 4000 字共 1 页' in text and 'task 的 page' in text, 'a cut report says it was cut and how to read on'
+        assert 'task' in lane.calls[-1]['tools'], 'and that turn has the tool to read on'
         assert 'observations' not in text, 'the short version carries no tool records'
         assert [state for state, *_ in handbacks(entries)] == ['handing', 'missed', 'handing', 'missed', 'handing', 'taken']
         assert handbacks(entries)[-2] == ('handing', None, True, False)
@@ -137,7 +137,7 @@ def test_when_the_short_version_fails_too_the_developer_is_told_and_the_watchdog
         count = len(entries)
         settle(chat)
         assert len(entries) == count and store.db.developer_inbox.count_documents({}) == 1, 'nothing more is tried'
-        assert handover.status_words(given).endswith('要再看就用 message_action 让它重跑')
+        assert handover.status_words(given).endswith('要再看就用 task 的 message 让它重跑')
     finally:
         chat.stop()
 
@@ -191,7 +191,7 @@ def test_her_task_list_says_where_each_task_stands_in_words():
     assert words({'state': 'RETURNED', 'feedback_state': 'READY'}) == '跑完了，结果还没交到你手上：报告存着，程序会交给你'
     assert words({'state': 'BLOCKED', 'feedback_state': 'UNDELIVERABLE'}).startswith('没做成，但结果交不到你手上')
     assert words({'state': 'PAUSED'}).startswith('做到一半宿主重启停了')
-    assert words({'state': 'CANCELLED', 'cancel_reason': 'host_stop'}).endswith('message_action 接着做')
+    assert words({'state': 'CANCELLED', 'cancel_reason': 'host_stop'}).endswith('task 的 message 接着做')
 
 
 def test_a_task_carried_on_by_a_later_one_points_to_it():

@@ -439,10 +439,10 @@ class ContextBuilder:
         from .tasks import REPORT_CHARS, report_pages
         for task in task_states:
             task.pop('_active',None)
-            # A report longer than a page reached her as its first page; the rest she reads with read_report.
+            # A report longer than a page reached her as its first page; the rest she reads with task op page.
             if task.pop('_report_chars',0)>REPORT_CHARS:
                 text=((self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1}) or {}).get('result') or {}).get('text') or ''
-                task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 read_report 翻读'%(len(report_pages(text)),len(text))
+                task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读'%(len(report_pages(text)),len(text))
             # A task's title is what she called it; the old goal text only when there is no title.
             if task.get('title'):
                 task.pop('goal',None)
@@ -513,7 +513,7 @@ class ContextBuilder:
         if paused:
             context['task_continuation_from_program'] = (
                 '「做到一半宿主重启停了」的是重启后等待操作者决定的旧行动，历史与回执仍保留。'
-                '只有本地用户明确要求继续时才可以用 message_action 接着做；'
+                '只有本地用户明确要求继续时才可以用 task 的 message 接着做；'
                 '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
                 '继续时先核实已有结果，未确认回执的操作不能盲目重做。')
         if read['linked_scenes']:
@@ -537,7 +537,7 @@ class ContextBuilder:
             if ideas:
                 more=ideas_left(self.store,persona,len(ideas))
                 context['ideas_from_program']={'items':ideas,**({'more':more} if more else {}),
-                    'note':'这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 review_idea 写下处理结果'
+                    'note':'这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 ideas 的 review 写下处理结果'
                            '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 交代行动脑去做，它会带开发工具，'
                            '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。'}
         if event.get('episode_kind') in ('self_development', 'presence'):
@@ -836,7 +836,7 @@ class ContextBuilder:
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={
-            'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话或接着做用 message_action，叫停用 stop_action。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
+            'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
             'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}

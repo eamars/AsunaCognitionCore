@@ -1,7 +1,7 @@
 /** Native Web fixture (ADR-011): one synthetic model, two brains on native tool calls, no Python/Mongo/QQ.
  *
  * Her turn: think, then (for `dual-*` input) delegate, then her words. The action brain reads two
- * synthetic records, asks her once (ask_character → her internal turn with answer_action), leaves a
+ * synthetic records, asks her once (ask_character → her internal turn with task op answer), leaves a
  * progress note, and reports; then her turn reads the result. Every model call is synthetic. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,7 +19,7 @@ const ROLE_SPECS = [
   { name: 'delegate', description: 'Hand a task to the action brain.',
     parameters: { title: { type: 'string', required: true }, brief: { type: 'string', required: true } } },
   { name: 'stay_silent', description: 'End the turn without speaking.', parameters: { reason: { type: 'string', required: true } } },
-  { name: 'answer_action', description: 'Answer the action brain.', parameters: { answer: { type: 'string', required: true } } },
+  { name: 'task', description: 'A task handed to the action brain; op answer answers its question.', parameters: { op: { type: 'string', required: true }, answer: { type: 'string' } } },
 ];
 const ACTION_SPECS = [
   { name: 'ask_character', description: 'Ask her and wait.', parameters: { question: { type: 'string', required: true } } },
@@ -62,7 +62,7 @@ export function apply(ctx, config) {
         const thought = trigger === 'question' ? '它问城市。他说的是本地，邻近的顺带看看也好。'
           : trigger === 'task_result' ? '结果回来了：有小雨。提醒他带伞。'
           : text.includes('dual-') ? '他想知道明天要不要带伞。我自己查不了，交给行动脑去看。' : '他来打招呼了，挺开心的，简单回一句。';
-        const plan = trigger === 'question' ? [call(1, id, 'think', { thought }), call(1, id, 'answer_action', { answer: '主要看本地，邻近城市顺带看一眼就行。' })]
+        const plan = trigger === 'question' ? [call(1, id, 'think', { thought }), call(1, id, 'task', { op: 'answer', answer: '主要看本地，邻近城市顺带看一眼就行。' })]
           : text.includes('dual-') && !trigger ? [call(1, id, 'think', { thought }),
             call(1, id, 'delegate', { title: '查明天的天气', brief: '帮我查一下明天本地的天气，看要不要带伞；邻近城市也顺带看一眼。只要结论和依据。' })]
           : [call(1, id, 'think', { thought })];
@@ -94,7 +94,7 @@ export function apply(ctx, config) {
   const collab = (task, entry) => core.onEvent({ kind: 'collab', session_id: roleId, task_id: task.id, thread: task.id,
     title: task.title, entry: { at: now(), ...entry } });
   const roleTurn = async (trigger, text) => {
-    const event = stage(roleId, 'TURN', text, { tools: trigger === 'question' ? ['think', 'recall', 'answer_action']
+    const event = stage(roleId, 'TURN', text, { tools: trigger === 'question' ? ['think', 'recall', 'task']
       : ['think', 'recall', 'delegate', 'stay_silent'], trigger });
     turns.set(event.token, { trigger });
     await core.onEvent(event);
@@ -130,7 +130,7 @@ export function apply(ctx, config) {
         await collab(task, { id: 'brief:' + task.id, kind: 'message', from: 'character', text: task.brief, title: task.title });
         return { value: { task: task.id, state: '已交给行动脑，正在排队' } };
       }
-      if (args.tool === 'answer_action') { turn.answer = args.args.answer; return { value: { answered: true }, conclude: true } }
+      if (args.tool === 'task' && args.args.op === 'answer') { turn.answer = args.args.answer; return { value: { answered: true }, conclude: true } }
       if (args.tool === 'stay_silent') return { value: { silent: true }, conclude: true };
       return { value: { saved: true } };
     } else if (method === 'result') {

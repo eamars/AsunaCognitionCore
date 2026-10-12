@@ -98,7 +98,7 @@ def status_words(task, continued_by=None):
     if state == 'PAUSED':
         return '做到一半宿主重启停了：主人说继续才接着做'
     if state == 'CANCELLED':
-        return '宿主停机时撤下了：要做就用 message_action 接着做' if task.get('cancel_reason') == 'host_stop' else '叫停了'
+        return '宿主停机时撤下了：要做就用 task 的 message 接着做' if task.get('cancel_reason') == 'host_stop' else '叫停了'
     if state == 'STALE':
         return '交代改过了，这一份作废'
     outcome = OUTCOME_WORDS.get(state, '跑完了')
@@ -108,7 +108,7 @@ def status_words(task, continued_by=None):
     if handed in ('DELIVERED', 'WAITING_TASK'):
         return outcome + '，结果已经交给你'
     if handed == 'UNDELIVERABLE':
-        return outcome + '，但结果交不到你手上：补交也没成，开发者已经知道；要再看就用 message_action 让它重跑'
+        return outcome + '，但结果交不到你手上：补交也没成，开发者已经知道；要再看就用 task 的 message 让它重跑'
     if handed == 'SUPPRESSED':
         return outcome + '；它所在的对话后来变了，结果不再交给你'
     return outcome + '，结果还没交到你手上：报告存着，程序会交给你'

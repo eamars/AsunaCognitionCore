@@ -1,7 +1,7 @@
 # ADR-055: Fewer tools, the same abilities: the action brain's and the idea notebook's tools merged
 
 Status: **Accepted 2026-10-12** after Xiaoman's review (her name, her option names, the migration and the acceptance
-check are hers). Not built.
+check are hers). **Built 2026-10-12** (see Build).
 
 ## Context
 
@@ -55,3 +55,25 @@ per-turn line. The budget test's count drops by 5.
 As ADR-054: before building, the side-by-side confusion cases on both models with the old and the new tools; after,
 refusals by cause at 7 and 14 days, options in place of sentences. Rolled back if the wrong-tool and wrong-option
 causes have not fallen by half after 14 days.
+
+## Build (2026-10-12)
+
+- **Checked before building** (scratchpad harness, her real descriptions and parameters, 18 made-up home moments: the
+  12 of ADR-054 and 6 on the merged families): 28 tools 61/72 right, 23 tools 64/72; local model at medium and high
+  effort 30/36 against 31/36, DeepSeek at low and high 31/36 against 33/36. Misses common to both: naming `think`
+  (the harness asks for one tool; hers says think comes first) and reading the notebook before reviewing it when the
+  moment gives no id. One new kind: DeepSeek at low effort twice named `ideas` without an option.
+- Hence one addition, as ADR-054 did for `plan`: a call without `op` whose fields name exactly one option is that
+  option (`role_tools.OP_FIELDS`; `task`'s message, answer, reason, page; `ideas`' idea, id or decision, search or
+  page), and its result says so. Fields naming none or several are refused with the options.
+- `review` takes the idea's `id` (its old `idea` was the id while `note`'s `idea` is the text: one name, two
+  meanings); an old `review_idea` call's `idea` arrives as `id`.
+- What a conversation lists and a turn allows is kept by option (`task.message`, `role_tools.abilities`); the model is
+  shown the tools (`toolbox`). The old names are registered with the merged tool's parameters but never listed; the
+  plugin's guard lets one through where its tool is listed, and its result carries `renamed`. Records keep the tool,
+  its `op` and `called_as`, and the readers (reasons, the night summary) read an old record as its option.
+- Cost as measured by `tests/test_tool_budget.py`: her character brain 37 tools defined to 32, 21,474 description
+  characters to 20,861; the seven merged tools 2,290 to 1,677; her home list 15,816 to 15,203. The budget is lowered
+  to 32 tools and 20,900 characters. No per-turn line added.
+- Her persona's own skill `asuna-bot-or-person` names old tools in her words; hers to update (old names keep
+  working meanwhile).

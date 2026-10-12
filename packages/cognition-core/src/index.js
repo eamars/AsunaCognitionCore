@@ -262,6 +262,7 @@ export class CognitionCore {
         if (primary.has(summary.sessionId)) this.ctx.emit('api-session/added', summary);
       this.specs = await this.worker.call('tool_specs');
       this.roleSpecs = await this.worker.call('role_tool_specs');
+      this.roleAliases = await this.worker.call('role_tool_aliases');
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
     })().catch(async error => {
@@ -728,6 +729,8 @@ export class CognitionCore {
     scope.tools.guard(exec => {
       const exposed = this.exposed(lane, exec.agent.session.id) ?? new Set();
       if (exposed.has(exec.name)) return undefined;
+      // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
+      if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
       // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`

@@ -1,0 +1,40 @@
+"""Each brain's tools have a budget: how many it defines and how large their descriptions are (characters of the JSON
+the model is sent). A change that adds a tool or grows the descriptions past the budget fails here until the budget
+below is raised in the same change, with the cost stated in its ADR (AGENTS.md). A change that removes one lowers the
+count here too, so the budget never drifts above what exists."""
+import json
+
+from asuna import role_tools
+from asuna.development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
+from asuna.image_generation import GENERATE_IMAGE_TOOL
+from asuna.private_words import PRIVATE_WORDS_TOOL
+from asuna.svg_render import RENDER_SVG_TOOL
+from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
+
+# (tools defined, description characters at most)
+CHARACTER = (37, 21500)
+ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
+
+
+def size(specs):
+    return len(json.dumps(specs, ensure_ascii=False))
+
+
+def check(name, specs, count, budget, extra=0):
+    have = len(specs) + extra
+    assert have == count, ('%s brain defines %d tools, the budget says %d. Adding one: state its cost (tools, '
+                           'description tokens, per-turn lines) in its ADR and raise the budget here; removing one: '
+                           'lower it.' % (name, have, count))
+    assert size(specs) <= budget, ('%s brain tool descriptions are %d characters, over the budget of %d: shorten '
+                                   'them, or state the cost in the ADR and raise the budget here.'
+                                   % (name, size(specs), budget))
+
+
+def test_the_character_brain_stays_within_its_tool_budget():
+    check('character', list(role_tools.TOOLS.values()), *CHARACTER)
+
+
+def test_the_action_brain_stays_within_its_tool_budget():
+    worker = [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, PRIVATE_WORDS_TOOL, *INTEGRATION_TOOLS,
+              *DEVELOPMENT_TOOLS, *PERSONA_JOB_TOOLS]
+    check('action', worker, *ACTION, extra=len(ACTION_DSH_CAPABILITIES))

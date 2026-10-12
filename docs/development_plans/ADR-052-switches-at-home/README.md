@@ -33,7 +33,7 @@ What exists:
 
 ## Proposal
 
-1. **One tool at home, `switches`**: list, set, clear. Only in owner-private conversations (her local chat and her
+1. **At home only** (the tools below, as options): list, set, clear. Only in owner-private conversations (her local chat and her
    home lines), as the owner asked for a switch at home. Each switch names a conversation (or a person), what it
    does, and an end: a time (an hour, tonight, three days) or `until I clear it`.
 2. **Mute** a public conversation (her middle level): it closes her mouth, not her eyes. Mute = **resting**
@@ -49,6 +49,16 @@ What exists:
 6. **She is told**: the program, not her memory, keeps every switch. Her first turn in a switched conversation
    carries one line ("这里你关了 X，到 Y"); her home heartbeat lists switches still on and those that end soon. An
    expired switch ends by itself and says so once.
+
+## No new tool (owner, 2026-10-12; her review)
+
+Her character brain already has many tools, so the switches are options on tools she has:
+
+- **Mute** is an option of `group_focus`, next to rest. Its description and every refusal say the difference in one
+  sentence each: resting = only words to her bring her; muted = she is there but does not speak first or visit.
+- **Tools off or on for a while** in one conversation: an option of `set_policy`.
+- **Block** a person: an option of `understand_person`. The program enforces it (their lines wake her nowhere), not
+  her note about the person, and it ends or reminds her like every switch. Her words: "recorded" is not "in effect".
 
 ## Open questions
 

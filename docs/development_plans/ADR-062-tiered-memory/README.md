@@ -8,6 +8,11 @@ start until every defect of ADR-063 is fixed or documented**; its phase 0b items
 *Her review:* ____ (her signature). This draft contains no paraphrase of her words; when her answers come, they are
 added under "Her review" as Claude's paraphrase for her to sign or correct, as ADR-060 does.
 
+## The core idea (the owner's words, 2026-10-13)
+
+**If you do not learn to forget, you leave no room to learn new things.** Everything below serves that sentence:
+forgetting is part of learning, not a loss to be prevented. It is how this ADR is first put to her.
+
 ## 1. Context: every store of hers only grows
 
 Measured 2026-10-13 on her live database (counts, lengths and dates only; no content read):

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { packageManagerEnv, prepareFresh } from '../../../tools/asuna-launch.mjs';
+import { packageManagerEnv, prepareFresh, retireSummarySessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -145,4 +145,25 @@ test('ADR-034: each start is prepared by a fresh process from the code on disk; 
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test('finished summary sessions leave the session store before a start, and the archive keeps them two weeks', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-retire-'));
+  try {
+    const home = path.join(dir, 'home'), archive = path.join(dir, 'archive'), project = path.join(home, 'sessions', 'p');
+    const day = 24 * 3600 * 1000, now = Date.now();
+    const make = async (folder, id, age) => {
+      await fs.mkdir(path.join(folder, id), { recursive: true });
+      await fs.writeFile(path.join(folder, id, 'session.v4.jsonl.zstd'), '');
+      const at = new Date(now - age); await fs.utimes(path.join(folder, id), at, at);
+    };
+    await make(project, 'asuna-summary-old', 2 * day);
+    await make(project, 'asuna-summary-fresh', 3600 * 1000);           // may still be asked again (a retry)
+    await make(project, 'asuna-role-old', 30 * day);                     // her conversations are never touched
+    await make(path.join(archive, 'p'), 'asuna-summary-gone', 15 * day);
+    assert.deepEqual(await retireSummarySessions(home, archive, now), { moved: 1, dropped: 1 });
+    assert.deepEqual((await fs.readdir(project)).sort(), ['asuna-role-old', 'asuna-summary-fresh']);
+    assert.deepEqual(await fs.readdir(path.join(archive, 'p')), ['asuna-summary-old']);
+    assert.deepEqual(await retireSummarySessions(path.join(dir, 'none'), path.join(dir, 'none-archive'), now), { moved: 0, dropped: 0 });
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

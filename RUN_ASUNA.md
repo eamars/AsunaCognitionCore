@@ -103,6 +103,7 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 - When DSH exits on its own, it is started again the same way.
 - When she asks for a restart (her `restart` tool), the worker writes `<data>/restart/request.json` once it is due; the launcher kills the DSH process tree (the stop is marked planned) and starts it again.
 - Each start is prepared (the checkout synced and installed, selections applied) by a fresh `asuna-launch.mjs --prepare <rung>` process from the code on disk, so a change to the launcher's preparation or the tools it runs takes effect at the next restart without restarting the launcher; the resident launcher only starts and watches DSH. The preparation's output goes to the console and to `<data>/restart/prepare.log`, rewritten each start; a failed one names its last lines in the record.
+- Before each start the preparation moves finished dialogue-summary sessions (`asuna-summary-*`, older than a day) out of DSH's session store into `<base>/archive/sessions`, and drops archived ones after 14 days; the character reads summaries from the database, so the page's session list holds only conversations.
 - The record of each restart is `<data>/restart/last.json`: who asked and why, what it interrupted, each start and its rung, and what loaded (the checkout's commit, the installed packages, the selections).
 - Ctrl+C or a stop signal stops DSH and the launcher; nothing restarts. `--once` runs DSH once without the supervisor.
 

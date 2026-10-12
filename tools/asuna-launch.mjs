@@ -217,6 +217,7 @@ async function main() {
     let notes = [];
     if (prepareRung === 0) {
       if (launch.sync) await syncCheckout(launch, exec);
+      await retireSummarySessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
       // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
       notes = (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
     } else if (prepareRung === 1) {
@@ -228,6 +229,7 @@ async function main() {
   }
   if (launch.once) {
     if (launch.sync) await syncCheckout(launch, exec);
+    await retireSummarySessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
     await applySelection(launch, run, advanceSelection);
     return run(host);
   }
@@ -255,6 +257,38 @@ async function main() {
     onStop: fn => stops.push(fn),
   });
   return 0;
+}
+
+// A dialogue summary is one request in a session of its own (native_worker.py). DSH lists every stored session to
+// the page on each load, reading each one's header, and has no way to remove one, so finished summaries made the
+// list grow by hundreds a day (6,070 rows, 12.6 MB, ~5 s per load on 10-13). Before DSH starts, summaries left
+// untouched for a day leave the store for the profile's archive, and the archive keeps them for two weeks.
+const RETIRED_PREFIX = 'asuna-summary-';
+const RETIRE_AFTER_MS = 24 * 3600 * 1000;
+const ARCHIVE_KEEP_MS = 14 * 24 * 3600 * 1000;
+
+/** Move finished summary sessions out of DSH's store (Host stopped); drop archived ones past their keep. */
+export async function retireSummarySessions(home, archive, now = Date.now()) {
+  const sessions = path.join(home, 'sessions');
+  let moved = 0, dropped = 0;
+  for (const project of await fs.readdir(sessions).catch(() => [])) {
+    for (const id of await fs.readdir(path.join(sessions, project)).catch(() => [])) {
+      if (!id.startsWith(RETIRED_PREFIX)) continue;
+      const from = path.join(sessions, project, id);
+      const { mtimeMs } = await fs.stat(from);
+      if (now - mtimeMs < RETIRE_AFTER_MS) continue;
+      await fs.mkdir(path.join(archive, project), { recursive: true });
+      await fs.rename(from, path.join(archive, project, id)); moved++;
+    }
+  }
+  for (const project of await fs.readdir(archive).catch(() => [])) {
+    for (const id of await fs.readdir(path.join(archive, project)).catch(() => [])) {
+      const at = path.join(archive, project, id);
+      if (now - (await fs.stat(at)).mtimeMs < ARCHIVE_KEEP_MS) continue;
+      await fs.rm(at, { recursive: true, force: true }); dropped++;
+    }
+  }
+  return { moved, dropped };
 }
 
 /** Install selected publications waiting for a Host start; `step` decides first (advance or revert). */

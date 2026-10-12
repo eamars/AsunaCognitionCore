@@ -2,6 +2,7 @@
  * worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn. */
 import { projectionCacheDomainSpec } from '@deepseek-ai/dsh-session-projection-cache';
 import { localWorkspace } from './paths.js';
+import { hold, isHeld, toolCallOpen } from './pairing.js';
 
 const needsTitle = (events, title, previous) => {
   const latest = events.findLast(event => event.type === 'session/title')?.data;
@@ -67,13 +68,15 @@ export async function recordChannelInput(core, receipt) {
   const message = await channelMessage(core, receipt);
   const headed = events => events.some(event => event.type === 'system/message');
   const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id)
-    || pendingOf(events).some(line => line.source.receipt === input.id);
+    || pendingOf(events).some(line => line.source.receipt === input.id) || isHeld(core, id, input.id);
   const agent = ctx.agents.get(id);
   if (agent?.status === 'running' && !headed(agent.session.snapshotEvents())) await headOrIdle(ctx, agent);
   const hot = ctx.sessions.get(id);
   if (hot) {
     const events = hot.snapshotEvents();
     if (contains(events)) { /* already recorded */ }
+    // While one of her tool calls waits for its result the line waits too (pairing.js), as DSH's own input does.
+    else if (headed(events) && agent && toolCallOpen(events)) hold(core, id, message);
     else if (headed(events)) hot.append('user/message', message, { surfaceOp: 'append' });
     else if (agent) for (const splice of queueing(agent.inbox.nextStep, message))
       agent.inbox.splice('next-step', splice.start, splice.removedCount ?? 0, splice.inserted);

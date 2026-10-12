@@ -54,7 +54,7 @@ test('settings activation pauses ingress and restores the previous configuration
 test('applied settings reach a conversation already open: it is reopened between its turns, never during one', async () => {
   const live = new Map(), resumed = [];
   const open = (id, options) => {
-    const agent = { id, options, session: { header: {} } };
+    const agent = { id, options, session: { header: {}, snapshotEvents: () => [], surface: { nodes: [] } } };
     const handle = { agent, dispose: async () => { live.delete(id); } };
     live.set(id, agent);
     return handle;

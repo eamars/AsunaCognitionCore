@@ -330,6 +330,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`image-refusal.js`](../../packages/cognition-core/src/image-refusal.js) — A model that refuses a picture must not end her turn, nor leave the conversation resending it (owner 2026-10-06).
 - [`index.js`](../../packages/cognition-core/src/index.js) — The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 - [`navigation.js`](../../packages/cognition-core/src/navigation.js) — Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn.
+- [`pairing.js`](../../packages/cognition-core/src/pairing.js) — A tool call and its result stay adjacent in her conversation.
 - [`paths.js`](../../packages/cognition-core/src/paths.js) — Where a profile's files live: `dataRoot` (the profile's data folder, which the worker also gets as ASUNA_DATA_ROOT), the local chat's working folder and the publication floor's state folder.
 - [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH 0.2.1-alpha.2 compatibility seam for informational plugin event envelopes.
 - [`persona.js`](../../packages/cognition-core/src/persona.js) — Persona contribution v2 (ADR-009 PERSONA_CONTRACT §2): shape checks at registration.

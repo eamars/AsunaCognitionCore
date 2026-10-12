@@ -23,6 +23,7 @@ import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
+import { release, repair } from './pairing.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
@@ -134,6 +135,8 @@ export class CognitionCore {
     this.channelWaiters = [];
     this.states = new Map();
     this.handles = new Map();
+    // Platform lines that arrived while a tool call of hers waited for its result (pairing.js).
+    this.held = new Map();
     // Conversations open when settings were last applied: each is reopened at its next idle moment (ensureAgent).
     this.reopen = new Set();
     this.channelWrites = new Map();
@@ -645,6 +648,8 @@ export class CognitionCore {
             delegationDepth: (parentAgent.session.header.delegationDepth ?? 0) + 1 } : {}) },
         agentOptions: options, setup });
     this.handles.set(stage.session_id, handle);
+    // A line written between a tool call and its result before that was held (pairing.js) is emptied in place.
+    if (stage.lane === 'character' && repair(handle.agent.session)) await this.ctx.sessions.flush(handle.agent.session);
     if (!parentAgent) {
       const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd,
         this.channelOf(stage.binding.scene_id)?.title ?? 'Local');
@@ -852,6 +857,7 @@ export class CognitionCore {
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
+      release(this, agent.session);                 // lines held while her tool call ran: after its result
       const decision = await next();
       if (decision.kind !== 'enter') return decision;
       const stage = state.admitted; state.admitted = null;
@@ -867,6 +873,7 @@ export class CognitionCore {
     });
     scope.on('agent/turn-stopping', async ({ agent, turn, signal }) => {
       const state = this.state(agent.session.id);
+      if (release(this, agent.session)) await this.ctx.sessions.flush(agent.session);
       const stage = state.current;
       if (!stage) return;
       const events = agent.session.snapshotEvents();

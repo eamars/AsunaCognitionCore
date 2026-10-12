@@ -254,6 +254,8 @@ Build and check a GitHub Release of the distributable plugins (ADR-010 D10).
 
 Install the core, one persona package and its channel packages into a local-only native Web profile.
 
+- class `ProfileLoader` — DSH writes its profile as YAML 1.2, where only true/false are booleans; PyYAML reads YAML 1.1, where a bare off/on/yes/no is one too, so a model's `off` effort would come back as false and DSH would refuse the file.
+- def `profile_yaml`
 - def `profile_base` — The owner's original profile keeps its existing location; others are isolated.
 - def `data_folder` — (dataRoot, stateDir) of a profile set up from this checkout (ADR-010 D3).
 - def `with_pnpm` — DSH installs plugins with `pnpm` from PATH; without one, use the pnpm Node ships through corepack.

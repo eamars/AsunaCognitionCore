@@ -251,6 +251,19 @@ Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles
 - def `retitleSession` — A conversation's title changed while running (a group made active or resting): retitle it and show it.
 - def `organizeNativeWorkspaces` — Native workspace/session migration.
 
+## `pairing.js`
+
+[packages/cognition-core/src/pairing.js](../../packages/cognition-core/src/pairing.js)
+
+A tool call and its result stay adjacent in her conversation.
+
+- def `toolCallOpen` — Whether a tool call of the running step still waits for its result.
+- def `hold` — Hold a line until the open tool call has its result.
+- def `isHeld`
+- def `release` — Write the held lines into the conversation, in arrival order; true when any was written.
+- def `strayLines` — Seqs of the lines on the conversation's surface that sit between a tool call and its result.
+- def `repair` — Replace each stray line with an empty one in place (DSH's surface replace); returns how many.
+
 ## `paths.js`
 
 [packages/cognition-core/src/paths.js](../../packages/cognition-core/src/paths.js)

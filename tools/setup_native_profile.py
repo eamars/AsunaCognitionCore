@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,22 @@ import yaml
 from asuna import channel_kinds
 from asuna.config import ROOT, load
 from asuna.native_settings import credential_ref, export_settings
+
+
+class ProfileLoader(yaml.SafeLoader):
+    """DSH writes its profile as YAML 1.2, where only true/false are booleans; PyYAML reads YAML 1.1, where a bare
+    off/on/yes/no is one too, so a model's `off` effort would come back as false and DSH would refuse the file."""
+
+
+ProfileLoader.yaml_implicit_resolvers = {
+    first: [(tag, pattern) for tag, pattern in resolvers if tag != 'tag:yaml.org,2002:bool']
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()}
+ProfileLoader.add_implicit_resolver('tag:yaml.org,2002:bool', re.compile(r'^(?:true|True|TRUE|false|False|FALSE)$'),
+                                    list('tTfF'))
+
+
+def profile_yaml(text):
+    return yaml.load(text, Loader=ProfileLoader)
 
 
 def profile_base(profile):
@@ -57,7 +74,7 @@ def persona_package(directory):
     """Read the persona package's npm name, project id and agent preset from its own files."""
     directory = directory.resolve()
     package = json.loads((directory / 'package.json').read_text(encoding='utf-8'))
-    patch = yaml.safe_load((directory / 'cordis.patch.yml').read_text(encoding='utf-8')) or []
+    patch = profile_yaml((directory / 'cordis.patch.yml').read_text(encoding='utf-8')) or []
     presets = [row['config']['id'] for item in patch for row in item.get('insert', [])
                if row.get('name') == '@asuna/cognition-core/preset']
     if len(presets) != 1:
@@ -179,7 +196,7 @@ def main():
     # Initial composition belongs in the editable profile layer. A command-line
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
-    prior = yaml.safe_load(editable.read_text(encoding='utf-8')) if editable.exists() else []
+    prior = profile_yaml(editable.read_text(encoding='utf-8')) if editable.exists() else []
     defaults = profile_patch(config, args.config, persona, args.profile, channels, args.channel_admission)
     stored = {}
     def merge(base, override):

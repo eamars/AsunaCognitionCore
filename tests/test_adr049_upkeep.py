@@ -113,6 +113,12 @@ def test_a_group_past_the_size_floor_gets_a_notes_visit_first_then_is_condensed_
     scene = store.db.scenes.find_one({'_id': 'g-a'})
     assert scene['condensed_by'] == 'floor' and 'condense_floor' not in scene
     assert '长度线' in condense.condensed_block(store, scene, 'ev-next', NOW)
+    # Condensed and still quiet: the conversation is measured again, not judged by the reading from before the condense
+    # (a quiet group was offered a notes visit and condensed again every ten minutes, 10-13).
+    size = lambda session_id, scene_id, cwd: measured.append(session_id) or {'tokens': 40000, 'floor': 100000}
+    later = NOW + timedelta(minutes=10)
+    assert condense.look(store, 'P1', compact, later, size=size, offer_notes=offer) == []
+    assert offered == ['g-a'] and compacted == ['role-g-a'] and measured == ['role-g-a'] * 2
 
 
 def test_a_group_under_the_floor_or_not_quiet_is_left_and_only_groups_are_looked_at(store):

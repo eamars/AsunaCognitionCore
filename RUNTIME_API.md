@@ -346,7 +346,8 @@ A group she has not marked (groups only: her private chats and home conversation
 a quiet spell after new lines there: the Host request `conversation_size` answers the conversation's size in DSH's own
 measure (the token meter its compaction threshold uses) and the floor, half of that conversation's compaction
 threshold (the character preset's compaction engine, `compaction.js` `floorTokens`); the scene keeps both
-(`conversation_size`). Past the floor, the program first opens a notes visit there (a `visit` turn with intent
+(`conversation_size`). A reading under the floor stands until new lines arrive; a reading past it is taken again before
+the program acts on it. Past the floor, the program first opens a notes visit there (a `visit` turn with intent
 `condense`, not in her plan's visit ledger and outside its daily limit; `condense_floor` on the scene records it), whose
 text and `visit_from_program` say that the program brought her to write the group's notes before its conversation is
 condensed; it also carries the phrases a `write_notes` visit gets. At the next quiet spell after that turn has run,

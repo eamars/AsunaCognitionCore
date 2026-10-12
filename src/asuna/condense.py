@@ -186,11 +186,13 @@ def _condense(store, scene, found, compact, moment, by):
 
 
 def _past_floor(store, scene, found, size, moment):
-    """Whether the conversation is past the size floor; measured again only after new lines since the last measure."""
+    """Whether the conversation is past the size floor. A reading under the floor stands until new lines arrive; past it,
+    the conversation is measured again, since a condense or her own turn's compaction may have shortened it since."""
     last = last_line(store, scene['_id'])
     measured = scene.get('conversation_size') or {}
-    if measured.get('at') and (last is None or last <= _at(measured['at'])):
-        return bool(measured.get('floor')) and measured.get('tokens', 0) >= measured['floor']
+    if (measured.get('at') and measured.get('floor') and measured.get('tokens', 0) < measured['floor']
+            and (last is None or last <= _at(measured['at']))):
+        return False
     try:
         answer = size(found[0], scene['_id'], found[1]) or {}
     except Exception as exc:

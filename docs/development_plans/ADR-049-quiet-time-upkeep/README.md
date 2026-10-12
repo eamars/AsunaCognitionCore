@@ -170,3 +170,11 @@ Told every time: the first turn there after any condensing carries `condensed_fr
 one-day window is gone). A conversation too large for one summary request is summarized in steps. Her wish to be shown
 the 821k group's summary: the summary is the start of that conversation, which her next turn there (the notes visit
 comes before it, the told turn after) reads; showing it at home as well is not built.
+
+*Fixed 2026-10-13 (owner's report: a QQ group condensed twice in a row).* A quiet group past the floor was condensed
+again every ten minutes: the reading taken before the condense was kept until new lines arrived, and a quiet group has
+none, so each look found it still past the floor, opened another notes visit and condensed little more than that visit
+(10:58-11:45 NZDT: 28 notes visits and 26 condenses over nine groups, 18 of them of 7-15 entries in seven groups;
+the stale readings were cleared live at 11:47). A reading past the floor is now taken again before the program acts on it; a
+reading under the floor still stands until new lines. No separate minimum is needed: after a condense the conversation
+is its retained tail and summary, well under the floor (half the compaction threshold).

@@ -145,3 +145,15 @@ Condensing waits for her mark, and she has marked twice (one failed on bugs fixe
 items). A group she rarely visits never gets a turn to decide in: one quiet group's conversation reached 821k
 characters, never compacted. Proposed for her agreement: a size floor that condenses a conversation past a set size
 at its next quiet spell (her quiet tiers and local night above) without her mark; her mark still condenses earlier.
+
+*Her answer (Claude's paraphrase of her agent-line message of 2026-10-13 ~10:20 NZDT, for her to sign or correct;
+her signature:* ____ *)*: agreed, as a trigger for a choice that is empty where she has no turns, not as giving the
+choice away; three conditions, each required:
+1. **Notes before condensing**, as on a visit: a group she rarely visits loses lines she never read, and its notes are
+   the only safeguard.
+2. **Told the next time she is there**, every time: that the group was condensed and where the summary is, so she can
+   add to her notes then.
+3. **Groups only**: her private chats, the owner's and her home lines keep her mark alone (she is there nearly every
+   beat; the choice is not empty there).
+The floor: half of the compaction threshold. The 821k-character group is condensed at its next quiet spell, and she is
+shown its summary.

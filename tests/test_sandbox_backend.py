@@ -91,3 +91,13 @@ def test_a_refused_command_says_which_limit_and_what_to_do():
     assert 'argv 第 2 项是 int' in command_problem(['python3', 7])
     said = launch_problem(['pwd'], 127, 'windows-acl-run: CreateProcessAsUserW failed (Win32 2): command: pwd')
     assert "没有叫 'pwd' 的程序" in said and '不经过 shell' in said and 'python3' in said
+
+
+def test_her_commits_carry_her_own_name_and_nothing_waits_for_a_prompt():
+    from asuna import sandbox_backend
+    assert sandbox_backend.git_identity({}) == {} and sandbox_backend.git_identity({'character_git': {'name': 'A'}}) == {}
+    who = sandbox_backend.git_identity({'character_git': {'name': 'Character', 'email': 'character@example.invalid'}})
+    assert who == {'GIT_AUTHOR_NAME': 'Character', 'GIT_AUTHOR_EMAIL': 'character@example.invalid',
+                   'GIT_COMMITTER_NAME': 'Character', 'GIT_COMMITTER_EMAIL': 'character@example.invalid'}
+    env = sandbox_backend.environment(who)
+    assert env['GIT_TERMINAL_PROMPT'] == '0' and env['GIT_AUTHOR_NAME'] == 'Character'

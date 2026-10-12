@@ -73,6 +73,18 @@ def environment(extra=None):
     # A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
     # Python into the working folder (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
-               PYTHON_MANAGER_AUTOMATIC_INSTALL='false')
+               PYTHON_MANAGER_AUTOMATIC_INSTALL='false',
+               # Nobody can answer a prompt here: git fails at once instead of waiting out the command's time.
+               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never')
     env.update(extra or {})
     return env
+
+
+def git_identity(config):
+    """The character's own name on what her commands commit (`character_git` {name, email} in local config), or {}.
+    Pushing and ssh use whatever credentials the Host's user has; only the name on her commits is hers."""
+    who = (config or {}).get('character_git') or {}
+    name, email = str(who.get('name') or '').strip(), str(who.get('email') or '').strip()
+    if not (name and email):
+        return {}
+    return {'GIT_AUTHOR_NAME': name, 'GIT_AUTHOR_EMAIL': email, 'GIT_COMMITTER_NAME': name, 'GIT_COMMITTER_EMAIL': email}

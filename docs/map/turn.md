@@ -50,7 +50,7 @@ One character turn per episode (ADR-011 §3).
 Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 
 - def `landing_lost` — The parts of her delivered line the platform did not store, in words; None when it stored what was sent.
-- def `refs` — Every id she may cite in this turn: ref_index, and the memories and tasks shown in their own blocks.
+- def `refs` — Every id she may cite in this turn: ref_index, the document sections, and the memories and tasks shown in their own blocks.
 - def `catch_up` — A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines.
 - def `order_context` — Fixed head, ordered blocks (persona order, then the core default for the rest), fixed tail.
 - def `ledger_block` — Every ledger she can read here, each within its per-turn limit (context_budget.note_view).

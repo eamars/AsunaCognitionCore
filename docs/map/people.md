@@ -201,6 +201,7 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `visitor` — Who a visit enters the group as: an authorized member, only so the turn is authorized there.
 - def `group_zone` — The time zone she set for this group (place_timezone), as a tzinfo; None when unset or no longer valid.
 - def `their_time` — 'HH:MM' on the group's own clock, or None when she has not set one.
+- def `clock_gap` — How the group's clock stands to hers (home: her tzinfo), in words that change only with a time zone or a daylight-saving switch, never with the minute; None when she has not set the group's time zone.
 - def `night_there` — Quiet hours there are about other people's night: the route's P5 quiet hours, or the core default, on the route's offset, else the group's own time zone (place_timezone), else the Host's clock.
 - def `set_zone` — Set or (name None) clear a group's time zone.
 - def `zones` — Every group she is in: whether its time zone is set, and the time there now.

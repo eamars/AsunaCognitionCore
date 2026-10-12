@@ -106,12 +106,14 @@ IDEAS_NOTE = ('这是你的「改进想法」本里还没处理完的想法（�
               '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。')
 EXPERIENCE_NOTE = ('真实历史片段与行动结果；每条保留来源场景。别人的原话只列你私人的对话；群和别人的私聊里只列你自己'
                    '说过的话，那边的情况心跳时看 places_from_program。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')
+DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感受要指向某一节时，照抄这里的 doc:… 引用。')
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
 MEMORY_SOURCE_RULES = 'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。'
 
 def refs(context):
-    """Every id she may cite in this turn: ref_index, and the memories and tasks shown in their own blocks."""
-    return list(dict.fromkeys([*(context.get('ref_index') or []),
+    """Every id she may cite in this turn: ref_index, the document sections, and the memories and tasks shown in their
+    own blocks."""
+    return list(dict.fromkeys([*(context.get('ref_index') or []), *(context.get('doc_refs_from_program') or []),
                                *[m.get('_id') for m in context.get('memories') or [] if isinstance(m, dict) and m.get('_id')],
                                *[t.get('_id') for t in context.get('task_state_from_program') or []
                                  if isinstance(t, dict) and t.get('_id')]]))
@@ -859,11 +861,14 @@ class ContextBuilder:
             members=group_members.block(self.store,scene,persona)
             if members:context['members_from_program']=members
         from .ingress import episode_id as _episode_id
-        # What she may cite that is not shown elsewhere: this turn's own ids and the document sections (her ask: she
-        # copies the doc refs); a memory's or a task's id is in its own block and counts as well (refs, ADR-056).
-        context['ref_index']=list(dict.fromkeys([event['event_id'],'in-'+_episode_id(event),
+        # What she may cite that is not shown elsewhere: this turn's own ids, and the document sections in a block of
+        # their own (her ask: she copies the doc refs), which stays the same from turn to turn and so folds; a memory's
+        # or a task's id is in its own block and counts as well (refs, ADR-056).
+        context['ref_index']=[event['event_id'],'in-'+_episode_id(event)]
+        doc_refs=list(dict.fromkeys([
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
+        if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         # Available with or without a record: her first understanding of someone creates it.
         context['understanding_update_from_program']={

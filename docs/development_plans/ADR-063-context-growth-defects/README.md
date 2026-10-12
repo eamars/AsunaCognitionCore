@@ -44,7 +44,7 @@ Claude's scratchpad `growth/`.
 
 | # | Commit | What changed | Measured effect |
 |---|---|---|---|
-| D1 (2) | b34c122b | a line arriving while its conversation has a `compaction/start` without its `compaction/end` is held (`pairing.js` `compactionOpen`) and joins as the compaction ends, committed or failed (`releaseAfterCompaction`) | after her restart: aborted compactions in the day audit |
+| D1 (2) | b34c122b | a line arriving while its conversation has a `compaction/start` without its `compaction/end` is held (`pairing.js` `compactionOpen`) and joins as the compaction ends, committed or failed (`releaseAfterCompaction`); a start older than the log's last `session/end-seed` (opened again after the process stopped mid-compaction) holds nothing, as in DSH's compaction lock. A held line lives in memory only and is acknowledged to the worker when held: a stop before its release leaves it out of the conversation (Mongo keeps it) | after her restart: aborted compactions in the day audit |
 
 Not a defect: her sister's host answers `session/page` without authentication on the LAN. That is by design (owner
 2026-10-13: a local server, no login wanted).

@@ -26,6 +26,8 @@ test('a compaction is open from its start to its end, failed or committed', () =
   assert.equal(compactionOpen([{ type: 'compaction/start' }, { type: 'user/message' }]), true);
   assert.equal(compactionOpen([{ type: 'compaction/start' }, { type: 'compaction/end', data: { error: {} } }]), false);
   assert.equal(compactionOpen([{ type: 'user/message' }]), false);
+  assert.equal(compactionOpen([{ type: 'compaction/start' }, { type: 'session/end-seed' }, { type: 'user/message' }]), false,
+    'a compaction the process stopped in runs no more once the conversation is opened again');
 });
 
 test('a held line joins the conversation once, after the result, in arrival order', () => {

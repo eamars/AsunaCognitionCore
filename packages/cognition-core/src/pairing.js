@@ -23,10 +23,12 @@ export function toolCallOpen(events) {
   return false;
 }
 
-/** Whether a compaction runs on the conversation: its last `compaction/start` has no `compaction/end` yet. */
+/** Whether a compaction runs on the conversation: its last `compaction/start` has no `compaction/end` yet. As in DSH's
+ * compaction lock, a start older than the log's last `session/end-seed` (the conversation was opened again since,
+ * e.g. after the process stopped mid-compaction) runs no more. */
 export function compactionOpen(events) {
   for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type === 'compaction/end') return false;
+    if (events[i].type === 'compaction/end' || events[i].type === 'session/end-seed') return false;
     if (events[i].type === 'compaction/start') return true;
   }
   return false;

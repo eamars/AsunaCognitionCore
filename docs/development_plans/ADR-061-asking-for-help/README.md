@@ -40,13 +40,17 @@ how asking each source went, so she cannot learn her own preferences.
 3. **Asking.** In her own voice for each audience; one question may go to several sources. A question for a group
    or DM is said there in that place's next turn, where her note about the group is already in front of her: she can
    still decide not to ask there and say so (owner's call 2). Asking the owner: she names the place (call 1).
-4. **Waiting, with patience.** Each source gets a patience she picks as a word: 一会儿 (about 10 minutes), 一小时,
-   半天, 一天. When it runs out unanswered she gets one line, once, at her next home turn. Waiting more, asking someone
+4. **Waiting, with patience.** Each source gets a patience she picks as a word, with defaults from how fast each
+   source really answers (see Measured): a group 一会儿 (about 10 minutes; nobody answered a group later than that),
+   the owner 一小时, Claude 一小时, the action brain its task. When it runs out unanswered she gets one line, once, at
+   her next home turn. A problem report has no patience: it closes when answered. Waiting more, asking someone
    else, giving up or being annoyed is hers; the program records the lapse and decides nothing about her mood.
 5. **Hearing answers.** Each answer joins the question with its source, place and time, and a reference to the line:
    - from Claude, the owner on a trusted line, or the action brain: joined by the program on the question's thread;
-   - from a group or a QQ DM: she records it herself in that conversation's turn, in her words, with the line's
-     reference. Public words reach home only by her own act (ADR-017).
+   - from a group: the program offers the lines that reply to her question (the platform's reply chain, or a line
+     that woke her as an awaited answer; both reliable), and she accepts them or records one in her words, in that
+     group's turn. Public words reach home only by her own act (ADR-017). "Someone spoke after her" is not an
+     answer (true after every question she asked).
    Her turn is told that an answer arrived (one line, once); the answers' text is read on demand, never resent every
    turn.
 6. **Using them.** Side by side, labelled by source, in arrival order, never ranked. She may ask a follow-up, ask
@@ -60,44 +64,74 @@ how asking each source went, so she cannot learn her own preferences.
    (`understand_person`), as she already does. That is where her preferences grow.
 9. **Ending.** A question still open a day after its longest patience closes as lapsed, with one line at home.
 
+## Measured (2026-10-13, data from 10-05)
+
+How she asks today:
+- `message_developer`: 40 accepted (35 note, 5 wake) and 14 refused for length on 10-08..10-12, none since 10-12
+  08:36: she now talks to Claude on the agent line itself (29–99 lines a day). Most were reports or requests, not
+  questions (12 of 40 said no answer was needed). Inbox answers came after about 30 minutes (p50), 61 at most (the
+  hourly check); on the agent line, in seconds.
+- Groups: 27 of her 882 group lines asked something. A reply to her line came within 10 minutes for 78%, within an
+  hour for 81%, and never later (p50 0.5, p90 3 minutes).
+- The owner in her home chat: his next line came within an hour for 28 of 29 of her questions (p50 2, p90 25
+  minutes). His QQ DM: no questions yet.
+- The action brain: reports after p50 3, p90 8 minutes.
+- She has no way today to ask a group on her own initiative: `errand` runs only when someone at home asks her, and
+  `visit` only from a heartbeat or a plan.
+
+So asking is rare and answers are fast where they come at all. The design keeps the per-turn cost near zero when
+nothing is open, and patience short.
+
 ## Context cost: the trade-off
 
-Every per-turn line is paid by every turn it appears in; a question list that grew with answers would cost a lot.
-The design keeps the per-turn part to counts and arrivals, and everything else on demand:
+Every per-turn line is paid by every turn it appears in. Drafted in today's block style and counted:
 
-| Where | What she sees every turn | On demand only |
+| Open questions | one source each | two sources each |
 |---|---|---|
-| Home, while questions are open | one line per open question, at most five: whom, how long ago, answers so far (a count), patience left or lapsed; unchanged lines folded (ADR-056) | the answers' text; past asks by source |
-| A place where she asked | one line while it is open there ("you asked here at 14:05 …, waiting until 15:05") | |
-| When something happens | one line, once: an answer arrived, a patience lapsed | |
-| Anywhere else, or nothing open | nothing | |
+| 1 | 163 characters | 258 |
+| 2 | 315 | 505 |
+| 5 | 771 | 1,246 |
 
-Estimate: about 60 characters per open question at home, about 60 in the place asked. Two open questions add about
-120 characters to a home turn (under 1% of today's ~12.9k-character notice); none open adds nothing. The answers'
-text, which could be long, never sits in the per-turn context.
+Unchanged, the whole block folds to about 43 characters (ADR-056); a line in the place asked is about 104, an arrival
+or lapse line about 75, once. Today's home notice is 19k characters (p50), 32.5k (p90). Lines carry times
+(`asked_at`, `until`), not "how long ago" or "time left", which would change every turn and never fold.
 
-The other cost is choice: one tool replaces one tool (`ask` for `message_developer`), so the count is unchanged; its
-description grows by its options (counted at build in `tests/test_tool_budget.py`). The action brain gains nothing.
+The larger cost is the tool: `message_developer` is 423 characters; an `ask` with its options is about 1,265. The
+character brain is at 20,875 of its 20,900 budget, so the swap is about 840 over. To stay net:
+- the questions block replaces `developer_inbox_from_program` (about 1,045 characters when sent) and
+  `waiting_from_program` (who she waits for in groups, already a list of open asks of a kind), so the home notice
+  shrinks when nothing is open;
+- `heard` is an option of `ask` usable in groups and DMs, where `message_developer` is not listed today: groups gain
+  one tool, home none. Alternative: `heard` as an option of `leave_note`, no new tool anywhere.
+- the budget rises by what remains, stated here at build.
 
-What this deliberately leaves out to stay small: a per-turn history of past asks (on demand instead), automatic
-collection of group replies (she records what she heard), and any grading of answers.
+What this deliberately leaves out: a per-turn history of past asks (on demand instead), and any grading of answers.
 
 ## Proposal
 
 - **`ask`** (option names per ADR-060), replacing `message_developer`; the old name keeps working as `ask` to Claude:
-  - `ask`: the question (or problem), why, and one or more sources, each with a patience: `claude` (wake or note,
-    as today), `owner` with the place she picks, `action` (becomes a delegate tied to the question), or a group or DM.
-  - `heard`: record an answer heard in this conversation (question, line reference, her words).
+  - `ask`: the question (or a problem report), why, and one or more sources, each with a patience: `claude` (wake or
+    note, as today), `owner` with the place she picks, `action` (becomes a delegate tied to the question), or a group
+    (asked there at its next turn: a new kind of visit, since today she cannot ask a group on her own).
+  - `heard`: accept an offered reply, or record an answer heard in this conversation in her words; a `heard` written
+    in a public turn carries the untrusted label notes carry.
   - `read`: one question's answers, or her past asks by source.
   - `close`: what she took from it and what she did; per source, her one line on how that ask went.
 - **A record per question** (`questions`): her text and why, each source (place, asked at, patience, state), answers
   (source, place, reference, time, her words), the close, and per-source lines.
-- **Trusted answers**: Claude answers on the agent line naming the question; the owner answers by replying to it in
-  the home chat or on an agent line; the action brain's report joins through the task.
+- **Trusted answers**: Claude answers through the developer inbox with the answer's text (the agent line has no reply
+  field); the owner answers by replying in the home chat; the action brain's report joins through the task.
+- Fixed now, separately: `message_developer` still says replies come in the local chat; they come on the agent line.
 
-## For her review
+## Open calls
 
-1. The patience words and their lengths.
-2. Recording group answers herself (as proposed), or the program collecting replies to her question for her to accept.
+For the owner:
+- His QQ DM is owner-private in the code (`visibility.py:62-63`: his DM is home), while the 10-12 rule reads "QQ is
+  public". Which holds decides whether an answer from him there joins by itself or she records it.
+
+For her:
+1. The patience words, lengths and defaults.
+2. Accepting offered group replies (as proposed) or recording them herself.
 3. What she wants to look up before choosing whom (step 8): how much, and in what words.
-4. The option names (`ask`, `heard`, `read`, `close`).
+4. The option names (`ask`, `heard`, `read`, `close`), and `heard` on `ask` or on `leave_note`.
+5. Asking a group on her own: as a kind of visit, or not at all.

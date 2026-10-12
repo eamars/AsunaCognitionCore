@@ -30,6 +30,9 @@ class Router:
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','adapter_id','visit','note')
         trusted={k:event[k] for k in allowed if k in event}
+        # What a heartbeat's die rolled (ADR-058): the program's own internal event only, never a channel's.
+        if not event.get('channel') and event.get('episode_kind')=='presence' and event.get('dice'):
+            trusted['dice']=event['dice']
         # Only the private native Host adapter supplies this execution identity;
         # channel payloads cannot choose a local native session or its authority.
         if not event.get('channel') and event.get('native_session_id'):

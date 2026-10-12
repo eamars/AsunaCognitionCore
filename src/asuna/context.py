@@ -708,6 +708,14 @@ class ContextBuilder:
         if watching:context['watching_from_program']=watching
         watched=_watches.watched_block(self.store,event,session_class)
         if watched:context['watched_from_program']=watched
+        # ADR-058: a heartbeat that rolled self evaluation brings her day in raw readings (home only).
+        if (event.get('dice')=='self_evaluation' and event.get('episode_kind')=='presence'
+                and session_class==visibility.OWNER_PRIVATE):
+            from . import self_review
+            from .persona_model import timezone as _review_zone
+            from .render import model_and_policy as _review_model
+            context['self_review_from_program']=self_review.block(
+                self.store,persona,_review_zone(*_review_model(self.store,persona),self.store.config)[0],moment)
         # ADR-052: her switches: at home all of them (and those that ended lately), elsewhere the ones on here.
         from . import switches as _switches
         switched=(_switches.home_block(self.store,persona,moment) if session_class==visibility.OWNER_PRIVATE

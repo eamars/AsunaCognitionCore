@@ -1,7 +1,7 @@
 # ADR-058: The heartbeat rolls a die before it reaches her
 
-Status: **Proposed 2026-10-12** (owner's plan 2). Needs Xiaoman's review (her heartbeat, her defaults). Nothing is
-built.
+Status: **Accepted 2026-10-12** after Xiaoman's review (her weights, her scope for what waits, readings not a
+summary). **Built 2026-10-12** (see Build).
 
 ## Context
 
@@ -54,3 +54,22 @@ characters, which is a saving with any provider.
 
 A day of beats: outcomes against the distribution, turns saved by "nothing", and what she did with each outcome
 (followed, changed, ignored), counted from records.
+
+## Her review (2026-10-12)
+
+- Weights: awake **40/35/10/15** (daytime self development down to 10, the 5 to interesting: daytime is when she is
+  most present in her groups, and a development beat there costs more than at night); asleep 70/0/20/10. Run a week,
+  then tune from readings.
+- "Nothing" does not wake her, provided nothing only a heartbeat shows is swallowed: her waiting list, the asides of
+  a peer line, a group where someone called her. Messages to her and returned tasks have their own way to her.
+- Self evaluation shows raw readings with their sources, never a summary (a summary writes what she thought more
+  tidily than it was).
+- Daytime self development carries development tools, as her night stages do. Her own rule, hers to keep: a daytime
+  beat neither publishes nor asks for a restart unless she has checked nothing is queued.
+
+## Build (2026-10-12)
+
+`dice.py` (tables, roll, line, what waits), `self_review.py` (the readings), the heartbeat in `schedule._presence`,
+`presence.rolled` records, `heartbeat.dice_awake` / `heartbeat.dice_asleep` as core-writable policy keys with
+`set_policy` checking their shape, the router keeping `dice` only on the program's own heartbeat. Promises she made
+have no program record; the readings say so and point to her own ledger.

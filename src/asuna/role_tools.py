@@ -1384,6 +1384,12 @@ class RoleTools:
         reason = self._text(args, 'reason', 2000)
         if key in ('tools_off', 'switch_off'):
             return self._switch_policy(ep, key, args, reason), False
+        from . import dice
+        if key in dice.KEYS.values():
+            try:
+                dice.parse(args.get('value'))
+            except ValueError as exc:
+                raise Refused(str(exc)) from None
         if 'value' not in args:
             raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。')
         model, _ = model_and_policy(self.store, ep['persona'])

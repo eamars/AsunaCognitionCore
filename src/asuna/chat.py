@@ -181,9 +181,10 @@ class Chat:
         """Queue a heartbeat or settlement opportunity in an owner-private scene (ADR-009 §10), her visit to
         a group (ADR-012 §4.2), which carries what she went there for and wakes the group as a scene tick, or a
         note of hers to a home conversation (ADR-018). Each waits behind what that scene already has queued."""
-        extras = {'visit': {'scene_tick', 'group_context', 'visit'}, 'note': {'note'}}
+        # A heartbeat may say what its die rolled (ADR-058); a visit and a note must say what they carry.
+        extras = {'visit': {'scene_tick', 'group_context', 'visit'}, 'note': {'note'}, 'presence': {'dice'}}
         if kind not in ('presence', 'settlement', 'visit', 'note') or not event_id.startswith(kind + ':') \
-                or bool(visit) != (kind in extras) or set(visit) - extras.get(kind, set()):
+                or (kind in ('visit', 'note') and not visit) or set(visit) - extras.get(kind, set()):
             raise ValueError('INVALID_INTERNAL_EVENT')
         return self.receive({'event_id': event_id, 'scene_id': scene_id, 'person_id': person_id,
                              'adapter_id': kind, 'episode_kind': kind, 'text': text, **visit})

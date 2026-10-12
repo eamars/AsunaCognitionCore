@@ -51,6 +51,26 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 - def `recent_phrasing` — 4-grams that appear ≥ ``minimum`` times across the given own messages; ≤ ``limit`` items.
 - def `night_stage_block` — night_stage_from_program: which stage of her night this is, in words.
 
+## `dice`
+
+[src/asuna/dice.py](../../src/asuna/dice.py)
+
+The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of four outcomes.
+
+- def `parse` — '40/35/10/15' -> {outcome: weight}; ValueError(words) when it is not four whole numbers with a positive sum.
+- def `table` — (period, weights) for now: asleep inside her declared sleep window, awake otherwise.
+- def `roll` — The outcome for this beat: the occurrence seeds it, so the same beat always rolls the same.
+- def `line` — The one line her heartbeat opens with.
+- def `waiting` — Whether something only a heartbeat shows is waiting for her (her review: a 'nothing' beat must not hide it).
+
+## `self_review`
+
+[src/asuna/self_review.py](../../src/asuna/self_review.py)
+
+self_review_from_program (ADR-058): her own day in raw readings, for a heartbeat that rolled self evaluation.
+
+- def `block`
+
 ## `people`
 
 [src/asuna/people.py](../../src/asuna/people.py)

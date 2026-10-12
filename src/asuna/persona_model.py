@@ -38,6 +38,9 @@ CORE_WRITABLE_KEYS = {
                                 'what': '在一个群说过话或去看过以后，多久内不再去（分钟）'},
     'heartbeat.visits_per_day': {'type': 'integer', 'min': 0, 'max': 8, 'what': '每天最多出门几次'},
     'heartbeat.visits_per_beat': {'type': 'integer', 'min': 1, 'max': 3, 'what': '一拍里最多去几个群'},
+    # The heartbeat's die (ADR-058): four whole numbers, nothing / interesting / self development / self evaluation.
+    'heartbeat.dice_awake': {'type': 'string', 'what': '醒着时心跳掷骰子的分布：歇着/有趣/自我开发/自我评估，如 40/35/10/15'},
+    'heartbeat.dice_asleep': {'type': 'string', 'what': '作息窗里心跳掷骰子的分布：歇着/有趣/自我开发/自我评估，如 70/0/20/10'},
     # Her night self-development stages (ADR-021): when and how often; the owner can switch them off.
     'self_development.night_start_hour': {'type': 'integer', 'min': 0, 'max': 23,
                                           'what': '夜里分段自我开发从几点开始（你的钟面，整点）'},
@@ -61,7 +64,7 @@ CORE_DEFAULTS = {
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
     'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'skip_in_sleep': False, 'pause_min': 0,
                   'visits': False, 'quiet_min': 30, 'after_own_min': 360, 'visits_per_day': 4,
-                  'visits_per_beat': 1},
+                  'visits_per_beat': 1, 'dice_awake': '40/35/10/15', 'dice_asleep': '70/0/20/10'},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
     'speak': {'max_messages': 1, 'split_marker': '[分条]', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},

@@ -68,11 +68,18 @@ class Controller:
         self.texts.append(text)
         self.envelopes.append(visit)
 
+    def offer_self_development(self, event_id, *, text=None, **_):
+        self.offers.append(('self_development', event_id, self.settings['scene_id'], self.settings['person_id']))
+        self.texts.append(text)
+        self.envelopes.append({})
+
 
 def scheduler(store, rhythm=None):
     owner(store)
     store.config['persona_model'] = {'model_version': 1, 'persona': {'id': 'P1', 'display_name': 'x'},
-        'heartbeat': {'enabled': True, 'every_min': 30, 'min_gap_min': 20, 'skip_in_sleep': False},
+        # The gates are under test here, not the die (ADR-058, test_heartbeat_dice.py): it always rolls interesting.
+        'heartbeat': {'enabled': True, 'every_min': 30, 'min_gap_min': 20, 'skip_in_sleep': False,
+                      'dice_awake': '0/1/0/0', 'dice_asleep': '0/1/0/0'},
         'rhythm': rhythm or {},
         'memory': {'promotion': {'daily_quota': 2, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}}}
     store.config['persona_runtime'] = {'P1': {'heartbeat_target': 'dm-a'}}

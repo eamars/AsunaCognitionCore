@@ -225,6 +225,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `message`
   - `relay` — Her words for a running action session (collab.js), marked so its claim can be acknowledged.
   - `onEvent`
+  - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
   - `idle` — Nothing of this conversation is running: no turn, none queued, no child of it open.
   - `ensureAgent`
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.

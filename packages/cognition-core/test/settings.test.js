@@ -55,7 +55,7 @@ test('applied settings reach a conversation already open: it is reopened between
   const live = new Map(), resumed = [];
   const open = (id, options) => {
     const agent = { id, options, session: { header: {}, snapshotEvents: () => [], surface: { nodes: [] } } };
-    const handle = { agent, dispose: async () => { live.delete(id); } };
+    const handle = { agent, dispose: async () => { live.delete(id); core.disposed(agent); } };   // as DSH emits it
     live.set(id, agent);
     return handle;
   };
@@ -66,7 +66,8 @@ test('applied settings reach a conversation already open: it is reopened between
     agentPresets: { mount: async () => {} },
     workspaceRegistry: { create: async () => ({ attachSession: async () => {} }), unarchiveSession: async () => {} } };
   const route = model => ({ persona: 'p', routes: { character: { provider: 'x', model, reasoningEffort: 'high', maxTokens: 10 } } });
-  const core = new CognitionCore(ctx, route('old'));
+  let core;
+  core = new CognitionCore(ctx, route('old'));
   core.personas.set('p', { preset: 'role' });
   core.channelOf = () => undefined;
   const stage = { session_id: 's1', lane: 'character', binding: { scene_id: 'x', cwd: '.' } };
@@ -79,8 +80,11 @@ test('applied settings reach a conversation already open: it is reopened between
   core.state('s1').current = { token: 't' };                  // her turn is running: it keeps its agent
   assert.equal(await core.ensureAgent(stage), first);
   core.state('s1').current = null;
+  const turn = core.state('s1');                              // the turn holds its state before the agent reopens
   const reopened = await core.ensureAgent(stage);
+  assert.equal(core.states.get('s1'), turn, 'closing the old agent kept the stage state of the turn reopening it');
   assert.notEqual(reopened, first);
   assert.deepEqual(resumed, ['old', 'new']);
+  assert.equal(core.retired.has(first), true, 'the closed agent cannot clear the stage of the turn that reopened it');
   assert.equal(await core.ensureAgent(stage), reopened, 'reopened once, not at every turn');
 });

@@ -139,6 +139,9 @@ export class CognitionCore {
     this.held = new Map();
     // Conversations open when settings were last applied: each is reopened at its next idle moment (ensureAgent).
     this.reopen = new Set();
+    // Agents closed to reopen their conversation: their last events must not touch the conversation's stage state,
+    // which the reopened agent's turn already carries.
+    this.retired = new WeakSet();
     this.channelWrites = new Map();
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
@@ -609,6 +612,15 @@ export class CognitionCore {
     }
   }
 
+  /** A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation. */
+  disposed(agent) {
+    if (this.retired.has(agent)) return;
+    const state = this.states.get(agent.session.id);
+    if (!state) return;
+    state.waiter?.reject(new Error('Asuna session disposed')); state.waiter = null;
+    this.states.delete(agent.session.id);
+  }
+
   /** Nothing of this conversation is running: no turn, none queued, no child of it open. */
   idle(id) {
     const state = this.states.get(id);
@@ -625,6 +637,7 @@ export class CognitionCore {
       this.reopen.delete(stage.session_id);
       const stale = this.handles.get(stage.session_id);
       this.handles.delete(stage.session_id);
+      this.retired.add(stale.agent);
       await stale.dispose();
     }
     const existing = this.ctx.agents.get(stage.session_id);
@@ -911,6 +924,7 @@ export class CognitionCore {
         .catch(() => {});
     });
     scope.on('agent/status', ({ agent, status }) => {
+      if (this.retired.has(agent)) return;
       // The thread's entries that arrived during her turn are appended once she is idle (collab.js).
       if (lane === 'character' && status === 'idle')
         this.collab.flush(agent.session.id).catch(error => this.ctx.logger.warn(String(error)));
@@ -920,12 +934,7 @@ export class CognitionCore {
       const stage = state.current; state.current = null;
       this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' }).catch(() => {});
     });
-    scope.on('agent/disposed', ({ agent }) => {
-      const state = this.states.get(agent.session.id);
-      if (!state) return;
-      state.waiter?.reject(new Error('Asuna session disposed')); state.waiter = null;
-      this.states.delete(agent.session.id);
-    });
+    scope.on('agent/disposed', ({ agent }) => this.disposed(agent));
   }
 
   /** Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()). */

@@ -96,6 +96,14 @@ test('native continuation preserves history and task children retain their actua
   await ctx.workspaceRegistry.archiveSession(role._id);
   await organizeNativeWorkspaces(core, { ...plan, first: false });
   assert.ok(ctx.workspaceRegistry.archivedSessionIds.includes(role._id), 'a restart preserves a deliberate archive');
+  // A carry (ADR-028) names only the conversation's own workspace; the local one is still there to order against
+  // (an overflowed group's carry failed reading the local workspace's id on 2026-10-12).
+  const carried = { _id: 'qq-carried', cwd: qq, scene_id: 'qq:bot:group:one', native_title: '群聊 · one' };
+  await organizeNativeWorkspaces(core, { first: false, archive_ids: [], workspaces: { QQ: qq },
+    entries: [{ session_id: carried._id, workspace: 'QQ', binding: carried }] });
+  assert.ok(await ctx.sessionPersistence.stat(carried._id));
+  assert.deepEqual(ctx.workspaceRegistry.list().map(workspace => workspace.title), ['QQ', 'Local']);
+  assert.deepEqual([...core.navigationWorkspaces.keys()].sort(), ['Local', 'QQ'], 'a partial plan keeps the others');
   const receipt = { session_id: role._id, binding: role,
     input: { id: 'quiet-qq-message', sender: '10001', text: 'a real quiet group message', received_at: '2026-10-03' } };
   await recordChannelInput(core, receipt);

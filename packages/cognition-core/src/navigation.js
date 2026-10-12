@@ -62,7 +62,7 @@ export async function recordChannelInput(core, receipt) {
   const { ctx } = core, { session_id: id, binding, input } = receipt;
   const channel = core.channelOf(binding.scene_id);
   if (!await ctx.sessionPersistence.stat(id)) await organizeNativeWorkspaces(core, {
-    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd, Local: localWorkspace(core.ctx.asunaFloor.dataRoot) },
+    first: false, archive_ids: [], workspaces: { [channel.title]: binding.cwd },
     entries: [{ session_id: id, workspace: channel.title, binding }] });
   await ctx.workspaceRegistry.unarchiveSession(id);
   const message = await channelMessage(core, receipt);
@@ -180,14 +180,17 @@ export async function retitleSession(core, { session_id: id, binding }) {
 export async function organizeNativeWorkspaces(core, plan) {
   const { ctx } = core;
   const workspaces = new Map();
-  for (const [title, directory] of Object.entries(plan.workspaces)) {
+  // Platform workspaces list above the local chat, so a plan for one conversation (a new line's, a carry's) that
+  // names only its own workspace still has the local one to order against.
+  const named = { ...plan.workspaces, Local: plan.workspaces.Local ?? localWorkspace(ctx.asunaFloor.dataRoot) };
+  for (const [title, directory] of Object.entries(named)) {
     // The key stays the identifier; the title shown carries the character's name (workspaceTitle).
     const shown = workspaceTitle(core, title);
     const workspace = await ctx.workspaceRegistry.create(directory, shown);
     await workspace.setTitle(shown);
     workspaces.set(title, workspace);
   }
-  core.navigationWorkspaces = workspaces;
+  core.navigationWorkspaces = new Map([...core.navigationWorkspaces ?? [], ...workspaces]);
   for (const entry of plan.entries) {
     const { session_id: id, binding } = entry;
     const persisted = await ctx.sessionPersistence.stat(id);

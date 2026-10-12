@@ -14,7 +14,7 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
-import { composeContext, visibleCarried } from './context-delivery.js';
+import { composeContext, trimTurn, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
@@ -505,6 +505,8 @@ export class CognitionCore {
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
       const composed = composeContext(stage.context, visibleCarried(session, pending));
+      // The turn's ceiling holds for what this notice sends (context_budget.ceiling).
+      trimTurn(composed, stage.ceiling);
       text = JSON.stringify(composed.context) + (stage.tail ? '\n' + stage.tail : '');
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;

@@ -305,9 +305,18 @@ class Coordinator:
         if pulled:
             fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
             self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
-        # A native role session composes the notice itself: what it still shows verbatim is not repeated.
-        delivery=({'context':context,'tail':text,'episode_id':ep['_id']}
+        # A native role session composes the notice itself: what it still shows verbatim is not repeated, and the
+        # turn's ceiling applies to what it then sends. A context sent whole is held to the ceiling here.
+        from . import context_budget
+        delivery=({'context':context,'tail':text,'episode_id':ep['_id'],'ceiling':context_budget.ceiling()}
                   if first and getattr(self.character,'composes_context',False) else {})
+        if first and 'context' not in delivery:
+            import copy
+            context=copy.deepcopy(context)
+            trimmed=context_budget.trim_turn(context)
+            if trimmed:
+                self.store.audit(ep['_id'],'context.trimmed',{'left_out':trimmed,'chars':context_budget.size(context)},
+                                 ep['scope_key'])
         if pulled:
             delivery['pictures']=[{'ref':ref,**payload['image']} for ref,payload in pulled]
         body=(json.dumps(context,ensure_ascii=False,default=str)+('\n'+text if text else '')) if first and 'context' not in delivery else text

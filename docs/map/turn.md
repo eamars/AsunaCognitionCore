@@ -76,6 +76,7 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `note_limit`
 - def `note_gate` — Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook).
 - def `trim_turn` — Drop the oldest list rows (TRIM_ORDER) until the turn fits; say what was left out.
+- def `ceiling` — The ceiling as the Host applies it to the notice it composes (context-delivery.js trimTurn): what is sent, not what is prepared, so a block she still sees never pushes another one's text under the knife.
 - def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028).
 - def `review_block` — Her notes that show every turn and are due for tidying tonight: over or near their limit, or changed and left untidied for a week.
 

@@ -173,3 +173,83 @@ export function composeContext(context, visible) {
   return { context: Object.fromEntries([...head, ...notes, ...rest]), carried,
     omitted: { blocks: unchanged, history_rows: rows, memories, ...(thoughts ? { thoughts } : {}), ...(items ? { items } : {}) } };
 }
+
+/** The turn's ceiling on what this notice sends (the worker's table, context_budget.ceiling): over it, the oldest rows
+ * of the listed lists go first, then the longest text left is halved, again and again, saying how much went. Under it
+ * nothing is cut, so a block she still sees never costs another one its text, and the same content is sent the same
+ * way. What is cut is no longer counted as carried. Returns what was left out. */
+export function trimTurn(composed, ceiling) {
+  const size = value => JSON.stringify(value ?? null).length;
+  if (!ceiling || size(composed.context) <= ceiling.chars) return {};
+  const context = structuredClone(composed.context), carried = composed.carried, left = {}, touched = new Set();
+  let total = size(context);
+  const ROWS = new Set(['delivered_history', 'group_continuity_from_program']);
+  // A row or memory goes from what the notice carries; a block that lost anything no longer counts as sent whole.
+  const forget = (block, path, row) => {
+    touched.add(block);
+    if (ROWS.has(block) && row?._id) carried.rows = carried.rows.filter(id => id !== row._id);
+    else if (block === 'memories' && row?._id) carried.memories = carried.memories.filter(id => id !== row._id);
+    else if (row && carried.items[path]) {
+      const index = carried.items[path].indexOf(digest(row));
+      if (index >= 0) carried.items[path].splice(index, 1);
+    }
+  };
+  for (const [block, inner, end] of ceiling.order) {
+    const holder = context[block];
+    let rows = inner && holder && typeof holder === 'object' && !Array.isArray(holder) ? holder[inner] : holder;
+    if (rows && !Array.isArray(rows) && Array.isArray(rows.items)) rows = rows.items;      // a folded list
+    if (!Array.isArray(rows)) continue;
+    const floor = block === 'delivered_history' ? ceiling.keep_history_rows : 0;
+    const path = !inner || inner === 'items' ? block : block + '.' + inner, name = block + (inner ? '.' + inner : '');
+    while (rows.length > floor && total > ceiling.chars) {
+      const [row] = rows.splice(end === 'oldest' ? 0 : -1, 1);
+      total -= size(row) + 1;
+      forget(block, path, row);
+      left[name] = (left[name] ?? 0) + 1;
+    }
+    if (total <= ceiling.chars) break;
+  }
+  let shortened = 0;
+  while (total > ceiling.chars) {
+    const found = longestText(context);
+    if (!found) break;
+    const { holder, key, text, block, row } = found;
+    const keep = Math.max(ceiling.short_text, Math.floor(text.length / 2));
+    const cut = text.slice(0, keep) + ceiling.cut_note.replace('%d', String(text.length - keep));
+    if (cut.length >= text.length) break;
+    holder[key] = cut;
+    total = size(context);
+    shortened += 1;
+    if (ROWS.has(block) || block === 'memories') forget(block, block, row);
+    else {
+      touched.add(block);
+      for (const path of Object.keys(carried.items)) if (path === block || path.startsWith(block + '.')) delete carried.items[path];
+    }
+  }
+  if (shortened) left.shortened_texts = shortened;
+  for (const block of touched) { delete carried.blocks[block]; delete carried.lists[block]; }
+  const entries = Object.entries(context), at = entries.findIndex(([key]) => !HEAD.includes(key));
+  entries.splice(at < 0 ? entries.length : at, 0, ['trimmed_from_program', { left_out: left, note: ceiling.note }]);
+  composed.context = Object.fromEntries(entries);
+  composed.omitted.trimmed = left;
+  return left;
+}
+
+/** The longest string in the context, where it sits, its top-level block and the nearest row with an `_id` above it. */
+function longestText(context) {
+  let best = null;
+  for (const [block, value] of Object.entries(context)) {
+    const stack = [[value, null]];
+    while (stack.length) {
+      const [node, row] = stack.pop();
+      const near = node && typeof node === 'object' && !Array.isArray(node) && node._id ? node : row;
+      const pairs = Array.isArray(node) ? node.entries() : node && typeof node === 'object' ? Object.entries(node) : [];
+      for (const [key, inner] of pairs) {
+        if (typeof inner === 'string') {
+          if (!best || inner.length > best.text.length) best = { holder: node, key, text: inner, block, row: near };
+        } else if (inner && typeof inner === 'object') stack.push([inner, near]);
+      }
+    }
+  }
+  return best;
+}

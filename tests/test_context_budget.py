@@ -96,6 +96,30 @@ def test_many_texts_that_cannot_get_shorter_end_the_cutting():
     assert all(len(text) <= 450 for text in context['rows'])
 
 
+def test_the_ceiling_holds_for_what_is_sent_not_for_what_is_prepared(store):
+    """ADR-063 D7: the prepared context is kept whole; a native session's Host applies the ceiling to the notice it
+    composes (it gets the table), and a context sent whole is held to it on the way out."""
+    from test_adr009_p2 import owner, THINK
+    owner(store)
+    huge = {'event_id': 'e-huge', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '长' * (budget.TURN_CHARS + 5000)}
+
+    class Composing(FakeLane):
+        composes_context = True
+
+        def generate(self, *args, **delivery):
+            self.delivery = delivery
+            return super().generate(*args, **delivery)
+    lane = Composing(store, [FakeTurn([THINK], '嗯。')])
+    ep = Coordinator(store, lane).ingest(huge)
+    assert 'trimmed_from_program' not in ep['context'] and len(ep['context']['event']['text']) == len(huge['text'])
+    assert lane.delivery['ceiling'] == budget.ceiling() and lane.delivery['ceiling']['chars'] == budget.TURN_CHARS
+    plain = FakeLane(store, [FakeTurn([THINK], '嗯。')])
+    ep = Coordinator(store, plain).ingest({**huge, 'event_id': 'e-huge-2'})
+    sent = plain.calls[0]['messages'][-1]['content']
+    assert 'trimmed_from_program' in sent and len(sent) < len(huge['text'])
+    assert len(ep['context']['event']['text']) == len(huge['text']), 'the record keeps the whole text'
+
+
 # ---- her mood ---------------------------------------------------------------------
 def test_mood_reasons_are_capped_stable_and_keep_every_unsettled_feeling():
     model = affect_model(MODEL)

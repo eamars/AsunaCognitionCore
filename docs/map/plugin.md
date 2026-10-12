@@ -135,6 +135,7 @@ Per-turn context delivery for the character brain: of the whole context the work
 - def `REUSE_WINDOW_TOKENS` — Must stay below the role preset's retained tail (DSH chars/4 estimate): (262144 − 32768) × retainRatio 0.16 ≈ 36.7K.
 - def `visibleCarried` — What the newest stretch of the surface already carries (DSH's chars/4 token estimate).
 - def `composeContext` — The context this notice sends, what it carries, and what it left out (for the audit).
+- def `trimTurn` — The turn's ceiling on what this notice sends (the worker's table, context_budget.ceiling): over it, the oldest rows of the listed lists go first, then the longest text left is halved, again and again, saying how much went.
 
 ## `fetch.js`
 

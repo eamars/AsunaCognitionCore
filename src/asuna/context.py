@@ -1033,13 +1033,9 @@ class ContextBuilder:
                 context['sticker_candidates_from_program']=pool
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
-        # The whole turn stays under its ceiling (context_budget.py); what is left out is said, and recall reaches it.
-        from .context_budget import size as _size, trim_turn
-        trimmed=trim_turn(context)
+        # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).
+        from .context_budget import size as _size
         manifest['context_chars']=_size(context)
-        if trimmed:
-            manifest['trimmed']=trimmed
-            self.store.audit(event['event_id'],'context.trimmed',{'left_out':trimmed,'chars':manifest['context_chars']},scope)
         people.relabel(context,scene,event['person_id'])
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))

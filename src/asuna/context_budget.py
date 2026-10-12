@@ -1,7 +1,8 @@
 """What a turn may carry on its own, and how her own notes stay short (owner 2026-10-06, ADR-014).
 
 The program adds most of a turn's context by itself, so it also bounds it: a versioned table of limits for each
-block it adds, a ceiling for the whole turn, and the words for how full her own notes are. Nothing is cut
+block it adds, a ceiling for what a turn sends (applied by the Host to the notice it composes, `ceiling`, or here to a
+context sent whole, `trim_turn`), and the words for how full her own notes are. Nothing is cut
 silently and nothing is lost: what a turn leaves out is counted and said, and stays readable through recall.
 Her notes are hers to tidy. Over its limit a note shows its newest sections and names the rest; far over it, it
 takes no new text until she tidies it. Her nightly settlement lists the notes due for tidying.
@@ -162,13 +163,20 @@ def trim_turn(context, limit=TURN_CHARS):
     if shortened:
         left['shortened_texts'] = shortened
     if left:
-        context['trimmed_from_program'] = {
-            'left_out': left, 'note': '这回合的资料超过了上限，这些列表里较早的几条没列出、过长的文字截短了；要看原文就 recall。'}
+        context['trimmed_from_program'] = {'left_out': left, 'note': TRIMMED_NOTE}
     return left
 
 
 SHORT_TEXT = 400                    # a text is never cut below this many characters
 CUT_NOTE = '……（太长，后面 %d 字没列出；原文还在记录里，要看就 recall）'
+TRIMMED_NOTE = '这回合的资料超过了上限，这些列表里较早的几条没列出、过长的文字截短了；要看原文就 recall。'
+
+
+def ceiling():
+    """The ceiling as the Host applies it to the notice it composes (context-delivery.js trimTurn): what is sent, not
+    what is prepared, so a block she still sees never pushes another one's text under the knife."""
+    return {'chars': TURN_CHARS, 'order': [list(row) for row in TRIM_ORDER], 'keep_history_rows': KEEP_HISTORY_ROWS,
+            'short_text': SHORT_TEXT, 'cut_note': CUT_NOTE, 'note': TRIMMED_NOTE}
 
 
 def _longest_text(node):

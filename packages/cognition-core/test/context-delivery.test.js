@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeContext, visibleCarried } from '../src/context-delivery.js';
+import { composeContext, trimTurn, visibleCarried } from '../src/context-delivery.js';
 
 // A minimal session surface: what the model currently sees, newest last.
 function surface(events) {
@@ -167,4 +167,36 @@ test('object lists inside a block fold by their field path; an item waiting on h
   const third = composeContext(context([], experience([task('t3', '在做'), task('t1', '做完了'), task('t2', '做完了'), asks])),
     visibleCarried(surface([...events, notice(second, 'ep-2')])));
   assert.deepEqual(third.context.recent_experience_from_program.tasks, { items: [asks], same_as_before: '其余 3 条同前（在做 1、做完了 2）' });
+});
+
+// ADR-063 D7: the ceiling holds for what a notice sends, not for what the worker prepared.
+const ceiling = { chars: 5000, order: [['memories', null, 'last'], ['delivered_history', null, 'oldest']],
+  keep_history_rows: 2, short_text: 400, cut_note: '……（后面 %d 字没列出）', note: '超过了上限' };
+
+test('a prepared context over the ceiling whose notice is under it is sent uncut', () => {
+  const self = { core: '我'.repeat(3000) };
+  const big = { relationship: { body: '认'.repeat(20000) } };
+  const first = composeContext(context([], big), visibleCarried(surface([])));
+  const composed = composeContext(context([], { ...big, self_state_from_program: self }),
+    visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.deepEqual(trimTurn(composed, ceiling), {}, 'what is still visible does not count against the ceiling');
+  assert.deepEqual(composed.context.self_state_from_program, self, 'her self text is not cut');
+});
+
+test('a notice over the ceiling loses the oldest rows first, then halves its longest text, and carries only what it sent', () => {
+  const rows = [0, 1, 2, 3].map(n => ({ _id: 'in-' + n, direction: 'inbound', text: '话'.repeat(1500) }));
+  const composed = composeContext({ scene: '群', memories: [{ _id: 'm1', body_markdown: '记'.repeat(1500) }],
+    delivered_history: rows, self_state_from_program: { core: '我'.repeat(3000) }, event: { text: '新的话' } },
+  visibleCarried(surface([])));
+  const left = trimTurn(composed, ceiling);
+  assert.equal(left.memories, 1);
+  assert.equal(left.delivered_history, 2, 'the newest rows are kept');
+  assert.ok(left.shortened_texts >= 1);
+  assert.ok(JSON.stringify(composed.context).length <= ceiling.chars + 200);
+  assert.deepEqual(composed.context.delivered_history.map(row => row._id), ['in-2', 'in-3']);
+  assert.deepEqual(composed.carried.rows, ['in-2', 'in-3']);
+  assert.deepEqual(composed.carried.memories, []);
+  assert.equal(composed.carried.blocks.self_state_from_program, undefined, 'a cut block is not sent whole');
+  assert.deepEqual(Object.keys(composed.context).slice(0, 2), ['scene', 'trimmed_from_program']);
+  assert.deepEqual(composed.omitted.trimmed, left);
 });

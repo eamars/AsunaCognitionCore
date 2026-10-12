@@ -147,3 +147,24 @@ test('a recalled memory whose every source line is still on the surface is not l
   assert.equal(composed.omitted.memories, 1);
   assert.deepEqual(composed.context.repeated_from_program, { history_rows: 0, memories: 1 });
 });
+
+test('object lists inside a block fold by their field path; an item waiting on her is always sent', () => {
+  const task = (id, state) => ({ _id: id, title: '事 ' + id, state });
+  const experience = tasks => ({ recent_experience_from_program: { window: '最近一天', tasks,
+    nested: { reasons: [{ why: '下雨' }] } } });
+  const first = composeContext(context([], experience([task('t1', '做完了'), task('t2', '做完了')])), visibleCarried(surface([])));
+  assert.deepEqual(first.context.recent_experience_from_program.tasks.length, 2, 'first time: all of it');
+  const events = [notice(first, 'ep-1')];
+
+  const asks = { ...task('t4', '在问你'), waiting_on_you: true };
+  const second = composeContext(context([], experience([task('t3', '在做'), task('t1', '做完了'), task('t2', '做完了'), asks])),
+    visibleCarried(surface(events)));
+  assert.deepEqual(second.context.recent_experience_from_program, { window: '最近一天',
+    tasks: { items: [task('t3', '在做'), asks], same_as_before: '其余 2 条同前（做完了 2）' },
+    nested: { reasons: { items: [], same_as_before: '其余 1 条同前' } } });
+  assert.equal(second.omitted.items, 3);
+  // The same block once more, everything still visible but the item waiting on her, which is sent again.
+  const third = composeContext(context([], experience([task('t3', '在做'), task('t1', '做完了'), task('t2', '做完了'), asks])),
+    visibleCarried(surface([...events, notice(second, 'ep-2')])));
+  assert.deepEqual(third.context.recent_experience_from_program.tasks, { items: [asks], same_as_before: '其余 3 条同前（在做 1、做完了 2）' });
+});

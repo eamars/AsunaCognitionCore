@@ -12,7 +12,8 @@
  * line is visible is left out too.
  *
  * A list block (a list of items, or a block with `items`) whose whole copy is not visible goes item by item
- * (ADR-056): an item still visible is folded into one `same_as_before` line that says how many and in what state,
+ * (ADR-056), and so does every list of objects in a block's fields (by its field path): an item still visible is
+ * folded into one `same_as_before` line that says how many and in what state,
  * except an item waiting on her (`waiting_on_you`), which is always sent; the same block again with every item still
  * visible is named in `unchanged_from_program` instead of sending an empty wrapper. What these lines mean is in her system
  * prompt (block_guide.py), so they carry no explanation of their own. */
@@ -75,6 +76,28 @@ function listOf(value) {
   return null;
 }
 
+/** Fold a block's object lists: its own list (a list, or `items`) under the block's key, and every object list in
+ * its fields, at any depth, under that field's path (`block.field.field`). An item still visible under its path folds,
+ * except one waiting on her. Returns the value to send, the digests of the items sent per path, and how many items
+ * were folded and kept. */
+function fold(path, value, seen) {
+  const list = listOf(value);
+  if (list) {
+    const kept = list.items.filter(item => item.waiting_on_you === true || !seen.has(path + ':' + digest(item)));
+    const folded = list.items.filter(item => !kept.includes(item));
+    return { value: folded.length ? list.wrap(kept, sameAsBefore(folded)) : value,
+      sent: { [path]: kept.map(digest) }, folded: folded.length, kept: kept.length };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { value, sent: {}, folded: 0, kept: 0 };
+  const out = {}, sent = {};
+  let folded = 0, kept = 0;
+  for (const [field, inner] of Object.entries(value)) {
+    const nested = fold(path + '.' + field, inner, seen);
+    out[field] = nested.value; Object.assign(sent, nested.sent); folded += nested.folded; kept += nested.kept;
+  }
+  return { value: folded ? out : value, sent, folded, kept };
+}
+
 /** "其余 4 条同前（读过了 3、已送到 1）": how many items were folded, and their states when they have one. */
 function sameAsBefore(folded) {
   const states = new Map();
@@ -130,23 +153,16 @@ export function composeContext(context, visible) {
       entries.push([key, value]);
     } else {
       const value_digest = digest(value);
-      const list = visible.blocks.has(key + ':' + value_digest) ? null : listOf(value);
-      if (!list) {
-        if (visible.blocks.has(key + ':' + value_digest)) unchanged.push(key);
-        else { carried.blocks[key] = value_digest; entries.push([key, value]); }
-        continue;
-      }
-      const seen = visible.items ?? new Set();
-      const kept = list.items.filter(item => item.waiting_on_you === true || !seen.has(key + ':' + digest(item)));
-      const folded = list.items.filter(item => !kept.includes(item));
-      carried.items[key] = kept.map(digest);
-      if (!folded.length) { carried.blocks[key] = value_digest; entries.push([key, value]); continue; }
+      if (visible.blocks.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
+      const folding = fold(key, value, visible.items ?? new Set());
+      Object.assign(carried.items, folding.sent);
+      if (!folding.folded) { carried.blocks[key] = value_digest; entries.push([key, value]); continue; }
       // Only a block sent whole may later count as unchanged: the folded items rest on older notices. The same block
       // again with every item still visible, though, is wholly before her: it is named unchanged, with no wrapper.
-      items += folded.length;
-      if (!kept.length && visible.lists?.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
+      items += folding.folded;
+      if (!folding.kept && visible.lists?.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
       carried.lists[key] = value_digest;
-      entries.push([key, list.wrap(kept, sameAsBefore(folded))]);
+      entries.push([key, folding.value]);
     }
   }
   const notes = [];

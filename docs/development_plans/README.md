@@ -67,3 +67,4 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 056 | Per-turn characters | Built | Fixed text once in the system prompt; clock times in blocks; only what changed | [folder](ADR-056-per-turn-characters/README.md) |
 | 057 | Group labels | Open | Nothing typed can pass for a label; the number authenticates nothing; random ids parked | [folder](ADR-057-group-labels/README.md) |
 | 058 | Heartbeat dice | Built | The heartbeat rolls a die (rest, interesting, self development, self evaluation, review, reach out) with tables she sets | [folder](ADR-058-heartbeat-dice/README.md) |
+| 059 | Reading the database, git and ssh from her home tasks | Built | Owner's keys and logins, her own name on commits; no read-only database user; `asuna.dbread` reads only and repeats its query, 零行 when empty; skill asuna-database | [folder](ADR-059-home-reach/README.md) |

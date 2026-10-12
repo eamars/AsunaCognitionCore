@@ -182,7 +182,21 @@ def workspace_reason(exc, op, given):
     return '%s（%s: %s）；换个做法，或把这一步没做成写进结果' % (op, type(exc).__name__, message[:200])
 
 
-SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12, with httpx, websockets, paramiko, pymongo, PyYAML and PIL (Pillow) importable). An argument /task or /task/… names the task folder. git and ssh work with the keys and logins of the user the Host runs as; what you commit carries your own name. Max 30 seconds, 256 KiB output. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'}}}
+def home_env(store):
+    """What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her
+    time zone for asuna.dbread."""
+    from . import dbread
+    from .persona_model import timezone as persona_timezone
+    from .render import model_and_policy
+    persona=(store.config.get('chat') or {}).get('persona')
+    try:
+        zone=persona_timezone(*model_and_policy(store,persona),store.config)[0] if persona else None
+    except Exception:
+        zone=None
+    return {**sandbox_backend.git_identity(store.config),**dbread.environment(store.config,zone)}
+
+
+SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12, with httpx, websockets, paramiko, pymongo, PyYAML and PIL (Pillow) importable; read the database with asuna.dbread, skill asuna-database). An argument /task or /task/… names the task folder. git and ssh work with the keys and logins of the user the Host runs as; what you commit carries your own name. Max 30 seconds, 256 KiB output. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'}}}
 
 WORKSPACE_TOOLS = [
     {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
@@ -704,10 +718,10 @@ class ToolBroker:
                     if not credentials.home_task(self.store,task):
                         raise Denied('CREDENTIALS_HOME_ONLY: credentials 只能用在 owner 私聊里交代的任务，这个任务不是；'
                                      '去掉 credentials 再跑，需要凭据的那一步写进报告')
-                    result=sandbox.run(args['argv'],env={**sandbox_backend.git_identity(self.store.config),
+                    result=sandbox.run(args['argv'],env={**home_env(self.store),
                                                          **credentials.environment(args['credentials'])})
                 else:
-                    result=sandbox.run(args['argv'],env=sandbox_backend.git_identity(self.store.config))
+                    result=sandbox.run(args['argv'],env=home_env(self.store))
                 with self.service.lock:self.service.valid(task)
             else:
                 raise Denied('UNKNOWN_TOOL: %s 不是这里能执行的工具；重试也一样，换用工具清单里的工具' % str(tool)[:60])

@@ -46,7 +46,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 
 ## 发布前自检（认知核候选，`development_run` 带 `project: "core"`）
 
-沙箱里只有标准库：没有 pytest、没有 pymongo、不联网。能跑的是零依赖的离线自检：
+沙箱里的 `python3` 是 worker 的 Python：pymongo 能 import、网络通（读库用 `asuna.dbread`，见技能 asuna-database）；有没有 pytest 先跑 `python3 -m pytest --version` 看。不依赖任何东西、一定能跑的是这些离线自检：
 
 ```sh
 python3 tools/p2_offline_check.py                            # 交流摘要
@@ -74,6 +74,13 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 ## 地板文件（受保护，不能经发布改）
 
 `start-asuna.cmd`、`tools/asuna-launch.mjs`，以及认知核的 `floor.js`、`recovery.js`、`persistence.js`、`persona.js`、`channel.js`、`settings.js`、`runtime-manifest.json`、`cordis.patch.yml`。它们保证宿主总能起来、总能打开修复入口；要改它们只能请主人。
+
+## git 和 ssh（家里的任务，`sandbox_run`）
+
+- `git`、`ssh` 用的是这台机器上主人的钥匙和账号；你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。
+- 一条命令最多 30 秒：整库 clone 可能跑不完。用 `git clone --depth 1`，或 `git clone --reference <本机仓库路径> <远端>` 借本机已有的对象；长活先拆成几步。
+- 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
+- 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
 
 ## 版本
 

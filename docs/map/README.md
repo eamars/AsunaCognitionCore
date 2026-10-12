@@ -293,6 +293,7 @@ The action brain's tasks, grants, schedules, sandbox, development and integratio
 - [`sandbox_backend`](../../src/asuna/sandbox_backend.py) — Where commands the worker does not write itself run: DSH's own sandbox (owner 2026-10-06).
 - [`development`](../../src/asuna/development.py) — Schemas for the native Host publication floor; no second publisher.
 - [`credentials`](../../src/asuna/credentials.py) — Her credentials (owner 2026-10-07): secrets a home task may use without any brain holding the value.
+- [`dbread`](../../src/asuna/dbread.py) — Reading the character's database from her task scripts: `from asuna import dbread`.
 - [`image_generation`](../../src/asuna/image_generation.py) — Pictures from the configured local image service, for any task (owner 2026-10-06).
 - [`svg_render`](../../src/asuna/svg_render.py) — render_svg (ADR-027): an SVG file in the task folder made into a PNG she can look at and send.
 - [`integration`](../../src/asuna/integration.py) — Owner-granted (and, narrowly, agent-line) fixed-network integration lifecycle; contains no platform protocol.

@@ -17,6 +17,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `require_current_feedback`
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - def `workspace_reason` — Why a file operation failed and what to do, in her words (the traceback stays in stderr).
+- def `home_env` — What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her time zone for asuna.dbread.
 - def `idle_minutes` — After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the action route, following how long its provider keeps a cached prefix.
 - def `last_used` — When the action context of a finished task was last used.
 - def `opening_text` — The action brain's first words for a task: her brief; a continuation's new words; after the idle limit (ADR-053) a fresh context told so, with the last report.
@@ -166,6 +167,33 @@ Her credentials (owner 2026-10-07): secrets a home task may use without any brai
 - def `environment` — The variables of these credentials, for one sandboxed command.
 - def `scrub` — The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts).
 - def `home_task` — Whether this task came from home (credentials are for home tasks only).
+
+## `dbread`
+
+[src/asuna/dbread.py](../../src/asuna/dbread.py)
+
+Reading the character's database from her task scripts: `from asuna import dbread`.
+
+- class `Window` — A filter value for a local-time window: {'$gte': utc, '$lt': utc}, remembering what it was asked as.
+- def `local_window` — Her local times -> UTC bounds for any *_at field.
+- class `Reader`
+  - `from_host` — The database the Host named for this command, else the checkout's local config.
+  - `collection`
+  - `fields` — Field names seen in a sample of the collection (top level and one level down).
+  - `find`
+  - `count`
+  - `distinct`
+  - `aggregate`
+  - `history` — A conversation's lines: the live ones and, for a group, the archived ones (scene_id archive:<id>).
+- def `find`
+- def `count`
+- def `distinct`
+- def `aggregate`
+- def `history`
+- def `fields`
+- def `collections`
+- def `show` — Print an answer whole, query first, as JSON.
+- def `environment` — What the Host gives a home task's commands: the database and her time zone.
 
 ## `image_generation`
 

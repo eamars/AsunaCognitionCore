@@ -54,7 +54,7 @@ HARD_RULES = [
     ("rule_silence_only_presence", "沉默只答「在不在」，不答「是不是」"),
     ("rule_silence_is_weak_evidence", "人卡住也会不回"),
     ("rule_roster_outside_repo", "名单不进仓库"),
-    ("rule_roster_in_work_log", "我认识的 bot 和真人（判 bot 的对照名单）"),
+    ("rule_roster_in_work_log", "我认识的 bot 清单（047 离线回放的地面真值）＋真人对照组"),
     ("rule_roster_via_recall", "用 recall 取"),
     ("rule_missing_roster_not_blind", "别把取不到当成「我谁都不认识」"),
 ]
@@ -91,7 +91,7 @@ STRONG_FIXED_TEXT = [
 
 STRONG_OTHER = [
     ("strong_fixed_text_needs_reply_chain", "固定文本要连它的回复链一起看才算"),
-    ("strong_fixed_text_has_human_meme_use", "手打过十二次"),
+    ("strong_fixed_text_has_human_meme_use", "我一度误判成是有人手打"),
     ("strong_forward_card_node_name", "合并转发卡的节点名是"),
     ("strong_cadence_hermes", "0.6 秒（Hermes）"),
     ("strong_cadence_atri", "正好 1.5 秒（ATRI）"),
@@ -163,7 +163,7 @@ ACCEPTANCE = [
 
 TRIAL_LOG = [
     ("trial_log_started", "2026-10-12：随 ADR-047 建立"),
-    ("trial_log_no_run_yet", "还没有一次真跑"),
+    ("trial_log_first_replay_run", "10-12 离线回放第一次真跑"),
 ]
 
 VERSION_LOG = [

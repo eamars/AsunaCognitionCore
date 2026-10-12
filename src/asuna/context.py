@@ -716,6 +716,12 @@ class ContextBuilder:
             from .render import model_and_policy as _review_model
             context['self_review_from_program']=self_review.block(
                 self.store,persona,_review_zone(*_review_model(self.store,persona),self.store.config)[0],moment)
+        # ADR-058: a heartbeat that rolled review brings every roll since her last review (home only).
+        if (event.get('dice')=='review_dice' and event.get('episode_kind')=='presence'
+                and session_class==visibility.OWNER_PRIVATE):
+            from . import dice as _dice
+            occurrence=str(event.get('event_id') or '').split(':',1)[-1]
+            context['dice_review_from_program']=_dice.review(self.store,persona,occurrence,moment)
         # ADR-052: her switches: at home all of them (and those that ended lately), elsewhere the ones on here.
         from . import switches as _switches
         switched=(_switches.home_block(self.store,persona,moment) if session_class==visibility.OWNER_PRIVATE

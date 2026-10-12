@@ -1,4 +1,4 @@
-"""The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of four outcomes.
+"""The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of six outcomes.
 
 - nothing: the beat does not reach her (no model call), unless something only a heartbeat shows would be lost by
   waiting an hour: someone she waits for in a group (her waiting list ends after an hour), or a peer line whose
@@ -8,43 +8,85 @@
 - interesting: the heartbeat as it always was.
 - self_development: the beat runs as a self-improvement turn (her notebook, development tools), as a night stage does.
 - self_evaluation: the heartbeat with the raw readings of her own day (self_review.py).
+- review_dice: the heartbeat with the raw readings of every roll since her last review and her two tables
+  (dice_review_from_program), so the weights are something she can check, not only set.
+- reach_out: the heartbeat, suggesting a word on one of her home lines (pass_note), whom is hers to choose; counts as 0
+  where she has no line.
 
 Two weight tables, awake and asleep, chosen by her declared sleep window (the only thing the window does to a
-heartbeat: a fully quiet night is 100/0/0/0); both are her policy keys (`set_policy`),
-four whole numbers in this order: nothing / interesting / self development / self evaluation. A weight of 0 removes
-an outcome. The roll is seeded by the beat's occurrence, so a record names its outcome and can be replayed. The roll
-is shown to her as one line of text: hers to follow, change or ignore; nothing asks for an answer.
+heartbeat: a fully quiet night is 歇着 100). Both are her policy keys (`set_policy`), written with names
+(歇着 40、有趣 31、…); a name left out weighs 0, and set_policy shows the whole table it stored. The roll is seeded
+by the beat's occurrence, so a record names its outcome and can be replayed. The roll is shown to her as one line
+of text: hers to follow, change or ignore; nothing asks for an answer.
 """
 from __future__ import annotations
 
+import collections
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation')
-WORDS = {'nothing': '歇着', 'interesting': '做点有意思的', 'self_development': '自我开发', 'self_evaluation': '自我评估'}
-DEFAULTS = {'awake': '40/35/10/15', 'asleep': '70/0/20/10'}        # her review, 2026-10-12: run a week, then tune
+OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out')
+NAMES = {'nothing': '歇着', 'interesting': '有趣', 'self_development': '自我开发', 'self_evaluation': '自我评估',
+         'review_dice': '复盘', 'reach_out': '找人'}
+BY_NAME = {name: outcome for outcome, name in NAMES.items()}
+# Her review, 2026-10-12: run them as they are; the review outcome brings the readings to retune from.
+DEFAULTS = {'awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5',
+            'asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4'}
 KEYS = {'awake': 'heartbeat.dice_awake', 'asleep': 'heartbeat.dice_asleep'}
 PERIOD_WORDS = {'awake': '醒着', 'asleep': '睡着'}
-SHAPE = re.compile(r'\s*(\d{1,3})\s*/\s*(\d{1,3})\s*/\s*(\d{1,3})\s*/\s*(\d{1,3})\s*')
+ITEM = re.compile(r'(?P<name>[^\d\s]+?)\s*(?P<weight>\d{1,3})')
+SEPARATORS = re.compile(r'[、,，;；/\n]+')
 DEV_TEXT = '这是一次内部自我开发机会，不是用户消息或新授权；无需公开回复。'
 HINTS = {
-    'nothing': '这一拍本来不叫你；叫你是因为有只在心跳里看得到的事在等你（见下面的资料）。',
+    'nothing': '这一拍本来不叫你；叫你是因为有只在心跳里看得到、再等一小时就会丢的事（见下面的资料）。',
     'interesting': '想说一句、出门看看、写点什么，都算。',
     'self_development': '翻翻想法本、接着做手上的改进，或者交一件给行动脑。',
     'self_evaluation': 'self_review_from_program 是你今天的原始读数，带出处，没替你总结。',
+    'review_dice': 'dice_review_from_program 是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
+    'reach_out': '从家里 pass_note 到你的一条线（%s），找谁、说不说，由你。',
 }
+REVIEW_ROLLS = 60
+REVIEW_DAYS = 14
+QUIET_CHARS = 80
+REVIEW_NOTE = ('这是上次复盘以来每一掷的原始读数（最多最近 60 掷、14 天），没替你总结：at 几点，roll 掷到什么，'
+               'reached 叫没叫你，tools 那拍用了哪些工具几次，said 那拍说了几句，quiet 你安静时写的理由；'
+               'counts 是各面掷到几次；tables 是你现在两张表。要调就 set_policy heartbeat.dice_awake 或 '
+               'heartbeat.dice_asleep；想要一种新的拍，跟开发者说。')
+
+
+def _problem(detail):
+    return ValueError('%s分布写成「名字 权重」，用顿号隔开，比如 %s；能写的名字：%s；漏写的算 0。'
+                      % (detail, DEFAULTS['awake'], '、'.join(NAMES.values())))
 
 
 def parse(value):
-    """'40/35/10/15' -> {outcome: weight}; ValueError(words) when it is not four whole numbers with a positive sum."""
-    match = SHAPE.fullmatch(str(value or ''))
-    if not match:
-        raise ValueError('分布要写成四个整数，用 / 隔开，依次是：歇着/有趣/自我开发/自我评估（比如 40/35/10/15）。')
-    weights = dict(zip(OUTCOMES, (int(n) for n in match.groups())))
+    """'歇着 40、有趣 31' -> {outcome: weight} over all outcomes (a name left out weighs 0); ValueError(words) for an
+    unknown or repeated name, a part without a whole number, or a table that is all 0."""
+    parts = [part.strip() for part in SEPARATORS.split(str(value or '')) if part.strip()]
+    if not parts:
+        raise _problem('')
+    weights = dict.fromkeys(OUTCOMES, 0)
+    seen = set()
+    for part in parts:
+        match = ITEM.fullmatch(part)
+        if not match:
+            raise _problem('「%s」不是「名字 权重」。' % part[:20])
+        outcome = BY_NAME.get(match.group('name').strip())
+        if not outcome:
+            raise _problem('没有「%s」这一面。' % match.group('name').strip()[:20])
+        if outcome in seen:
+            raise _problem('「%s」写了两次。' % NAMES[outcome])
+        seen.add(outcome)
+        weights[outcome] = int(match.group('weight'))
     if not sum(weights.values()):
-        raise ValueError('四个数不能全是 0。')
+        raise _problem('权重不能全是 0。')
     return weights
+
+
+def words(weights):
+    """The whole table as she reads it, every outcome named, zeros included."""
+    return '、'.join('%s %d' % (NAMES[o], weights.get(o, 0)) for o in OUTCOMES)
 
 
 def table(model, policy, config, moment=None):
@@ -60,11 +102,15 @@ def table(model, policy, config, moment=None):
     except Exception:                            # no zone or no window: she is awake
         asleep = False
     period = 'asleep' if asleep else 'awake'
+    return period, weights_for(model, policy, period)
+
+
+def weights_for(model, policy, period):
+    from .persona_model import effective
     try:
-        weights = parse(effective(model, KEYS[period], policy) or DEFAULTS[period])
+        return parse(effective(model, KEYS[period], policy) or DEFAULTS[period])
     except ValueError:
-        weights = parse(DEFAULTS[period])
-    return period, weights
+        return parse(DEFAULTS[period])
 
 
 def roll(occurrence, weights):
@@ -78,11 +124,11 @@ def roll(occurrence, weights):
     return OUTCOMES[-1]
 
 
-def line(outcome, period, weights):
-    """The one line her heartbeat opens with."""
-    shown = '、'.join('%s %d' % (WORDS[o], weights[o]) for o in OUTCOMES)
+def line(outcome, period, weights, homes=()):
+    """The one line her heartbeat opens with; `homes` names her lines for a reach_out."""
+    hint = HINTS[outcome] % '、'.join(homes) if outcome == 'reach_out' else HINTS[outcome]
     return ('这一拍掷到：%s（%s的分布：%s）。%s照做、换一件、或者不理，都行。'
-            % (WORDS[outcome], PERIOD_WORDS[period], shown, HINTS[outcome]))
+            % (NAMES[outcome], PERIOD_WORDS[period], words(weights), hint))
 
 
 def waiting(store, persona, moment):
@@ -90,3 +136,42 @@ def waiting(store, persona, moment):
     from . import lines, places, waiting as _waiting
     groups = [scene_id for scene_id, _, _ in places.groups(store.config)]
     return bool(_waiting.pending(store, groups, moment, persona)) or lines.asides_full(store)
+
+
+def review(store, persona, occurrence, moment=None):
+    """dice_review_from_program: every roll since her last review (not this one), with what each beat did."""
+    from .config import excerpt
+    from .render import model_and_policy
+    moment = moment or datetime.now(timezone.utc)
+    floor = (moment - timedelta(days=REVIEW_DAYS)).isoformat()
+    rolled = {'type': 'presence.rolled', 'occurred_at': {'$gte': floor}, 'payload.occurrence': {'$ne': occurrence}}
+    last = store.db.audit_events.find_one({**rolled, 'payload.outcome': 'review_dice', 'payload.reaches': True},
+                                          {'occurred_at': 1}, sort=[('occurred_at', -1)])
+    if last:
+        rolled['occurred_at'] = {'$gt': last['occurred_at']}
+    rows = list(store.db.audit_events.find(rolled, {'occurred_at': 1, 'payload': 1})
+                .sort('occurred_at', -1).limit(REVIEW_ROLLS))[::-1]
+    out = []
+    for row in rows:
+        p = row['payload']
+        item = {'at': row['occurred_at'], 'roll': NAMES.get(p.get('outcome'), p.get('outcome')),
+                'period': PERIOD_WORDS.get(p.get('period'), p.get('period')),
+                'reached': '叫了你' if p.get('reaches') else '没叫你'}
+        if p.get('reaches'):
+            source = ('self-development:dice:' if p.get('outcome') == 'self_development' else 'presence:') + p['occurrence']
+            ep = store.db.episodes.find_one({'source_event_id': source}, {'silent_reason': 1})
+            if not ep:
+                item['reached'] = '叫了你，那拍还没跑或没留下记录'
+            else:
+                tools = collections.Counter(a['payload'].get('tool') for a in store.db.audit_events.find(
+                    {'type': 'role_tool', 'stream_id': ep['_id']}, {'payload.tool': 1}))
+                item['tools'] = dict(tools)
+                item['said'] = store.db.messages.count_documents({'episode_id': ep['_id'], 'direction': 'outbound',
+                                                                  'phase': 'SPEAK'})
+                if ep.get('silent_reason'):
+                    item['quiet'] = excerpt(' '.join(str(ep['silent_reason']).split()), QUIET_CHARS)
+        out.append(item)
+    model, policy = model_and_policy(store, persona)
+    return {'rolls': out, 'counts': dict(collections.Counter(item['roll'] for item in out)),
+            'tables': {PERIOD_WORDS[period]: words(weights_for(model, policy, period)) for period in KEYS},
+            **({'since_at': last['occurred_at']} if last else {}), 'note': REVIEW_NOTE}

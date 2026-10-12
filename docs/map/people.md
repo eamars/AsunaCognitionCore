@@ -54,13 +54,16 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 
 [src/asuna/dice.py](../../src/asuna/dice.py)
 
-The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of four outcomes.
+The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of six outcomes.
 
-- def `parse` — '40/35/10/15' -> {outcome: weight}; ValueError(words) when it is not four whole numbers with a positive sum.
+- def `parse` — '歇着 40、有趣 31' -> {outcome: weight} over all outcomes (a name left out weighs 0); ValueError(words) for an unknown or repeated name, a part without a whole number, or a table that is all 0.
+- def `words` — The whole table as she reads it, every outcome named, zeros included.
 - def `table` — (period, weights) for now: asleep inside her declared sleep window, awake otherwise.
+- def `weights_for`
 - def `roll` — The outcome for this beat: the occurrence seeds it, so the same beat always rolls the same.
-- def `line` — The one line her heartbeat opens with.
+- def `line` — The one line her heartbeat opens with; `homes` names her lines for a reach_out.
 - def `waiting` — Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not).
+- def `review` — dice_review_from_program: every roll since her last review (not this one), with what each beat did.
 
 ## `self_review`
 

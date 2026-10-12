@@ -14,7 +14,7 @@ EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
                'CANCELLED': '撤了'}
 NOTE = ('这是你今天的原始读数（从你的零点算起），带出处，没替你总结：said 你在哪儿说了几句，tasks 今天交出去的事和结果，'
-        'refused 被退回的调用按工具数，open 还挂着的事。答应过别人的事程序没有记录，要看你自己的活账。')
+        'refused 被退回的调用按工具数，open 还挂着的事。答应过别人还没销的事程序没有记录，在你的活账里（ledgers_from_program）。')
 
 
 def _midnight(zone_name, moment):

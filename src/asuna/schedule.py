@@ -698,10 +698,13 @@ class ScheduleService:
             return 'SKIPPED:' + reason
         # ADR-058: the die. A 'nothing' beat reaches her only when waiting an hour would lose something only a
         # heartbeat shows (or the owner knocked it by hand); every roll is recorded with the distribution it used.
-        from . import dice
+        from . import dice, lines
         period, weights = dice.table(model, policy, self.app.config, moment)
         if not (self.app.config.get('self_development') or {}).get('enabled'):
             weights = {**weights, 'self_development': 0}            # no self-improvement turns on this machine
+        homes = [line['label'] for line in lines.peer_lines(self.store)]
+        if not homes:
+            weights = {**weights, 'reach_out': 0}                   # no line at home to reach out on
         if not sum(weights.values()):
             weights = {**weights, 'interesting': 1}
         outcome = dice.roll(occurrence, weights)
@@ -710,17 +713,18 @@ class ScheduleService:
                          'weights': weights, 'outcome': outcome, 'reaches': reaches}, plan['scope_key'])
         if not reaches:
             return 'SKIPPED:DICE_NOTHING'
-        text = dice.line(outcome, period, weights) + '\n' + HEARTBEAT_TEXT + (HEARTBEAT_EARLY if forced else '')
+        opening = dice.line(outcome, period, weights, homes)
+        text = opening + '\n' + HEARTBEAT_TEXT + (HEARTBEAT_EARLY if forced else '')
         reconnected = plan.get('reconnected_at')
         if reconnected and reconnected != plan.get('reconnect_told_at'):
             hours = max(0.0, (moment - schedule_rules._aware(reconnected)).total_seconds() / 3600)
             text += HEARTBEAT_RECONNECTED % ago(hours)
         if outcome == 'self_development':
             self.controller.offer_self_development('self-development:dice:' + occurrence,
-                                                   text=dice.line(outcome, period, weights) + '\n' + dice.DEV_TEXT)
+                                                   text=opening + '\n' + dice.DEV_TEXT)
         else:
             self.controller.offer_internal('presence', 'presence:' + occurrence, plan['scene_id'], plan['person_id'],
-                                           text, **({'dice': outcome} if outcome == 'self_evaluation' else {}))
+                                           text, **({'dice': outcome} if outcome in ('self_evaluation', 'review_dice') else {}))
         current = self.store.db.plans.find_one({'_id': plan['_id']})
         self.store.put('plans', {**current, 'last_presence_at': now(), 'beats': {**beats, 'count': beats['count'] + 1},
                                  **({'reconnect_told_at': reconnected} if reconnected else {})},

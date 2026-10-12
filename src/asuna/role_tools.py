@@ -1385,9 +1385,10 @@ class RoleTools:
         if key in ('tools_off', 'switch_off'):
             return self._switch_policy(ep, key, args, reason), False
         from . import dice
+        table = None
         if key in dice.KEYS.values():
             try:
-                dice.parse(args.get('value'))
+                table = dice.words(dice.parse(args.get('value')))
             except ValueError as exc:
                 raise Refused(str(exc)) from None
         if 'value' not in args:
@@ -1400,7 +1401,8 @@ class RoleTools:
                               reason=reason, author='character', mutation_id=f"{ep['_id']}:policy_set:{call_id}",
                               sources=[ep['source_event_id']])
         scheduler = self.coordinator.scheduler
-        result = {'key': key, 'value': args['value'], 'revision_id': revision['_id']}
+        result = {'key': key, 'value': args['value'], 'revision_id': revision['_id'],
+                  **({'stored_table': table} if table else {})}      # the whole table, so a name left out shows as 0
         if scheduler and hasattr(scheduler, 'ensure_presence') and key.startswith(('heartbeat.', 'rhythm.')):
             # A new rhythm takes effect through schedule_update, never delete + create.
             scheduler.ensure_presence()

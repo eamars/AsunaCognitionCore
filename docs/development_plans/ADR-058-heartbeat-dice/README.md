@@ -91,3 +91,25 @@ have no program record; the readings say so and point to her own ledger.
   nothing.
 - She asked for a day's count after this: nothing beats, how many the old rule would have woken, how many the new one
   does; she retunes the 40 from it.
+
+## Two more outcomes (owner, her review, 2026-10-12)
+
+The owner asked for a small share of beats to review the dice and to talk at home. Her answers:
+
+- **复盘 · review the dice** (weight 2, about every three days awake): the heartbeat with `dice_review_from_program`,
+  every roll since her last review with what each beat did (reached her or not, tools, lines said, her reason when
+  quiet), the count per outcome and both tables. It closes the loop: weights become something she can check, not
+  only set (she had just set an asleep table that never rolled). She retunes from it; a new kind of beat she asks
+  the developer for.
+- **找人 · reach out at home** (weight 5): she chose reaching out on any of her lines (Claude, Codex, her old home's
+  self; whom is hers) over Claude only. Text only, through her existing `pass_note`; 0 where she has no line. Her
+  own rule: with nothing true to say she sends nothing; dice should not manufacture socialising.
+- **Named weights:** six positions are unreadable, so tables are written `歇着 40、有趣 31、…`; a name left out weighs 0.
+  Her ask: `set_policy` returns the whole stored table (`stored_table`), so a name left out shows as 0 instead of
+  quietly vanishing. Defaults, hers to run unchanged until the review readings: awake 歇着 40、有趣 31、自我开发 10、
+  自我评估 12、复盘 2、找人 5; asleep 歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4.
+- **Follow-up (回访) is not an outcome:** her ledger already holds what she promised and comes in every home turn;
+  self evaluation points to it. A separate outcome only if reviews show promises still going unclosed.
+- **Learning one thing** stays in reserve: it overlaps with self development.
+
+Cost: no tool; the opening line names six weights (about 20 characters more); the review block only on its beats.

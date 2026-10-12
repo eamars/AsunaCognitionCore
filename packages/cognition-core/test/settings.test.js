@@ -50,3 +50,37 @@ test('settings activation pauses ingress and restores the previous configuration
   assert.equal(core.config.value, 'previous');
 });
 
+
+test('applied settings reach a conversation already open: it is reopened between its turns, never during one', async () => {
+  const live = new Map(), resumed = [];
+  const open = (id, options) => {
+    const agent = { id, options, session: { header: {} } };
+    const handle = { agent, dispose: async () => { live.delete(id); } };
+    live.set(id, agent);
+    return handle;
+  };
+  const ctx = { get: () => undefined,
+    agents: { get: id => live.get(id),
+      resume: async ({ resumeSessionId, agentOptions }) => { resumed.push(agentOptions.model); return open(resumeSessionId, agentOptions); } },
+    sessionPersistence: { stat: async () => true },
+    agentPresets: { mount: async () => {} },
+    workspaceRegistry: { create: async () => ({ attachSession: async () => {} }), unarchiveSession: async () => {} } };
+  const route = model => ({ persona: 'p', routes: { character: { provider: 'x', model, reasoningEffort: 'high', maxTokens: 10 } } });
+  const core = new CognitionCore(ctx, route('old'));
+  core.personas.set('p', { preset: 'role' });
+  core.channelOf = () => undefined;
+  const stage = { session_id: 's1', lane: 'character', binding: { scene_id: 'x', cwd: '.' } };
+  const first = await core.ensureAgent(stage);
+  core.lifecycle.state = 'ready';
+  core.worker = { call: async () => {} };
+  core.validateSettings = async () => {};
+  core.restart = async () => {};
+  await core.applySettings(route('new'));
+  core.state('s1').current = { token: 't' };                  // her turn is running: it keeps its agent
+  assert.equal(await core.ensureAgent(stage), first);
+  core.state('s1').current = null;
+  const reopened = await core.ensureAgent(stage);
+  assert.notEqual(reopened, first);
+  assert.deepEqual(resumed, ['old', 'new']);
+  assert.equal(await core.ensureAgent(stage), reopened, 'reopened once, not at every turn');
+});

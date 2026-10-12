@@ -134,6 +134,8 @@ export class CognitionCore {
     this.channelWaiters = [];
     this.states = new Map();
     this.handles = new Map();
+    // Conversations open when settings were last applied: each is reopened at its next idle moment (ensureAgent).
+    this.reopen = new Set();
     this.channelWrites = new Map();
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
@@ -455,7 +457,12 @@ export class CognitionCore {
       await this.validateSettings(next);
       if (this.lifecycle.state === 'ready') await this.worker.call('settings.quiesce');
       this.config = next;
-      try { await this.restart('settings applied'); }
+      try {
+        await this.restart('settings applied');
+        // A live agent keeps the model and options it was opened with; every open conversation takes the
+        // applied routes when it is reopened, between its turns.
+        this.reopen = new Set(this.handles.keys());
+      }
       catch (error) {
         this.config = previous;
         try { await this.restart('settings restored after a failed apply'); }
@@ -599,11 +606,24 @@ export class CognitionCore {
     }
   }
 
+  /** Nothing of this conversation is running: no turn, none queued, no child of it open. */
+  idle(id) {
+    const state = this.states.get(id);
+    return !state?.current && !state?.queue.length
+      && ![...this.handles.values()].some(handle => handle.agent?.session?.header?.parentSession === id);
+  }
+
   async ensureAgent(stage, parentAgent, descriptor) {
     // Native Archive hides a monitored conversation until its next activity.
     // It does not disable the channel. Reopen before DSH's archive gate.
     if (stage.lane === 'character' && this.channelOf(stage.binding.scene_id))
       await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
+    if (this.reopen.has(stage.session_id) && this.handles.has(stage.session_id) && this.idle(stage.session_id)) {
+      this.reopen.delete(stage.session_id);
+      const stale = this.handles.get(stage.session_id);
+      this.handles.delete(stage.session_id);
+      await stale.dispose();
+    }
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;
     const preset = PRESETS[stage.lane] ?? this.personas.get(this.config.persona).preset;

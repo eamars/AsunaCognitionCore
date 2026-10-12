@@ -1,7 +1,8 @@
 # ADR-064: QQ notices reach her as one-off lines; a reply tool later
 
 Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. Waits for
-review by the master agent (Claude) and by her. Nothing is built until both have reviewed.
+review by the master agent (Claude) and by her. Nothing is built until both have reviewed. The review is parked until ADR-062 and
+ADR-061 are done (owner 2026-10-13: its decisions depend on that earlier work).
 
 ## Owner's direction (2026-10-13)
 

@@ -42,7 +42,6 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 
 - def `in_window` — HH:MM-HH:MM, including windows that cross midnight; empty → False.
 - def `rhythm_block`
-- def `heartbeat_rest_gate` — True only when the persona chose heartbeat.skip_in_sleep and the local time is in her sleep window.
 - def `episode_dates` — {episode id: local date} from the audited context preparation of each episode.
 - def `selections` — {memory id: [episode ids]} for memories actually selected into turns within the window.
 - def `promotion_candidates` — Deterministic: units or monologues referenced by ≥ 2 different turns within promotion.window_days.
@@ -61,7 +60,7 @@ The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls
 - def `table` — (period, weights) for now: asleep inside her declared sleep window, awake otherwise.
 - def `roll` — The outcome for this beat: the occurrence seeds it, so the same beat always rolls the same.
 - def `line` — The one line her heartbeat opens with.
-- def `waiting` — Whether something only a heartbeat shows is waiting for her (her review: a 'nothing' beat must not hide it).
+- def `waiting` — Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not).
 
 ## `self_review`
 

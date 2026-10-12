@@ -73,3 +73,21 @@ A day of beats: outcomes against the distribution, turns saved by "nothing", and
 `presence.rolled` records, `heartbeat.dice_awake` / `heartbeat.dice_asleep` as core-writable policy keys with
 `set_policy` checking their shape, the router keeping `dice` only on the program's own heartbeat. Promises she made
 have no program record; the readings say so and point to her own ledger.
+
+## After the first beat (2026-10-12)
+
+- **What wakes a "nothing" beat: only what an hour would lose** (her rule: lost wakes her, late does not). The first
+  roll was nothing and reached her anyway, woken by an aside on her old home's line, which sends one most hours (25
+  of 47 hours). Asides and calls stay listed until she answers, so every nothing would have reached her and the
+  saving would have been nearly zero. Now only two things wake it: her waiting list (it ends after an hour), and a
+  peer line whose unseen asides already fill the six she is shown (one more would push the oldest out of her view,
+  and she has no tool to read it back). Fewer asides and a group where someone called her (that woke her by its own
+  path) wait for the next beat that reaches her.
+- **One night mechanism** (owner's question, her choice of option 1). `heartbeat.skip_in_sleep` skipped every beat in
+  her sleep window before the roll, so the asleep table never rolled. The gate and its key are removed; her sleep
+  window now decides only which table rolls, and a fully quiet night is `100/0/0/0`. The window still tells her she
+  is in her sleeping hours. Her own rule for night beats (read, reckon, write ideas, prepare; no publishing, no big
+  decisions) is hers, not the program's. A stored `skip_in_sleep` value stays in her policy ledger and is read by
+  nothing.
+- She asked for a day's count after this: nothing beats, how many the old rule would have woken, how many the new one
+  does; she retunes the 40 from it.

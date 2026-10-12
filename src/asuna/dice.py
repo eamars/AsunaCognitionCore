@@ -1,13 +1,16 @@
 """The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of four outcomes.
 
-- nothing: the beat does not reach her (no model call), unless something only a heartbeat shows is waiting for her:
-  someone she is waiting for in a group, a line of her sister's not answering her, a group where someone called her
-  since she last spoke there. Then it reaches her with the roll said, and those things in it.
+- nothing: the beat does not reach her (no model call), unless something only a heartbeat shows would be lost by
+  waiting an hour: someone she waits for in a group (her waiting list ends after an hour), or a peer line whose
+  unseen asides already fill the list she is shown (one more would push the oldest out of her view). What stays
+  until she answers (fewer asides; a group where someone called her, which woke her by its own path) is shown at
+  the next beat that reaches her: late, never lost. Then it reaches her with the roll said, and those things in it.
 - interesting: the heartbeat as it always was.
 - self_development: the beat runs as a self-improvement turn (her notebook, development tools), as a night stage does.
 - self_evaluation: the heartbeat with the raw readings of her own day (self_review.py).
 
-Two weight tables, awake and asleep, chosen by her declared sleep window; both are her policy keys (`set_policy`),
+Two weight tables, awake and asleep, chosen by her declared sleep window (the only thing the window does to a
+heartbeat: a fully quiet night is 100/0/0/0); both are her policy keys (`set_policy`),
 four whole numbers in this order: nothing / interesting / self development / self evaluation. A weight of 0 removes
 an outcome. The roll is seeded by the beat's occurrence, so a record names its outcome and can be replayed. The roll
 is shown to her as one line of text: hers to follow, change or ignore; nothing asks for an answer.
@@ -82,16 +85,8 @@ def line(outcome, period, weights):
             % (WORDS[outcome], PERIOD_WORDS[period], shown, HINTS[outcome]))
 
 
-def waiting(store, persona, moment, zone):
-    """Whether something only a heartbeat shows is waiting for her (her review: a 'nothing' beat must not hide it)."""
+def waiting(store, persona, moment):
+    """Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not)."""
     from . import lines, places, waiting as _waiting
     groups = [scene_id for scene_id, _, _ in places.groups(store.config)]
-    if _waiting.pending(store, groups, moment, persona):
-        return True
-    if lines.asides(store, zone):
-        return True
-    for scene_id in groups:
-        scene = store.db.scenes.find_one({'_id': scene_id})
-        if scene and places.room(store, scene, moment).get('called'):
-            return True
-    return False
+    return bool(_waiting.pending(store, groups, moment, persona)) or lines.asides_full(store)

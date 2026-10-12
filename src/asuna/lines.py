@@ -46,10 +46,7 @@ def asides(store, zone):
     from .schedule_rules import line_stamp
     out = []
     for line in peer_lines(store):
-        mine = store.db.messages.find_one({'scene_id': line['scene_id'], 'direction': 'outbound', 'phase': 'SPEAK'},
-                                          {'scene_seq': 1}, sort=[('scene_seq', -1)])
-        query = {'scene_id': line['scene_id'], 'direction': 'inbound', 'event.raw.asuna_aside': True,
-                 **({'scene_seq': {'$gt': mine['scene_seq']}} if mine else {})}
+        query = _unseen(store, line['scene_id'])
         count = store.db.messages.count_documents(query)
         if not count:
             continue
@@ -59,6 +56,20 @@ def asides(store, zone):
                                                     for row in reversed(rows)],
                     **({'more': '更早还有 %d 条' % (count - len(rows))} if count > len(rows) else {})})
     return {'lines': out, 'note': ASIDES_NOTE} if out else None
+
+
+def _unseen(store, scene_id):
+    """The asides on this line since she last spoke there."""
+    mine = store.db.messages.find_one({'scene_id': scene_id, 'direction': 'outbound', 'phase': 'SPEAK'},
+                                      {'scene_seq': 1}, sort=[('scene_seq', -1)])
+    return {'scene_id': scene_id, 'direction': 'inbound', 'event.raw.asuna_aside': True,
+            **({'scene_seq': {'$gt': mine['scene_seq']}} if mine else {})}
+
+
+def asides_full(store):
+    """Whether a line's unseen asides fill the list she is shown: one more would push the oldest out of her view."""
+    return any(store.db.messages.count_documents(_unseen(store, line['scene_id'])) >= ASIDES_SHOWN
+               for line in peer_lines(store))
 
 
 def _row(store, scene_id):

@@ -1,5 +1,5 @@
-"""ADR-058: the heartbeat rolls a die before it reaches her. Nothing (no turn, unless something only a heartbeat
-shows is waiting), interesting, self development, self evaluation; awake and asleep weights she sets; the roll is
+"""ADR-058: the heartbeat rolls a die before it reaches her. Nothing (no turn, unless an hour would lose something
+only a heartbeat shows), interesting, self development, self evaluation; awake and asleep weights she sets; the roll is
 one line of text, reproducible from the beat, and recorded."""
 import collections
 
@@ -39,6 +39,23 @@ def test_nothing_still_reaches_her_when_only_a_heartbeat_would_show_what_waits(s
     monkeypatch.setattr(dice, 'waiting', lambda *args: True)
     service, plan = beat(store, '1/0/0/0')
     assert plan['last_outcome'] == 'ENQUEUED' and service.controller.texts[0].startswith('这一拍掷到：歇着')
+
+
+def test_what_waits_wakes_a_nothing_beat_only_when_an_hour_would_lose_it(store):
+    from datetime import datetime, timezone
+    from test_peer_lines import SCENE, with_line
+    with_line(store)
+    moment = datetime(2026, 10, 12, 9, 0, tzinfo=timezone.utc)
+    for seq in range(1, 6):                     # five unseen asides: all still in the list next hour
+        store.db.messages.insert_one({'_id': 'a%d' % seq, 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': seq,
+                                      'direction': 'inbound', 'text': '心跳 %d' % seq,
+                                      'received_at': '2026-10-12T08:%02d:00+00:00' % seq,
+                                      'event': {'raw': {'asuna_aside': True}}})
+    assert dice.waiting(store, 'P1', moment) is False
+    store.db.messages.insert_one({'_id': 'a6', 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': 6,
+                                  'direction': 'inbound', 'text': '心跳 6', 'received_at': '2026-10-12T08:06:00+00:00',
+                                  'event': {'raw': {'asuna_aside': True}}})
+    assert dice.waiting(store, 'P1', moment) is True, 'the list is full: one more would push the oldest out'
 
 
 def test_each_outcome_opens_with_its_line_and_goes_where_it_belongs(store):

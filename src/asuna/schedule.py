@@ -668,7 +668,7 @@ class ScheduleService:
         /heartbeat) skips the gates; the beat still counts toward the day."""
         from .config import ago
         from .persona_model import effective, timezone as persona_timezone
-        from .rhythm import HEARTBEAT_EARLY, HEARTBEAT_RECONNECTED, HEARTBEAT_TEXT, heartbeat_rest_gate
+        from .rhythm import HEARTBEAT_EARLY, HEARTBEAT_RECONNECTED, HEARTBEAT_TEXT
         persona, model, policy = self._persona()
         moment = schedule_rules._aware(now())
         zone, _ = persona_timezone(model, policy, self.app.config)
@@ -688,8 +688,6 @@ class ScheduleService:
             if gap < float(effective(model, 'heartbeat.min_gap_min', policy) or 0) \
                     and not self._news_since(plan['scene_id'], last):
                 reason = 'MIN_GAP'
-        if not reason and heartbeat_rest_gate(model, policy, self.app.config):
-            reason = 'REST_WINDOW'
         if not reason and beats['count'] >= HEARTBEAT_BEATS_PER_DAY:
             reason = 'DAILY_BUDGET'
         if forced:
@@ -698,8 +696,8 @@ class ScheduleService:
         if reason:
             self.store.audit(plan['_id'], 'presence.skipped', {'reason': reason, 'occurrence': occurrence}, plan['scope_key'])
             return 'SKIPPED:' + reason
-        # ADR-058: the die. A 'nothing' beat reaches her only when something only a heartbeat shows waits for her
-        # (or the owner knocked it by hand); every roll is recorded with the distribution it used.
+        # ADR-058: the die. A 'nothing' beat reaches her only when waiting an hour would lose something only a
+        # heartbeat shows (or the owner knocked it by hand); every roll is recorded with the distribution it used.
         from . import dice
         period, weights = dice.table(model, policy, self.app.config, moment)
         if not (self.app.config.get('self_development') or {}).get('enabled'):
@@ -707,8 +705,7 @@ class ScheduleService:
         if not sum(weights.values()):
             weights = {**weights, 'interesting': 1}
         outcome = dice.roll(occurrence, weights)
-        reaches = outcome != 'nothing' or forced or dice.waiting(
-            self.store, persona, moment, schedule_rules.scene_timezone(self.app.config, {'_id': plan['scene_id']}))
+        reaches = outcome != 'nothing' or forced or dice.waiting(self.store, persona, moment)
         self.store.audit(plan['_id'], 'presence.rolled', {'occurrence': occurrence, 'period': period,
                          'weights': weights, 'outcome': outcome, 'reaches': reaches}, plan['scope_key'])
         if not reaches:

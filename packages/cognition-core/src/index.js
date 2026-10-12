@@ -23,7 +23,7 @@ import { readSpill } from './spill.js';
 import { normalizePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
-import { release, repair } from './pairing.js';
+import { release, releaseAfterCompaction, repair } from './pairing.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
@@ -1057,6 +1057,8 @@ export function apply(ctx, config = {}) {
   // A picture the model refuses becomes DSH's offload placeholder in that conversation, and the request is tried
   // once more, instead of ending her turn and every later one there (image-refusal.js).
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
+  // Platform lines held while a compaction ran on their conversation join it as the compaction ends (pairing.js).
+  releaseAfterCompaction(core);
   ctx.on('dispose', () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;
     return core.dispose();

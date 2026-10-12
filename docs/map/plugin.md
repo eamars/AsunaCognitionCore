@@ -256,12 +256,14 @@ Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles
 
 [packages/cognition-core/src/pairing.js](../../packages/cognition-core/src/pairing.js)
 
-A tool call and its result stay adjacent in her conversation.
+A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
 
 - def `toolCallOpen` — Whether a tool call of the running step still waits for its result.
-- def `hold` — Hold a line until the open tool call has its result.
+- def `compactionOpen` — Whether a compaction runs on the conversation: its last `compaction/start` has no `compaction/end` yet.
+- def `hold` — Hold a line until the open tool call has its result, or the running compaction its end.
 - def `isHeld`
 - def `release` — Write the held lines into the conversation, in arrival order; true when any was written.
+- def `releaseAfterCompaction` — Lines held while a compaction ran join its conversation as it ends (after the event is published: DSH refuses an append from inside a session observer).
 - def `strayLines` — Seqs of the lines on the conversation's surface that sit between a tool call and its result.
 - def `repair` — Replace each stray line with an empty one in place (DSH's surface replace); returns how many.
 

@@ -2,7 +2,7 @@
  * worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn. */
 import { projectionCacheDomainSpec } from '@deepseek-ai/dsh-session-projection-cache';
 import { localWorkspace } from './paths.js';
-import { hold, isHeld, toolCallOpen } from './pairing.js';
+import { compactionOpen, hold, isHeld, toolCallOpen } from './pairing.js';
 
 const needsTitle = (events, title, previous) => {
   const latest = events.findLast(event => event.type === 'session/title')?.data;
@@ -75,8 +75,9 @@ export async function recordChannelInput(core, receipt) {
   if (hot) {
     const events = hot.snapshotEvents();
     if (contains(events)) { /* already recorded */ }
-    // While one of her tool calls waits for its result the line waits too (pairing.js), as DSH's own input does.
-    else if (headed(events) && agent && toolCallOpen(events)) hold(core, id, message);
+    // While one of her tool calls waits for its result the line waits too (pairing.js), as DSH's own input does, and
+    // while a compaction runs here, which refuses a summary of a surface that changed under it.
+    else if (headed(events) && (agent && toolCallOpen(events) || compactionOpen(events))) hold(core, id, message);
     else if (headed(events)) hot.append('user/message', message, { surfaceOp: 'append' });
     else if (agent) for (const splice of queueing(agent.inbox.nextStep, message))
       agent.inbox.splice('next-step', splice.start, splice.removedCount ?? 0, splice.inserted);

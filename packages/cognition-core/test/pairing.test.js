@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis';
 import LlmRuntime, { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm';
 import SessionStore from '@deepseek-ai/dsh-session';
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection';
-import { hold, isHeld, release, repair, strayLines, toolCallOpen } from '../src/pairing.js';
+import { compactionOpen, hold, isHeld, release, repair, strayLines, toolCallOpen } from '../src/pairing.js';
 
 const line = (receipt, text = '群里的一句') => createUserMessage({ source: { kind: 'user', channel: 'qq', receipt },
   content: [{ type: 'text', text }] });
@@ -19,6 +19,13 @@ test('a tool call is open from its call to its result, and never past a step bou
   assert.equal(toolCallOpen([call, { type: 'step/end' }]), false);
   assert.equal(toolCallOpen([{ type: 'step/start' }, call, { type: 'tool/call', data: { callId: 'c2' } }, result]), true,
     'one of two calls still waits');
+});
+
+test('a compaction is open from its start to its end, failed or committed', () => {
+  assert.equal(compactionOpen([{ type: 'compaction/start' }]), true);
+  assert.equal(compactionOpen([{ type: 'compaction/start' }, { type: 'user/message' }]), true);
+  assert.equal(compactionOpen([{ type: 'compaction/start' }, { type: 'compaction/end', data: { error: {} } }]), false);
+  assert.equal(compactionOpen([{ type: 'user/message' }]), false);
 });
 
 test('a held line joins the conversation once, after the result, in arrival order', () => {

@@ -12,7 +12,7 @@ import Storage from '@deepseek-ai/dsh-storage';
 import * as JsonStorage from '@deepseek-ai/dsh-storage-json';
 import * as Domain from '@deepseek-ai/dsh-storage-domain';
 import Workspace from '@deepseek-ai/dsh-workspace';
-import LlmRuntime, { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm';
+import LlmRuntime, { LlmAdapter, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm';
 import AgentRegistry from '@deepseek-ai/dsh-agent';
 import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
@@ -22,6 +22,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import Subagents from '@deepseek-ai/dsh-subagent';
 import Persistence from '../src/persistence.js';
 import { CognitionCore } from '../src/index.js';
+import { isHeld, releaseAfterCompaction } from '../src/pairing.js';
 import { PENDING_LINES, lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from '../src/navigation.js';
 
 test('native continuation preserves history and task children retain their actual execution directory', async t => {
@@ -136,6 +137,20 @@ test('native continuation preserves history and task children retain their actua
   assert.deepEqual(surface.filter(event => event.type === 'user/message').map(event => event.data.source.receipt ?? 'notice'),
     [...Array.from({ length: PENDING_LINES }, (_, index) => 'before-' + (index + 2)), 'notice', 'before-' + (PENDING_LINES + 2)]);
   assert.equal(first.agent.inbox.nextStep.length, 0);
+  // A line that arrives while a compaction runs here waits for its end: a compaction in her turn refuses a summary of
+  // a surface that changed under it ("session surface changed during summarization").
+  releaseAfterCompaction(core);
+  const compacting = first.agent.session, onSurface = receipt => compacting.surface.nodes
+    .some(seq => compacting.eventAt(seq).data?.source?.receipt === receipt);
+  compacting.append('compaction/start', { compactionId: 'c1', turn: null });
+  await recordChannelInput(core, line(PENDING_LINES + 3));
+  assert.ok(isHeld(core, fresh._id, 'before-' + (PENDING_LINES + 3)) && !onSurface('before-' + (PENDING_LINES + 3)),
+    'held while the compaction runs');
+  compacting.append('compaction/end', { compactionId: 'c1', turn: null,
+    error: errorChain(new Error('summary not smaller')) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(onSurface('before-' + (PENDING_LINES + 3)), 'joins the conversation as the compaction ends, failed or not');
+  assert.equal(isHeld(core, fresh._id, 'before-' + (PENDING_LINES + 3)), false);
   await first.dispose();
   const again = await ctx.agents.resume({ resumeSessionId: fresh._id, agentOptions: route });
   assert.equal(again.agent.session.eventAt(again.agent.session.surface.nodes[0]).type, 'system/message', 'the log reloads');

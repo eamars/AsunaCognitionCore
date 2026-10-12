@@ -104,6 +104,16 @@ test('a list block goes item by item: what she still sees folds into one line wi
     visibleCarried(surface([notice(once, 'ep-3')])));
   assert.deepEqual(twice.context.plans_from_program, { items: [{ _id: 'p2', intent: '看两个群' }], same_as_before: '其余 1 条同前' });
   assert.deepEqual(twice.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
+
+  // ADR-063 D9: that same block once more, every item still visible: named unchanged, no empty wrapper.
+  const thrice = composeContext(context([], { plans_from_program: [plans[0], { _id: 'p2', intent: '看两个群' }] }),
+    visibleCarried(surface([notice(once, 'ep-3'), notice(twice, 'ep-4')])));
+  assert.equal(thrice.context.plans_from_program, undefined);
+  assert.deepEqual(thrice.context.unchanged_from_program, ['self_state_from_program', 'relationship', 'plans_from_program']);
+  // A block whose every item is visible but which differs as a whole (an item gone) still says what it holds.
+  const fewer = composeContext(context([], { plans_from_program: [plans[0]] }),
+    visibleCarried(surface([notice(once, 'ep-3'), notice(twice, 'ep-4')])));
+  assert.deepEqual(fewer.context.plans_from_program, { items: [], same_as_before: '其余 1 条同前' });
 });
 
 test('a group thread line or the speaker\'s last lines still on the surface are not listed again', () => {

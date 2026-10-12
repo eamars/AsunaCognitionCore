@@ -13,7 +13,8 @@
  *
  * A list block (a list of items, or a block with `items`) whose whole copy is not visible goes item by item
  * (ADR-056): an item still visible is folded into one `same_as_before` line that says how many and in what state,
- * except an item waiting on her (`waiting_on_you`), which is always sent. What these lines mean is in her system
+ * except an item waiting on her (`waiting_on_you`), which is always sent; the same block again with every item still
+ * visible is named in `unchanged_from_program` instead of sending an empty wrapper. What these lines mean is in her system
  * prompt (block_guide.py), so they carry no explanation of their own. */
 import { createHash } from 'node:crypto';
 
@@ -29,7 +30,8 @@ const digest = value => createHash('sha256').update(JSON.stringify(value ?? null
 /** What the newest stretch of the surface already carries (DSH's chars/4 token estimate). Lines still
  * waiting in the inbox (navigation.js) count too: the same step claims them just before this notice. */
 export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDOW_TOKENS) {
-  const visible = { blocks: new Set(), items: new Set(), rows: new Set(), memories: new Set(), episodes: new Set(), thoughts: new Set() };
+  const visible = { blocks: new Set(), items: new Set(), lists: new Set(), rows: new Set(), memories: new Set(),
+    episodes: new Set(), thoughts: new Set() };
   const nodes = session.surface.nodes;
   let used = 0;
   for (const line of pending.toReversed()) {
@@ -53,6 +55,8 @@ export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDO
     if (!carried) continue;
     for (const [key, value] of Object.entries(carried.blocks ?? {})) visible.blocks.add(key + ':' + value);
     for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
+    // A list block sent folded: the whole block as it was then (its items on this and older notices).
+    for (const [key, value] of Object.entries(carried.lists ?? {})) visible.lists.add(key + ':' + value);
     for (const id of carried.rows ?? []) visible.rows.add(id);
     for (const id of carried.memories ?? []) visible.memories.add(id);
     if (carried.episode) visible.episodes.add(carried.episode);
@@ -81,7 +85,7 @@ function sameAsBefore(folded) {
 
 /** The context this notice sends, what it carries, and what it left out (for the audit). */
 export function composeContext(context, visible) {
-  const entries = [], carried = { blocks: {}, items: {}, rows: [], memories: [] }, unchanged = [];
+  const entries = [], carried = { blocks: {}, items: {}, lists: {}, rows: [], memories: [] }, unchanged = [];
   let rows = 0, memories = 0, thoughts = 0, items = 0;
   const shownThought = id => typeof id === 'string' && id.startsWith('mono-')
     && (visible.thoughts ?? new Set()).has(id.slice(id.lastIndexOf(':') + 1));
@@ -137,8 +141,11 @@ export function composeContext(context, visible) {
       const folded = list.items.filter(item => !kept.includes(item));
       carried.items[key] = kept.map(digest);
       if (!folded.length) { carried.blocks[key] = value_digest; entries.push([key, value]); continue; }
-      // Only a block sent whole may later count as unchanged: the folded items rest on older notices.
+      // Only a block sent whole may later count as unchanged: the folded items rest on older notices. The same block
+      // again with every item still visible, though, is wholly before her: it is named unchanged, with no wrapper.
       items += folded.length;
+      if (!kept.length && visible.lists?.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
+      carried.lists[key] = value_digest;
       entries.push([key, list.wrap(kept, sameAsBefore(folded))]);
     }
   }

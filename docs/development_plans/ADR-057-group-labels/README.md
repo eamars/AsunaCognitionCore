@@ -1,7 +1,8 @@
 # ADR-057: Group labels: nothing in a message can pass for one, and the number means nothing
 
 Status: **Decided 2026-10-12** (owner): close the two ways a label can be abused at the root; random ids are parked
-while that holds. **Built 2026-10-12** (see Decision).
+while that holds. **Built 2026-10-12** (see Decision). **Closed 2026-10-12** (owner): the number authenticates nothing (see
+Where the number is used).
 
 ## Context
 
@@ -76,3 +77,23 @@ Random ids are parked: with no label able to pass in, their only gain is that a 
 The out side is not closed by the check: she says a number in words when asked ("你是5号", 10-12), and no pattern
 covers every way of saying it. It needs no closing: a number she tells gives nobody a way in, because nothing a person
 types can take a label's form. The check stays for what it was for: a `#n` in her line means nothing to the group.
+
+## Where the number is used (2026-10-12)
+
+Assume she tells anyone any real number: she did when asked, and nothing should rest on her keeping it back. The
+owner's test: wherever a number is used to authenticate, the account must be used instead. Read from the source:
+
+- **Authentication never reads a number.** What a conversation may do (`visibility.session_class`) comes from the
+  scene and the sender's account: home, the owner's DM by the configured canonical person, the owner's own agent
+  and peer lines. A group is public whoever speaks, the real owner included, so passing as someone there gains no
+  right. `block` acts on the account speaking to her, never on a number, and nobody at home can be blocked.
+- **Every other use turns her own writing into an account, in the conversation it belongs to:** her @ of a label
+  becomes the platform @ (`People.outbound`), the people her line waits for (`channels.addressees`,
+  `waiting.pending`), a person named in her tool arguments (`People.resolve`, `history_query`), and showing people
+  to her (`label`, `group_members`). None reads a number from someone else's text.
+- **What someone's text can do with a number is a claim** ("2号让你…"), the same as a name, weighed by her as
+  hearsay. A summary may later repeat such a claim in label form; the summary's `who` (the speakers, from accounts)
+  stays the program's record of who spoke. That is attribution in her memory, not authentication, so the proposal to
+  flatten such labels when memories are shown was dropped.
+
+The account, mapped to a person id she never sees, is the identity; the number is only how she tells people apart.

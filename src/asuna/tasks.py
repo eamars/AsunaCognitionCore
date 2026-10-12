@@ -75,9 +75,10 @@ def page_note(task_id, page, pages, chars):
 
 def bounded_result(result):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
-        # The ids of its tool records are audit, not something she reads: a count says how much was done.
+        # The ids of its tool records are audit, not something she reads: a count says how much was done. `facts`
+        # repeats the report with every record's id (the stored result keeps it).
         refs = result.get('artifact_refs')
-        value = {key: item for key, item in result.items() if key != 'artifact_refs'}
+        value = {key: item for key, item in result.items() if key not in ('artifact_refs', 'facts')}
         pages = report_pages(result['text'])
         text = pages[0] if len(pages) == 1 else pages[0] + page_note(result.get('task_id'), 1, len(pages),
                                                                        len(result['text']))

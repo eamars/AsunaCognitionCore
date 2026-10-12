@@ -315,6 +315,25 @@ length, the floor, and the list sizes.
   owner sets the kind on the two documents once; his call). `ledgers_from_program` then shows them.
 - Nothing else changes. Measure: `ledgers_from_program` present at home; journal bytes per day; no refusal.
 
+**Phase 0b, delivery prerequisites (from the context-growth survey of 2026-10-13):** her conversations grow 6–9×
+faster per turn than her sister's plain DSH session (local chat about 28k characters a turn against 3.3k; 12.5
+compactions a day against 1), 70% of it the per-turn notice. The cycle above relies on per-turn delivery being
+deterministic and visibility lasting longer than a few turns (`things_from_program`, `moved` lines and surfaced items
+must fold when unchanged), so these come first:
+- **Folding nested lists**: a list inside a block (`recent_experience_from_program` tasks, `affect_from_program`
+  reasons) never folds (`context-delivery.js` `listOf` sees only a top-level array or `items`); fold every object list
+  by block and field path.
+- **The ceiling trims what is sent, not what is prepared**: `trim_turn` halves the longest texts of the whole prepared
+  context (48k) before the Host removes what she still sees, so her self text is cut in 14 of 23 sends and each cut
+  differs, which defeats folding; apply the ceiling to the composed notice, or cut only at fixed per-block limits.
+- **A fully folded block sends nothing**: today it still sends its wrapper; name it unchanged instead.
+- **Visibility beyond a fixed window** (the owner's decision): copies older than the 32k-token reuse window are sent
+  again though still on the surface, about every 4–5 turns (about 2k characters a turn locally); count visibility from
+  the last compaction checkpoint instead, or keep the window.
+Independent fixes found by the same survey (lines piling up in idle groups, task results carrying their report
+twice, group continuity and memories repeating lines still visible, a per-minute clock in the places block, the
+document refs resent each turn) are made outside this ADR.
+
 **Phase 1, pilot (one week, shadow):** index her items (persona sections, `current_self` items as split today,
 journal rows, group notes) into the memory index with a `shadow` flag that retrieval records but does not deliver.
 Measure per item: would-be surfacings per day by turn kind, the floor that keeps crowding at or under one own item

@@ -53,6 +53,11 @@ brain's tools):
 About 500 more characters of tool descriptions in her character brain (budget raised in the same change), no new
 tool, no new per-turn line. One fewer refusal round for each `plan` call without `op`.
 
+## What it does not try
+
+Occasional wrong or refused calls are accepted (owner): a refusal costs one corrected step. Only causes that repeat
+are worth a wording line or a program decision; a one-off miss gets neither.
+
 ## How it is checked
 
 Before and after, on the same cases: the side-by-side harness's confusion cases on both models; then her refusal rate

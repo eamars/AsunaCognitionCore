@@ -210,14 +210,21 @@ TOOLS = {
     'understand_person': {
         'description': ('更新你对当前说话人的理解，两层选一层：person 是人那层（你在哪儿遇到他都看得到），here 是这里那层'
                         '（只在这个对话里看得到）。写那一层完整的新正文，保留仍然成立的旧内容，分清对方说过的、你看到的和你推的。'
-                        '只在这次真有值得留下的变化时用，不为了被夸而每轮更新；两层各自一回合最多写一次。一个人的喜好、习惯、怎么跟他聊，记在这里，不写进文档或长期记忆。'),
-        'parameters': {'layer': _s('person（人那层）或 here（这里那层）', required=True, enum=['person', 'here']),
-                       'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文', required=True)},
+                        '只在这次真有值得留下的变化时用，不为了被夸而每轮更新；两层各自一回合最多写一次。一个人的喜好、习惯、怎么跟他聊，记在这里，不写进文档或长期记忆。'
+                        '家外的对话里写 block（小时数，默认 24，最多 168）屏蔽这个人的这个账号：他的话照存，但哪儿都不叫你，到点自己结束。'),
+        'parameters': {'layer': _s('person（人那层）或 here（这里那层）', enum=['person', 'here']),
+                       'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文'),
+                       'block': {'type': 'integer', 'description': '屏蔽他多少小时（不写理解时 layer、body 可省略）'}},
     },
     'set_policy': {
-        'description': '调整你自己声明过的一个参数（persona-model 里的 policy key）。',
-        'parameters': {'key': _s('参数名', required=True), 'value': {'type': 'json', 'description': '新的值', 'required': True},
-                       'reason': _s(limit=2000, description='为什么改', required=True)},
+        'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管你的开关：key=tools_off 把 place 那个对话里的'
+                        '一些工具关掉（value 是工具名列表，空列表全部恢复；hours 默认 24，最多 168，到点自己恢复）；'
+                        'key=switch_off 提前结束一个开关（value 写它的 id）。'),
+        'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
+                       'value': {'type': 'json', 'description': '新的值', 'required': True},
+                       'reason': _s(limit=2000, description='为什么改', required=True),
+                       'place': _s('tools_off：哪个对话，照抄 place'),
+                       'hours': {'type': 'integer', 'description': 'tools_off：关多少小时'}},
     },
     'feel': {
         'description': ('记一笔心情（op=record，只用 how_to_record_from_program 里的词，不写数字）；事情了结用 close，'
@@ -328,9 +335,12 @@ TOOLS = {
                         'op=active 让一个群常驻，op=rest 让它歇着（place 照抄 list 或 places_from_program 里的 place；'
                         '在群里不写 place 就是这个群）。你当管理员的群一直常驻。常驻多了有代价，超过平常的数目时结果里会说。'
                         'op=condense：等这个群安静下来，把它的对话压一压（前面变成一段摘要，之后读回来快）；只在出门看群'
-                        '的那一轮、或在家里的心跳和反思里用；op=keep 收回这个选择。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep']),
-                       'place': _s('哪个群：place，可省略（在群里就是这个群）')},
+                        '的那一轮、或在家里的心跳和反思里用；op=keep 收回这个选择。'
+                        'op=mute 在家里把一个群静音（hours 默认 24，最多 168）：像歇着一样只有叫你的话会叫你，另外你不先开口、'
+                        '不去串门，到点自己结束；op=unmute 提前结束。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute']),
+                       'place': _s('哪个群：place，可省略（在群里就是这个群）'),
+                       'hours': {'type': 'integer', 'description': 'mute：静音多少小时'}},
     },
     'place_timezone': {
         'description': ('你在的群各在哪个时区：设了以后，「那边是不是夜里」按那个群的钟算，你在那个群定的计划也按它。'
@@ -460,7 +470,9 @@ def exposed(store, ep):
     """What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the
     conversation's list (abilities)."""
     listed = abilities(store, ep)
-    return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed]
+    from . import switches
+    off = switches.tools_off(store, ep['scene_id'])          # ADR-052: still listed (a stable list), not usable
+    return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed and name.split('.')[0] not in off]
 
 
 def _turn_rules(store, ep):
@@ -653,6 +665,11 @@ NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、
 
 def not_now(store, ep, name):
     """Why her conversation's tool or option `name` is not in this turn, and when it can be used."""
+    from . import local_time, switches
+    off = switches.tools_off(store, ep['scene_id']).get(name.split('.')[0])
+    if off:
+        return ('%s 是你在家里给这个对话关掉的（到 %s 自己恢复）；要提前用，回家用 set_policy 的 switch_off 结束它（id 是 %s）。'
+                % (name.split('.')[0], local_time.stamp(off['until'], local_time.zone_of(store, ep['scene_id'])), off['_id']))
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY
@@ -1259,6 +1276,9 @@ class RoleTools:
         from .memory import MemoryService
         from .queue import database_effects_lock
         from .tasks import require_current_feedback
+        blocked = self._block(ep, args['block']) if args.get('block') is not None else None
+        if blocked and args.get('body') is None:
+            return blocked, False
         body = self._text(args, 'body', SINGLE_BODY_CHARS)
         layer = args.get('layer')
         if layer not in ('person', 'here'):
@@ -1282,10 +1302,78 @@ class RoleTools:
             update = MemoryService(self.store).commit_understanding(self._fresh(ep), body, layer)
         self.coordinator._update(self._fresh(ep), **{field: update})
         result = {k: update.get(k) for k in ('state', 'reason') if update.get(k)}
+        if blocked:
+            result['block'] = blocked
         if update.get('state') == 'NOT_COMMITTED':
             result['note'] = UNDERSTANDING_NOT_SAVED.get(str(update.get('reason')).split(':', 1)[0],
                                                          '这次理解没存上（不是你的错）；重试也一样，下回合再更新。')
         return result, False
+
+    def _mute(self, ep, scene, on, hours):
+        """ADR-052: a group muted for a while: it rests, and she neither speaks first there nor visits."""
+        from . import focus, switches
+        from .people import People
+        if scene.get('kind') != 'group':
+            raise Refused('只有群能静音。')
+        if on and focus.admin_here(self.store, scene, ep.get('persona')):
+            raise Refused('你在这个群是管理员，它一直常驻（管理员要看得见群里的事），静音不了。')
+        label = People(self.store, ep.get('persona')).scene_title(scene)
+        if on:
+            row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours)
+            result = {'done': '%s静音了：只有叫你的话会叫你，你不先开口、不去；到点自己结束' % label,
+                      'until_at': row['until'], 'id': row['_id']}
+        else:
+            row = switches.muted(self.store, scene['_id'])
+            if not row:
+                return {'unchanged': '%s本来就没静音。' % label}
+            switches.clear(self.store, ep, row['_id'])
+            result = {'done': '%s不再静音，回到%s' % (label, '常驻' if focus.active(self.store, scene, ep.get('persona'))
+                                                       else '歇着')}
+        if focus._changed:
+            try:
+                focus._changed(scene['_id'])
+            except Exception:                    # the title catches up at the next start; her choice stands
+                pass
+        return result
+
+    def _block(self, ep, hours):
+        """ADR-052: block the account speaking to her, outside home only (nobody at home can be blocked)."""
+        from . import switches
+        from .people import People
+        if self._cls(ep) == visibility.OWNER_PRIVATE:
+            raise Refused('家里的人屏蔽不了：block 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        label = People(self.store, ep.get('persona')).speaker(scene, ep['person_id'])
+        row = switches.set_switch(self.store, ep, 'block', label=label, person_id=ep['person_id'], hours=hours)
+        return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, 'until_at': row['until'], 'id': row['_id']}
+
+    def _switch_policy(self, ep, key, args, reason):
+        """ADR-052: tools off in one conversation, or an early end to any switch."""
+        from . import places, switches
+        if key == 'switch_off':
+            row = switches.clear(self.store, ep, args.get('value'))
+            return {'done': '这个开关关了：%s' % switches.WORDS[row['kind']] + '：' + row['label']}
+        place = self._text(args, 'place', 40)
+        found = places.find(self.store.config, place)
+        if not found:
+            raise Refused('没有「%s」这个地方；place 照抄 places_from_program 或 group_focus 的 list 里的 place。' % place)
+        tools = args.get('value')
+        if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
+            raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。')
+        unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
+        if unknown:
+            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。' % '、'.join(unknown))
+        scene = self.store.db.scenes.find_one({'_id': found[0]}) or {'_id': found[0]}
+        from .people import People
+        label = People(self.store, ep.get('persona')).scene_title(scene)
+        current = switches.on(self.store, kind='tools_off', scene_id=found[0])
+        if not tools:
+            for row in current:
+                switches.clear(self.store, ep, row['_id'])
+            return {'done': '%s的工具都恢复了' % label}
+        row = switches.set_switch(self.store, ep, 'tools_off', label=label, scene_id=found[0], tools=tools,
+                                  hours=args.get('hours'), why=reason[:200])
+        return {'done': '%s里关了：%s' % (label, '、'.join(row['tools'])), 'until_at': row['until'], 'id': row['_id']}
 
     def tool_set_policy(self, ep, call_id, args):
         from .policy import PolicyStore
@@ -1294,6 +1382,8 @@ class RoleTools:
             raise Denied('POLICY_SET_REQUIRES_OWNER_PRIVATE')
         key = self._text(args, 'key', 200)
         reason = self._text(args, 'reason', 2000)
+        if key in ('tools_off', 'switch_off'):
+            return self._switch_policy(ep, key, args, reason), False
         if 'value' not in args:
             raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。')
         model, _ = model_and_policy(self.store, ep['persona'])
@@ -1565,8 +1655,10 @@ class RoleTools:
     def tool_group_focus(self, ep, call_id, args):
         from . import focus, places
         op = args.get('op')
-        if op not in ('list', 'active', 'rest', 'condense', 'keep'):
-            raise Refused('op 是 list、active、rest、condense 或 keep%s。' % _given(args, 'op'))
+        if op not in ('list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute'):
+            raise Refused('op 是 list、active、rest、condense、keep、mute 或 unmute%s。' % _given(args, 'op'))
+        if op in ('mute', 'unmute') and self._cls(ep) != visibility.OWNER_PRIVATE:
+            raise Refused('静音在家里定（家里的对话里用 group_focus，place 写那个群）；在群里只能让它常驻或歇着。')
         if op in ('condense', 'keep') and not (turn_kind(ep) in CONDENSE_TURNS or (
                 turn_kind(ep) in CONDENSE_AT_HOME and self._cls(ep) == visibility.OWNER_PRIVATE)):
             raise Refused(CONDENSE_REFUSED)
@@ -1597,6 +1689,8 @@ class RoleTools:
             if scheduler:                     # the home plan that looks every few minutes while a group is marked
                 scheduler.ensure_condense()
             return answer, False
+        if op in ('mute', 'unmute'):
+            return self._mute(ep, scene, op == 'mute', args.get('hours')), False
         try:
             return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
         except ValueError as exc:

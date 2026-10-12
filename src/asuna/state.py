@@ -34,7 +34,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # Who is in each group, as the channel adapter last fetched it (group_members.py, owner 2026-10-08).
                'group_members',
                # A Host taken away from outside, found at the next start (host_stops.py, 2026-10-08).
-               'host_stops')
+               'host_stops',
+               # Her switches: a muted group, tools off in a conversation, a blocked person (switches.py, ADR-052).
+               'switches')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
@@ -130,6 +132,7 @@ class Store:
                       ([('persona',1),('created_at',-1)],{}), ([('reply_to',1)],{})],
             'developer_inbox': [([('persona',1),('created_at',-1)],{}), ([('state',1),('created_at',1)],{})],
             'host_stops': [([('how',1),('back_at',-1)],{})],
+            'switches': [([('state',1),('kind',1),('until',1)],{}), ([('persona',1),('state',1)],{})],
         }
         for name, indexes in specs.items():
             for keys, options in indexes:

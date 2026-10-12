@@ -340,6 +340,9 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
     """(can go, words). Deterministic; the view and the visit tool use the same answer. While people are
     talking she may still go and look, take notes or share a picture; starting a topic waits for quiet."""
     here = here or room(store, scene, moment)
+    from . import switches
+    if switches.muted(store, scene['_id'], moment):
+        return False, '你把这个群静音了：静音时不去，到点自己结束'
     if today(store, plan, date) >= settings['per_day']:
         return False, '今天出门的次数用完了'
     if night_there(store.config, scene, moment):
@@ -388,9 +391,12 @@ def places_block(store, persona, model, policy, plan, moment, date):
         notes = [section.get('heading') for section in (docs.read(notes_slug(scene_id))[1] or {}).get('sections', [])
                  if section.get('heading')][:NOTE_HEADINGS]
         visit = last_visit(store, plan, scene_id)
-        from . import focus
+        from . import focus, switches
+        muted = switches.muted(store, scene_id, moment)
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
-               'focus': '常驻' if focus.active(store, scene, persona) else '歇着（只有叫你的话会叫你）',
+               'focus': ('静音（只有叫你的话会叫你，你不先开口、不去）' if muted else
+                         '常驻' if focus.active(store, scene, persona) else '歇着（只有叫你的话会叫你）'),
+               **({'muted_until_at': muted['until']} if muted else {}),
                'now': _tier(ACTIVITY, here['lines']) + ('' if here['last_line_at'] else '，还没见过有人说话'),
                **({'last_line_at': _stamp(here['last_line_at'])} if here['last_line_at'] else {}),
                'people': '最近一小时说话的有' + _tier(VOICES, here['voices']),

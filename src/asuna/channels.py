@@ -357,6 +357,13 @@ class Channels:
             event['watched'] = watched['_id']
             if 'group_context' in event and not event['group_context']['wake_reason']:
                 event['group_context']['wake_reason'] = 'watched'     # one look, through the relevance gate
+        from . import switches
+        blocked = switches.blocked(self.store, member['person_id'])
+        if blocked:
+            # ADR-052: someone she blocked: kept and searchable, wakes her nowhere, not addressed to her.
+            event['blocked'] = blocked['_id']
+            if 'group_context' in event:
+                event['group_context'].update(wake_reason=None, blocked=event['group_context']['wake_reason'])
         if 'group_context' in event:
             # ADR-039: in a group she lets rest, only what is meant for her wakes her (focus.RESTING_WAKES).
             from . import focus

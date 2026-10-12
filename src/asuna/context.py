@@ -708,6 +708,11 @@ class ContextBuilder:
         if watching:context['watching_from_program']=watching
         watched=_watches.watched_block(self.store,event,session_class)
         if watched:context['watched_from_program']=watched
+        # ADR-052: her switches: at home all of them (and those that ended lately), elsewhere the ones on here.
+        from . import switches as _switches
+        switched=(_switches.home_block(self.store,persona,moment) if session_class==visibility.OWNER_PRIVATE
+                  else _switches.here_block(self.store,scene['_id'],moment))
+        if switched:context['switches_from_program']=switched
         if scene.get('kind')=='group':
             from . import waiting as _waiting
             still=_waiting.block(self.store,[scene['_id']],moment,persona)

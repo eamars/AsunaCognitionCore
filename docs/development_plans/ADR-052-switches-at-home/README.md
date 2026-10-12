@@ -1,6 +1,7 @@
 # ADR-052: Her switches at home: what each conversation may do
 
-Status: **Draft 2026-10-12**: her side settled (defaults, mute); waiting on the owner's two questions below, then built.
+Status: **Accepted 2026-10-12**: her side settled (defaults, mute); the owner answered both questions (lend only tools
+no rule keeps at home; a block is that account for 24 hours unless she says otherwise). **Built 2026-10-12** (see Build).
 
 ## Context
 
@@ -73,3 +74,26 @@ Her character brain already has many tools, so the switches are options on tools
   longer knows what happens there. During a mute, a direct @ or an answer to something she is waiting for still
   wakes her first. Mute against resting is settled in (2).
 - **Owner:** is (3) a person anywhere, or per platform (QQ ids are recycled, ADR-029)?
+
+## Owner's answers (2026-10-12)
+
+- (5) A tool lent to a conversation must be one no rule keeps at home.
+- (3) A block is that platform account, ending after 24 hours like every switch unless she gives another number.
+
+## Build (2026-10-12)
+
+- `switches.py`, collection `switches`: one switch per kind and target, with `until`; ended switches are read by
+  time, no job. Every switch takes `hours` (default 24, at most 168); `set_policy` `switch_off` ends one early.
+- Mute: `group_focus` `mute` / `unmute`, at home only. `focus.active` is false while muted (the resting rules), visits
+  are refused, the heartbeat row says muted with `muted_until_at`. An admin group cannot be muted, as it cannot rest.
+- Tools off: `set_policy` `tools_off` with `place`, at home only. The tools stay listed (the tool list stays stable for
+  the prompt cache); `role_tools.exposed` leaves them out and the refusal names the end and the switch's id.
+- Block: `understand_person` `block`, outside home only (the person speaking to her; nobody at home can be blocked).
+  The channel intake marks the line and clears a group line's wake reason; the router keeps it without a turn.
+- She is told: `switches_from_program` in a switched conversation, and at home every switch on plus those that ended
+  in the last 12 hours (ADR-056's delivery sends them only when they change).
+- Tools on for a while is not built: under the owner's rule nothing is lendable today (every tool a public
+  conversation lacks is kept at home by a rule, or comes from the owner's configuration). Built when one exists.
+- Cost (AGENTS.md): no new tool; her character brain's descriptions grow by 557 characters (group_focus 166,
+  set_policy 286, understand_person 105), to 20,824 of the 20,900 budget; no per-turn line, one block where a switch
+  is on.

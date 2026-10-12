@@ -210,6 +210,22 @@ Her active and resting groups (ADR-039): she stays present in a few groups and l
 - def `listing` — Her groups by state, with the last day's lines, in words for her.
 - def `set_focus` — She makes a group active or lets it rest.
 
+## `switches`
+
+[src/asuna/switches.py](../../src/asuna/switches.py)
+
+Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
+
+- def `hours_of` — The hours a switch lasts: DEFAULT_HOURS when not given, else a whole number 1..MAX_HOURS.
+- def `set_switch` — One switch per kind and target; setting it again replaces it (a new end, new tools).
+- def `clear`
+- def `on` — The switches on now (not cleared, not past their end).
+- def `muted`
+- def `tools_off` — tool name -> the switch that turned it off in this conversation.
+- def `blocked`
+- def `here_block` — switches_from_program in the switched conversation: what she switched here from home, and until when.
+- def `home_block` — switches_from_program at home: every switch on, and the ones that ended in the last hours (said once a while).
+
 ## `condense`
 
 [src/asuna/condense.py](../../src/asuna/condense.py)

@@ -40,9 +40,13 @@ def admin_here(store, scene, persona=None):
 
 
 def active(store, scene, persona=None):
-    """Whether she is present in this group: her own choice, or her admin role there. Not a group: always."""
+    """Whether she is present in this group: her own choice, or her admin role there. Not a group: always. A muted
+    group (switches.py, ADR-052) is not, whatever its focus, until the mute ends."""
     if (scene or {}).get('kind') != 'group':
         return True
+    from . import switches
+    if switches.muted(store, scene['_id']):
+        return False
     return bool(scene.get('focus_active')) or admin_here(store, scene, persona)
 
 

@@ -50,7 +50,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 
 ```sh
 python3 tools/p2_offline_check.py                            # 交流摘要
-python3 tools/p3_offline_check.py                            # 自然语言安排（plan 工具）
+PYTHONPATH=src python3 tests/test_schedule_rules.py         # 安排的时间换算（时区、夏令时）
 python3 tools/p5_offline_check.py                            # 主动插话
 python3 tools/outbound_image_offline_check.py                # 出站图片（attach_image）
 PYTHONPATH=tests python3 tests/discussion_digest_cases.py    # 讨论整理

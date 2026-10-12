@@ -139,17 +139,6 @@ ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要�
 - def `run_cases`
 - def `main`
 
-## `p3_offline_check.py`
-
-[tools/p3_offline_check.py](../../tools/p3_offline_check.py)
-
-ADR-005 P3 交付前自检：零依赖跑法，操作员不必起 Mongo、不必起 DSH、不必联网。
-
-- def `run`
-- def `compile_all`
-- def `rules_are_stdlib_only`
-- def `main`
-
 ## `p5_offline_check.py`
 
 [tools/p5_offline_check.py](../../tools/p5_offline_check.py)

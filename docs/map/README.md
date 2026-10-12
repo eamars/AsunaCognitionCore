@@ -396,7 +396,6 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`outbound_image_offline_check.py`](../../tools/outbound_image_offline_check.py) — 出站图片附件（QQ 私聊 B 阶段第一步）的离线自检：不需要 Mongo、不需要 pytest、不联网、不发 QQ。
 - [`p1c_offline_check.py`](../../tools/p1c_offline_check.py) — ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。
 - [`p2_offline_check.py`](../../tools/p2_offline_check.py) — ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要闭环那批用例。
-- [`p3_offline_check.py`](../../tools/p3_offline_check.py) — ADR-005 P3 交付前自检：零依赖跑法，操作员不必起 Mongo、不必起 DSH、不必联网。
 - [`p5_offline_check.py`](../../tools/p5_offline_check.py) — ADR-005 P5 离线自检：不需要 Mongo、不需要 pytest，直接跑话题追踪＋主动参与那批用例。
 - [`pack_plugins.py`](../../tools/pack_plugins.py) — Build the core plugin and the persona and channel packages passed with --persona / --channel; no local state or secrets.
 - [`probe_blob.py`](../../tools/probe_blob.py) — Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and non-operator reads are refused, and deleting its memory removes it.

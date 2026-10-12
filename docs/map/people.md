@@ -57,6 +57,7 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 
 Who is who in a scene, as the character reads it.
 
+- def `typed` — Someone's own text with any label-shaped part made plain: [name #4] reads ［name ＃4］, @#4 reads @＃4.
 - def `speech_problem` — What she is about to say that would show the group a label's number or a tag that tags nobody, handed back in the same turn; None when there is none.
 - def `said_line` — One line of what someone wrote, as she reads it: a leading > (the mark of the program's quote and thought lines) is shown full-width, so a message cannot pass for a quote of someone else or for her own past thought.
 - def `safe_name` — A shown name she can read safely: one line, visible characters only, no label characters.
@@ -76,6 +77,7 @@ Who is who in a scene, as the character reads it.
   - `ref`
   - `notes` — What the program noticed about this person, in words: group role, look-alike names, a recent rename.
   - `head`
+  - `heard` — Someone's own text as she reads it: a label they typed made plain, then their real @ as labels.
   - `mentions` — The adapter's real @<number> of a known person (or of her own account) reads as their label.
   - `ensure_roster` — Label everyone who has written in this scene, so a lookup can name them all.
   - `resolve` — The people of this scene a lookup may mean.

@@ -1,7 +1,7 @@
 # ADR-057: Group labels: nothing in a message can pass for one, and the number means nothing
 
-Status: **Proposed 2026-10-12** (owner's plan 1: short random ids instead of #n). Needs the owner's choice and
-Xiaoman's review. Nothing is built.
+Status: **Decided 2026-10-12** (owner): close the two ways a label can be abused at the root; random ids are parked
+while that holds. **Built 2026-10-12** (see Decision).
 
 ## Context
 
@@ -55,3 +55,17 @@ No tool; no per-turn line. The common prompt's sentence about the number gets sh
 
 Replay the 10 imitations found: each reads as text, none as a label. A new person's id is 4 digits, unique in its
 group, and never below 1000 (so an old number and a new id can never be confused).
+
+## Decision (owner, 2026-10-12)
+
+The owner's one risk: she leaked a person's number before, and someone could use it to pass as that person. Two ways,
+both closed without renumbering anyone:
+
+- **Out:** her bare `#n` leaked five times (10-05 to 10-07, real people's numbers). Closed since 10-08 by the program
+  handing such a line back to her before it is sent (`people.speech_problem`); no leak in public since.
+- **In:** a label typed in someone's text read exactly like the program's. Now every label-shaped text someone sent
+  reads `［name ＃4］` / `@＃4` (`people.typed`, through `People.heard`): in their lines, a quoted reply of theirs, the
+  turn's event text, correction snippets and what summaries are made from. Their real @ still becomes the label, after.
+  Labels she wrote herself (her own lines, quoted) and the program's memories are unchanged.
+
+Random ids are parked: with no label able to pass in or leak out, their only gain is that a number reads as no order.

@@ -7,7 +7,8 @@ the same across renames, compaction and memory, and two people with one name nev
 
 Names are made safe before she reads them: one line, visible characters only, and none of the
 characters a label is built from, so a name can never close a label, imitate a handle or start a
-new speaker line. Message text is indented under its label for the same reason. The program, not
+new speaker line. Message text is indented under its label for the same reason, and a label typed in someone's
+text reads as plain text (`typed`), so only the program's labels look like labels. The program, not
 the model, notices look-alike names, recent renames and group roles, and says so after the label.
 Platform account numbers stay in program data: mentions of known people read as their label.
 """
@@ -36,6 +37,18 @@ LABEL = r'\[(?P<name>[^\[\]#\n]*)#\s*(?P<handle>\d{1,6})\s*\]'
 LABEL_MENTION = re.compile(r'@\s*(?P<open>\[\s*)?(?:[^\s@\[\]#]{1,12}\s*)?' + LABEL + r'(?(open)(?:\s*\])?)'
                            r'|@#(?P<bare>\d{1,6})')
 BARE_LABEL = re.compile(LABEL)
+# What someone types that looks like a label: shown as text, so only the program's labels have that form (ADR-057).
+TYPED_LABEL = re.compile(r'\[(?P<name>[^\[\]#\n]*)#(?P<handle>\s*\d{1,6}\s*)\]')
+TYPED_HANDLE = re.compile(r'@#(?=\d)')
+
+
+def typed(text):
+    """Someone's own text with any label-shaped part made plain: [name #4] reads ［name ＃4］, @#4 reads @＃4.
+    Applied before their real @ become labels, so a label she reads in a line is always the program's."""
+    text = TYPED_LABEL.sub(lambda m: '［%s＃%s］' % (m.group('name'), m.group('handle')), text or '')
+    return TYPED_HANDLE.sub('@＃', text)
+
+
 # A label opening her line or one of its lines, without @: it reads like a tag but leaves as a plain name.
 LEADING_LABEL = re.compile(r'(?:^|\n)[ \t]*(\[[^\[\]#\n]*#\s*\d{1,6}\s*\])')
 LEADING_LABEL_PROBLEM = ('开头的「%s」不会 @ 到人（发出去只是名字）：要 @ 他就写 @%s；只是提到他，就直接写名字。')
@@ -325,6 +338,10 @@ class People:
         notes = self.notes(scene_id, doc, moment)
         return self.label(doc) + ('（%s）' % '；'.join(notes) if notes else '')
 
+    def heard(self, scene, text, account=None):
+        """Someone's own text as she reads it: a label they typed made plain, then their real @ as labels."""
+        return self.mentions(scene, typed(text), account)
+
     def mentions(self, scene, text, account=None):
         """The adapter's real @<number> of a known person (or of her own account) reads as their label."""
         platform = channel_kinds.of(scene['_id'])
@@ -476,7 +493,8 @@ class People:
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
                                            {'author': 1, 'text': 1, 'direction': 1}) if parent_id else None
         if parent:
-            quote = ' '.join(self.mentions(scene, parent.get('text'), account).split())
+            said = self.mentions if parent.get('direction') == 'outbound' else self.heard
+            quote = ' '.join(said(scene, parent.get('text'), account).split())
             lines.append('  > 回复 %s：%s' % (self.speaker(scene, parent.get('author')), excerpt(quote, REPLY_EXCERPT)))
             if parent.get('direction') == 'outbound':
                 # A reply to her own line: what she thought when she said it, as she wrote it (reasons.py, ADR-043).
@@ -484,7 +502,7 @@ class People:
                 then = for_message(self.store, parent['_id'])
                 if then:
                     lines.append('  > （你说那句时心里想的：%s）' % ' '.join(then.split()))
-        body = self.mentions(scene, row.get('text') or '', account)
+        body = self.heard(scene, row.get('text') or '', account)
         lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
         from .stickers import PICTURE_FETCH_SECONDS, recognized
         from .vision import line_refs, media_source, pull_bytes
@@ -592,7 +610,8 @@ class People:
             row['mentions'] = ['你' if str(n) == str(account) else
                                self._author(scene, self.account_person((scene or {}).get('_id'), n)) for n in ids]
         if isinstance(row.get('text'), str) and scene:
-            row['text'] = self.mentions(scene, row['text'], account)
+            said = self.mentions if row.get('direction') == 'outbound' else self.heard
+            row['text'] = said(scene, row['text'], account)
         if isinstance(row.get('reply_to_message'), dict):
             self._row(scene, row['reply_to_message'])
         return row
@@ -629,7 +648,7 @@ class People:
             for row in experience.get('messages') or []:
                 self._row(scene, row)
         if isinstance(context.get('event'), dict) and isinstance(context['event'].get('text'), str):
-            context['event']['text'] = self.mentions(scene, context['event']['text'], scene.get('channel_account_id'))
+            context['event']['text'] = self.heard(scene, context['event']['text'], scene.get('channel_account_id'))
         for fact in context.get('memories') or []:
             self._memory(fact, current, scene)
         return context
@@ -664,7 +683,7 @@ class People:
             whom = self._author(scene, item.get('target_author')) if item.get('target_author') else None
             said = ' '.join(str(item.get('snippet') or '').split())
             if scene:
-                said = self.mentions(scene, said, scene.get('channel_account_id'))
+                said = self.heard(scene, said, scene.get('channel_account_id'))
             out.append(('%s 更正了自己' % who if item.get('self_correction') else
                         '%s 更正了 %s' % (who, whom) if whom else '%s 提出了更正' % who)
                        + ('：「%s」' % excerpt(said, REPLY_EXCERPT) if said else ''))

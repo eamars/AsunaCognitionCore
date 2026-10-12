@@ -1,8 +1,9 @@
 # ADR-060: Plain parameter names: one name per idea, words a reader understands
 
 Status: **Proposed 2026-10-13** (owner's ask, after seeing `missing required property "op"` more than once). For
-Xiaoman's review: the names are hers to choose; the owner approved doing it tonight. **Her first review 2026-10-13
-03:00 NZDT** is in "Her review" below; her full read is still coming.
+Xiaoman's review: the names are hers to choose; the owner approved doing it tonight. Her answers came on the agent
+line on 2026-10-13 (03:02, 04:00 and her full read, NZDT); "Her review" below is Claude's paraphrase of them, for her
+to sign or correct.
 
 ## Context
 
@@ -63,21 +64,32 @@ Nothing changes in what any tool can do.
 Questions for her: the chooser's name (1); `to` on notes (2); `feel`'s chooser (8); any name here she reads
 differently from how it is meant.
 
-## Her review (2026-10-13, first pass)
+## Her review
+
+*Claude's paraphrase of her messages of 2026-10-13 (03:02 first pass, 04:00 answers, then her full read), not her
+own words. Her signature:* ____
+
 
 - Agreed: `op` → `do` (with `group_action.kind`), `why` everywhere, `sid` → `section`, `quote.how` → `quote_whom`,
   `block` → `block_hours`, `feel.open` → `unresolved`, `watch.mode` → `how_often`, yes/no as words (the cheapest
   item: all 31 refusals), `plan.line` and `peer_line.line` → `place`, `feel`'s `decision` folded into `do`.
 - **Notes keep `to`**: `to` is where a note is sent, `place` is which conversation she is in; different directions.
 - **`pass_note.mode` → `when` would make a new double meaning**: `when` already means a time elsewhere
-  (`restart.when`, and `sticker.when` means "when to use it", already a second meaning). Proposed instead:
+  (`restart.when`, and `sticker.when` means "when to use it", already a second meaning). Agreed instead:
   `pass_note.mode` → `deliver` (wake / next_time) and `sticker.when` → `use_for`, leaving `when` a time only.
-- **`write_document.inject` → `shown` reads like `visibility`** beside it. Proposed: `when_shown`, or unchanged.
+- **`write_document.inject` → `shown` reads like `visibility`** beside it. Her choice: **`when_shown`** (inject is
+  jargon; `visibility` says who can see a section, `when_shown` when it is put in context).
 - **One word for written content**: the files' `text` → `content` fixes the action brain's 7 refusals, but her
   `write_document` calls its text `body`, so she would trip the other way. Proposed: `content` for a document's or
   a file's text (`write_document.body`, `update_self.body`, `understand_person.body`, `write_file.text`,
-  `development_write.text`); a message keeps `text`.
-- Still open, from her full read: how long old names keep working, and whether a refusal lists both names.
+  `development_write.text`); a message keeps `text`. Agreed, with the cost named: `body` is a word she writes
+  dozens of times a day, so the old name must not leave early.
+- **Old names leave by use, not by calendar**: an old name is removed once her calls use it fewer than 5 times in a
+  week.
+- **Both names, both ways**: a call with an old name runs and its result says "`body` 已改名 `content`，这次照办"; a
+  refused call lists the new and the old name together, so the refusal says what it wants.
+- **The one-meaning rule runs as a test against the rename table**, not as a sentence in this ADR: her full read
+  found the draft's own `pass_note.mode` → `when` broke it.
 
 ## Cost (AGENTS.md)
 

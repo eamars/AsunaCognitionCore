@@ -29,7 +29,7 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 018 | Notes between her conversations | Open | Notes trusted from home, cautioned and tool-limited from public; live Web review pending | [folder](ADR-018/README.md) |
 | 019 | Linux deployment and Docker | Built | The plugin inherits DSH's platform layer; Docker is a deployment layer on top | [folder](ADR-019/README.md) |
 | 020 | Several characters at once | Open | One Host and page per character, a database per profile; M1, M2, M4, M5 built, Web review pending | [folder](ADR-020-several-characters/README.md) |
-| 021 | Night self-development in stages | Built | Night stages one at a time; a change needing a Host restart waits for the owner | [folder](ADR-021-night-self-development/README.md) |
+| 021 | Night self-development in stages | Built | Night stages one at a time; a change needing a Host restart is hers to request (ADR-034) | [folder](ADR-021-night-self-development/README.md) |
 | 022 | Catching up missed QQ messages | Open | History fetched by the adapter, old lines marked and gated; off until the owner names routes | [folder](ADR-022-qq-catchup/README.md) |
 | 023 | Chatbot security by design | Archived | Not adopted (owner: no extra burden on her), nor the lighter measures | archived, git d90d7866 |
 | 024 | What she sees in a group | Built | Member lists by the adapter, a slice per turn; trigger and recent pictures; animated pictures as a contact sheet | [folder](ADR-024-what-she-sees-in-a-group/README.md) |
@@ -65,6 +65,6 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 054 | Tool wording from her mistakes | Built | Each confusable tool says when to use it rather than its sibling | [folder](ADR-054-tool-wording-from-her-mistakes/README.md) |
 | 055 | Fewer tools, same abilities | Built | `task` and `ideas` merge the follow-up and notebook tools | [folder](ADR-055-fewer-tools-same-abilities/README.md) |
 | 056 | Per-turn characters | Built | Fixed text once in the system prompt; clock times in blocks; only what changed | [folder](ADR-056-per-turn-characters/README.md) |
-| 057 | Group labels | Open | Nothing typed can pass for a label; the number authenticates nothing; random ids parked | [folder](ADR-057-group-labels/README.md) |
+| 057 | Group labels | Built | Nothing typed can pass for a label; the number authenticates nothing, so the plan is closed; random ids parked | [folder](ADR-057-group-labels/README.md) |
 | 058 | Heartbeat dice | Built | The heartbeat rolls a die (rest, interesting, self development, self evaluation, review, reach out) with tables she sets | [folder](ADR-058-heartbeat-dice/README.md) |
 | 059 | Reading the database, git and ssh from her home tasks | Built | Owner's keys and logins, her own name on commits; no read-only database user; `asuna.dbread` reads only and repeats its query, 零行 when empty; skill asuna-database | [folder](ADR-059-home-reach/README.md) |

@@ -62,8 +62,8 @@ tuning to one model. DSH alpha.2's DeepSeek adapter can announce tool changes in
 
 - The first turn of each conversation after the change re-reads once; after that a turn re-reads only the new tail.
 - A home turn lists about 29 tools (11K → 16K characters of tool text, read from cache). Trimming long tool
-  descriptions and moving repeated per-turn text into the system prompt are the next steps (owner and Xiaoman
-  agreed).
+  descriptions and moving repeated per-turn text into the system prompt were the next steps (owner and Xiaoman
+  agreed), done by ADR-054 and ADR-056.
 - A call outside the turn costs one round with a refusal she learns from; the tool never runs outside its turn.
 - The action brain is unchanged (`digest_authorized_discussion` and the integration tools keep their grants; her
   view).

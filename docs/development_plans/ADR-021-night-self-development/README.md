@@ -42,8 +42,9 @@ self-development schedule at night that allows multi-stage work and evaluation.
   newer publication of a project marks older ones SUPERSEDED. One receipt from 2026-10-04, older than that marking,
   still read HOST_RESTART_REQUIRED and was marked SUPERSEDED by hand.
 - Python publications already take effect without the owner: the worker is replaced when idle and the host offers her
-  a self-improvement turn once the change runs (`host._complete_activations`). Until D4 is settled, a stage that
-  publishes a JS, composition or dependency change stops the later stages until someone restarts the Host.
+  a self-improvement turn once the change runs (`host._complete_activations`). A stage that publishes a JS,
+  composition or dependency change stops the later stages until the Host restarts; since ADR-034 she requests that
+  restart herself.
 
 ## 4. D4: why the first design was withdrawn, and what a design must answer
 

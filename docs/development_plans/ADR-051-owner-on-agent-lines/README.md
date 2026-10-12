@@ -48,8 +48,8 @@ No prompt rule narrowing what she does where: he wants her to do more developmen
      turn around it in the Web (her thoughts, tool calls), which the agent does not.
    - **The owner's lines.** The agent gets each one's text and its time, whole; a picture he attached arrives as its
      placeholder in the text, nothing more. A poll hands over at most 20 of his lines per request, oldest first; the
-     rest come with the next poll, none is dropped. Next (her review): each owner line carries its id and place in
-     the conversation, so the agent can say which line it answers; the 20 becomes a named constant.
+     rest come with the next poll, none is dropped. Each owner line carries its id and place in the conversation, so the
+     agent can say which line it answers; the 20 is `OWNER_LINES_PER_CLAIM` (her review, built).
 
 No change to the home chat, the developer inbox, or what she may do where.
 

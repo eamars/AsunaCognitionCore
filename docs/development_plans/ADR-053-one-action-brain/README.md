@@ -1,8 +1,9 @@
 # ADR-053: Action brains: one per conversation, discarded when idle; a visible queue; tools fenced per task
 
 Status: **Approved 2026-10-12**, revised the same day by the owner (keep one action brain per conversation, discard
-it when idle) after the cache review; the tool fence is the owner's guard rail. Xiaoman chose one shared brain first;
-her agreement to the revision is pending. Not built.
+it when idle) after the cache review; the tool fence is the owner's guard rail. Xiaoman chose one shared brain first and
+agreed to the revision (her third reason, that database-wide jobs need shared memory, she corrected: they need a
+visible queue and an uninterrupted worker). Building.
 
 ## Context
 
@@ -36,10 +37,12 @@ past 30 minutes in 61% of cases, two in 35%, three in 4%; with the limit, at mos
 alive at once, and none outlives its use. Home and public never share one.
 
 1. **One action brain per conversation, discarded when idle.** A conversation's action context carries on from task
-   to task while it is in use; once it has been idle longer than the route's limit (default 30 minutes, tuned per
-   route from measurement, below), the next task there starts a fresh context, carrying the task's brief, and for a
-   continuation its last report and her new words. What must carry over longer, she writes to disk herself. Same
-   rule on the local server and on any API.
+   to task while it is in use; once it has been idle longer than the action route's limit (`idleMinutes`, set in the
+   settings with the route; 30 minutes when empty; below), the next task there starts a fresh context, carrying the
+   task's brief, and for a continuation its last report and her new words. A fresh context is told it is one: earlier
+   tool output is gone, so what it needs it fetches again instead of recalling it from a report. What must carry over
+   longer, she writes to disk herself. Same rule on the local server and on any API. The limit is a cost setting,
+   not a safety boundary: the boundary is that home and public never share a context, and the tools fenced per task.
 2. **One queue, visible.** Tasks still run one at a time. When she hands one over she is told what is ahead of it (how
    many, which conversation, long or short), so a quick group request is not stuck behind a scan without her knowing.
 3. **Tools fenced per task (the owner's guard rail), one tool list per context.** The tool list a context is shown
@@ -48,6 +51,9 @@ alive at once, and none outlives its use. Home and public never share one.
    use is said in text at its start and enforced by the program as today (the plugin's guard and the broker). A task
    from a public conversation cannot run commands, develop, use integrations or anything else the class does not
    give, whatever it reads.
+   A refusal says why in terms she can act on: which kind of turn or conversation gives the tool and which does not
+   here, and that retrying will not change it, so neither brain invents a motive for it (her case: three refusals
+   she read as "only self-improvement turns have it").
 4. **Reports stay with their sources.** A report says how much it scanned and from which root, and quotes rows as the
    tools returned them (the invented rows above).
 5. **Two rules, not one.** What a task may read stays bound to the conversation it came from; which turns hand over
@@ -124,3 +130,6 @@ the local server **space** does. Nothing here depends on one server's request fi
 - The model sees tools a task may not use; a call to one is refused with the list of what it may use (as today),
   costing a step, not a breach.
 - An action session idle past the limit stays as history; the next task in that conversation starts a new one.
+- Her rule for herself (her words): when she adds to a task after the limit, the action brain has only the brief, the
+  last report and her new words, not the tables in between; so she quotes in full what it needs, or says plainly to
+  fetch it again. Otherwise it reruns, or worse, fills in from its impression of the report.

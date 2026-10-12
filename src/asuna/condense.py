@@ -127,10 +127,9 @@ def main_session(store, scene, persona):
 
 # ---- her choice -------------------------------------------------------------------------------------------------
 def mark(store, scene, ep, moment=None):
-    from .state import now
     moment = moment or datetime.now(timezone.utc)
     store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_wanted': {
-        'at': now(), 'episode_id': ep['_id'], 'turn': ep.get('turn_kind') or ep.get('episode_kind')}}})
+        'at': moment.isoformat(), 'episode_id': ep['_id'], 'turn': ep.get('turn_kind') or ep.get('episode_kind')}}})
     store.audit(ep['_id'], 'condense.wanted', {'scene_id': scene['_id']}, ep['scope_key'])
     minutes = quiet_minutes(store, scene['_id'], moment)
     return {'done': '记下了：等这个群安静下来就压一压这段对话',
@@ -152,7 +151,6 @@ def marked(store):
 # ---- the plan's look --------------------------------------------------------------------------------------------
 def look(store, persona, compact, moment=None):
     """Condense every marked group that is due. compact(session_id, scene_id, cwd) → the plugin's answer dict."""
-    from .state import now
     moment = moment or datetime.now(timezone.utc)
     done = []
     for scene in marked(store):
@@ -174,7 +172,7 @@ def look(store, persona, compact, moment=None):
             store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
         if answer.get('compacted') or answer.get('reason') == 'nothing_to_compact':
             store.db.scenes.update_one({'_id': scene['_id']}, {
-                '$set': {'condensed_at': now(), **({'conversation_tokens': None} if answer.get('compacted') else {})},
+                '$set': {'condensed_at': moment.isoformat(), **({'conversation_tokens': None} if answer.get('compacted') else {})},
                 '$unset': {'condense_wanted': ''}})
             done.append(scene['_id'])
         store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': found[0],

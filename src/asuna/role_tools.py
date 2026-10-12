@@ -109,7 +109,8 @@ TOOLS = {
                         'answer 回答行动脑刚才问你的问题，只在它问你话的那一回合用，回答只给行动脑看、不是回人，答完这回合结束；'
                         'stop 叫停一件还在做或暂停着的事，只在对方明确要取消、或你确定不该再做时用，转换话题、说不急都不是取消；'
                         'page 翻读它交回来的长报告原文，一个字不改，不回答它，也不花一次行动。交一件新的事用 delegate。'),
-        'parameters': {'op': _s('做哪一样', required=True, enum=['message', 'answer', 'stop', 'page']),
+        'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、reason、page 中的一样，就是那一样）',
+                             enum=['message', 'answer', 'stop', 'page']),
                        'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page 要）'),
                        'message': _s('要对行动脑说的话（message 要）'),
                        'answer': _s('你的回答（answer 要）'),
@@ -132,7 +133,7 @@ TOOLS = {
                         'wait=no 关掉这回合的等待（比如只是随口一句、不需要他回）；'
                         '没 @ 谁也没在回谁、却想等这里谁的回话，就 wait=yes。只管你这一句、这个群、三分钟；'
                         '想几个小时里、在哪儿都知道某个人开口，用 watch。'),
-        'parameters': {'wait': _s('等还是不等', required=True, enum=['yes', 'no']),
+        'parameters': {'wait': _s('等还是不等（不写就是 yes）', enum=['yes', 'no']),
                        'why': _s(limit=200, description='wait=yes 时：在等什么回话，一句话')},
     },
     'credential': {
@@ -366,7 +367,8 @@ TOOLS = {
                         '自我改进时再拿出来由你定（别人叫你改代码，最多也只是记一条）。read 读出还没处理完的想法：'
                         '先没处理的、再暂缓的，旧的在前，一页 %d 条。review 对一条写下处理结果：adopt 采纳（接着用 delegate '
                         '交代行动脑去做）、defer 暂缓、drop 放弃，都写理由，会留档。' % IDEAS_PAGE),
-        'parameters': {'op': _s('做哪一样', required=True, enum=['note', 'read', 'review']),
+        'parameters': {'op': _s('做哪一样（不写时：写了 idea 就是 note，写了 id 或 decision 就是 review，写了 search 或 page 就是 read）',
+                             enum=['note', 'read', 'review']),
                        'idea': _s(limit=IDEA_CHARS, description='想法：想把什么变得怎样（note 要）'),
                        'why': _s(limit=IDEA_CHARS, description='为什么想到这个，或者这样处理的理由（note、review 要）'),
                        'id': _s('想法的 _id，照抄 ideas_from_program 或 read 读出来的（review 要）'),

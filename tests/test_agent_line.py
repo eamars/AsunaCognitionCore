@@ -161,14 +161,15 @@ def test_the_owner_on_a_line_is_his_own_voice_and_the_agent_sees_it(served, monk
         {'event_id': 'web-1', 'scene_id': SCENE, 'person_id': owner, 'text': '这条线上的事我也看着'}, persona='P1')
     row = store.db.messages.find_one({'scene_id': SCENE, 'direction': 'inbound'})
     assert row['author'] == owner
-    assert cli.poll(mine, 0) == (['主人好。'], 'open', ['这条线上的事我也看着'])        # her answer passes the publication check
+    got, state, shown = cli.poll(mine, 0)
+    assert (got, state) == (['主人好。'], 'open') and shown[0].endswith(' 这条线上的事我也看着') and shown[0].startswith('#')
     assert cli.poll(mine, 0) == ([], 'open', [])                                     # each owner line once
     lines.set_line(store, SCENE, closed=True, choice='until_reopened')
     store.db.messages.insert_one({'_id': 'in-web-2', 'schema_version': 1, 'scene_id': SCENE, 'direction': 'inbound', 'author': owner,
                                   'text': '还有一件', 'scene_seq': 99})
     assert cli.poll(mine, 0) == ([], 'closed', [])                                   # a closed line shows the agent nothing
     lines.set_line(store, SCENE, closed=False)
-    assert cli.poll(mine, 0) == ([], 'open', ['还有一件'])
+    assert cli.poll(mine, 0) == ([], 'open', ['#99 还有一件'])
 
 
 def test_the_owner_on_a_line_works_in_his_own_workspace(store, tmp_path):

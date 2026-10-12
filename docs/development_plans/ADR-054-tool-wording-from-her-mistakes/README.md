@@ -1,7 +1,8 @@
 # ADR-054: Tool wording and calls, from her real mistakes
 
 Status: **Accepted 2026-10-12**: the owner's direction (word each tool so her first guess lands on the right one);
-Xiaoman's review taken (her numbers corrected two of mine). Not built.
+Xiaoman's review taken (her numbers corrected two of mine). Built 2026-10-12; live after her next restart. The
+limits rule covers free text she writes (copied identifiers and safety caps of 20,000 or more are left out).
 
 ## Context
 

@@ -241,6 +241,8 @@ class Channels:
     def route_target(self, channel_id, route_id):
         return self.store.config['channels'][channel_id]['routes'][route_id]['target']
 
+    OWNER_LINES_PER_CLAIM = 20       # the owner's lines one outbox claim hands an agent; the rest come with the next
+
     def owner_lines(self, channel_id, route_id):
         """What the owner wrote on this line from the Web (ADR-051) that its agent has not been shown yet, oldest
         first, each shown once: the agent never reads her answer to words it never saw."""
@@ -250,13 +252,14 @@ class Channels:
         if not channel_kinds.owner_joins(scene_id):
             return []
         shown = []
-        while len(shown) < 20:
+        while len(shown) < self.OWNER_LINES_PER_CLAIM:
             row = self.store.db.messages.find_one_and_update(
                 {'scene_id': scene_id, 'direction': 'inbound', 'author': owner, 'shown_on_line': {'$exists': False}},
                 {'$set': {'shown_on_line': now()}}, sort=[('scene_seq', 1)])
             if not row:
                 break
-            shown.append({'text': row.get('text') or '', 'at': row.get('received_at')})
+            shown.append({'id': row['_id'], 'seq': row.get('scene_seq'), 'text': row.get('text') or '',
+                          'at': row.get('received_at')})
         return shown
 
     def line_closed(self, channel_id, route_id):

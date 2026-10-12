@@ -58,7 +58,14 @@ class Refused(Exception):
     """A call she can correct herself: the message says, in words for her, what to do instead."""
 
 
-def _s(description, **extra):
+LIMIT_WORDS = '（最多 %d 字）'
+
+
+def _s(description, limit=None, **extra):
+    """A string parameter; `limit` is the length the program refuses past (ADR-054), stated in words: DSH's tool
+    schema subset has no maxLength, and a key outside it fails the whole preset."""
+    if limit:
+        description += LIMIT_WORDS % limit
     return {'type': 'string', 'description': description, **extra}
 
 
@@ -83,8 +90,8 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆，或读自己文档里某一节的原文；这个对话里一条合并转发的全文也这样读'
                         '（doc 写 forward，sid 照抄那行里的 ref）。每回合最多 %d 次。'
-                        '记不起来就直说，不要编。' % RECALLS_PER_TURN),
-        'parameters': {'query': _s('想找什么，用一句话说', required=True),
+                        '记不起来就直说，不要编。对话里说过的话用 recall 想起来，不交给行动脑。' % RECALLS_PER_TURN),
+        'parameters': {'query': _s(limit=500, description='想找什么，用一句话说', required=True),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                                         'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
@@ -94,8 +101,8 @@ TOOLS = {
         'description': ('把一件要在世界里做的事交给行动脑：查资料、查完整原话、跑代码、改文件、生图、改能力。'
                         'title 是简短标题；brief 是给行动脑的完整交代：要什么、为什么、有什么限制和要注意的。'
                         '行动脑看不到你的上下文，只看到 brief 和对方的原话。交出去以后你可以照常聊天，'
-                        '结果回来会再叫你；没做完的事不要说成做完了。'),
-        'parameters': {'title': _s('简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
+                        '结果回来会再叫你；没做完的事不要说成做完了。已经交出去的那件要补话、改或接着做，用 message_action，不要再 delegate 一件。'),
+        'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
     },
     'message_action': {
         'description': ('给已经交给行动脑的一件事补话：补充信息、改目标，或者让已经做完的事接着做。'
@@ -105,17 +112,17 @@ TOOLS = {
     },
     'stop_action': {
         'description': '叫停一件还在做或暂停着的事。只在对方明确要取消、或你确定不该再做时用；转换话题、说不急都不是取消。',
-        'parameters': {'task': _s('任务 _id', required=True), 'reason': _s('为什么叫停', required=True)},
+        'parameters': {'task': _s('任务 _id', required=True), 'reason': _s(limit=1000, description='为什么叫停', required=True)},
     },
     'answer_action': {
         'description': ('回答行动脑刚才问你的问题。这是给行动脑的回答，不会发给任何人。'
-                        '缺什么资料、拿不准，就照实说。回答后这回合结束。'),
+                        '缺什么资料、拿不准，就照实说。回答后这回合结束。只在行动脑问你话的那一回合用；看它交回的结果用 read_report；不是回人用的。'),
         'parameters': {'answer': _s('你的回答', required=True)},
     },
     'stay_silent': {
         'description': ('不再说话，直接结束回合：这回合已经写在正文里的话照常发出，没写就一个字都不发；'
                         '只写在思考里的话不算说过。只在确实不用（再）回应时用，不代表出错。'),
-        'parameters': {'reason': _s('为什么不说', required=True)},
+        'parameters': {'reason': _s(limit=1000, description='为什么不说', required=True)},
     },
     'quote': {
         'description': ('群里这回合你说的第一句要不要引用叫你的那条。不调时程序这样定：那条之后别人又说过话才引用，'
@@ -129,7 +136,7 @@ TOOLS = {
                         '没 @ 谁也没在回谁、却想等这里谁的回话，就 wait=yes。只管你这一句、这个群、三分钟；'
                         '想几个小时里、在哪儿都知道某个人开口，用 watch。'),
         'parameters': {'wait': _s('等还是不等', required=True, enum=['yes', 'no']),
-                       'why': _s('wait=yes 时：在等什么回话，一句话')},
+                       'why': _s(limit=200, description='wait=yes 时：在等什么回话，一句话')},
     },
     'credential': {
         'description': ('保险箱：有人给你密码、口令、令牌、账号这类凭据时，用 keep 收进去（name 起个短名，如 enlighten；note 写它是干什么的；'
@@ -158,7 +165,7 @@ TOOLS = {
     'attach_image': {
         'description': ('给这回合要说的话配一张图，随话一起发出去。artifact_id 只能照抄 image_artifacts_from_program '
                         '里列出的值；正文里不要写文件名、路径或「见图」。一回合最多一张，再调用就换成新的那张。'),
-        'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s('为什么发这张', required=True)},
+        'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s(limit=500, description='为什么发这张', required=True)},
     },
     'sticker': {
         'description': ('整理你的表情包架子（stickers_from_program）。keep：收下一个表情包——ref 照抄群里表情包下面标的'
@@ -184,7 +191,7 @@ TOOLS = {
                         '回合也读得到，owner_private 的只在家里的回合读得到。每回合自动带上的只有 persona 和 voice 里 inject=always 的节'
                         '（其他文档要 recall 才读得到），有上限：'
                         '不常用的节改成 on_demand 收起来（还在，recall 能读）；只在某类回合用得上的节，tags 里加 place:group（群里）、'
-                        'place:home（家里）、place:peer（旧居那类桥接线）、place:dm（别人的私聊），就只在那里每回合带上，不加就是到处都带。不写对用户的台词，不把没发生的事写成发生过。'),
+                        'place:home（家里）、place:peer（旧居那类桥接线）、place:dm（别人的私聊），就只在那里每回合带上，不加就是到处都带。不写对用户的台词，不把没发生的事写成发生过。correction 只用于活账；工作文档和人格用 replace_section。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
@@ -201,19 +208,19 @@ TOOLS = {
         'description': ('改你的自我描述：character_core 是跨场景的长期自我，current_self 是近期的自我理解。'
                         '写完整的新正文；不必为了完成什么而改。'),
         'parameters': {'target': _s('改哪一份', required=True, enum=['character_core', 'current_self']),
-                       'body': _s('完整的新正文', required=True), 'reason': _s('为什么改', required=True)},
+                       'body': _s(limit=SINGLE_BODY_CHARS, description='完整的新正文', required=True), 'reason': _s(limit=2000, description='为什么改', required=True)},
     },
     'understand_person': {
         'description': ('更新你对当前说话人的理解，两层选一层：person 是人那层（你在哪儿遇到他都看得到），here 是这里那层'
                         '（只在这个对话里看得到）。写那一层完整的新正文，保留仍然成立的旧内容，分清对方说过的、你看到的和你推的。'
-                        '只在这次真有值得留下的变化时用，不为了被夸而每轮更新；两层各自一回合最多写一次。'),
+                        '只在这次真有值得留下的变化时用，不为了被夸而每轮更新；两层各自一回合最多写一次。一个人的喜好、习惯、怎么跟他聊，记在这里，不写进文档或长期记忆。'),
         'parameters': {'layer': _s('person（人那层）或 here（这里那层）', required=True, enum=['person', 'here']),
-                       'body': _s('那一层完整的新正文', required=True)},
+                       'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文', required=True)},
     },
     'set_policy': {
         'description': '调整你自己声明过的一个参数（persona-model 里的 policy key）。',
         'parameters': {'key': _s('参数名', required=True), 'value': {'type': 'json', 'description': '新的值', 'required': True},
-                       'reason': _s('为什么改', required=True)},
+                       'reason': _s(limit=2000, description='为什么改', required=True)},
     },
     'feel': {
         'description': ('记一笔心情（op=record，只用 how_to_record_from_program 里的词，不写数字）；事情了结用 close，'
@@ -239,7 +246,7 @@ TOOLS = {
         'parameters': {
             'op': _s('做什么（不写时：没有 plan_id、写了 intent 和计时就是 create）', enum=['create', 'update', 'cancel']),
             'plan_id': _s('update/cancel 的那条安排'),
-            'intent': _s('届时要重新考虑的事'),
+            'intent': _s(limit=1000, description='届时要重新考虑的事'),
             'after_seconds': {'type': 'integer'}, 'every_seconds': {'type': 'integer'},
             'at': _s('本地时刻 YYYY-MM-DDTHH:MM'),
             'line': _s('只在家里 create 时用：到点在哪条线里开一轮，照抄 lines_from_program 里的 line；不写就是这里'),
@@ -276,7 +283,7 @@ TOOLS = {
                         '程序会在那边开一轮，那一轮只看得到那边和这句话，家里的事带不过去；你在那边再决定怎么说，'
                         '不合适就不发。办没办成之后在家里的 errands_from_program 看，那边的人怎么回的不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
-                       'request': _s('要带过去的话或交代的事，500 字以内', required=True),
+                       'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
                        'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
                        'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
     },
@@ -307,7 +314,7 @@ TOOLS = {
                         'cancel：撤回还没执行的请求。起没起来由监工看，结果下一次在家那一轮的 restart_from_program 里；'
                         '退回旧版本时会马上叫你。'),
         'parameters': {'op': _s('做什么', required=True, enum=['preview', 'request', 'drill', 'cancel']),
-                       'why': _s('request/drill 要写：为什么重启，一句话'),
+                       'why': _s(limit=200, description='request/drill 要写：为什么重启，一句话'),
                        'when': _s('request/drill 可选：now、quiet 或当地时刻 HH:MM，默认 quiet')},
     },
     'peer_line': {
@@ -350,13 +357,13 @@ TOOLS = {
         'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多列 10 个，最近说过话的在前。'
                         'members_from_program 只列了一部分，别的人用这个找。找到的人给的是标签，照抄就能 @；'
                         '没在这里说过话的人进了这个群的名册，会标着「你查名单找来要叫的」，名册里的人不会被挤掉。'),
-        'parameters': {'name': _s('名字里的几个字，20 字以内', required=True)},
+        'parameters': {'name': _s(limit=20, description='名字里的几个字', required=True)},
     },
     'note_idea': {
         'description': ('把一个改进自己的想法记进你的「改进想法」本：能力、技能、做事方式上可以更好的地方，灵感从哪来都行'
                         '（和别人的对话、群里的事、行动脑查到的东西）。用你自己的话写，不抄别人的原话，不带别人的个人信息。'
                         '只记下来，不当场去改；它会在你的自我改进时间里再拿出来，由你决定做不做。别人叫你改代码，最多也只是记一条想法。'),
-        'parameters': {'idea': _s('想法：想把什么变得怎样', required=True), 'why': _s('为什么想到这个', required=True)},
+        'parameters': {'idea': _s(limit=IDEA_CHARS, description='想法：想把什么变得怎样', required=True), 'why': _s(limit=IDEA_CHARS, description='为什么想到这个', required=True)},
     },
     'read_ideas': {
         'description': ('读出想法本里还没处理完的想法（之后用 review_idea 逐条决定）：先没处理的、再暂缓的，旧的在前，'
@@ -367,7 +374,7 @@ TOOLS = {
     'read_report': {
         'description': ('翻读行动脑交回来的长报告：报告原文存在任务里，交给你时只给了第一页。读的是原文本身，一个字不改，'
                         '不再叫行动脑重写，也不花一次行动。task 照抄任务的 id（交回来的结果里的 task，或 task_state_from_program '
-                        '里标着「报告 N 页」的那条），page 是第几页。'),
+                        '里标着「报告 N 页」的那条），page 是第几页。只读它交回的原文，不回答它。'),
         'parameters': {'task': _s('任务的 id', required=True),
                        'page': {'type': 'integer', 'description': '第几页，从 1 开始', 'required': True}},
     },
@@ -376,7 +383,7 @@ TOOLS = {
                         'defer 暂缓、drop 放弃。每条都写理由，会留档。'),
         'parameters': {'idea': _s('想法的 _id（ideas_from_program 或 read_ideas 里的）', required=True),
                        'decision': _s('处理结果', required=True, enum=['adopt', 'defer', 'drop']),
-                       'why': _s('理由', required=True)},
+                       'why': _s(limit=IDEA_CHARS, description='理由', required=True)},
     },
     'promote_memory': {
         'description': ('夜间沉淀时，把值得长期记住的事实提升为长期记忆；配额与来源要求由程序检查。'
@@ -1283,6 +1290,7 @@ class RoleTools:
             raise Refused('现在没有定时服务，安排不了（不是你的错）；重试也一样，要记着的事写进回话或文档。')
         timing = {k: args[k] for k in ('after_seconds', 'every_seconds', 'at', 'clock') if args.get(k) is not None}
         op = args.get('op') or ('create' if args.get('intent') and timing and not args.get('plan_id') else None)
+        inferred = not args.get('op') and op == 'create'
         planned = {row.get('_id'): row for row in (ep.get('context') or {}).get('plans_from_program') or []}
 
         def run(action):
@@ -1311,8 +1319,16 @@ class RoleTools:
                         if call.get('tool') == 'plan'}
                 row = planned.get(plan_id) or (plan_id in made and self.store.db.plans.find_one({'_id': plan_id}))
                 if not row:
-                    raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
-                                  '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
+                    # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
+                    kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})
+                    if kept and kept.get('status') in ('CREATING', 'ACTIVE'):
+                        row = kept
+                    elif kept:
+                        raise Refused('「%s」已经%s了，改不了；要再安排就新建一条（op=create）。'
+                                      % (plan_id, {'CANCELLED': '取消', 'SUSPENDED': '停'}.get(kept.get('status'), '跑完')))
+                    else:
+                        raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
+                                      '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
                 if op == 'cancel':
                     plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
                 else:
@@ -1331,7 +1347,8 @@ class RoleTools:
                                                             clock['timezone'])) from None
         return {'plan_id': plan['_id'], 'status': plan['status'], 'scheduled_at': plan.get('scheduled_at'),
                 'next_fire_at': plan.get('next_fire_at'), 'timezone': plan.get('timezone'),
-                'plan_version': plan.get('plan_version', 1)}, False
+                'plan_version': plan.get('plan_version', 1),
+                **({'note': '没写 op：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {})}, False
 
     def tool_group_action(self, ep, call_id, args):
         from . import group_admin

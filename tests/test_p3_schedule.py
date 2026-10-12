@@ -151,3 +151,22 @@ def test_foreign_plan_update_is_denied(store, driven):
                       'plan-p3-1', {'plan_id': 'plan-p3-1', 'intent': '替别人改'})
 
 
+
+
+def test_her_plan_tool_reaches_a_plan_her_list_leaves_out_and_says_why_for_a_finished_one(store, driven):
+    """ADR-054: her list shows a few plans; one of this conversation's it leaves out is still hers; a cancelled or
+    finished one says it cannot be changed; a create she did not name is said back."""
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    from asuna.role_tools import Refused
+    p2.seed_real(store)
+    coordinator = Coordinator(store, FakeLane(store, []))
+    coordinator.scheduler = driven
+    ep = {**EP, 'persona': 'P1', 'context': {'plans_from_program': []}, 'tool_calls': {}}
+    plan = driven.create(EP, DAILY)
+    cancelled, _ = coordinator.tools.tool_plan(ep, 'c1', {'op': 'cancel', 'plan_id': plan['_id']})
+    assert cancelled['status'] == 'CANCELLED'
+    with pytest.raises(Refused, match='已经取消了，改不了'):
+        coordinator.tools.tool_plan(ep, 'c2', {'op': 'update', 'plan_id': plan['_id'], 'intent': '算了还是要'})
+    made, _ = coordinator.tools.tool_plan(ep, 'c3', {'intent': '一小时后提醒喝水', 'after_seconds': 3600})
+    assert '按新建' in made['note']

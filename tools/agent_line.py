@@ -66,7 +66,8 @@ def poll(line, wait):
     while True:
         left = deadline - time.monotonic()
         answer = call(line, 'GET', '/outbox?wait_seconds=%d' % (max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
-        owner += [item.get('text') or '' for item in answer.get('owner_lines') or []]
+        owner += [('#%s ' % item['seq'] if item.get('seq') is not None else '') + (item.get('text') or '')
+                  for item in answer.get('owner_lines') or []]
         if answer.get('line') == 'closed':
             return got, 'closed', owner
         items = answer.get('items') or []

@@ -180,6 +180,21 @@ def their_time(scene, moment):
     return moment.astimezone(tz).strftime('%H:%M') if tz else None
 
 
+def clock_gap(scene, moment, home):
+    """How the group's clock stands to hers (home: her tzinfo), in words that change only with a time zone or a
+    daylight-saving switch, never with the minute; None when she has not set the group's time zone."""
+    from . import schedule_rules
+    tz = group_zone(scene)
+    if not tz:
+        return None
+    gap = schedule_rules.offset_minutes(tz, moment) - schedule_rules.offset_minutes(home, moment)
+    if not gap:
+        return '那边和你这边同一个钟点'
+    hours, minutes = divmod(abs(gap), 60)
+    span = ' '.join(part for part in ('%d 小时' % hours if hours else '', '%d 分钟' % minutes if minutes else '') if part)
+    return '那边的钟比你这边%s %s' % ('快' if gap > 0 else '慢', span)
+
+
 def night_there(config, scene, moment):
     """Quiet hours there are about other people's night: the route's P5 quiet hours, or the core default, on the
     route's offset, else the group's own time zone (place_timezone), else the Host's clock."""
@@ -383,6 +398,10 @@ def places_block(store, persona, model, policy, plan, moment, date):
     if not effective(model, 'heartbeat.visits', policy):
         return None
     people, docs, rule, items = People(store, persona), DocumentStore(store, persona), settings(model, policy), []
+    from . import schedule_rules
+    from .persona_model import timezone as persona_timezone
+    zone, _ = persona_timezone(model, policy, store.config)
+    home = schedule_rules._zone(zone if schedule_rules.is_iana(zone) else 'UTC')['tz']
     for scene_id, route, channel in groups(store.config):
         scene = store.db.scenes.find_one({'_id': scene_id})
         if not scene:
@@ -404,8 +423,9 @@ def places_block(store, persona, model, policy, plan, moment, date):
                **({'you_spoke_at': _stamp(here['mine_at'])} if here['mine_at'] else {'you': '你还没在这里说过话'}),
                'your_notes': notes or '你还没写过这个群的笔记',
                'can_visit': why}
-        if their_time(scene, moment):
-            row['their_time'] = '那边现在 ' + their_time(scene, moment)
+        gap = clock_gap(scene, moment, home)
+        if gap:
+            row['their_clock'] = gap
         if visit:
             row['last_visit'], row['last_visit_at'] = '来看过：' + OUTCOMES[outcome(store, visit)], _stamp(_at(visit['at']))
         if here['called']:

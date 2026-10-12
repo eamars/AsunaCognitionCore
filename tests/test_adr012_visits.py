@@ -410,6 +410,13 @@ def test_a_group_she_gave_a_time_zone_is_night_on_its_own_clock(store):
     assert places.night_there(store.config, scene(), small_hours)
     [row] = [row for row in places.zones(store, 'P1', dinner) if row['place'] == PLACE]
     assert row['timezone'] == 'Asia/Shanghai' and row['their_time'] == '那边现在 19:05'
+    # Her heartbeat's places block gives the gap to her own clock, which does not change with the minute (ADR-063 D6).
+    from zoneinfo import ZoneInfo
+    home = ZoneInfo('Pacific/Auckland')
+    assert places.clock_gap(scene(), dinner, home) == places.clock_gap(scene(), dinner + timedelta(minutes=7), home)         == '那边的钟比你这边慢 5 小时'
+    assert places.clock_gap(scene(), dinner, ZoneInfo('Asia/Shanghai')) == '那边和你这边同一个钟点'
+    assert places.clock_gap(scene(), dinner, ZoneInfo('Asia/Kolkata')) == '那边的钟比你这边快 2 小时 30 分钟'
     places.set_zone(store, PLACE, None)
     [row] = [row for row in places.zones(store, 'P1', dinner) if row['place'] == PLACE]
     assert 'their_time' not in row and row['timezone'].startswith('没设')
+    assert places.clock_gap(scene(), dinner, home) is None

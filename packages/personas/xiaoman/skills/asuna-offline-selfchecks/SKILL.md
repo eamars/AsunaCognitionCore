@@ -108,7 +108,7 @@ pytest 默认不收 `*_cases.py`，同结构的用例还有五套待修。「没
 
 - 退役核对：`tools/` 清单（63 个文件）里没有 `p5b_ui_offline_check.py`；硬跑 → exit 2 +
   `can't open file '/task/tools/p5b_ui_offline_check.py': [Errno 2] No such file or directory`，与本节口径一致；
-  全仓 `grep -rn 'p5b|P5-b'` 只剩 `docs/development_plans/ADR-007-asuna_autonomous_self_development/READ_IMAGE_REPORT.md` 两处历史提及，产品代码里已无 P5-b UI 件；
+  全仓 `grep -rn 'p5b|P5-b'` 只剩 ADR-007 当时的读图报告里两处历史提及（该报告已归档，全文见 git bf771c33），产品代码里已无 P5-b UI 件；
 - P3：`PASS 全部源文件能编译` + `PASS schedule_rules 只用标准库` + `PASS 离线用例全绿（38/38）` +
   `PASS 基线反证跳过` → `P3 自检：可以出补丁`、exit 0。上面第一次记录那 5 条红（`p3coord.config` 缺
   `character_id`）不复现了——夹具已修好，那条红到此变成历史；

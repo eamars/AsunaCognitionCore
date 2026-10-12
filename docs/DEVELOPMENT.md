@@ -139,5 +139,6 @@ Every error a tool call can return is read by a model that has to act on it, so 
   READMEs, this page) describe the current state only: what it is, how to use it, what it needs. No history, dates,
   ADR provenance or reasons. Change them in the same commit as the behavior.
 - Decisions, designs and plans go in an ADR: `docs/development_plans/ADR-0NN-<slug>/README.md`, with a row in
-  [the index](development_plans/README.md). ADRs keep their history and dates.
+  [the index](development_plans/README.md). ADRs keep their dates and the decisions still in force; superseded
+  ADRs are archived (removed, listed in the index with the git hash of their full text).
 - Code comments may say why; keep them to what a reader of that code needs.

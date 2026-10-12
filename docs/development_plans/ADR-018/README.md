@@ -33,8 +33,8 @@ She wrote the same thing herself in her idea notebook on 2026-10-05: "If I don't
 
 | Date | Proposal | Outcome |
 | --- | --- | --- |
-| 2026-09-25 | "Cross-scene context sync" report: A1 adapter mirroring, A2 host-configured read-only links, B addressed forwarding | **Only A2** (`context_links` / `read_scenes`). No mirroring and no addressed forwarding. Today only local chat ↔ owner DM are linked (`ADR-005/LINKED_SCENES_A2_USAGE.md`) |
-| 2026-10-04 | ADR-009: a link never raises a session's class. owner_private content does not leave through links, groups or the action brain | Implemented (`ADR-009/ARCHITECTURE.md` §46, §448) |
+| 2026-09-25 | "Cross-scene context sync" report: A1 adapter mirroring, A2 host-configured read-only links, B addressed forwarding | **Only A2** (`context_links` / `read_scenes`). No mirroring and no addressed forwarding. Today only local chat ↔ owner DM are linked (ADR-005, section A2) |
+| 2026-10-04 | ADR-009: a link never raises a session's class. owner_private content does not leave through links, groups or the action brain | Implemented (ADR-009 §2) |
 | 2026-10-05 | ADR-011 Q7: may influence from elsewhere change her directly? | "It may, but not directly": only through a self-improvement turn, organised and reviewed, as her own idea (the idea notebook) |
 | 2026-10-06 | ADR-017: general home/public rule | Home → public is not a worry. **Public → home is not real time, goes through her own review, and stays in her own records.** The same day added `elsewhere` (her own actions only), `errand` (the owner asks her to say something elsewhere), and `plan` targeting the old-home line |
 | 2026-10-06 | Her own idea: "when the home me wants to reach the old-home me, I can open a turn on that line" | Built as `plan` with `line` |

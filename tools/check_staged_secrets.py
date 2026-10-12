@@ -2,7 +2,7 @@
 
 Default mode (no ``--personal``) scans staged blobs for configured secrets; its output and exit code are unchanged.
 
-``--personal [--all | --paths FILE...]`` (ADR-009 CLEANUP 9) is a stdlib-only, report-only personal-data scan; it
+``--personal [--all | --paths FILE...]`` (ADR-009) is a stdlib-only, report-only personal-data scan; it
 needs neither config/local.json, Mongo nor the asuna package. Source: staged blobs by default, the working-tree copy
 of every tracked file with ``--all``, the given files with ``--paths``. Each hit prints ``path:line:category`` (line 0
 means the file name; for --paths files outside the repo only the base name is checked) and never the matched value.

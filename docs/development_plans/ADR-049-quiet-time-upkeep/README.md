@@ -132,3 +132,9 @@ and whether at all, is the owner's decision.
   look answered `no_compact_command` and, as designed, took the mark back. Adding that row is a change to her persona
   package, published by her.
 
+## Verified live (2026-10-12)
+
+The first real condensing (her mark on a visit, done at night there): 470 items, about 72,000 tokens compacted. The
+group's conversation measured about 168,000 tokens before and 42,376 at her next turn there, with 62 messages since.
+The condensed note reached exactly one turn (the next one woken there) and stopped once she had spoken. Still to see:
+the slang phrases on a note-writing visit.

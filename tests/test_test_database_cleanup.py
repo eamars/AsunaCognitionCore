@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from asuna.config import load
+from asuna.testing import suite_config as load
 from asuna.state import Store
 from asuna.testing import dispose_test_store
 

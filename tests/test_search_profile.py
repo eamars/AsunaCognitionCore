@@ -3,7 +3,7 @@ seam, with its fetch provider (fetch.js) for web_fetch."""
 import importlib.util
 from pathlib import Path
 
-from asuna.config import load
+from asuna.testing import suite_config as load
 
 ROOT = Path(__file__).resolve().parents[1]
 

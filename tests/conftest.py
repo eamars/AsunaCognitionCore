@@ -1,11 +1,13 @@
-import copy,uuid,os,shutil
+import copy,uuid,os,shutil,subprocess,sys
 from pathlib import Path
+import sandbox_temp
+sandbox_temp.inherit()   # tmp_path folders a run inside DSH's Windows sandbox can use
 import pytest
 from pymongo import MongoClient
-from asuna.config import ROOT,load
+from asuna.config import ROOT,DATA
 from asuna.state import Store
 from asuna.evidence import write_json,sha
-from asuna.testing import dispose_test_store,remove_lock_files,remove_workspace
+from asuna.testing import dispose_test_store,remove_lock_files,remove_workspace,suite_config as load
 from asuna.queue import effects_lock_path
 from asuna import channel_kinds
 
@@ -13,14 +15,18 @@ from asuna import channel_kinds
 QQ_CHANNEL={'python':ROOT/'packages'/'channels'/'napcat-qq'/'python','module':'napcat_qq'}
 channel_kinds.load([QQ_CHANNEL])
 
+# Every folder a test writes is under the data folder this run writes (ASUNA_DATA_ROOT, else the checkout's .runtime)
+# or under pytest's --basetemp, so a run confined to one writable folder works.
+WORK=DATA/'work'
+
 # Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does:
 # DSH's own provider (tests/dsh_sandbox.mjs) picks this OS's runner, writes confined to the given root (ADR-019: the
-# plugin inherits DSH's platform layer). Without a usable runner, sandboxed features are off. One wrap per root.
+# plugin inherits DSH's platform layer). Without a runner, sandboxed features are off. One wrap per root.
 _WRAPS={}
 
 
 def _dsh_wrap(root):
-    import json,subprocess
+    import json
     if root not in _WRAPS:
         node=shutil.which('node')
         out=subprocess.run([node,str(Path(__file__).with_name('dsh_sandbox.mjs')),root],cwd=ROOT,capture_output=True,
@@ -30,15 +36,47 @@ def _dsh_wrap(root):
     return _WRAPS[root]
 
 
-def _probe():
+def _cannot_confine():
+    """Why the runner cannot confine a command in this run, or None; measured by running one where the tests confine
+    theirs. A runner can wrap a command and still fail to start it: in a worktree whose folders the user may not
+    re-permission, or inside a process that is itself confined, granting a folder its write right is denied."""
+    from asuna import sandbox_backend
+    root=WORK/('sandbox-probe-'+uuid.uuid4().hex)
+    try:root.mkdir(parents=True)
+    except OSError as error:return 'the data folder %s is not writable (%s)'%(DATA,error.strerror or error)
+    try:
+        wrap=_dsh_wrap(str(root))
+        if 'prefix' not in wrap:return 'no Host sandbox runner'
+        argv=[*wrap['prefix'],sys.executable,'-c',"open('probe.txt','w').write('ok')",*wrap['suffix']]
+        try:ran=subprocess.run(argv,cwd=root,env=sandbox_backend.environment(),capture_output=True,text=True,timeout=60)
+        except (OSError,subprocess.SubprocessError) as error:return 'the runner did not start (%s)'%error
+        if ran.returncode!=0 or not (root/'probe.txt').is_file():
+            return 'exit %s: %s'%(ran.returncode,' '.join((ran.stderr or ran.stdout).split())[:300])
+        return None
+    finally:
+        remove_workspace(root);_WRAPS.pop(str(root),None)
+
+
+def _host_sandbox():
     import tempfile
     return 'prefix' in _dsh_wrap(tempfile.gettempdir())
 
 
-HOST_SANDBOX=_probe()
+# What the program is told: the Host has a sandbox runner, so tools that run commands are granted.
+HOST_SANDBOX=_host_sandbox()
+# Whether a confined command actually runs here. When it cannot, a test that runs one skips at that command: what
+# it checks there is unchecked, not passed.
+CANNOT_CONFINE=_cannot_confine() if HOST_SANDBOX else None
+UNCHECKED='UNCHECKED, not passed: the Host sandbox runner cannot confine a command in this run (%s)'%CANNOT_CONFINE
+
+
+def pytest_report_header(config):
+    return ['asuna data folder: %s'%DATA,
+            'Host sandbox: '+('none' if not HOST_SANDBOX else UNCHECKED if CANNOT_CONFINE else 'confines commands')]
 
 
 def host_confine(argv,root):
+    if CANNOT_CONFINE:pytest.skip(UNCHECKED)
     wrap=_dsh_wrap(str(root))
     if 'prefix' not in wrap:raise RuntimeError('SANDBOX_UNAVAILABLE: '+wrap.get('error',''))
     return [*wrap['prefix'],*argv,*wrap['suffix']]
@@ -133,15 +171,15 @@ def pytest_sessionfinish(session,exitstatus):
     config=load()
     for name in sorted(_OWNED):
         drop_database(config,name)
-        remove_workspace(ROOT/'.runtime/work'/name)
+        remove_workspace(WORK/name)
 
 
 @pytest.fixture
 def runtime_work():
-    """Make folders under .runtime/work (the sandbox only confines roots there); all are removed at teardown."""
+    """Make folders under the data folder's work/ (the sandbox only confines roots there); all are removed at teardown."""
     made=[]
     def make(prefix):
-        path=ROOT/'.runtime/work'/(prefix+'-'+uuid.uuid4().hex);made.append(path);return path
+        path=WORK/(prefix+'-'+uuid.uuid4().hex);made.append(path);return path
     yield make
     for path in made:remove_workspace(path)
 
@@ -171,7 +209,7 @@ def store(request):
     name=_POOL.pop() if pooled and _POOL else isolated_database('asuna_v2_test_M1')
     if pooled:_OWNED.add(name)
     from fixture_grant import fixture_grant
-    shutil.rmtree(ROOT/'.runtime/work'/name,ignore_errors=True)   # a reused database gets an empty workspace
+    shutil.rmtree(WORK/name,ignore_errors=True)   # a reused database gets an empty workspace
     fixture_grant(config,name)
     db=Store(config,name)
     try:
@@ -197,6 +235,6 @@ def store(request):
                 db.client.close();_POOL.append(name)                # reset by the next test; dropped at session end
             else:
                 dispose_test_store(db)
-                remove_workspace(ROOT/'.runtime/work'/name)
+                remove_workspace(WORK/name)
             for derived in getattr(db,'derived_databases',[]):   # replay targets etc.
                 drop_database(config,derived)

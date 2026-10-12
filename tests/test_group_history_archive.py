@@ -23,7 +23,7 @@ NEW = '2026-06-01T01:00:00Z'
 
 @pytest.fixture(scope='module', autouse=True)
 def mongo_available():
-    from asuna.config import load
+    from asuna.testing import suite_config as load
     try:
         with MongoClient(load()['mongo_uri'], serverSelectionTimeoutMS=2000, timeoutMS=3000) as client:
             client.admin.command('ping')

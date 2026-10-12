@@ -1,10 +1,12 @@
 import concurrent.futures
 import copy
 import json
+import os
 import subprocess
 import sys
 import pytest
-from asuna.config import ROOT,load,validate_database
+from asuna.config import ROOT,validate_database
+from asuna.testing import suite_config as load
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,FakeTurn,LaneResult
@@ -82,7 +84,8 @@ def test_E14_100_duplicates(store):
     assert len(lane.calls)==1 and store.db.sink_receipts.count_documents({})==1
 
 def test_E14_real_process_crash_after_receive(store):
-    result=subprocess.run([sys.executable,str(ROOT/'tests/crash_worker.py'),store.name],cwd=ROOT,capture_output=True)
+    result=subprocess.run([sys.executable,str(ROOT/'tests/crash_worker.py'),store.name],cwd=ROOT,capture_output=True,
+                          env={**os.environ,'PYTHONPATH':str(ROOT/'src')})   # the code under test, not an installed copy
     assert result.returncode==77,result.stderr.decode(errors='replace')
     assert store.db.sink_receipts.count_documents({})==1
     restored=Store(load(),store.name)

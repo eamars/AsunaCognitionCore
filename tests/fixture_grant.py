@@ -4,11 +4,11 @@ Workspace mode is the only task mode, so delegation needs a real grant. A route 
 dm-a a public scene (it is not the owner's local scene) and replaces any channel routes that
 a local configuration would bring into tests.
 """
-from asuna.config import ROOT
+from asuna.config import DATA
 
 
 def fixture_grant(config, name):
-    work = ROOT / '.runtime/work' / name
+    work = DATA / 'work' / name
     work.mkdir(parents=True, exist_ok=True)
     config['channels'] = {'fixture': {'token': 'f' * 32, 'account_id': 'fixture-bot', 'routes': {
         'dm-a': {'scene_id': 'dm-a', 'sender_id': 'A', 'person_id': 'A', 'target': {'type': 'dm', 'id': 'A'},

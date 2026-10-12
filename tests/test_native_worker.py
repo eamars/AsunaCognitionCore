@@ -5,7 +5,7 @@ import pytest
 from asuna.native_worker import BusinessWorker, prune_host_reports, KEPT_HOST_REPORTS
 from asuna.state import Denied
 from asuna.router import Router
-from asuna.config import ROOT
+from asuna.config import DATA, ROOT
 from concurrent.futures import Future
 
 
@@ -98,7 +98,7 @@ def test_qq_is_view_only_including_unbound_native_sessions():
     worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local'}}, store=SimpleNamespace(
         db=SimpleNamespace(sessions=SimpleNamespace(find=lambda _: rows))))
     policies = worker.dispatch('input_policies', {'sessions': [
-        {'id': row['_id']} for row in rows] + [{'id': 'unbound-qq', 'cwd': str(ROOT / '.runtime/work/qq')}]})
+        {'id': row['_id']} for row in rows] + [{'id': 'unbound-qq', 'cwd': str(DATA / 'work/qq')}]})
     assert 'local' not in policies
     assert policies['qq'] == policies['unbound-qq']
     assert 'old-local' in policies

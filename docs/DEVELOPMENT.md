@@ -75,6 +75,24 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   per session and resets a reused `asuna_v2_test_*` database for each test; every test database is dropped at
   session end, failures included. Mongo tests skip when the service is unavailable.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
+- pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.
+- A test run writes only under the data folder (`ASUNA_DATA_ROOT`, else the checkout's `.runtime`) and pytest's
+  `--basetemp`; the DSH home it uses is `<data>/asuna-dsh`, whatever `config/local.json` names. A run confined to one
+  writable folder (a sandboxed command) points both into it:
+
+  ```powershell
+  $env:ASUNA_DATA_ROOT = 'C:\scratch\run\data'
+  .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp C:\scratch\run\tmp tests
+  ```
+
+  Without a shell, set the variable before pytest starts:
+  `python3 -c "import os,sys,pytest; os.environ['ASUNA_DATA_ROOT']=sys.argv[1]; sys.exit(pytest.main(sys.argv[2:]))" <folder>/data -q -p no:cacheprovider --basetemp <folder>/tmp tests`.
+- Test temporary folders (`tmp_path`, `tempfile`) take their parent folder's permissions (`tests/sandbox_temp.py`):
+  on Windows a private folder would drop the write grant DSH's sandbox gives by inheritance.
+- The pytest header (without `-q`) names the data folder and whether the Host sandbox confines commands in this run,
+  measured by running one confined command in the data folder. Where it cannot (a folder the user may not
+  re-permission, or a run that is itself confined), each test reaching a confined command skips there with a reason
+  starting `UNCHECKED, not passed`; so does the `uv.lock` check when uv cannot use its cache.
 - **Repository guards** fail the suite when the tree drifts: `test_line_endings` (LF everywhere),
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),

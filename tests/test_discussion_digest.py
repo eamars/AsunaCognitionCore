@@ -12,7 +12,7 @@ import os
 
 import pytest
 
-from asuna.config import load
+from asuna.testing import suite_config as load
 from conftest import isolated_database, drop_database
 from asuna.state import Store, Denied
 from asuna.tasks import TaskService, ToolBroker

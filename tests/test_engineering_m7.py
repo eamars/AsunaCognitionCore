@@ -1,4 +1,4 @@
-import subprocess,sys
+import os,subprocess,sys
 from pathlib import Path
 import pytest
 from asuna.config import ROOT
@@ -23,7 +23,8 @@ def delegated(store):
 
 @pytest.mark.parametrize('point',['after_task_persist','after_lane_delivery','after_tool_commit','after_send_before_receipt','before_commit_audit'])
 def test_E14_five_actual_process_crash_points(store,point):
-    p=subprocess.run([sys.executable,str(ROOT/'tests/crash_matrix_worker.py'),store.name,point],capture_output=True)
+    p=subprocess.run([sys.executable,str(ROOT/'tests/crash_matrix_worker.py'),store.name,point],capture_output=True,
+                     env={**os.environ,'PYTHONPATH':str(ROOT/'src')})   # the code under test, not an installed copy
     assert p.returncode==77,p.stderr.decode(errors='replace')
     store.recover_commits()
     # A turn cut off mid-way resumes as a new turn in the same session; it is told what already took effect.

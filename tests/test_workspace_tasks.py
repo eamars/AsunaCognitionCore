@@ -3,7 +3,7 @@ import uuid
 
 import pytest
 
-from asuna.config import ROOT
+from asuna.config import DATA
 from asuna.coordinator import Coordinator
 from asuna.evidence import sha
 from asuna.lanes import FakeLane, FakeTurn, LaneResult
@@ -27,7 +27,7 @@ def remove_workspaces():
 
 
 def setup_workspace(store):
-    work = ROOT / '.runtime/work' / ('workspace-test-' + uuid.uuid4().hex)
+    work = DATA / 'work' / ('workspace-test-' + uuid.uuid4().hex)
     CREATED.append(work)
     (work / 'notes').mkdir(parents=True)
     (work / 'notes/source.txt').write_text('原文保持不变', encoding='utf-8')

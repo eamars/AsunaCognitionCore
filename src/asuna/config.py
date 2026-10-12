@@ -70,8 +70,12 @@ def redact_text(text: str, config: dict) -> str:
     return text
 
 
-def load(path: str | Path = 'config/local.json') -> dict:
+def load(path: str | Path = 'config/local.json', *, dsh_home: str | Path | None = None) -> dict:
+    """A settings file with its channel and integration siblings; `dsh_home` replaces its DSH home (a test run
+    under its own data folder)."""
     value = json.loads(Path(path).read_text(encoding='utf-8'))
+    if dsh_home is not None:
+        value['dsh_home'] = str(dsh_home)
     # The two brains' models are DSH providers chosen on the settings card, never settings of Asuna's own.
     for lane in ('character', 'executor'):
         if lane in value:

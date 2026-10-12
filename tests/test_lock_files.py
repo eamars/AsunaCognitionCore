@@ -28,4 +28,6 @@ def _uv():
 @pytest.mark.skipif(not _uv(), reason='uv is not installed here')
 def test_uv_lock_matches_pyproject():
     result = subprocess.run([_uv(), 'lock', '--check'], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    if result.returncode and 'Failed to initialize cache' in result.stderr:   # a run confined to one folder
+        pytest.skip('UNCHECKED, not passed: uv cannot use its cache here: ' + ' '.join(result.stderr.split())[-200:])
     assert result.returncode == 0, 'run uv lock: ' + (result.stderr or result.stdout)[-400:]

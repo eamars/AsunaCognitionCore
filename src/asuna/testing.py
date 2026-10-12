@@ -3,9 +3,15 @@ import re
 import shutil
 
 from pymongo import MongoClient
-from .config import validate_database
+from .config import DATA, load, validate_database
 from .queue import effects_lock_path
 from .tasks import workspace_lock_path
+
+
+def suite_config(path='config/local.json'):
+    """The settings a test run reads (the MongoDB address) with the DSH home of the data folder the run writes
+    (ASUNA_DATA_ROOT), so a run confined to its own folder never needs the profile's."""
+    return load(path, dsh_home=DATA / 'asuna-dsh')
 
 
 def remove_lock_files(*paths):

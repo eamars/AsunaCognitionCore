@@ -17,7 +17,7 @@ import os
 
 import pytest
 
-from asuna.config import load
+from asuna.testing import suite_config as load
 from asuna.dialogue_summary import DialogueSummarizer
 from asuna.memory import MemoryService
 from conftest import isolated_database, drop_database

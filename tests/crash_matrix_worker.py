@@ -1,5 +1,5 @@
 import os,sys
-from asuna.config import load
+from asuna.testing import suite_config as load
 from asuna.state import Store
 from asuna.lanes import FakeLane,FakeTurn
 from asuna.coordinator import Coordinator

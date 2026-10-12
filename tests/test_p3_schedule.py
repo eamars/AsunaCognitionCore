@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from asuna.config import load
+from asuna.testing import suite_config as load
 from asuna.schedule import ScheduleService
 from conftest import isolated_database, drop_database
 from asuna.state import Denied, Store

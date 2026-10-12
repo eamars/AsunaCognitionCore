@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from asuna.blobs import BlobStore
-from asuna.config import ROOT
+from asuna.config import DATA, ROOT
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
@@ -85,7 +85,7 @@ def job_config(store, entry=JOB, sources=('demo-home',), timeout=60):
 
 
 def write_job(name, body):
-    directory = ROOT / '.runtime/work' / ('adr009-job-' + uuid.uuid4().hex[:8])
+    directory = DATA / 'work' / ('adr009-job-' + uuid.uuid4().hex[:8])
     directory.mkdir(parents=True)
     (directory / name).write_text(body, encoding='utf-8')
     return directory / name
@@ -132,7 +132,7 @@ sys.stdout.write(json.dumps({"kind":"report","status":"ok","summary":json.dumps(
         job_config(store, entry=flood)
         assert JobRunner(store, 'P1', launcher=SandboxLauncher(store.config)).run('migrate')['status'] == 'error'
     finally:
-        for path in (ROOT / '.runtime/work').glob('adr009-job-*'):
+        for path in (DATA / 'work').glob('adr009-job-*'):
             shutil.rmtree(path, ignore_errors=True)
 
 
@@ -204,7 +204,7 @@ def test_T4_12_consult_from_a_public_task_sees_no_owner_private_material(store):
     docs = DocumentStore(store, 'P1')
     docs.apply('persona', {'op': 'append_section', 'heading': '私密', 'visibility': 'owner_private', 'reason': 't'},
                'OWNER_PRIVATE_PERSONA_CANARY', base_revision_id=docs.read('persona')[0], author='operator', mutation_id='t412')
-    work = ROOT / '.runtime/work' / ('t412-' + uuid.uuid4().hex[:8]); work.mkdir(parents=True)
+    work = DATA / 'work' / ('t412-' + uuid.uuid4().hex[:8]); work.mkdir(parents=True)
     try:
         store.config['channels'] = {'f': {'routes': {'g': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'x'},
                                     'members': {'s': {'person_id': 'A', 'workspace': str(work), 'read_only_paths': []}}}}}}

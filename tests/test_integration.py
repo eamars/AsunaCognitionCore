@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from asuna.config import ROOT
+from asuna.config import DATA, ROOT
 from asuna.coordinator import Coordinator
 from asuna.integration import IntegrationRunner, owner_profile
 from asuna.lanes import FakeLane, FakeTurn
@@ -40,7 +40,7 @@ def profile(scene='local', person='owner'):
 
 @pytest.fixture
 def runner():
-    root = ROOT/'.runtime/integration'/('test-'+uuid.uuid4().hex)
+    root = DATA/'integration'/('test-'+uuid.uuid4().hex)
     value = IntegrationRunner(profile(), root=root)
     yield value
     if value.lease: value.call('integration_stop', {})
@@ -99,7 +99,7 @@ def test_an_enabled_channel_adapter_starts_by_itself_once_and_a_stop_is_kept(tmp
     from conftest import QQ_CHANNEL
     channel_kinds.load([QQ_CHANNEL])
     configured = profile(); configured['integration']['adapter_config'] = {'host': {'channel_id': 'qq'}}
-    root = ROOT/'.runtime/integration'/('test-'+uuid.uuid4().hex)
+    root = DATA/'integration'/('test-'+uuid.uuid4().hex)
     try:
         first = IntegrationRunner(configured, root=root)
         assert first.service_argv() == ['python3', '/app/adapter.py', '--service']       # what the QQ package declares

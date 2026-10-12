@@ -99,7 +99,7 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `prompt_path`
 - def `schema`
 - def `redact_text`
-- def `load`
+- def `load` — A settings file with its channel and integration siblings; `dsh_home` replaces its DSH home (a test run under its own data folder).
 - def `validate_database`
 - def `validate_endpoint` — The rule DSH's Models page applies to a provider address: an http or https URL with a host.
 - def `redacted`
@@ -201,6 +201,7 @@ File evidence for runs and probes: `Evidence` writes each event as a hash-chaine
 
 Explicit teardown for databases owned by isolated tests and probes.
 
+- def `suite_config` — The settings a test run reads (the MongoDB address) with the DSH home of the data folder the run writes (ASUNA_DATA_ROOT), so a run confined to its own folder never needs the profile's.
 - def `remove_lock_files` — Remove lock files a test or probe owned; one still held stays (Windows refuses to delete an open file).
 - def `remove_workspace` — A test workspace and the lease file a task run left for it.
 - def `dispose_test_store` — Drop an owned test database even if its application client was closed.

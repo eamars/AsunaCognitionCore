@@ -21,6 +21,9 @@ import threading
 import types
 from pathlib import Path
 
+import sandbox_temp
+sandbox_temp.inherit()   # temporary folders a run inside DSH's Windows sandbox can use
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, 'src')

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from asuna import channel_kinds, lines
 from asuna.channels import Channels
-from asuna.config import ROOT
+from asuna.config import DATA, ROOT
 
 channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'dsh-peer' / 'python', 'module': 'dsh_peer'}])
 SCENE = 'dsh:home:dm:peer'
@@ -14,7 +14,7 @@ SCENE = 'dsh:home:dm:peer'
 def with_line(store):
     store.config['channels'] = {**store.config.get('channels', {}), 'dsh': {'account_id': 'home', 'token': 't' * 24,
         'routes': {'peer-dm': {'person_id': 'dsh:peer', 'scene_id': SCENE, 'sender_id': 'peer',
-                               'target': {'type': 'dm', 'id': 'peer'}, 'workspace': str(ROOT / '.runtime/channels/x')}}}}
+                               'target': {'type': 'dm', 'id': 'peer'}, 'workspace': str(DATA / 'channels/x')}}}}
     return lines.peer_lines(store)
 
 

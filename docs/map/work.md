@@ -124,6 +124,7 @@ ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——�
 
 A task's commands, run under DSH's sandbox (sandbox_backend.py): writes stay in the task folder.
 
+- def `run_seconds` — The seconds a call asks for, or the default when it asks nothing.
 - def `command_problem` — What is wrong with this argv, in her words, or None.
 - def `launch_problem` — Why the sandbox could not start her command, and what to do.
 - class `Sandbox`

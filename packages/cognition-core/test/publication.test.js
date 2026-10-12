@@ -130,6 +130,16 @@ test('a refused development call says what was wrong, with the values, and what 
   await assert.rejects(floor.call('development_read', { path: '../x' }), /DEVELOPMENT_PATH_DENIED: '\.\.\/x' 落在项目候选外面/);
   await assert.rejects(floor.call('development_read', { path: '.env' }), /DEVELOPMENT_PATH_DENIED: '\.env' 是私密文件/);
   await assert.rejects(floor.call('development_run', { argv: Array(41).fill('a') }), /DEVELOPMENT_ARGV_INVALID: argv 有 41 项，最多 40 项/);
+  await assert.rejects(floor.call('development_run', { argv: ['python3', '-c', '1'], timeout: 601 }),
+    /DEVELOPMENT_TIMEOUT_INVALID: timeout 是 1 到 600 的整数秒（给的是 601）/);
+  // A command may ask for longer; one stopped by its time hands back what it printed so far.
+  floor.sandbox = () => ({ confine: async argv => ({ argv }) });
+  const stopped = await floor.call('development_run', { argv: [process.execPath, '-e',
+    'console.log("half done"); setTimeout(() => {}, 30000)'], timeout: 2 });
+  assert.equal(stopped.timed_out, true);
+  assert.match(stopped.stdout, /half done/); assert.match(stopped.stopped, /2 秒/);
+  const quick = await floor.call('development_run', { argv: [process.execPath, '-e', 'console.log(1)'] });
+  assert.equal(quick.timed_out, false); assert.equal(quick.stopped, undefined);
 });
 
 test('a repository candidate publishes only the project paths, not what a command left beside them', async t => {

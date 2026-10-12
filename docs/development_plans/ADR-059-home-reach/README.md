@@ -31,3 +31,16 @@ Her home tasks' commands already ran as the Host's user, so `git` and `ssh` reac
 
 No new tool. `sandbox_run`'s description grows by about 190 characters (git and ssh, dbread); one more core skill
 listed for the action brain (its description line); per turn nothing.
+
+## Longer commands (2026-10-13)
+
+The owner saw her sandbox test run stop: a command ran at most 30 seconds (`development_run` 35) and one stopped by
+its time handed back nothing, while the full suite takes about four minutes. Owner's choice (of: a longer time per
+call; background jobs through DSH's `job_output`/`job_kill`; a faster suite): a longer time per call.
+
+- `sandbox_run` and `development_run` take an optional `timeout` in seconds, at most 600; left out, 30 and 35 as
+  before. The action brain's step waits for the command; her conversations do not.
+- A command stopped by its time returns its output so far with `timed_out` and a line saying what to do, instead of
+  an error with nothing.
+- Cost: no new tool; the action brain's tool text grows by 266 characters (one optional field on each of the
+  two and a shorter limit line), inside its budget; per turn nothing.

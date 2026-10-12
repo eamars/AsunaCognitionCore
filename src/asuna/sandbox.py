@@ -11,6 +11,20 @@ from .config import DATA
 from . import sandbox_backend
 
 OUTPUT_LIMIT = 262144
+# How long one command may run, in seconds: this unless the call asks for longer, up to the most (a full test run
+# takes minutes). A command stopped by its time hands back what it printed so far.
+RUN_SECONDS = 30
+RUN_SECONDS_MOST = 600
+
+
+def run_seconds(value, default=RUN_SECONDS):
+    """The seconds a call asks for, or the default when it asks nothing. Raises ValueError for anything else."""
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= RUN_SECONDS_MOST:
+        raise ValueError('INVALID_TIMEOUT: timeout 是 1 到 %d 的整数秒（给的是 %r）；不写就是 %d 秒'
+                         % (RUN_SECONDS_MOST, value, default))
+    return value
 PYTHONS = ('python3', 'python', 'python3.exe', 'python.exe')
 ARGV_ITEMS = 40
 ARGV_CHARS = 16000
@@ -71,7 +85,7 @@ class Sandbox:
             out.append(root + arg[len('/task'):] if arg == '/task' or arg.startswith('/task/') else arg)
         return out
 
-    def run(self, argv: list[str], timeout: int = 30, env=None) -> dict:
+    def run(self, argv: list[str], timeout: int = RUN_SECONDS, env=None) -> dict:
         """``env``: extra variables for this one command (her credentials, credentials.environment)."""
         problem = command_problem(argv)
         if problem:
@@ -84,12 +98,12 @@ class Sandbox:
             raise RuntimeError('TOOL_OUTPUT_LIMIT: 输出超过 %d 字节（256 KiB），命令被停下，输出没有保留；同样的命令重试也一样：'
                                '让脚本把结果写进 /task 里的文件（每个 32 KiB 以内，read_file 一次读一个），'
                                '或只打印过滤后需要的部分' % OUTPUT_LIMIT)
+        out = {'argv': argv, 'exit_code': value['exit_code'], 'stdout': value['stdout'], 'stderr': value['stderr'],
+               'output_limit': False, 'timed_out': value['timed_out'], 'sandbox': 'dsh', 'writes': 'task folder only'}
         if value['timed_out']:
-            raise TimeoutError('TOOL_TIMEOUT: 命令跑满 %d 秒还没结束，被停下，输出没有保留；同样的命令重试也一样：'
-                               '把活拆小（每次只处理一部分，进度写进 /task 的文件，下一次接着做），'
-                               '或让脚本在时限内自己收尾' % timeout)
-        return {'argv': argv, 'exit_code': value['exit_code'], 'stdout': value['stdout'], 'stderr': value['stderr'],
-                'output_limit': False, 'timed_out': False, 'sandbox': 'dsh', 'writes': 'task folder only'}
+            out['stopped'] = ('命令跑满 %d 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 %d 秒），'
+                              '或把活拆小、进度写进 /task 的文件' % (timeout, RUN_SECONDS_MOST))
+        return out
 
 
 def run_bounded(command, cwd, timeout, *, stdin=None, env=None, limit=OUTPUT_LIMIT):

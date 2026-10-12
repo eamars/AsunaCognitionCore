@@ -101,3 +101,26 @@ def test_her_commits_carry_her_own_name_and_nothing_waits_for_a_prompt():
                    'GIT_COMMITTER_NAME': 'Character', 'GIT_COMMITTER_EMAIL': 'character@example.invalid'}
     env = sandbox_backend.environment(who)
     assert env['GIT_TERMINAL_PROMPT'] == '0' and env['GIT_AUTHOR_NAME'] == 'Character'
+
+
+def test_a_command_may_ask_for_longer_and_a_stopped_one_keeps_what_it_printed(tmp_path, monkeypatch):
+    # A full test run takes minutes: a call may ask for up to 600 s; one stopped by its time hands back its output
+    # so far instead of nothing (owner 2026-10-13).
+    from asuna import sandbox as sandbox_module
+    from asuna.sandbox import RUN_SECONDS, run_seconds
+    monkeypatch.setattr(sandbox_module, 'DATA', tmp_path)
+    assert run_seconds(None) == RUN_SECONDS and run_seconds(240) == 240
+    for bad in (0, 601, '60', True, 1.5):
+        with pytest.raises(ValueError, match='INVALID_TIMEOUT'):
+            run_seconds(bad)
+    sandbox_backend.attach(lambda argv, root: argv)              # this test runs the command itself
+    try:
+        box = Sandbox(tmp_path / 'work' / 't1', config={'_host_sandbox': {'available': True}})
+        script = box.task_dir / 'slow.py'
+        script.write_text('import time\nprint("half done", flush=True)\ntime.sleep(30)\n', encoding='utf-8')
+        result = box.run(['python3', '-u', '/task/slow.py'], 2)
+        assert result['timed_out'] and 'half done' in result['stdout'] and '2 秒' in result['stopped']
+        quick = box.run(['python3', '-c', 'print(1)'], 2)
+        assert not quick['timed_out'] and 'stopped' not in quick and quick['stdout'].strip() == '1'
+    finally:
+        sandbox_backend.attach(None)

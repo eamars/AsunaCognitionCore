@@ -112,16 +112,20 @@ function commandEnvironment() {
 }
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    const { runMs, ...spawnOptions } = options;
+    const child = spawn(command, args, { windowsHide: true, ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '', limited = false;
     const collect = (key, data) => {
       if (stdout.length + stderr.length + data.length > 262144) { limited = true; child.kill(); return; }
       if (key === 'stdout') stdout += data; else stderr += data;
     };
     child.stdout.on('data', data => collect('stdout', data)); child.stderr.on('data', data => collect('stderr', data));
-    const timer = setTimeout(() => { limited = true; child.kill(); }, 90000);
+    // A command given its own time (development_run) is stopped then and says so; others keep the floor's 90 s.
+    let timedOut = false;
+    const timer = setTimeout(() => { if (runMs) timedOut = true; else limited = true; child.kill(); }, runMs ?? 90000);
     child.on('error', error => { clearTimeout(timer); reject(error); });
-    child.on('exit', code => { clearTimeout(timer); resolve({ exit_code: code, stdout, stderr, limited }); });
+    child.on('exit', code => { clearTimeout(timer); resolve({ exit_code: code, stdout, stderr, limited,
+      ...(runMs ? { timed_out: timedOut } : {}) }); });
   });
 }
 
@@ -322,6 +326,9 @@ export class PublicationFloor {
         if (args.argv.length > 40) throw argvInvalid(`argv 有 ${args.argv.length} 项，最多 40 项；把长参数写进脚本（development_write）再运行它`);
         const bad = args.argv.findIndex(a => typeof a !== 'string' || a.includes('\0'));
         if (bad >= 0) throw argvInvalid(`argv[${bad}] 不是字符串，或含有空字符（\\0）；每一项都写成普通字符串`);
+        const seconds = args.timeout ?? 35;
+        if (!Number.isInteger(seconds) || seconds < 1 || seconds > 600) throw new Error('DEVELOPMENT_TIMEOUT_INVALID: timeout 是 1 到 600 '
+          + `的整数秒（给的是 ${given(args.timeout)}）；不写就是 35 秒`);
         if (args.argv.join('').length > 16000) throw argvInvalid(`argv 合起来 ${args.argv.join('').length} 个字符，最多 16000；`
           + '把长内容写进文件（development_write），让命令去读它');
         // DSH's own sandbox (owner 2026-10-06): the command may write only its candidate. It runs natively on this
@@ -333,9 +340,10 @@ export class PublicationFloor {
         const argv = args.argv.map((arg, index) => index === 0 && PYTHONS.has(arg) ? this.config.python ?? this.workerPython
           : arg === '/task' || arg.startsWith('/task/') ? root + arg.slice(5) : arg);
         const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: project.candidate });
-        const result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, timeout: 35000,
+        const result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, runMs: seconds * 1000,
           env: commandEnvironment() });
-        return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only' };
+        return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only', ...(result.timed_out ? { stopped:
+          `命令跑满 ${seconds} 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 600 秒），或把活拆小` } : {}) };
       }
       if (tool === 'development_publish') return this.publish(project, args.reason ?? '', origin);
       throw new Error(`UNKNOWN_DEVELOPMENT_TOOL: 发布底座不认识 ${given(tool)}——程序两边对不上，不是参数的问题；`

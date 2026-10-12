@@ -78,7 +78,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 ## git 和 ssh（家里的任务，`sandbox_run`）
 
 - `git`、`ssh` 用的是这台机器上主人的钥匙和账号；你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。
-- 一条命令最多 30 秒：整库 clone 可能跑不完。用 `git clone --depth 1`，或 `git clone --reference <本机仓库路径> <远端>` 借本机已有的对象；长活先拆成几步。
+- 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），比如跑全套测试；跑满被停下时会带回停下前的输出。整库 clone 用 `git clone --depth 1`，或 `git clone --reference <本机仓库路径> <远端>` 借本机已有的对象。
 - 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
 

@@ -495,7 +495,7 @@
     },
     {
       "name": "development_run",
-      "description": "Run a command in the candidate and return raw stdout, stderr and exit status, including failures.",
+      "description": "Run a command in the candidate and return raw stdout, stderr and exit status, including failures. 35 s (timeout: up to 600); a stopped command returns its output so far.",
       "parameters": {
         "argv": {
           "oneOf": [
@@ -510,6 +510,10 @@
             }
           ],
           "required": true
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "seconds, up to 600"
         },
         "project": {
           "type": "string",

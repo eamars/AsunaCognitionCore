@@ -40,6 +40,12 @@ Claude's scratchpad `growth/`.
 | D2 | **Copies older than the reuse window are resent** | about every 4–5 turns; 4.2k a turn locally, 2.0k on the agent line | `REUSE_WINDOW_TOKENS` 32,768 counts only the newest stretch | count visibility from the last compaction checkpoint (what DSH keeps verbatim), composing after any compaction in the step | **ADR-062 prerequisite**; the owner's go (2026-10-13: "prerequisites need to be done") |
 | D11 | **Small repeats** | `rhythm.local_time` repeats `clock.now_local`; one group surface holds two system prompts from a model switch | duplicate field; a reopen after the model switch | drop the field; nothing for the second prompt (it leaves with the next compaction) | independent |
 
+### Progress
+
+| # | Commit | What changed | Measured effect |
+|---|---|---|---|
+| D1 (2) | b34c122b | a line arriving while its conversation has a `compaction/start` without its `compaction/end` is held (`pairing.js` `compactionOpen`) and joins as the compaction ends, committed or failed (`releaseAfterCompaction`) | after her restart: aborted compactions in the day audit |
+
 Not a defect: her sister's host answers `session/page` without authentication on the LAN. That is by design (owner
 2026-10-13: a local server, no login wanted).
 

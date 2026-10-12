@@ -84,6 +84,14 @@ the local server **space** does. Nothing here depends on one server's request fi
   otherwise it starts a fresh context that carries the task's brief, its last report and her new words. After that
   long both kinds of endpoint have most likely dropped the cache, so carrying on would read the whole old context
   cold, at full price and with no benefit over a shorter fresh start. The limit is one setting, not tied to a model.
+- **The limit is set per route, from measurement (owner: on the local server space matters more than time).**
+  Knowing directly whether a task's history is still held is not possible: the local server reports only totals
+  (entries, bytes, evictions), not which histories it holds, and an API reports nothing ahead of a request. Both
+  report afterwards how much of a prompt came from cache. So each route has its own idle limit (default 30 minutes),
+  and a continuation's first step records whether its history was still there; the limit is tuned from that record
+  (on the local server, where her long conversations push entries out within 5–30 minutes, it will likely end up
+  shorter). Guessing wrong costs seconds either way: continuing a dropped history reads the task cold, starting
+  fresh needlessly loses the task's detailed tool output.
 - **Server-specific savings stay optional.** A field only one server knows (the local server's one-shot flag for her
   group gates) is sent only to a route configured to take it; every other endpoint never sees it.
 

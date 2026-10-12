@@ -553,6 +553,7 @@ export class CognitionCore {
           : event.method === 'carry_session' ? await carrySession(this, event.args)
           : event.method === 'retitle' ? await retitleSession(this, event.args)
           : event.method === 'compact_session' ? await this.compactSession(event.args)
+          : event.method === 'conversation_size' ? await this.conversationSize(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its
@@ -699,6 +700,19 @@ export class CognitionCore {
     } catch (error) {
       return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };
     }
+  }
+
+  /** ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction
+   * threshold uses), and the floor its character preset's compaction engine sets (compaction.js `floorTokens`). */
+  async conversationSize({ session_id: id, scene_id: scene, cwd }) {
+    const meter = this.ctx.get('tokenMeter');
+    if (!meter) return { reason: 'no_token_meter' };
+    const agent = this.ctx.agents.get(id)
+      ?? await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene, cwd } });
+    const engine = this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction');
+    const floor = typeof engine?.floorTokens === 'function' ? await engine.floorTokens(agent) : undefined;
+    if (!floor) return { reason: 'no_floor' };
+    return { tokens: meter.measure(agent.session).totalTokens, floor };
   }
 
   result(stage, sessionId, last, finishReason) {

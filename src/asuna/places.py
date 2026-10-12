@@ -21,7 +21,8 @@ ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊')
 VOICES = ((0, '没有人'), (1, '一个人'), (3, '两三个人'), (None, '好几个人'))
 INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
            'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记',
-           'note': '你自己的一张便条叫你来的'}
+           'note': '你自己的一张便条叫你来的',
+           'condense': '这个群的对话过了你同意的长度线，压之前来看看，把要紧的写进群笔记'}
 VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
@@ -433,7 +434,14 @@ def last_visits_block(store, persona, plan, moment):
     return {'items': rows, 'note': VISITS_NOTE}
 
 
+CONDENSE_VISIT_TEXT = ('这是程序带你来的，不是有人叫你，也不是新的授权：这个群的对话过了你同意的长度线，群里安静下来以后'
+                       '就会压缩，更早的原话会变成一段摘要。压之前先看看最近的聊天和你写的群笔记，把值得留下的（谁是谁、'
+                       '聊过什么、这里的说法）写进群笔记；不用说话，想说也可以，没有合适的话就 stay_silent。')
+
+
 def visit_text(intent, topic):
+    if intent == 'condense':
+        return CONDENSE_VISIT_TEXT
     return ('这是你自己从家里决定出门来这个群看看，不是有人叫你，也不是新的授权。你出门时的打算：%s%s。'
             '先看看最近的聊天、这里的现场（visit_from_program）和你写的群笔记，再决定：说一句、发一张你自己做的图、'
             '只把看到的写进群笔记，或者 stay_silent。没有合适的话就别硬说。'
@@ -460,6 +468,9 @@ def visit_block(store, scene, visit, moment):
         # ADR-018: what the note says is in note_from_program, with where she wrote it.
         block.update(basis='你自己在别处写的便条叫你来的：不是这里有人叫你',
                      note='先读懂这里在聊什么，再决定便条上的事在这里怎么办；不合适就不说，stay_silent。')
+    if visit.get('intent') == 'condense':
+        block.update(basis='程序带你来的：压缩之前先记笔记，不是这里有人叫你',
+                     note='先读最近的聊天，把值得留下的写进群笔记；说不说话随你，没有合适的话就不说。')
     if visit.get('topic'):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):

@@ -1,14 +1,20 @@
-"""Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation early.
+"""Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation.
 
 On a visit, or at home in her heartbeat or reflection, she may choose to have a group's conversation condensed once
-the group has gone quiet (`group_focus` op `condense`; `keep` takes the choice back). A home plan exists only while a
-group is marked: every few minutes it condenses the marked groups whose quiet has lasted long enough for how busy they
+the group has gone quiet (`group_focus` op `condense`; `keep` takes the choice back). A home plan looks every few
+minutes while she is in any group: it condenses the marked groups whose quiet has lasted long enough for how busy they
 are, or whose local night it is, through DSH's own compaction of that conversation (host request `compact_session`).
-The plugin refuses while a turn of hers runs there; the next look tries again. The next turn there says once that the
-conversation was condensed, so she can add to the group's notes what the summary dropped.
+The plugin refuses while a turn of hers runs there; the next look tries again.
 
-A `write_notes` visit also carries a few phrases several people there have used since her last look and that her
-group notes do not have yet, for her to work out or skip. Nothing is stored beyond her own notes.
+A group she has not marked is condensed by its size (the size floor she agreed to): at a quiet spell after new lines,
+the look asks the Host how long the conversation is and what the floor is (`conversation_size`: half the compaction
+threshold, in DSH's own measure). Past the floor, the program first opens a notes visit there (intent `condense`),
+and condenses at the next quiet spell after that visit's turn has run. Her private chats and home conversations are
+never condensed this way. The first turn there after any condensing says that the conversation was condensed and
+where the summary is, so she can add to the group's notes what the summary dropped.
+
+A `write_notes` or `condense` visit also carries a few phrases several people there have used since her last look and
+that her group notes do not have yet, for her to work out or skip. Nothing is stored beyond her own notes.
 
 Times, counts and sizes reach her only as words from the tables below (TABLES_VERSION).
 """
@@ -30,9 +36,10 @@ LOOK_EVERY_SECONDS = 300
 # How long a conversation was on its latest request → words (never the number).
 SIZE_WORDS = ((40000, '短'), (90000, '中等'), (150000, '长'), (None, '很长'))
 SIZE_NOTE = '对话越长，群里安静一阵以后再接话时读回来越慢（很长的要二十来秒）；压过以后前面变成一段摘要，原话就不在眼前了。'
-CONDENSED_NOTE = ('这个群的对话%s按你的选择压过了：开头那段摘要就是压缩留下的，更早的原话不在眼前了。'
+CONDENSED_NOTE = ('这个群的对话%s%s压过了：这段对话开头那段摘要就是压缩留下的，更早的原话不在眼前了。'
                   '看一眼摘要，漏了要紧的就补进群笔记。')
-CONDENSED_SHOWN_HOURS = 24
+CONDENSED_BY = {'mark': '按你的选择', 'floor': '过了你同意的长度线，趁群里安静'}
+OFFER_AGAIN_MINUTES = 60              # a notes visit that never ran is offered again after this
 # Phrases for a write_notes visit.
 PHRASES_SHOWN = 5
 PHRASE_MIN_PEOPLE = 3
@@ -149,51 +156,117 @@ def marked(store):
 
 
 # ---- the plan's look --------------------------------------------------------------------------------------------
-def look(store, persona, compact, moment=None):
-    """Condense every marked group that is due. compact(session_id, scene_id, cwd) → the plugin's answer dict."""
+def watched(store):
+    """The groups the plan looks at: the marked ones and every group she is routed to."""
+    from .places import groups
+    ids = {scene_id for scene_id, _, _ in groups(store.config)} | {scene['_id'] for scene in marked(store)}
+    return list(store.db.scenes.find({'_id': {'$in': sorted(ids)}, 'kind': 'group'}))
+
+
+def _condense(store, scene, found, compact, moment, by):
+    """Ask the Host to condense; returns whether it is done (condensed, or nothing to condense)."""
+    try:
+        session_id, cwd = found
+        answer = compact(session_id, scene['_id'], cwd) or {}
+    except Exception as exc:              # the next look tries again
+        store.audit('condense', 'condense.failed', {'scene_id': scene['_id'], 'error': str(exc)[:200]})
+        return False
+    if answer.get('reason') in UNAVAILABLE and by == 'mark':
+        # This Host cannot condense at all: the mark is taken back rather than tried every few minutes.
+        store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
+    done = bool(answer.get('compacted') or answer.get('reason') == 'nothing_to_compact')
+    if done:
+        update = {'$unset': {'condense_wanted': '', 'condense_floor': '', 'condensed_told': ''}}
+        if answer.get('compacted'):
+            update['$set'] = {'condensed_at': moment.isoformat(), 'condensed_by': by, 'conversation_tokens': None}
+        store.db.scenes.update_one({'_id': scene['_id']}, update)
+    store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': found[0], 'by': by,
+                                                **{k: answer.get(k) for k in ('compacted', 'items', 'tokens', 'reason')}})
+    return done
+
+
+def _past_floor(store, scene, found, size, moment):
+    """Whether the conversation is past the size floor; measured again only after new lines since the last measure."""
+    last = last_line(store, scene['_id'])
+    measured = scene.get('conversation_size') or {}
+    if measured.get('at') and (last is None or last <= _at(measured['at'])):
+        return bool(measured.get('floor')) and measured.get('tokens', 0) >= measured['floor']
+    try:
+        answer = size(found[0], scene['_id'], found[1]) or {}
+    except Exception as exc:
+        store.audit('condense', 'condense.size_failed', {'scene_id': scene['_id'], 'error': str(exc)[:200]})
+        return False
+    if not answer.get('floor'):
+        return False
+    tokens, floor = int(answer.get('tokens') or 0), int(answer['floor'])
+    store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'conversation_size': {
+        'tokens': tokens, 'floor': floor, 'at': moment.isoformat()}}})
+    return tokens >= floor
+
+
+def look(store, persona, compact, moment=None, size=None, offer_notes=None):
+    """Condense every marked group that is due, and every group past the size floor whose notes visit has run.
+    compact(session_id, scene_id, cwd) and size(session_id, scene_id, cwd) return the plugin's answer dicts;
+    offer_notes(scene) opens the notes visit and returns its event id, or None when no visit can be opened there."""
+    from . import places, switches
     moment = moment or datetime.now(timezone.utc)
     done = []
-    for scene in marked(store):
+    for scene in watched(store):
+        wanted = scene.get('condense_wanted')
+        if not wanted and not (size and offer_notes):
+            continue
         if not due(store, scene, moment):
             continue
         found = main_session(store, scene, persona)
         if not found:
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
-            store.audit('condense', 'condense.no_conversation', {'scene_id': scene['_id']})
+            if wanted:
+                store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
+                store.audit('condense', 'condense.no_conversation', {'scene_id': scene['_id']})
             continue
-        try:
-            session_id, cwd = found
-            answer = compact(session_id, scene['_id'], cwd) or {}
-        except Exception as exc:              # the next look tries again
-            store.audit('condense', 'condense.failed', {'scene_id': scene['_id'], 'error': str(exc)[:200]})
+        if wanted:
+            if _condense(store, scene, found, compact, moment, 'mark'):
+                done.append(scene['_id'])
             continue
-        if answer.get('reason') in UNAVAILABLE:
-            # This Host cannot condense at all: the mark is taken back rather than tried every few minutes.
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
-        if answer.get('compacted') or answer.get('reason') == 'nothing_to_compact':
-            store.db.scenes.update_one({'_id': scene['_id']}, {
-                '$set': {'condensed_at': moment.isoformat(), **({'conversation_tokens': None} if answer.get('compacted') else {})},
-                '$unset': {'condense_wanted': ''}})
-            done.append(scene['_id'])
-        store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': found[0],
-                                                    **{k: answer.get(k) for k in ('compacted', 'items', 'tokens', 'reason')}})
+        if switches.muted(store, scene['_id'], moment):
+            continue
+        floor = scene.get('condense_floor') or {}
+        if floor.get('visit'):
+            state = places.outcome(store, {'scene_id': scene['_id'], 'event_id': floor['visit']})
+            if state == 'pending':
+                continue
+            if state != 'failed':
+                if _condense(store, scene, found, compact, moment, 'floor'):
+                    done.append(scene['_id'])
+                continue
+            store.audit('condense', 'condense.notes_visit_failed', {'scene_id': scene['_id'], 'event_id': floor['visit']})
+            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_floor': {'failed_at': moment.isoformat()}}})
+            continue
+        if floor.get('failed_at') and moment - _at(floor['failed_at']) < timedelta(minutes=OFFER_AGAIN_MINUTES):
+            continue
+        if not _past_floor(store, scene, found, size, moment):
+            continue
+        event_id = offer_notes(scene)
+        if event_id:
+            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_floor': {
+                'visit': event_id, 'at': moment.isoformat()}}})
+            store.audit('condense', 'condense.notes_visit', {'scene_id': scene['_id'], 'event_id': event_id})
     return done
 
 
-def condensed_block(store, scene, moment=None):
-    """Once after condensing: until she next speaks there, or for a day."""
-    when = _at((scene or {}).get('condensed_at'))
-    moment = moment or datetime.now(timezone.utc)
-    if not when or moment - when > timedelta(hours=CONDENSED_SHOWN_HOURS):
+def condensed_block(store, scene, event_id, moment=None):
+    """After condensing, the first turn of hers there says so (and that same turn again if it is prepared again)."""
+    if not (scene or {}).get('condensed_at'):
         return None
-    from .config import character_id
-    spoke = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound',
-                                        'author': character_id(store.config), 'receipt_at': {'$gt': when.isoformat()}},
-                                       {'_id': 1})
-    if spoke:
+    told = scene.get('condensed_told')
+    if told and told != event_id:
         return None
+    if not told:
+        store.db.scenes.update_one({'_id': scene['_id'], 'condensed_at': scene['condensed_at']},
+                                   {'$set': {'condensed_told': event_id}})
     from .config import ago
-    return CONDENSED_NOTE % ago(max(0.0, (moment - when).total_seconds() / 3600))
+    moment = moment or datetime.now(timezone.utc)
+    hours = max(0.0, (moment - _at(scene['condensed_at'])).total_seconds() / 3600)
+    return CONDENSED_NOTE % (ago(hours), CONDENSED_BY.get(scene.get('condensed_by'), CONDENSED_BY['mark']))
 
 
 # ---- phrases for a write_notes visit -----------------------------------------------------------------------------

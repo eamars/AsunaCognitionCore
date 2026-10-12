@@ -3,10 +3,16 @@
  * Everything except the summary request is DSH's: thresholds, retained tail,
  * tool pairing, checkpoint framing and the shrink check. `summarize` is the
  * documented subclass hook; it sends the same replayed prefix (so the
- * provider's cache is reused) and swaps only the final instruction. The action
- * brain keeps DSH's own engineering template. */
+ * provider's cache is reused) and swaps only the final instruction. A span too
+ * large for one request (the model refuses it for its context window) is
+ * summarized in steps: its first half, then that summary followed by the rest,
+ * halving again while a part does not fit. `floorTokens` is the size past which
+ * a quiet group's conversation is condensed without her mark (ADR-049): half of
+ * this engine's own compaction threshold for the conversation's model. The
+ * action brain keeps DSH's own engineering template. */
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
-import { BlockAssembler, LlmError, contentHasImage } from '@deepseek-ai/dsh-llm';
+import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
+import { overflowed } from './carry.js';
 
 export const ROLE_COMPACTION_INSTRUCTION = [
   '现在请你作为这段对话的压缩器：把上面较早的一段对话整理成一份检查点，让同一个角色接着往下聊时不丢失来龙去脉。',
@@ -62,23 +68,59 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const target = configured ?? latest ?? (agent.options.provider && agent.options.model
       ? { provider: agent.options.provider, model: agent.options.model } : undefined);
     if (!target) throw new Error('no provider/model available for summarization');
-    const options = {
-      provider: target.provider, model: target.model,
-      messages: [...input.messages, { role: 'user', content: [{ type: 'text', text: ROLE_COMPACTION_INSTRUCTION }] }],
-      toolHistory: agent.session.toolHistory(),
-      ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
-      maxTokens: this.config.maxTokens, sessionId: agent.session.id, purpose: 'compaction',
-      ...(signal === undefined ? {} : { signal }),
+    const once = async messages => {
+      const options = {
+        provider: target.provider, model: target.model,
+        messages: [...messages, { role: 'user', content: [{ type: 'text', text: ROLE_COMPACTION_INSTRUCTION }] }],
+        toolHistory: agent.session.toolHistory(),
+        ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
+        maxTokens: this.config.maxTokens, sessionId: agent.session.id, purpose: 'compaction',
+        ...(signal === undefined ? {} : { signal }),
+      };
+      const assembler = new BlockAssembler();
+      for await (const chunk of this.ctx.llm.stream(options)) assembler.push(chunk);
+      const error = finishError(assembler.finish);
+      if (error) throw error;
+      const rawOutput = assembler.blocks();
+      if (contentHasImage(rawOutput)) throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT');
+      const summary = rawOutput.filter(block => block.type === 'text');
+      if (!summary.some(block => block.text.trim())) throw new Error('summarization produced no text summary content');
+      return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
+        maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
-    const assembler = new BlockAssembler();
-    for await (const chunk of this.ctx.llm.stream(options)) assembler.push(chunk);
-    const error = finishError(assembler.finish);
-    if (error) throw error;
-    const rawOutput = assembler.blocks();
-    if (contentHasImage(rawOutput)) throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT');
-    const summary = rawOutput.filter(block => block.type === 'text');
-    if (!summary.some(block => block.text.trim())) throw new Error('summarization produced no text summary content');
-    return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
-      maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
+    const [head, body] = input.messages[0]?.role === 'system'
+      ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
+    return inSteps(head, body, once);
   }
+
+  /** Half of this engine's compaction threshold for the conversation's model, in DSH's own measure (ADR-049's size
+   * floor), or undefined when the model declares no window. */
+  async floorTokens(agent) {
+    const target = agent.session.requestHeader()?.config
+      ?? (agent.options.provider && agent.options.model ? agent.options : undefined);
+    if (!target) return undefined;
+    const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model);
+    const window = info.context?.contextWindow;
+    if (!window) return undefined;
+    const own = this.config.modelPolicies?.find(policy => policy.provider === target.provider && policy.model === target.model);
+    const ratio = own?.thresholdRatio ?? this.config.thresholdRatio;
+    const headroom = own?.headroomTokens ?? this.config.headroomTokens ?? 0;
+    const reserved = agent.session.requestHeader()?.config.maxTokens ?? info.defaultMaxTokens ?? 0;
+    return Math.floor(Math.floor(Math.min(window * ratio, window - reserved - headroom)) / 2);
+  }
+}
+
+/** Summarize `body` after `head` in one request, or, when the model refuses it for its context window, in steps: the
+ * first part, then its summary followed by the rest. A part is cut only before a user message, so a tool call and its
+ * result stay together. */
+export async function inSteps(head, body, once) {
+  const cuts = body.map((message, index) => index).filter(index => index > 0 && body[index].role === 'user');
+  try { return await once([...head, ...body]); }
+  catch (error) { if (!overflowed(error) || !cuts.length) throw error; }
+  const middle = Math.floor(body.length / 2);
+  const cut = cuts.reduce((best, index) => Math.abs(index - middle) < Math.abs(best - middle) ? index : best);
+  const first = await inSteps(head, body.slice(0, cut), once);
+  const text = first.summary.map(block => block.text).join('\n');
+  return inSteps(head, [createUserMessage({ source: { kind: 'asuna', form: 'notice' },
+    content: [{ type: 'text', text: '<compacted-summary>\n' + text + '\n</compacted-summary>' }] }), ...body.slice(cut)], once);
 }

@@ -66,7 +66,7 @@ def test_condensing_is_her_choice_on_a_visit_or_at_home_never_mid_conversation(s
     assert not condense.marked(store)
 
 
-def test_a_look_condenses_a_due_group_once_and_she_is_told_until_she_speaks(store):
+def test_a_look_condenses_a_due_group_once_and_her_next_turn_there_is_told(store):
     scene = group(store, character_context='ctx-1')
     store.db.sessions.insert_one({'_id': 'role-g-a', 'schema_version': 1, 'native_host': True, 'main_conversation': True, 'scene_id': 'g-a',
                                   'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1', 'cwd': 'C:/w/g-a'})
@@ -79,10 +79,61 @@ def test_a_look_condenses_a_due_group_once_and_she_is_told_until_she_speaks(stor
     assert condense.look(store, 'P1', done, NOW) == ['g-a'] and asked == [('role-g-a', 'C:/w/g-a')] * 2
     assert not condense.marked(store)
     scene = store.db.scenes.find_one({'_id': 'g-a'})
-    assert '压过了' in condense.condensed_block(store, scene, NOW + timedelta(minutes=5))
-    store.db.messages.insert_one({'_id': 'her', 'schema_version': 1, 'scene_id': 'g-a', 'direction': 'outbound', 'author': 'demo',
-                                  'text': '嗯', 'receipt_at': (NOW + timedelta(minutes=10)).isoformat()})
-    assert condense.condensed_block(store, scene, NOW + timedelta(minutes=20)) is None
+    told = condense.condensed_block(store, scene, 'ev-1', NOW + timedelta(days=3))
+    assert '按你的选择压过了' in told and '开头那段摘要' in told, 'told even days later, where the summary is'
+    scene = store.db.scenes.find_one({'_id': 'g-a'})
+    assert condense.condensed_block(store, scene, 'ev-1', NOW), 'the same turn prepared again still has it'
+    assert condense.condensed_block(store, scene, 'ev-2', NOW) is None, 'once per condensing'
+
+
+def routed(store, *names):
+    store.config['channels'] = {'qq': {'routes': {name: {'scene_id': name, 'target': {'type': 'group', 'id': name}}
+                                                  for name in names}}}
+
+
+def test_a_group_past_the_size_floor_gets_a_notes_visit_first_then_is_condensed_at_a_quiet_spell(store):
+    from asuna import places
+    group(store, character_context='ctx-1')
+    routed(store, 'g-a')
+    store.db.sessions.insert_one({'_id': 'role-g-a', 'schema_version': 1, 'native_host': True, 'main_conversation': True, 'scene_id': 'g-a',
+                                  'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1', 'cwd': 'C:/w/g-a'})
+    lines(store, 'g-a', 40, last_minutes_ago=45)
+    measured, compacted, offered = [], [], []
+    size = lambda session_id, scene_id, cwd: measured.append(session_id) or {'tokens': 120000, 'floor': 100000}
+    compact = lambda session_id, scene_id, cwd: compacted.append(session_id) or {'compacted': True, 'items': 900}
+    offer = lambda scene: offered.append(scene['_id']) or 'visit:g-a:condense-1'
+    assert condense.look(store, 'P1', compact, NOW, size=size, offer_notes=offer) == []
+    assert offered == ['g-a'] and not compacted, 'notes first'
+    # Her notes turn has not run yet: nothing is condensed, nothing measured again.
+    assert condense.look(store, 'P1', compact, NOW, size=size, offer_notes=offer) == [] and not compacted
+    assert measured == ['role-g-a'] and offered == ['g-a']
+    store.db.episodes.insert_one({'_id': places.episode_key({'scene_id': 'g-a', 'event_id': 'visit:g-a:condense-1'}),
+                                  'schema_version': 1, 'state': 'COMMITTED', 'tool_calls': {}})
+    assert condense.look(store, 'P1', compact, NOW, size=size, offer_notes=offer) == ['g-a'] and compacted == ['role-g-a']
+    scene = store.db.scenes.find_one({'_id': 'g-a'})
+    assert scene['condensed_by'] == 'floor' and 'condense_floor' not in scene
+    assert '长度线' in condense.condensed_block(store, scene, 'ev-next', NOW)
+
+
+def test_a_group_under_the_floor_or_not_quiet_is_left_and_only_groups_are_looked_at(store):
+    group(store, character_context='ctx-1')
+    group(store, 'g-busy', character_context='ctx-1')
+    store.put('scenes', {'_id': 'dm-floor', 'kind': 'dm', 'scope_key': 'scene:dm-floor', 'policy_epoch': 1, 'members': [],
+                         'sequence': 0}, stream='dm-floor')
+    routed(store, 'g-a', 'g-busy', 'dm-floor')
+    for name in ('g-a', 'g-busy', 'dm-floor'):
+        store.db.sessions.insert_one({'_id': 'role-' + name, 'schema_version': 1, 'native_host': True, 'main_conversation': True,
+                                      'scene_id': name, 'persona': 'P1', 'policy_epoch': 1, 'character_context': 'ctx-1',
+                                      'binding_key': 'bk-' + name})
+    lines(store, 'g-a', 40, last_minutes_ago=45)
+    lines(store, 'g-busy', 40, last_minutes_ago=1)
+    measured = []
+    size = lambda session_id, scene_id, cwd: measured.append(session_id) or {'tokens': 50000, 'floor': 100000}
+    never = lambda *_: pytest.fail('nothing to condense or visit')
+    assert condense.look(store, 'P1', never, NOW, size=size, offer_notes=never) == []
+    assert measured == ['role-g-a'], 'the busy group is not quiet; a private chat is never condensed by size'
+    assert condense.look(store, 'P1', never, NOW, size=size, offer_notes=never) == []
+    assert measured == ['role-g-a'], 'measured again only after new lines'
 
 
 def test_a_host_that_cannot_condense_takes_the_mark_back_instead_of_retrying(store):

@@ -254,7 +254,7 @@ Her switches (ADR-052): mute a group, turn tools off in a conversation, block a 
 
 [src/asuna/condense.py](../../src/asuna/condense.py)
 
-Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation early.
+Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation.
 
 - def `per_day` — Average incoming lines a day there over the last week.
 - def `quiet_minutes` — How long the group must be quiet before condensing, by how busy it is.
@@ -266,8 +266,9 @@ Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its
 - def `mark`
 - def `unmark`
 - def `marked`
-- def `look` — Condense every marked group that is due.
-- def `condensed_block` — Once after condensing: until she next speaks there, or for a day.
+- def `watched` — The groups the plan looks at: the marked ones and every group she is routed to.
+- def `look` — Condense every marked group that is due, and every group past the size floor whose notes visit has run.
+- def `condensed_block` — After condensing, the first turn of hers there says so (and that same turn again if it is prepared again).
 - def `last_look` — When she last visited this group before this visit (the heartbeat plan's ledger), or None.
 - def `phrases` — At most five phrases of this group for a write_notes visit: used by at least three people there over the last week, on at least three different days (a group's own words come back; a day's topic does not), at least once since her last look,
 

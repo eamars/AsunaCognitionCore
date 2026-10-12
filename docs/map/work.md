@@ -80,7 +80,8 @@ Business ownership for native DSH reminders; no host time wheel.
   - `pause_presence` — Her heartbeat.pause_min: beats keep ticking but skip until then, and resume by themselves.
   - `watch_rhythm` — Watchdog (ADR-012 §4.3): a heartbeat that went quiet for two beats is rebuilt, and she is told.
   - `ensure_settlement` — Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date.
-  - `ensure_condense` — ADR-049: a home plan that looks every few minutes, only while some group is marked to be condensed.
+  - `ensure_condense` — ADR-049: a home plan that looks every few minutes while she is in any group (marked ones, size floor).
+  - `condense_notes_visit` — ADR-049's size floor: before a group past it is condensed, a notes visit there (not one of her own visits: it is not in her plan's ledger and has no daily limit).
   - `next_beat` — When DSH will next deliver her heartbeat (its own record), or None.
   - `beat_now` — The owner's /heartbeat (ADR-012 §8): one beat now through the same path, without the gates.
   - `visit` — Her visit (ADR-012 §4.2): checked against the same rules her places view shows, then a public turn in that group.

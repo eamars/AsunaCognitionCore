@@ -924,7 +924,7 @@ class ContextBuilder:
             upkeep={}
             if condense.size_words(scene):
                 upkeep['conversation']=condense.size_words(scene)
-            if (event.get('visit') or {}).get('intent')=='write_notes':
+            if (event.get('visit') or {}).get('intent') in ('write_notes','condense'):
                 found=condense.phrases(self.store,scene,persona,condense.last_look(self.store,scene['_id'],
                                                                                    event.get('event_id')),moment)
                 if found:
@@ -942,8 +942,9 @@ class ContextBuilder:
             from . import places
             context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
             from . import condense
-            if condense.condensed_block(self.store,scene,moment):
-                context['condensed_from_program']=condense.condensed_block(self.store,scene,moment)
+            condensed=condense.condensed_block(self.store,scene,event.get('event_id'),moment)
+            if condensed:
+                context['condensed_from_program']=condensed
         manifest['context_sha256']=sha(canonical(context))
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)

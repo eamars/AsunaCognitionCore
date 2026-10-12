@@ -123,6 +123,8 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `ROLE_COMPACTION_INSTRUCTION`
 - class `RoleCompactionEngine`
   - `summarize`
+  - `floorTokens` — Half of this engine's compaction threshold for the conversation's model, in DSH's own measure (ADR-049's size floor), or undefined when the model declares no window.
+- def `inSteps` — Summarize `body` after `head` in one request, or, when the model refuses it for its context window, in steps: the first part, then its summary followed by the rest.
 
 ## `context-delivery.js`
 
@@ -229,6 +231,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `idle` — Nothing of this conversation is running: no turn, none queued, no child of it open.
   - `ensureAgent`
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
+  - `conversationSize` — ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction threshold uses), and the floor its character preset's compaction engine sets (compaction.js `floorTokens`).
   - `result`
   - `workerFailed`
   - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data, since the Host's own log is not kept.

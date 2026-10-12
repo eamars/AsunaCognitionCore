@@ -455,11 +455,11 @@ class ScheduleService:
                                  {'daily': {'time': settle_at + ':00', 'time_zone': zone}}, {'timezone': zone})
 
     def ensure_condense(self):
-        """ADR-049: a home plan that looks every few minutes, only while some group is marked to be condensed."""
+        """ADR-049: a home plan that looks every few minutes while she is in any group (marked ones, size floor)."""
         from . import condense
         from .persona_data import persona_runtime
-        if not condense.marked(self.store):
-            self._retire(condense.PLAN_ID, 'no group marked to condense')
+        if not condense.watched(self.store):
+            self._retire(condense.PLAN_ID, 'no group to look at')
             return None
         persona, _, _ = self._persona()
         target = persona_runtime(self.app.config, persona).get('internal_scene') or self.app.config['chat']['scene_id']
@@ -480,16 +480,39 @@ class ScheduleService:
         def compact(session_id, scene_id, cwd):
             return worker.host_call('compact_session', {'session_id': session_id, 'scene_id': scene_id, 'cwd': cwd})
 
+        def size(session_id, scene_id, cwd):
+            return worker.host_call('conversation_size', {'session_id': session_id, 'scene_id': scene_id, 'cwd': cwd})
+
         def run():
             try:
-                condense.look(self.store, persona, compact)
+                condense.look(self.store, persona, compact, size=size, offer_notes=self.condense_notes_visit)
             finally:
                 try:
-                    self.ensure_condense()            # retires itself once nothing is marked
+                    self.ensure_condense()            # retires itself once she is in no group
                 except Exception as exc:
                     self.store.audit('condense', 'condense.plan_failed', {'error': str(exc)[:200]})
         threading.Thread(target=run, name='asuna-condense', daemon=True).start()
         return 'LOOKING'
+
+    def condense_notes_visit(self, scene):
+        """ADR-049's size floor: before a group past it is condensed, a notes visit there (not one of her own visits:
+        it is not in her plan's ledger and has no daily limit). Returns its event id, or None when no member route
+        can authorize a turn there."""
+        from . import places
+        found = places.find(self.app.config, places.place_id(scene['_id']))
+        if not found or not scene.get('channel_id'):
+            return None
+        _, route, channel = found
+        person = places.visitor(route, channel)
+        if not person:
+            return None
+        event_id = 'visit:%s:condense-%s' % (scene['_id'], schedule_rules._aware(now()).strftime('%Y%m%dT%H%M%S'))
+        self.controller.offer_internal('visit', event_id, scene['_id'], person, places.visit_text('condense', None),
+            scene_tick=True,
+            group_context={'wake_reason': places.WAKE_REASON, 'topic_id': event_id, 'reply_to': None,
+                           'reply_message_id': None, 'mentioned_account_ids': []},
+            visit={'intent': 'condense', 'topic': None, 'artifact_id': None, 'from': 'condense'})
+        return event_id
 
     def next_beat(self):
         """When DSH will next deliver her heartbeat (its own record), or None."""

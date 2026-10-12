@@ -329,21 +329,38 @@ Her groups are active or resting (`focus.py`). An active group works as describe
 
 Her switches (`switches.py`, collection `switches`) end by themselves: after `hours` (default 24, at most 168), or earlier with `set_policy {key: switch_off, value: <id>}`. At home, `group_focus {op: mute, place, hours}` mutes a group (`op: unmute` ends it): a muted group is not active whatever its focus (only the resting wakes, no proactive chance, no summaries), its visits are refused (`places.eligibility`), and her heartbeat lists it as muted. At home, `set_policy {key: tools_off, place, value: [tool names], hours}` turns tools off in one conversation (an empty list restores them; `think`, `recall` and `stay_silent` cannot be): they stay in that conversation's list, and a call is refused saying who turned it off, until when and the switch's id. Outside home, `understand_person {block: hours}` blocks the account speaking to her: the channel intake marks its lines (`event.blocked`, a group line's wake reason cleared and kept as `group_context.blocked`) and the router records them without a turn (`RECORDED_NO_WAKE`); nobody at home can be blocked. A switched conversation's turns carry `switches_from_program` with its own switches; her home turns carry all of them and those that ended in the last 12 hours.
 
-A group's conversation can be condensed early, on her choice (`condense.py`). In a visit turn, at home in a
+A group's conversation is condensed on her choice, or by its size (`condense.py`). In a visit turn, at home in a
 heartbeat, self-improvement or settlement turn, or in an owner-private turn a plan of hers woke, `group_focus {op:
 condense, place}` marks a group (`condense_wanted` on its scene) and `op: keep` takes the mark back; any other turn
-(a group, someone else's chat: someone there is waiting for her to speak) is refused. While some group is marked, a program plan
-at home (`plan-asuna-condense`, every 5 minutes, not in her plan list) condenses each marked group once someone other
-than her last spoke there long enough ago for how busy the group is (average incoming lines a day over the last week:
-100 or more 10 minutes, 30 to 100 15 minutes, fewer 30 minutes; her own lines never restart the wait), or at once
-during the group's local night (01:00 to 07:00, its time zone). It asks the Host to run DSH's `/compact` on that
-group's main character session through the commands service (`compact_session`; the session's log shows the command
-and its result), which the plugin refuses while a turn of hers runs there; the next look tries again. A Host with no
-commands service or no `/compact` for that session takes the mark back instead of trying again. A condensed group's scene gets `condensed_at` and loses the mark, and the plan retires when nothing
-is marked. Until she next speaks there, or for a day, a turn in that group carries `condensed_from_program`, saying the
-conversation was condensed and the summary at its start is what is left. Each character turn's result reports how
-long the conversation was on its latest request (`prompt_tokens`); the scene keeps it (`conversation_tokens`), and a
-visit turn's `visit_from_program.upkeep.conversation` says it in words (短, 中等, 长, 很长), never as a number.
+(a group, someone else's chat: someone there is waiting for her to speak) is refused. While she is in any group, a
+program plan at home (`plan-asuna-condense`, every 5 minutes, not in her plan list) looks at each group at its quiet
+spell: once someone other than her last spoke there long enough ago for how busy the group is (average incoming lines
+a day over the last week: 100 or more 10 minutes, 30 to 100 15 minutes, fewer 30 minutes; her own lines never restart
+the wait), or at once during the group's local night (01:00 to 07:00, its time zone). A marked group is condensed
+then. Condensing asks the Host to run DSH's `/compact` on that group's main character session through the commands
+service (`compact_session`; the session's log shows the command and its result), which the plugin refuses while a
+turn of hers runs there; the next look tries again. A Host with no commands service or no `/compact` for that session
+takes the mark back instead of trying again.
+
+A group she has not marked (groups only: her private chats and home conversations keep her mark alone) is measured at
+a quiet spell after new lines there: the Host request `conversation_size` answers the conversation's size in DSH's own
+measure (the token meter its compaction threshold uses) and the floor, half of that conversation's compaction
+threshold (the character preset's compaction engine, `compaction.js` `floorTokens`); the scene keeps both
+(`conversation_size`). Past the floor, the program first opens a notes visit there (a `visit` turn with intent
+`condense`, not in her plan's visit ledger and outside its daily limit; `condense_floor` on the scene records it), whose
+text and `visit_from_program` say that the program brought her to write the group's notes before its conversation is
+condensed; it also carries the phrases a `write_notes` visit gets. At the next quiet spell after that turn has run,
+the group is condensed; a visit that failed is offered again after an hour; a muted group waits. A summary request too
+large for the model's window (the model refuses it for its context window) is made in steps: the first part of the
+span, then that summary followed by the rest, halving again while a part does not fit, cut only before a user message.
+
+A condensed group's scene gets `condensed_at` and `condensed_by` (`mark` or `floor`) and loses its mark. The first
+turn of hers in that group afterwards carries `condensed_from_program` (that same turn again if it is prepared again;
+the scene records it in `condensed_told`), saying the conversation was condensed, on her choice or past the floor
+she agreed to, and that the summary at the start of that conversation is what is left. Each character turn's result
+reports how long the conversation was on its latest request (`prompt_tokens`); the scene keeps it
+(`conversation_tokens`), and a visit turn's `visit_from_program.upkeep.conversation` says it in words (短, 中等, 长,
+很长), never as a number.
 
 A `write_notes` visit also carries `visit_from_program.upkeep.phrases`: at most 5 phrases of that group (Chinese runs
 of 2 to 6 characters, Latin words of 3 or more letters, markup, @s and links left out, and pieces made only of common

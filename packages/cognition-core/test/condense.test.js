@@ -48,3 +48,15 @@ test('ADR-049: a stage result carries how long the conversation was on that requ
   assert.equal(asuna.result({ token: 'op' }, 'role-g', { ...last, data: { ...last.data, usage: undefined } }, 'stop')
     .prompt_tokens, undefined);
 });
+
+test('ADR-049: a conversation\'s size is DSH\'s own measure, with the floor its compaction engine sets', async () => {
+  const agent = { id: 'role-g', session: { id: 'role-g' } };
+  const engine = { floorTokens: async target => (target === agent ? 104857 : undefined) };
+  const asuna = core({ agents: { 'role-g': agent },
+    tokenMeter: { measure: session => ({ totalTokens: session === agent.session ? 150000 : 0 }) },
+    agentPresets: { serviceFor: (target, name) => (target === agent && name === 'compaction' ? engine : undefined) } });
+  assert.deepEqual(await asuna.conversationSize({ session_id: 'role-g', scene_id: 'g' }), { tokens: 150000, floor: 104857 });
+  const plain = core({ agents: { 'role-g': agent }, tokenMeter: { measure: () => ({ totalTokens: 1 }) },
+    agentPresets: { serviceFor: () => ({}) } });
+  assert.deepEqual(await plain.conversationSize({ session_id: 'role-g', scene_id: 'g' }), { reason: 'no_floor' });
+});

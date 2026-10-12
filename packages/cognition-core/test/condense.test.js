@@ -60,3 +60,12 @@ test('ADR-049: a conversation\'s size is DSH\'s own measure, with the floor its 
     agentPresets: { serviceFor: () => ({}) } });
   assert.deepEqual(await plain.conversationSize({ session_id: 'role-g', scene_id: 'g' }), { reason: 'no_floor' });
 });
+
+test('ADR-063 D2: a copy counts as visible as far back as the tail her compaction keeps, else the fixed window', async () => {
+  const agent = { id: 'role-g', session: { id: 'role-g' } }, meter = { measure: () => ({ nodes: [] }) };
+  const asuna = core({ tokenMeter: meter,
+    agentPresets: { serviceFor: () => ({ retainedTokens: async () => 36700 }) } });
+  assert.deepEqual(await asuna.reach(agent), { tokens: 36700, meter });
+  assert.deepEqual(await core({ tokenMeter: meter, agentPresets: { serviceFor: () => ({}) } }).reach(agent),
+    { tokens: 32768 });
+});

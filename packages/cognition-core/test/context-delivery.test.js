@@ -200,3 +200,23 @@ test('a notice over the ceiling loses the oldest rows first, then halves its lon
   assert.deepEqual(Object.keys(composed.context).slice(0, 2), ['scene', 'trimmed_from_program']);
   assert.deepEqual(composed.omitted.trimmed, left);
 });
+
+// ADR-063 D2: a copy counts as visible inside the tail any compaction keeps verbatim, as the conversation's engine
+// sizes it and DSH's meter prices it, not inside a fixed window.
+test('visibility reaches as far as the retained tail, priced by DSH\'s meter', () => {
+  const first = composeContext(context([]), visibleCarried(surface([])));
+  const filler = { type: 'user/message', data: { content: [{ type: 'text', text: 'x'.repeat(40000 * 4) }] } };
+  const events = [notice(first, 'ep-1'), filler];
+  const meter = tokens => ({ measure: () => ({ nodes: events.map((event, seq) => ({ seq, tokens: tokens(event) })) }),
+    estimateMessage: () => 0 });
+  // Beyond the fixed window, inside a larger retained tail: still visible.
+  const far = composeContext(context([]), visibleCarried(surface(events), [], 60000, meter(event => event === filler ? 40000 : 100)));
+  assert.equal(far.context.self_state_from_program, undefined);
+  assert.deepEqual(far.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
+  // The meter prices the filler above the tail: the copy is sent again, whatever characters/4 would say.
+  const priced = composeContext(context([]), visibleCarried(surface(events), [], 60000, meter(event => event === filler ? 70000 : 100)));
+  assert.deepEqual(priced.context.self_state_from_program, { core: '同一份自我' });
+  // Without a meter or an engine: the fixed window, as before.
+  const fixed = composeContext(context([]), visibleCarried(surface(events)));
+  assert.deepEqual(fixed.context.self_state_from_program, { core: '同一份自我' });
+});

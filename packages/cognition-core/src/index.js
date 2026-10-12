@@ -14,7 +14,7 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
-import { composeContext, trimTurn, visibleCarried } from './context-delivery.js';
+import { REUSE_WINDOW_TOKENS, composeContext, trimTurn, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
@@ -500,11 +500,21 @@ export class CognitionCore {
     });
   }
 
-  message(stage, session, pending = []) {
+  /** How far back a copy in her conversation counts as visible: the tail any compaction there keeps verbatim
+   * (compaction.js retainedTokens), with DSH's token meter to price it; the fixed window without them. */
+  async reach(agent) {
+    const engine = this.ctx.get('agentPresets')?.serviceFor?.(agent, 'compaction');
+    const tokens = typeof engine?.retainedTokens === 'function'
+      ? await engine.retainedTokens(agent).catch(() => undefined) : undefined;
+    const meter = this.ctx.get('tokenMeter');
+    return tokens && meter ? { tokens, meter } : { tokens: REUSE_WINDOW_TOKENS };
+  }
+
+  message(stage, session, pending = [], reach = { tokens: REUSE_WINDOW_TOKENS }) {
     let text = stage.text, carried;
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
-      const composed = composeContext(stage.context, visibleCarried(session, pending));
+      const composed = composeContext(stage.context, visibleCarried(session, pending, reach.tokens, reach.meter));
       // The turn's ceiling holds for what this notice sends (context_budget.ceiling).
       trimTurn(composed, stage.ceiling);
       text = JSON.stringify(composed.context) + (stage.tail ? '\n' + stage.tail : '');
@@ -610,7 +620,7 @@ export class CognitionCore {
         this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
       state.current = event;
       state.system = event.system;
-      agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
+      agent.followup(this.message(event, agent.session, agent.inbox.nextStep, await this.reach(agent)));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     }
@@ -903,7 +913,7 @@ export class CognitionCore {
       const stage = state.admitted; state.admitted = null;
       if (!stage) return decision;
       return stage.kind === 'stage'
-        ? { ...decision, messages: [...decision.messages, this.message(stage, agent.session)] }
+        ? { ...decision, messages: [...decision.messages, this.message(stage, agent.session, [], await this.reach(agent))] }
         : { kind: 'reject' };
     });
     scope.on('agent/assistant-stream', ({ agent, frame }) => {
@@ -935,7 +945,7 @@ export class CognitionCore {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
-          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
+          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session, [], await this.reach(agent)));
         }
       }
     });

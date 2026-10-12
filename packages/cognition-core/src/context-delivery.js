@@ -2,11 +2,12 @@
  * what her session does not still show is sent.
  *
  * A block, history row (of `delivered_history`, or a line in `group_continuity_from_program`) or memory is left out,
- * and so is one of her own thoughts (a recalled one, or one of her
- * recent thoughts) whose `think` call the session still shows, only while an identical copy sits inside the newest REUSE_WINDOW_TOKENS
- * of the session surface. That stretch is inside DSH's retained tail, so any
- * compaction, including one that runs right before this message joins the
- * surface, keeps it verbatim. Anything older is sent again. Each notice records
+ * and so is one of her own thoughts (a recalled one, or one of her recent thoughts) whose `think` call the session
+ * still shows, only while an identical copy sits inside the conversation's retained tail: the newest stretch of the
+ * surface that any compaction keeps verbatim, as its compaction engine sizes it for the model (compaction.js
+ * `retainedTokens`) and DSH's token meter prices its nodes; REUSE_WINDOW_TOKENS and a characters/4 estimate when
+ * either is missing. A pressure compaction, including one that runs right before this message joins the surface,
+ * keeps that stretch verbatim. Anything older is sent again. Each notice records
  * what it carries in its own `source.carried`, so the session log is the only
  * state; nothing is cached in the worker or Mongo. A recalled memory (not one of her thoughts) whose every source
  * line is visible is left out too.
@@ -19,8 +20,8 @@
  * prompt (block_guide.py), so they carry no explanation of their own. */
 import { createHash } from 'node:crypto';
 
-/** Must stay below the role preset's retained tail (DSH chars/4 estimate):
- * (262144 − 32768) × retainRatio 0.16 ≈ 36.7K. */
+/** The stretch counted when the conversation's compaction engine or DSH's token meter is not at hand; below the role
+ * preset's retained tail: (262144 − 32768) × retainRatio 0.16 ≈ 36.7K. */
 export const REUSE_WINDOW_TOKENS = 32768;
 /** Orientation and the turn's trigger are always sent. */
 const ALWAYS = new Set(['scene', 'speaker', 'session_class', 'event']);
@@ -28,15 +29,18 @@ const HEAD = ['scene', 'speaker', 'session_class'];
 
 const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);
 
-/** What the newest stretch of the surface already carries (DSH's chars/4 token estimate). Lines still
- * waiting in the inbox (navigation.js) count too: the same step claims them just before this notice. */
-export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDOW_TOKENS) {
+/** What the newest stretch of the surface already carries. Lines still waiting in the inbox (navigation.js) count
+ * too: the same step claims them just before this notice. `meter` is DSH's token meter, whose node prices a compaction
+ * keeps its tail by; without it, characters/4. */
+export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDOW_TOKENS, meter = undefined) {
   const visible = { blocks: new Set(), items: new Set(), lists: new Set(), rows: new Set(), memories: new Set(),
     episodes: new Set(), thoughts: new Set() };
   const nodes = session.surface.nodes;
+  const estimate = content => Math.ceil(JSON.stringify(content).length / 4);
+  const priced = meter ? new Map(meter.measure(session).nodes.map(node => [node.seq, node.tokens])) : null;
   let used = 0;
   for (const line of pending.toReversed()) {
-    used += Math.ceil(JSON.stringify(line.content).length / 4);
+    used += meter ? meter.estimateMessage(line) : estimate(line.content);
     if (used > windowTokens) return visible;
     if (line.source?.channel && line.source.receipt) visible.rows.add(line.source.receipt);
   }
@@ -44,7 +48,7 @@ export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDO
     const event = session.eventAt(nodes[index]);
     if (!event) continue;
     const content = session.deriveEventMessage(event)?.content ?? '';
-    used += Math.ceil(JSON.stringify(content).length / 4);
+    used += priced?.get(nodes[index]) ?? estimate(content);
     if (used > windowTokens) break;
     // Her own thought, as she wrote it with `think` (its call id ends the stored thought's id).
     if (Array.isArray(content)) for (const block of content)

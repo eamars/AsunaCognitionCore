@@ -123,3 +123,17 @@ test('a group thread line or the speaker\'s last lines still on the surface are 
   assert.equal(composed.omitted.history_rows, 3);
   assert.ok(composed.carried.rows.includes('in-old'), 'a line sent here counts as visible for the next notice');
 });
+
+test('a recalled memory whose every source line is still on the surface is not listed again', () => {
+  const line = (receipt, text) => ({ type: 'user/message', data: { content: [{ type: 'text', text }],
+    source: { kind: 'user', channel: 'qq', receipt } } });
+  const events = [line('in-a', '第一句'), line('in-b', '第二句')];
+  const memories = [{ _id: 'chunk-a', kind: 'chunk', source_event_ids: ['in-a'], body_markdown: '第一句' },
+    { _id: 'sum-ab', kind: 'derived_summary', source_event_ids: ['in-a', 'in-b', 'in-gone'], body_markdown: '摘要' },
+    { _id: 'mono-1', kind: 'monologue', source_event_ids: ['in-a'], body_markdown: '心里话' },
+    { _id: 'chunk-x', kind: 'chunk', body_markdown: '没有来源' }];
+  const composed = composeContext(context([], { memories }), visibleCarried(surface(events)));
+  assert.deepEqual(composed.context.memories.map(item => item._id), ['sum-ab', 'mono-1', 'chunk-x']);
+  assert.equal(composed.omitted.memories, 1);
+  assert.deepEqual(composed.context.repeated_from_program, { history_rows: 0, memories: 1 });
+});

@@ -8,7 +8,8 @@
  * compaction, including one that runs right before this message joins the
  * surface, keeps it verbatim. Anything older is sent again. Each notice records
  * what it carries in its own `source.carried`, so the session log is the only
- * state; nothing is cached in the worker or Mongo.
+ * state; nothing is cached in the worker or Mongo. A recalled memory (not one of her thoughts) whose every source
+ * line is visible is left out too.
  *
  * A list block (a list of items, or a block with `items`) whose whole copy is not visible goes item by item
  * (ADR-056): an item still visible is folded into one `same_as_before` line that says how many and in what state,
@@ -112,9 +113,13 @@ export function composeContext(context, visible) {
       carried.rows.push(...kept.map(row => row._id).filter(Boolean));
       entries.push([key, kept.map(({ episode_id: _episode, ...row }) => row)]);
     } else if (key === 'memories' && Array.isArray(value)) {
-      const kept = value.filter(item => !visible.memories.has(item._id) && !shownThought(item._id));
-      thoughts += value.filter(item => !visible.memories.has(item._id) && shownThought(item._id)).length;
-      memories += value.filter(item => visible.memories.has(item._id)).length;
+      // A memory is shown already when its copy is, or when every line it was made from is still on the surface.
+      const shown = item => visible.memories.has(item._id) || item.kind !== 'monologue'
+        && Array.isArray(item.source_event_ids) && item.source_event_ids.length > 0
+        && item.source_event_ids.every(id => visible.rows.has(id));
+      const kept = value.filter(item => !shown(item) && !shownThought(item._id));
+      thoughts += value.filter(item => !shown(item) && shownThought(item._id)).length;
+      memories += value.filter(shown).length;
       carried.memories.push(...kept.map(item => item._id).filter(Boolean));
       entries.push([key, kept]);
     } else if (ALWAYS.has(key)) {

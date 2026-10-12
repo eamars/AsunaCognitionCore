@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeContext, trimTurn, visibleCarried } from '../src/context-delivery.js';
+import { composeContext, restoreContext, trimTurn, visibleCarried } from '../src/context-delivery.js';
 
 // A minimal session surface: what the model currently sees, newest last.
 function surface(events) {
@@ -31,10 +31,15 @@ test('a role notice repeats only what the visible session no longer shows', () =
   assert.deepEqual(second.omitted, { blocks: ['self_state_from_program'], history_rows: 2, memories: 1 });
   assert.equal(second.context.event.text, '新的话');
 
-  // Once the carrier is outside the reuse window (compaction may have absorbed it), everything returns.
+  // However far back, a copy on the surface counts; once a compaction has taken the carrier, everything returns.
   const filler = { type: 'user/message', data: { content: [{ type: 'text', text: 'x'.repeat(40000 * 4) }] } };
-  const third = composeContext(context([{ _id: 'in-1', direction: 'inbound', text: '旧话' }]),
+  const far = composeContext(context([{ _id: 'in-1', direction: 'inbound', text: '旧话' }]),
     visibleCarried(surface([...events, filler])));
+  assert.equal(far.context.self_state_from_program, undefined);
+  const checkpoint = { type: 'user/message', data: { content: [{ type: 'text', text: '<compacted-summary>…' }],
+    source: { kind: 'compact-checkpoint' } } };
+  const third = composeContext(context([{ _id: 'in-1', direction: 'inbound', text: '旧话' }]),
+    visibleCarried(surface([checkpoint, filler])));
   assert.deepEqual(third.context.self_state_from_program, { core: '同一份自我' });
   assert.equal(third.context.delivered_history.length, 1);
 });
@@ -201,22 +206,24 @@ test('a notice over the ceiling loses the oldest rows first, then halves its lon
   assert.deepEqual(composed.omitted.trimmed, left);
 });
 
-// ADR-063 D2: a copy counts as visible inside the tail any compaction keeps verbatim, as the conversation's engine
-// sizes it and DSH's meter prices it, not inside a fixed window.
-test('visibility reaches as far as the retained tail, priced by DSH\'s meter', () => {
-  const first = composeContext(context([]), visibleCarried(surface([])));
-  const filler = { type: 'user/message', data: { content: [{ type: 'text', text: 'x'.repeat(40000 * 4) }] } };
-  const events = [notice(first, 'ep-1'), filler];
-  const meter = tokens => ({ measure: () => ({ nodes: events.map((event, seq) => ({ seq, tokens: tokens(event) })) }),
-    estimateMessage: () => 0 });
-  // Beyond the fixed window, inside a larger retained tail: still visible.
-  const far = composeContext(context([]), visibleCarried(surface(events), [], 60000, meter(event => event === filler ? 40000 : 100)));
-  assert.equal(far.context.self_state_from_program, undefined);
-  assert.deepEqual(far.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
-  // The meter prices the filler above the tail: the copy is sent again, whatever characters/4 would say.
-  const priced = composeContext(context([]), visibleCarried(surface(events), [], 60000, meter(event => event === filler ? 70000 : 100)));
-  assert.deepEqual(priced.context.self_state_from_program, { core: '同一份自我' });
-  // Without a meter or an engine: the fixed window, as before.
-  const fixed = composeContext(context([]), visibleCarried(surface(events)));
-  assert.deepEqual(fixed.context.self_state_from_program, { core: '同一份自我' });
+// ADR-063 D2: nothing a notice called unchanged may be missing when the model reads the next request.
+test('after a compaction, what a notice relied on and the surface no longer shows is restored', () => {
+  const rows = [{ _id: 'in-1', direction: 'inbound', text: '旧话' }];
+  const first = composeContext(context(rows), visibleCarried(surface([])));
+  const second = composeContext(context(rows), visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.deepEqual(second.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
+  assert.deepEqual(second.context.delivered_history, []);
+  const checkpoint = { type: 'user/message', data: { content: [{ type: 'text', text: '<compacted-summary>…' }],
+    source: { kind: 'compact-checkpoint' } } };
+  // Nothing taken: nothing to send.
+  assert.equal(restoreContext(context(rows), visibleCarried(surface([notice(first, 'ep-1'), notice(second, 'ep-2')])), 'ep-2'), null);
+  // The first notice summarized away, the second still there: its own blocks, row and memory come back, not the trigger.
+  const restored = restoreContext(context(rows), visibleCarried(surface([checkpoint, notice(second, 'ep-2')])), 'ep-2');
+  assert.deepEqual(restored.context, { restored_from_program: ['self_state_from_program', 'relationship', 'delivered_history', 'memories'],
+    self_state_from_program: { core: '同一份自我' }, relationship: { body: '认识' }, delivered_history: rows,
+    memories: [{ _id: 'm1', body_markdown: '记忆' }] });
+  assert.equal(restored.carried.blocks.relationship !== undefined && restored.carried.rows[0], 'in-1', 'what it sends counts as carried');
+  // Both summarized: the turn's orientation and trigger come back too.
+  const all = restoreContext(context(rows), visibleCarried(surface([checkpoint])), 'ep-2');
+  assert.ok(all.context.event && all.context.scene);
 });

@@ -8,9 +8,8 @@
  * summarized in steps: its first half, then that summary followed by the rest,
  * halving again while a part does not fit. `floorTokens` is the size past which
  * a quiet group's conversation is condensed without her mark (ADR-049): half of
- * this engine's own compaction threshold for the conversation's model;
- * `retainedTokens` the tail any compaction keeps verbatim. The action brain
- * keeps DSH's own engineering template. */
+ * this engine's own compaction threshold for the conversation's model. The
+ * action brain keeps DSH's own engineering template. */
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
 import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
 import { overflowed } from './carry.js';
@@ -94,7 +93,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     return inSteps(head, body, once);
   }
 
-  /** This engine's threshold and retained tail for the conversation's model, as DSH's basic engine resolves them
+  /** This engine's compaction threshold for the conversation's model, as DSH's basic engine resolves it
    * (`resolveCompactSpec`), or undefined when the model declares no window. */
   async pressure(agent) {
     const target = agent.session.requestHeader()?.config
@@ -107,9 +106,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const ratio = own?.thresholdRatio ?? this.config.thresholdRatio;
     const headroom = own?.headroomTokens ?? this.config.headroomTokens ?? 0;
     const budget = window - (agent.session.requestHeader()?.config.maxTokens ?? info.defaultMaxTokens ?? 0);
-    const retain = own?.retainTokens ?? (own?.retainRatio === undefined ? this.config.retainTokens : undefined)
-      ?? Math.floor(budget * (own?.retainRatio ?? this.config.retainRatio));
-    return { threshold: Math.floor(Math.min(window * ratio, budget - headroom)), retain };
+    return { threshold: Math.floor(Math.min(window * ratio, budget - headroom)) };
   }
 
   /** Half of this engine's compaction threshold for the conversation's model, in DSH's own measure (ADR-049's size
@@ -117,12 +114,6 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   async floorTokens(agent) {
     const spec = await this.pressure(agent);
     return spec && Math.floor(spec.threshold / 2);
-  }
-
-  /** The tail of the conversation any compaction here keeps verbatim (context-delivery.js counts a copy as visible
-   * only inside it), or undefined when the model declares no window. */
-  async retainedTokens(agent) {
-    return (await this.pressure(agent))?.retain;
   }
 }
 

@@ -57,9 +57,6 @@ test('the size floor is half the engine\'s own compaction threshold for the conv
   engine.ctx = { llm: { resolveModelInfo: async () => ({ context: { contextWindow: 262144 }, defaultMaxTokens: 32768 }) } };
   const agent = { session: { requestHeader: () => ({ config: { provider: 'p', model: 'm', maxTokens: 32768 } }) }, options: {} };
   assert.equal(await engine.floorTokens(agent), Math.floor(Math.floor(262144 * 0.8) / 2));
-  engine.config.retainRatio = 0.16;
-  assert.equal(await engine.retainedTokens(agent), Math.floor((262144 - 32768) * 0.16), 'the tail any compaction keeps');
   engine.ctx.llm.resolveModelInfo = async () => ({});
   assert.equal(await engine.floorTokens(agent), undefined, 'no window declared: no floor');
-  assert.equal(await engine.retainedTokens(agent), undefined);
 });

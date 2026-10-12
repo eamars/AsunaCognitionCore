@@ -215,6 +215,44 @@ test('T6.4 the action brain question runs as her turn in the idle role session w
 });
 
 
+// ADR-063 D2: a compaction after her notice was composed takes the copies it relied on; the next request has them.
+test('what a compaction took from under her notice is in the next request again', async t => {
+  const h = await harness(t);
+  const role = await h.create('role');
+  const context = { scene: 'home', self_state_from_program: { core: 'SELF-COPY' }, event: { text: 'one' } };
+  const stage = (token, episode) => ({ kind: 'stage', session_id: 'role', token, phase: 'TURN', lane: 'character',
+    system: 'Current persona from existing state: role', text: 'Internal context', context, episode_id: episode,
+    binding: { scene_id: 'local-scene' } });
+  await h.core.onEvent(stage('op-1', 'ep-1'));
+  await role.whenIdle();
+  assert.match(JSON.stringify(h.requests[0].messages), /SELF-COPY/);
+  // The next turn's notice relies on the first one's copy; a compaction at that turn's first step summarizes it.
+  let compact = true;
+  h.ctx.on('agent/pre-step', async ({ agent }, next) => {
+    if (compact && agent === role) {
+      compact = false;
+      const session = role.session, nodes = session.surface.nodes;
+      const first = nodes.find(seq => session.eventAt(seq).type !== 'system/message'), last = nodes.at(-1);
+      const turn = session.snapshotEvents().findLast(event => event.type === 'turn/start').data.turn;
+      session.append('compaction/start', { compactionId: 'c1', turn });
+      const summary = session.append('compaction/summary', { compactionId: 'c1', summary: [{ type: 'text', text: 'earlier' }],
+        shadowedRange: { start: first, end: last }, shadowedSeqs: nodes.filter(seq => seq >= first),
+        shadowedTokenCount: 10, provider: 'fixture', model: 'one-model' });
+      session.append('user/message', createUserMessage({ source: { kind: 'compact-checkpoint', compactionId: 'c1' },
+        content: [{ type: 'text', text: '<compacted-summary>earlier</compacted-summary>' }] }),
+      { surfaceOp: { op: 'replace', startSeq: first, endSeq: last }, sourceEventSeqs: [summary.seq, ...nodes.filter(seq => seq >= first)] });
+      session.append('compaction/end', { compactionId: 'c1', turn });
+    }
+    return next();
+  });
+  await h.core.onEvent(stage('op-2', 'ep-2'));
+  await role.whenIdle();
+  const sent = JSON.stringify(h.requests.at(-1).messages);
+  assert.match(sent, /unchanged_from_program/, 'the notice relied on the earlier copy');
+  assert.match(sent, /SELF-COPY/, 'and the copy is back before the request');
+  assert.match(sent, /restored_from_program/);
+});
+
 test('a picture that cannot become an attachment says why, in a result the tool host accepts', async () => {
   const value = { ref: 'att-1', image: { media_type: 'image/gif', data: Buffer.from('GIF89a').toString('base64') } };
   const refused = Object.assign(new Error('unsupported'), { code: 'ATTACHMENT_TYPE_UNSUPPORTED' });

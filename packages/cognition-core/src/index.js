@@ -14,7 +14,7 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
-import { REUSE_WINDOW_TOKENS, composeContext, trimTurn, visibleCarried } from './context-delivery.js';
+import { composeContext, restoreContext, trimTurn, visibleCarried } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
@@ -500,26 +500,18 @@ export class CognitionCore {
     });
   }
 
-  /** How far back a copy in her conversation counts as visible: the tail any compaction there keeps verbatim
-   * (compaction.js retainedTokens), with DSH's token meter to price it; the fixed window without them. */
-  async reach(agent) {
-    const engine = this.ctx.get('agentPresets')?.serviceFor?.(agent, 'compaction');
-    const tokens = typeof engine?.retainedTokens === 'function'
-      ? await engine.retainedTokens(agent).catch(() => undefined) : undefined;
-    const meter = this.ctx.get('tokenMeter');
-    return tokens && meter ? { tokens, meter } : { tokens: REUSE_WINDOW_TOKENS };
-  }
-
-  message(stage, session, pending = [], reach = { tokens: REUSE_WINDOW_TOKENS }) {
+  message(stage, session, pending = []) {
     let text = stage.text, carried;
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
-      const composed = composeContext(stage.context, visibleCarried(session, pending, reach.tokens, reach.meter));
+      const composed = composeContext(stage.context, visibleCarried(session, pending));
       // The turn's ceiling holds for what this notice sends (context_budget.ceiling).
       trimTurn(composed, stage.ceiling);
       text = JSON.stringify(composed.context) + (stage.tail ? '\n' + stage.tail : '');
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;
+      // What a compaction takes off the surface after this is sent again at the next step (restored).
+      this.state(session.id).notice = { stage, from: session.seq };
     }
     // The summary is a stable identifier, never shown as prose; the client titles a turn's trigger
     // from `trigger` in the viewer's language (client.js).
@@ -527,6 +519,24 @@ export class CognitionCore {
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':' + stage.phase,
         operation: stage.token, lane: stage.lane, phase: stage.phase,
         ...(stage.trigger ? { trigger: stage.trigger } : {}), ...(carried ? { carried } : {}) } });
+  }
+
+  /** A compaction committed since her notice was composed: what of its context the surface (with the messages this
+   * step adds) no longer shows, as a follow-up notice; null when nothing fell out. */
+  restored(session, pending) {
+    const notice = this.state(session.id).notice;
+    if (!notice) return null;
+    const since = notice.from;
+    notice.from = session.seq;
+    if (!session.snapshotEvents(since).some(event => event.type === 'compaction/summary')) return null;
+    const { stage } = notice;
+    const composed = restoreContext(stage.context, visibleCarried(session, pending), stage.episode_id);
+    if (!composed) return null;
+    trimTurn(composed, stage.ceiling);
+    return createUserMessage({ content: [{ type: 'text', text: JSON.stringify(composed.context) }],
+      source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':restore',
+        operation: stage.token, lane: stage.lane, phase: 'RESTORE',
+        carried: { ...composed.carried, episode: stage.episode_id } } });
   }
 
   /** Her words for a running action session (collab.js), marked so its claim can be acknowledged. */
@@ -620,7 +630,7 @@ export class CognitionCore {
         this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
       state.current = event;
       state.system = event.system;
-      agent.followup(this.message(event, agent.session, agent.inbox.nextStep, await this.reach(agent)));
+      agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     }
@@ -911,10 +921,12 @@ export class CognitionCore {
       const decision = await next();
       if (decision.kind !== 'enter') return decision;
       const stage = state.admitted; state.admitted = null;
-      if (!stage) return decision;
-      return stage.kind === 'stage'
-        ? { ...decision, messages: [...decision.messages, this.message(stage, agent.session, [], await this.reach(agent))] }
-        : { kind: 'reject' };
+      if (stage && stage.kind !== 'stage') return { kind: 'reject' };
+      let messages = stage ? [...decision.messages, this.message(stage, agent.session)] : decision.messages;
+      // A compaction (this step's, or one since her notice) may have taken copies it relies on: they come back here.
+      const restored = lane === 'character' ? this.restored(agent.session, messages) : null;
+      if (restored) messages = [...messages, restored];
+      return messages === decision.messages ? decision : { ...decision, messages };
     });
     scope.on('agent/assistant-stream', ({ agent, frame }) => {
       const state = this.state(agent.session.id);
@@ -945,7 +957,7 @@ export class CognitionCore {
         const nextStage = await waiting;
         if (nextStage.error) throw new Error(nextStage.error);
         if (nextStage.kind === 'stage') {
-          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session, [], await this.reach(agent)));
+          state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
         }
       }
     });

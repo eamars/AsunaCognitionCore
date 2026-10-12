@@ -123,9 +123,8 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `ROLE_COMPACTION_INSTRUCTION`
 - class `RoleCompactionEngine`
   - `summarize`
-  - `pressure` — This engine's threshold and retained tail for the conversation's model, as DSH's basic engine resolves them (`resolveCompactSpec`), or undefined when the model declares no window.
+  - `pressure` — This engine's compaction threshold for the conversation's model, as DSH's basic engine resolves it (`resolveCompactSpec`), or undefined when the model declares no window.
   - `floorTokens` — Half of this engine's compaction threshold for the conversation's model, in DSH's own measure (ADR-049's size floor), or undefined when the model declares no window.
-  - `retainedTokens` — The tail of the conversation any compaction here keeps verbatim (context-delivery.js counts a copy as visible only inside it), or undefined when the model declares no window.
 - def `inSteps` — Summarize `body` after `head` in one request, or, when the model refuses it for its context window, in steps: the first part, then its summary followed by the rest.
 
 ## `context-delivery.js`
@@ -134,8 +133,8 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 
 Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only what her session does not still show is sent.
 
-- def `REUSE_WINDOW_TOKENS` — The stretch counted when the conversation's compaction engine or DSH's token meter is not at hand; below the role preset's retained tail: (262144 − 32768) × retainRatio 0.16 ≈ 36.7K.
-- def `visibleCarried` — What the newest stretch of the surface already carries.
+- def `visibleCarried` — What the surface already carries.
+- def `restoreContext` — After a compaction, what of a notice's context is no longer visible: the blocks, rows, memories and items to send again (the turn's own orientation and trigger only when the notice itself is gone), with `restored_from_program` naming the bl
 - def `composeContext` — The context this notice sends, what it carries, and what it left out (for the audit).
 - def `trimTurn` — The turn's ceiling on what this notice sends (the worker's table, context_budget.ceiling): over it, the oldest rows of the listed lists go first, then the longest text left is halved, again and again, saying how much went.
 
@@ -227,8 +226,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `applySettings`
   - `state`
   - `next`
-  - `reach` — How far back a copy in her conversation counts as visible: the tail any compaction there keeps verbatim (compaction.js retainedTokens), with DSH's token meter to price it; the fixed window without them.
   - `message`
+  - `restored` — A compaction committed since her notice was composed: what of its context the surface (with the messages this step adds) no longer shows, as a follow-up notice; null when nothing fell out.
   - `relay` — Her words for a running action session (collab.js), marked so its claim can be acknowledged.
   - `onEvent`
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.

@@ -101,6 +101,19 @@ the local server **space** does. Nothing here depends on one server's request fi
   (on the local server, where her long conversations push entries out within 5–30 minutes, it will likely end up
   shorter). Guessing wrong costs seconds either way: continuing a dropped history reads the task cold, starting
   fresh needlessly loses the task's detailed tool output.
+- **What providers say (their docs, 2026-10-12).** Every one drops an unused prefix after a while, and use refreshes
+  it; the while differs by an order of magnitude, so the limit cannot be one number:
+
+  | Endpoint | How long an unused prefix lasts | A cache hit costs |
+  |---|---|---|
+  | DeepSeek | best effort, "usually within a few hours to a few days" | about 2% of a miss |
+  | OpenAI, current models | at least 30 minutes after the last use (a `30m` setting) | discounted |
+  | OpenAI, earlier models | about 5–10 minutes in memory (up to an hour), or the 24-hour option | discounted |
+  | Anthropic | 5 minutes by default, 1 hour as a paid option | 10% (writes cost extra) |
+  | The local server | until pushed out by space; her long conversations push entries out in 5–30 minutes | free |
+
+  Each route's default follows its provider (an API that keeps prefixes for hours gets a longer limit; one that keeps
+  them for minutes a shorter one), then the measurement tunes it.
 - **Server-specific savings stay optional.** A field only one server knows (the local server's one-shot flag for her
   group gates) is sent only to a route configured to take it; every other endpoint never sees it.
 

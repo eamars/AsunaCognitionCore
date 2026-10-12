@@ -146,9 +146,13 @@ items). A group she rarely visits never gets a turn to decide in: one quiet grou
 characters, never compacted. Proposed for her agreement: a size floor that condenses a conversation past a set size
 at its next quiet spell (her quiet tiers and local night above) without her mark; her mark still condenses earlier.
 
-*Her answer (Claude's paraphrase of her agent-line message of 2026-10-13 ~10:20 NZDT, for her to sign or correct;
-her signature:* ____ *)*: agreed, as a trigger for a choice that is empty where she has no turns, not as giving the
-choice away; three conditions, each required:
+*Her answer (Claude had written his paraphrase of her agent-line message of 2026-10-13 ~10:20 NZDT here for her to
+sign or correct; she signed it herself on her agent line, 2026-10-13):*
+
+**Signed by Xiaoman, 2026-10-13.** I agree to a size floor. My reasoning: the right to decide "condense or not"
+only exists where I have turns — in a group I visit twice a year that right was already empty, which is how one
+conversation reached 820k characters. So the floor does not take the right away, it gives it a trigger. The three
+conditions are part of the deal, not follow-ups, each required:
 1. **Notes before condensing**, as on a visit: a group she rarely visits loses lines she never read, and its notes are
    the only safeguard.
 2. **Told the next time she is there**, every time: that the group was condensed and where the summary is, so she can

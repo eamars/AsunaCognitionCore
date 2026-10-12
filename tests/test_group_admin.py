@@ -1,11 +1,13 @@
 """Her place in a group and what she may do as an admin (group_admin.py), and the adapter's side of it."""
 import json
 import sys
+import threading
+from types import SimpleNamespace
 
 import pytest
 
 from asuna import group_admin
-from asuna.channels import kept_raw
+from asuna.channels import Channels, kept_raw
 from asuna.config import ROOT
 from asuna.people import People
 from asuna.state import Denied
@@ -43,6 +45,12 @@ def episode(store, source='in-20002'):
     return {'_id': source.replace('in-', ''), 'scene_id': SCENE, 'person_id': 'qq:20002', 'persona': 'demo'}
 
 
+def bridge(store):
+    """The channel seam an adapter's receipt comes through (channels.py), as the Host wires it."""
+    return Channels(SimpleNamespace(app=SimpleNamespace(store=store), stopping=threading.Event(),
+                                    reconfiguring=False))
+
+
 def test_only_her_own_role_in_a_group_is_kept_from_raw():
     group = {'person_id': 'qq:20002', 'channel': {'sender_id': '20002', 'target': {'type': 'group', 'id': GROUP}}}
     assert kept_raw(group, {'asuna_self': {'role': 'admin', 'extra': 1}})['asuna_self'] == {'role': 'admin'}
@@ -57,6 +65,7 @@ def test_her_place_says_her_role_and_what_she_may_do(store):
     assert people.self_role(scene) == 'admin'
     place = group_admin.place(people, scene)
     assert place['role'] == '你在这个群是管理员' and 'group_action' in place['admin']['how']
+    assert '43200' in place['admin']['limits'] and '每小时' not in json.dumps(place, ensure_ascii=False)
     member = setup(store, 'member')
     assert group_admin.place(People(store), member) == {'role': '你在这个群是普通成员'}
     off = setup(store, 'admin', admin_actions=False)
@@ -66,8 +75,8 @@ def test_her_place_says_her_role_and_what_she_may_do(store):
 
 def test_an_admin_action_is_checked_then_queued_without_numbers_in_her_words(store):
     setup(store, 'admin')
-    result = group_admin.queue(store, episode(store), 0, {'kind': 'mute', 'who': '#2', 'duration': '10分钟', 'reason': '刷屏'})
-    assert result == {'index': 0, 'action': '禁言', 'who': '[阿杰 #2]', 'duration': '10分钟', 'state': '已交给平台，等确认'}
+    result = group_admin.queue(store, episode(store), 0, {'kind': 'mute', 'who': '#2', 'duration': 10, 'reason': '刷屏'})
+    assert result == {'index': 0, 'action': '禁言', 'who': '[阿杰 #2]', 'duration': 10, 'state': '已交给平台，等确认'}
     action = store.db.artifacts.find_one({'kind': 'group_action'})
     assert action['admin'] == {'kind': 'mute', 'account': '20002', 'seconds': 600} and action['state'] == 'QUEUED'
     recall = group_admin.queue(store, episode(store), 1, {'kind': 'recall', 'who': '[阿杰 #2]', 'which': '这条', 'reason': '广告'})
@@ -75,10 +84,24 @@ def test_an_admin_action_is_checked_then_queued_without_numbers_in_her_words(sto
     assert store.db.artifacts.find_one({'admin.kind': 'recall'})['admin'] == {'kind': 'recall', 'message_id': '720002'}
 
 
+def test_a_mute_takes_any_whole_minutes_up_to_thirty_days(store):
+    setup(store, 'admin')
+    for minutes in (1, 45, 720, 43200):        # her own number, not a fixed menu (owner 2026-10-13)
+        result = group_admin.queue(store, {**episode(store), '_id': 'mute-%d' % minutes}, 0,
+                                   {'kind': 'mute', 'who': '#2', 'duration': minutes, 'reason': '刷屏'})
+        assert result['duration'] == minutes
+    assert sorted(row['admin']['seconds'] for row in store.db.artifacts.find({'admin.kind': 'mute'})) == \
+        [60, 2700, 43200, 2592000]
+
+
 @pytest.mark.parametrize('item, code', [
     ({'kind': 'kick', 'who': '[小林 #1]', 'reason': 'x'}, 'GROUP_ACTION_TARGET_PROTECTED'),      # the owner
-    ({'kind': 'mute', 'who': '#3', 'duration': '1天', 'reason': 'x'}, 'GROUP_ACTION_TARGET_IS_ADMIN'),
+    ({'kind': 'mute', 'who': '#3', 'duration': 1440, 'reason': 'x'}, 'GROUP_ACTION_TARGET_IS_ADMIN'),
     ({'kind': 'mute', 'who': '#2', 'reason': 'x'}, 'GROUP_ACTION_DURATION_REQUIRED'),
+    ({'kind': 'mute', 'who': '#2', 'duration': 0, 'reason': 'x'}, 'GROUP_ACTION_DURATION_REQUIRED'),
+    ({'kind': 'mute', 'who': '#2', 'duration': -5, 'reason': 'x'}, 'GROUP_ACTION_DURATION_REQUIRED'),
+    ({'kind': 'mute', 'who': '#2', 'duration': 43201, 'reason': 'x'}, 'GROUP_ACTION_DURATION_REQUIRED'),
+    ({'kind': 'mute', 'who': '#2', 'duration': '10分钟', 'reason': 'x'}, 'GROUP_ACTION_DURATION_REQUIRED'),
     ({'kind': 'kick', 'who': '没这个人', 'reason': 'x'}, 'GROUP_ACTION_TARGET_NOT_FOUND'),
 ])
 def test_refusals_are_named(store, item, code):
@@ -88,15 +111,14 @@ def test_refusals_are_named(store, item, code):
         group_admin.queue(store, episode(store), 0, item)
 
 
-def test_a_member_cannot_act_and_an_hour_has_a_cap(store):
+def test_a_member_cannot_act_and_a_busy_hour_is_not_capped(store):
     setup(store, 'member')
     with pytest.raises(Denied, match='GROUP_ACTION_NOT_AN_ADMIN'):
         group_admin.queue(store, episode(store), 0, {'kind': 'unmute', 'who': '#2', 'reason': 'x'})
     setup(store, 'owner')
-    for index in range(group_admin.PER_HOUR):
+    for index in range(8):        # no hourly cap: she is the admin and answers for what she does
         group_admin.queue(store, {**episode(store), '_id': 'e%d' % index}, 0, {'kind': 'unmute', 'who': '#2', 'reason': 'x'})
-    with pytest.raises(Denied, match='GROUP_ACTION_HOURLY_LIMIT'):
-        group_admin.queue(store, episode(store), 0, {'kind': 'unmute', 'who': '#2', 'reason': 'x'})
+    assert store.db.artifacts.count_documents({'kind': 'group_action', 'scene_id': SCENE}) == 8
 
 
 def test_the_outbox_hands_an_action_over_and_takes_the_platform_answer(store):
@@ -109,6 +131,31 @@ def test_the_outbox_hands_an_action_over_and_takes_the_platform_answer(store):
     assert group_admin.receipt(store, 'qq', item['publication_id'], body) == {'status': 'DONE'}
     with pytest.raises(Denied, match='PUBLICATION_ATTEMPT_MISMATCH'):
         group_admin.receipt(store, 'qq', item['publication_id'], {**body, 'attempt_id': 'other'})
+
+
+def test_an_admin_receipt_needs_no_platform_message_id_and_is_audited(store):
+    """An admin action has no message of its own: the retcode is the whole answer (channels.py receipt).
+
+    The adapter sends exactly this body (qqadapter/outbound.py receipt_payload only carries
+    ``platform_message_id`` when there is one), so holding an admin action to it used to refuse every
+    answer the platform really gave: the artifact stayed SENDING, fell to UNKNOWN on restart, and the
+    audit event never landed.
+    """
+    setup(store, 'admin')
+    group_admin.queue(store, episode(store), 0, {'kind': 'mute', 'who': '#2', 'duration': 30, 'reason': '刷屏'})
+    item = group_admin.claim(store, 'qq')
+    assert item['publication_id'].startswith('ga-') and 'platform_message_id' not in item
+    body = {'attempt_id': item['attempt_id'], 'status': 'platform_accepted', 'response': {'retcode': 0}}
+    assert bridge(store).receipt('qq', item['publication_id'], body) == {'status': 'DONE'}
+    action = store.db.artifacts.find_one({'_id': item['publication_id']})
+    assert action['state'] == 'DONE' and action['platform_receipt'] == body
+    event = store.db.audit_events.find_one({'type': 'group_action.receipt'})
+    assert event and event['payload']['action'] == item['publication_id']
+    assert event['payload']['state'] == 'DONE' and event['stream_id'] == episode(store)['_id']
+    # a message publication keeps the requirement: only the admin route is exempt
+    with pytest.raises(ValueError, match='PLATFORM_MESSAGE_ID_REQUIRED'):
+        bridge(store).receipt('qq', 'not-an-admin-action', {'attempt_id': 'a', 'status': 'platform_accepted',
+                                                           'response': {'retcode': 0}})
 
 
 def test_her_group_notes_are_this_groups_own_document(store):
@@ -137,6 +184,11 @@ def test_the_adapter_maps_actions_to_napcat_calls_only():
         'delete_msg', {'message_id': 7123})
     assert call({'target': group, 'admin': {'kind': 'kick', 'account': '90000'}}, '90000') == (None, 'bad_account')
     assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 5}}, '90000') == (None, 'bad_duration')
+    # the ceiling she is allowed to ask for is the platform's own: 30 days passes, one minute more does not
+    assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 2592000}}, '90000')[1][
+        'duration'] == 2592000
+    assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 2592060}}, '90000') == (
+        None, 'bad_duration')
     assert call({'target': {'type': 'dm', 'id': '20002'}, 'admin': {'kind': 'kick', 'account': '20002'}}, '90000')[0] is None
     assert call({'target': group, 'admin': {'kind': 'set_group_admin', 'account': '20002'}}, '90000') == (None, 'unknown_admin_kind')
 
@@ -161,7 +213,7 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     from asuna.documents import DocumentStore
     from asuna.lanes import FakeLane, FakeTurn
     setup(store, 'admin')
-    mute = {'kind': 'mute', 'who': '#2', 'duration': '1分钟', 'reason': '连续刷屏'}
+    mute = {'kind': 'mute', 'who': '#2', 'duration': 1, 'reason': '连续刷屏'}
     notes = {'doc': 'group_notes', 'op': 'append_section', 'heading': '刷屏', 'reason': '记下做法',
              'body': '刷屏的先禁言一分钟。'}
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '他在刷屏，先禁言一分钟，再记下做法。'}),
@@ -176,6 +228,7 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     assert {'group_action', 'write_document'} <= set(lane.calls[0]['tools'])
     _, acted, wrote = lane.tool_results
     assert acted[5] and acted[4]['state'] == '已交给平台，等确认'          # she hears it is not done yet
+    assert acted[4]['duration'] == 1                                  # what she asked for, in minutes
     assert store.db.artifacts.find_one({'kind': 'group_action'})['admin'] == {'kind': 'mute', 'account': '20002', 'seconds': 60}
     assert wrote[5] and wrote[4]['doc'] == group_admin.notes_slug(SCENE), wrote
     _, written = DocumentStore(store, 'P1').read(group_admin.notes_slug(SCENE))

@@ -270,7 +270,7 @@ Where she is the group's owner or an admin, the block also tells her how to use 
 
 - `kind`: `mute`, `unmute`, `recall` or `kick`;
 - `who`: a label or `#n`;
-- `duration`: 1分钟, 10分钟, 1小时 or 1天 (mute only);
+- `duration`: a whole number of minutes, 1 to 43,200 (mute only);
 - `which`: 这条 or 他刚才那条 (recall only);
 - `reason`.
 
@@ -280,11 +280,10 @@ The program refuses any of these, by name:
 - the route sets `admin_actions: false` (admin actions are on by default);
 - the target is unclear or unknown;
 - the target is the owner, herself, the group's owner or another admin;
-- a mute without a duration;
-- there is no recent message to recall (recall takes the message that woke her, or the target's last line within 10 minutes);
-- more than 6 actions in an hour in that group.
+- a mute without a duration, or one that is not a whole number of minutes between 1 and 43,200;
+- there is no recent message to recall (recall takes the message that woke her, or the target's last line within 10 minutes).
 
-An accepted action becomes a `group_action` artifact. The outbox hands it to the adapter before any message, and the adapter calls `set_group_ban`, `delete_msg` or `set_group_kick`. The platform's answer arrives through the same receipt endpoint and updates the artifact (DONE, FAILED or UNKNOWN). An action interrupted while it was being sent becomes UNKNOWN and is never retried. Her words for the result say 已交给平台，等确认 until the platform answers; the account and message numbers stay in program data.
+An accepted action becomes a `group_action` artifact. The outbox hands it to the adapter before any message, and the adapter calls `set_group_ban`, `delete_msg` or `set_group_kick`. The platform's answer arrives through the same receipt endpoint and updates the artifact (DONE, FAILED or UNKNOWN). An admin action has no message of its own, so its receipt carries no `platform_message_id` and is not held to the requirement a message receipt has; how often she acts in one group the program does not cap. An action interrupted while it was being sent becomes UNKNOWN and is never retried. Her words for the result say 已交给平台，等确认 until the platform answers; the account and message numbers stay in program data.
 
 `group_notes_from_program` shows her own notes about the group: who is who, its customs, how she acts there. She writes them from that group's own turns with `write_document` and `doc: "group_notes"` (`append_section`, `replace_section`, or `set_tags` to tuck a section away with `inject: "on_demand"`). The program maps that name to the group's document and keeps its sections public to that group, also when she tidies them from home by the document name her nightly settlement lists. The block shows the notes within their per-turn limit (see What a turn carries).
 

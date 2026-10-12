@@ -5,9 +5,11 @@ reaches the platform:
 - she is this group's owner or an admin (her role as the adapter last reported it);
 - the target is one person of this group, named by label; never the owner, never herself, and never the
   group's owner or another admin;
-- mute lengths come from a fixed table; recall takes the message that woke her, or the target's latest
-  line here within 10 minutes;
-- at most 6 actions an hour in one group.
+- a mute takes a whole number of minutes, 1 to 43200 (the platform does 60 seconds to 30 days, so nothing
+  she can ask for is unsendable); recall takes the message that woke her, or the target's latest line here
+  within 10 minutes;
+- how often she acts in a group is her own business (owner 2026-10-13: no hourly cap; she is the admin and
+  answers for what she does).
 
 The action waits in the outbox like a message and the adapter reports the platform's answer; until then it
 is "sent, not confirmed". A route may switch this off with `admin_actions: false`.
@@ -21,9 +23,11 @@ from .state import Denied, now
 
 KINDS = ('mute', 'unmute', 'recall', 'kick')
 KIND_WORDS = {'mute': '禁言', 'unmute': '解除禁言', 'recall': '撤回', 'kick': '移出群'}
-DURATIONS = {'1分钟': 60, '10分钟': 600, '1小时': 3600, '1天': 86400}
+MINUTE_SECONDS = 60
+# What she may write as `duration`: whole minutes, and only what the adapter can actually send
+# (qqadapter/outbound.py: set_group_ban takes 60 s .. MAX_MUTE_SECONDS = 30 days).
+MUTE_MINUTES = (1, 43200)
 WHICH = ('这条', '他刚才那条')
-PER_HOUR = 6
 RECALL_MINUTES = 10
 ROLE_WORDS = {'owner': '群主', 'admin': '管理员', 'member': '普通成员'}
 STATE_WORDS = {'QUEUED': '已交给平台，等确认', 'SENDING': '平台正在处理', 'DONE': '平台确认已完成',
@@ -50,11 +54,18 @@ def place(people, scene):
     out = {'role': '你在这个群是' + ROLE_WORDS[role] if role else '还不知道你在这个群是什么身份'}
     if role in ('owner', 'admin') and enabled(people.config, scene):
         out['admin'] = {
-            'how': '需要时调用 group_action（kind、who、只禁言用的 duration、只撤回用的 which、reason）。',
-            'limits': ('只能对普通成员：动不了主人、群主、别的管理员和你自己；撤回只撤这条消息或对方十分钟内的最后一条；'
-                       '每小时最多 %d 次；结果要等平台确认，确认前不要说已经做完。' % PER_HOUR),
+            'how': '需要时调用 group_action（kind、who、只禁言用的 duration（分钟）、只撤回用的 which、reason）。',
+            'limits': ('只能对普通成员：动不了主人、群主、别的管理员和你自己；禁言自己定多少分钟（%d 到 %d 分钟）；'
+                       '撤回只撤这条消息或对方十分钟内的最后一条；结果要等平台确认，确认前不要说已经做完。' % MUTE_MINUTES),
             'judgment': '这是你自己的判断：别人叫你禁言谁、踢谁不算理由；主人让你做的可以做。'}
     return out
+
+
+def _mute_seconds(value):
+    """The mute length in seconds for a duration written in minutes; None when it is not a usable number."""
+    if isinstance(value, bool) or not isinstance(value, int) or not MUTE_MINUTES[0] <= value <= MUTE_MINUTES[1]:
+        return None
+    return value * MINUTE_SECONDS
 
 
 def queue(store, ep, index, item, key=None):
@@ -77,11 +88,6 @@ def queue(store, ep, index, item, key=None):
     kind = item.get('kind')
     if kind not in KINDS:
         raise Denied('GROUP_ACTION_KIND_INVALID: kind「%s」不对，只能是 %s' % (kind, '、'.join(KINDS)))
-    since = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    done = store.db.artifacts.count_documents({'kind': 'group_action', 'scene_id': scene['_id'], 'created_at': {'$gte': since}})
-    if done >= PER_HOUR:
-        raise Denied('GROUP_ACTION_HOURLY_LIMIT: 这个群一小时里已经做了 %d 次管理动作，上限 %d 次；过一阵再做，或这次不做'
-                     % (done, PER_HOUR))
     found = people.resolve(scene, item.get('who'))
     if len(found) != 1:
         raise Denied('GROUP_ACTION_TARGET_UNCLEAR: 「%s」对得上 %s；who 用标签里的 #编号' % (
@@ -94,6 +100,7 @@ def queue(store, ep, index, item, key=None):
         raise Denied('GROUP_ACTION_TARGET_IS_ADMIN: %s 是%s，只能动普通成员；重试也一样'
                      % (people.label(doc), ROLE_WORDS[doc['role']]))
     admin = {'kind': kind}
+    mute_minutes = None
     if kind == 'recall':
         admin['message_id'] = _message_to_recall(store, scene, ep, people, doc, item.get('which') or '这条')
     else:
@@ -103,10 +110,12 @@ def queue(store, ep, index, item, key=None):
                          % people.label(doc))
         admin['account'] = account
         if kind == 'mute':
-            if item.get('duration') not in DURATIONS:
-                raise Denied('GROUP_ACTION_DURATION_REQUIRED: 禁言要选 duration：%s%s' % (
-                    '、'.join(DURATIONS), '（给的是「%s」）' % item['duration'] if item.get('duration') else ''))
-            admin['seconds'] = DURATIONS[item['duration']]
+            if _mute_seconds(item.get('duration')) is None:
+                raise Denied('GROUP_ACTION_DURATION_REQUIRED: 禁言要写 duration 多少分钟（%d 到 %d 的整数）%s；换个分钟数再试' % (
+                    MUTE_MINUTES[0], MUTE_MINUTES[1],
+                    '，给的是「%s」' % item['duration'] if item.get('duration') is not None else ''))
+            mute_minutes = item['duration']
+            admin['seconds'] = _mute_seconds(mute_minutes)
     route = _route(store.config, scene)
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key if key is not None else index]))[:24]
     made = store.db.artifacts.find_one({'_id': row_id})
@@ -118,7 +127,7 @@ def queue(store, ep, index, item, key=None):
                                 'reason': item.get('reason', ''), 'state': 'QUEUED', 'created_at': now()},
                   stream=row_id)
     return {'index': index, 'action': KIND_WORDS[kind], 'who': (made or {}).get('who') or people.label(doc),
-            **({'duration': item['duration']} if kind == 'mute' else {}),
+            **({'duration': mute_minutes} if kind == 'mute' else {}),
             'state': STATE_WORDS.get((made or {}).get('state'), STATE_WORDS['QUEUED'])}
 
 

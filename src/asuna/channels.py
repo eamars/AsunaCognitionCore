@@ -502,12 +502,16 @@ class Channels:
         status = body.get('status')
         if status not in ('platform_accepted', 'failed', 'unknown') or not isinstance(body.get('response'), dict):
             raise ValueError('INVALID_PLATFORM_RECEIPT')
-        if status == 'platform_accepted' and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip()):
-            raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
         if publication_id.startswith('ga-'):
+            # 管理动作没有自己那条消息：平台的 retcode 就是全部答复，适配器也就不带 platform_message_id
+            # （qqadapter/outbound.py 的 receipt_payload 只在有值时才带这个键）。这条分流必须走在下面那道
+            # 消息类发布的要求之前：否则平台真办了动作，回执却被 400 拒掉，artifact 永远停在 SENDING，
+            # group_admin.receipt 那条审计也一次都没落过。
             from . import group_admin
             with database_effects_lock(self.store.name):
                 return group_admin.receipt(self.store, channel_id, publication_id, body)
+        if status == 'platform_accepted' and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip()):
+            raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
         with database_effects_lock(self.store.name):
             row = self.store.db.messages.find_one({'_id': publication_id})
             # An already claimed send may have happened before revocation. Preserve

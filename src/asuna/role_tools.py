@@ -265,7 +265,7 @@ TOOLS = {
                         '结果要等平台确认，确认前不要说已经做完。'),
         'parameters': {'kind': _s('做什么', required=True, enum=['mute', 'unmute', 'recall', 'kick']),
                        'who': _s('谁：标签，如 [名字 #4] 或 #4', required=True),
-                       'duration': _s('禁言多久（只禁言用）', enum=['1分钟', '10分钟', '1小时', '1天']),
+                       'duration': {'type': 'integer', 'description': '禁言多少分钟（只禁言用），1 到 43200'},
                        'which': _s('撤回哪条（只撤回用）', enum=['这条', '他刚才那条']),
                        'reason': _s('为什么', required=True)},
     },

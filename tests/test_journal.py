@@ -65,6 +65,26 @@ def test_the_record_kept_as_one_document_moves_into_rows_once(store):
     assert docs.slugs().count('work_log') == 1
 
 
+def test_an_entry_moved_into_rows_keeps_when_it_was_written_and_last_changed(store):
+    docs = DocumentStore(store, 'P1')
+
+    def section(sid, body):
+        return {'sid': sid, 'heading': sid, 'body': body, 'body_sha256': body, 'visibility': 'owner_private',
+                'inject': 'on_demand', 'tags': []}
+
+    base = None
+    for n, sections in enumerate([[section('a', '甲')], [section('a', '甲'), section('b', '乙')],
+                                  [section('a', '甲'), section('b', '乙改')]], 1):
+        content = {'kind': 'working', 'title': 'work_log', 'source': {'origin': 'asuna'}, 'sections': sections}
+        base = docs._commit('work_log', content, base_revision_id=base, reason='r', author='character',
+                            mutation_id=f'old{n}')['_id']
+        store.db.state_revisions.update_one({'_id': base}, {'$set': {'created_at': f'2026-10-0{n}T00:00:00+00:00'}})
+    docs.read('work_log')
+    rows = {row['sid']: (row['created_at'], row['updated_at']) for row in store.db.journal_entries.find()}
+    assert rows == {'a': ('2026-10-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00'),
+                    'b': ('2026-10-02T00:00:00+00:00', '2026-10-03T00:00:00+00:00')}
+
+
 def test_her_recall_reads_an_entry_as_a_section(store):
     from asuna.role_tools import read_sections
     docs = DocumentStore(store, 'P1')

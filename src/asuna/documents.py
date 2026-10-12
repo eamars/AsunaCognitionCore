@@ -172,13 +172,16 @@ class DocumentStore:
             return
         revision = self.store.db.state_revisions.find_one({'_id': head['revision_id']}) or {}
         at = revision.get('created_at') or now()
+        times = self._section_times(slug)
         for seq, section in enumerate((revision.get('content') or {}).get('sections') or [], 1):
             entry_id = self._journal_entry_id(slug, section['sid'])
+            created, updated = times.get(section['sid'], (at, at))
             if not self.store.db.journal_entries.find_one({'_id': entry_id}, {'_id': 1}):
                 self.store.put('journal_entries', {
                     '_id': entry_id, 'persona': self.persona, 'slug': slug, 'seq': seq, 'scope_key': SCOPE,
-                    **{k: section[k] for k in SECTION_KEYS if k in section}, 'created_at': at, 'updated_at': at,
-                    'last_mutation': 'import:' + head['revision_id']}, stream='doc:import:' + slug)
+                    **{k: section[k] for k in SECTION_KEYS if k in section}, 'created_at': created,
+                    'updated_at': updated, 'last_mutation': 'import:' + head['revision_id']},
+                    stream='doc:import:' + slug)
         if not self.store.db.journal_revisions.find_one({'_id': head['revision_id']}):
             self.store.put('journal_revisions', {
                 '_id': head['revision_id'], 'mutation_id': 'import:' + head['revision_id'], 'persona': self.persona,
@@ -188,6 +191,20 @@ class DocumentStore:
         self.store.db.state_heads.delete_one({'_id': head['_id'], 'revision_id': head['revision_id']})
         self.store.audit('doc:import:' + slug, 'journal.imported', {'entity': self.entity(slug),
                          'from_revision': head['revision_id']}, SCOPE)
+
+    def _section_times(self, slug):
+        """When each section of a record kept as one document first appeared and when its text last changed, from the
+        document's revisions: {sid: (created_at, updated_at)}."""
+        times = {}
+        for revision in self.store.db.state_revisions.find(
+                {'entity_key': self.key(slug)}, {'created_at': 1, 'content.sections.sid': 1,
+                                                 'content.sections.body_sha256': 1}).sort('created_at', 1):
+            for section in (revision.get('content') or {}).get('sections') or []:
+                created, updated, text = times.get(section['sid'], (revision['created_at'],) * 2 + (None,))
+                if section.get('body_sha256') != text:
+                    updated, text = revision['created_at'], section.get('body_sha256')
+                times[section['sid']] = (created, updated, text)
+        return {sid: (created, updated) for sid, (created, updated, _) in times.items()}
 
     def _journal_entry_id(self, slug, sid):
         return 'journal:' + sha(canonical([self.persona, slug, sid]))[:32]

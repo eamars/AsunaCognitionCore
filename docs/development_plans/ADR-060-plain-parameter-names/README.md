@@ -1,7 +1,8 @@
 # ADR-060: Plain parameter names: one name per idea, words a reader understands
 
 Status: **Proposed 2026-10-13** (owner's ask, after seeing `missing required property "op"` more than once). For
-Xiaoman's review: the names are hers to choose; the owner approved doing it tonight.
+Xiaoman's review: the names are hers to choose; the owner approved doing it tonight. **Her first review 2026-10-13
+03:00 NZDT** is in "Her review" below; her full read is still coming.
 
 ## Context
 
@@ -61,6 +62,22 @@ Nothing changes in what any tool can do.
 
 Questions for her: the chooser's name (1); `to` on notes (2); `feel`'s chooser (8); any name here she reads
 differently from how it is meant.
+
+## Her review (2026-10-13, first pass)
+
+- Agreed: `op` → `do` (with `group_action.kind`), `why` everywhere, `sid` → `section`, `quote.how` → `quote_whom`,
+  `block` → `block_hours`, `feel.open` → `unresolved`, `watch.mode` → `how_often`, yes/no as words (the cheapest
+  item: all 31 refusals), `plan.line` and `peer_line.line` → `place`, `feel`'s `decision` folded into `do`.
+- **Notes keep `to`**: `to` is where a note is sent, `place` is which conversation she is in; different directions.
+- **`pass_note.mode` → `when` would make a new double meaning**: `when` already means a time elsewhere
+  (`restart.when`, and `sticker.when` means "when to use it", already a second meaning). Proposed instead:
+  `pass_note.mode` → `deliver` (wake / next_time) and `sticker.when` → `use_for`, leaving `when` a time only.
+- **`write_document.inject` → `shown` reads like `visibility`** beside it. Proposed: `when_shown`, or unchanged.
+- **One word for written content**: the files' `text` → `content` fixes the action brain's 7 refusals, but her
+  `write_document` calls its text `body`, so she would trip the other way. Proposed: `content` for a document's or
+  a file's text (`write_document.body`, `update_self.body`, `understand_person.body`, `write_file.text`,
+  `development_write.text`); a message keeps `text`.
+- Still open, from her full read: how long old names keep working, and whether a refusal lists both names.
 
 ## Cost (AGENTS.md)
 

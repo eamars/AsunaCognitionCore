@@ -1,64 +1,80 @@
-# ADR-056: Per-turn characters: what every notice repeats, and what to stop repeating
+# ADR-056: Per-turn characters: each piece of the prompt once, and only when it changed
 
-Status: **Proposed 2026-10-12** (owner's request: trace the notice growth, propose cuts). Needs Xiaoman's review (it
-changes what she reads each turn) and the owner's choice of items. Nothing is built.
+Status: **Proposed 2026-10-12**; the owner agrees with the three rules. Needs Xiaoman's review (it changes what she
+reads each turn). Nothing is built.
 
 ## Context
 
 Every turn of hers starts with a notice: the program's JSON (`context.py`) and, after it, the turn instruction
 (`prompts/turn.md`). Each notice stays in her conversation, so its size is paid once as prefill and then again as
-how fast the conversation fills up and compacts (ADR-014, ADR-049).
+how fast the conversation fills and compacts (ADR-014, ADR-049).
 
-**The growth was not growth.** The home average rose from 15,555 characters (10-11) to 21,140 (10-12), but by turn
-kind nothing moved: heartbeat about 26k, night about 26–31k, note about 17k, public talk about 12.6k on all three
-days. Two things changed the mix. First, ADR-045 stopped about 97 short turns a day from her sister's line (incoming
-text about 1,200 characters), so the cheap turns left the average. Second, the home talk that remained was mostly
-long messages from the agent line and the owner (incoming text about 4,700 characters). The characters per day fell.
+The delivery is already selective (`context-delivery.js`): a block identical to a copy within the newest 32k tokens
+of her conversation is left out and named in `unchanged_from_program`; history rows, memories and her own thoughts
+are filtered one by one. Three things get past it.
 
-**What a day costs** (10-11, a full day: 385 notices, 5,686,621 characters; 323 talk, 26 note, 25 heartbeat,
-11 night; measured from her role sessions, sizes only):
+**The growth that started this was not growth.** The home average rose from 15,555 characters (10-11) to 21,140
+(10-12), but by turn kind nothing moved (heartbeat about 26k, night 26–31k, note about 17k, public talk about 12.6k on
+all three days). ADR-045 removed about 97 short turns a day from her sister's line, so the cheap turns left the
+average; the home talk that remained was mostly long messages from the agent line and the owner.
 
-| Part | Characters a day | Where |
-|---|---|---|
-| The turn instruction after the JSON (`turn.md`, 987 characters, the same every turn) | 376,367 | every notice |
-| `ref_index` (every id she may cite: the event, her memories, tasks, every persona section) | 377,375 | every notice |
-| `plans_from_program` (about 4,700 with 6 plans; her own intents are 53%) | 226,310 | heartbeats, nights, some talk |
-| `unchanged_from_program` (names of the blocks not repeated) | 204,129 | every notice |
-| `places_from_program` (18 groups, about 290 characters each) | 126,567 | every heartbeat |
-| `ideas_from_program` (20 ideas with their reasons) | 79,194 | night and self-improvement |
-| `recent_experience_from_program` (task report starts, publish lineage) | 76,960 | heartbeats, nights |
+## Survey: what she was sent today (2026-10-12, from her role sessions)
 
-## Proposal (each item separable; numbers are characters a day at 10-11's traffic)
+237 notices, 4,586,262 characters. Each block is compared with its previous copy in the same conversation (sizes and
+fingerprints only, no text read):
 
-1. **The turn instruction once, in the system prompt** (−376k, 6.6%). It is the same text every turn; the system
-   prompt is fixed per conversation, so the prompt cache is not affected (ADR-038). The rules stay word for word;
-   what she must do first is also enforced by the program (a call before `think` is refused, saying so). Only a
-   consult or resumed turn keeps its own extra lines at the tail, as now.
-2. **`ref_index` kept by the program, not shown** (about −340k, 6%). The ids it lists are already in their own
-   blocks (memories, tasks); the persona sections are listed on every turn though she almost never cites them.
-   The program keeps the list for checking `feel`'s `ref` and the appraiser; the notice shows the event's and the
-   turn's own id only, and a wrong `ref` is refused naming where ids are found.
-3. **`unchanged_from_program` as one line** (about −150k, 2.6%): a count and the names, without repeating its
-   explanation each turn (the explanation moves with item 1).
-4. **Plans without their machinery** (about −40k): drop the raw `rule`, the UTC `next_fire_at`, `created_at`,
-   `updated_at`, `plan_version` and the per-plan time zone; keep `_id`, her intent, status, the description and the
-   local time. Her intents stay whole: they are her words.
-5. **Places: what changed since the last beat** (about −80k): the groups where someone called her, something was
-   said since her last beat, or she can visit now, in full; the others as one line with their names. The rows now
-   carry relative times, so the block counts as changed every beat even when nothing happened.
-6. **The idea notebook's first page without reasons** (about −40k): idea, id, where and when; `ideas` op `read`
-   shows the reasons for the ones she opens.
+| What | Characters | Share | Rule |
+|---|---|---|---|
+| The turn instruction after the JSON: one text in 232 of 237 notices (the other 5 add a consult or resume line) | 237,229 | 5.2% | 1 |
+| A block's own explanation (`note`), the same as in its previous copy | 98,885 | 2.2% | 1 |
+| Fixed rule text (`memory_source_rules`, `how_to_record_from_program`) the same as before | 34,910 | 0.8% | 1 |
+| A block sent again whose only difference is a relative time ("N 分钟前") | 540,637 | 11.8% | 2 |
+| Unchanged items inside a list sent again for another item's change | 480,022 | 10.5% | 3 |
+| `ref_index` ids already shown in the same notice | 75,023 | 1.6% | 3 |
+| **The three rules together** | **1,466,706** | **32.0%** | |
+| A block sent identical to its previous copy, which had left the 32k-token window | 693,822 | 15.1% | see Open |
+| A block's real change | 875,066 | 19.1% | kept |
 
-Items 1–3 together are about 15% of a day's characters and about 1,900 characters off every turn of every kind,
-which also slows how fast each conversation fills. Items 4–6 shrink only the heavy turns (heartbeat, night).
+Where each rule bites (characters today; how many sends):
+
+- **Time only:** `developer_inbox_from_program` 111,837 (104 sends), `notes_from_program` 96,432 (115),
+  `notes_sent_from_program` 91,564 (120), `members_from_program` 73,371 (24), `relationship` 56,905 (21),
+  `elsewhere_from_program` 38,901 (90), `your_pictures_from_program` 31,289 (66), `ideas_from_program` 30,968 (4).
+  These are the blocks that rarely change in substance: their minute-level "N 分钟前" changes their fingerprint.
+- **Unchanged items:** `plans_from_program` 193,216 (one plan changes, all are sent), `task_state_from_program`
+  47,472, `ideas_from_program` 44,814, `recent_experience_from_program` 33,111, `members_from_program` 25,799.
+- **Left the window:** `stickers_from_program` 214,966 sent identical, `note_places_from_program` 51,818,
+  `lines_from_program` 45,294, `plans_from_program` 55,743. A notice is about 5k tokens, so a block falls out of the
+  32k window after about six turns.
+
+## Decision (proposed)
+
+1. **Fixed text appears once.** The turn instruction, each block's explanation and the fixed rule texts live in the
+   system prompt, which is fixed per conversation (the prompt cache is not affected, ADR-038). A notice carries only
+   what changes; a block keeps its fields and loses its `note`. A consult or resumed turn keeps its own extra lines at
+   the tail. The rules are moved word for word, not rewritten.
+2. **Times inside blocks are clock times, not "N minutes ago".** Every notice carries the clock
+   (`clock_from_program`), so "10-12 20:15" reads as well, and a block then changes only when its content does; the
+   existing fingerprint test does the rest. (`config.ago` stays for single facts said once, such as a refusal.)
+3. **Lists are delivered item by item**, as history and memories already are: only new or changed items are sent,
+   with a line saying how many others are as before and where (`unchanged_from_program`). `ref_index` is kept by the
+   program for checking `feel`'s `ref` and the appraiser; the notice shows this turn's own ids, and a wrong `ref` is
+   refused saying where ids are found.
+
+## Open
+
+- **The 32k-token window** (15.1% today) is there so a block is never assumed visible after a compaction dropped
+  it. A copy sent after the conversation's last compaction is still on the page whatever its age; whether the
+  delivery can know that no compaction runs between composing a notice and its joining the conversation has to be
+  checked in DSH before the window is widened. Not part of this decision.
 
 ## Cost (AGENTS.md)
 
-No new tool, option or per-turn line; each item removes characters from a turn. Item 1 moves about 990 characters
-into each conversation's system prompt once.
+No new tool, option or per-turn line; each rule removes characters from turns. Rule 1 moves about 2,500 characters
+(the turn instruction, the block explanations and the rule texts) into each conversation's system prompt once.
 
 ## How it is checked
 
-The same measurement after a day (`notice_trace.py`-style sizes by kind, no text): characters per turn by kind, and
-whether her refusals for a missing `think` or a wrong `ref` rose (ADR-054's counts by cause). Any item whose refusals
-rise is taken back.
+The same survey after a day (`survey_today.py`-style: sizes and fingerprints by block, no text): each rule's share
+should fall to near zero, and characters per turn by kind should fall by about a third. Her refusals by cause
+(ADR-054) for a missing `think` or a wrong `ref` must not rise; a rule whose refusals rise is taken back.

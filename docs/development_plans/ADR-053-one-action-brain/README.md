@@ -70,6 +70,23 @@ Decision: fresh per task, no pin. (4) matters here: home and public tasks share 
 system prompts are identical. A related saving outside this ADR: her group relevance gates are about a fifth of all
 requests and each parks a ~0.3 GiB entry; marking them one-shot would free that at about 0.6 s per gate.
 
+## Any endpoint, and an idle limit (owner, 2026-10-12)
+
+The design must suit any OpenAI-compatible endpoint (DeepSeek and others), not only the local server. Such an API is
+taken to cache without a space limit, as long as an entry has not expired: there **time** decides what is cached; on
+the local server **space** does. Nothing here depends on one server's request fields.
+
+- **Fresh per task suits both.** Every task starts with the same head (one system prompt, one tool list), which an
+  API caches by prefix and the local server by its head checkpoint; a task's prompt carries no earlier task, so an
+  API bills fewer input tokens per step and the local server holds at most one leftover task entry.
+- **An idle limit for an action context (the owner's idea), 30 minutes by default.** A continuation of a task (her
+  follow-up, a revision) goes on in the task's own context only if that context was used within the limit;
+  otherwise it starts a fresh context that carries the task's brief, its last report and her new words. After that
+  long both kinds of endpoint have most likely dropped the cache, so carrying on would read the whole old context
+  cold, at full price and with no benefit over a shorter fresh start. The limit is one setting, not tied to a model.
+- **Server-specific savings stay optional.** A field only one server knows (the local server's one-shot flag for her
+  group gates) is sent only to a route configured to take it; every other endpoint never sees it.
+
 ## Consequences
 
 - The model server holds one action context at a time instead of one per conversation; the warm prefix (system

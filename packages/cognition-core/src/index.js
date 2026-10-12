@@ -530,7 +530,8 @@ export class CognitionCore {
       const previous = this.channelWrites.get(id) ?? Promise.resolve();
       const worker = this.worker;
       const writing = previous.catch(() => {}).then(async () => {
-        await recordChannelInput(this, receipt);
+        // A held line is acknowledged when it is written (pairing.js release → written).
+        if (await recordChannelInput(this, receipt) === 'held') return;
         await worker.call('channel_input.ack', { input_id: receipt.input.id, session_id: id });
       });
       this.channelWrites.set(id, writing);
@@ -677,6 +678,16 @@ export class CognitionCore {
       await this.ctx.sessions.flush(handle.agent.session);
     }
     return handle.agent;
+  }
+
+  /** Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once
+   * the conversation is durable. A stop before that leaves them unacknowledged, so the next start projects them again. */
+  written(session, receipts) {
+    const worker = this.worker;
+    (async () => {
+      await this.ctx.sessions.flush(session);
+      for (const input_id of receipts) await worker.call('channel_input.ack', { input_id, session_id: session.id });
+    })().catch(error => this.ctx.logger.warn('Asuna: held lines written but not acknowledged: ' + String(error)));
   }
 
   /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.

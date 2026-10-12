@@ -143,7 +143,10 @@ test('native continuation preserves history and task children retain their actua
   const compacting = first.agent.session, onSurface = receipt => compacting.surface.nodes
     .some(seq => compacting.eventAt(seq).data?.source?.receipt === receipt);
   compacting.append('compaction/start', { compactionId: 'c1', turn: null });
-  await recordChannelInput(core, line(PENDING_LINES + 3));
+  const acked = [];
+  core.worker = { call: async (method, args) => { if (method === 'channel_input.ack') acked.push(args.input_id); } };
+  assert.equal(await recordChannelInput(core, line(PENDING_LINES + 3)), 'held');
+  assert.equal(await recordChannelInput(core, line(PENDING_LINES + 3)), 'held', 'a receipt projected again while held');
   assert.ok(isHeld(core, fresh._id, 'before-' + (PENDING_LINES + 3)) && !onSurface('before-' + (PENDING_LINES + 3)),
     'held while the compaction runs');
   compacting.append('compaction/end', { compactionId: 'c1', turn: null,
@@ -151,6 +154,10 @@ test('native continuation preserves history and task children retain their actua
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(onSurface('before-' + (PENDING_LINES + 3)), 'joins the conversation as the compaction ends, failed or not');
   assert.equal(isHeld(core, fresh._id, 'before-' + (PENDING_LINES + 3)), false);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(acked, ['before-' + (PENDING_LINES + 3)],
+    'acknowledged only once written: a stop while held leaves it for the next start to project again');
+  delete core.worker;
   await first.dispose();
   const again = await ctx.agents.resume({ resumeSessionId: fresh._id, agentOptions: route });
   assert.equal(again.agent.session.eventAt(again.agent.session.surface.nodes[0]).type, 'system/message', 'the log reloads');

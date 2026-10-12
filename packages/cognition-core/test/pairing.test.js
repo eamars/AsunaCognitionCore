@@ -31,12 +31,13 @@ test('a compaction is open from its start to its end, failed or committed', () =
 });
 
 test('a held line joins the conversation once, after the result, in arrival order', () => {
-  const appended = [], core = { held: new Map() };
+  const appended = [], written = [], core = { held: new Map(), written: (session, receipts) => written.push(...receipts) };
   const session = { id: 's', snapshotEvents: () => [], append: (type, data) => appended.push(data.source.receipt) };
   hold(core, 's', line('r1')); hold(core, 's', line('r2')); hold(core, 's', line('r1'));
   assert.equal(isHeld(core, 's', 'r2'), true);
   assert.equal(release(core, session), true);
   assert.deepEqual(appended, ['r1', 'r2']);
+  assert.deepEqual(written, ['r1', 'r2'], 'their receipts are acknowledged as they are written, not when held');
   assert.equal(release(core, session), false, 'released once');
 });
 

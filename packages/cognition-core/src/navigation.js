@@ -50,7 +50,8 @@ function headOrIdle(ctx, agent) {
   return Promise.race([head, agent.whenIdle()]).finally(() => dispose());
 }
 
-/** Record a received platform message in her conversation without starting inference.
+/** Record a received platform message in her conversation without starting inference. Returns 'held' when the line
+ * waits to join (pairing.js): its receipt is acknowledged when it is written, not now.
  *
  * DSH requires a conversation's first visible event to be the system head its agent writes on its first
  * step; a line placed before that makes the log unloadable after the turn. So a line that arrives before
@@ -68,7 +69,9 @@ export async function recordChannelInput(core, receipt) {
   const message = await channelMessage(core, receipt);
   const headed = events => events.some(event => event.type === 'system/message');
   const contains = events => events.some(event => event.type === 'user/message' && event.data.source.receipt === input.id)
-    || pendingOf(events).some(line => line.source.receipt === input.id) || isHeld(core, id, input.id);
+    || pendingOf(events).some(line => line.source.receipt === input.id);
+  // A held line is acknowledged when it joins the conversation (pairing.js release), not before.
+  if (isHeld(core, id, input.id)) return 'held';
   const agent = ctx.agents.get(id);
   if (agent?.status === 'running' && !headed(agent.session.snapshotEvents())) await headOrIdle(ctx, agent);
   const hot = ctx.sessions.get(id);
@@ -77,7 +80,7 @@ export async function recordChannelInput(core, receipt) {
     if (contains(events)) { /* already recorded */ }
     // While one of her tool calls waits for its result the line waits too (pairing.js), as DSH's own input does, and
     // while a compaction runs here, which refuses a summary of a surface that changed under it.
-    else if (headed(events) && (agent && toolCallOpen(events) || compactionOpen(events))) hold(core, id, message);
+    else if (headed(events) && (agent && toolCallOpen(events) || compactionOpen(events))) { hold(core, id, message); return 'held'; }
     else if (headed(events)) hot.append('user/message', message, { surfaceOp: 'append' });
     else if (agent) for (const splice of queueing(agent.inbox.nextStep, message))
       agent.inbox.splice('next-step', splice.start, splice.removedCount ?? 0, splice.inserted);

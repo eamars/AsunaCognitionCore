@@ -45,7 +45,9 @@ export function isHeld(core, id, receipt) {
   return (core.held.get(id) ?? []).some(line => line.source?.receipt === receipt);
 }
 
-/** Write the held lines into the conversation, in arrival order; true when any was written. */
+/** Write the held lines into the conversation, in arrival order; true when any was written. Their receipts are
+ * acknowledged to the worker once the conversation is flushed (`core.written`): a held line lives only in memory, and
+ * an unacknowledged receipt is projected again at the next start. */
 export function release(core, session) {
   const held = core.held.get(session.id);
   if (!held?.length) return false;
@@ -54,6 +56,7 @@ export function release(core, session) {
     .map(event => event.data.source?.receipt));
   for (const message of held)
     if (!recorded.has(message.source?.receipt)) session.append('user/message', message, { surfaceOp: 'append' });
+  core.written?.(session, held.map(message => message.source?.receipt).filter(Boolean));
   return true;
 }
 

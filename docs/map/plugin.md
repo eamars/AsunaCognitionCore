@@ -230,6 +230,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
   - `idle` — Nothing of this conversation is running: no turn, none queued, no child of it open.
   - `ensureAgent`
+  - `written` — Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once the conversation is durable.
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
   - `conversationSize` — ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction threshold uses), and the floor its character preset's compaction engine sets (compaction.js `floorTokens`).
   - `result`

@@ -15,8 +15,11 @@ hours, so a number cannot be guessed and does not read as a rank.
 Measured (2026-10-12):
 
 - **Imitation is rare but real.** Since 09-01, 10 incoming lines outside home contained text shaped like a label;
-  one used a small number that was a real label in that group, someone else's. Running numbers are easy to guess:
-  #1–#3 are the first people she met there.
+  one used a small number that was a real label in that group, someone else's.
+- **A number is no secret, guessed or not: she says it when asked.** On 10-12 a member asked her for his number and
+  she answered "你是5号"; the out-going check (`people.speech_problem`) looks for `#n` only, so it passed. A random id
+  would be told the same way. Whatever keeps a person from passing as another cannot rest on the number being
+  unknown.
 - **Labels are everywhere in what she remembers.** 4,935 of 5,112 dialogue summaries, 290 chat chunks and 15 of her
   thoughts contain labels. Her documents contain none.
 - **Numbers grow large:** the largest group is at #170.
@@ -24,17 +27,17 @@ Measured (2026-10-12):
 ## The broken invariant
 
 "A label is something only the program writes" does not hold: a person's message body can contain `[name #4]`. The
-body is indented under the real speaker's label, but a model can still read the inner text as a speaker. Unguessable
-numbers make a forged label miss; they do not stop a forged line from looking like a label.
+body is indented under the real speaker's label, but a model can still read the inner text as a speaker. A number
+that is unknown makes a forged label miss only until someone asks her; it never stops a forged line from looking like
+a label.
 
 ## Options
 
 1. **Close it at the root (recommended first):** text that someone sent can never contain a label. Like ADR-050's
    quote lines, the program rewrites a label-shaped text inside a body (`[x #n]` becomes `［x ＃n］`), so only the
    program's labels have the label's form. Deterministic, no change to any number, nothing she remembers changes.
-2. **Random 4-digit ids for new people only**, drawn from 1000–9999 and unique per group: no rank reading, nothing to
-   guess, nothing stored changes. Existing people keep their numbers; the established members (the likeliest to be
-   imitated) stay guessable, which option 1 already covers.
+2. **Random 4-digit ids for new people only**, drawn from 1000–9999 and unique per group: no rank reading, nothing stored
+   changes. It hides nothing: she tells a person's id to whoever asks, as she tells a number now.
 3. **Re-draw everyone's id once** to random 4 digits: uniform, but every stored summary and chunk then names people
    by numbers that point at nobody. It needs either a lasting old-to-new mapping when memories are shown, or a rewrite
    of 5,000+ stored summaries. Expensive, and it disturbs her memory for a cosmetic gain once option 1 is in.
@@ -68,4 +71,8 @@ both closed without renumbering anyone:
   turn's event text, correction snippets and what summaries are made from. Their real @ still becomes the label, after.
   Labels she wrote herself (her own lines, quoted) and the program's memories are unchanged.
 
-Random ids are parked: with no label able to pass in or leak out, their only gain is that a number reads as no order.
+Random ids are parked: with no label able to pass in, their only gain is that a number reads as no order.
+
+The out side is not closed by the check: she says a number in words when asked ("你是5号", 10-12), and no pattern
+covers every way of saying it. It needs no closing: a number she tells gives nobody a way in, because nothing a person
+types can take a label's form. The check stays for what it was for: a `#n` in her line means nothing to the group.

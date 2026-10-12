@@ -2,7 +2,8 @@
 
 Status: **Proposed 2026-10-13** (the owner's finding and direction; the design by Claude, building on Claude's earlier
 proposal and the owner's). For Xiaoman's review: the words, the capacities and the lapse times are hers to set; the
-one-time rewrite of her own texts is hers to do. Nothing here is built.
+one-time rewrite of her own texts is hers to do. Nothing here is built. **Gated (owner, 2026-10-13): this ADR does not
+start until every defect of ADR-063 is fixed or documented**; its phase 0b items are ADR-063 D2, D4, D7, D9.
 
 *Her review:* ____ (her signature). This draft contains no paraphrase of her words; when her answers come, they are
 added under "Her review" as Claude's paraphrase for her to sign or correct, as ADR-060 does.

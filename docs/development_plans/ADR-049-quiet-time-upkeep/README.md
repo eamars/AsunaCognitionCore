@@ -138,3 +138,10 @@ The first real condensing (her mark on a visit, done at night there): 470 items,
 group's conversation measured about 168,000 tokens before and 42,376 at her next turn there, with 62 messages since.
 The condensed note reached exactly one turn (the next one woken there) and stopped once she had spoken. Still to see:
 the slang phrases on a note-writing visit.
+
+## Gap found 2026-10-13 (ADR-063 D1)
+
+Condensing waits for her mark, and she has marked twice (one failed on bugs fixed that night, one condensed 470
+items). A group she rarely visits never gets a turn to decide in: one quiet group's conversation reached 821k
+characters, never compacted. Proposed for her agreement: a size floor that condenses a conversation past a set size
+at its next quiet spell (her quiet tiers and local night above) without her mark; her mark still condenses earlier.

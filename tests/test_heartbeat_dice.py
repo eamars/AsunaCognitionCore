@@ -46,8 +46,11 @@ def test_nothing_still_reaches_her_when_only_a_heartbeat_would_show_what_waits(s
 
 def test_what_waits_wakes_a_nothing_beat_only_when_an_hour_would_lose_it(store):
     from datetime import datetime, timezone
+    from asuna import lines
     from test_peer_lines import SCENE, with_line
     with_line(store)
+    store.put('scenes', {'_id': SCENE, 'scene_id': SCENE, 'kind': 'dm', 'scope_key': 'scene:' + SCENE,
+                         'policy_epoch': 1, 'sequence': 0})          # ingress makes the line's scene
     moment = datetime(2026, 10, 12, 9, 0, tzinfo=timezone.utc)
     for seq in range(1, 6):                     # five unseen asides: all still in the list next hour
         store.db.messages.insert_one({'_id': 'a%d' % seq, 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': seq,
@@ -59,6 +62,16 @@ def test_what_waits_wakes_a_nothing_beat_only_when_an_hour_would_lose_it(store):
                                   'direction': 'inbound', 'text': '心跳 6', 'received_at': '2026-10-12T08:06:00+00:00',
                                   'event': {'raw': {'asuna_aside': True}}})
     assert dice.waiting(store, 'P1', moment) is True, 'the list is full: one more would push the oldest out'
+    # A heartbeat that showed them to her: until more she has not seen fill the list, a beat loses nothing by resting
+    # (before, every rest beat woke her until she answered on that line; 10-12 live data).
+    assert lines.asides(store, {'tz': timezone.utc})['lines'][0]['items']
+    assert dice.waiting(store, 'P1', moment) is False, 'shown asides wait for her answer without waking her'
+    for seq in range(7, 13):
+        store.db.messages.insert_one({'_id': 'a%d' % seq, 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': seq,
+                                      'direction': 'inbound', 'text': '心跳 %d' % seq,
+                                      'received_at': '2026-10-12T08:%02d:00+00:00' % seq,
+                                      'event': {'raw': {'asuna_aside': True}}})
+    assert dice.waiting(store, 'P1', moment) is True, 'six she has not been shown fill the list again'
 
 
 def test_each_outcome_opens_with_its_line_and_goes_where_it_belongs(store):

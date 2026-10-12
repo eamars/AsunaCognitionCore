@@ -41,7 +41,8 @@ ASIDES_NOTE = ('另一头不是在回你的话（她自己那边的心跳、自�
 
 def asides(store, zone):
     """peer_asides_from_program: on each peer line, the lines not addressed to her since she last spoke there
-    (ADR-045), newest last, at most ASIDES_SHOWN with how many more; None when there are none. Computed."""
+    (ADR-045), newest last, at most ASIDES_SHOWN with how many more; None when there are none. Records the newest
+    one shown on each line, so a heartbeat wakes her only for asides she has not been shown (asides_full)."""
     from .config import excerpt
     from .schedule_rules import line_stamp
     out = []
@@ -50,7 +51,9 @@ def asides(store, zone):
         count = store.db.messages.count_documents(query)
         if not count:
             continue
-        rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1}).sort('scene_seq', -1).limit(ASIDES_SHOWN))
+        rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1, 'scene_seq': 1})
+                    .sort('scene_seq', -1).limit(ASIDES_SHOWN))
+        store.db.scenes.update_one({'_id': line['scene_id']}, {'$max': {'asides_shown_seq': rows[0]['scene_seq']}})
         out.append({'line': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
                                                      'text': excerpt(' '.join((row.get('text') or '').split()), ASIDE_EXCERPT)}
                                                     for row in reversed(rows)],
@@ -67,9 +70,16 @@ def _unseen(store, scene_id):
 
 
 def asides_full(store):
-    """Whether a line's unseen asides fill the list she is shown: one more would push the oldest out of her view."""
-    return any(store.db.messages.count_documents(_unseen(store, line['scene_id'])) >= ASIDES_SHOWN
-               for line in peer_lines(store))
+    """Whether the asides she has not been shown on a line fill the list: one more would push one she never saw out
+    of her view. Once shown, waiting for her answer loses nothing (her rule: lost wakes her, late does not)."""
+    for line in peer_lines(store):
+        query = _unseen(store, line['scene_id'])
+        shown = (store.db.scenes.find_one({'_id': line['scene_id']}, {'asides_shown_seq': 1}) or {}).get('asides_shown_seq')
+        if shown is not None:
+            query['scene_seq'] = {'$gt': max(shown, query.get('scene_seq', {}).get('$gt', shown))}
+        if store.db.messages.count_documents(query) >= ASIDES_SHOWN:
+            return True
+    return False
 
 
 def _row(store, scene_id):

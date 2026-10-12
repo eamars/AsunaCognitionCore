@@ -1,30 +1,42 @@
-# ADR-064: QQ notices reach her; more than text and stickers later
+# ADR-064: QQ notices reach her as one-off lines; a reply tool later
 
-Status: **Proposed 2026-10-13**. The owner's direction is below. This ADR waits for the master agent's review of the
-plan, then her review. Nothing is built until the review is done.
+Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. Waits for
+review by the master agent (Claude) and by her. Nothing is built until both have reviewed.
 
 ## Owner's direction (2026-10-13)
+
+**First round:**
 
 1. Notify her of most inbound actions and messages she misses today.
 2. Do not read cards by default. She can hand a card to the action brain for extra work, but that is never the
    default, and no tool is added for it.
 3. Voice and video are parked: the model does not take them.
-4. Phase two adds interactions beyond text and stickers. Poke and reactions come later, as new tools enabled only for
-   QQ groups and DMs.
+4. Phase two adds interactions beyond text and stickers, as tools enabled only for QQ groups and DMs.
+
+**Second round (on the first draft):**
+
+5. Notices are **not stored**. A notice is a one-off and does not warrant storage.
+6. A notice is treated **like a text message** at the relevance gate; she can ignore it at will.
+7. No recall handling in her client: no marking of recalled rows, no database work. She is told only that message
+   "xxx" was recalled.
+8. No dedicated notice types: projecting each notice into a line of text is enough. Not worth starting with fewer
+   kinds.
+9. A reaction on her own line passes the relevance gate like anything else.
+10. Friend and group requests go to her local (home) session. Whether to ask the owner first is her decision.
+11. Phase two is a **reply tool** in place of plain speech: she picks what to reply with, or a combination (sticker
+    only, text + sticker, a nudge), similar to ADR-061's `ask`. It needs more thought.
 
 ## Context
 
 The NapCat adapter forwards only `post_type: message`. Every notice, request and meta event is counted as
 `nonmessage` and dropped before anything reads it (`packages/channels/napcat-qq/integration/qqadapter/inbound.py`,
-`classify`). The host's channel API accepts only message envelopes (`channels.py` `_receive`, a strict field
-allowlist).
+`classify`).
 
 Measured on the live adapter (2026-10-13, 51 minutes of uptime): 138 event frames, 105 of them `nonmessage`. At the
-30-second heartbeat that is about 102 heartbeats, so one to three real notices. The adapter does not record their type,
-so the actual mix is unknown.
+30-second heartbeat that is about 102 heartbeats, so one to three real notices. Their types are not recorded.
 
-The live NapCat is 4.18.0. The event and action lists below come from the NapCat source at v4.18.38
-(`packages/napcat-onebot/event`, `action/router.ts`); some extensions may be missing from 4.18.0.
+The live NapCat is 4.18.0. The lists below come from the NapCat source at v4.18.38; some extensions may be missing
+from 4.18.0.
 
 ### What NapCat sends that she never hears
 
@@ -54,152 +66,173 @@ The live NapCat is 4.18.0. The event and action lists below come from the NapCat
 
 ### Message content she gets only as a placeholder
 
-- Cards (`json`, `xml`, `miniapp`, `music`, `share`): title only. The card itself is not kept: `kept_raw` keeps the
-  media block, which carries no card payload.
-- `dice`, `rps`: shown as a generic `[dice消息（未解析）]`; the result in the segment is never shown.
-- `markdown`, `contact`, `onlinefile`, `flashtransfer`: generic placeholder.
-- Voice, video, files: placeholder (voice and video parked; files are covered by `group_upload` only).
+- Cards (`json`, `xml`, `miniapp`, `music`, `share`): title only. The card itself is not kept (`kept_raw` keeps the
+  media block, which carries no card payload).
+- `dice`, `rps`: a generic `[dice消息（未解析）]`; the result is never shown.
+- `markdown`, `contact`, `onlinefile`, `flashtransfer`: generic placeholder. Voice and video: placeholder (parked).
 
 ### What she can do on QQ today
 
-Send text, @, classic faces, store stickers (`mface`), pictures, replies. Group admin: recall (`delete_msg`), kick, mute
-and unmute (`set_group_kick`, `set_group_ban`). Everything else NapCat offers (about 185 actions) is unused.
+Send text, @, classic faces, stickers (a `[表情包:名字]` line), one picture (`attach_image`), a quote (`quote`). Group
+admin: recall, kick, mute and unmute (`group_action`). Everything else NapCat offers (about 185 actions) is unused.
 
 ## The broken invariant
 
-"What happens in a conversation reaches her" holds only for messages. A recall, a poke, a reaction, a join, her own
-mute: each changes the conversation she is in, and she cannot know it. She answers recalled messages, ignores pokes,
-and learns she was muted or kicked only from a failed send.
+"What happens in a conversation reaches her" holds only for messages. A poke, a reaction to her line, a recall, a
+join, her own mute: each changes the conversation she is in, and she cannot know it. She ignores pokes, answers
+recalled messages, and learns she was muted or kicked only from a failed send.
 
-## Decision (proposed)
+## Phase 1: notices as one-off lines of text
 
-### Phase 1: notices as program lines (no tools)
+### The adapter projects, the host passes it on
 
-**1a. Count first (adapter only).** The adapter journals each dropped event by `post_type` / `notice_type` /
-`sub_type` (no content, no ids) and shows the counts in `health.json`. It runs at least three days before 1b is
-switched on. The counts set the fold rules below and show which extensions 4.18.0 really sends.
+- **Projection (adapter).** A new `notices.py` turns each NapCat notice or request into one line of text from a
+  versioned word table in the channel package. The table is keyed by `notice_type` / `sub_type`; an unknown kind
+  becomes `[QQ 通知:<kind>]`. Words that point at a person go through the adapter's existing label and @ handling.
+  Examples:
+  - `戳了戳你` / `戳了戳 @x`
+  - `给你的话「…」点了 👍`
+  - `撤回了消息「…」`
+  - `进群了` / `退群了` / `被 @x 移出了群`
+  - `禁言了你 10 分钟`
+  - `把群名改成了「…」`
+  - `上传了文件 x.pdf（2 MB）`
+- **No dedicated types downstream.** The line travels as an ordinary message envelope from the notice's actor (the
+  poker, reactor, recaller, joiner), carrying one flag in `raw` (`asuna_notice: true`, kept by `kept_raw`). The
+  host's only uses of the flag:
+  - **Not stored.** A notice that starts no turn leaves no row (see below).
+  - **Rendered as the program's line, not the actor's words.** Her turn shows `[x #3] 戳了戳你` in the program's
+    form, not as text x typed. Words inside a notice that a person controls (a recalled text, a card name, a request
+    comment, a group name, a grey tip) get the same body rewriting as messages (ADR-050 `>`, ADR-057 labels). That
+    way text typed to look like a notice reads as that person's words.
+- **Same gates as messages.** Own account, allowed group or authorized DM route, blocked senders. A notice whose
+  operator is her own account is dropped, because the receipt of her own action already told her.
 
-**1b. Notices reach her.**
+### At the relevance gate: like a text message
 
-- **Adapter.** A new `notices.py` maps a NapCat notice or request to a structured notice: kind (a fixed table),
-  scene (group or DM route), actor, target, and the few typed fields the kind needs (message id, duration, old and
-  new card, emoji ids, file name and size). It passes the same gates as messages: own account, allowed group or
-  authorized DM route, blocked senders. A notice whose operator is her own account is dropped: the receipt of her own
-  admin action already told her. The adapter posts notices to a new channel endpoint (`notices`, like `members` and
-  `media_keys`), never as a message envelope.
-- **Host.** `notices.receive` checks the kind against its table, resolves actor and target to people (labels as in
-  ADR-057), and writes the line itself from a versioned word table (AGENTS.md: interpreted state). The adapter never
-  supplies the words. A notice line therefore has a form no person's text can produce, the same root fix as ADR-057.
-- **Storage.** A notice is a `messages` row with `direction: 'notice'` (like ADR-029's `archived`). Every existing
-  query that counts people's lines (`inbound`) skips it by default: awaited answers, "others' lines" in ADR-049,
-  people's last-spoke times, watches, summaries and chunks. Only the history views include it on purpose. A recall
-  also stamps the recalled row (`recalled: {at, by}`).
-- **Where she sees it.** In the conversation it happened in, as a line in the history her next turn reads there (the
-  group's lines since she spoke, the DM history). A notice is not a turn by itself, except as listed under wake rules.
-- **About her.** Notices that change what she can do (she was muted or unmuted, kicked, made or unmade admin, given a
-  title, the group disbanded, the account pushed offline), and requests (friend, join, invite), also appear at home:
-  one block listing the ones she has not been shown yet, at most 5 lines, absent when empty. Requests are notified
-  only. Answering them needs an action this ADR does not add; she can tell the owner.
+| Notice | Like a text message that… | So |
+|---|---|---|
+| Poke at her (group) | Calls her without an @ | Relevance gate, reason `poked` (new `attend.GATED` entry, ~30 characters): 接话 or 不理 |
+| Reaction to her line (group) | Answers her without quoting | Relevance gate, reason `reacted` (new entry, ~30 characters) |
+| Anything else in a group | Nobody addressed to her | No turn; shown once (see "Seen once") |
+| Anything in a DM | Arrives in a DM | Wakes her as a DM message does; she can `stay_silent` |
+| About her own account (below) | — | Her home session |
 
-**Wake rules.** A notice wakes her only when it is meant for her, the same test as ADR-039's resting groups:
+ADR-039 (resting groups) and ADR-052 (blocked people) apply unchanged: a notice from someone she blocked never wakes
+her.
 
-- a poke at her (group `target_id` is her account, or a poke in a DM);
-- nothing else. A reaction to her line, a recall, a join and her own mute are seen on her next turn there, or at
-  home.
+### Seen once, never stored
 
-ADR-052 applies: a notice from someone she blocked is kept and never wakes her. A poke in a group she lets rest still
-wakes her, as an @ does.
+A group notice that starts no turn is held **in memory** per conversation. The host shows it once, in that
+conversation's next turn or relevance-gate material, after the stored lines, then drops it.
 
-**Recall shown honestly.** A recalled message she was already shown keeps its text in history, marked `（已撤回）`,
-because a person who read it remembers it. One she was never shown reads `（已撤回，没看到内容）`. The record keeps the
-text either way.
+- At most 10 per conversation. Older ones are dropped and counted (`还有 3 条较早的通知没列出`).
+- A Host restart loses them. That is acceptable for a one-off.
 
-**Folding.** A busy group must not fill her history with notices (ADR-063 context growth). Notice lines fold in history:
-consecutive notices of one kind become one line (`3 人进群：…`, `[x #3] 等 4 人给 [你的话] 点了 👍`). Reactions on
-other people's messages fold per message, and only the count is shown. The fold thresholds are set from the 1a counts
-and stated in the word table.
+A notice that does start a turn (a poke she took up, a DM notice) is that turn's input. It is recorded the way every
+turn's input is, because a turn must survive a crash (`persist_input` runs before the gate). It carries its `notice`
+flag, so views that show people's lines treat it as the program's line. This is the one place a notice leaves a
+trace; see the open points.
 
-**Not shown, with reasons:**
+### Recall: just the line
+
+`[x #3] 撤回了消息「…」`. For the excerpt, the host reads the stored line by its platform id: read-only, at most 40
+characters, matched within this conversation and the last day (ADR-029: platform ids recycle). If no match is found,
+the line reads `撤回了一条消息`. Nothing is marked or written, and history keeps the original line as it was.
+
+### About her own account: her home session
+
+- **Which notices:** she was muted or unmuted, kicked, made or unmade admin, given a title; a group was disbanded;
+  the account was pushed offline (told once it is back online); a friend request; a join request in a group where
+  she is admin; an invitation into a group.
+- **Delivery:** these reach her home session as a **program event**, like a heartbeat's reason, never as the
+  owner's words (AGENTS.md: nothing passes for the owner's).
+- **Batching:** notices arriving within one minute share one home turn.
+- **Requests are hers to answer.** Whether she asks the owner first is her call. Answering takes two new values on
+  her existing `group_action`, `accept` and `decline`, usable at home only, for a request listed in that turn. They go
+  out the way her admin actions do (outbox → adapter → `set_friend_add_request` / `set_group_add_request`, with a
+  receipt).
+  - **Accepting is not admitting.** Who may then talk to her follows the channel's admission settings, unchanged. A
+    new friend's DM, or a group she joins, is not admitted by the accept itself.
+
+### Not projected, with reasons
 
 - `input_status` (typing): changes every few seconds and means nothing once the message arrives.
 - `meta_event` lifecycle and heartbeat: plumbing.
 - `message_sent`: her own words, already recorded when she sends.
 - `online_file_*`: about online-file transfers she can neither send nor open.
 
-**1c. Small content fixes (same batch).**
+### Small content fixes (same batch)
 
-- `dice` and `rps` show their result: `[骰子:5]`, `[猜拳:石头]`. A self-describing placeholder, no new parsing.
-- Cards keep a bounded payload (title, description, link, at most 2 KB) on the stored row, inside the media item. Her
-  turn still shows the title placeholder only; nothing reads the card by default. When she hands a card to the action
-  brain (`task`), the action brain reads the stored row with the read access it already has (dbread). No tool is
+- `dice` and `rps` show their result: `[骰子:5]`, `[猜拳:石头]`.
+- Cards keep a bounded payload (title, description, link, at most 2 KB) on the stored message, in its media item.
+  Her turn still shows the title placeholder only; nothing reads the card by default. If she hands a card to the
+  action brain (`delegate`), it reads the stored message with the read access it already has (dbread). No tool is
   added.
-- Voice, video, `markdown`, `contact`, `onlinefile`, `flashtransfer`: unchanged (parked or generic).
+- Voice, video, `markdown`, `contact`, `onlinefile`, `flashtransfer`: unchanged.
 
-### Phase 2: interactions beyond text and stickers (new QQ-only tools)
+### Counted
 
-The first two are poke and reactions. They are new tools present only in QQ group and DM toolboxes, never at home or on
-agent and peer lines.
+The adapter counts each event it receives by type (no content, no ids) in `health.json`, so the real mix is known
+after a few days and the 10-per-conversation cap can be checked against it.
 
-- **Recommended: one tool, two operations.** `gesture` with `op: poke | react`:
-  - poke takes the person's label;
-  - react takes a message (the same reference her replies use) and an emoji name from `faces.json`, the names she
-    already uses for faces in text.
-- **Alternative: two tools,** `poke` and `react`. Each is clearer alone, but adds two choices to every QQ turn.
-- **Path.** Both go out the way her admin actions do today: a queued publication the adapter claims and turns into a
-  NapCat call, with a receipt.
-  - Poke uses `group_poke` / `friend_poke`.
-  - React uses `set_msg_emoji_like`. Whether it works in DMs is to be checked on 4.18.0.
+## Phase 2: a reply tool (direction only; needs more thought)
 
-Candidates after poke and reactions, each needing its own decision: essence (`set_essence_msg`), forwarding
-(`send_forward_msg`), answering requests (`set_friend_add_request`, `set_group_add_request`). Voice out stays parked
-with voice in.
+Today speech is the turn's body text. A sticker is a `[表情包:名字]` line in that text, a picture is `attach_image`,
+the quote is `quote`, and silence is `stay_silent`. The owner's idea is one `reply` tool that composes the answer
+from parts, as ADR-061's `ask` composes one question to many sources:
 
-## Options considered for phase 1
+- **Parts, in her order:** text, sticker, picture, poke (nudge), a reaction to a message, and the quote. Any
+  combination: a sticker alone, text + sticker, a poke alone, a reaction alone.
+- **Where it works:** QQ groups and DMs only. Home, agent and peer lines keep plain speech.
+- **Out:** each part goes out the way messages and admin actions do (outbox → adapter → receipt).
+  - Poke: `group_poke` / `friend_poke`.
+  - Reaction: `set_msg_emoji_like`, which may be group-only on 4.18.0; to check.
+  - Emoji names: from `faces.json`, the names she already uses for faces.
 
-1. **Notices as program lines in their conversation, waking only when meant for her** (recommended). Honest and
-   cheap: she learns at her next turn there, as a person scrolling up would.
-2. **Every notice is a turn.** Rejected: pokes from strangers in big groups, joins and card changes would each start a
-   model turn, the growth ADR-063 just closed.
-3. **Notices as message envelopes with a marker text** (reuse the message path). Rejected: the line would be text a
-   person can type, the ADR-057 hole, and every query that counts people's lines would count notices.
-4. **A home digest only.** Rejected: a recall or reaction belongs where it happened. Home gets only what is about her.
+**Questions phase 2 must answer before it is drafted in full:**
+
+- Does `reply` replace body text in QQ turns, or sit beside it? Body text that is also sent is the root of earlier
+  bugs (ADR-063 lines held during a tool call).
+- Which existing tools fold into it (`quote`, `attach_image`, the sticker line, `stay_silent`)? If they do, the QQ
+  toolbox can shrink while abilities grow (AGENTS.md tool budget).
+- How a reaction and a poke look in her own history, so she remembers she did them.
+- Which other interactions join later (essence, forwarding), each by its own decision.
 
 ## Cost (AGENTS.md)
 
-The character cost is upper bounds before the build; the build measures the real numbers.
+Phase 1:
 
-**Phase 1** adds no tool and no tool description. Per-turn text:
+| Brain | Adds |
+|---|---|
+| Character, group turn | Up to 10 one-off notice lines (each about 60 characters or less), only when there are any; 0 otherwise |
+| Character, relevance gate | Two reasons in `GATED`, about 30 characters each, shown only when they apply |
+| Character, home turn | A program event per batch of notices about her, about 60 characters per line; 0 when none |
+| Character, tools | No new tool. `group_action` gains `accept` and `decline` plus about 80 characters of description; `tests/test_tool_budget.py` is raised in the same change |
+| Action brain | Nothing. A card handed over costs only what the brief carries |
 
-| Brain | Where | Adds |
-|---|---|---|
-| Character | Group or DM turn | Notice lines inside the existing history, after folding. Each line is at most about 60 characters; the fold rules cap the count |
-| Character | Home turn | One block when there is something new about her: about 60 characters of heading, plus at most 5 lines of at most about 60 characters. 0 when empty |
-| Action | — | Nothing. A card handed over in `task` costs only what the brief already carries |
-
-**Phase 2** adds one tool (`gesture`) to the character brain's QQ toolboxes only. About 350 characters of schema and
-description; the build measures it and raises `tests/test_tool_budget.py` in the same change. Home, agent and peer
-lines: 0. Action brain: 0.
+Phase 2 states its cost when drafted. The aim is a smaller QQ toolbox than today's.
 
 ## How it is checked
 
-- **1a.** `health.json` shows counts by type. After three days the counts go into this ADR and set the fold
-  thresholds.
-- **1b.** Live, in a test group or by the owner:
-  - a recall, a poke at her, a reaction to her line, a join and a card change each appear once, as program lines in
-    that group's history on her next turn;
-  - only the poke woke her;
-  - a mute of her appears at home;
+- `health.json` shows events by type after the build.
+- Live, in a test group or by the owner:
+  - a poke at her and a reaction to her line each reach the relevance gate, and she may answer 不理;
+  - a join, a card change and someone else's recall each show once in her next group turn, and not in the one after;
+  - none of these leaves a row in `messages`;
+  - a recall line quotes the recalled text;
+  - a DM poke wakes her;
+  - a friend request reaches her home session as a program event, she accepts it, and the receipt comes back;
   - text typed to look like a notice reads as that person's words.
-- **Replay.** A day of real notices from 1a, folded, stays within the per-turn cost above.
-- **Unchanged counters.** Queries that count people's lines give the same numbers with notice rows present.
-- **Phase 2.** A poke and a reaction from a group turn arrive on QQ, and the receipt reaches her.
 
-## Open questions for the reviewers
+## Open points for the reviewers
 
-- Should a reaction on her own line ever wake her (for example, the first one in a resting group), or never?
-- Should 1b start with fewer kinds (recall, poke, reactions, join and leave, her own mute and kick), with the rest
-  following once the counts are in?
-- Who answers friend and group requests until a later phase does: the owner by hand, as now?
+1. **Taken-up notices.** A notice that starts a turn is stored as that turn's input, because every turn's input is
+   durable. The alternative is a turn without an input row, which touches the coordinator's crash recovery. The
+   recommendation is to keep it.
+2. **Seen-once list in memory.** A Host restart loses notices that were not yet shown. The alternative is to drop
+   unwoken group notices entirely, which loses joins, card changes and others' recalls.
+3. **Request answers on `group_action`.** Is that the right home, or should they wait for phase 2?
 
 ## Her review
 

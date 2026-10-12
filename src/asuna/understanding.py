@@ -8,7 +8,7 @@
 She chooses the layer each time she writes (`understand_person`). The program does not filter what goes where: the
 note gives her three questions to ask on the spot, and the person layer always opens with the line that it is only
 part of them. Each person-layer revision records where it was written; it is read with that conversation's name and
-how long ago.
+the time (a timestamp field, shown on the local clock).
 """
 from __future__ import annotations
 
@@ -45,15 +45,15 @@ def _elsewhere(store, person_id, here_scope):
 
 
 def _written(store, revision, moment):
-    from .config import ago
+    """(where it was last written, when) or None; the time is a field, shown on the local clock."""
     from .people import People
     origin = revision.get('origin') or {}
     scene = store.db.scenes.find_one({'_id': origin.get('scene_id')}) if origin.get('scene_id') else None
     try:
-        hours = (moment - datetime.fromisoformat(origin['at'])).total_seconds() / 3600
+        datetime.fromisoformat(origin['at'])
     except (KeyError, TypeError, ValueError):
         return None
-    return '最后是在%s里改的，%s' % (People(store).scene_title(scene) if scene else '一个现在已经没有的对话', ago(max(0.0, hours)))
+    return ('最后是在%s里改的' % (People(store).scene_title(scene) if scene else '一个现在已经没有的对话'), origin['at'])
 
 
 def person_view(store, person_id, here_scope, head, moment=None):
@@ -67,5 +67,5 @@ def person_view(store, person_id, here_scope, head, moment=None):
     view['text'] = (head[1].get('content') or {}).get('body') or NO_PERSON
     written = _written(store, head[1], moment)
     if written:
-        view['written'] = written
+        view['written'], view['written_at'] = written
     return view

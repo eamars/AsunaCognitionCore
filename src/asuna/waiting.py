@@ -16,16 +16,6 @@ ANYONE = '这里任何人'
 NOTE = '你点过名（@ 或 wait=yes）、到现在还没在那边开口的人，一小时以内的。对方一开口就不再列；过了一小时自己消失。'
 
 
-def _ago(moment, stamp):
-    from datetime import datetime
-    try:
-        then = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
-    except ValueError:
-        return ''
-    minutes = max(int((moment - then).total_seconds() // 60), 0)
-    return '挂了 %d 分钟' % minutes if minutes < 60 else '挂了 %d 小时' % (minutes // 60)
-
-
 def _excerpt(text):
     from .people import BARE_LABEL, LABEL_MENTION
     plain = LABEL_MENTION.sub(lambda m: '@' + ' '.join((m.group('name') or '').split()), text or '')
@@ -83,7 +73,8 @@ def block(store, scene_ids, moment, persona=None, *, home=False):
         return None
     people, shown = People(store, persona), []
     for item in items[:SHOWN_HOME] if home else items:
-        row = {'who': people.label(item['doc']) if item['doc'] else ANYONE, 'waiting': _ago(moment, item['at']),
+        row = {'who': people.label(item['doc']) if item['doc'] else ANYONE, 'waiting_since_at': item['at'],
+               'waiting_on_you': True,
                'your_line': _excerpt(item['text'])}
         if home:
             scene = store.db.scenes.find_one({'_id': item['scene_id']}) or {'_id': item['scene_id']}

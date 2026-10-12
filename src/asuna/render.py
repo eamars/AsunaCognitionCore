@@ -56,6 +56,13 @@ def compose(common, persona_content, voice_content, cls, place=None) -> str:
     return text + ('\n' + voice if voice else '')
 
 
+def role_text(config, rendered):
+    """Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py,
+    ADR-056). The persona budget bounds the render alone: the guide is the core's, the same for every persona."""
+    from .block_guide import guide
+    return rendered + '\n\n' + guide(config)
+
+
 def largest(common, persona_content, voice_content):
     """(estimated tokens, text) of the largest render over the places: the one the budget bounds."""
     renders = [compose(common, persona_content, voice_content, cls, place) for place, cls in visibility.PLACE_CLASS.items()]
@@ -132,7 +139,7 @@ def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, plac
         raise ValueError('REQUIRED_PERSONA_MISSING')
     voice_rev, voice_doc = docs.read('voice')
     common = common_text(store.config)
-    text = compose(common, persona_doc, voice_doc, cls, place)
+    text = role_text(store.config, compose(common, persona_doc, voice_doc, cls, place))
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
            'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
     report_budget(store, persona, persona_doc, voice_doc, common)
@@ -212,7 +219,8 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
             raise ValueError('SYSTEM_REF_REVISION_MISSING')
         revisions.append(revision['content'] if revision else None)
     common = common_text(store.config)
-    text = compose(common, revisions[0], revisions[1], ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place'))
+    text = role_text(store.config, compose(common, revisions[0], revisions[1],
+                                           ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place')))
     digest = _remember(text)
     if digest != ref['render_sha256'] and stream:
         store.audit(stream, 'system.render_drift', {'expected': ref['render_sha256'], 'actual': digest,

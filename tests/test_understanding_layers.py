@@ -29,7 +29,7 @@ def test_the_person_layer_is_read_elsewhere_with_where_it_was_written(store):
     assert done['state'] == 'COMMITTED' and done['person_understanding_update']['state'] == 'COMMITTED'
     _, there, _ = ContextBuilder(store).prepare({**GROUP, 'event_id': 'e3'})
     person = there['relationship']['person']
-    assert person['text'] == 'A 说话直接，先给结论。' and person['written'].startswith('最后是在') and '刚才' in person['written']
+    assert person['text'] == 'A 说话直接，先给结论。' and person['written'].startswith('最后是在') and person['written_at']
     assert there['relationship']['here'] == NO_HERE, 'the direct chat\'s here layer stays there'
     assert '换个群还成立吗' in there['understanding_update_from_program']['target']
 

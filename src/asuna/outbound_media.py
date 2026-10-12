@@ -233,14 +233,11 @@ OWN_PICTURES_NOTE = ('这些是你自己画的图（新的在前）。这里发�
 def own_pictures(store, moment, *, limit=5):
     """Her own newest pictures, to look at where none can be sent (her local chat): ids and when, in words."""
     from datetime import datetime
-    from .config import ago
     out = []
     for item in produced_images(store, limit=limit):
         row = {'artifact_id': item['artifact_id']}
-        try:
-            row['when'] = ago((moment - datetime.fromisoformat(item['created_at'])).total_seconds() / 3600)
-        except (TypeError, ValueError):
-            pass
+        if item.get('created_at'):
+            row['at'] = item['created_at']
         out.append(row)
     return out
 

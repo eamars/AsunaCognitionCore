@@ -80,3 +80,17 @@ No new tool, option or per-turn line; each rule removes characters from turns. R
 The same survey after a day (`survey_today.py`-style: sizes and fingerprints by block, no text): each rule's share
 should fall to near zero, and characters per turn by kind should fall by about a third. Her refusals by cause
 (ADR-054) for a missing `think` or a wrong `ref` must not rise; a rule whose refusals rise is taken back.
+
+## Build (2026-10-12)
+
+- Rule 1: `block_guide.py` holds what each block is for (the modules' own note constants), the delivery's own lines
+  and the memory rules; `render.role_text` appends it with `prompts/turn.md` after the persona render (4,226
+  characters once per conversation, outside the persona budget). A notice is the context alone, plus a consult's or a
+  resumed turn's own lines. `turn.md` changed one word: its data is "at the start of each turn", not "above".
+- Rule 2: the developer inbox, notes received and sent, members, her pictures, places, visits, errands, elsewhere,
+  the owner's last message, the person layer's last edit, the waiting list and the notebook carry timestamp fields
+  (`at`, `*_at`), which `local_time.for_model` shows on the local clock.
+- Rule 3: `context-delivery.js` folds still-visible items of a changed list block into `same_as_before` with their
+  states; `waiting_on_you` marks a note waiting for her answer and every waiting-list entry. `ref_index` keeps this
+  turn's ids and the `doc:` sections; `context.refs` adds the memory and task ids for `feel` and the appraiser.
+- Installed in its own restart, after the one carrying ADR-055.

@@ -46,7 +46,8 @@ def test_she_sees_who_she_still_waits_for_and_nobody_else(store):
     line(store, G1, 6, '有人知道吗', 70, choice={'why': '想问路'})        # older than an hour: gone
     line(store, G2, 7, '谁有空帮个忙', 10, choice={'why': '找人帮忙'})     # wait=yes, nobody called: anyone here
     here = waiting.block(store, [G1], NOW, 'P1')
-    assert [(i['who'], i['waiting']) for i in here['items']] == [('[A同学 #1]', '挂了 50 分钟')]
+    assert [(i['who'], i['waiting_on_you']) for i in here['items']] == [('[A同学 #1]', True)]
+    assert here['items'][0]['waiting_since_at']
     assert here['items'][0]['your_line'] == '@A同学 你周末来吗'
     home = waiting.block(store, [G1, G2], NOW, 'P1', home=True)
     assert [(i['group'] != '', i['who']) for i in home['items']] == [(True, waiting.ANYONE), (True, '[A同学 #1]')]

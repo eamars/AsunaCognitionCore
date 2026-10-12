@@ -33,6 +33,8 @@ def peer_lines(store):
 
 ASIDES_SHOWN = 6
 ASIDE_EXCERPT = 80
+VIEW_NOTE = ('这是你和另一个智能体之间的线。开关由你自己决定（peer_line）：关着时她的话会被跳过、不补发；'
+             '你自己的话照常发得出去。')
 ASIDES_NOTE = ('另一头不是在回你的话（她自己那边的心跳、自言自语、主动找你），不叫醒你，先记在这里；'
                '你在那条线上开口之后，那之前的就不再列。要回就从家里 pass_note 到那条线。')
 
@@ -116,5 +118,4 @@ def describe(until, zone):
 def view(store, lines, zone, moment=None):
     return {'items': [{'line': line['label'], 'state': describe(closed_until(store, line['scene_id'], moment), zone)}
                       for line in lines],
-            'note': '这是你和另一个智能体之间的线。开关由你自己决定（peer_line）：关着时她的话会被跳过、不补发；'
-                    '你自己的话照常发得出去。'}
+            'note': VIEW_NOTE}

@@ -132,7 +132,7 @@ Group administration where she is an admin (owner direction 2026-10-04: on by de
 
 [src/asuna/group_members.py](../../src/asuna/group_members.py)
 
-Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed. The host keeps one list per group in `group_members`, apart from `scene_people` (that roster stays "people who appeared here": a thousand members there would change what a label means and make every turn scan them). A group turn shows a chosen slice in words — the people she already knows here, the most recently active, anyone @-mentioned lately — and `find_member` searches the whole list. Names, roles and how long ago someone last spoke; never raw numbers or timestamps.
+Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed. The host keeps one list per group in `group_members`, apart from `scene_people` (that roster stays "people who appeared here": a thousand members there would change what a label means and make every turn scan them). A group turn shows a chosen slice in words — the people she already knows here, the most recently active, anyone @-mentioned lately — and `find_member` searches the whole list. Names, roles and when someone last spoke (a timestamp field, shown on the local clock); never raw numbers.
 
 - def `receive` — POST /v1/channels/<id>/members: one group's whole list from the adapter.
 - def `block` — members_from_program for a group turn, or None when no list was received.

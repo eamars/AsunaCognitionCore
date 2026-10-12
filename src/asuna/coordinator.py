@@ -165,9 +165,9 @@ class Coordinator:
 
     # ── one turn ────────────────────────────────────────────────────
     def _notice(self, ep):
-        """The turn's first message: the prepared context and this turn's instruction."""
+        """What follows the prepared context in the turn's first message: only what this turn has of its own (a
+        consult, a resumed turn). The turn instruction is in her system prompt (block_guide.py, ADR-056)."""
         kind=role_tools.turn_kind(ep)
-        instruction=prompt_path(self.store.config,'turn.md').read_text(encoding='utf-8')
         extra=prompt_path(self.store.config,'turn_consult.md').read_text(encoding='utf-8') if kind=='consult' else ''
         if ep.get('resume_diagnostic'):
             # The stored failure (often a traceback with paths) is read only at home; elsewhere she is told plainly
@@ -183,7 +183,7 @@ class Coordinator:
             if tasks:
                 extra+='\n这一回合中断前已经交给行动脑的事（不要再交一遍）：'+'、'.join(
                     '「%s」（%s）'%(row.get('title') or row.get('goal'),row['_id']) for row in tasks)
-        return instruction+('\n'+extra if extra else '')
+        return extra.strip('\n')
 
     @staticmethod
     def _operation(ep_id, generation):
@@ -299,6 +299,9 @@ class Coordinator:
         # What she reads is on the local clock; the stored context keeps UTC for the program (local_time.py).
         from . import local_time
         context=local_time.for_model(context,local_time.zone_of(self.store,ep['scene_id']))
+        # What each block is for is in her system prompt; a block saying the same again arrives without it (ADR-056).
+        from . import block_guide
+        context=block_guide.strip(context)
         if pulled:
             fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
             self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
@@ -307,7 +310,7 @@ class Coordinator:
                   if first and getattr(self.character,'composes_context',False) else {})
         if pulled:
             delivery['pictures']=[{'ref':ref,**payload['image']} for ref,payload in pulled]
-        body=(json.dumps(context,ensure_ascii=False,default=str)+'\n'+text) if first and 'context' not in delivery else text
+        body=(json.dumps(context,ensure_ascii=False,default=str)+('\n'+text if text else '')) if first and 'context' not in delivery else text
         value=self.character.generate(self._binding(ep),operation,'TURN' if first else 'REPAIR',body,
                                       episode_system(self.store,ep),tools=names,handler=handler,
                                       trigger='note' if ep['context'].get('note_from_program')

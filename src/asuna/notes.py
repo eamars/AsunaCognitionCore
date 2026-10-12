@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from .config import ago, character_id, excerpt
+from .config import character_id, excerpt
 from .evidence import canonical, sha
 from .state import now
 from . import visibility
@@ -75,11 +75,6 @@ def _at(value):
         return None
     moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
-def _ago(moment, value):
-    at = _at(value)
-    return ago(max(0.0, (moment - at).total_seconds() / 3600)) if at else ''
 
 
 def trust_of(cls):
@@ -301,7 +296,7 @@ def opening_block(store, persona, row, cls, episode, moment):
         note = CAUTION % where
     else:
         note = OUTSIDE_NOTE % where
-    block = {'from': where, 'when': _ago(moment, row['created_at']), 'written': TRUST_WORDS[row['trust']],
+    block = {'from': where, 'at': row['created_at'], 'written': TRUST_WORDS[row['trust']],
              'text': row['text'], 'note': note}
     if row.get('reply_to'):
         block['reply_to_yours'] = '这是对你之前那张便条的回信。'
@@ -325,12 +320,13 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
     for row in rows:
         words = state(store, row, moment)
         item = {'from': people.scene_title(store.db.scenes.find_one({'_id': row['from_scene']})),
-                'when': _ago(moment, row['created_at']), 'written': TRUST_WORDS[row['trust']]}
+                'at': row['created_at'], 'written': TRUST_WORDS[row['trust']]}
         hidden = row['trust'] == UNTRUSTED and cls == visibility.OWNER_PRIVATE and kind == 'self_development'
         if hidden:
             item['summary'] = HIDDEN_SUMMARY
         elif words == 'waiting':
             item['text'] = row['text']
+            item['waiting_on_you'] = True           # never folded into "as before" (ADR-056)
             if row['trust'] == UNTRUSTED and cls == visibility.OWNER_PRIVATE:
                 item['caution'] = CAUTION % item['from']
             _seen(store, row, episode)
@@ -351,7 +347,7 @@ def sent_block(store, persona, scene_id, moment):
         return None
     people = People(store, persona)
     return {'items': [{'to': people.scene_title(store.db.scenes.find_one({'_id': row['to_scene']})),
-                       'when': _ago(moment, row['created_at']), 'wrote': excerpt(row['text'], EXCERPT),
+                       'at': row['created_at'], 'wrote': excerpt(row['text'], EXCERPT),
                        'state': STATE_WORDS[state(store, row, moment)]} for row in rows],
             'note': SENT_NOTE}
 

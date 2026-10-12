@@ -492,7 +492,7 @@ export class CognitionCore {
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
       const composed = composeContext(stage.context, visibleCarried(session, pending));
-      text = JSON.stringify(composed.context) + '\n' + stage.tail;
+      text = JSON.stringify(composed.context) + (stage.tail ? '\n' + stage.tail : '');
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;
     }

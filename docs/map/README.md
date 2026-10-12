@@ -200,6 +200,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`coordinator`](../../src/asuna/coordinator.py) — One character turn per episode (ADR-011 §3).
 - [`context`](../../src/asuna/context.py) — Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 - [`context_budget`](../../src/asuna/context_budget.py) — What a turn may carry on its own, and how her own notes stay short (owner 2026-10-06, ADR-014).
+- [`block_guide`](../../src/asuna/block_guide.py) — What her turns' blocks are for, said once in her role system prompt (ADR-056 rule 1).
 - [`render`](../../src/asuna/render.py) — Role system prompt rendering (ADR-009 §8.1).
 - [`role_tools`](../../src/asuna/role_tools.py) — Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 - [`tool_args`](../../src/asuna/tool_args.py) — What she plainly meant, before a tool checks its arguments (owner 2026-10-06).

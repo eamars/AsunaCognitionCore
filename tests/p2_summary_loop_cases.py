@@ -457,7 +457,7 @@ def r1_summary_reaches_next_turn():
 def r2_rules_explain_how_to_read_it():
     store = bind_store(rows())
     _system, context, _manifest = prepare(store)
-    rules = context['memory_source_rules']
+    rules = _system                    # the reading rules are in her system prompt (ADR-056)
     assert 'derived_summary' in rules and 'source_window' in rules, rules
     assert 'source_event_ids' in rules, rules
     route = context['understanding_update_from_program']['route']
@@ -895,7 +895,7 @@ def r5_group_next_turn_shows_attribution_and_correction():
     assert '老陈' in entry['who'] and '小舟' in entry['who'] and '你' in entry['who'], entry
     assert '更正了自己' in entry['corrections'][0], entry
     assert saved['_id'] in manifest['selected'], manifest
-    rules = context['memory_source_rules']
+    rules = _system                    # the reading rules are in her system prompt (ADR-056)
     assert 'about_current_speaker' in rules and '更正' in rules, rules
     assert 'about_current_speaker' in context['understanding_update_from_program']['route']
     return '下一轮在群里也认得出这条摘要盖了谁、里面哪句被更正过'

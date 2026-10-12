@@ -2,6 +2,7 @@
 import pytest
 
 from asuna import visibility
+from asuna.block_guide import guide
 from asuna.coordinator import Coordinator
 from asuna.documents import DocumentError, DocumentStore
 from asuna.lanes import FakeLane, FakeTurn
@@ -37,8 +38,11 @@ def test_a_section_pinned_to_groups_renders_only_in_group_turns_and_still_counts
     assert 'ONLY_IN_GROUPS' in group and 'ONLY_IN_GROUPS' not in home and 'ONLY_IN_GROUPS' not in dm
     assert all('EVERYWHERE_LINE' in text for text in (group, home, dm))
     after = render_status(store, 'P1')['estimate_tokens']
-    assert after == max(estimate_tokens(group), estimate_tokens(home), estimate_tokens(dm),
-                        estimate_tokens(render_system(store, 'P1', visibility.OWNER_PRIVATE, 'peer')[0]))
+    # The budget bounds the persona render; the guide after it (block_guide.py) is the core's, the same everywhere.
+    peer = render_system(store, 'P1', visibility.OWNER_PRIVATE, 'peer')[0]
+    tail = '\n\n' + guide(store.config)
+    assert all(text.endswith(tail) for text in (group, home, dm, peer))
+    assert after == max(estimate_tokens(text[:-len(tail)]) for text in (group, home, dm, peer))
     assert after > before, 'the largest render is the one bounded'
 
 

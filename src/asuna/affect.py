@@ -269,6 +269,12 @@ def affect_model(model, policy=None):
 
 
 # ── ledger ──────────────────────────────────────────────────────────
+
+def _refs(ep):
+    """The ids a feeling may cite in this episode (context.refs: ref_index and the ids shown in their blocks)."""
+    from .context import refs
+    return refs(ep['context'])
+
 class AffectError(ValueError):
     def __init__(self, code, detail=''):
         super().__init__(code + (': ' + str(detail) if detail else ''))
@@ -334,7 +340,7 @@ class AffectLedger:
     def _kinds(self):
         return '、'.join(spec.get('label') or key for key, spec in self.model.get('kinds', {}).items()) or '（种类表是空的）'
 
-    def check(self, item, refs, where='这回合的 ref_index'):
+    def check(self, item, refs, where='这回合的 ref_index、memories 或 task_state_from_program'):
         """Program gates for a committed event (§6.4): any failure refuses only this item."""
         if not self.enabled:
             raise AffectError('AFFECT_DISABLED', '情感账没开；重试也一样')
@@ -368,7 +374,8 @@ class AffectLedger:
         row instead of raising EVENT_IMMUTABLE.
         """
         if refs is None:
-            self.check(item, ep['context'].get('ref_index', []))
+            from .context import refs
+            self.check(item, refs(ep['context']))
         else:
             self.check(item, refs, '这条提案当时的 ref_index（照抄提案里的 ref）')
         source_scope = visibility.owner_private_scope(self.persona) if cls == visibility.OWNER_PRIVATE else ep['scope_key']
@@ -439,7 +446,7 @@ class AffectLedger:
         source_scope = visibility.owner_private_scope(self.persona) if cls == visibility.OWNER_PRIVATE else ep['scope_key']
         doc = {'_id': sha(canonical(['proposal', ep['_id'], index])), 'persona': self.persona, 'kind_row': 'proposal',
                'status': 'pending', 'source_scope': source_scope, 'episode_id': ep['_id'],
-               'ref_index': list(ep['context'].get('ref_index', [])), 'created_at': now(),
+               'ref_index': _refs(ep), 'created_at': now(),
                **{k: item[k] for k in EVENT_FIELDS if k in item}}
         return self._insert('affect_proposals', doc, 'affect-propose:' + ep['_id'])[0]
 
@@ -598,7 +605,7 @@ class Appraiser:
         monologues = [row.get('body_markdown', '') for row in self.store.db.memory_units.find(
             {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1})]
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
-                   'speech': ep.get('speech'), 'ref_index': ep['context'].get('ref_index', []),
+                   'speech': ep.get('speech'), 'ref_index': _refs(ep),
                    'how_to_record': recording_guide(ledger.model)}
         from . import answers
         question = (prompt_path(self.store.config, 'stage_appraise.md').read_text(encoding='utf-8')

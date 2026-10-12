@@ -3,14 +3,13 @@ group's member list when it starts and periodically, and posts it when it change
 group in `group_members`, apart from `scene_people` (that roster stays "people who appeared here": a thousand
 members there would change what a label means and make every turn scan them). A group turn shows a chosen slice in
 words — the people she already knows here, the most recently active, anyone @-mentioned lately — and `find_member`
-searches the whole list. Names, roles and how long ago someone last spoke; never raw numbers or timestamps.
+searches the whole list. Names, roles and when someone last spoke (a timestamp field, shown on the local clock); never raw numbers.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
 from . import channel_kinds
-from .config import ago
 from .people import People, safe_name
 
 MAX_MEMBERS = 5000                       # one group's list; a larger one is refused, not cut
@@ -83,10 +82,11 @@ def _label(people, scene, member):
 
 
 def _active(member, moment):
+    """When they last spoke, as a timestamp field (shown on the local clock), or that nobody saw them speak."""
     sent = member.get('last_sent_time')
     if not sent:
-        return '没见他说过话'
-    return '最近说话是' + ago(max(0.0, moment.timestamp() - sent) / 3600)
+        return {'active': '没见他说过话'}
+    return {'last_spoke_at': datetime.fromtimestamp(sent, timezone.utc).isoformat(timespec='seconds')}
 
 
 def block(store, scene, persona, moment=None):
@@ -116,19 +116,15 @@ def block(store, scene, persona, moment=None):
     for member in chosen[:MEMBER_LINES]:
         entry = known.get(member['user_id'])
         item = {'who': people.label(entry) if entry else (_name(member) or '（没名字）'),
-                'active': _active(member, moment)}
+                **_active(member, moment)}
         if member['role'] in ROLE_WORDS:
             item['role'] = ROLE_WORDS[member['role']]
         items.append(item)
     leaders = ['%s（%s）' % (_name(m), ROLE_WORDS[m['role']]) for m in members if m['role'] in ROLE_WORDS]
     fetched = doc.get('fetched_at') or doc.get('received_at') or ''
-    try:
-        age = ago(max(0.0, (moment - datetime.fromisoformat(fetched.replace('Z', '+00:00'))).total_seconds()) / 3600)
-    except ValueError:
-        age = ''
     return {'count': '群里一共 %d 人' % doc['count'], **({'leaders': leaders[:12]} if leaders else {}),
             'items': items, **({'not_shown': '另有 %d 人没列出' % (doc['count'] - len(items))} if doc['count'] > len(items) else {}),
-            **({'list_from': '名单是' + age + '拉的'} if age else {}), 'note': BLOCK_NOTE}
+            **({'list_fetched_at': fetched} if fetched else {}), 'note': BLOCK_NOTE}
 
 
 def find(store, scene, persona, query, moment=None):
@@ -141,7 +137,7 @@ def find(store, scene, persona, query, moment=None):
     hits = [m for m in doc['members'] if needle in m.get('nickname', '').casefold() or needle in m.get('card', '').casefold()]
     hits.sort(key=lambda m: -(m.get('last_sent_time') or 0))
     people = People(store, persona)
-    found = [{'who': _label(people, scene, m), 'active': _active(m, moment),
+    found = [{'who': _label(people, scene, m), **_active(m, moment),
               **({'role': ROLE_WORDS[m['role']]} if m['role'] in ROLE_WORDS else {}),
               **({'also': '群名片「%s」，昵称「%s」' % (m['card'], m['nickname'])} if m.get('card') and m.get('nickname')
                  and m['card'] != m['nickname'] else {})} for m in hits[:FIND_LIMIT]]

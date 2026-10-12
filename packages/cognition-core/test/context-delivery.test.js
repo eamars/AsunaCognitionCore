@@ -79,3 +79,29 @@ test('her own thoughts the session still shows where she wrote them are not repe
   assert.equal(fresh.context.recent_thoughts_from_program.items.length, 2);
   assert.equal(fresh.context.memories.length, 3);
 });
+
+test('a list block goes item by item: what she still sees folds into one line with its states, what waits on her never does', () => {
+  const notes = items => ({ notes_from_program: { items } });
+  const read = { from: '群 A', at: '2026-10-12 19:00', text: '早到了', state: '读过了' };
+  const waiting = { from: '群 B', at: '2026-10-12 19:05', text: '等你回', waiting_on_you: true };
+  const first = composeContext(context([], notes([read, waiting])), visibleCarried(surface([])));
+  assert.deepEqual(first.context.notes_from_program.items, [read, waiting], 'first time: all of it');
+  const events = [notice(first, 'ep-1')];
+
+  const fresh = { from: '群 C', at: '2026-10-12 19:30', text: '新便条', state: '读过了' };
+  const second = composeContext(context([], notes([fresh, read, waiting])), visibleCarried(surface(events)));
+  assert.deepEqual(second.context.notes_from_program, { items: [fresh, waiting], same_as_before: '其余 1 条同前（读过了 1）' });
+  assert.equal(second.omitted.items, 1);
+
+  // The same block again: every item is visible, but it was never sent whole, so it is not called unchanged.
+  const third = composeContext(context([], notes([fresh, read, waiting])), visibleCarried(surface([...events, notice(second, 'ep-2')])));
+  assert.deepEqual(third.context.notes_from_program, { items: [waiting], same_as_before: '其余 2 条同前（读过了 2）' });
+
+  // A plain list (her plans) keeps the same rule; the delivery's own lines carry no explanation.
+  const plans = [{ _id: 'p1', intent: '喝水' }, { _id: 'p2', intent: '看群' }];
+  const once = composeContext(context([], { plans_from_program: plans }), visibleCarried(surface([])));
+  const twice = composeContext(context([], { plans_from_program: [plans[0], { _id: 'p2', intent: '看两个群' }] }),
+    visibleCarried(surface([notice(once, 'ep-3')])));
+  assert.deepEqual(twice.context.plans_from_program, { items: [{ _id: 'p2', intent: '看两个群' }], same_as_before: '其余 1 条同前' });
+  assert.deepEqual(twice.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
+});

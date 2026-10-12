@@ -50,6 +50,7 @@ One character turn per episode (ADR-011 §3).
 Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 
 - def `landing_lost` — The parts of her delivered line the platform did not store, in words; None when it stored what was sent.
+- def `refs` — Every id she may cite in this turn: ref_index, and the memories and tasks shown in their own blocks.
 - def `catch_up` — A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines.
 - def `order_context` — Fixed head, ordered blocks (persona order, then the core default for the rest), fixed tail.
 - def `ledger_block` — Every ledger she can read here, each within its per-turn limit (context_budget.note_view).
@@ -78,6 +79,16 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028).
 - def `review_block` — Her notes that show every turn and are due for tidying tonight: over or near their limit, or changed and left untidied for a week.
 
+## `block_guide`
+
+[src/asuna/block_guide.py](../../src/asuna/block_guide.py)
+
+What her turns' blocks are for, said once in her role system prompt (ADR-056 rule 1).
+
+- def `notes` — block key -> the explanations it may carry (a block worded per place has more than one).
+- def `strip` — The context without the explanations the guide already gives.
+- def `guide` — The fixed text of her turns: how a turn goes, what each block is, how to read memories.
+
 ## `render`
 
 [src/asuna/render.py](../../src/asuna/render.py)
@@ -87,6 +98,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `common_text`
 - def `readable_sections` — Sections of a document visible to a session class, public before owner-private.
 - def `compose`
+- def `role_text` — Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py, ADR-056).
 - def `largest` — (estimated tokens, text) of the largest render over the places: the one the budget bounds.
 - def `model_and_policy`
 - def `estimate_tokens` — Tokenizer-free upper estimate: one token per CJK character, DSH's characters/4 for everything else.

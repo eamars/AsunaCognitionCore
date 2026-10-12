@@ -57,7 +57,7 @@ def test_her_places_read_in_words_and_each_says_whether_she_can_go(store):
     block = view(store, service)
     [row] = block['items']                                        # the blocked group is not a place
     assert row['place'] == PLACE and row['can_visit'] == '可以去' and block['left_today'] == 4
-    assert '零星有人说话' not in row['now'] and '小时前' in row['now'] and row['your_notes'] == '你还没写过这个群的笔记'
+    assert '零星有人说话' not in row['now'] and row['last_line_at'] and row['your_notes'] == '你还没写过这个群的笔记'
     assert 'GROUP_LINE_NEVER_SHOWN_AT_HOME' not in json.dumps(block, ensure_ascii=False)
     line(store, 'g1', 'm-now', '在吗', minutes_ago=1, wake='mentioned_account')
     [row] = view(store, service)['items']

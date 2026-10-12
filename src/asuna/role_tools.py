@@ -74,7 +74,7 @@ AFFECT_FIELDS = {
     'intensity': _s('多强：how_to_record_from_program.intensity 里的一个词'),
     'arousal': _s('多激动：how_to_record_from_program.arousal 里的一个词，可省略'),
     'direction': _s('好或坏；种类本身带好坏时不写', enum=['好', '坏']),
-    'ref': _s('触动你的那件事：ref_index 里的 id'),
+    'ref': _s('触动你的那件事：ref_index 里的 id，或 memories、task_state_from_program 里那条的 _id'),
     'why': _s('来由'),
     'cost': _s('代价，可省略'),
     'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 true'},
@@ -1757,7 +1757,7 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
         items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
                       'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
                       **({'where': people.scene_title(scene)} if scene else {}),      # ADR-018 §5.8
-                      **({'when': ago(hours)} if hours is not None else {}),
+                      **({'at': row['created_at']} if hours is not None else {}),
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
     return items
 

@@ -7,7 +7,12 @@
  * compaction, including one that runs right before this message joins the
  * surface, keeps it verbatim. Anything older is sent again. Each notice records
  * what it carries in its own `source.carried`, so the session log is the only
- * state; nothing is cached in the worker or Mongo. */
+ * state; nothing is cached in the worker or Mongo.
+ *
+ * A list block (a list of items, or a block with `items`) whose whole copy is not visible goes item by item
+ * (ADR-056): an item still visible is folded into one `same_as_before` line that says how many and in what state,
+ * except an item waiting on her (`waiting_on_you`), which is always sent. What these lines mean is in her system
+ * prompt (block_guide.py), so they carry no explanation of their own. */
 import { createHash } from 'node:crypto';
 
 /** Must stay below the role preset's retained tail (DSH chars/4 estimate):
@@ -22,7 +27,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value ?? null
 /** What the newest stretch of the surface already carries (DSH's chars/4 token estimate). Lines still
  * waiting in the inbox (navigation.js) count too: the same step claims them just before this notice. */
 export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDOW_TOKENS) {
-  const visible = { blocks: new Set(), rows: new Set(), memories: new Set(), episodes: new Set(), thoughts: new Set() };
+  const visible = { blocks: new Set(), items: new Set(), rows: new Set(), memories: new Set(), episodes: new Set(), thoughts: new Set() };
   const nodes = session.surface.nodes;
   let used = 0;
   for (const line of pending.toReversed()) {
@@ -45,6 +50,7 @@ export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDO
     const carried = source?.kind === 'asuna' ? source.carried : undefined;
     if (!carried) continue;
     for (const [key, value] of Object.entries(carried.blocks ?? {})) visible.blocks.add(key + ':' + value);
+    for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
     for (const id of carried.rows ?? []) visible.rows.add(id);
     for (const id of carried.memories ?? []) visible.memories.add(id);
     if (carried.episode) visible.episodes.add(carried.episode);
@@ -52,10 +58,29 @@ export function visibleCarried(session, pending = [], windowTokens = REUSE_WINDO
   return visible;
 }
 
+/** A list block's items and how to rebuild the block around fewer of them, or null for any other block. */
+function listOf(value) {
+  const objects = items => items.length > 0 && items.every(item => item && typeof item === 'object' && !Array.isArray(item));
+  if (Array.isArray(value)) return objects(value) ? { items: value, rest: {}, wrap: (items, same) => ({ items, same_as_before: same }) } : null;
+  if (value && typeof value === 'object' && Array.isArray(value.items) && objects(value.items)) {
+    const { items, ...rest } = value;
+    return { items, rest, wrap: (kept, same) => ({ ...rest, items: kept, same_as_before: same }) };
+  }
+  return null;
+}
+
+/** "其余 4 条同前（读过了 3、已送到 1）": how many items were folded, and their states when they have one. */
+function sameAsBefore(folded) {
+  const states = new Map();
+  for (const item of folded) if (typeof item.state === 'string') states.set(item.state, (states.get(item.state) ?? 0) + 1);
+  const tally = [...states].map(([state, count]) => state + ' ' + count).join('、');
+  return '其余 ' + folded.length + ' 条同前' + (tally ? '（' + tally + '）' : '');
+}
+
 /** The context this notice sends, what it carries, and what it left out (for the audit). */
 export function composeContext(context, visible) {
-  const entries = [], carried = { blocks: {}, rows: [], memories: [] }, unchanged = [];
-  let rows = 0, memories = 0, thoughts = 0;
+  const entries = [], carried = { blocks: {}, items: {}, rows: [], memories: [] }, unchanged = [];
+  let rows = 0, memories = 0, thoughts = 0, items = 0;
   const shownThought = id => typeof id === 'string' && id.startsWith('mono-')
     && (visible.thoughts ?? new Set()).has(id.slice(id.lastIndexOf(':') + 1));
   for (let [key, value] of Object.entries(context)) {
@@ -83,17 +108,27 @@ export function composeContext(context, visible) {
       entries.push([key, value]);
     } else {
       const value_digest = digest(value);
-      if (visible.blocks.has(key + ':' + value_digest)) unchanged.push(key);
-      else { carried.blocks[key] = value_digest; entries.push([key, value]); }
+      const list = visible.blocks.has(key + ':' + value_digest) ? null : listOf(value);
+      if (!list) {
+        if (visible.blocks.has(key + ':' + value_digest)) unchanged.push(key);
+        else { carried.blocks[key] = value_digest; entries.push([key, value]); }
+        continue;
+      }
+      const seen = visible.items ?? new Set();
+      const kept = list.items.filter(item => item.waiting_on_you === true || !seen.has(key + ':' + digest(item)));
+      const folded = list.items.filter(item => !kept.includes(item));
+      carried.items[key] = kept.map(digest);
+      if (!folded.length) { carried.blocks[key] = value_digest; entries.push([key, value]); continue; }
+      // Only a block sent whole may later count as unchanged: the folded items rest on older notices.
+      items += folded.length;
+      entries.push([key, list.wrap(kept, sameAsBefore(folded))]);
     }
   }
   const notes = [];
-  if (unchanged.length) notes.push(['unchanged_from_program', { blocks: unchanged,
-    note: '这些资料和本会话前面给出的一样，没有变化，仍以前面那份为准。' }]);
+  if (unchanged.length) notes.push(['unchanged_from_program', unchanged]);
   if (rows || memories || thoughts) notes.push(['repeated_from_program', { history_rows: rows, memories,
-    ...(thoughts ? { your_thoughts: thoughts } : {}),
-    note: '已经在本会话里的消息、记忆和你自己写下的心里话不再重复列出；delivered_history、memories 和 recent_thoughts_from_program 只含新的。' }]);
+    ...(thoughts ? { your_thoughts: thoughts } : {}) }]);
   const head = entries.filter(([key]) => HEAD.includes(key)), rest = entries.filter(([key]) => !HEAD.includes(key));
   return { context: Object.fromEntries([...head, ...notes, ...rest]), carried,
-    omitted: { blocks: unchanged, history_rows: rows, memories, ...(thoughts ? { thoughts } : {}) } };
+    omitted: { blocks: unchanged, history_rows: rows, memories, ...(thoughts ? { thoughts } : {}), ...(items ? { items } : {}) } };
 }

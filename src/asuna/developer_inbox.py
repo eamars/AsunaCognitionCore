@@ -51,7 +51,6 @@ def leave(store, persona, level, text, *, key, source):
 
 def block(store, persona, moment=None):
     """developer_inbox_from_program: what came of her recent messages, in words, or None."""
-    from .config import ago
     moment = moment or _now()
     since = (moment - timedelta(days=KEEP_DAYS)).isoformat()
     # Hers only: the program's own notes to the developer (handover.py) are not something she wrote.
@@ -61,8 +60,7 @@ def block(store, persona, moment=None):
         return None
     items = []
     for row in rows:
-        hours = (moment - datetime.fromisoformat(row['created_at'])).total_seconds() / 3600
-        items.append({'level': row['level'], 'when': ago(hours), 'text': row['text'][:120],
+        items.append({'level': row['level'], 'at': row['created_at'], 'text': row['text'][:120],
                       'state': STATE_WORDS.get(row.get('state'), row.get('state'))})
     return {'items': items, 'note': BLOCK_NOTE}
 

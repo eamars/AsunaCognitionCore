@@ -35,6 +35,11 @@ WAKE_REASON = 'visit'
 TOPIC_CHARS = 80
 VISITS_KEPT = 30
 NOTE_HEADINGS = 8
+# What each block is for (said once in her system prompt, block_guide.py).
+PLACES_NOTE = ('你在的群，只有概况，没有原话（新鲜的内容要去了才看得到）。想去哪个看看，就用 visit：'
+               '程序会在那个群里给你开一个回合，你在那儿再决定说不说、说什么。不去也完全正常。left_today 是今天还能出门几次。')
+VISITS_NOTE = '你最近几次出门：去了哪儿、去做什么、结果怎样。'
+ERRANDS_NOTE = '你最近替家里的人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'
 HOUR = timedelta(hours=1)
 FINISHED = ('COMMITTED', 'WAITING_TASK')
 FAILED = ('FAILED_PROTOCOL', 'FAILED_RUNTIME', 'INTERRUPTED')
@@ -51,6 +56,11 @@ def _at(value):
         return None
     moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _stamp(value):
+    """A time for a context field (ISO, UTC): local_time.for_model shows it on her local clock."""
+    return value.isoformat(timespec='seconds') if value else None
 
 
 def _ago(moment, since):
@@ -143,8 +153,8 @@ def errands_block(store, persona, moment):
         scene = store.db.scenes.find_one({'_id': row['scene_id']}) or {'_id': row['scene_id']}
         state = outcome(store, {'scene_id': row['scene_id'], 'event_id': row['event']['event_id']})
         items.append({'to': people.scene_title(scene), 'asked': excerpt(row['event']['visit'].get('request'), 60),
-                      'state': ERRAND_STATES.get(state, state), 'when': _ago(moment, _at(row.get('received_at')))})
-    return {'items': items, 'note': '你最近替家里的人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'}         if items else None
+                      'state': ERRAND_STATES.get(state, state), 'at': _stamp(_at(row.get('received_at')))})
+    return {'items': items, 'note': ERRANDS_NOTE}         if items else None
 
 
 def visitor(route, channel):
@@ -343,8 +353,8 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
         # Read from home as well as in the group: name the group, never "here"; a visit whose turn has not run yet
         # is not a look she took.
         if visit and max(recent) == _at(visit.get('at')) and outcome(store, visit) == 'pending':
-            return False, '你%s已经出门去那个群了，那边那一轮还没跑完；等它跑完、结果带回来再说' % _ago(moment, max(recent))
-        return False, '你%s去过那个群（在那儿说过话或看过），过一阵再去' % _ago(moment, max(recent))
+            return False, '你已经出门去那个群了，那边那一轮还没跑完；等它跑完、结果带回来再说'
+        return False, '你不久前去过那个群（在那儿说过话或看过），过一阵再去'
     if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
         if intent in STARTING:
             return False, '这会儿有人在聊；起话头等安静下来，去看看、写笔记、发图可以'
@@ -381,16 +391,16 @@ def places_block(store, persona, model, policy, plan, moment, date):
         from . import focus
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
                'focus': '常驻' if focus.active(store, scene, persona) else '歇着（只有叫你的话会叫你）',
-               'now': _tier(ACTIVITY, here['lines']) + ('，上一句是%s' % _ago(moment, here['last_line_at'])
-                                                        if here['last_line_at'] else '，还没见过有人说话'),
+               'now': _tier(ACTIVITY, here['lines']) + ('' if here['last_line_at'] else '，还没见过有人说话'),
+               **({'last_line_at': _stamp(here['last_line_at'])} if here['last_line_at'] else {}),
                'people': '最近一小时说话的有' + _tier(VOICES, here['voices']),
-               'you': ('你%s在这里说过话' % _ago(moment, here['mine_at'])) if here['mine_at'] else '你还没在这里说过话',
+               **({'you_spoke_at': _stamp(here['mine_at'])} if here['mine_at'] else {'you': '你还没在这里说过话'}),
                'your_notes': notes or '你还没写过这个群的笔记',
                'can_visit': why}
         if their_time(scene, moment):
             row['their_time'] = '那边现在 ' + their_time(scene, moment)
         if visit:
-            row['last_visit'] = '%s来看过：%s' % (_ago(moment, _at(visit['at'])), OUTCOMES[outcome(store, visit)])
+            row['last_visit'], row['last_visit_at'] = '来看过：' + OUTCOMES[outcome(store, visit)], _stamp(_at(visit['at']))
         if here['called']:
             row['called_you'] = '你上次说话以后，有人叫过你'
         items.append((not can, row))
@@ -399,9 +409,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
     return {'items': [row for _, row in sorted(items, key=lambda item: item[0])],
             'left_today': max(0, rule['per_day'] - today(store, plan, date)),
             'this_beat': '这一拍最多去 %d 个群' % rule['per_beat'],
-            'note': ('你在的群，只有概况，没有原话（新鲜的内容要去了才看得到）。想去哪个看看，就用 visit：'
-                     '程序会在那个群里给你开一个回合，你在那儿再决定说不说、说什么。不去也完全正常。'
-                     'left_today 是今天还能出门几次。')}
+            'note': PLACES_NOTE}
 
 
 def last_visits_block(store, persona, plan, moment):
@@ -414,9 +422,9 @@ def last_visits_block(store, persona, plan, moment):
     rows = []
     for visit in reversed(visits):
         scene = store.db.scenes.find_one({'_id': visit['scene_id']})
-        rows.append({'group': people.scene_title(scene), 'when': _ago(moment, _at(visit['at'])),
+        rows.append({'group': people.scene_title(scene), 'at': _stamp(_at(visit['at'])),
                      'went_to': INTENTS.get(visit.get('intent'), ''), 'what': OUTCOMES[outcome(store, visit)]})
-    return {'items': rows, 'note': '你最近几次出门：去了哪儿、去做什么、结果怎样。'}
+    return {'items': rows, 'note': VISITS_NOTE}
 
 
 def visit_text(intent, topic):
@@ -467,6 +475,8 @@ def record(plan, scene_id, event_id, intent, moment, date):
 # A home turn otherwise knows nothing of her own doings outside: shown the pictures she made, she took them
 # for another person's. Only her own actions, as program words -- nobody else's words (ADR-017).
 ELSEWHERE_HOURS = 6
+ELSEWHERE_NOTE = ('这是你自己最近 %d 小时在别的对话里做过的事（只有你做的，没有别人的话）。每个对话只看得到'
+                  '自己那一块，这里补上你在别处干过什么；都是你。' % ELSEWHERE_HOURS)
 ELSEWHERE_PLACES = 5
 
 
@@ -513,10 +523,9 @@ def elsewhere(store, persona, moment, home, private=()):
         if place['stickers']:
             did.append('发了%d个表情包' % place['stickers'])
         item = {'where': people.scene_title(scene) + ('（家里）' if scene_id in private else ''), 'you': '，'.join(did) or '没说话',
-                'last': _ago(moment, place['last']) if place['last'] else ''}
+                **({'last_at': _stamp(place['last'])} if place['last'] else {})}
         if place['tasks']:
             item['handed_over'] = place['tasks'][:3]
         items.append(item)
     return {'items': items,
-            'note': '这是你自己最近 %d 小时在别的对话里做过的事（只有你做的，没有别人的话）。每个对话只看得到'
-                    '自己那一块，这里补上你在别处干过什么；都是你。' % ELSEWHERE_HOURS}
+            'note': ELSEWHERE_NOTE}

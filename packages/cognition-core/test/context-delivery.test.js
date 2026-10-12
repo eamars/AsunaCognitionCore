@@ -105,3 +105,21 @@ test('a list block goes item by item: what she still sees folds into one line wi
   assert.deepEqual(twice.context.plans_from_program, { items: [{ _id: 'p2', intent: '看两个群' }], same_as_before: '其余 1 条同前' });
   assert.deepEqual(twice.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
 });
+
+test('a group thread line or the speaker\'s last lines still on the surface are not listed again', () => {
+  const line = (receipt, text) => ({ type: 'user/message', data: { content: [{ type: 'text', text }],
+    source: { kind: 'user', channel: 'qq', receipt } } });
+  const reply = { type: 'assistant/message', data: { content: [{ type: 'text', text: '她接的话' }] } };
+  const first = composeContext(context([]), visibleCarried(surface([])));
+  const events = [line('in-a', '第一句'), notice(first, 'ep-9'), reply, line('in-b', '第二句')];
+  const group = { wake_reason: 'reply_to_character', topic_id: 't1',
+    related_messages: [{ _id: 'in-a', direction: 'inbound', text: '第一句' },
+      { _id: 'out-9', direction: 'outbound', episode_id: 'ep-9', text: '她接的话' },
+      { _id: 'in-old', direction: 'inbound', text: '早就看不到的' }],
+    current_speaker_tail: [{ _id: 'in-b', direction: 'inbound', text: '第二句' }] };
+  const composed = composeContext(context([], { group_continuity_from_program: group }), visibleCarried(surface(events)));
+  assert.deepEqual(composed.context.group_continuity_from_program, { wake_reason: 'reply_to_character', topic_id: 't1',
+    related_messages: [{ _id: 'in-old', direction: 'inbound', text: '早就看不到的' }], current_speaker_tail: [] });
+  assert.equal(composed.omitted.history_rows, 3);
+  assert.ok(composed.carried.rows.includes('in-old'), 'a line sent here counts as visible for the next notice');
+});

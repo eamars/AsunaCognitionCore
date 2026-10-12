@@ -1,7 +1,8 @@
 /** Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only
  * what her session does not still show is sent.
  *
- * A block, history row or memory is left out, and so is one of her own thoughts (a recalled one, or one of her
+ * A block, history row (of `delivered_history`, or a line in `group_continuity_from_program`) or memory is left out,
+ * and so is one of her own thoughts (a recalled one, or one of her
  * recent thoughts) whose `think` call the session still shows, only while an identical copy sits inside the newest REUSE_WINDOW_TOKENS
  * of the session surface. That stretch is inside DSH's retained tail, so any
  * compaction, including one that runs right before this message joins the
@@ -91,10 +92,22 @@ export function composeContext(context, visible) {
       if (!items.length) continue;
       value = { ...value, items };
     }
+    // Her own reply is visible while the turn that produced it is.
+    const unseen = row => !visible.rows.has(row._id)
+      && !(row.direction === 'outbound' && row.episode_id && visible.episodes.has(row.episode_id));
+    if (key === 'group_continuity_from_program' && value && typeof value === 'object') {
+      // The thread's lines and the speaker's last lines that the conversation still shows are not listed again.
+      const lines = {};
+      for (const field of ['related_messages', 'current_speaker_tail']) if (Array.isArray(value[field])) {
+        const kept = value[field].filter(unseen);
+        rows += value[field].length - kept.length;
+        carried.rows.push(...kept.map(row => row._id).filter(Boolean));
+        lines[field] = kept.map(({ episode_id: _episode, ...row }) => row);
+      }
+      value = { ...value, ...lines };
+    }
     if (key === 'delivered_history' && Array.isArray(value)) {
-      // Her own reply is visible while the turn that produced it is.
-      const kept = value.filter(row => !visible.rows.has(row._id)
-        && !(row.direction === 'outbound' && row.episode_id && visible.episodes.has(row.episode_id)));
+      const kept = value.filter(unseen);
       rows += value.length - kept.length;
       carried.rows.push(...kept.map(row => row._id).filter(Boolean));
       entries.push([key, kept.map(({ episode_id: _episode, ...row }) => row)]);

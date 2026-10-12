@@ -44,8 +44,8 @@ def notes():
 # How the delivery's own lines read (context-delivery.js writes them without their explanation).
 DELIVERY = (
     ('unchanged_from_program', '这些块和本会话前面给出的一样，没有变化，仍以前面那份为准。'),
-    ('repeated_from_program', '已经在本会话里的消息、记忆和你自己写下的心里话不再重复列出；delivered_history、memories 和 '
-                              'recent_thoughts_from_program 只含新的。'),
+    ('repeated_from_program', '已经在本会话里的消息、记忆和你自己写下的心里话不再重复列出；delivered_history、'
+                              'group_continuity_from_program 里的原话、memories 和 recent_thoughts_from_program 只含新的。'),
     ('same_as_before', '一个列表块里，其余几条和本会话前面给出的一样，没再列出；后面写着它们的状态。等你处理的那几条总会列出来。'),
 )
 

@@ -786,7 +786,7 @@ class ContextBuilder:
             related = list(self.store.db.messages.find({'_id': {'$in': [r for r in refs if r]},
                 'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
                 {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                 'platform_reply_to':1, 'event.group_context':1,
+                 'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
                  'occurred_at':1, 'receipt_at':1, 'received_at':1}))
             # P5：整条话题线（含没@她的旁听行）一并给出——接不上话题就谈不上要不要接话。
             seen = {row['_id'] for row in related}
@@ -796,7 +796,7 @@ class ContextBuilder:
                         'event.group_context.topic_id': group['topic_id'],
                         '$or': [{'direction':'inbound'}, {'delivery_state':'DELIVERED'}]},
                         {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                         'platform_reply_to':1, 'event.group_context':1,
+                         'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
                          'occurred_at':1, 'receipt_at':1, 'received_at':1}
                         ).sort('scene_seq', -1).limit(12):
                     if row['_id'] not in seen:
@@ -813,6 +813,9 @@ class ContextBuilder:
             for row in [*related, *speaker_tail]:
                 for key in ('occurred_at', 'receipt_at', 'received_at'):
                     row.pop(key, None)
+                # Her own line keeps its turn's id: the Host leaves it out while that turn is still visible.
+                if row.get('direction')!='outbound':
+                    row.pop('episode_id', None)
                 row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             continuity = {**group, 'related_messages': related,
                           'current_speaker_tail': list(reversed(speaker_tail))}

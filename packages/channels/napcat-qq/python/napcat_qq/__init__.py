@@ -17,8 +17,12 @@ IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn', 'gxh.vip.qq.com')
 # The adapter's resident service: an enabled integration for this channel starts it by itself the first time.
 SERVICE_ARGV = ('python3', '/app/adapter.py', '--service')
 # QQ's own faces (小黄脸) by name -> id: the same table the adapter turns `[表情:名字]` into a face with.
-FACES = {row['name']: row['id'] for row in json.loads(
-    (Path(__file__).resolve().parents[2] / 'integration' / 'qqadapter' / 'faces.json').read_text(encoding='utf-8'))['faces']}
+_FACE_ROWS = json.loads(
+    (Path(__file__).resolve().parents[2] / 'integration' / 'qqadapter' / 'faces.json').read_text(encoding='utf-8'))['faces']
+FACES = {row['name']: row['id'] for row in _FACE_ROWS}
+for _row in _FACE_ROWS:                # a renamed face keeps its old names (`aliases`) so they still pass the core's check
+    for _alias in _row.get('aliases') or ():
+        FACES.setdefault(_alias, _row['id'])
 STICKERS = True                   # the adapter can send a sticker: a picture marked as one, or a store sticker
 
 

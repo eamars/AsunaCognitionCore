@@ -22,6 +22,7 @@ import time
 from . import hostapi as hostapi_mod
 from . import inbound as inbound_mod
 from . import fixtures
+from . import faces as faces_mod
 from . import outbound as outbound_mod
 from . import peers as peers_mod
 from .peers import PEER_KEY, PeerDirectory
@@ -840,6 +841,21 @@ def _check_outbound_verify(rep, gcfg, root):
     rep.check("outbound_face_not_stored_is_a_mismatch",
               ver.get("result") == "segment_mismatch" and ver.get("sent_segments") == ["text", "face"] and
               ver.get("stored_segments") == ["text"], json.dumps(ver, ensure_ascii=False))
+
+    # A renamed face (424: 续标识 -> 不对头) is shown by its new name and still sent by either name.
+    rep.check("face_renamed_new_name_is_primary",
+              faces_mod.BY_ID.get("424") == "不对头" and faces_mod.BY_NAME.get("不对头") == "424",
+              json.dumps([faces_mod.BY_ID.get("424"), faces_mod.BY_NAME.get("不对头")], ensure_ascii=False))
+    rep.check("face_renamed_old_name_still_resolves",
+              faces_mod.BY_NAME.get("续标识") == "424" and outbound_mod.encode_faces("哎[表情:续标识]") ==
+              [T("哎"), F("424")] and outbound_mod.encode_faces("哎[表情:不对头]") == [T("哎"), F("424")],
+              json.dumps(outbound_mod.encode_faces("哎[表情:续标识]"), ensure_ascii=False))
+    rep.check("face_inbound_shows_current_name",
+              faces_mod.name_of({"id": "424"}) == "不对头" and
+              faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}) == "不对头" and
+              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "汪汪",
+              json.dumps([faces_mod.name_of({"id": "424"}),
+                          faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}})], ensure_ascii=False))
 
     stub, host, counters, _ob = run("shape", item("shape", GRP, "正文"),
                                     verify_responses=[{"status": "ok", "retcode": 0, "data": {"message_id": 990001}}])

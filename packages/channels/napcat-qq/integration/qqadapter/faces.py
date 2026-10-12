@@ -13,6 +13,11 @@ TOKEN = re.compile(r'\[表情:([^\[\]\s:]{1,12})\]')
 _TABLE = json.loads((Path(__file__).with_name('faces.json')).read_text(encoding='utf-8'))
 BY_ID = {row['id']: row['name'] for row in _TABLE['faces']}
 BY_NAME = {row['name']: row['id'] for row in _TABLE['faces']}
+# A row may keep its former names in `aliases`: they still resolve to the id, so text written under an old
+# name keeps working after a rename. A table name always wins over an alias if the two ever collide.
+ALIASES = {alias: row['id'] for row in _TABLE['faces'] for alias in (row.get('aliases') or ())
+           if alias not in BY_NAME}
+BY_NAME.update(ALIASES)
 
 
 def clean_name(value):
@@ -25,5 +30,7 @@ def clean_name(value):
 def name_of(data):
     """A face segment's name: what NapCat said it is, else the table's name for its id, else ''."""
     raw = data.get('raw') if isinstance(data.get('raw'), dict) else {}
-    return (clean_name(raw.get('faceText')) or clean_name(data.get('text') or data.get('Text'))
+    name = (clean_name(raw.get('faceText')) or clean_name(data.get('text') or data.get('Text'))
             or BY_ID.get(str(data.get('id') or '').strip(), ''))
+    # NapCat may still say a renamed face by its old name: show the table's current one
+    return BY_ID[ALIASES[name]] if name in ALIASES else name

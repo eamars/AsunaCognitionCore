@@ -179,3 +179,18 @@ def test_at_home_she_previews_and_asks_with_the_tool(store, tmp_path, monkeypatc
     assert results[0][5] and not results[1][5] and results[2][5], results
     assert 'when=23:55' in str(results[1][4])                         # an unknown argument is refused, not dropped
     assert d.pending['why'] == '前端改了' and d.pending['when'] == '04:30'
+
+
+def test_a_waiting_request_is_seen_at_home_and_a_new_one_says_what_it_replaced(store, tmp_path, monkeypatch):
+    """Any of her home conversations may ask (owner 2026-10-12): each sees the waiting one; none silently replaces it."""
+    monkeypatch.setenv('ASUNA_SUPERVISED', '1')
+    d = desk(store, tmp_path, [T0])
+    assert restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path) is None
+    first = d.request('装新版本', 'quiet', where='本机私聊')
+    assert 'replaced' not in first
+    seen = restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)['waiting']
+    assert '本机私聊要的重启' in seen and '装新版本' in seen
+    second = d.request('换个时间', '23:55', where='agent 线')
+    assert second['replaced']['why'] == '装新版本' and second['replaced']['where'] == '本机私聊'
+    assert 'agent 线要的重启' in restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)['waiting']
+    d.close()

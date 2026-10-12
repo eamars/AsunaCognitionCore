@@ -17,6 +17,11 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `require_current_feedback`
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - def `workspace_reason` — Why a file operation failed and what to do, in her words (the traceback stays in stderr).
+- def `idle_minutes` — After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the action route, following how long its provider keeps a cached prefix.
+- def `last_used` — When the action context of a finished task was last used.
+- def `opening_text` — The action brain's first words for a task: her brief; a continuation's new words; after the idle limit (ADR-053) a fresh context told so, with the last report.
+- def `place_words` — Where a queued task came from, coarse: never a group's or a person's name.
+- def `queue_words` — What is ahead of this task for the one action worker (ADR-053), always said, an empty queue too.
 - def `stale_reason` — Why a call's task no longer holds its authority, as the program sees it.
 - class `TaskService`
   - `collab` — One entry of the two brains' thread in her conversation (coordinator.collab); a view only.
@@ -30,9 +35,11 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `record_handback_failure` — A hand-back failed before her turn (ADR-030 D4): counted, so the watchdog knows what to try next.
   - `give_up_handback` — Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told.
   - `close_orphan` — A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such.
+- def `capability_refusal` — The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help.
 - def `given_text`
 - class `ToolBroker` — Trusted host process; no DB/publication credentials enter model or child tools.
   - `specs`
+  - `catalogue` — Every tool the action brain can be given.
   - `bind`
   - `call`
   - `close`

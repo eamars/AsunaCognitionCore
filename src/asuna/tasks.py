@@ -195,6 +195,69 @@ WORKSPACE_TOOLS = [
 # names are persisted with each task grant so native session visibility follows
 # the same task boundary as the existing host tools.
 ACTION_DSH_CAPABILITIES = ('skill', 'todo_write', 'web_search', 'web_fetch')
+IDLE_MINUTES = 30          # the action route's idleMinutes when empty (ADR-053)
+FRESH_REPORT_CHARS = 20000
+
+
+def idle_minutes(config):
+    """After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the
+    action route, following how long its provider keeps a cached prefix."""
+    return int((config or {}).get('action_idle_minutes') or IDLE_MINUTES)
+
+
+def last_used(task):
+    """When the action context of a finished task was last used."""
+    from datetime import datetime
+    return datetime.fromisoformat(task.get('finished_at') or task.get('started_at') or task['created_at'])
+
+
+def opening_text(store, task):
+    """The action brain's first words for a task: her brief; a continuation's new words; after the idle limit
+    (ADR-053) a fresh context told so, with the last report."""
+    brief=task.get('brief') or task['goal']
+    text=('她接着交代：\n' if task.get('continues_task_id') else '')+brief
+    fresh=task.get('fresh_context')
+    if task.get('continues_task_id') and fresh:
+        prev=store.db.tasks.find_one({'_id':fresh['report_of']},{'result.text':1}) or {}
+        report=((prev.get('result') or {}).get('text') or '').strip()
+        shown=report[:FRESH_REPORT_CHARS]
+        text=('这是一份新开的上下文：这件事上一轮已经闲了约 %d 分钟，之前的工具输出都不在这里了。下面是上一轮交回的报告'
+              '%s；要用到的东西重新取，不要凭报告的印象补。\n\n—— 上一轮的报告 ——\n%s\n\n她接着交代：\n'
+              % (fresh['after_minutes'], '' if len(report)<=len(shown) else '（共 %d 字，这里是前 %d 字）'%(len(report),len(shown)),
+                 shown or '（上一轮没有留下报告）'))+brief
+    return text
+
+def place_words(store, scene_id):
+    """Where a queued task came from, coarse: never a group's or a person's name."""
+    from . import channel_kinds
+    if scene_id == (store.config.get('chat') or {}).get('scene_id'):
+        return '家里'
+    if channel_kinds.home(scene_id):
+        return '家里的另一条线'
+    scene = store.db.scenes.find_one({'_id': scene_id}, {'kind': 1}) or {}
+    return '一个群' if scene.get('kind') == 'group' else '一个私聊'
+
+
+def queue_words(store, task_id):
+    """What is ahead of this task for the one action worker (ADR-053), always said, an empty queue too."""
+    from datetime import datetime, timezone
+    mine = store.db.tasks.find_one({'_id': task_id}, {'created_at': 1}) or {}
+    ahead = [row for row in store.db.tasks.find({'state': {'$in': ['RUNNING', 'READY']}, '_id': {'$ne': task_id}},
+                                                {'state': 1, 'scene_id': 1, 'started_at': 1, 'created_at': 1})
+             if row['state'] == 'RUNNING' or (row.get('created_at') or '') < (mine.get('created_at') or '~')]
+    if not ahead:
+        return '前面没有排着的，马上开始。'
+    parts = []
+    for row in ahead:
+        if row['state'] == 'RUNNING':
+            started = row.get('started_at') or row.get('created_at')
+            minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(started)).total_seconds() // 60) if started else 0
+            parts.append('正在跑的一件来自%s，已经跑了约 %d 分钟' % (place_words(store, row['scene_id']), minutes))
+    waiting = [row for row in ahead if row['state'] == 'READY']
+    if waiting:
+        parts.append('还有 %d 件在排（来自%s）' % (len(waiting), '、'.join(dict.fromkeys(place_words(store, row['scene_id'])
+                                                                          for row in waiting))))
+    return '前面有 %d 件：%s。行动脑一次只做一件，轮到它才开始。' % (len(ahead), '；'.join(parts))
 
 WORKSPACE_TOOLS.append(HISTORY_TOOL)
 # P1-c：按需群整理与历史查询共用同一只读入口规则（场景来自任务绑定，参数不换范围）。
@@ -443,6 +506,26 @@ class TaskService:
         return closed
 
 
+# Which tasks are given which tools (ADR-053): the one table both refusing layers (the plugin's guard and this
+# broker) read their words from, so neither brain gets two versions to guess a motive from.
+GIVEN_TO = (
+    (lambda tool: tool == 'sandbox_run', '只给家里的对话（本机聊天、主人私聊、agent 线、peer 线）交的任务'),
+    (lambda tool: tool.startswith('development_') or tool.startswith('persona_job'),
+     '只给家里的对话里这几种回合交的任务：有人说话叫起来的、她的自我改进、她自己的计划到点、家里另一条线的便条叫起来的'
+     '（自我开发要开着）'),
+    (lambda tool: tool.startswith('integration') or tool == 'import_integration_artifact',
+     '只给主人在家里交的任务（集成要开着）；agent 线交的只有 integration_start 和 integration_status'),
+    (lambda tool: tool == 'generate_image', '生图服务开着时，每个任务都有'),
+)
+
+
+def capability_refusal(store, task, tool):
+    """The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help."""
+    given = next((words for match, words in GIVEN_TO if match(str(tool))), '这件任务交的时候没给它')
+    return ('CAPABILITY_DENIED: 这个任务没有 %s：它%s；这件是%s交的。不是参数的问题，重试也一样：'
+            '要用它就在报告里写明，让她在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
+
+
 DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'
                    '重试也一样，需要改代码就在报告里说明')
 UNAVAILABLE='不是参数的问题，重试也一样：不用它能做的先做，没做成的写进报告'
@@ -462,6 +545,11 @@ class ToolBroker:
 
     @property
     def specs(self):
+        return ToolBroker.catalogue()
+
+    @staticmethod
+    def catalogue():
+        """Every tool the action brain can be given."""
         from .image_generation import GENERATE_IMAGE_TOOL
         from .svg_render import RENDER_SVG_TOOL
         from .private_words import PRIVATE_WORDS_TOOL
@@ -484,11 +572,8 @@ class ToolBroker:
                              '重试也一样：停下，在报告里写做到了哪里')
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
-            if tool not in current['allowed_capabilities']:
-                raise Denied('CAPABILITY_DENIED: 这个任务没有 %s 这个工具；能用的是 %s'
-                             % (str(tool)[:60],'、'.join(current['allowed_capabilities'])))
-            if tool in DEVELOPMENT_NAMES and not current.get('development_grant'):
-                raise Denied(DEVELOPMENT_GRANT)
+            if tool not in current['allowed_capabilities'] or (tool in DEVELOPMENT_NAMES and not current.get('development_grant')):
+                raise Denied(capability_refusal(self.store,current,tool))
             if integration_gated(tool):
                 # 值在允许集内，而且这个工具在该 profile 的白名单里。每次调用都从任务行重算这个场景这会儿
                 # 还配不配（照 native_worker 重算 session_class 的思路），写入那一刻的结论不算数。
@@ -527,7 +612,7 @@ class ToolBroker:
                   or tool in ('generate_image','render_svg','private_words','sandbox_run') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
-                if not task.get('development_grant'):raise Denied(DEVELOPMENT_GRANT)
+                if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
                 result=self.persona_jobs(task,args)
                 with self.service.lock:self.service.valid(task)
             elif tool in DEVELOPMENT_NAMES:
@@ -688,8 +773,7 @@ class Executor:
         system=prompt_path(store.config,'executor.md').read_text(encoding='utf-8')+action_values(store,cls=cls)
         # ADR-011 §4: her brief is the first message (a continuation: her new words in the same session);
         # the program's facts follow it, marked as the program's.
-        brief=task.get('brief') or task['goal']
-        text=('她接着交代：\n' if task.get('continues_task_id') else '')+brief
+        text=opening_text(store,task)
         facts={'original_input':(source or {}).get('text'),'workspace':'/task','read_only_paths':grant.get('read_only_paths',[])}
         if task.get('constraints'):facts['constraints']=task['constraints']
         # Pull 模式：只告诉她有什么图、ref 是什么、能不能拉；图片正文不进输入。

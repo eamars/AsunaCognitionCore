@@ -32,6 +32,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
   - `status`
+  - `refusals_for` — For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given.
   - `joined_line` — The scene of a home line the owner joins (ADR-051) whose live character session this is, else None.
   - `read_only_note`
   - `bind_session`
@@ -215,14 +216,16 @@ Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supe
 - def `last`
 - class `Desk`
   - `preview`
-  - `request`
+  - `request` — Her one pending request; a new one replaces it, and says what it replaced (any of her home conversations may ask, so one may replace another's).
   - `cancel`
   - `quiet`
   - `due`
   - `go` — Hand the due request to the supervisor: the stop is planned, and what it interrupts is recorded now.
   - `start`
   - `close`
-- def `block` — restart_from_program for a home turn: the supervisor's latest record, for a day.
+- def `waiting_words` — A pending request in her words: when it goes, why, and which of her conversations asked.
+- def `waiting` — The request waiting at the desk, from its file (any worker reads the same one), or None.
+- def `block` — restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a day.
 - def `call_after_fallback` — Once, right after a restart that fell back: a home turn tells her she runs the previous version.
 
 ## `host_stops`

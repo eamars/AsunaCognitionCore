@@ -1,7 +1,8 @@
 # ADR-053: Action brains: a context per task, an idle limit, and she is told
 
 Status: **Approved 2026-10-12** (owner and Xiaoman), rewritten the same day after a correction: the action brain
-already starts a fresh context for every task. Not built.
+already starts a fresh context for every task. Built 2026-10-12 (with the owner's widening of the development grant
+to her own plans and trusted notes); live after her next restart.
 
 ## Context
 

@@ -224,3 +224,14 @@ def test_a_failed_file_operation_says_why_and_what_to_do(tmp_path):
     assert 'overwrite=true' in workspace_file(tmp_path, [], 'write_file', {'path': 'kept.txt', 'text': '新'})['error']
     assert 'list_files' in workspace_file(tmp_path, [], 'read_file', {'path': 'none.txt'})['error']
     assert '相对路径' in workspace_file(tmp_path, [], 'read_file', {'path': '../outside.txt'})['error']
+
+
+def test_a_refused_tool_says_who_is_given_it_and_where_this_task_came_from(store):
+    """ADR-053: one sentence from one table, for the broker and the plugin's guard alike."""
+    from asuna.tasks import capability_refusal
+    task = {'scene_id': store.config['chat']['scene_id']}
+    words = capability_refusal(store, task, 'development_publish')
+    assert words.startswith('CAPABILITY_DENIED: 这个任务没有 development_publish：它只给家里的对话里')
+    assert '这件是家里交的' in words and '重试也一样' in words
+    assert '只给家里的对话（本机聊天' in capability_refusal(store, task, 'sandbox_run')
+    assert '这件任务交的时候没给它' in capability_refusal(store, task, 'web_fetch')

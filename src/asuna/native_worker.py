@@ -168,6 +168,7 @@ class NativeLane:
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
+                **({'capability_refusals': self.worker.refusals_for(task)} if self.lane == 'executor' else {}),
                 'system_sha256': sha(system.encode()),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'],
                                                                               self.store.db)],
@@ -318,7 +319,7 @@ class BusinessWorker:
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
-                   schedule=True, channels=None, sandbox=None, ui_titles=None):
+                   schedule=True, channels=None, sandbox=None, ui_titles=None, action_idle_minutes=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -349,6 +350,8 @@ class BusinessWorker:
                                    else neutral(persona['id'], persona['display_name']))
         config['_skill_directories'] = skill_directories or persona.get('skill_directories', [])
         config['_native_routes'] = routes or {}
+        if action_idle_minutes:
+            config['action_idle_minutes'] = action_idle_minutes
         for lane, key in (('character', 'character'), ('action', 'executor')):
             if models and lane in models:
                 config[key] = {**config[key], **models[lane]}
@@ -627,6 +630,13 @@ class BusinessWorker:
                 'queued_inputs': self.controller.pending.qsize() if self.controller else 0,
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,
                 'active_task': self.controller.active_task if self.controller else None}
+
+    def refusals_for(self, task):
+        """For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given."""
+        from .tasks import capability_refusal, ToolBroker
+        names = [spec['name'] for spec in ToolBroker.catalogue()]
+        return {name: capability_refusal(self.app.store, task, name) for name in names
+                if name not in task['allowed_capabilities']}
 
     def joined_line(self, session):
         """The scene of a home line the owner joins (ADR-051) whose live character session this is, else None."""
@@ -1126,8 +1136,8 @@ class NativeDevelopmentBridge:
         scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
         if not task.get('development_grant') or visibility.session_class(
                 self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
-            raise Denied('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权（只有 owner 私聊里交代、带开发授权的任务能用 '
-                         'development_*）；重试也一样，需要改代码就在报告里说明')
+            from .tasks import capability_refusal
+            raise Denied(capability_refusal(self.store, task, tool))
         if tool == 'development_database_read':
             from .state import COLLECTIONS
             from bson.errors import BSONError

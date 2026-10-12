@@ -81,7 +81,7 @@ def group_line(key, text, person='B', scene='g1'):
     return {'event_id': key, 'scene_id': scene, 'person_id': person, 'text': text, 'group_context': GROUP}
 
 
-def test_a_note_from_home_wakes_another_home_line_and_grants_nothing(store):
+def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     service = world(store)
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '晚上记得提醒我'},
                     [('pass_note', {'to': OWNER_DM, 'text': '主人说晚上九点要提醒他吃药，在 QQ 上提醒。'})], '好')
@@ -100,13 +100,14 @@ def test_a_note_from_home_wakes_another_home_line_and_grants_nothing(store):
     again = service.note(ep, visibility.OWNER_PRIVATE, {'to': OWNER_DM, 'text': 'x'}, [r[1] for r in lane.tool_results
                                                                                          if r[2] == 'pass_note'][0])
     assert again['note'] == row['_id'] and store.db.notes.count_documents({}) == 1
-    # Its own turn there: the source named, nobody there as its sender, nothing granted by the note.
+    # Its own turn there: the source named, nobody there as its sender; a note from home is her own initiative, so
+    # it carries the development tools as her plans do (owner 2026-10-12), and still nothing about a person.
     there, other = turn(store, service, delivered(service), [('stay_silent', {'reason': '记下了'})])
     assert other.triggers == ['note'] and there['episode_kind'] == 'note'
     block = there['context']['note_from_program']
     assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '本机私聊' in block['from']
     assert not {'relationship', 'sender_identity', 'understanding_update_from_program'} & set(there['context'])
-    assert 'development' not in there['context']['action_capabilities_from_program']
+    assert 'development' in there['context']['action_capabilities_from_program']
     assert not {'credential', 'errand', 'visit', 'understand_person'} & set(there['turn_tools'])
     # Back where she wrote it: the program's status word.
     back, _ = turn(store, service, {'event_id': 'ask-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '嗯'}, [], '嗯')

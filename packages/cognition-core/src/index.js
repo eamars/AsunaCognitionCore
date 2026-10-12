@@ -44,8 +44,10 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
 
 // attendEffort and groupEffort (character route only): the effort of her relevance gate and of her group turns, one of
 // the levels the model offers; empty is the route's own effort.
+// idleMinutes (action route only): after this long unused, a task's continuation starts a fresh action context
+// (ADR-053); empty is 30. A cost setting: it follows how long the route's provider keeps a cached prefix.
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number(),
-  attendEffort: z.string(), groupEffort: z.string() });
+  attendEffort: z.string(), groupEffort: z.string(), idleMinutes: z.number() });
 export const Config = z.object({ python: z.string().volatile(), persona: z.string().volatile(),
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
@@ -240,6 +242,7 @@ export class CognitionCore {
         skill_directories: await this.skillDirectories(persona, channels),
         routes: Object.fromEntries(['character', 'action', 'appraiser'].filter(lane => this.routeFor(lane))
           .map(lane => [lane, nativeRoute(this.routeFor(lane))])), models,
+        action_idle_minutes: this.routeFor('action')?.idleMinutes,
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
@@ -726,8 +729,10 @@ export class CognitionCore {
       const exposed = this.exposed(lane, exec.agent.session.id) ?? new Set();
       if (exposed.has(exec.name)) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
+      // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
-        : `CAPABILITY_DENIED: 这个任务没有 ${exec.name} 这个工具；能用的是：${usable}。要用它，在报告里写明，让她另交一件授予它的任务。`;
+        : this.state(exec.agent.session.id).refusals?.[exec.name]
+          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让她在给它的地方另交一件。`;
     });
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();
@@ -922,6 +927,7 @@ export class CognitionCore {
     if (binding.lane !== 'executor') throw new Error('Invalid action binding');
     const allowed = new Set(binding.allowed_capabilities);
     this.state(agent.session.id).allowed = allowed;
+    this.state(agent.session.id).refusals = binding.capability_refusals ?? {};
     // Restrictions filter inherited/global tools; each granted tool below is
     // registered in this action scope. Do not pass scoped names as globals.
     scope.tools.restrict({ allow: [] });

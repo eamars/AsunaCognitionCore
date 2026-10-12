@@ -563,7 +563,8 @@ class Coordinator:
                 self.collab(task,'message',{'from':'character','text':message},entry_id=message_id)
                 if self.on_action_message:
                     self.on_action_message(task,{'id':message_id,'text':message})
-            return {'task':task['_id'],'state':'行动脑下一步就会看到这句话'}
+            return {'task':task['_id'],'state':'行动脑下一步就会看到这句话',
+                    'action_brain':'它正在做这件事，接着原来的上下文：之前查到的它都还看得到。'}
         local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
         source=(self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}).get('event',{})
         if task['state']=='STALE':
@@ -575,7 +576,15 @@ class Coordinator:
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         continued=self.store.db.tasks.find_one({'_id':task_id})
         if not continued:
-            binding=task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
+            # ADR-053: decided once, here, and kept on the task: a context idle past the action route's limit is not
+            # carried on (its provider has most likely dropped the cache); the continuation starts fresh.
+            from datetime import datetime, timezone
+            from .tasks import idle_minutes, last_used
+            idle=(datetime.now(timezone.utc)-last_used(task)).total_seconds()/60
+            fresh={'after_minutes':int(idle),'report_of':task['_id'],'limit':idle_minutes(self.store.config)} \
+                if idle>idle_minutes(self.store.config) else None
+            binding=(f"task:{task_id}:{ep['scope_key']}:{ep['policy_epoch']}:1" if fresh else
+                     task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}")
             source_ref='in-'+ep['_id']
             raw=[source_ref] if self.store.db.messages.find_one({'_id':source_ref},{'_id':1}) else task['raw_input_refs']
             with database_effects_lock(self.store.name):
@@ -587,12 +596,19 @@ class Coordinator:
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
+                    **({'fresh_context':fresh} if fresh else {}),
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])
         fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(continued,'message',{'from':'character','text':message},entry_id='brief:'+task_id)
-        return {'task':task_id,'continues':task['_id'],'state':'已交给行动脑，接着原来的过程做',
+        from .tasks import queue_words
+        fresh=continued.get('fresh_context')
+        context=(('新开一份上下文：这件事上一轮已经闲了约 %d 分钟（超过 %d 分钟就不接着用），之前查到的工具输出它看不到了；'
+                  '它手上只有原来的交代、上一轮的报告和你这句话。要它用的东西，就在这句话里写全，或者说清楚让它重新取。')
+                 % (fresh['after_minutes'],fresh['limit'])) if fresh else '接着上一轮的上下文做：之前查到的它都还看得到。'
+        return {'task':task_id,'continues':task['_id'],'state':'已交给行动脑',
+                'action_brain':context,'queue':queue_words(self.store,task_id),
                 'note':'结果回来会再叫你。'}
 
     def collab(self, task, kind, data, entry_id=None):

@@ -116,17 +116,20 @@ class Desk:
                               else '这次宿主不是由监工起的：没人接重启请求，现在要不了'}
 
     # ── her request ────────────────────────────────────────────────
-    def request(self, why, when='quiet', drill=False, asked='xiaoman'):
+    def request(self, why, when='quiet', drill=False, asked='xiaoman', where=None):
+        """Her one pending request; a new one replaces it, and says what it replaced (any of her home conversations
+        may ask, so one may replace another's)."""
         if not supervised():
             raise PermissionError('RESTART_NOT_SUPERVISED: 这次宿主不是由监工（启动器常驻）起的，没人接重启请求；要重启跟主人说')
         moment = self.clock()
         at = self._when(when, moment)
         with self.lock:
-            self.pending = {'asked': asked, 'why': why, 'when': when, 'drill': bool(drill),
+            replaced = self.pending
+            self.pending = {'asked': asked, 'why': why, 'when': when, 'drill': bool(drill), 'where': where,
                             'requested_at': moment.isoformat(), 'not_before': at.isoformat()}
             self._keep(self.pending)
         self.start()
-        return self.pending
+        return {**self.pending, **({'replaced': replaced} if replaced else {})}
 
     def _when(self, when, moment):
         if when in ('now', 'quiet'):
@@ -200,15 +203,34 @@ class Desk:
         self.stop_event.set()
 
 
+def waiting_words(pending, zone):
+    """A pending request in her words: when it goes, why, and which of her conversations asked."""
+    from .schedule_rules import line_stamp
+    when = {'now': '马上', 'quiet': '等没有在跑的回合、任务和排队消息时（最多 %d 分钟）' % QUIET_MINUTES}.get(
+        pending.get('when'), '%s 之后再等安静' % line_stamp(zone, pending.get('not_before')))
+    return '%s要的%s，%s；为的是：%s' % (pending.get('where') or '你', '演练' if pending.get('drill') else '重启', when,
+                                    str(pending.get('why') or '')[:120])
+
+
+def waiting(root=None):
+    """The request waiting at the desk, from its file (any worker reads the same one), or None."""
+    try:
+        return json.loads((folder(root) / 'pending.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+
+
 # ── after a restart ────────────────────────────────────────────────
 def block(store, zone, moment=None, root=None, integration_state=None):
-    """restart_from_program for a home turn: the supervisor's latest record, for a day."""
+    """restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a
+    day."""
     from .schedule_rules import line_stamp
     record = last(root)
     moment = moment or datetime.now(timezone.utc)
     zone = _zone(zone)
+    pending = waiting(root)
     if not record or not record.get('back_at') or moment - _aware(record['back_at']) > timedelta(hours=SHOWN_HOURS):
-        return None
+        return {'waiting': waiting_words(pending, zone)} if pending else None
     asked = {'xiaoman': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来'}.get(record.get('asked'), str(record.get('asked')))
     down = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
     tries = record.get('attempts') or []
@@ -219,6 +241,8 @@ def block(store, zone, moment=None, root=None, integration_state=None):
              'attempts': ['第 %d 次：%s' % (i + 1, '起来了' if a.get('ok') else '没起来：' + str(a.get('reason'))[:120]) for i, a in enumerate(tries)],
              'loaded': record.get('loaded') or {},
              'note': NOTE}
+    if pending:
+        value['waiting'] = waiting_words(pending, zone)
     if record.get('reverted'):
         value['reverted'] = record['reverted']
     if record.get('interrupted'):

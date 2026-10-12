@@ -205,3 +205,35 @@ def test_consult_answers_the_action_brain_without_publishing(store):
     assert asked['turn_tools'] == ['think', 'recall', 'answer_action']
     assert lane.calls[0]['tools'] == role_tools.toolbox(store, asked)
     assert asked['state'] == 'COMMITTED' and published(store, asked) == []
+
+
+def test_handing_over_says_how_the_action_brain_starts_and_what_is_ahead(store):
+    """ADR-053: told by the program at hand-over, an empty queue too, never left to her memory."""
+    coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
+    coordinator.ingest(event())
+    result = next(r[4] for r in lane.tool_results if r[2] == 'delegate')
+    assert '新开一份上下文' in result['action_brain'] and result['queue'] == '前面没有排着的，马上开始。'
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '查风', 'brief': '查明天的风'})], '也去查了。')])
+    coordinator.ingest(event('e2', text='风呢'))
+    second = next(r[4] for r in coordinator.character.tool_results if r[2] == 'delegate')
+    assert second['queue'].startswith('前面有 1 件') and '还有 1 件在排（来自' in second['queue']
+
+
+def test_a_continuation_after_the_idle_limit_starts_a_fresh_context_with_the_last_report(store):
+    from datetime import datetime, timedelta, timezone
+    from asuna.tasks import opening_text
+    coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '查天气', 'brief': '查明天的天气'})], '去查了。'))
+    ep = coordinator.ingest(event())
+    first = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
+    old = (datetime.now(timezone.utc) - timedelta(minutes=95)).isoformat()
+    store.put('tasks', {**first, 'state': 'RETURNED', 'feedback_state': 'DELIVERED', 'result': {'text': '明天有雨'},
+                        'execution_binding': 'task:x', 'finished_at': old}, expected=first['revision'], stream=first['_id'])
+    store.config['action_idle_minutes'] = 60
+    coordinator.character = FakeLane(store, [FakeTurn([THINK, ('message_action', {'task': first['_id'], 'message': '再看看后天'})], '好。')])
+    second = coordinator.ingest(event('e2', text='那后天呢'))
+    continued = store.db.tasks.find_one({'_id': second['task_ids'][0]})
+    assert continued['execution_binding'] != 'task:x' and continued['fresh_context']['after_minutes'] >= 94
+    said = next(r[4] for r in coordinator.character.tool_results if r[2] == 'message_action')
+    assert '新开一份上下文' in said['action_brain'] and '写全' in said['action_brain'] and 'queue' in said
+    text = opening_text(store, continued)
+    assert '新开的上下文' in text and '明天有雨' in text and text.endswith('她接着交代：\n再看看后天')

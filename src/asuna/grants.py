@@ -42,10 +42,11 @@ def conversation_workspace(config, scene_id):
 def development_granted(store, scene, event, session_class=None):
     """Who may hand work with the development tools to the action brain (ADR-011 §6.1).
 
-    Two sources only, with self-development enabled: the owner asking in a private chat (the local chat or
-    the owner's DM, i.e. an owner-private turn the owner wrote), and her own self-improvement turns. Her
-    feedback turns keep the grant of the task they answer. Nobody else's request carries it: in other
-    scenes an improvement can only become an entry in her idea notebook (role_tools.note_idea).
+    With self-development enabled, in owner-private conversations: someone's words there (the owner, or an agent on
+    its line), her own self-improvement turns, and her own initiative there: a plan of hers coming due, or a note
+    from another of her trusted home conversations (owner 2026-10-12). Her feedback turns keep the grant of the task
+    they answer. Nobody else's request carries it: in other scenes an improvement can only become an entry in her
+    idea notebook (role_tools.note_idea).
     """
     from . import visibility
     if (store.config.get('self_development') or {}).get('enabled') is not True:
@@ -59,4 +60,7 @@ def development_granted(store, scene, event, session_class=None):
     cls = session_class or visibility.session_class(store.config, store.db, scene, event['person_id'])
     if cls != visibility.OWNER_PRIVATE:
         return False
-    return kind in ('self_development', 'external')
+    if kind == 'note':
+        from . import notes
+        return (notes.opening_for(store, event) or {}).get('trust') == notes.TRUSTED
+    return kind in ('self_development', 'external', 'scheduled')

@@ -197,3 +197,18 @@ def test_a_database_read_of_an_archived_row_still_reaches_her_character_brain(st
         assert service.feedback(done, Coordinator(store, lane))['state'] == 'COMMITTED'
     finally:
         broker.close()
+
+
+def test_her_own_plans_and_trusted_notes_in_home_conversations_carry_the_development_tools(store):
+    """Owner 2026-10-12: her own initiative at home counts like her self-improvement turns: a plan of hers coming due,
+    or a note from another of her trusted home conversations; a note from a public conversation does not."""
+    from asuna.grants import development_granted
+    from asuna import notes
+    owner(store)
+    scene = store.db.scenes.find_one({'_id': 'dm-a'})
+    assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'scheduled'}) is True
+    store.db.notes.insert_one({'_id': 'note-home', 'schema_version': 1, 'trust': notes.TRUSTED})
+    store.db.notes.insert_one({'_id': 'note-group', 'schema_version': 1, 'trust': notes.UNTRUSTED})
+    assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'note', 'note': {'id': 'note-home'}}) is True
+    assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'note', 'note': {'id': 'note-group'}}) is False
+    assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'presence'}) is False

@@ -106,6 +106,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
      
       'settings.route': '{brain} · {field}', 'settings.route.provider': '模型服务', 'settings.route.model': '模型',
       'settings.route.reasoningEffort': '推理强度', 'settings.route.maxTokens': '最大输出 token',
+      'settings.route.idleMinutes': '闲置多久后重开上下文（分钟）',
       'settings.route.attendEffort': '要不要接话时的推理强度', 'settings.route.groupEffort': '群聊里的推理强度',
       'settings.routeEffort': '同这个脑的推理强度',
       'settings.newSecrets': '新增或更新凭据（JSON）', 'settings.overridden': '已覆盖', 'settings.reset': '恢复默认',
@@ -253,6 +254,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
      
       'settings.route': '{brain} · {field}', 'settings.route.provider': 'Model service', 'settings.route.model': 'Model',
       'settings.route.reasoningEffort': 'Reasoning effort', 'settings.route.maxTokens': 'Max output tokens',
+      'settings.route.idleMinutes': 'Fresh context after idle (minutes)',
       'settings.route.attendEffort': 'Reasoning effort when deciding whether to reply', 'settings.route.groupEffort': 'Reasoning effort in groups',
       'settings.routeEffort': "Same as this brain's reasoning effort",
       'settings.newSecrets': 'Add or update credentials (JSON)', 'settings.overridden': 'Overridden', 'settings.reset': 'Reset to default',
@@ -802,9 +804,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           add([key], { key: 'settings.' + key }, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         // The character route also carries the effort of her relevance gate and of her group turns.
         for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
-          ...(lane === 'character' ? ['attendEffort', 'groupEffort'] : [])])
+          ...(lane === 'character' ? ['attendEffort', 'groupEffort'] : ['idleMinutes'])])
           add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + (lane === 'character' ? 'character' : 'executor') },
-            field: { key: 'settings.route.' + key } } }, key === 'maxTokens' ? 'number' : 'choice');
+            field: { key: 'settings.route.' + key } } }, ['maxTokens', 'idleMinutes'].includes(key) ? 'number' : 'choice');
         // Business values use the shipped settings fields. Structured settings
         // retain their JSON type; no second schema editor or settings store.
         for (const [key, value] of Object.entries(initial.deployment ?? {}))

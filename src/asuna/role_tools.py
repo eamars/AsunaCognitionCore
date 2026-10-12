@@ -1013,7 +1013,10 @@ class RoleTools:
         from . import credentials
         brief = credentials.scrub(self._text(args, 'brief', 20000))     # a credential value never rides a brief
         task = self.coordinator.delegate(ep, call_id, title, brief)
-        return {'task': task['_id'], 'state': '已交给行动脑，正在排队',
+        from .tasks import queue_words
+        return {'task': task['_id'], 'state': '已交给行动脑',
+                'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
+                'queue': queue_words(self.store, task['_id']),
                 'note': '结果回来会再叫你；在那之前不要说已经做完。'}, False
 
     def _own_task(self, ep, task_id):
@@ -1419,16 +1422,21 @@ class RoleTools:
         if op not in ('request', 'drill'):
             raise Refused('op 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'))
         why = self._text(args, 'why', 200)
+        from .people import People
+        where = People(self.store, ep['persona']).scene_title(self.store.db.scenes.find_one({'_id': ep['scene_id']}))
         try:
-            pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill')
+            pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill', where=where)
         except PermissionError as exc:
             raise Refused(str(exc))
         except ValueError as exc:
             raise Refused(str(exc))
         when = {'now': '下一刻就停', 'quiet': '等没有在跑的回合、任务和排队消息（最多 30 分钟）'}.get(
             pending['when'], '到 %s 后再等安静' % pending['when'])
+        replaced = pending.get('replaced')
         return {'queued': True, 'when': when, 'drill': pending['drill'],
-                'note': '交给监工了。起来以后结果在 restart_from_program；退回旧版本会马上叫你。'}, False
+                **({'replaced': '顶掉了原来排着的那个：' + restarts.waiting_words(replaced, restarts._zone(desk.zone))} if replaced else {}),
+                'note': '交给监工了。排着的时候，你在家里的每一回合都在 restart_from_program 里看得到它；起来以后结果也在那里；'
+                        '退回旧版本会马上叫你。'}, False
 
     def tool_peer_line(self, ep, call_id, args):
         from . import lines

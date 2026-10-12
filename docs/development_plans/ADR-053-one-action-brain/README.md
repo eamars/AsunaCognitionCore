@@ -39,10 +39,14 @@ What the evidence asked for is therefore not a shared brain but the rest of this
    the action brain starts fresh or carries on (and, when fresh after the limit, that it has only the brief, the last
    report and her new words), and what is ahead of it in the queue (how many, from which conversation, running for
    how long). Decided once at hand-over and kept on the task, so what runs is what she was told; deterministic, not
-   left to her remembering.
+   left to her remembering. Where (her ruling): in the tool result of `delegate` and of `message_action`, always, as
+   the program's line; an empty queue says so explicitly ("前面没有排着的"), never by leaving the line out, which she
+   would read as the feature not working.
 4. **Refusals she can act on.** A refused tool says which kind of turn or conversation gives it and which does not
    here, and that retrying will not change it, so neither brain invents a motive (her case: three refusals she read
-   as "only self-improvement turns have it").
+   as "only self-improvement turns have it"). One sentence for both layers (the plugin's guard and the worker's
+   broker), from one table of which kinds of turn give which tools, so the two brains never get two versions to
+   guess between (her ruling, the same rule as ADR-051's "both readers read the same").
 5. **Reports stay with their sources.** A report says how much it scanned and from which root, and quotes rows as the
    tools returned them.
 6. **Two rules, not one.** What a task may read stays bound to the conversation it came from; which turns hand over

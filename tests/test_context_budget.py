@@ -88,6 +88,14 @@ def test_one_huge_message_is_cut_to_the_ceiling_saying_how_much_went():
     assert context['persona']['core'] == '我' * 2000, 'the longest text goes first; a short block stays whole'
 
 
+def test_many_texts_that_cannot_get_shorter_end_the_cutting():
+    # Hundreds of ~450-character texts: halving one gives back 400 characters plus its note, no shorter. The cutting
+    # looped forever on such a turn and stopped her queue for hours (10-13); now it stops and the turn goes over.
+    context = {'rows': ['字' * 450 for _ in range(400)]}
+    budget.trim_turn(context, limit=5000)
+    assert all(len(text) <= 450 for text in context['rows'])
+
+
 # ---- her mood ---------------------------------------------------------------------
 def test_mood_reasons_are_capped_stable_and_keep_every_unsettled_feeling():
     model = affect_model(MODEL)

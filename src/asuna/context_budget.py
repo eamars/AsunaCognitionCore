@@ -141,16 +141,22 @@ def trim_turn(context, limit=TURN_CHARS):
             left[name] = left.get(name, 0) + 1
         if total <= limit:
             break
-    # Still over (one huge message, row or block): the ceiling is hard. The longest text left is halved, again and
-    # again, keeping its start and saying how much went; the original stays in the record (recall, history).
+    # Still over (one huge message, row or block): the longest text left is halved, again and again, keeping its
+    # start and saying how much went; the original stays in the record (recall, history). Every cut must make the
+    # turn shorter: a text already near SHORT_TEXT comes back as long with its note, and cutting it again forever
+    # stopped her whole queue (10-13, a turn of many ~400-character texts). When the longest text cannot get
+    # shorter, nothing else can either: the turn goes as it is, over the ceiling.
     shortened = 0
     while total > limit:
         found = _longest_text(context)
-        if found is None or len(found[2]) <= SHORT_TEXT:
+        if found is None:
             break
         holder, key, text = found
         keep = max(SHORT_TEXT, len(text) // 2)
-        holder[key] = text[:keep] + CUT_NOTE % (len(text) - keep)
+        cut = text[:keep] + CUT_NOTE % (len(text) - keep)
+        if len(cut) >= len(text):
+            break
+        holder[key] = cut
         total = size(context)
         shortened += 1
     if shortened:

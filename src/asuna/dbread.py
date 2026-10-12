@@ -68,6 +68,19 @@ def local_window(start, end=None, zone=None):
     return window
 
 
+def now(zone=None):
+    """Her clock now, as local_window takes it: '2026-10-13 12:05'."""
+    return datetime.now(_zone(zone)).strftime('%Y-%m-%d %H:%M')
+
+
+def recent(hours=24, zone=None):
+    """The last `hours` up to now, as a local-time window."""
+    tz = _zone(zone)
+    end = datetime.now(tz)
+    return local_window((end - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'),
+                        zone)
+
+
 def _plain(value):
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
 
@@ -155,7 +168,8 @@ class Reader:
             cursor = cursor.sort(list(sort))
         rows = list(cursor.skip(int(skip or 0)).limit(limit + 1))
         more = len(rows) > limit
-        return self._answer(name, query, rows[:limit], limit=limit,
+        return self._answer(name, query, rows[:limit], **({'sort': _plain(list(sort))} if sort else {}),
+                            **({'skip': int(skip)} if skip else {}), limit=limit,
                             **({'more': '还有更多：缩小过滤，或按 scene_seq/时间分段，不要用大 skip'} if more else {}))
 
     def count(self, name, query=None):
@@ -172,6 +186,15 @@ class Reader:
         rows = list(self.collection(name).aggregate(list(pipeline) + [{'$limit': limit}]))
         first = next((step['$match'] for step in pipeline if '$match' in step), {})
         return self._answer(name, first, rows, pipeline=_plain(pipeline), limit=limit)
+
+    def place(self, code):
+        """Which conversation a place code (g + six hex, as her notes and plans name places) stands for."""
+        from .evidence import sha
+        code = str(code).strip()
+        found = [scene for scene in self.db.scenes.find({}, {'_id': 1, 'kind': 1})
+                 if 'g' + sha(str(scene['_id']).encode())[:6] == code]
+        return self._answer('scenes', {'place': code}, [{'place': code, 'scene_id': scene['_id'], 'kind': scene.get('kind')}
+                                                         for scene in found])
 
     def history(self, scene_id, query=None, fields=None, limit=LIMIT):
         """A conversation's lines: the live ones and, for a group, the archived ones (scene_id archive:<id>)."""
@@ -209,6 +232,10 @@ def aggregate(name, pipeline, limit=LIMIT):
 
 def history(scene_id, query=None, fields=None, limit=LIMIT):
     return _default().history(scene_id, query, fields, limit)
+
+
+def place(code):
+    return _default().place(code)
 
 
 def fields(name):

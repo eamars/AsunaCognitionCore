@@ -25,9 +25,10 @@ dbread.show(dbread.find('messages', {'scene_id': 'local-dm', 'received_at': when
                         fields=['author', 'text', 'received_at'], sort=[('scene_seq', 1)]))
 ```
 
-- `find(集合, 过滤, fields=[...], sort=[...], limit=50)`：最多 500 行；不给 fields 时去掉 embedding 和 event.raw。
+- `find(集合, 过滤, fields=[...], sort=[...], limit=50, skip=0)`：最多 500 行；不给 fields 时去掉 embedding 和 event.raw；回答里照写 sort 和 skip。
 - `count`、`distinct(集合, 字段, 过滤)`、`aggregate(集合, 管道)`（`$out`、`$merge` 不做）。
 - `history(scene_id)`：现在的行和群的旧历史（`archive:<scene_id>`）分开给。
+- `place('g41690f')`：笔记和计划里的地点代号是哪个对话（scene_id）。
 - `collections()`、`fields(集合)`：真名单。集合名写错，回答里列出真名；过滤里有没见过的字段，回答里写 `unseen_fields`。
 - 查空时回答写着「零行」。报告里照写零行，不要空着、不要猜内容。
 
@@ -35,6 +36,7 @@ dbread.show(dbread.find('messages', {'scene_id': 'local-dm', 'received_at': when
 
 - 库里所有 `*_at` 都是 UTC 的 ISO 字符串：进来的消息 `occurred_at` 以 `Z` 结尾，其他多是 `+00:00`。
 - 她说的「21:00」是本地钟点：一定先 `local_window` 换成 UTC 再比，不要拿本地钟点直接比，也不要用空格分隔的时间串、不要 `$regex` 比时间。
+- 「现在」「最近 24 小时」：`dbread.now()` 是她这边现在的钟点，`dbread.recent(24)` 直接给最近 24 小时的区间。
 - 她自己说出去的行（outbound）没有 `occurred_at`/`received_at`，只有一部分有 `receipt_at`：按 `scene_seq` 排。
 - 翻长对话按 `scene_seq` 分段，不要大 `skip`。
 

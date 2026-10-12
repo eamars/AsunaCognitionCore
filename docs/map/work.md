@@ -178,6 +178,8 @@ Reading the character's database from her task scripts: `from asuna import dbrea
 
 - class `Window` — A filter value for a local-time window: {'$gte': utc, '$lt': utc}, remembering what it was asked as.
 - def `local_window` — Her local times -> UTC bounds for any *_at field.
+- def `now` — Her clock now, as local_window takes it: '2026-10-13 12:05'.
+- def `recent` — The last `hours` up to now, as a local-time window.
 - class `Reader`
   - `from_host` — The database the Host named for this command, else the checkout's local config.
   - `collection`
@@ -186,12 +188,14 @@ Reading the character's database from her task scripts: `from asuna import dbrea
   - `count`
   - `distinct`
   - `aggregate`
+  - `place` — Which conversation a place code (g + six hex, as her notes and plans name places) stands for.
   - `history` — A conversation's lines: the live ones and, for a group, the archived ones (scene_id archive:<id>).
 - def `find`
 - def `count`
 - def `distinct`
 - def `aggregate`
 - def `history`
+- def `place`
 - def `fields`
 - def `collections`
 - def `show` — Print an answer whole, query first, as JSON.

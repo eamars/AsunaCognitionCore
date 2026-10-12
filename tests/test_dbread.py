@@ -64,3 +64,22 @@ def test_a_home_task_command_is_told_the_database_and_her_zone():
     env = dbread.environment({'mongo_uri': 'mongodb://example.invalid', 'database': 'd'}, 'Pacific/Auckland')
     assert env == {'ASUNA_MONGO_URI': 'mongodb://example.invalid', 'ASUNA_DATABASE': 'd', 'ASUNA_TIMEZONE': 'Pacific/Auckland'}
     assert dbread.environment({}, 'UTC') == {}
+
+
+def test_her_second_round_a_place_code_her_clock_and_the_sort_she_asked_are_answered(store):
+    """Her test of 10-13: a place code had no way back to its conversation, the last 24 hours needed her own zone
+    arithmetic, and a find did not repeat its sort and skip."""
+    from asuna.places import place_id
+    store.put('scenes', {'_id': 'qq:1:group:7', 'kind': 'group', 'scope_key': 'scene:g', 'policy_epoch': 1,
+                         'members': [], 'sequence': 0}, stream='g')
+    db = reader(store)
+    found = db.place(place_id('qq:1:group:7'))
+    assert found['found'] == 1 and found['rows'][0]['scene_id'] == 'qq:1:group:7'
+    assert db.place('g000000')['said'].startswith('零行')
+    assert len(dbread.now('Pacific/Auckland')) == len('2026-10-13 12:05')
+    day = dbread.recent(24, 'Pacific/Auckland')
+    assert day.asked['zone'] == 'Pacific/Auckland' and day['$gte'] < day['$lt']
+    line(store, 1, '2026-10-12T08:30:00+00:00')
+    line(store, 2, '2026-10-12T10:30:00+00:00')
+    answer = db.find('messages', {'scene_id': 'local-dm'}, sort=[('scene_seq', -1)], skip=1, limit=1)
+    assert answer['sort'] == [['scene_seq', -1]] and answer['skip'] == 1 and answer['rows'][0]['scene_seq'] == 1

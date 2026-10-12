@@ -66,6 +66,10 @@ Her four rules:
   - 91 of 205 recalled thoughts had their `think` call still visible; memories re-sent while visible were 8%.
   - Measure again after a day of traffic: notice size, thoughts left out, how often the last-3 block still goes
     out, and the share of thoughts among recalled memories.
+- **Measured 2026-10-12** (341 notices since batch 1 went live): the last-3 thoughts block went out in 8 of them
+  (it went in every notice, about 590 characters); 148 recalled thoughts delivered, 138 with when they were thought;
+  memories re-sent while an earlier copy was visible 7% (8% before). The notice as a whole averaged 18,427 characters
+  (15,121 before): the parts batch 1 changed shrank, so the growth is in other blocks; not attributed here.
 
 ## Batch 2: binding and returning (built 2026-10-11, its own restart)
 

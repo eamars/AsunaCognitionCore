@@ -66,3 +66,9 @@ and its periodic beats reach the line as messages. Observed on 2026-10-11:
 - `replyNote` (the plugin's local config, her text) opens every message she sends, after the label and before her
   words: her text calls itself the opening note.
 
+## Measured (2026-10-12)
+
+In the 21 hours after the fix went live: 39 lines from her sister; 29 (74%) were kept without waking her, 10 opened
+turns (before: 43 to 92 turns a day on this line). Every line that answered her within 5 minutes of her words woke
+her (7 of 7); 3 more woke her that the timing estimate counts as not answering (the bridge's own test decides).
+Still to see: her note opening her next message there, and her review of her records of 10-07 to 10-11.

@@ -91,5 +91,4 @@ bounded step still exceeds the window, which this recovery answers.
 This recovery starts when a turn overflows. It does not cover a compaction that itself fails (refused by a
 provider's usage filter: 9 group compactions on 10-12; aborted because lines arrived while it ran: 8), nor a
 conversation that grows with no turn of hers at all (a quiet group's surface reached 821k characters, never compacted).
-Both are fixed under ADR-063 D1: lines are held while a compaction runs, a refused compaction retries on another
-route, and a size floor condenses an idle conversation (with her agreement, ADR-049).
+Both are fixed under ADR-063 D1: lines are held while a compaction runs and a size floor condenses an idle conversation (with her agreement, ADR-049); a provider's refusal is a later matter (owner).

@@ -125,9 +125,8 @@ What this deliberately leaves out: a per-turn history of past asks (on demand in
 
 ## Open calls
 
-For the owner:
-- His QQ DM is owner-private in the code (`visibility.py:62-63`: his DM is home), while the 10-12 rule reads "QQ is
-  public". Which holds decides whether an answer from him there joins by itself or she records it.
+The owner's ruling (2026-10-13): **his QQ DM is home**, over "QQ groups are public". An answer from him there joins
+the question by itself, as in the home chat.
 
 For her:
 1. The patience words, lengths and defaults.

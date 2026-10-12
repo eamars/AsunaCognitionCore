@@ -340,14 +340,17 @@ the wait), or at once during the group's local night (01:00 to 07:00, its time z
 then. Condensing asks the Host to run DSH's `/compact` on that group's main character session through the commands
 service (`compact_session`; the session's log shows the command and its result), which the plugin refuses while a
 turn of hers runs there; the next look tries again. A Host with no commands service or no `/compact` for that session
-takes the mark back instead of trying again.
+takes the mark back instead of trying again. A mark has no size minimum: `/compact` keeps the newest stretch of the conversation word for word
+(DSH's retained tail) and summarizes the rest, so a conversation no longer than that stretch is left as it is
+(`nothing_to_compact`) and the mark is cleared.
 
 A group she has not marked (groups only: her private chats and home conversations keep her mark alone) is measured at
 a quiet spell after new lines there: the Host request `conversation_size` answers the conversation's size in DSH's own
 measure (the token meter its compaction threshold uses) and the floor, half of that conversation's compaction
 threshold (the character preset's compaction engine, `compaction.js` `floorTokens`); the scene keeps both
 (`conversation_size`). A reading under the floor stands until new lines arrive; a reading past it is taken again before
-the program acts on it. Past the floor, the program first opens a notes visit there (a `visit` turn with intent
+the program acts on it. After a condense the conversation is its retained tail and summary, under the floor, so a group is
+condensed by size again only once it has grown past the floor again. Past the floor, the program first opens a notes visit there (a `visit` turn with intent
 `condense`, not in her plan's visit ledger and outside its daily limit; `condense_floor` on the scene records it), whose
 text and `visit_from_program` say that the program brought her to write the group's notes before its conversation is
 condensed; it also carries the phrases a `write_notes` visit gets. At the next quiet spell after that turn has run,

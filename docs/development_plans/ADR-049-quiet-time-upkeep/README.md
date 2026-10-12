@@ -178,3 +178,10 @@ none, so each look found it still past the floor, opened another notes visit and
 the stale readings were cleared live at 11:47). A reading past the floor is now taken again before the program acts on it; a
 reading under the floor still stands until new lines. No separate minimum is needed: after a condense the conversation
 is its retained tail and summary, well under the floor (half the compaction threshold).
+
+When a group is condensed again (owner 2026-10-13: no repeated condensing where it is not needed). By size: only once
+it has grown past the floor again, by a fresh reading; the retained tail (DSH's `retainRatio` 0.16, about 37k tokens
+on her model) is far under the floor (about 105k), so a condense always brings a group back under it. By her mark: no
+size minimum (owner: fine as it is; she has marked twice ever and the mark answers her the group's size in words); a
+conversation no longer than the retained tail is left as it is and the mark cleared, a slightly longer one is
+condensed down to the tail. Inside her turns DSH's own threshold (0.8 of the window) applies as before.

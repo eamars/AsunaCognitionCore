@@ -161,3 +161,12 @@ conditions are part of the deal, not follow-ups, each required:
    beat; the choice is not empty there).
 The floor: half of the compaction threshold. The 821k-character group is condensed at its next quiet spell, and she is
 shown its summary.
+
+*Built 2026-10-13 (ADR-063 D1 part 1, 77512efa).* The floor is measured on the Host in DSH's own token meter against
+half of the character preset's compaction threshold for the conversation's model; a group is measured at a quiet
+spell after new lines. Notes first: past the floor the program opens a notes visit there (intent `condense`, outside
+her visit ledger and its daily limit), and condenses at the next quiet spell after that turn ran; a muted group waits.
+Told every time: the first turn there after any condensing carries `condensed_from_program`, however long after (the
+one-day window is gone). A conversation too large for one summary request is summarized in steps. Her wish to be shown
+the 821k group's summary: the summary is the start of that conversation, which her next turn there (the notes visit
+comes before it, the told turn after) reads; showing it at home as well is not built.

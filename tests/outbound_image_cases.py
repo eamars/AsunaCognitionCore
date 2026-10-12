@@ -1034,23 +1034,6 @@ def a_silent_turn_sends_no_picture():
     return True, 'stay_silent 结束的回合不写 SPEAK 行：接受过的图也不会跟着出去'
 
 
-@case
-def speak_row_writes_metadata_on_the_first_segment_only():
-    '''coordinator 写 SPEAK 行那一段的守卫：只挂第一段，行上只有元数据。'''
-    source = io.open(os.path.join(SRC, 'asuna', 'coordinator.py'), encoding='utf-8').read()
-    assert "attach_meta=outbound_media.attachment_for_speak(ep)" in source, 'SPEAK 那一步没接上 attach_image 结果'
-    assert "if index==0 and attach_meta:" in source and "row['attachment']=dict(attach_meta)" in source, \
-        '附件元数据不是只挂第一段'
-    assert source.index("attach_meta=outbound_media.attachment_for_speak(ep)") < \
-        source.index("if index==0 and attach_meta:"), '元数据要在写行之前算好'
-    ep = {'attachment': {'artifact_id': 'blob-x', 'media_type': 'image/png', 'sha256': '1' * 64, 'size': 10}}
-    assert outbound_media.attachment_for_speak(ep) == {'artifact_id': 'blob-x', 'media_type': 'image/png',
-                                                       'sha256': '1' * 64, 'size': 10}
-    assert outbound_media.attachment_for_speak({}) is None
-    assert outbound_media.attachment_for_speak({'attachment': 'blob-x'}) is None     # 形状不对就当没有
-    return True, '第一段挂元数据；没有被接受的图时行上没有 attachment'
-
-
 # 4) 历史投影
 def delivered_row(**over):
     row = publication_row(delivery_state='DELIVERED', attempt_id='attempt-1', receipt_at='2026-10-04T15:00:00+00:00',

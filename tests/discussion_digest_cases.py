@@ -17,8 +17,8 @@ for _path in (os.path.dirname(SRC), SRC, HERE):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-import discussion_digest as dd                       # noqa: E402
-import history_query as hq                           # noqa: E402
+from asuna import discussion_digest as dd           # noqa: E402
+from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402
 
 
@@ -186,6 +186,7 @@ class FakeStore:
     def __init__(self, rows, sink=None, scenes=None, boom=False):
         class DB:
             pass
+        self.config = {}                     # read for the conversation's time zone (local_time.zone_of)
         self.db = DB()
         self.db.messages = FakeCollection(rows, boom=boom)
         self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])

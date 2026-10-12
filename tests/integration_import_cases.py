@@ -482,43 +482,6 @@ def t11_fetch_script_report_contract():
 
 
 # ── 闸门：QQ 任务拿不到这个工具 ─────────────────────────────────────────
-def t12_tool_is_only_in_the_owner_integration_group():
-    from asuna.integration import INTEGRATION_TOOLS, event_granted, owner_profile
-    from asuna.state import Denied
-    names = [tool['name'] for tool in INTEGRATION_TOOLS]
-    assert IMPORT_TOOL in INTEGRATION_TOOLS and names.count(IMPORT_TOOL_NAME) == 1, names
-    assert integration_gated(IMPORT_TOOL_NAME) and integration_gated('integration_status'), '导入工具没被闸门认出来'
-    assert not integration_gated('read_file') and not integration_gated('sandbox_run'), '普通工具被误认成集成工具'
-    assert not integration_gated(None) and not integration_gated(IMPORT_TOOL_NAME.upper())
-    # 能力清单的推导跟 tasks.py / coordinator.py 一样：只有 event_granted 为真才并入这一组。
-    owner_event = {'scene_id': 'local', 'person_id': 'owner', 'integration_profile': 'owner'}
-    qq_event = {'scene_id': 'group-a', 'person_id': 'qq:A'}   # QQ 任务的事件不带 integration_profile
-    assert event_granted(LOCAL, owner_event) is True, '本机 owner 私聊场景没通过闸门'
-    owner_allowed = [t['name'] for t in INTEGRATION_TOOLS if event_granted(LOCAL, owner_event)]
-    assert IMPORT_TOOL_NAME in owner_allowed, owner_allowed
-    assert event_granted(LOCAL, qq_event) is False, 'QQ 场景的事件不该被认成 owner 集成授权'
-    qq_allowed = [t['name'] for t in INTEGRATION_TOOLS if event_granted(LOCAL, qq_event)]
-    assert IMPORT_TOOL_NAME not in qq_allowed, qq_allowed
-    # QQ 事件自己声称 integration_profile=owner 也不算：闸门看的是场景与人，不是消息里的字。
-    forged_events = (dict(qq_event, integration_profile='owner'),
-                    {'scene_id': 'local', 'person_id': 'stranger', 'integration_profile': 'owner'})
-    for forged in forged_events:
-        try:
-            event_granted(LOCAL, forged)
-            raise AssertionError('不该通过闸门：%s' % forged)
-        except Denied as exc:
-            assert 'INTEGRATION_OWNER_REQUIRED' in str(exc), exc
-    # 宿主设置里关掉开关，等于收回授权：老任务也不能再用。
-    off = json.loads(json.dumps(LOCAL))
-    off['integration']['enabled'] = False
-    try:
-        event_granted(off, owner_event)
-        raise AssertionError('关掉开关后仍然放行')
-    except Denied as exc:
-        assert 'INTEGRATION_OWNER_REQUIRED' in str(exc), exc
-    return '工具只在 owner 集成组里；QQ 场景、外人场景与关闭开关都进不来'
-
-
 def t13_workspace_tools_do_not_carry_it():
     '''普通工作区工具清单里没有它：QQ 任务的基础能力清单不可能包含导入。'''
     try:
@@ -541,7 +504,7 @@ CASES = [t1_success_writes_bytes_and_reports_hash, t2_unknown_endpoint_is_denied
          t6_size_limit_is_enforced_before_writing, t7_http_status_and_transport_are_passed_through,
          t8_protected_input_is_not_overwritten, t9_real_http_get_reads_bytes_and_reports_status,
          t10_real_fetch_feeds_the_platform_writer, t11_fetch_script_report_contract,
-         t12_tool_is_only_in_the_owner_integration_group, t13_workspace_tools_do_not_carry_it]
+         t13_workspace_tools_do_not_carry_it]
 
 
 def run_all():

@@ -27,7 +27,7 @@ Windows, `.venv/bin/python` elsewhere).
 
 `p1c_offline_check.py`, `p2_offline_check.py`, `p5_offline_check.py`,
 `integration_import_offline_check.py` and `outbound_image_offline_check.py` run the `tests/*_cases.py` modules
-without Mongo or pytest; `tests/test_schedule_rules.py` runs the same way on its own (`PYTHONPATH=src`). The character runs them inside her sandbox before publishing a change (her skills name
+without Mongo or pytest; `tests/test_schedule_rules.py` runs the same way on its own (`PYTHONPATH=src`). `tests/test_offline_checks.py` runs each of them under pytest as well. The character runs them inside her sandbox before publishing a change (her skills name
 which one fits).
 
 ## Probes

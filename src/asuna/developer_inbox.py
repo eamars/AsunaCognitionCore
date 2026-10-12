@@ -19,9 +19,9 @@ WAKE, NOTE = 'wake', 'note'
 LIMITS = {WAKE: 3, NOTE: 20}                 # per 24 hours
 TEXT_CHARS = 800
 SHOWN, KEEP_DAYS = 5, 7
-STATE_WORDS = {'new': '还没看', 'seen': '看到了，还没回', 'answered': '回了（回话在本机聊天里）'}
+STATE_WORDS = {'new': '还没看', 'seen': '看到了，还没回', 'answered': '回了（回话在他的 agent 线上）'}
 BLOCK_NOTE = ('你写给开发代理（改你程序的那位，不是主人）的留言，新的在前。wake 是要他尽快来，note 等他下次来看；'
-              '他在本机聊天里回你。')
+              '他在他的 agent 线上回你。')
 
 
 def _now():

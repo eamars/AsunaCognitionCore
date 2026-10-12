@@ -31,6 +31,6 @@ def test_a_message_is_kept_counted_and_shown_back(store):
     developer_inbox.mark(store, first['_id'], 'answered')
     items = developer_inbox.block(store, 'demo')['items']
     assert items[0]['level'] == 'note' and items[0]['state'] == '还没看'
-    assert any(item['state'] == '回了（回话在本机聊天里）' for item in items)
+    assert any(item['state'] == '回了（回话在他的 agent 线上）' for item in items)
     audit = store.db.audit_events.find_one({'type': 'developer.message'})
     assert audit and 'text' not in audit['payload']

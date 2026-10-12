@@ -356,7 +356,7 @@ TOOLS = {
     'message_developer': {
         'description': ('给开发代理留话：改你程序的那位（不是主人）。level=wake 是要他尽快来看：卡住了、出了得他动手的问题'
                         '（他开着的时候大约一小时内会看到，不开着就等他下次来）；level=note 是不急的，等他下次来看。'
-                        '他在本机聊天里回你。要拍板的事（权限、花钱、开不开哪条道）找主人，不找他。'
+                        '他在他的 agent 线上回你。要拍板的事（权限、花钱、开不开哪条道）找主人，不找他。'
                         '800 字以内；24 小时内 wake 最多 3 条、note 最多 20 条。'),
         'parameters': {'level': _s('wake（要他尽快来）或 note（等他下次来看）', required=True, enum=['wake', 'note']),
                        'text': _s('留言：什么事、卡在哪、要他做什么，800 字以内', required=True)},
@@ -1738,7 +1738,7 @@ class RoleTools:
         text = self._text(args, 'text', developer_inbox.TEXT_CHARS)
         row = developer_inbox.leave(self.store, ep['persona'], level, text, key=[ep['_id'], call_id],
                                     source={'scene_id': ep['scene_id'], 'episode_id': ep['_id'], 'turn': turn_kind(ep)})
-        return {'left': row['_id'], 'note': ('留好了。他开着的时候大约一小时内会看到，回话在本机聊天里；不开着就等他下次来。'
+        return {'left': row['_id'], 'note': ('留好了。他开着的时候大约一小时内会看到，回话在他的 agent 线上；不开着就等他下次来。'
                                             if level == developer_inbox.WAKE else '留好了，他下次来会看到。')}, False
 
     def tool_ideas_read(self, ep, call_id, args):

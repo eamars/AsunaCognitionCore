@@ -1042,7 +1042,8 @@ class ScheduleService:
                 # scene tick; what she says goes out on the conversation's own route (publish.py).
                 if scene.get('channel_id'):
                     route = route_for_scene(self.app.config, scene['channel_id'], scene['_id'])
-                    if plan['person_id'] not in {m['person_id'] for m in route_members(route).values()}:
+                    from .integration import owner_line
+                    if plan['person_id'] not in {m['person_id'] for m in route_members(route).values()}                             and not owner_line(self.app.config, scene['_id'], plan['person_id']):
                         raise Denied('SCHEDULE_ROUTE_REVOKED')
                 event = {'event_id': 'schedule:' + occurrence, 'scene_id': plan['scene_id'],
                          'person_id': plan['person_id'], 'adapter_id': 'scheduler',

@@ -169,3 +169,14 @@ def test_the_owner_on_a_line_is_his_own_voice_and_the_agent_sees_it(served, monk
     assert cli.poll(mine, 0) == ([], 'closed', [])                                   # a closed line shows the agent nothing
     lines.set_line(store, SCENE, closed=False)
     assert cli.poll(mine, 0) == ([], 'open', ['还有一件'])
+
+
+def test_the_owner_on_a_line_works_in_his_own_workspace(store, tmp_path):
+    """ADR-051 found live: his turn on a line looks up a workspace; he is no route member there, so it is his own."""
+    from asuna.grants import workspace_grant
+    with_lines(store, tmp_path)
+    owner = store.config['chat']['person_id']
+    assert workspace_grant(store.config, SCENE, owner) == store.config['chat']
+    assert workspace_grant(store.config, SCENE, 'agent:claude-code')['person_id'] == 'agent:claude-code'
+    with pytest.raises(Exception, match='WORKSPACE_NOT_AUTHORIZED'):
+        workspace_grant(store.config, 'qq:1:dm:2', owner)

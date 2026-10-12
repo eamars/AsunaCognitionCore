@@ -4,8 +4,9 @@ from .state import Denied
 
 def workspace_grant(config, scene_id, person_id, *, required=True):
     local = config.get('chat', {})
-    if (scene_id, person_id) == (local.get('scene_id'), local.get('person_id')):
-        return local
+    from .integration import owner_line
+    if (scene_id, person_id) == (local.get('scene_id'), local.get('person_id')) or owner_line(config, scene_id, person_id):
+        return local                     # the owner, in his home chat or on a home line he joins (ADR-051)
     for channel in config.get('channels', {}).values():
         for route in channel.get('routes', {}).values():
             if scene_id == route['scene_id']:

@@ -365,7 +365,7 @@ project; the host part with her next restart.
   row in `artifacts` (kind `platform_request`, one per platform flag) with a number given once and never reused, open
   until she answers it; her answer's receipt marks it answered, or gone when the platform refuses the answer. At each
   Host start the open ones are listed again in one program event. `group_action` `accept` / `decline` with that
-  number answers one in her local chat only. (Owner's call on point 2 below, 2026-10-13: fixed in 14a6ecf4, host
+  number answers one in her local chat only. (Owner's call on point 2 below, 2026-10-13: fixed in e767f5de, host
   only.)
 - **Profiling.** A synthetic group turn with a held recall shows the recall once, in its own block, and nowhere else
   in the notice (`tests/test_notices.py`).

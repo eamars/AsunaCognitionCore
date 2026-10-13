@@ -323,7 +323,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`action.js`](../../packages/cognition-core/src/action.js) — The action brain's preset plugin: each action agent gets the executor's system prompt and only the tools its task was granted (`attachAction` in index.js).
 - [`api.js`](../../packages/cognition-core/src/api.js) — The `asunaApi` remote service the Web page calls: worker and model status, the settings card's save and apply, her memory pages, brain context views, session kinds and titles, and persona jobs.
 - [`appraiser.js`](../../packages/cognition-core/src/appraiser.js) — The optional affect appraiser's preset plugin: a tool-free session that proposes affect events and never speaks.
-- [`attend.js`](../../packages/cognition-core/src/attend.js) — The relevance gate's preset plugin: one small tool-free session per group that decides whether she joins in (attend.py), never speaking itself.
+- [`attend.js`](../../packages/cognition-core/src/attend.js) — The relevance gate's preset plugin: a small tool-free session for each question, deciding whether she joins in (attend.py), never speaking itself.
 - [`carry.js`](../../packages/cognition-core/src/carry.js) — A conversation that no longer fits the model's window continues in a new session (ADR-028).
 - [`channel.js`](../../packages/cognition-core/src/channel.js) — Channel contribution: a platform plugin (e.g. @asuna/napcat-qq) registers its kind with Core.
 - [`children.js`](../../packages/cognition-core/src/children.js) — Her action brain's children: tasks (catalogued DSH subagents) and the worker's own hidden stages.

@@ -43,6 +43,13 @@ def prune_host_reports():
         shutil.rmtree(old, ignore_errors=True)
 
 
+def gate_session_id(binding, operation):
+    """A fresh gate session for each question, its repairs included: the material is complete every time, so the
+    gate keeps no history and never compacts (attend.py)."""
+    base = re.sub(r':fix-\d+$', '', operation)
+    return 'asuna-attend-' + sha((binding + ':' + base).encode())[:32]
+
+
 class ContextOverflow(RuntimeError):
     """A stage of her conversation was refused because the session no longer fits the model's window, after DSH's own
     overflow compaction (ADR-028). `carry` is what the plugin read from the session: its last summary."""
@@ -142,8 +149,7 @@ class NativeLane:
             elif self.lane == 'appraiser':
                 native_id = 'asuna-appraiser-' + ep['persona']
             elif self.lane == 'attend':
-                # One small gate session per group, shared by everyone who speaks there (attend.py).
-                native_id = 'asuna-attend-' + sha(ep['scene_id'].encode())[:24]
+                native_id = gate_session_id(binding, operation)
             else:
                 native_id = role_id
             if self.lane == 'appraiser':

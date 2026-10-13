@@ -44,6 +44,17 @@ def test_her_home_turns_say_it_for_a_day_in_words(store):
     assert host_stops.block(store, ZONE, moment + timedelta(hours=24)) is None
 
 
+def test_failed_gate_looks_are_counted_for_a_day_and_kept_a_week(store):
+    moment = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+    store.db.missed_looks.insert_many([{'_id': 'ep-a', 'scene_id': 'g1', 'at': '2026-10-14T09:00:00+00:00'},
+                                       {'_id': 'ep-b', 'scene_id': 'g1', 'at': '2026-10-14T10:00:00+00:00'},
+                                       {'_id': 'ep-c', 'scene_id': 'g1', 'at': '2026-10-12T10:00:00+00:00'},
+                                       {'_id': 'ep-d', 'scene_id': 'g1', 'at': '2026-10-01T10:00:00+00:00'}])
+    said = host_stops.block(store, ZONE, moment)
+    assert list(said) == ['missed_looks'] and said['missed_looks'].endswith(' 2 次')
+    assert store.db.missed_looks.count_documents({}) == 3, 'older than a week is gone'
+
+
 def test_a_home_turn_carries_it(store, tmp_path):
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn

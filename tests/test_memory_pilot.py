@@ -172,5 +172,7 @@ def test_the_turns_query_vector_is_reused_not_embedded_again(store, tmp_path, mo
 def test_the_switch_off_starts_no_pilot(items, monkeypatch):
     builder = ContextBuilder(items, object())
     monkeypatch.setattr(memory_pilot, 'SHADOW_PILOT', False)
+    from asuna import memory_tiers
+    monkeypatch.setattr(memory_tiers, 'ENABLED', False)
     assert memory_pilot.attach(builder, items, 'P1', Route) is None and builder.pilot is None
     assert memory_pilot.attach(ContextBuilder(items), items, 'P1', Route) is None, 'no retrieval, nothing to measure'

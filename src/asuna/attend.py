@@ -1,8 +1,10 @@
 """The relevance gate (owner direction 2026-10-04): may she let a group message pass?
 
 A group turn nobody addressed to her (the proactive rules fired, a reply inside a thread she was in, or her
-name without an @) first asks her one short question in her own small per-group session: 接话 or 不理. Only
-接话 starts the full turn with its recall, monologue and decision. An @ or a reply to her skips the gate.
+name without an @) first asks her one short question in a fresh small session: 接话 or 不理. Only 接话 starts
+the full turn with its recall, monologue and decision. An @ or a reply to her skips the gate. Each question has
+everything it needs, so the gate keeps no history of earlier questions. A gate that cannot decide (the model
+failed, or never answered 接话 or 不理) is the program's failure, recorded as `failed`, never as her 不理.
 
 The gate reads words only: why she is being asked, who is talking and how well she knows them, what was
 said here since she last spoke (bounded), and her mood. Nothing is recalled, and the group's own

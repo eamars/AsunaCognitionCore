@@ -57,7 +57,9 @@ def test_each_kit_is_where_its_place_needs_it(store):
     # The local chat: her heartbeats, nights and vault; her shelf to tidy; the owner may send her on errands.
     assert {'visit', 'promote_memory', 'credential', 'errand', 'sticker', 'restart', 'task'} <= local
     # A trusted line is text only and not the owner: about herself yes, his errands, vault and outings no.
-    assert {'restart', 'update_self', 'ideas', 'write_document', 'pass_note'} <= line
+    assert {'restart', 'ideas', 'write_document', 'pass_note'} <= line
+    from asuna import memory_tiers
+    assert ('update_self' in line) is not memory_tiers.ENABLED, 'with tiered memory on, update_self retires'
     assert not {'credential', 'errand', 'visit', 'sticker', 'read_image', 'attach_image', 'watch'} & line
     # The owner's QQ chat: his errands and watching people there; no vault (a password does not travel through QQ).
     assert {'errand', 'watch', 'sticker', 'restart'} <= owner_qq and not {'credential', 'visit'} & owner_qq

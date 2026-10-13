@@ -118,7 +118,9 @@ to ship the fixes with the renames above: one review with her, one restart, refu
 
 ### Defects: wrong text in context
 
-1. **DSH's coding-agent text reaches three of her brains.** The action brain, the relevance gate and the summarizer
+1. **DSH's coding-agent text reaches three of her brains** (owner, same day: the action brain is a coding agent
+   and keeps it, for DSH compatibility; only the gate and the summarizer, which are not, have it blanked in the
+   plugin). The action brain, the relevance gate and the summarizer
    get about 2,300 characters of English meant for a developer using DSH: the checkout path ("use this checkout only
    to inspect or extend DSH"), the Web GUI URL and its HMR rules, and how to link files and use a `present` tool none
    of them has. Her role turns do not (their system prompt is the worker's render alone). The cause: three sections
@@ -147,7 +149,39 @@ form cannot say; say each fact once, in the one place it applies.
   `write_document` (one paragraph mixing five operations, visibility and injection), `ideas`, `leave_note`,
   `understand_person`, `delegate`, each with "不抄 / 不带 / 不当场 / 不为了 / 不要说成".
 
+### The renames, as one table (her condition, 2026-10-14)
+
+What a call writes, old name → new name. An old name keeps working and its result says the new one; it leaves once
+her calls use it fewer than 5 times in a week.
+
+| Tool | Old | New | Note |
+|---|---|---|---|
+| every tool with options (task, ideas, ask, feel, plan, write_document, sticker, credential, watch, restart, peer_line, group_focus, place_timezone, private_words) | `op` | `do` | |
+| group_action | `kind` | `do` | |
+| plan, peer_line | `line` | `place` | |
+| pass_note, leave_note | `to` | `to` | kept: where a note goes, not where she is |
+| stay_silent, task, write_document, update_self, set_policy, group_action | `reason` | `why` | |
+| feel (and its `edit`) | `kind` | `feeling` | |
+| feel | `open` | `unresolved` | yes / no |
+| feel | `decision` | folded into `do` | `do` = accept / decline / edit on a proposal |
+| watch | `mode` | `how_often` | once / burst |
+| pass_note | `mode` | `deliver` | wake / next_time |
+| sticker | `when` | `use_for` | `when` stays a time only |
+| understand_person | `block` | `block_hours` | |
+| quote | `how` | `quote_whom` | source / none |
+| write_document | `inject` | `when_shown` | always / on_demand / never |
+| write_document, recall | `sid` | `section` | |
+| write_document, update_self, understand_person | `body` | `content` | |
+| write_file, development_write (action brain) | `text` | `content` | a message keeps `text` |
+| generate_image (action brain) | `workflows` | `list_routes` | yes / no |
+| errand | `exactly` | `exactly` | yes / no as words |
+| list_files, development tools (action brain) | `case_sensitive`, `include_semantic`, `overwrite` | same names | yes / no as words |
+| recall | `query` required | optional when `sections` is given | |
+
 ### One word per idea (beside the renames above)
+
+This governs the program's own text only (tool texts, block notes, errors, prompts); how she writes her own words
+is hers (her condition: she writes 拍, and her ledgers and thoughts keep it).
 
 The same thing is called: 回合 / 一轮 / 一拍 (a turn); 行动脑 / 行动侧 (the action brain); 用户 / 对方 / 主人 (who she
 talks to); 本机 / 本地 / 家里 (home); `ref` / `_id` / `artifact_id` / `sid` (what to copy). Each gets one word,

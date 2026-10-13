@@ -44,8 +44,9 @@ def test_with_the_switch_off_nothing_is_kept_and_her_turn_has_no_things_block(st
 
 
 def test_on_day_one_places_follow_the_tags_and_the_prompt_is_as_before(store, monkeypatch):
+    from asuna.block_guide import guide
     owner(store)
-    before = render_system(store, 'P1')[0]
+    before = render_system(store, 'P1')[0][:-len(guide(store.config))]       # her persona and voice as rendered
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     tiers = Tiers(store, 'P1')
     tiers.sync()
@@ -53,7 +54,8 @@ def test_on_day_one_places_follow_the_tags_and_the_prompt_is_as_before(store, mo
     rows = {row['sid']: row for row in tiers.items(doc='persona')}
     assert {s['sid']: memory_tiers.FROM_INJECT[s['inject']] for s in sections} == {k: r['place'] for k, r in rows.items()}
     assert all(r['fact'] and r['store'] == 'persona' for r in rows.values())
-    assert render_system(store, 'P1')[0] == before, 'nothing lapses on the day the switch goes on'
+    assert render_system(store, 'P1')[0][:-len(guide(store.config))] == before, \
+        'nothing lapses on the day the switch goes on (only the told text is added, test_memory_tiers_told.py)'
     assert tiers.tick() == []
 
 

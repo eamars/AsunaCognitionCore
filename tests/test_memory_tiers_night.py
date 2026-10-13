@@ -98,6 +98,24 @@ def test_her_own_judgment_is_not_offered_as_a_fact_until_someone_confirms_it(on)
     assert '记成事实' in night_list(on, 'P1', NIGHT)['items'][0]['how'], 'confirmed from elsewhere, it may be'
 
 
+def test_a_judgment_is_confirmed_only_by_the_same_from_someone_else(on):
+    """Owner's call (2026-10-13): a near-duplicate from another person or conversation confirms; one she wrote in the
+    same conversation herself does not."""
+    tiers = Tiers(on, 'P1')
+    mine = append(on, 'work_log', '判断一', '这个群先不放开', **{'from': '我自己的判断'})
+    again = append(on, 'work_log', '判断二', '这个群先别放开', **{'from': '我自己的判断'})
+    told = append(on, 'work_log', '别人说', '群主也说先别放开', **{'from': '别人说的'})
+    shadow = on.db[memory_pilot.COLLECTION]
+    for key, sid in (('s1', mine), ('s2', again), ('s3', told)):
+        shadow.insert_one({'_id': key, 'row': 'item', 'status': 'active', 'doc': 'work_log', 'sid': sid})
+    shadow.insert_one({'_id': 'pair:a', 'row': 'pair', 'store': 'journal', 'items': ['s1', 's2'], 'score': 0.97})
+    night_list(on, 'P1', NIGHT)
+    assert not tiers.item('work_log', mine).get('confirmed'), 'her own echo in the same conversation is not someone else'
+    shadow.insert_one({'_id': 'pair:b', 'row': 'pair', 'store': 'journal', 'items': ['s1', 's3'], 'score': 0.97})
+    night_list(on, 'P1', NIGHT + timedelta(days=1))
+    assert tiers.item('work_log', mine).get('confirmed'), 'the same from someone else confirms it'
+
+
 def test_a_write_may_not_sign_her_judgment_as_a_fact_but_a_checked_rewrite_may(on):
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn

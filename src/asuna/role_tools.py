@@ -409,6 +409,32 @@ TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
 TOOL_NAMES = tuple(TOOLS)
+
+
+def _tiered(tools):
+    """Her tools with tiered memory on (ADR-062): update_self retires into write_document (it still runs, unlisted);
+    write_document lets an item go and says what an item is or where it came from; recall says it lists a document's
+    headings; promote_memory says what a fact is about. The texts are the smallest that say it."""
+    import copy
+    out = copy.deepcopy({name: spec for name, spec in tools.items() if name != 'update_self'})
+    write = out['write_document']
+    write['description'] += 'let_go 把一节放下一层。'
+    write['parameters']['op']['enum'] = [*write['parameters']['op']['enum'], 'let_go']
+    write['parameters']['nature'] = _s('这一节是', enum=['事实', '记忆'])
+    write['parameters']['from'] = _s('它从哪来', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
+    out['recall']['description'] += 'sections 只写 doc 就列出它的标题。'
+    out['recall']['parameters']['sections']['items']['properties']['sid'] = _s('节的 sid')
+    out['promote_memory']['parameters']['about'] = _s('关于', enum=['self', 'person', 'place', 'world'])
+    return out
+
+
+TIERED = _tiered(TOOLS)
+
+
+def tools():
+    """The tool specs her brain is shown: tiered memory's when its switch is on, else as they are."""
+    from . import memory_tiers
+    return TIERED if memory_tiers.ENABLED else TOOLS
 # ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
 # and a turn may use is kept by option ('task.message'); the model is shown the tools.
 OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review')}
@@ -453,7 +479,7 @@ def renamed(name, args):
 
 def specs(names):
     """The worker-side tool specs the plugin registers (name, description, parameters)."""
-    return [{'name': name, **TOOLS[name]} for name in names]
+    return [{'name': name, **tools()[name]} for name in names]
 
 
 def all_specs():
@@ -463,12 +489,22 @@ def all_specs():
         return {'name': old, 'description': RENAMED_NOTE % ((old,) + tuple(can.split('.'))),
                 'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
                                for key, spec in TOOLS[tool]['parameters'].items() if key != 'op'}}
+    from . import memory_tiers
+    if memory_tiers.ENABLED:
+        # update_self runs on, unlisted, where write_document is listed (ADR-055's rule for a retired name).
+        retired = {'name': 'update_self', 'description': '已并入 write_document（doc=self 或 core）；旧名照常可用。',
+                   'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
+                                  for key, spec in TOOLS['update_self']['parameters'].items()}}
+        return specs([name for name in TOOL_NAMES if name != 'update_self']) + [
+            unlisted(old, can) for old, can in RENAMED.items()] + [retired]
     return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()]
 
 
 def aliases():
     """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
-    return {old: can.split('.')[0] for old, can in RENAMED.items()}
+    from . import memory_tiers
+    retired = {'update_self': 'write_document'} if memory_tiers.ENABLED else {}
+    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, **retired}
 
 
 def turn_kind(ep):
@@ -630,6 +666,9 @@ def abilities(store, ep):
         names.append('errand')
     if local and where == 'home':
         names += LOCAL_CHAT
+    from . import memory_tiers
+    if memory_tiers.ENABLED:
+        names = [name for name in names if name != 'update_self']     # retired into write_document (ADR-062)
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
     return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
                                                 OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
@@ -918,7 +957,11 @@ class RoleTools:
             if name in OPS and args.get('op') not in OPS[name]:
                 raise Refused('%s 的 op 是 %s 之一%s。' % (name, '、'.join(OPS[name]), _given(args, 'op')))
             can = ability(name, args)
-            if can not in (ep.get('turn_tools') or ()):
+            from . import memory_tiers
+            if (memory_tiers.ENABLED and can == 'update_self' and 'write_document' in (ep.get('turn_tools') or ())
+                    and visibility.OWNER_PRIVATE == self._cls(ep)):
+                pass                              # her retired name, where write_document is hers (ADR-062)
+            elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
             if name != 'think' and not ep.get('turn_thought'):
                 raise Refused('先用 think 写下这回合的心里话，再做别的。')

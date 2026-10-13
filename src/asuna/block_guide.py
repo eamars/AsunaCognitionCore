@@ -39,7 +39,16 @@ def notes():
         'switches_from_program': (switches.NOTE,),
         'self_review_from_program': (self_review.NOTE,),
         'dice_review_from_program': (dice.REVIEW_NOTE,),
+        **_tiered_notes(),
     }
+
+
+def _tiered_notes():
+    """The blocks tiered memory adds (ADR-062), only when its switch is on."""
+    from . import memory_tiers
+    if not memory_tiers.ENABLED:
+        return {}
+    return {'things_from_program': (memory_tiers.THINGS_NOTE,), 'night_list_from_program': (memory_tiers.NIGHT_NOTE,)}
 
 
 # How the delivery's own lines read (context-delivery.js writes them without their explanation).
@@ -76,4 +85,7 @@ def guide(config):
     for key, texts in notes().items():
         lines.append('- %s：%s' % (key, '／'.join(texts)))
     lines += ['', '# 记忆的来源', MEMORY_SOURCE_RULES]
+    from . import memory_tiers
+    if memory_tiers.ENABLED:
+        lines += ['', '# 记忆放在哪', memory_tiers.TOLD]          # ADR-062 §4.3: once per conversation
     return turn + '\n\n' + '\n'.join(lines)

@@ -333,7 +333,7 @@ facts in persona, voice, ledgers, group notes and `core`, memories in `self` and
 takes `nature` (事实 or 记忆) or `from` (主人定的 and 查过的 make a fact, 别人说的 and 我自己的判断 a memory) for the item
 it writes, and a `set_tags` carrying only these changes nothing in the document. Her own judgment is not made a fact
 by her alone: `nature: 事实` on an item from 我自己的判断, or relabelling one 查过的 without rewriting it with a basis,
-is refused, with how it becomes one (confirmed by the same said in another conversation, or rewritten by
+is refused, with how it becomes one (confirmed by a near-duplicate from someone else, or rewritten by
 `replace_section` with a basis and `from: 查过的`). Memories cool to 收着 by disuse (a
 running record's row after 30 days unused, any other when the persona model's forgetting formula falls below
 `step_back_below`); facts never do. A `correction` moves the item it corrects to 收着 with the
@@ -357,6 +357,13 @@ well and counts as their use, as does a section she reads by `sections`. Its ans
 most eight, each with its ref, store and place), and when nothing at all came back says so for all three places
 (`found`). A `sections` entry with a `doc` and no `sid` lists that document's headings, each with its place.
 
+With the switch on, her tools are `role_tools.TIERED` (`role_tools.tools()`): `update_self` is no longer listed but
+still runs where `write_document` is hers (registered unlisted, an alias of `write_document`); `write_document` takes
+`op: let_go`, `nature` and `from`; `recall`'s `sections` take a `doc` without `sid`; `promote_memory` takes `about`.
+Her system prompt says once, where the memory rules are, what the places are and that absence is not evidence
+(`memory_tiers.TOLD`, a section `# 记忆放在哪`), and the block guide explains `things_from_program` and
+`night_list_from_program`. Off, her tools and system prompt are exactly as without it.
+
 With the switch on, her nightly settlement turn carries `night_list_from_program` instead of `notes_review_from_program`:
 at most five items (`memory_tiers.night_list`), each with its ref, heading, store, nature, text, why it is there and what
 she can do with it, none of them a keep or drop choice. 写一句意思: an item that lapsed from 随身 and is long (over 240
@@ -369,7 +376,8 @@ different conversations, or carried through three stays, at most once a week; wh
 to that person, to that group's notes, to a ledger, or still changing; 记成事实 is offered only for one that someone
 else decided or said, or that she checked, or a judgment of hers the same said elsewhere confirmed). 合并: two items of one document the
 item index scores 0.95 or more alike (a pair of facts is to be merged); items met again from another conversation are
-memorable, and that confirms a judgment of hers. 回头看: once a week, one put-away item with past uses. `promote_memory`'s candidates are then the memories
+memorable; a judgment of hers is confirmed by its near-duplicate written in another conversation or one from
+someone else (别人说的, 主人定的). 回头看: once a week, one put-away item with past uses. `promote_memory`'s candidates are then the memories
 she recalled in two different conversations, and its `about` (self, person, place, world) lands the promoted fact,
 written as the fact and a line of its basis, in the fact store of its subject: `core` for herself, the ledger `world`
 for the world, the group's notes when every source is from one group and the memory is public; a person's facts are

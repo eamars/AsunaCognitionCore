@@ -13,6 +13,9 @@ from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TO
 
 # (tools defined, description characters at most)
 CHARACTER = (32, 21018)       # ADR-062 phase 0: write_document kind, +137 characters
+# With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
+# nature, from, about and the recall sentence (+294).
+CHARACTER_TIERED = (31, 20924)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -32,6 +35,21 @@ def check(name, specs, count, budget, extra=0):
 
 def test_the_character_brain_stays_within_its_tool_budget():
     check('character', list(role_tools.TOOLS.values()), *CHARACTER)
+
+
+def test_with_tiered_memory_on_the_character_brain_stays_within_its_budget():
+    check('character (tiered memory on)', list(role_tools.TIERED.values()), *CHARACTER_TIERED)
+
+
+def test_with_tiered_memory_off_her_tools_are_exactly_as_before(monkeypatch):
+    """The switch off changes nothing she is shown: the same tools, byte for byte (her prompt cache holds)."""
+    from asuna import memory_tiers
+    monkeypatch.setattr(memory_tiers, 'ENABLED', False)
+    assert role_tools.tools() is role_tools.TOOLS and size(list(role_tools.TOOLS.values())) == CHARACTER[1]
+    assert 'update_self' not in role_tools.aliases() and 'let_go' not in str(role_tools.TOOLS['write_document'])
+    monkeypatch.setattr(memory_tiers, 'ENABLED', True)
+    assert role_tools.tools() is role_tools.TIERED and role_tools.aliases()['update_self'] == 'write_document'
+    assert 'update_self' in [spec['name'] for spec in role_tools.all_specs()], 'the retired name still runs'
 
 
 def test_the_action_brain_stays_within_its_tool_budget():

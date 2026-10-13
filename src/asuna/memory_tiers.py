@@ -45,7 +45,10 @@ SOURCES = tuple(FROM_NATURE)
 # Her rule (2026-10-13): a fact needs an author who can correct it. Her own judgment becomes a fact only when someone
 # else confirms it (met again from another conversation) or when she has checked it (rewritten with 查过的 and a basis).
 OWN_JUDGMENT, CHECKED = '我自己的判断', '查过的'
-FACT_AUTHORS = ('别人说的', '主人定的', CHECKED)
+OTHERS_SAID = ('别人说的', '主人定的')
+FACT_AUTHORS = (*OTHERS_SAID, CHECKED)
+# Considered and dropped (owner's call, 2026-10-13): a correction thread that upholds it. No honest signal for it
+# exists without the program judging what was said, which would grade her text.
 JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实：要有人确认（另一处又碰到同样的说法），或者你查过了：'
                      '用 replace_section 把它改写成带依据的一条（依据：谁、何时、从哪来），from 写 查过的。')
 CAPS = {'self': 12, 'persona': 16, 'ledger': 10, 'group_notes': 6, 'core': 12, 'voice': 6}
@@ -89,6 +92,17 @@ NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
 NOT_BACK = ('inject 改成 always 不会把它带回随身：它再被用到、被你改写出变化、或被更正碰到，才会回来；'
             '现在它在%s。')
+# What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3; the core
+# idea first, the absence rule last). Hers to reword.
+TOLD = ('不学会忘，就腾不出地方学新的。你的东西有三个地方：随身的每回合都在；手边的平时不在眼前，谈到相关的事会自己浮上来，'
+        'recall 一句话也能找到；收着的只有 recall 找得到。放下不是丢：程序只换地方，不改一个字，什么都在，碰到相关的事还会回来。'
+        '随身的位置有限，一件事一阵子没被用到、没在别处再碰到，就自己放到手边，程序会告诉你一次；你又用到它、改写出变化、'
+        '或它被更正碰到，它就回来，下次能留更久。长的细节会退成一句意思，细节还在后面。事实和记忆不一样：事实不会因为不用而退，'
+        '只被更正替换；写的时候可以说它是事实还是记忆、从哪来（nature、from），你自己的判断要有人确认或你查过，才算事实。'
+        '想放下的，自己 let_go 就行。没看到不等于没有：要说「没有、没答应过、没说过」，先 recall 一下，它会告诉你找了哪几层。')
+THINGS_NOTE = ('你的东西在哪：每份按随身、手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
+               'self_items 是把 current_self 拆成条的提议。')
+NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
               '一条是一个说法连同它的依据（样本、来源、证据），不按行拆；原来那段留作历史，程序不替你拆。')
 
@@ -488,13 +502,13 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         a, b = (rows.get(shadow.get(key)) for key in pair['items'])
         if a and b and a['store'] == b['store'] and a['doc'] == b['doc']:
             pairs.append((not a.get('fact'), a, b))
-            if a.get('scene_id') and b.get('scene_id') and a['scene_id'] != b['scene_id']:
-                # Met again from another conversation: memorable, once a night.
-                for row in (a, b):
-                    if (row.get('last_moment') != 'duplicate_elsewhere'
-                            or (row.get('memorable_at') or '')[:10] != night):
-                        tiers.memorable(row, 'duplicate_elsewhere', moment)
-                    # The same said elsewhere confirms a judgment of hers: it may now be made a fact.
+            elsewhere = a.get('scene_id') and b.get('scene_id') and a['scene_id'] != b['scene_id']
+            for row, other in ((a, b), (b, a)):
+                if elsewhere and (row.get('last_moment') != 'duplicate_elsewhere'
+                                  or (row.get('memorable_at') or '')[:10] != night):
+                    tiers.memorable(row, 'duplicate_elsewhere', moment)       # met again from another conversation
+                if elsewhere or other.get('from') in OTHERS_SAID:
+                    # The same from someone else confirms a judgment of hers: it may now be made a fact.
                     tiers.rows.update_one({'_id': row['_id']}, {'$set': {'confirmed': _iso(moment)}})
     for _, a, b in sorted(pairs, key=lambda p: (p[0], p[1]['_id'])):
         merged = entry('merge', a, NIGHT_WHY['merge'])

@@ -12,10 +12,10 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (32, 19509)       # ADR-060: new names and the wording audit, -1,981 characters
+CHARACTER = (32, 19651)       # ADR-060: new names and the wording audit, -1,839 characters (eight unenforced rules kept after her review)
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 19422)
+CHARACTER_TIERED = (31, 19553)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

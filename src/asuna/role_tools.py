@@ -109,7 +109,7 @@ TOOLS = {
     },
     'task': {
         'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一轮）；answer 回答它刚问你的问题（只在它问你的那一回合，'
-                         '回答只给它看，答完这回合结束）；stop 叫停一件还在做或暂停着的事（对方明确取消、或你确定不该再做时）'
+                         '回答只给它看，答完这回合结束）；stop 叫停一件还在做或暂停着的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
                          '；page 翻读它交回的长报告原文。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、reason、page 中的一样，就是那一样）',
                              enum=['message', 'answer', 'stop', 'page']),
@@ -182,7 +182,7 @@ TOOLS = {
                          'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
                          'owner_private（默认）只在家里。每回合自动带上的只有 persona 和 voice 里 when_shown=always 的节，'
                          '有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
-                         '就只在那里带上。工作文档和人格用 replace_section。'),
+                         '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
@@ -198,7 +198,7 @@ TOOLS = {
     },
     'update_self': {
         'description': ('改你的自我描述：character_core 是跨场景的长期自我，current_self 是近期的自我理解。'
-                         'content 写完整的新正文。'),
+                         '自我理解真的变了才改，content 写完整的新正文。'),
         'parameters': {'target': _s('改哪一份', required=True, enum=['character_core', 'current_self']),
                        'body': _s(limit=SINGLE_BODY_CHARS, description='完整的新正文', required=True), 'reason': _s(limit=2000, description='为什么改', required=True)},
     },
@@ -237,7 +237,7 @@ TOOLS = {
     'plan': {
         'description': ('把一件事留到将来再想：create 新建（intent 加一种计时），update 改期或改内容，cancel 取消。'
                          '计时选一种：after_seconds 几秒后；every_seconds 固定间隔；at 本地时刻「YYYY-MM-DDTHH:MM」；'
-                         'clock 每天或每周的钟点。到期只是让你再想一次。已有的安排在 plans_from_program，'
+                         'clock 每天或每周的钟点。到期只是让你再想一次，事情还没做。已有的安排在 plans_from_program，'
                          '钟面在 clock_from_program。在家里新建时可以写 place：到点在那条线里开一回合（照抄 lines_from_program 里的）'
                          '，之后在那条线里看和改。'),
         'parameters': {
@@ -264,7 +264,7 @@ TOOLS = {
     'visit': {
         'description': ('出门去你在的某个群看看：place 照抄 places_from_program 里的，intent 是去做什么。'
                          '程序在那个群给你开一回合，你在那儿看了现场再决定说不说；结果下次心跳带回来（last_visits_from_program）'
-                         '。topic 是想聊的话头，会原样带过去，只写愿意在那儿说的。家里的心跳或计划到点时可以出门，能去几个看 places_from_program.this_beat；'
+                         '。那边存的是你写的原样，看不出平台上显示成什么样（比如 @ 有没有落成）。topic 是想聊的话头，会原样带过去，只写愿意在那儿说的。家里的心跳或计划到点时可以出门，能去几个看 places_from_program.this_beat；'
                          '想晚点去就用 plan 定时间。'),
         'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
@@ -274,7 +274,7 @@ TOOLS = {
     'errand': {
         'description': ('替家里托你的人去别处说一句：去 errand_places_from_program 里的某个群或私聊，'
                          '只在这回合跟你说话的人让你办时用。request 照抄要带过去的话或交代的事；exactly=yes 是要原样转达。'
-                         '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说。办成没有在家里的 errands_from_program 看。'),
+                         '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
                        'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
                        'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
@@ -344,7 +344,7 @@ TOOLS = {
                        'took': _s(limit=500, description='得到了什么、做了什么，这次问各处怎样（close）')},
     },
     'ideas': {
-        'description': ('你的「改进想法」本，do 选一样：note 记下一个改进自己的想法（能力、技能、做事方式），用你自己的话写；'
+        'description': ('你的「改进想法」本，do 选一样：note 记下一个改进自己的想法（能力、技能、做事方式），用你自己的话写，不写别人的个人信息；'
                          '只记下来，自我改进时再拿出来定。read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。'
                          'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，'
                          '都写 why。' % IDEAS_PAGE),
@@ -359,7 +359,7 @@ TOOLS = {
     },
     'find_member': {
         'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多 10 个，最近说过话的在前。找到的人给的是标签，'
-                         '照抄就能 @；进了名册的人会一直留着。'),
+                         '照抄就能 @；进了名册的人会一直留着。members_from_program 只列了一部分，别的人用这个找。'),
         'parameters': {'name': _s(limit=20, description='名字里的几个字', required=True)},
     },
     'promote_memory': {

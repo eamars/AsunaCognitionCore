@@ -1018,16 +1018,19 @@ class RoleTools:
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
             raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN)
+        from . import memory_tiers
         sections = args.get('sections') or []
+        listing = [item for item in sections if memory_tiers.ENABLED and isinstance(item, dict)
+                   and isinstance(item.get('doc'), str) and item.get('sid') is None]
         if not isinstance(sections, list) or len(sections) > 3 or any(
-                not isinstance(item, dict) or not isinstance(item.get('doc'), str) or not isinstance(item.get('sid'), str)
-                for item in sections):
+                not isinstance(item, dict) or not isinstance(item.get('doc'), str)
+                or not (isinstance(item.get('sid'), str) or item in listing) for item in sections):
             raise Refused('sections 是至多 3 条 {doc, sid}（doc、sid 都是文字，sid 照抄 recall 或文档里的）%s。'
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
         _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))
-        documents, missing = read_sections(self.store, ep, sections, self._cls(ep))
+        documents, missing = read_sections(self.store, ep, [s for s in sections if s not in listing], self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
@@ -1059,6 +1062,28 @@ class RoleTools:
             result['not_read'] = missing
         if elsewhere:
             result['own_thoughts_in_groups'] = [{k: v for k, v in m.items() if k != '_id'} for m in elsewhere]
+        if memory_tiers.ENABLED:
+            # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
+            tiers = memory_tiers.Tiers(self.store, ep['persona'])
+            tiers.used([(d['doc'], d['sid']) for d in documents or [] if d.get('doc') and d.get('sid')], 'recalled',
+                       ep['scene_id'])
+            docs = DocumentStore(self.store, ep['persona'])
+            for item in listing:
+                content = docs.read(item['doc'])[1]
+                if content:
+                    result.setdefault('documents', []).append({'doc': item['doc'], 'headings': memory_tiers.doc_headings(
+                        self.store, ep['persona'], item['doc'], content, self._cls(ep))})
+                else:
+                    result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
+            readable = {'global-safe', ep['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
+                                                          if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
+            shown = {m.get('_id') for m in result['memories']}
+            found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep), shown)
+            if found:
+                result['headings'] = found
+            result['searched'] = memory_tiers.SEARCHED
+            if not (result['memories'] or result.get('documents') or found or elsewhere):
+                result['found'] = memory_tiers.NOTHING
         return result, False
 
     def tool_stay_silent(self, ep, call_id, args):

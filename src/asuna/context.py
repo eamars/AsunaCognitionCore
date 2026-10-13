@@ -410,6 +410,7 @@ class ContextBuilder:
                 slot=outbound_media.history_slot(row,self.store)
                 if slot:row['attachment']=slot
                 else:row.pop('attachment',None)
+        own=[]
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -441,6 +442,17 @@ class ContextBuilder:
                                       recall=recall)
                 except Exception:
                     pass
+            if memory_tiers.ENABLED and self.pilot is not None and isinstance(event.get('text'),str):
+                # ADR-062: two of the six slots for her own items at hand (a recall reaches put-away ones too).
+                try:
+                    _private=visibility.owner_private_scope(persona) if session_class==visibility.OWNER_PRIVATE else None
+                    own=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
+                                             {'global-safe',scope,*([_private] if _private else [])},scene['_id'],
+                                             recall=recall,excerpt_chars=MEMORY_CHARS)
+                except Exception:
+                    own=[]
+                if own:
+                    memories=memories[:memory_tiers.SLOTS-len(own)]
         else:
             readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
             if session_class==visibility.OWNER_PRIVATE:
@@ -469,6 +481,7 @@ class ContextBuilder:
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
+        facts.extend(own)
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
         # recently returned work is not hidden behind old high-write tasks.

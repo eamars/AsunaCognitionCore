@@ -52,7 +52,7 @@ def own_items(store, persona):
         if body:
             out.append({'key': 'shadow:' + sha(canonical([kind, doc, section['sid']]))[:32], 'store': kind, 'doc': doc,
                         'sid': section['sid'], 'scope_key': scope_key, 'visibility': section.get('visibility'),
-                        'inject': section.get('inject'), 'text': body,
+                        'inject': section.get('inject'), 'text': body, 'heading': section.get('heading') or '',
                         'lexical': (section.get('heading') or '') + '\n' + body})
 
     def scope_of(section):
@@ -69,6 +69,12 @@ def own_items(store, persona):
     for slug in store.db.journal_entries.distinct('slug', {'persona': persona}):
         for row in store.db.journal_entries.find({'persona': persona, 'slug': slug}).sort('seq', 1):
             add('journal', slug, row, scope_of(row))
+    # Her ledgers and her self described as items (`self`, `core`), when she has them.
+    for slug in docs.slugs():
+        content = docs.read(slug)[1] or {}
+        kind = 'ledger' if content.get('kind') == 'ledger' else slug if slug in ('self', 'core') else None
+        for section in content.get('sections') or [] if kind else []:
+            add(kind, slug, section, scope_of(section))
     for scene in store.db.scenes.find({'kind': 'group'}, {'scope_key': 1}):
         content = docs.read(notes_slug(scene['_id']))[1]
         for section in (content or {}).get('sections') or []:
@@ -93,6 +99,25 @@ def attach(context, store, persona, retrieval):
         return None
     context.pilot = Pilot(store, persona, retrieval()).start()
     return context.pilot
+
+
+def rank(items, query, vector):
+    """Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the
+    items say nothing). Returns (keys in fused order, each key's vector score, the items by vector score)."""
+    unit = _unit(vector)
+    scores = {item['key']: _score(unit, item['unit']) for item in items}
+    by_vector = sorted(items, key=lambda item: (-scores[item['key']], item['key']))[:24]
+    frequencies = Counter(term for item in items for term in item['terms'])
+    qterms = {t for t in terms(query) if frequencies[t] <= max(2, len(items) * .5)}
+
+    def lexical(item):
+        return sum(math.log(1 + len(items) / (1 + frequencies[t])) for t in qterms & item['terms'])
+    by_lexical = sorted((item for item in items if lexical(item) > 0), key=lambda i: (-lexical(i), i['key']))[:24]
+    fused = {}
+    for ranked in (by_vector, by_lexical):
+        for position, item in enumerate(ranked, 1):
+            fused[item['key']] = fused.get(item['key'], 0) + 1 / (60 + position)
+    return sorted(fused, key=lambda key: (-fused[key], key)), scores, by_vector
 
 
 def admitted(ranked, floor=FLOOR, slots=OWN_SLOTS):
@@ -163,21 +188,7 @@ class Pilot:
             vector = self.retrieval.embed([job['query']], 'query')[0]
         readable = {'global-safe', job['scope'], *([job['private_scope']] if job['private_scope'] else [])}
         items = [item for item in self.items if item['scope_key'] in readable]
-        query = _unit(vector)
-        scores = {item['key']: _score(query, item['unit']) for item in items}
-        by_vector = sorted(items, key=lambda item: (-scores[item['key']], item['key']))[:24]
-        # The lexical side as retrieval.search has it: terms common to over half of the readable items say nothing.
-        frequencies = Counter(term for item in items for term in item['terms'])
-        qterms = {t for t in terms(job['query']) if frequencies[t] <= max(2, len(items) * .5)}
-
-        def lexical(item):
-            return sum(math.log(1 + len(items) / (1 + frequencies[t])) for t in qterms & item['terms'])
-        by_lexical = sorted((item for item in items if lexical(item) > 0), key=lambda i: (-lexical(i), i['key']))[:24]
-        fused = {}
-        for ranked in (by_vector, by_lexical):
-            for rank, item in enumerate(ranked, 1):
-                fused[item['key']] = fused.get(item['key'], 0) + 1 / (60 + rank)
-        order = sorted(fused, key=lambda key: (-fused[key], key))
+        order, scores, by_vector = rank(items, job['query'], vector)
         surfaced = admitted([(key, scores[key]) for key in order])
         stores = {item['key']: item['store'] for item in items}
         top = [{'item': item['key'], 'store': item['store'], 'score': round(scores[item['key']], 4)}

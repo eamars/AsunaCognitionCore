@@ -52,6 +52,10 @@ REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '
            'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它',
            'surprise': '被更正碰到了'}
 MOVED_SHOWN = 5
+FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
+HEADINGS_SHOWN = 8
+SEARCHED = '找了：随身、手边、收着'
+NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
 NOT_BACK = ('inject 改成 always 不会把它带回随身：它再被用到、被你改写出变化、或被更正碰到，才会回来；'
             '现在它在%s。')
@@ -367,6 +371,70 @@ def told(move):
 def placed(store, persona, slug, content):
     """A document's sections as the turn reads them when the switch is on; unchanged when it is off."""
     return Tiers(store, persona).placed(slug, content) if ENABLED else content
+
+
+def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, recall=False, moment=None,
+            excerpt_chars=800):
+    """Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most
+    OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref. What is carried
+    (随身) is already in front of her and is never brought up again. Each one surfaced is marked: recalled, or
+    surfaced in this conversation."""
+    from .config import excerpt
+    from .memory_pilot import admitted, rank
+    items = list(getattr(pilot, 'items', None) or [])
+    if not items:
+        return []
+    tiers = Tiers(store, persona)
+    rows = {(row['doc'], row['sid']): row for row in tiers.items()}
+    allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
+    pool = [item for item in items if item['scope_key'] in readable
+            and (rows.get((item['doc'], item['sid'])) or {}).get('place') in allowed]
+    if not pool:
+        return []
+    vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
+    order, scores, _ = rank(pool, query, vector)
+    by_key = {item['key']: item for item in pool}
+    moment = moment or _now()
+    out, refs = [], []
+    for key in admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS):
+        item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]
+        out.append({'_id': ref(item['doc'], item['sid']), 'kind': 'own_item', 'heading': item.get('heading') or row['heading'],
+                    'body_markdown': excerpt(item['text'], excerpt_chars), 'store': STORE_WORDS[row['store']],
+                    'place': row['place'], 'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
+        refs.append((item['doc'], item['sid']))
+    if refs:
+        tiers.used(refs, 'recalled', scene_id) if recall else tiers.surfaced(refs, scene_id)
+    return out
+
+
+def headings(store, persona, pilot, query, readable, cls, shown=()):
+    """recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns."""
+    from . import visibility
+    from .retrieval import terms
+    wanted = terms(query)
+    rows = {(row['doc'], row['sid']): row for row in Tiers(store, persona).items(place={'$in': [AT_HAND, PUT_AWAY]})}
+    texts = {(item['doc'], item['sid']): (item['scope_key'], item['lexical']) for item in getattr(pilot, 'items', None) or []}
+    found = []
+    for key, row in rows.items():
+        if ref(*key) in shown or not visibility.readable(row.get('visibility') or 'public', cls):
+            continue
+        scope, text = texts.get(key, (None, row.get('heading') or ''))
+        if scope is not None and scope not in readable:
+            continue
+        hits = len(wanted & terms(text))
+        if hits >= min(2, len(wanted)) and hits:
+            found.append((-hits, row['heading'], {'ref': ref(*key), 'heading': row['heading'],
+                                                  'store': STORE_WORDS[row['store']], 'place': row['place']}))
+    return [entry for *_, entry in sorted(found)[:HEADINGS_SHOWN]]
+
+
+def doc_headings(store, persona, slug, content, cls):
+    """recall with a doc and no sid: that document's headings, each with its place."""
+    from . import visibility
+    places = {row['sid']: row['place'] for row in Tiers(store, persona).items(doc=slug)}
+    return [{'sid': s['sid'], 'heading': s.get('heading') or s['sid'],
+             'place': places.get(s['sid']) or FROM_INJECT.get(s.get('inject'), AT_HAND)}
+            for s in (content or {}).get('sections') or [] if visibility.readable(s.get('visibility') or 'public', cls)]
 
 
 DOC_REF = re.compile(r'doc:([^#\s"\'，。、]+)#([^\s"\'，。、）)]+)')

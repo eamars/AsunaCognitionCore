@@ -343,6 +343,17 @@ yet told in this conversation, each once, with its clock time and reason; a home
 exists, `update_self` for `current_self` (or `character_core`) writes an item there: it rewrites the one its `sid`
 names, or adds one headed by its `heading` (else the body's first line).
 
+With the switch on and the shadow pilot running (it holds her items' vectors), a turn brings up her own items at hand
+by itself: scored against the turn's query as memories are (`memory_pilot.rank`), at most two (`OWN_SLOTS`) of the six
+memory slots, only above the absolute floor `FLOOR` (0.83), never one she carries (随身 is in front of her already).
+Each is a `memories` entry of kind `own_item` with its `doc:slug#sid` ref as `_id`, its heading, its text, its store,
+its place and its age in words (`事实` for a fact). A conversation bringing up an item another conversation already
+brought up makes it memorable; one conversation bringing it up again does not. A `recall` reaches items put away as
+well and counts as their use, as does a section she reads by `sections`. Its answer says which places it searched
+(`searched`), lists the headings of matching items at hand or put away beyond the bodies it returns (`headings`, at
+most eight, each with its ref, store and place), and when nothing at all came back says so for all three places
+(`found`). A `sections` entry with a `doc` and no `sid` lists that document's headings, each with its place.
+
 ## Shadow pilot of her own items
 
 `memory_pilot.py` measures which of her own items a turn would surface, and delivers nothing. Her persona sections, the list lines of `current_self` (30 characters or longer), the rows of each running record and each group's notes sections are embedded on the memory embedding route into the collection `memory_shadow` (rows `item`), apart from `memory_units`; an owner-private item is readable only in owner-private turns, a public one everywhere, a group's notes only in that group. The items are read again at most every ten minutes, and only new or changed ones are embedded. After each character turn's context is prepared, the turn is queued; a background thread scores the items against the turn's query the way retrieval scores memories (vector and lexical ranks fused; the vector score is the index's (1 + cosine) / 2, reusing the vector the turn's retrieval computed), takes at most two above the floor of 0.83 (`FLOOR`, `OWN_SLOTS`), and writes one row (`turn`, or `recall` for a `recall` query): item ids, stores and scores, the best six candidates above 0.75, the turn's kind, the conversation and its kind, the query's hash, the time the job took. An item a turn would surface records the conversation in `surfaced_in`. Pairs of items in one store scoring 0.93 or more are written as `pair` rows. No text, heading or query is written, and nothing of it reaches a prompt. `tools/memory_pilot_report.py` prints the daily reading in counts; `--drop` removes the collection. The switch is `memory_pilot.SHADOW_PILOT`: off, the Host starts no pilot.

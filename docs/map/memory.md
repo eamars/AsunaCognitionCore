@@ -34,6 +34,7 @@ The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a tu
 
 - def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
 - def `attach` — Start the pilot for a context builder that retrieves, when the switch is on: the Pilot, else None.
+- def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
 - def `admitted` — Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor.
 - class `Pilot` — One background thread: turns are queued by `submit` and scored off the reply path.
   - `start`
@@ -70,6 +71,9 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `told` — A move as her result or the moved line says it, in words.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
+- def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.
+- def `headings` — recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns.
+- def `doc_headings` — recall with a doc and no sid: that document's headings, each with its place.
 - def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.
 
 ## `retrieval`

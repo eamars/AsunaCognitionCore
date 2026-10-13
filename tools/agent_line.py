@@ -1,6 +1,6 @@
 """A coding agent's line to her (ADR-033): post a message, poll her answers.
 
-  python tools/agent_line.py send <route> "<text>"      (or - to read the text from stdin)
+  python tools/agent_line.py send <route> "<text>" [--answers <question id>]   (or - to read the text from stdin)
   python tools/agent_line.py poll <route> [--wait SECONDS] [--json]
   python tools/agent_line.py status <route>
 
@@ -8,9 +8,12 @@ The route's key is read from <data>/private/route-keys/agent-<route>.json (ASUNA
 by the Host at start. The key opens only this line: posting as this route, and claiming and confirming her words on it.
 A poll confirms each answer it prints; an answer nobody polls stays queued, shown in her history as not yet delivered.
 A poll also prints, once each, what the owner wrote on this line from the Web, marked as the owner's.
+`--answers q-…` marks the message as the answer to one of her questions (her `ask`, questions_from_program); without
+it, the first message on the line after her question there is its answer.
 """
 import argparse
 import http.client
+import re
 import json
 import os
 import socket
@@ -53,10 +56,17 @@ def call(line, method, path, body=None, timeout=CLAIM_WAIT + 10):
         sys.exit('The Host does not answer at %s (%s): is it running?' % (line['url'], getattr(exc, 'reason', exc)))
 
 
-def send(line, text):
+QUESTION = re.compile(r'q-[0-9a-f]{8}')       # her question ids (asuna/questions.py)
+
+
+def send(line, text, answers=None):
     body = {'route_id': line['route_id'], 'account_id': line['account_id'], 'sender_id': line['sender_id'],
             'event_id': 'agent-' + uuid.uuid4().hex, 'text': text,
             'occurred_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')}
+    if answers:
+        if not QUESTION.fullmatch(answers):
+            sys.exit('--answers takes a question id as she sees it, like q-1a2b3c4d; got %r.' % answers)
+        body['raw'] = {'asuna_answer': {'question': answers}}
     return call(line, 'POST', '/events', body)
 
 
@@ -90,6 +100,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = parser.add_subparsers(dest='command', required=True)
     s = sub.add_parser('send'); s.add_argument('route'); s.add_argument('text')
+    s.add_argument('--answers', metavar='QUESTION', help='the question of hers this message answers (q-…)')
     p = sub.add_parser('poll'); p.add_argument('route'); p.add_argument('--wait', type=int, default=0)
     p.add_argument('--json', action='store_true')
     t = sub.add_parser('status'); t.add_argument('route')
@@ -98,7 +109,7 @@ def main(argv=None):
     line = load_key(args.route)
     if args.command == 'send':
         text = sys.stdin.read() if args.text == '-' else args.text
-        result = send(line, text.strip())
+        result = send(line, text.strip(), args.answers)
         print({'line_closed': 'line closed: she is not taking messages on this line now'}.get(
             result.get('status'), result.get('status', 'sent')))
     elif args.command == 'poll':

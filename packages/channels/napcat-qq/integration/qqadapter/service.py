@@ -17,7 +17,7 @@ from . import notices as notices_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
-from .hostapi import HostApi
+from .hostapi import CAPABILITIES, HostApi
 from .journal import Counters, Journal
 from .onebot import OneBot
 from .outbound import Outbound
@@ -94,6 +94,7 @@ class Adapter:
         self._tries = {}
         self._last_status = 0.0
         self.identity = None
+        self.capabilities = list(CAPABILITIES)      # until run() asks NapCat what it can do
 
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)
@@ -349,6 +350,19 @@ class Adapter:
                                 if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_"))},
                                sort_keys=True)))
 
+    # ---- what this NapCat can do for her reply (ADR-064 phase 2) --------
+    def find_capabilities(self):
+        """Pictures, stickers and reactions always; a poke only when NapCat's packet backend answers."""
+        caps = list(CAPABILITIES) + ["react"]
+        try:
+            resp = self.onebot.api_call("get_packet_status", {}, timeout=5, meta={"probe": "packet_status"})
+            if isinstance(resp, dict) and resp.get("retcode") == 0:
+                caps.append("poke")
+        except Exception as exc:
+            self.log("PACKET_STATUS_UNKNOWN type=%s" % type(exc).__name__)
+        self.log("CAPABILITIES %s" % ",".join(caps))
+        return caps
+
     # ---- identity -------------------------------------------------------
     def verify_identity(self):
         try:
@@ -390,6 +404,7 @@ class Adapter:
             self.journal.release_lock()
             return 2
         self.identity = self.verify_identity()
+        self.capabilities = self.find_capabilities()
         self.log("IDENTITY %s" % json.dumps(self.identity, sort_keys=True))
         if self.peers is not None:
             self.log("PEERS %s" % json.dumps(self.peers.summary(), sort_keys=True))
@@ -455,7 +470,7 @@ class Adapter:
             except Exception as exc:
                 self.counters.inc("receipt_replay_error")
                 self.log("RECEIPT_REPLAY_ERROR type=%s" % type(exc).__name__)
-            res = self.host.claim_outbox(self.claim_wait)
+            res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities)
             if res.kind == "items":
                 items = res.obj.get("items") or []
                 self.out.handle_item(items[0], stopping=self.stop.is_set())

@@ -486,10 +486,71 @@ class Outbound:
         self.report(pub, receipt_payload(status, attempt, resp if isinstance(resp, dict) else {"unparsed_response": True}),
                     "admin_" + status)
 
+    @staticmethod
+    def action_call(item):
+        """(OneBot action, params) for a poke or a reaction in her reply, or (None, reason)."""
+        act = item.get("action") if isinstance(item.get("action"), dict) else {}
+        target = item.get("target") or {}
+        ttype, tid = str(target.get("type") or ""), str(target.get("id") or "")
+        if not tid.isdigit():
+            return None, "bad_target"
+        if act.get("kind") == "poke":
+            account = str(act.get("account") or "")
+            if not account.isdigit():
+                return None, "bad_account"
+            if ttype == "group":
+                return "group_poke", {"group_id": int(tid), "user_id": int(account)}
+            return "friend_poke", {"user_id": int(account)}
+        if act.get("kind") == "react":
+            mid, emoji = str(act.get("message_id") or ""), str(act.get("emoji_id") or "")
+            if not mid or len(mid) > 40 or not emoji.isdigit():
+                return None, "bad_reaction"
+            return "set_msg_emoji_like", {"message_id": int(mid) if mid.lstrip("-").isdigit() else mid,
+                                          "emoji_id": emoji, "set": True}
+        return None, "unknown_action"
+
+    def handle_action(self, item, stopping=False):
+        """A poke or a reaction: one platform call; the receipt carries no message id (none is made)."""
+        pub = str(item.get("publication_id") or "")
+        attempt = str(item.get("attempt_id") or "")
+        target = item.get("target") or {}
+        self.counters.inc("action_claims")
+        if stopping:
+            self.report(pub, receipt_payload("unknown", attempt, {"reason": "adapter_stopping_before_send"}), "stopping")
+            return
+        if not pub or not attempt:
+            return
+        if self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": "target_not_authorized"}), "target_not_authorized")
+            return
+        action, params = self.action_call(item)
+        if action is None:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": params}), params)
+            return
+        try:
+            resp = self.onebot.api_call(action, params, timeout=self.ack_timeout,
+                                        meta={"publication_id": pub, "attempt_id": attempt, "action": action})
+        except ApiNotConnected as exc:
+            self.report(pub, receipt_payload("failed", attempt, {"reason": "ws_not_connected", "detail": str(exc)[:200]}),
+                        "ws_not_connected")
+            return
+        except (ApiTransportError, ApiTimeout) as exc:
+            self.report(pub, receipt_payload("unknown", attempt, {"reason": type(exc).__name__}), "action_unknown")
+            return
+        retcode = resp.get("retcode") if isinstance(resp, dict) else None
+        status = "platform_accepted" if retcode == 0 else "failed"
+        self.log("ACTION_RESULT pub=%s action=%s status=%s retcode=%s" % (pub, action, status, retcode))
+        self.journal.append("actions.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
+                                             "action": action, "status": status, "retcode": retcode})
+        self.report(pub, receipt_payload(status, attempt, resp if isinstance(resp, dict) else {"unparsed_response": True}),
+                    "action_" + status)
+
     # ---- one claimed publication ---------------------------------------
     def handle_item(self, item, stopping=False):
         if item.get("admin") is not None:
             return self.handle_admin(item, stopping=stopping)
+        if item.get("action") is not None:
+            return self.handle_action(item, stopping=stopping)
         pub = str(item.get("publication_id") or "")
         attempt = str(item.get("attempt_id") or "")
         target = item.get("target") or {}

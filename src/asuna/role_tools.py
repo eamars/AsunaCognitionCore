@@ -136,7 +136,7 @@ TOOLS = {
                           'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
                           'name': _s('sticker：你收着的表情包的名字'),
                           'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
-                          'who': _s('poke 戳谁、react 给谁的话点：照抄标签'),
+                          'who': _s('poke 戳谁、react 给谁的话点：照抄标签；私聊里不写就是对方'),
                           'line': _s('react：「这条」是叫你的那条，「刚才那条」是他十分钟内的最后一句', enum=['这条', '刚才那条']),
                           'face': _s('react：表情名')}}},
             'quote': _s('群里：source 引用叫你的那条，none 不引用；不写由程序定', enum=['source', 'none']),
@@ -941,6 +941,27 @@ def words(exc):
 _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words for her
 
 
+# Her pokes and reactions in her history: the program's words, marked as what she did (ADR-064 phase 2, her words).
+ACTION_MARK = '（你做的动作，不是你说的话）'
+REACT_MINUTES = 10
+# Channels whose platform refused a reaction in a private chat: not tried there again until the Host restarts (her
+# call: the platform may take them one day).
+REACT_OFF_IN_DMS = set()
+
+
+def recent_line(store, scene, ep, people, doc, which):
+    """The line she means of theirs: the one that called her (这条, if it is theirs), else their latest within
+    REACT_MINUTES (刚才那条, or 这条 when the line that called her is someone else's)."""
+    from datetime import datetime, timedelta, timezone
+    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+    if which == '这条' and source and people.person(source.get('author')) == doc.get('person'):
+        return source
+    since = (datetime.now(timezone.utc) - timedelta(minutes=REACT_MINUTES)).isoformat()
+    return store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound',
+                                       'author': {'$in': people.authors_of(doc['person'], [scene['_id']])},
+                                       'received_at': {'$gte': since}}, sort=[('scene_seq', -1)])
+
+
 def chat_lines(text):
     """How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message):
     each line with words counts, a blank line does not, a fenced code block counts as one."""
@@ -1305,10 +1326,17 @@ class RoleTools:
                 else:
                     planned.append({'kind': 'sticker', 'text': '[表情包:%s]' % name, 'fields': fields, 'name': name,
                                     'shown': 'sticker「%s」' % name})
+            elif kind in ('poke', 'react'):
+                try:
+                    planned.append(self._action_part(ep, scene, kind, part))
+                except Refused as exc:
+                    problems.append('第 %d 条 %s' % (index, str(exc)))
             elif kind == 'picture':
                 try:
                     meta = self._picture(ep, scene, str(part.get('artifact_id') or ''))
-                except (Refused, Denied) as exc:
+                except Refused as exc:
+                    problems.append('第 %d 条 picture %s' % (index, str(exc)))
+                except Denied as exc:
                     problems.append('第 %d 条 picture %s' % (index, words(exc)))
                 else:
                     planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
@@ -1331,6 +1359,45 @@ class RoleTools:
         self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
         return {'note': reply_receipt(queued)}, False
+
+    def _action_part(self, ep, scene, kind, part):
+        """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action."""
+        from . import channel_kinds
+        from .people import People
+        from .schedule_rules import line_stamp, scene_timezone
+        people = People(self.store, ep['persona'])
+        who = str(part.get('who') or '').strip()
+        if not who and scene.get('kind') == 'dm':
+            who = ep['person_id']                 # a private chat has one other person: who may be left out
+        found = people.resolve(scene, who) if who else []
+        if not found:
+            raise Refused('找不到「%s」：who 照抄标签' % who if who else '要写 who（照抄标签）')
+        if len(found) > 1:
+            raise Refused('「%s」对得上 %s：用标签里的 #编号' % (who, '、'.join(people.label(doc) for doc in found[:5])))
+        doc = found[0]
+        if doc.get('person') == people.self_id:
+            raise Refused('不能对你自己')
+        label = people.label(doc)
+        if kind == 'poke':
+            account = people.account_of(scene, doc)
+            if not account:
+                raise Refused('程序还不知道 %s 在平台上的账号（不是你的错）' % label)
+            return {'kind': 'poke', 'text': '戳了戳 %s%s' % (label, ACTION_MARK), 'shown': 'poke %s' % label,
+                    'fields': {'action': {'kind': 'poke', 'account': account}}}
+        if scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
+            raise Refused('私聊里点不了表情（平台不收），到下次重启前私聊里不用 react')
+        face = str(part.get('face') or '').strip()
+        faces = channel_kinds.faces_of(scene['_id'])
+        if face not in faces:
+            raise Refused('「%s」不是这里的表情名' % face if face else '要写 face（表情名）')
+        line = recent_line(self.store, scene, ep, people, doc, part.get('line') or '这条')
+        message_id = ((line or {}).get('event') or {}).get('channel', {}).get('platform_event_id')
+        if not message_id:
+            raise Refused('%s %d 分钟内在这里没说过能点的话' % (label, REACT_MINUTES))
+        stamp = line_stamp(scene_timezone(self.store.config, scene), line.get('occurred_at') or line.get('received_at'))
+        return {'kind': 'react', 'text': '给 %s %s 那句点了「%s」%s' % (label, stamp, face, ACTION_MARK),
+                'shown': 'react「%s」给 %s' % (face, label),
+                'fields': {'action': {'kind': 'react', 'message_id': str(message_id), 'emoji_id': str(faces[face])}}}
 
     def _picture(self, ep, scene, artifact):
         """The attachment of a picture she may send here, or Refused in words."""

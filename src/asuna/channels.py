@@ -474,6 +474,15 @@ class Channels:
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
+                    act = row.get('action') if isinstance(row.get('action'), dict) else None
+                    if act and act.get('kind') not in (supports or ()):
+                        # A poke or a reaction this adapter did not declare is not done at all (ADR-064 phase 2).
+                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED',
+                                                'failure': 'CHANNEL_DOES_NOT_DECLARE_' + str(act.get('kind')).upper()},
+                                                expected=row['revision'], stream=row['episode_id'])
+                        from .publish import PublishService
+                        PublishService(self.store).cancel_after(failed)
+                        continue
                     sticker = row.get('sticker') if isinstance(row.get('sticker'), dict) else None
                     if sticker and 'sticker' not in (supports or ()):
                         # A sticker is the whole message: one this adapter cannot send is not sent at all (ADR-016).
@@ -505,6 +514,10 @@ class Channels:
                         # her row keeps the [表情包:名字] she wrote; the platform gets the sticker alone
                         item['text'] = ''
                         item['sticker'] = {k: v for k, v in sticker.items() if k != 'name'}
+                    if act:
+                        # her row keeps the program's words for her history; the platform gets the action alone
+                        item['text'] = ''
+                        item['action'] = dict(act)
                     return {'items': [item]}
             if time.monotonic() >= deadline:
                 break
@@ -552,10 +565,12 @@ class Channels:
             from . import group_admin
             with database_effects_lock(self.store.name):
                 return group_admin.receipt(self.store, channel_id, publication_id, body)
-        if status == 'platform_accepted' and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip()):
-            raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
         with database_effects_lock(self.store.name):
             row = self.store.db.messages.find_one({'_id': publication_id})
+            # A poke or a reaction makes no message of its own: its receipt carries none (ADR-064 phase 2).
+            if (status == 'platform_accepted' and not (row or {}).get('action')
+                    and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip())):
+                raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
             # An already claimed send may have happened before revocation. Preserve
             # the factual receipt without authorizing a new send or target change.
             if not row or row.get('channel_id') != channel_id:
@@ -567,6 +582,10 @@ class Channels:
             if row['delivery_state'] not in ('SENDING', 'UNKNOWN'):
                 raise Denied('PUBLICATION_RECEIPT_CONFLICT')
             state = {'platform_accepted': 'DELIVERED', 'failed': 'FAILED', 'unknown': 'UNKNOWN'}[status]
+            if (state == 'FAILED' and (row.get('action') or {}).get('kind') == 'react'
+                    and (row.get('target') or {}).get('type') == 'dm'):
+                from . import role_tools
+                role_tools.REACT_OFF_IN_DMS.add(channel_id)     # her call: tried again after the next restart
             self.store.put('messages', {**row, 'delivery_state': state, 'platform_receipt': body,
                            'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
                            'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},

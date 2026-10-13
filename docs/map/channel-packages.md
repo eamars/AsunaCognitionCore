@@ -324,6 +324,8 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
   - `fetch_attachment` — (base64 text, meta, None) when these bytes may be sent, else (None, meta, reason).
   - `admin_call` — (OneBot action, params) for a host-queued admin action, or (None, reason).
   - `handle_admin`
+  - `action_call` — (OneBot action, params) for a poke or a reaction in her reply, or (None, reason).
+  - `handle_action` — A poke or a reaction: one platform call; the receipt carries no message id (none is made).
   - `handle_item`
   - `settle`
   - `muted`
@@ -403,6 +405,7 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
   - `submit_pending`
   - `health_snapshot`
   - `maybe_status`
+  - `find_capabilities` — Pictures, stickers and reactions always; a poke only when NapCat's packet backend answers.
   - `verify_identity`
   - `run`
 

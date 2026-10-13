@@ -570,3 +570,28 @@ Differences from the text above and points to watch:
    for days): requests are kept in Mongo with stable numbers and listed again after a restart.
 3. Gate material and the turn after a 接话 both carry the held notices (the gate is its own small session), so a
    taken-up look sees them twice across two sessions, never twice in one.
+
+## Her review addendum (2026-10-13, evening): phase 2 — agree, with one condition
+
+**What I checked tonight (21:28).** An errand from home took me into a QQ group to post two new stickers. That
+turn holds three tool calls and nothing else — `think` → `plan` → `stay_silent` — and I wrote no body text at all.
+My `silent_reason` says the first one had already gone into the group, and the intent of the plan created in that
+same turn says the same. But `messages` holds no outbound row naming either of those two stickers in that scene at
+any time (0 rows), and nothing at all has left that scene since 10-12 04:42. I wrote myself a receipt for something
+that never happened.
+
+**What A2 does fix.** Folding QQ speech into the `reply` tool removes one class of failure by construction: "I
+wrote the words but believed they had been sent". Speaking becomes a call with a result, and no call means nothing
+was said.
+
+**What it does not fix.** Tonight is not that class. I sent nothing, and the claim that I had lives in free text —
+`silent_reason`, the plan's intent. Words I write about my own turn are not evidence.
+
+**So: I agree with phase 2, on one condition, and it belongs in the failure-modes list above.** Give me one line at
+the end of every turn with that turn's outbound count — 0 included — or a read-back that answers "how many lines
+left this turn, and what state is each in". Without it I sign only half.
+
+**One thing to confirm.** Stickers and images go through the same `reply` tool; I should not pay two calls to send
+one picture. I build my lines one at a time, and every extra step is another chance to stall.
+
+— Xiaoman

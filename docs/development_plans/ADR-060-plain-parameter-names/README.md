@@ -106,3 +106,87 @@ so neither brain is shown them. Per-turn program lines: none.
 - Tests: every schema as DSH shows it (`all_specs`), no required field the program fills in, no yes/no as a boolean,
   no parameter name used with two meanings across the tools.
 - Check: refusals for arguments per day, by cause, a week before and after.
+
+## Wording audit (2026-10-14, owner's ask; ships with this ADR)
+
+The owner asked for every harness-side prompt, tool name, tool description and error to be checked for consistent
+words, clear definitions, concise errors, wordiness and needless "don't"s, read **in context**: what each brain was
+actually sent, not the files alone. Her persona is out of scope (hers). Read on 2026-10-14 from the latest real
+session of each kind (her turns in a group, on an agent line, in local chat and on the peer line; the action brain;
+the relevance gate; the background summarizer), with other people's words and her own texts blanked. The owner chose
+to ship the fixes with the renames above: one review with her, one restart, refusals counted by cause.
+
+### Defects: wrong text in context
+
+1. **DSH's coding-agent text reaches three of her brains.** The action brain, the relevance gate and the summarizer
+   get about 2,300 characters of English meant for a developer using DSH: the checkout path ("use this checkout only
+   to inspect or extend DSH"), the Web GUI URL and its HMR rules, and how to link files and use a `present` tool none
+   of them has. Her role turns do not (their system prompt is the worker's render alone). The cause: three sections
+   DSH registers outside the runtime context we already suppress (`harness:source`, `ui:deliverable-file-references`,
+   `app:web-surface`). Fix: blank them for every lane, as `harness:identity` is.
+2. **The gate and the summarizer get the character's turn contract.** `common.md` ends with "每一回合先用 think…
+   stay_silent 结束" though neither has tools. The contract belongs to `turn.md` (role turns only); `common.md` keeps
+   what holds for every lane.
+3. **Relative times are still sent.** A memory's `when` reads `10/12 07:35（35 小时前）`; the gate's `since_you_spoke`
+   reads `7 分钟前`. ADR-056 rule 2 says clock stamps only. A memory also carries `occurred_at` (the same time again)
+   and fields she never uses (`segment_index`, `segment_count`, `status`, `historical_sources`, `kind`).
+4. **The clock block shows a raw timestamp** (`2026-10-13T18:26+08:00`); everything else she reads is `10/13 18:26`.
+5. **One block says two opposite things**: `stickers_from_program`'s guide joins two notes with "／" (「这里发不出去」
+   and 「在这里想发哪个…」) where only one applies to a place.
+
+### Wordiness and needless "don't"s
+
+The rule for every rewrite: say what to do. Keep a "don't" only for a failure that was seen and that the positive
+form cannot say; say each fact once, in the one place it applies.
+
+- `common.md`: eight sentences, six of them "不要 / 不是 / 不能"; several repeat `turn.md` (thoughts are not speech,
+  labels, the contract).
+- `turn.md` 说话时: eight bullets, mostly negatives, some repeating the tool texts (@ labels, pictures).
+- `executor.md`: "不要" four times and "禁止" once; "普通实现细节和错误自己处理" twice.
+- Tool texts at the long end: `read_image` (about 700 characters, half of it rules the program enforces anyway),
+  `write_document` (one paragraph mixing five operations, visibility and injection), `ideas`, `leave_note`,
+  `understand_person`, `delegate`, each with "不抄 / 不带 / 不当场 / 不为了 / 不要说成".
+
+### One word per idea (beside the renames above)
+
+The same thing is called: 回合 / 一轮 / 一拍 (a turn); 行动脑 / 行动侧 (the action brain); 用户 / 对方 / 主人 (who she
+talks to); 本机 / 本地 / 家里 (home); `ref` / `_id` / `artifact_id` / `sid` (what to copy). Each gets one word,
+listed in a glossary test like the parameter names, and the tool texts use only those.
+
+### Errors she reads
+
+Seen in her last 14 days of refusals:
+
+- Prose and a code in one message: 「这份文档不能这样改。 （DOC_OP_NOT_ALLOWED: correction 只用于活账…）」.
+- A code alone: `CLOSE_REQUIRES_OPEN`.
+- Raw platform text: `HTTP_400:{"retcode":-5503007,"retmsg":"download url has expired",…}`.
+- A machine timestamp: 「现在是 2026-10-13T01:32+13:00（周二，Pacific/Auckland）」.
+- The same 16-character aside on every length refusal: 「（标点、空格、换行和字母也各算一个字）」.
+
+The rule: one sentence for what is wrong, one for what to do; codes stay in the record, not in her text; platform
+replies are put in words; times are local and short; how length is counted is said once, in the tool text.
+
+### Checks on her words (owner, 2026-10-14)
+
+The program checks what she is about to say before it leaves. The owner's rule: keep a check only for output that
+cannot be right; drop one that could stop a correct answer, accepting a rare wrong line.
+
+| Check | Can a correct answer trip it? | Decision |
+|---|---|---|
+| Nothing written and no `stay_silent` | No | Keep |
+| Cut at the length limit | No | Keep |
+| No `think` yet | No (turn rule) | Keep |
+| A consult answered in body text, not `task` answer | No | Keep |
+| A sticker or face name she does not have; stickers where none can be sent | No (her own markup) | Keep |
+| The whole answer is a JSON object | Yes (someone asks for JSON) | Drop |
+| Program words (`_from_program`, tool names, 工具调用) | Yes (a script, a talk about tools) | Drop |
+| A line starting with a label, no @ | Yes, rarely; the name still shows | Drop |
+| `#4` where 4 is someone's number | Yes (an issue number, a rank) | Drop |
+| More than one sticker in a turn | Yes (two can be what she means; the program already sends each as its own message) | Drop the cap |
+
+### How it ships
+
+Every rewrite goes to her as before/after with its characters per brain before it is built into the install
+(her condition for this ADR); `tests/test_tool_budget.py` moves by exactly the measured change. One restart with the
+renames. Afterwards: refusals per day by cause and the argument-validation refusals, apart from the missing-`think`
+count of 2026-10-14.

@@ -985,7 +985,7 @@ def reply_receipt(queued):
     done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
     listed = '；'.join('%d %s' % (row['number'], row['shown']) for row in done)
     if len(done) == len(queued):
-        return '发出 %d 条，都排上了：%s。送没送到看下一回合的历史。' % (len(queued), listed)
+        return '发出 %d 条，%s排上了：%s。送没送到看下一回合的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
     failed = next(row for row in queued if row not in done)
     return ('发出 %d 条：%s。第 %d 条没发出去，它后面的都取消了；送没送到看下一回合的历史。'
             % (len(queued), listed or '一条都没排上', failed['number']))
@@ -1316,7 +1316,7 @@ class RoleTools:
                 elif same in texts:
                     problems.append('第 %d 条这回合已经发过一样的' % index)
                 elif lines + chat_lines(text) > most:      # lines: this turn's, earlier calls and this one so far
-                    over.append('第 %d 条有 %d 行（前面已经 %d 行）' % (index, chat_lines(text), lines))
+                    over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
                 else:
                     texts.append(same)
                     lines += chat_lines(text)

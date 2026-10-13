@@ -135,7 +135,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     assert ep['context']['faces_from_program']['seen_here'] == ['汪汪', '大怨种']
     results = [row for row in lane.tool_results if row[2] == 'sticker']
     assert [row[5] for row in results] == [True, True, True, False, False], results
-    assert 'STICKER_IS_A_PHOTO' in results[3][4] and 'STICKER_ALREADY_KEPT' in results[4][4]
+    assert '这是一张照片' in results[3][4] and 'STICKER_' not in results[3][4] + results[4][4]
     shelf = {row['name']: row for row in stickers.shelf(store, 'P1')}
     assert set(shelf) == {'摸鱼', '臭', '老图'} and shelf['臭']['kind'] == 'market' and 'artifact_id' not in shelf['臭']
     kept = store.db.artifacts.find_one({'_id': shelf['摸鱼']['artifact_id']})
@@ -268,7 +268,7 @@ def test_at_home_she_asks_for_the_pool_looks_at_a_candidate_and_keeps_it(store, 
     assert 'sticker_candidates_from_program' not in ep['context'] and ep['context'].get('stickers_from_program')
     assert {'sticker', 'read_image'} <= set(lane.calls[0]['tools'])
     results = lane.tool_results[1:]
-    assert 'op=pool' in str(results[0][4]) and not results[0][5]                  # the refusal says where the pool is
+    assert 'do=pool' in str(results[0][4]) and not results[0][5]                  # the refusal says where the pool is
     assert results[1][5] and candidate in str(results[1][4]) and '池子里 2 个' in str(results[1][4])
     assert results[2][5] and results[3][5], results
     # Her ask 2026-10-10: at home each shelf sticker with a picture carries its id, and she can look at it again.

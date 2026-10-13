@@ -109,7 +109,13 @@ EXPERIENCE_NOTE = ('真实历史片段与行动结果；每条保留来源场景
                    '说过的话，那边的情况心跳时看 places_from_program。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')
 DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感受要指向某一节时，照抄这里的 doc:… 引用。')
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
-MEMORY_SOURCE_RULES = 'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。'
+MEMORY_SOURCE_RULES = ('reported_speech 是那个人说过的话，不是核实过的事实；同一人的原话按 scene_seq 从旧到新排，'
+                       '他自己的东西、喜好和更正以他较新的明确说法为准。public_statement 只证明说过，答应不等于做到；'
+                       'character_interpretation 是你当时的理解或猜测。旧说法再出现不推翻已有的更正；旧记录是历史，再想起它不是新经历。'
+                       'derived_summary 是程序从一段原文整理的摘要：source_window 是它覆盖的 scene_seq 范围，'
+                       'source_event_ids 能回读原文；它只证明那段里说过什么，和同一人较新的明确说法冲突时以说法为准，'
+                       '要细节就回读。摘要的 who 是那段里说话的人，about_current_speaker 说明它算不算眼前这个人的话；'
+                       'corrections 和 corrected_by 是程序按真实回复算出的更正，有就以更正后的为准。人按标签分，名字会重复、会改，标签不会。')
 
 def refs(context):
     """Every id she may cite in this turn: the turn's own event, ref_index, the document sections, and the memories and
@@ -480,11 +486,9 @@ class ContextBuilder:
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
         for fact in facts:
-            # Only what she reads (ADR-060): the time once (when), no storage state, no 1-of-1 segment numbers.
+            # Only what she reads (ADR-060): no storage state, no empty source list, no 1-of-1 segment numbers.
             fact.pop('status',None)
             if not fact.get('historical_sources'):fact.pop('historical_sources',None)
-            if fact.get('when'):
-                fact.pop('occurred_at',None);fact.pop('generated_at',None)
             if fact.get('segment_count')==1:
                 fact.pop('segment_index',None);fact.pop('segment_count',None)
         facts.extend(own)

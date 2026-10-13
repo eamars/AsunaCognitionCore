@@ -200,6 +200,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 - def `name`
 - def `inject`
 - def `Config`
+- def `DSH_DEVELOPER_SECTIONS`
 - def `imagesOf` — Pictures attached to the owner's local messages (DSH keeps them in her conversation, so she sees them), read back for the program's own record: history, her action brain's read_image, an image she may send on.
 - def `pictureParts` — The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her context says read_image reaches any picture that did not appear).
 - def `stageView`

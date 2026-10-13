@@ -27,7 +27,7 @@ CORE = {'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True
         'kinds': {}, 'bands': [], 'policy': [],
         # Words a model writes, and the numbers they stand for (a model never writes or reads the numbers).
         'scale': {'val': {'轻微': 8, '明显': 20, '强烈': 40}, 'arl': {'平稳': 0, '有些波动': 15, '激动': 35}}}
-PUBLIC_MOOD_NOTE = '这份心情可能来自别的对话：不必在这里解释原因，也不要编一个理由。'
+PUBLIC_MOOD_NOTE = '这份心情可能来自别的对话，原因不一定在这里。'
 
 
 # ── pure projection ─────────────────────────────────────────────────

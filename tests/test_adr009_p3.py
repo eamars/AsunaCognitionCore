@@ -63,7 +63,7 @@ def test_T3_8_she_reads_and_writes_feelings_in_words_and_the_same_state_reads_th
     _, recorded, unknown = lane.tool_results
     assert recorded[5] and recorded[4]['event_id'] == stored['_id']
     # A word outside her table is refused back to her in words; nothing is stored for it.
-    assert not unknown[5] and 'AFFECT_INTENSITY_UNKNOWN' in unknown[4]
+    assert not unknown[5] and '不在词表里' in unknown[4]
     assert not store.db.affect_events.find_one({'why': '不在词表里'})
     from datetime import datetime, timedelta
     at = (datetime.fromisoformat(stored['ts']) + timedelta(hours=1)).isoformat()   # one fixed moment

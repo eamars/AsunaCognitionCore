@@ -203,6 +203,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`block_guide`](../../src/asuna/block_guide.py) — What her turns' blocks are for, said once in her role system prompt (ADR-056 rule 1).
 - [`render`](../../src/asuna/render.py) — Role system prompt rendering (ADR-009 §8.1).
 - [`role_tools`](../../src/asuna/role_tools.py) — Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
+- [`param_names`](../../src/asuna/param_names.py) — ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
 - [`tool_args`](../../src/asuna/tool_args.py) — What she plainly meant, before a tool checks its arguments (owner 2026-10-06).
 - [`answers`](../../src/asuna/answers.py) — Deterministic checks on a model's answer wherever the program needs one to continue (owner 2026-10-05).
 - [`publish`](../../src/asuna/publish.py) — Sends her accepted lines: `PublishService.publish` checks the turn is still current, then queues a platform line for its channel route or delivers a local-chat line with an idempotent receipt.

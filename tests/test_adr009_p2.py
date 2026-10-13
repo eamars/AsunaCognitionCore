@@ -66,8 +66,8 @@ def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_tur
     _, wrote, tagged, policy = lane.tool_results
     assert wrote[5] and tagged[5], (wrote, tagged)
     # A refused call goes back to her in words, in the same turn; the turn still speaks.
-    assert not policy[5] and 'POLICY_KEY_UNDECLARED' in policy[4]
-    assert 'POLICY_KEY_UNDECLARED' in ep['tool_calls'][policy[1]]['refused']
+    assert not policy[5] and '没有可以改的参数' in policy[4] and 'POLICY_KEY_UNDECLARED' not in policy[4]
+    assert ep['tool_calls'][policy[1]]['code'] == 'POLICY_KEY_UNDECLARED', 'the code stays in the record'
     assert [r['text'] for r in store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'})] == ['记下了。']
     # A group (public) turn may not write any document of hers.
     before = DocumentStore(store, 'P1').read('diary')[0]
@@ -75,7 +75,7 @@ def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_tur
     ep = Coordinator(store, group).ingest(event('write-group', scene='g1'))
     assert ep['state'] == 'COMMITTED' and [c['phase'] for c in group.calls] == ['TURN']
     refusal = group.tool_results[1]
-    assert not refusal[5] and 'DOC_WRITE_REQUIRES_OWNER_PRIVATE' in refusal[4] and '主人私聊' in refusal[4]
+    assert not refusal[5] and '只能在家里' in refusal[4] and '主人私聊' in refusal[4]
     assert DocumentStore(store, 'P1').read('diary')[0] == before
 
 

@@ -27,7 +27,7 @@ AREAS = {
         'native_worker', 'host', 'application', 'cli', 'config', 'native_settings', 'lanes', 'queue', 'state',
         'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
-        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'role_tools', 'tool_args',
+        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'role_tools', 'param_names', 'tool_args',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
     'people': ('Groups and people', 'Who is talking, whether she joins in, her places, notes between conversations.', [
         'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',

@@ -159,7 +159,7 @@ TOOLS = {
     },
     'attach_image': {
         'description': ('给这回合的话配一张图，随话一起发出。artifact_id 照抄 image_artifacts_from_program 里的；'
-                         '正文只写要说的话。一回合一张，再调用就换成新的那张。'),
+                         '正文只写要说的话，不写文件名、路径或「见图」。一回合一张，再调用就换成新的那张。'),
         'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s(limit=500, description='为什么发这张', required=True)},
     },
     'sticker': {
@@ -891,6 +891,11 @@ WORDS = {
 }
 
 
+def code_of(exc):
+    """The machine code of a refusal, kept in the record (ADR-060), never in her words."""
+    return getattr(exc, 'code', None) or str(exc).split(':', 1)[0].strip() or type(exc).__name__
+
+
 def words(exc):
     """A refusal in words for her (ADR-060): what is wrong and what to do. The code stays in the record (the audit
     keeps the exception); a detail in words is kept, a machine detail (a platform's raw reply, an id) is not."""
@@ -980,7 +985,7 @@ class RoleTools:
             raise
         except (Denied, Conflict, DocumentError, ValueError) as exc:
             message = words(exc)
-            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as)
+            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc))
             raise Refused(message) from None
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED.get(called_as, 'ask.ask').split('.')))}
@@ -1004,7 +1009,7 @@ class RoleTools:
         from . import local_time
         return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
 
-    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None):
+    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None):
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
         calls = dict(ep.get('tool_calls') or {})
@@ -1015,12 +1020,14 @@ class RoleTools:
                           **({'op': args.get('op')} if name in OPS and isinstance(args, dict) else {}),
                           **({'called_as': called_as} if called_as else {}),
                           **({'refused': refused} if refused else {'result': result}),
+                          **({'code': code} if code else {}),
                           **({'reason_ref': reason} if reason else {}),
                           **({'conclude': True} if conclude else {})}
         c._update(ep, tool_calls=calls)
         self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': args,
                                               **({'called_as': called_as} if called_as else {}),
                                               **({'refused': refused} if refused else {'result': result}),
+                                              **({'code': code} if code else {}),
                                               **({'reason_ref': reason} if reason else {})},
                          ep['scope_key'])
 

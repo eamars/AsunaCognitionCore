@@ -54,10 +54,10 @@ def test_a_record_is_dated_by_the_line_it_came_from(store):
     said = {'kind': 'chat_chunk', 'scope_key': scene['scope_key'], 'scene_seq': 950, 'formed_at': at(3)}
     summary = {'kind': 'dialogue_summary', 'scope_key': scene['scope_key'], 'source_window': [940, 960], 'generated_at': at(1)}
     thought = {'kind': 'monologue', 'scope_key': scene['scope_key'], 'formed_at': at(2)}
-    assert builder.when(said, zone, moment) == schedule_rules.line_stamp(zone, sent) + '（4 小时前）', \
+    assert builder.when(said, zone, moment) == schedule_rules.line_stamp(zone, sent), \
         'her own line is dated by its receipt, not by when it was indexed'
-    assert builder.when(summary, zone, moment).endswith('（26 小时前）'), 'a summary by the last line it covers'
-    assert builder.when(thought, zone, moment).endswith('（2 小时前）')
+    assert builder.when(summary, zone, moment) == schedule_rules.line_stamp(zone, at(26)), 'a summary by the last line it covers'
+    assert builder.when(thought, zone, moment) == schedule_rules.line_stamp(zone, at(2))
     assert builder.when({'kind': 'chat_chunk', 'scope_key': 'global-safe'}, zone, moment) is None
 
 

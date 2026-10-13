@@ -160,7 +160,7 @@ def test_T4_9_persona_job_run_only_for_development_tasks(store):
     row = store.db.episodes.find_one({'_id': ep['_id']})
     store.put('episodes', {**row, 'state': 'TURN', 'turn_tools': [*row['turn_tools'], 'delegate']},
               expected=row['revision'], stream=ep['_id'])
-    with pytest.raises(Refused, match='WORKSPACE_NOT_AUTHORIZED'):
+    with pytest.raises(Refused, match='没有授权的工作区'):
         coordinator.tools.call(ep['_id'], 'forced-delegate', 'delegate', {'title': '整理', 'brief': '把旧日记整理进记忆。'})
     assert not store.db.tasks.find_one({'scene_id': 'dm-b'})
     # ADR-011 §6.1: development (and with it persona jobs) comes with the owner's private chat only while

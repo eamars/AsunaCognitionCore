@@ -851,6 +851,13 @@ def call_tool(store, ep, args, tools=None, name='attach_image'):
     return outcome + (store.db.episodes.find_one({'_id': ep['_id']}),)
 
 
+def code(after):
+    """The code of the last refused call, which the record keeps (her words do not carry it, ADR-060)."""
+    calls = sorted((after.get('tool_calls') or {}).values(), key=lambda call: call.get('seq', 0))
+    refused = [call for call in calls if call.get('refused')]
+    return refused[-1].get('code') if refused else None
+
+
 def attach(store, ep, artifact_id, tools=None):
     return call_tool(store, ep, {'artifact_id': artifact_id, 'why': '给他看这张'}, tools)
 
@@ -895,7 +902,7 @@ def attach_image_refuses_artifact_not_offered_this_turn():
     offered['items'] = [item for item in offered['items'] if item['artifact_id'] != elsewhere['artifact_id']]
     ep = turn_ep(store, context={'image_artifacts_from_program': offered})
     outcome, said, after = attach(store, ep, elsewhere['artifact_id'])
-    assert outcome == 'refused' and 'ATTACH_ARTIFACT_NOT_IN_CONTEXT' in said, said
+    assert outcome == 'refused' and code(after) == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
     assert 'image_artifacts_from_program' in said, '退回的话没告诉她该从哪里抄 artifact_id'
     assert 'attachment' not in after and outbound_media.attachment_for_speak(after) is None
     assert [row.get('refused') for row in after['tool_calls'].values()] == [said]
@@ -913,7 +920,7 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
     forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']}], 'note': ''}}
     group_ep2 = turn_ep(store, kind='group', session='public', context=forged, ep_id='ep-turn-2')
     outcome, said, after = attach(store, group_ep2, stored['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome == 'refused' and 'ATTACHMENT_NOT_HER_OWN' in said and 'attachment' not in after, said
+    assert outcome == 'refused' and code(after) == 'ATTACHMENT_NOT_HER_OWN' and 'attachment' not in after, said
     # 她自己做出来的图（从她的生成端点导入、登记在她私聊那边）可以随话发到群里
     store.db.scenes.insert_one(scene_row('dm'))
     made = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
@@ -944,7 +951,7 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
     public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
         'image_artifacts_from_program': {'items': [{'artifact_id': stored2['artifact_id']}], 'note': ''}})
     outcome2, said2, after2 = attach(store2, public_ep2, stored2['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome2 == 'refused' and 'ATTACHMENT_NOT_HER_OWN' in said2 and 'attachment' not in after2, said2
+    assert outcome2 == 'refused' and code(after2) == 'ATTACHMENT_NOT_HER_OWN' and 'attachment' not in after2, said2
     # 别人的私聊也能发她自己做的图（owner 2026-10-06），别人的图照样不发
     made2 = BlobStore(store2).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
                                   source_ids=['integration:image:/made2.jpg'])
@@ -962,7 +969,7 @@ def attach_image_refuses_non_image_and_oversize_bytes():
     assert texty['artifact_id'] in [item['artifact_id'] for item in
                                     ep['context']['image_artifacts_from_program']['items']], ep['context']
     outcome, said, after = attach(store, ep, texty['artifact_id'])
-    assert outcome == 'refused' and 'ATTACHMENT_NOT_AN_IMAGE' in said and 'attachment' not in after, said
+    assert outcome == 'refused' and code(after) == 'ATTACHMENT_NOT_AN_IMAGE' and 'attachment' not in after, said
 
     big = {'_id': 'blob-big', 'scope_key': DM_SCOPE, 'state': 'DONE', 'kind': 'image',
            'storage': 'gridfs', 'gridfs_id': '0' * 24, 'sha256': '1' * 64,
@@ -1020,7 +1027,7 @@ def a_speaking_turn_carries_the_picture_on_its_speak_row():
     rows2 = speak_rows(store2, ep2)
     assert done2['state'] == 'COMMITTED' and [row['text'] for row in rows2] == ['这张我找不到了'], done2['state']
     assert 'attachment' not in rows2[0], rows2[0]
-    assert lane2.tool_results[1][5] is False and 'ATTACH_ARTIFACT_NOT_IN_CONTEXT' in lane2.tool_results[1][4]
+    assert lane2.tool_results[1][5] is False and code(store2.db.episodes.find_one({'_id': ep2['_id']})) == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT'
     return True, 'think → attach_image → 正文：SPEAK 行带元数据；被退回时只发文字，行上没有 attachment'
 
 
@@ -1189,13 +1196,12 @@ def blobstore_get_predicate_not_loosened():
 
 @case
 def prompts_say_no_file_paths_and_only_listed_artifacts():
-    turn = io.open(os.path.join(SRC, 'asuna', 'resources', 'prompts', 'turn.md'), encoding='utf-8').read()
     tool = role_tools.TOOLS['attach_image']['description']
     assert 'artifact_id' in tool and 'image_artifacts_from_program' in tool, tool
     assert '文件名' in tool and '路径' in tool and '见图' in tool, tool
     assert '不是文件路径' in outbound_media.OFFER_NOTE and 'attach_image' in outbound_media.OFFER_NOTE
     assert '私聊' in role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED'], role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED']
-    assert '文件路径' in turn and '见图' in turn
+    # Said once, in the tool's own text (ADR-060), not again in her turn instruction.
     return True, 'attach_image 说明只能引用程序给出的 artifact、正文不写路径／见图；群里退回时说明只有私聊能带'
 
 
@@ -1337,7 +1343,7 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
     ep = turn_ep(store, context={'image_artifacts_from_program': {
         'items': [{'artifact_id': art['artifact_id']}], 'note': ''}})
     outcome, said, after = attach(store, ep, art['artifact_id'])
-    assert outcome == 'refused' and 'ATTACHMENT_SCOPE_DENIED' in said and 'attachment' not in after, said
+    assert outcome == 'refused' and code(after) == 'ATTACHMENT_SCOPE_DENIED' and 'attachment' not in after, said
     return True, '只有同一 canonical person 的另一个 owner_private dm 场景可引用；群／别人／没联动都拒绝'
 
 

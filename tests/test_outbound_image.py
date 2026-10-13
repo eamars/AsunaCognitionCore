@@ -121,8 +121,10 @@ def forced_attach(store, coordinator, ep, attach):
               expected=row['revision'], stream=ep['_id'])
     with pytest.raises(Refused) as refused:
         coordinator.tools.call(ep['_id'], 'forced-attach', 'attach_image', attach)
-    assert not store.db.episodes.find_one({'_id': ep['_id']}).get('attachment')
-    return refusal_code(str(refused.value))
+    row = store.db.episodes.find_one({'_id': ep['_id']})
+    assert not row.get('attachment')
+    # Her words carry no code (ADR-060); the record keeps it.
+    return row['tool_calls']['forced-attach'].get('code'), str(refused.value)
 
 
 def bridge(store):
@@ -234,7 +236,7 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     # 在离线套件里逐条覆盖：python3 tools/outbound_image_offline_check.py
     assert outbound_media.offer(store, store.config, store.db.scenes.find_one({'_id': QQ}),
                                 'owner_private', 'A') is None
-    assert refused_turn(key='nolink') == {'ATTACH_ARTIFACT_NOT_IN_CONTEXT': art['artifact_id']}
+    assert refused_turn(key='nolink')[0] == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT'
 
     # 群：她自己做出来的图（从她的生成端点导入的）可以随话发进她在的群，她自己挑（owner 2026-10-05）
     channel_scene(store, GROUP, person='A', target='group')
@@ -256,7 +258,8 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     # 主人自己的 dm 场景却把路由目标配成群：确定性撞 target_not_dm（配置错了也不静默发）
     channel_scene(store, QQ, person='A', target='group', kind='dm')
     link(store, QQ, LOCAL)
-    assert refused_turn(key='misroute', target='group') == {'ATTACH_TARGET_NOT_ALLOWED': role_tools.ATTACH_REASONS['target_not_dm'] + '；重试也一样，这回合只说话不带图'}
+    code, said = refused_turn(key='misroute', target='group')
+    assert code == 'ATTACH_TARGET_NOT_ALLOWED' and role_tools.ATTACH_REASONS['target_not_dm'] in said
 
 
 def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_path):

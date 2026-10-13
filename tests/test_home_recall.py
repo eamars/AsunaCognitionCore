@@ -43,7 +43,7 @@ def test_home_recall_names_the_group_and_the_time(store, retrieval):
     home = store.db.scenes.find_one({'_id': 'dm-a'})
     [item] = context.own_thoughts_elsewhere(home, '开源项目')
     assert item['_id'] == 'thought-g1' and item['thought'].startswith('群里有人提到')
-    assert item['where'] and 'g1' not in item['where'] and '小时前' in item['when']
+    assert item['where'] and 'g1' not in item['where'] and item['when'] and '小时前' not in item['when']
 
 
 def test_the_recall_tool_adds_them_at_home_only(store, retrieval):

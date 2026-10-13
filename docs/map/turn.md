@@ -58,7 +58,7 @@ Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene
   - `recent_thoughts` — Her last thoughts here, each with when she had it on her clock face: a stamp, not "how long ago", which would change the block every turn with nothing new in it.
   - `own_thoughts_elsewhere` — At home, what she herself thought in her groups about this (her monologue there, never their talk): each with the group's name and the time she thought it.
   - `said_at` — When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line.
-  - `when` — A recalled record's time as her history lines show it, and how long ago: '10/11 19:16（3 小时前）'.
+  - `when` — A recalled record's time as her history lines show it: '10/11 19:16'.
   - `prepare` — `turn_kind`: a recall's own turn kind, for the shadow pilot's row only.
 
 ## `context_budget`
@@ -139,7 +139,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `offered_pictures` — The artifact ids her turn may send (image_artifacts_from_program): she may also look at them.
 - def `her_pictures` — Whether she can look at a picture this turn: her own route takes images and the conversation's recent pictures (the same window read_image reads) include one that can be pulled.
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
-- def `words`
+- def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words.
+- def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
   - `tool_think`
@@ -188,6 +189,16 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `read_sections` — recall with sections: readable section text, and what could not be read (in words).
 - def `promote` — Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources.
 
+## `param_names`
+
+[src/asuna/param_names.py](../../src/asuna/param_names.py)
+
+ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
+
+- def `names` — {shown: handler's} for a tool.
+- def `inbound` — (arguments under the handler's names, notes for each old name she used).
+- def `shown` — A tool's parameters as the model is shown them: new names, yes/no as words.
+
 ## `tool_args`
 
 [src/asuna/tool_args.py](../../src/asuna/tool_args.py)
@@ -210,7 +221,7 @@ Deterministic checks on a model's answer wherever the program needs one to conti
 - def `ask` — Run `generate(attempt, note)` until its answer passes; returns (value, shaped).
 - def `json_object` — Parse one JSON object, with the parser's own position when it is not one.
 - def `json_list`
-- def `speech_problem` — What is wrong with the end of a turn, in words for her; None when it can be said.
+- def `speech_problem` — What makes the end of a turn impossible to send, in words for her; None when it can be said.
 - def `turn_note` — The program's words back to her, in the same turn.
 
 ## `publish`

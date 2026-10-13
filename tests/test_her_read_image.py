@@ -55,7 +55,7 @@ def test_at_home_the_tool_is_there_without_a_picture_and_an_unknown_ref_is_refus
     coordinator = Coordinator(store, lane)
     ep = coordinator.ingest({'event_id': 'm2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
     assert 'read_image' in ep['turn_tools'], 'at home a ref from any of her conversations can be read'
-    with pytest.raises(Refused, match='IMAGE_ATTACHMENT_NOT_IN_SCENE: att-unknownpicture 不在你所有对话最近 7 天的图里：超过 7 天的图 ref 找不回') as refused:
+    with pytest.raises(Refused, match='att-unknownpicture 不在你所有对话最近 7 天的图里：超过 7 天的图 ref 找不回') as refused:
         coordinator.tools.call(ep['_id'], 'x', 'read_image', {'ref': 'att-unknownpicture'})
     assert '最近 50 条' not in str(refused.value), 'at home the search covered all her conversations, not this one'
 
@@ -198,7 +198,7 @@ def test_a_group_turn_refuses_a_disk_path_and_says_what_to_do_instead(store, tmp
         read_image_for_task(store, BlobStore(store), task_in('scene:g1'), store.config, {'ref': str(picture_file)},
                             route='character', session_class=cls)
     said = words(refused.value)
-    assert 'IMAGE_PATH_HOME_ONLY' in said and '家里' in said, said
+    assert 'IMAGE_PATH_HOME_ONLY' not in said and '按路径读图只在家里' in said, said
     # 群里的 read_image 本身没有被收掉：消息里的图照旧走 att- 那条路（这里只是没有那样的消息）。
     with pytest.raises(ValueError, match='IMAGE_ATTACHMENT_NOT_IN_SCENE'):
         read_image_for_task(store, BlobStore(store), task_in('scene:g1'), store.config, {'ref': 'att-000000000000'},

@@ -74,7 +74,7 @@ def test_a_home_task_runs_one_command_with_the_credential_and_never_sees_it(stor
 
 def test_the_vault_tool_is_offered_at_home_only(store):
     words = role_tools.TOOLS['credential']['description']
-    assert '不要写值' in words and 'sandbox_run' in words
+    assert '值只在 keep 这一次写' in words and 'sandbox_run' in words
     turn = lambda cls, kind='external': role_tools.exposed(store, {
         '_id': 'ep-x', 'scene_id': store.config['chat']['scene_id'], 'person_id': store.config['chat']['person_id'],
         'episode_kind': kind, 'manifest': {'session_class': cls}, 'context': {}})

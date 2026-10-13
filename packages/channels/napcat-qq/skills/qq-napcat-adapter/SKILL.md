@@ -137,7 +137,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.7.1（2026-10-08，ADR-024）：成员名单（上一条）。新增 `qqadapter/members.py`、`HostApi.post_members`、`members_*` 计数；入站、出站、回执不变。
 - 0.7.2（2026-10-13）：她自己的禁言（权限与边界里那条）。新增 `qqadapter/mutes.py`、`HostApi.post_own_mute`、`outbound.platform_muted`、`mutes_*` 计数；其余通知、入站、出站不变。
 - 0.8.0（2026-10-13，ADR-064 第一阶段）：通知（权限与边界里那条）。新增 `qqadapter/notices.py`、`HostApi.post_notice`、请求的回答；关于她自己禁言的通知仍走 `mutes.py`。
-- 0.9.0（2026-10-14，ADR-064 第二阶段）：她的 reply。出站一项带 `action` 时只做那个动作、不发消息：`poke` 群里 `group_poke`（`group_id`、`user_id`），私聊 `friend_poke`（`user_id`）；`react` 是 `set_msg_emoji_like`（`message_id`、`emoji_id`、`set: true`）。回执只看 `retcode`（0 才算做了），不带消息 id；流水记在 `actions.jsonl`。开机在身份核对之后问 NapCat 一次 `get_packet_status`（空参数）：`retcode` 是 0 才在领取时声明 `poke`，`react` 一直声明；日志一行 `CAPABILITIES image,sticker,react[,poke]`，那次调用出错记 `PACKET_STATUS_UNKNOWN`。带图的一项可以没有字（她 reply 里单发的图）。
+- 0.9.0（2026-10-14，ADR-064 第二阶段）：她的 reply。出站一项带 `action` 时只做那个动作、不发消息：`poke` 群里 `group_poke`（`group_id`、`user_id`），私聊 `friend_poke`（`user_id`）；`react` 是 `set_msg_emoji_like`（`message_id`、`emoji_id`、`set: true`）。回执只看 `retcode`（0 才算做了），不带消息 id；流水记在 `actions.jsonl`。开机在身份核对之后问 NapCat 一次 `get_packet_status`（空参数）：`retcode` 是 0 才在领取时声明 `poke`，`react` 一直声明；日志一行 `CAPABILITIES image,sticker,react[,poke] packet_status_retcode=…`（不认这个动作的 NapCat 回非 0），那次调用出错记 `PACKET_STATUS_UNKNOWN`。带图的一项可以没有字（她 reply 里单发的图）。
 
 ## 试用记录
 

@@ -353,14 +353,16 @@ class Adapter:
     # ---- what this NapCat can do for her reply (ADR-064 phase 2) --------
     def find_capabilities(self):
         """Pictures, stickers and reactions always; a poke only when NapCat's packet backend answers."""
-        caps = list(CAPABILITIES) + ["react"]
+        caps, retcode = list(CAPABILITIES) + ["react"], None
         try:
             resp = self.onebot.api_call("get_packet_status", {}, timeout=5, meta={"probe": "packet_status"})
-            if isinstance(resp, dict) and resp.get("retcode") == 0:
+            retcode = resp.get("retcode") if isinstance(resp, dict) else "unparsed"
+            if retcode == 0:
                 caps.append("poke")
         except Exception as exc:
             self.log("PACKET_STATUS_UNKNOWN type=%s" % type(exc).__name__)
-        self.log("CAPABILITIES %s" % ",".join(caps))
+        # the answer's own code, so a NapCat that does not know the action is told from one whose backend is off
+        self.log("CAPABILITIES %s packet_status_retcode=%s" % (",".join(caps), retcode))
         return caps
 
     # ---- identity -------------------------------------------------------

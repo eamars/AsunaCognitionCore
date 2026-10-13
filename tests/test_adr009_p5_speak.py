@@ -182,7 +182,7 @@ def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeyp
     _, ep, lane = turn(store, calls=[said(two), said('第三行', '第四行'), said(code)])
     results = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
     assert results[0][1], 'a blank line is not a line'
-    assert not results[1][1] and '已经 3 行，第 2 条有 1 行' in results[1][0], 'two lines in one message count as two'
+    assert not results[1][1] and '第 2 条有 1 行（前面已经 3 行）' in results[1][0], 'two lines in one message count as two'
     assert not results[2][1], 'a code block is one line, its words another: over 3'
     assert [r['text'] for r in outbound(store, ep['_id'])] == [two]
 

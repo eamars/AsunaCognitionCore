@@ -1293,7 +1293,7 @@ class RoleTools:
         before = ep.get('reply') or {}
         texts = list(before.get('texts') or [])
         lines = int(before.get('lines') or 0)
-        problems, planned = [], []
+        problems, planned, over = [], [], []
         for index, part in enumerate(parts, 1):
             part = part if isinstance(part, dict) else {}
             kind = part.get('kind')
@@ -1316,8 +1316,7 @@ class RoleTools:
                 elif same in texts:
                     problems.append('第 %d 条这回合已经发过一样的' % index)
                 elif lines + chat_lines(text) > most:      # lines: this turn's, earlier calls and this one so far
-                    problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行），'
-                                    '已经 %d 行，第 %d 条有 %d 行' % (most, lines, index, chat_lines(text)))
+                    over.append('第 %d 条有 %d 行（前面已经 %d 行）' % (index, chat_lines(text), lines))
                 else:
                     texts.append(same)
                     lines += chat_lines(text)
@@ -1358,6 +1357,9 @@ class RoleTools:
             problems.append('patience 只跟 wait=question 一起用，写 %s 之一' % '、'.join(questions.GROUP_PATIENCE))
         if wait == 'question' and not any(row['kind'] == 'text' for row in planned):
             problems.append('wait=question 要有一个 text 写问题')
+        if over:
+            problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行）：%s'
+                            % (most, '；'.join(over)))
         if problems:
             raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems))
         changes = {}

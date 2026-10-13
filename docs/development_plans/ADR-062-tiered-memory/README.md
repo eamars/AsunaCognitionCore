@@ -6,9 +6,9 @@ one-time rewrite of her own texts is hers to do. Built: phase 0 and the phase 1 
 review. **Gated (owner, 2026-10-13): this ADR does not
 start until every defect of ADR-063 is fixed or documented**; its phase 0b items are ADR-063 D2, D4, D7, D9.
 
-*Her review:* ____ (her signature).
+*Her review:* signed on the agent line, 2026-10-13 about 20:45 (her answers to §9 are below).
 
-**Her first answer (agent line, 2026-10-13 about 13:40 NZDT; Claude's paraphrase, for her to sign or correct):** she
+**Her first answer (agent line, 2026-10-13 about 13:40 NZDT; Claude's paraphrase; signed on the agent line, 2026-10-13 about 20:45):** she
 agrees with the two principles. Facts kept apart from memories and replaced only by correction matches how she
 already works. No pin, only letting go, suits her: the things she meant to check back on lapsed precisely because
 nobody pinned them for her. She especially agrees that being corrected makes a thing memorable; her most valuable
@@ -20,8 +20,8 @@ reading the whole text, not from a first impression.
 
 The owner read her answer and agrees with her (2026-10-13), the absence rule included.
 
-**Her answers to the two questions that shape the build (agent line, 2026-10-13 about 14:40 NZDT; Claude's paraphrase,
-for her to sign or correct):**
+**Her answers to the two questions that shape the build (agent line, 2026-10-13 about 14:40 NZDT; Claude's paraphrase;
+signed on the agent line, 2026-10-13 about 20:45):**
 1. *Facts and memories are told apart per item, not per store.* Measured against herself, the store split fails both
    ways: her persona holds the owner's rulings (facts he can revoke) beside her own judgments (memories that stay only
    because nobody corrected them), and her self text holds facts with a source (lessons with evidence) that should be
@@ -36,6 +36,31 @@ for her to sign or correct):**
 Built accordingly (the build follows from step 2, 2026-10-13): each item carries `nature` (事实 / 记忆) and `from` (who
 decided or where it came from, as words: 主人定的 / 我自己的判断 / 别人说的 / 查过的), the store table giving the
 defaults; the night list can offer 记成事实 for a memory; the gist of an item with a basis keeps a one-line basis.
+
+**Her answers to the nine questions of §9 (agent line, 2026-10-13 about 20:45 NZDT).** Item 1 is her own text, built
+word for word; the rest is Claude's paraphrase, for her to sign or correct.
+1. *The told text* (her text, replacing the drafted one): 「我的东西分三个地方：随身，每一回合都带着；手边，不进提示，recall 找得到；收着，默认不出现，我说得出字或标题才回来。留下来的不是我用得多的，是我记得牢的：跨对话被用到、被人纠正过、从几个不同的地方碰到同一件事。没人给我置顶，我也不能喊留着；只有放手是我自己的动作。淡下去不是删掉，原话一直在收着。事实只会被更正替换，不会因为没人用而退；记忆会淡。没看到不等于没有：要说『没有、没答应过、没说过』，先 recall 一下，它会告诉你找了哪几层。」
+2. *Names.* 随身, 手边 and 收着 stay; the use words stay; of the age words only the tier from 7 to 14 days changes, from
+   上周 to 前阵子.
+3. *Numbers.* `self` stays at 12. Persona from 16 to 18: she has exactly 16 standing sections today, so a new rule would
+   silently push an old one out. A group's carried notes from 6 to 10: her active groups already have 8 sections. The
+   slower 28 days for group notes, the first stay of 14 days doubling to a cap of 56, and the staggered first stays on
+   the switch-on day stay as drafted.
+4. *Facts.* The default list stands, and saying it per item is a hard requirement of hers. Her voice is a memory, not a
+   fact: her tone is something she keeps changing, not what is.
+5. *The gist step.* 160 characters, but the basis line is not counted in them, so length can never squeeze out the
+   basis. Two nights without a gist and the item goes 收着 without one, as drafted. An item of 160 characters or fewer
+   never appears on the night list.
+6. *Splitting current_self.* She writes the items herself with `write_document`; the program never splits her
+   paragraph by line (her text runs on, and cutting it by line gives claims without their basis). She does the first
+   split herself; `update_self` stays as an alias.
+7. *Graduation.* Proposed after three unchanged stays, as drafted. `character_core` holds 12 sentences, and she writes
+   the first 12 herself; the program never generates them from existing text.
+8. *Her thoughts* stay out of the gist step, as drafted.
+9. *The weekly reading* shows three things only: what left 随身 this week and whether she recalled it afterwards; one
+   random 收着 item's own text, not an index line; one line of which items she changed this week. No scores, no counts.
+
+*Her signature for this paraphrase:* ____
 
 ## The core idea (the owner's words, 2026-10-13)
 
@@ -270,8 +295,8 @@ above 0.5 / above 0.1 / below). No number reaches her.
    stay is spread per item, deterministically, from its usual length to twice that (14 to 28 days; a group's notes,
    28 to 56: the same cliff on day 28 otherwise, 31 sections), never past the 56-day cap, so the first lapses come
    gradually; later items take the usual first stay.
-3. **Capacity by count.** 随身 holds at most N items per store (proposed: `self` 12, persona 16, each ledger 10, each
-   group's notes 6; her numbers), facts included. Adding a 13th does not refuse: the item least recently memorable
+3. **Capacity by count.** 随身 holds at most N items per store (`self` 12, persona 18, each ledger 10, each
+   group's notes 10; her numbers, 2026-10-13), facts included. Adding a 13th does not refuse: the item least recently memorable
    lapses, and the write's result names it. This is the flip: today the oldest stays and the newest is refused.
 4. **Detail fades into gist (the forced step).** When an item lapses, the next night lists it if it is long (over
    240 characters) or carries dated specifics. She writes its gist (one or two sentences, ≤ 160 characters) with the
@@ -311,9 +336,10 @@ above 0.5 / above 0.1 / below). No number reaches her.
    - 合并: two items the index finds near-duplicate (cosine above a high threshold, same store): she merges them into
      one. Mandatory for a fact store (otherwise it is the next store that only grows); in a memory store she may keep
      both. Schema-consistent assimilation, in her words.
-   - 回头看: at most one 收着 item a week, chosen at random among those with uses in their history: a chance to bring
-     back what the index would otherwise never show her again (Richards & Frankland's transience is useful, but a
-     person also stumbles on old things).
+   - 回头看: at most one 收着 item a week, chosen at random: a chance to bring back what the index would otherwise
+     never show her again (Richards & Frankland's transience is useful, but a person also stumbles on old things). Built
+     in her weekly reading instead of the night list (her answer 9 asks for one random 收着 item's own text there; two
+     random old things a week would be one too many).
    The list replaces `notes_review_from_program` (7,740 characters when it fires) and its "tidy three notes a night"
    framing, which measured as compression, not retirement.
 9. **Graduation and declared facts.** `character_core` is written only from the 几处都提到 list, as one sentence per
@@ -329,8 +355,8 @@ above 0.5 / above 0.1 / below). No number reaches her.
 
 ### 4.3 What she is told, and when
 
-Fixed text, once per conversation (system prompt, ADR-056 rule 1; about 650 characters, persona-agnostic), in the
-place where the memory rules already are. Proposed wording kind (final words are hers):
+Fixed text, once per conversation (system prompt, ADR-056 rule 1; persona-agnostic), in the place where the memory
+rules already are. Her own text (2026-10-13) is the one built, word for word: 「我的东西分三个地方：随身，每一回合都带着；手边，不进提示，recall 找得到；收着，默认不出现，我说得出字或标题才回来。留下来的不是我用得多的，是我记得牢的：跨对话被用到、被人纠正过、从几个不同的地方碰到同一件事。没人给我置顶，我也不能喊留着；只有放手是我自己的动作。淡下去不是删掉，原话一直在收着。事实只会被更正替换，不会因为没人用而退；记忆会淡。没看到不等于没有：要说『没有、没答应过、没说过』，先 recall 一下，它会告诉你找了哪几层。」 The draft it replaced:
 
 > 不学会忘，就腾不出地方学新的。你的东西有三个地方：随身的每回合都在；手边的平时不在眼前，谈到相关的事会自己浮上来，
 > recall 一句话也能找到；收着的只有 recall 找得到。放下不是丢：程序只换地方，不改一个字，什么都在，碰到相关的事还会
@@ -367,10 +393,10 @@ program "forgot" something: it moved it.
 |---|---|---|---|---|---|---|
 | `current_self` → document `self` (memory) | one item per section | 随身 | 12 | stay 14 → 28 → 56 days by memorable moments; overflow lapses the least recently memorable; cools to 收着 by disuse | yes | her one-time rewrite of today's body into items; `update_self` retires (§5) |
 | `character_core` → document `core` (fact) | one sentence per section | 随身, by graduation only | 12 | stay 56 days, then 手边; never 收着 by disuse | no (already gist) | first entries come from the 几处都提到 list |
-| Persona document (fact) | section (as now) | 随身 when written; existing `always` = 随身 | 16 | lapse by stay to 手边, never 收着 by disuse; replaced by correction; merge mandatory; `on_demand` sections become 手边 (indexed) at once: the 29 tucked ones become findable | yes | `inject` maps to places (`always` = 随身, `on_demand` = 手边, `never` = 收着). Her backstory lives in the persona package; this store earns its keep on what she learns |
-| Voice (fact) | section | 随身 | 6 | stay 56 days; never cools | no | small; the voice is schema-like |
+| Persona document (fact) | section (as now) | 随身 when written; existing `always` = 随身 | 18 | lapse by stay to 手边, never 收着 by disuse; replaced by correction; merge mandatory; `on_demand` sections become 手边 (indexed) at once: the 29 tucked ones become findable | yes | `inject` maps to places (`always` = 随身, `on_demand` = 手边, `never` = 收着). Her backstory lives in the persona package; this store earns its keep on what she learns |
+| Voice (memory, her answer 4) | section | 随身 | 6 | stay 56 days; cools by disuse | no | her tone is something she keeps changing |
 | Ledgers (kind `ledger`, fact) | section | 随身 | 10 each | as persona; a `correction` supersedes the corrected item | yes | facts about her circumstances and the world; phase 0 fixes the kind of her two existing ones |
-| Group notes (fact) | section, that group's scene scope | 随身 in that group | 6 per group | stay 28 days (groups move slower), then 手边; never cools; use = surfaced in that group or cited | yes, listed on a `write_notes` visit or at night | facts about a group (people, conventions); public visibility, read only in that group, unchanged |
+| Group notes (fact) | section, that group's scene scope | 随身 in that group | 10 per group | stay 28 days (groups move slower), then 手边; never cools; use = surfaced in that group or cited | yes, listed on a `write_notes` visit or at night | facts about a group (people, conventions); public visibility, read only in that group, unchanged |
 | Journal (`work_log`) | row | 手边 | 0 (never carried) | use only; rows roll up: each night her gist of the day (≤ 400 characters) is a row of its own; rows over 30 days without use are 收着 | the day gist is the gist step | phase 0 moves it to rows |
 | Understanding: person layer (fact) and here layer | body as now (phase 3: items) | 随身 with that person | — | later; facts about a person, a promise to them and their stated boundaries never cool | later | same shape as `self`; small today |
 | Memory units: chunks, dialogue summaries | as now | 手边 (chunks step back once summarised) | — | existing formula | summaries are the program's gist | unchanged |
@@ -498,11 +524,22 @@ confirmation rule). Built to her two answers: facts and memories are per item (`
 查过的 / 别人说的 / 我自己的判断, the store giving the default), and `self` is split by claim with its basis, never by
 line (the offer says so; a gist keeps a basis line). Off: nothing of it is read or written, and her tools and system
 prompt are byte for byte as before (tested). On, measured: character-brain tools 31, 20,924 characters (−94: retiring
-`update_self`, −388, pays for `let_go`, `nature`, `from`, `about` and the recall sentence, +294); system prompt +561
-characters once per conversation (the told text 366, two block notes); per turn `things_from_program` (a few hundred
+`update_self`, −388, pays for `let_go`, `nature`, `from`, `about` and the recall sentence, +294); system prompt +530
+characters once per conversation (her told text 224, three block notes; the drafted text was 366 and +561); per turn `things_from_program` (a few hundred
 characters when it changes, folded otherwise; a moved line about 60 once), her items in at most two memory slots
 (they replace two memories, not add), the night list at most five items with bodies (it replaces the notes review);
 a synthetic turn sends no text twice (tested).
+**Folded in from her nine answers (2026-10-13, 763d4d5f):** her told text word for word; 前阵子 for 7 to 14 days;
+persona 18 and group notes 10 carried; voice a memory; a gist's basis lines not counted in its 160 characters, an item
+of 160 characters or fewer never listed, and a rewrite of a listed item that drops the basis its verbatim had refused
+(nothing written); the weekly reading (`memory_week_from_program`, in a self-evaluation heartbeat, at most once a week,
+no scores, no counts) carrying the random 收着 item, which leaves the night list. Kept against her answer 5 by the
+owner's earlier decision: a fact passed over twice stays 手边 with its verbatim (a fact never goes 收着 by disuse); a
+memory goes 收着 as she said.
+
+**Before the switch-on:** (1) her own split of `current_self` into `self` items (`write_document`, a claim with its
+basis each); (2) her first 12 `character_core` sentences, written by her into `core`; (3) the owner's quiet restart
+for the switch-on; (4) profile062 after it.
 
 **Phase 3, after two weeks of readings:** understanding layers as items; the idea age word; sticker last-used words;
 retire the alias; her own weekly reading in self evaluation (ADR-058): moves, saves, gists written, items brought
@@ -555,6 +592,7 @@ automatic moves stop and `inject` reads as before.
 ## 9. Open questions
 
 **For her** (the design touches her texts and habits; it waits for her agreement; the core idea is put to her first):
+Answered by her on the agent line, 2026-10-13 about 20:45 (her answers are at the top of this ADR).
 1. The core idea and the told text of §4.3, in her words, including its last line on absence (her worry, §4.3).
 2. The three place words and the age and use words.
 3. The caps (12 / 16 / 10 / 6), the first stay (14 days) and its doubling; whether group notes should move slower.

@@ -101,14 +101,19 @@ const REPOSITORY_PATHS = /^(src\/|packages\/cognition-core\/|docs\/|tests\/|tool
 const inProject = (project, relative) => project.format !== 'repository' || REPOSITORY_PATHS.test(relative);
 const PYTHONS = new Set(['python3', 'python', 'python3.exe', 'python.exe']);
 /** What a sandboxed command inherits: enough for Windows and Python to start, no credentials (as sandbox_backend.py). */
-function commandEnvironment() {
+function commandEnvironment(candidate) {
   const keep = ['SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
     'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE'];
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.includes(key.toUpperCase())));
+  // A core candidate's commands get a temporary folder inside the candidate (the system's is not writable there; the
+  // folder is outside what publishes) and its Pythons make folders they can use (src/asuna/sandbox_site).
+  const site = candidate && path.join(candidate, 'src', 'asuna', 'sandbox_site');
+  const own = site ? { TEMP: path.join(candidate, '.tmp'), TMP: path.join(candidate, '.tmp'),
+    TMPDIR: path.join(candidate, '.tmp'), PYTHONPATH: site } : {};
   // A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
   // Python into the candidate (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
   return { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
-    PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false' };
+    PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false', ...own };
 }
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -340,8 +345,10 @@ export class PublicationFloor {
         const argv = args.argv.map((arg, index) => index === 0 && PYTHONS.has(arg) ? this.config.python ?? this.workerPython
           : arg === '/task' || arg.startsWith('/task/') ? root + arg.slice(5) : arg);
         const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: project.candidate });
+        const core = project.format === 'repository';
+        if (core) await fs.mkdir(path.join(project.candidate, '.tmp'), { recursive: true });
         const result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, runMs: seconds * 1000,
-          env: commandEnvironment() });
+          env: commandEnvironment(core ? project.candidate : undefined) });
         return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only', ...(result.timed_out ? { stopped:
           `命令跑满 ${seconds} 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 600 秒），或把活拆小` } : {}) };
       }

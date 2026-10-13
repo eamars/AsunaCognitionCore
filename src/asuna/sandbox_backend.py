@@ -10,6 +10,8 @@ tools a task is given (coordinator._grants). Backends:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 BACKENDS = ('auto', 'none')
 _CONFINE = {'call': None}
 
@@ -64,8 +66,13 @@ def confine(config, argv, root):
     return wrapped
 
 
-def environment(extra=None):
-    """What a confined command inherits: enough for Windows and Python to start, no credentials."""
+SITE = Path(__file__).with_name('sandbox_site')   # sitecustomize for the Pythons a confined command starts
+TEMP_FOLDER = '.tmp'                             # inside the command's own folder: the only place it may write
+
+
+def environment(extra=None, cwd=None):
+    """What a confined command inherits: enough for Windows and Python to start, no credentials. Its temporary folder
+    is one inside its own folder (the system's is not writable there), and its Pythons make folders it can use."""
     import os
     keep = ('SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
             'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE')
@@ -75,7 +82,11 @@ def environment(extra=None):
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                PYTHON_MANAGER_AUTOMATIC_INSTALL='false',
                # Nobody can answer a prompt here: git fails at once instead of waiting out the command's time.
-               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never')
+               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE))
+    if cwd is not None:
+        temp = Path(cwd) / TEMP_FOLDER
+        temp.mkdir(parents=True, exist_ok=True)
+        env.update(TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp))
     env.update(extra or {})
     return env
 

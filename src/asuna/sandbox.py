@@ -109,7 +109,7 @@ class Sandbox:
 def run_bounded(command, cwd, timeout, *, stdin=None, env=None, limit=OUTPUT_LIMIT):
     """Run a wrapped command: its output capped, its time bounded, stdin never the worker's own (the Host's request
     pipe). Killing the wrapper ends the confined command (DSH's runner holds it in a kill-on-close job)."""
-    process = subprocess.Popen(command, cwd=str(cwd), env=sandbox_backend.environment(env),
+    process = subprocess.Popen(command, cwd=str(cwd), env=sandbox_backend.environment(env, cwd),
                                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     buffers, state = [bytearray(), bytearray()], {'limit': False}

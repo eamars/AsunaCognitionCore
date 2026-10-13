@@ -33,6 +33,7 @@ Stable entry: native Web and repair tools boot without importing Python code.
 - def `profileBase`
 - def `resolveLaunch`
 - def `listProfiles` — Every installed profile of this checkout: its persona, Web port, database and whether something answers there.
+- def `retireSummarySessions` — Move finished summary sessions out of DSH's store (Host stopped); drop archived ones past their keep.
 
 ## `asuna-supervisor.mjs`
 

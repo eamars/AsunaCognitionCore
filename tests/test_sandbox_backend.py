@@ -123,3 +123,23 @@ def test_a_command_may_ask_for_longer_and_a_stopped_one_keeps_what_it_printed(tm
         assert not quick['timed_out'] and 'stopped' not in quick and quick['stdout'].strip() == '1'
     finally:
         sandbox_backend.attach(None)
+
+
+def test_a_command_can_use_temporary_folders_inside_its_own_folder():
+    """Her scripts' tempfile.mkdtemp failed in the sandbox: the system temp folder is not writable there, and on Windows
+    a 0o700 folder drops the inherited write grant (ADR-065)."""
+    import shutil, uuid
+    from asuna.config import DATA
+    root = DATA / 'work' / ('temp-' + uuid.uuid4().hex)
+    box = Sandbox(root / 't1', config={'_host_sandbox': {'available': True}})
+    code = ("import sys, os, tempfile, pathlib\n"
+            "d = tempfile.mkdtemp()\n"
+            "pathlib.Path(d, 'x.txt').write_text('ok')\n"
+            "with tempfile.TemporaryDirectory() as t: pathlib.Path(t, 'y').write_text('ok')\n"
+            "print(os.path.realpath(d).startswith(os.path.realpath(sys.argv[1])), sorted(os.listdir(d)))")
+    result = box.run(['python3', '-c', code, '/task'])
+    try:
+        assert result['exit_code'] == 0 and result['stdout'].strip() == "True ['x.txt']", result
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+

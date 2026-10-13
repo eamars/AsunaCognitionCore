@@ -8,6 +8,7 @@ from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
 from test_engineering_m1 import THINK
 from test_group_admin import BOT, GROUP, SCENE, setup as group_setup
+from reply_parts import said
 
 NOON = datetime(2026, 10, 6, 4, 0, tzinfo=timezone.utc)       # 12:00 at +8 (the route's offset below)
 EVIDENCE = SimpleNamespace(record=lambda *a, **k: None)
@@ -88,7 +89,7 @@ def test_her_turn_reads_the_chain(store):
     for n, author in enumerate((20001, 20002)):
         line(store, n, author, '吃饭了')
     _, event = consider(store, scene, line(store, 2, 20003, '吃饭了'))
-    lane = FakeLane(store, [FakeTurn([THINK], '吃饭了')])
+    lane = FakeLane(store, [FakeTurn([THINK, said('吃饭了')])])
     ep = Coordinator(store, lane).ingest(event['event'], persona='P1')
     chain = ep['context']['group_continuity_from_program']['chain_from_program']
     assert chain['what'] == '吃饭了' and chain['people'] == '3 个人接连发了这个'

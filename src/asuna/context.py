@@ -45,6 +45,9 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
                   '谁说的以行上的 speaker 为准。')
 
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
+# ADR-064 phase 2: where she speaks only through reply.
+REPLY_SENT=('这里只有 reply 发得出去：正文不发。一回合的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
+            '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。不想说出口的放进 think。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 
 
@@ -1078,19 +1081,21 @@ class ContextBuilder:
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
         if scene.get('channel_id'):
             # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
-            speak={'sent':'你这回合写出来的每段话都会发出去，写在工具调用旁边的也算；不想说出口的放进 think。',
+            from . import channel_kinds
+            replying=bool(channel_kinds.reply_parts(scene['_id']))
+            most=int(effective(model,'speak.max_messages',policy) or 1)
+            speak={'sent':(REPLY_SENT%most if replying else
+                           '你这回合写出来的话会作一条消息发出去，写在工具调用旁边的也算；不想说出口的放进 think。'),
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
             if session_class!=visibility.OWNER_PRIVATE:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
-            messages=int(effective(model,'speak.max_messages',policy) or 1)
-            if messages>1:
-                # Her words may leave as a few messages, broken where she marks them (ADR-009 §11.1).
-                from .rhythm import SPLIT_MARKER
-                marker=effective(model,'speak.split_marker',policy) or SPLIT_MARKER
-                speak['messages']=(f'默认是一条消息。想像聊天那样分几条发，就在要断开的地方写 {marker}，最多 {messages} 条，'
-                    f'多出来的并进最后一条；分开写的几段话也各是一条。代码块里的 {marker} 不算，代码块总是整块发出。不用为了分条而分条。')
             context['speak_from_program']=speak
+            unsent=(scene.get('unsent') or {}) if replying else {}
+            if unsent.get('text'):
+                # ADR-064 phase 2: words she wrote in the body of her last turn here never left; said once.
+                context['unsent_from_program']='没发出去：「%s」'%unsent['text']
+                self.store.db.scenes.update_one({'_id':scene['_id']},{'$unset':{'unsent':''}})
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label

@@ -12,6 +12,7 @@ from asuna.lanes import FakeLane, FakeTurn
 from asuna.render import budget_gate
 from conftest import FIXTURES
 from test_engineering_m1 import THINK, event
+from reply_parts import said
 
 MODEL = json.loads((FIXTURES / 'personas/demo/persona-model.json').read_text(encoding='utf-8'))
 
@@ -270,7 +271,7 @@ def test_in_its_group_she_tucks_a_section_away_and_from_home_she_tidies_it_by_na
                '很长的细节', base_revision_id=None, author='character', mutation_id='g1')
     sid = docs.read(slug)[1]['sections'][0]['sid']
     tuck = {'doc': 'group_notes', 'op': 'set_tags', 'sid': sid, 'inject': 'on_demand', 'reason': '不常用'}
-    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', tuck)], '在')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', tuck), said('在')])])
     group_event = {'event_id': 'tuck-1', 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 在吗',
                    'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
                    'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP},

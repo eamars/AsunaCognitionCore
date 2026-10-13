@@ -21,6 +21,7 @@ sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py 
 from qqadapter import fixtures, mutes as adapter_mutes            # noqa: E402
 from qqadapter.journal import Counters                            # noqa: E402
 from qqadapter.outbound import Outbound, send_outcome             # noqa: E402
+from reply_parts import said
 
 # NapCat's answer to a send while muted, as the live receipt stored it (QQ result 120).
 MUTED_ANSWER = {'status': 'failed', 'retcode': 1200, 'data': None,
@@ -208,7 +209,7 @@ def test_a_refused_send_sets_the_state_and_a_send_that_goes_out_clears_it(store)
 def at_turn(store, key='at-1'):
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'})], '在的')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'}), said('在的')])])
     event = {'event_id': key, 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 在吗',
              'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}, 'sender_id': '20002',

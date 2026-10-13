@@ -1025,7 +1025,9 @@ export class CognitionCore {
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
           // Silence says what this turn has written so far: deciding to say something is not saying it.
-          if (spec.name === 'stay_silent') return { ...reply.value, written: writtenSoFar(agent.session, operation) };
+          // Where only reply speaks, the worker says what reply queued instead (`sent`).
+          if (spec.name === 'stay_silent' && !('sent' in (reply.value ?? {})))
+            return { ...reply.value, written: writtenSoFar(agent.session, operation) };
           // An answer she reads that the conversation still shows is named, not sent again (ADR-061).
           if (spec.name === 'ask') return withoutVisibleAnswers(reply.value, visibleCarried(agent.session));
           // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.

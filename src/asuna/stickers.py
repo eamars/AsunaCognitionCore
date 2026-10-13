@@ -44,7 +44,7 @@ SHELF_WORDS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (N
 USE_WORDS = ((1, '还没发过'), (3, '发过一两次'), (8, '发过几次'), (None, '常发'))
 ORIGIN_WORDS = {'own': '你自己画的', 'collected': '群里收来的'}
 
-STICKERS_NOTE = ('你收着的表情包（名字和你写的用法）。能发的地方：在要说的话里单独写一行「[表情包:名字]」，每个作为单独一条发出去。'
+STICKERS_NOTE = ('你收着的表情包（名字和你写的用法）。能发的地方：reply 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去。'
                  '群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
                  '你认得的表情包下面标着你给它起的名字。')
 HOME_NOTE = ('你收着的表情包。在家里发不出去，只是给你整理（sticker 的 drop、rename；你画的图也能 keep 上来）；'
@@ -236,23 +236,6 @@ def speech_problem(store, ep, speech):
         return '「%s」不是 %s 的小黄脸名字：换成认识的名字，或者去掉。' % ('、'.join(dict.fromkeys(unknown)),
                                                            _title(scene))
     return None
-
-
-def split(segments):
-    """Each sticker token leaves as a message of its own, in the order she wrote it."""
-    out = []
-    for segment in segments:
-        pos = 0
-        for match in TOKEN.finditer(segment):
-            before = segment[pos:match.start()].strip()
-            if before:
-                out.append(before)
-            out.append(match.group(0))
-            pos = match.end()
-        tail = segment[pos:].strip()
-        if tail:
-            out.append(tail)
-    return out or segments
 
 
 def outbound(store, persona, segment):

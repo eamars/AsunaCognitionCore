@@ -127,7 +127,9 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     keep = lambda ref, name: ('sticker', {'op': 'keep', 'ref': ref, 'name': name, 'when': '有人摸鱼的时候'})
     lane = FakeLane(store, [FakeTurn([THINK, keep(refs['custom'], '摸鱼'), keep(refs['market'], '臭'),
                                       keep(refs['old'], '老图'), keep(refs['photo'], '照片'),
-                                      keep(refs['custom'], '又一个')], '收了[表情包:摸鱼]')])
+                                      keep(refs['custom'], '又一个'),
+                                      ('reply', {'parts': [{'kind': 'text', 'text': '收了'},
+                                                           {'kind': 'sticker', 'name': '摸鱼'}]})])])
     ep = Coordinator(store, lane).ingest(mention('keep-1'), persona='P1')
     assert ep['state'] in ('COMMITTED', 'WAITING_TASK'), ep.get('failure')
     assert 'sticker' in lane.calls[0]['tools']
@@ -156,8 +158,8 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
 
 def test_an_adapter_that_cannot_send_stickers_sends_none(store, monkeypatch):
     refs = group_world(store, monkeypatch)
-    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'ref': refs['market'], 'name': '臭', 'when': '嫌弃'})],
-                                     '[表情包:臭]')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'ref': refs['market'], 'name': '臭', 'when': '嫌弃'}),
+                                      ('reply', {'parts': [{'kind': 'sticker', 'name': '臭'}]})])])
     ep = Coordinator(store, lane).ingest(mention('keep-2'), persona='P1')
     [row] = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}))
     assert row['sticker']['kind'] == 'market' and row['sticker']['emoji_id'] == MARKET['emoji_id']
@@ -176,7 +178,6 @@ def test_what_she_says_is_checked_for_stickers_and_faces(store, monkeypatch):
     store.put('stickers', {'_id': 'stk-b', 'persona': 'P1', 'name': 'b', 'identity': 'x:b'})
     assert stickers.speech_problem(store, ep, '[表情包:a][表情包:b]') is None     # two can be what she means
     assert '发不出' in stickers.speech_problem(store, {'scene_id': 'dm-a', 'persona': 'P1'}, '[表情包:a]')
-    assert stickers.split(['哈[表情包:a]哈', '嗯']) == ['哈', '[表情包:a]', '哈', '嗯']
 
 
 def test_the_shelf_has_a_limit_and_rotating_it_is_hers(store, monkeypatch):

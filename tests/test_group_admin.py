@@ -17,6 +17,7 @@ ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
 from qqadapter.outbound import Outbound            # noqa: E402
 from qqadapter.selfrole import SelfRoles           # noqa: E402
+from reply_parts import said
 
 
 def setup(store, her_role='admin', admin_actions=True):
@@ -217,7 +218,7 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     notes = {'doc': 'group_notes', 'op': 'append_section', 'heading': '刷屏', 'reason': '记下做法',
              'body': '刷屏的先禁言一分钟。'}
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '他在刷屏，先禁言一分钟，再记下做法。'}),
-                                      ('group_action', mute), ('write_document', notes)], '先禁言一分钟哦')])
+                                      ('group_action', mute), ('write_document', notes), said('先禁言一分钟哦')])])
     event = {'event_id': 'spam-1', 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 刷屏',
              'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}, 'sender_id': '20002',
@@ -226,7 +227,7 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     assert [call['phase'] for call in lane.calls] == ['TURN']           # one turn: the notes' body is in the call
     assert {'group_action', 'write_document'} <= set(lane.calls[0]['tools'])
-    _, acted, wrote = lane.tool_results
+    _, acted, wrote, _ = lane.tool_results
     assert acted[5] and acted[4]['state'] == '已交给平台，等确认'          # she hears it is not done yet
     assert acted[4]['duration'] == 1                                  # what she asked for, in minutes
     assert store.db.artifacts.find_one({'kind': 'group_action'})['admin'] == {'kind': 'mute', 'account': '20002', 'seconds': 60}

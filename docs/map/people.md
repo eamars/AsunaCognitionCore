@@ -45,7 +45,6 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 - def `episode_dates` — {episode id: local date} from the audited context preparation of each episode.
 - def `selections` — {memory id: [episode ids]} for memories actually selected into turns within the window.
 - def `promotion_candidates` — Deterministic: units or monologues referenced by ≥ 2 different turns within promotion.window_days.
-- def `split_speech` — SPEAK → ≤ max_messages messages, broken wherever she wrote the marker; extra pieces stay in the last one.
 - def `pacing` — not_before for each segment: previous not_before + clamp(len / cps, min_gap, max_gap).
 - def `recent_phrasing` — 4-grams that appear ≥ ``minimum`` times across the given own messages; the ``limit`` most frequent, in a fixed order (a block that reorders without changing is sent again).
 - def `night_stage_block` — night_stage_from_program: which stage of her night this is, in words.

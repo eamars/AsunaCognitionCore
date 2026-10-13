@@ -1,35 +1,41 @@
-"""ADR-009 P5 MongoDB tests: T5.4 multi-segment speech, T5.9 segment crash recovery."""
+"""ADR-009 P5 MongoDB tests: her reply's parts leave in order at typing pace (T5.4) and survive a crash (T5.9); words
+written where only reply speaks never leave (ADR-064 phase 2); elsewhere her words are one message."""
 from datetime import datetime
 from types import SimpleNamespace
 import threading
 
 import pytest
 
+from asuna import channel_kinds
 from asuna.channels import Channels
-from asuna.coordinator import Coordinator
+from asuna.coordinator import Coordinator, UNSENT_NOTE
 from asuna.ingress import persist_input
 from asuna.lanes import FakeLane, FakeTurn
+from reply_parts import said
 from test_adr009_p2 import THINK
 
-SPEECH = '第一段，先说这个。\n---split---\n第二段。\n---split---\n第三段收尾。'
+PARTS = ('第一段，先说这个。', '第二段。', '第三段收尾。')
 TARGET = {'type': 'dm', 'id': 'peer'}
 
 
 def model(max_messages):
     return {'model_version': 1, 'persona': {'id': 'P1', 'display_name': 'x'},
-            'speak': {'max_messages': max_messages, 'split_marker': '---split---', 'chars_per_second': 4,
-                      'min_gap_s': 1, 'max_gap_s': 3}}
+            'speak': {'max_messages': max_messages, 'chars_per_second': 4, 'min_gap_s': 1, 'max_gap_s': 3}}
 
 
-def channel_scene(store):
+def channel_scene(store, monkeypatch=None):
     store.config['channels'] = {'replay': {'token': 'x' * 32, 'account_id': 'bot', 'routes': {
         'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': TARGET}}}}
     scene = store.db.scenes.find_one({'_id': 'dm-a'})
     store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
+    if monkeypatch:
+        # A kind where she speaks only through reply (the QQ kind declares this; the test channel stands in for it).
+        monkeypatch.setattr(channel_kinds, 'reply_parts',
+                            lambda scene_id: ('text', 'sticker', 'picture') if scene_id == 'dm-a' else ())
 
 
-def turn(store, key='one', crash=None, speech=SPEECH, channel=True):
-    lane = FakeLane(store, [FakeTurn([THINK], speech)])
+def turn(store, key='one', crash=None, calls=None, channel=True, content=''):
+    lane = FakeLane(store, [FakeTurn([THINK, *(calls if calls is not None else [said(*PARTS)])], content)])
     coordinator = Coordinator(store, lane)
     event = {'event_id': key, 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'}
     if channel:
@@ -37,7 +43,7 @@ def turn(store, key='one', crash=None, speech=SPEECH, channel=True):
         persist_input(store, event, managed=True)
     if crash:
         coordinator.crash = crash
-    return coordinator, coordinator.ingest(event)
+    return coordinator, coordinator.ingest(event), lane
 
 
 def outbound(store, ep_id):
@@ -63,33 +69,35 @@ def receipt(bridge, item, status):
     return bridge.receipt('replay', item['publication_id'], body)
 
 
-def test_T5_4_segments_pacing_claim_and_failure(store):
+def test_T5_4_parts_pacing_claim_and_failure(store, monkeypatch):
     store.config['persona_model'] = model(3)
-    channel_scene(store)
-    _, ep = turn(store)
+    channel_scene(store, monkeypatch)
+    _, ep, lane = turn(store)
     rows = outbound(store, ep['_id'])
     assert [r['_id'] for r in rows] == [ep['_id'] + ':speak:%d' % i for i in range(3)]
-    assert [r['text'] for r in rows] == ['第一段，先说这个。', '第二段。', '第三段收尾。']
-    assert all(r['delivery_state'] == 'QUEUED_EXTERNAL' and r['segment_count'] == 3 for r in rows)
-    times = [datetime.fromisoformat(r['not_before']) for r in rows]
+    assert [r['text'] for r in rows] == list(PARTS)
+    assert all(r['delivery_state'] == 'QUEUED_EXTERNAL' and r['reply_part'] for r in rows)
+    [result] = [row[4] for row in lane.tool_results if row[2] == 'reply']
+    assert result['note'] == '发出 3 条，都排上了：1 text；2 text；3 text。送没送到看下一回合的历史。'
+    times = [datetime.fromisoformat(r['not_before']) for r in rows[1:]]
     gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
-    assert all(1 <= gap <= 3 for gap in gaps) and gaps[0] == 9 / 4
+    assert all(1 <= gap <= 3 for gap in gaps)
     bridge = channels(store)
     first = bridge.claim('replay')['items'][0]
     assert first['publication_id'] == rows[0]['_id']
-    assert bridge.claim('replay') == {'items': []}, 'segment 2 is not due yet'
+    assert bridge.claim('replay') == {'items': []}, 'part 2 is not due yet'
     release(store, rows[1:2])
-    assert bridge.claim('replay') == {'items': []}, 'segment 2 waits for segment 1 to settle'
+    assert bridge.claim('replay') == {'items': []}, 'part 2 waits for part 1 to settle'
     receipt(bridge, first, 'failed')
     states = [r['delivery_state'] for r in outbound(store, ep['_id'])]
     assert states == ['FAILED', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
     assert bridge.claim('replay') == {'items': []}
 
 
-def test_T5_4_paced_segments_deliver_in_order_and_hold_the_line(store):
+def test_T5_4_paced_parts_deliver_in_order_and_hold_the_line(store, monkeypatch):
     store.config['persona_model'] = model(3)
-    channel_scene(store)
-    _, ep = turn(store)
+    channel_scene(store, monkeypatch)
+    _, ep, _ = turn(store)
     rows = outbound(store, ep['_id'])
     bridge = channels(store)
     for index in range(3):
@@ -100,72 +108,116 @@ def test_T5_4_paced_segments_deliver_in_order_and_hold_the_line(store):
     assert [r['delivery_state'] for r in outbound(store, ep['_id'])] == ['DELIVERED'] * 3
 
 
-def test_T5_9_crash_after_first_segment_resumes_in_order(store):
+def test_T5_9_a_crash_between_parts_still_sends_what_reply_queued(store, monkeypatch):
     store.config['persona_model'] = model(3)
-    channel_scene(store)
+    channel_scene(store, monkeypatch)
     calls = []
 
     def crash(point):
-        if point == 'after_segment_publish' and not calls:
+        if point == 'after_reply_part_publish' and not calls:
             calls.append(point)
-            raise RuntimeError('crash between segments')
-    with pytest.raises(RuntimeError, match='crash between segments'):
+            raise RuntimeError('crash between parts')
+    with pytest.raises(RuntimeError, match='crash between parts'):
         turn(store, crash=crash)
-    ep = store.db.episodes.find_one({'state': 'SPEAK_ACCEPTED'})
+    ep = store.db.episodes.find_one({'state': 'TURN'})
     before = outbound(store, ep['_id'])
     assert [r['delivery_state'] for r in before] == ['QUEUED_EXTERNAL', 'READY', 'READY']
-    coordinator = Coordinator(store, FakeLane(store, []))
+    coordinator = Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '说完了'})])]))
     coordinator.recover()
     after = outbound(store, ep['_id'])
     assert [r['_id'] for r in after] == [r['_id'] for r in before], 'no new rows on recovery'
     assert [r['delivery_state'] for r in after] == ['QUEUED_EXTERNAL'] * 3
-    assert store.db.episodes.find_one({'_id': ep['_id']})['state'] == 'COMMITTED'
 
 
-def test_T5_9_sending_segment_becomes_unknown_and_cancels_the_rest(store):
+def test_T5_9_sending_part_becomes_unknown_and_cancels_the_rest(store, monkeypatch):
     store.config['persona_model'] = model(3)
-    channel_scene(store)
-    _, ep = turn(store)
+    channel_scene(store, monkeypatch)
+    _, ep, _ = turn(store)
     bridge = channels(store)
-    bridge.claim('replay')                                  # segment 1 is SENDING when the host dies
+    bridge.claim('replay')                                  # part 1 is SENDING when the host dies
     bridge.recover_sending()
     states = [r['delivery_state'] for r in outbound(store, ep['_id'])]
     assert states == ['UNKNOWN', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
 
 
-def test_she_marks_where_a_message_ends_and_code_leaves_whole():
-    from asuna.rhythm import SPLIT_MARKER, split_speech
-    assert SPLIT_MARKER == '[分条]'
-    assert split_speech('哈哈哈这个我懂 [分条] 不过说真的', SPLIT_MARKER, 3) == ['哈哈哈这个我懂', '不过说真的']
-    code = '先看日志：\n```\ngrep x [分条] app.log\n```'
-    assert split_speech('好 [分条]\n' + code, SPLIT_MARKER, 3) == ['好', code]          # a marker in code is text
-    assert split_speech('一[分条]二[分条]三[分条]四', SPLIT_MARKER, 3) == ['一', '二', '三\n四']
-    assert split_speech('一段话\n\n又一段', SPLIT_MARKER, 3) == ['一段话\n\n又一段']      # blank lines never split
-    assert split_speech('一[分条]二', SPLIT_MARKER, 1) == ['一[分条]二']                # one message: untouched
+def test_one_wrong_part_sends_nothing_and_says_which(store, monkeypatch):
+    store.config['persona_model'] = model(2)
+    channel_scene(store, monkeypatch)
+    bad = ('reply', {'parts': [{'kind': 'text', 'text': '好'}, {'kind': 'sticker', 'name': '没收着的'},
+                               {'kind': 'text', 'text': '好'}, {'kind': 'text', 'text': '[分条]三'}]})
+    _, ep, lane = turn(store, calls=[bad, said('一'), said('二'), said('二'), said('三')])
+    results = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    refused = results[0][0]
+    assert not results[0][1] and refused.startswith('这次一条都没发：')
+    assert '第 2 条 sticker「没收着的」你没收着' in refused and '第 3 条这回合已经发过一样的' in refused
+    assert '第 4 条：一个 text 就是一条消息' in refused and refused.endswith('改好再调用一次 reply。')
+    assert results[1][1] and results[2][1]
+    assert not results[3][1] and '已经发过一样的' in results[3][0], 'the same text twice in one turn'
+    assert not results[4][1] and '最多 2 行' in results[4][0], 'her speak.max_messages counts lines across calls'
+    assert [r['text'] for r in outbound(store, ep['_id'])] == ['一', '二']
 
 
-def test_only_a_platform_turn_is_told_how_its_words_leave(store):
+def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(store, monkeypatch):
     store.config['persona_model'] = model(3)
-    _, local = turn(store, key='local', speech='好', channel=False)
+    channel_scene(store, monkeypatch)
+    lane = FakeLane(store, [FakeTurn([THINK], '这段写在正文里'), FakeTurn([], '还是写在正文里')])
+    event = {'event_id': 'body-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-body-1'}}
+    persist_input(store, event, managed=True)
+    ep = Coordinator(store, lane).ingest(event)
+    assert ep['state'] == 'COMMITTED' and outbound(store, ep['_id']) == []
+    assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % '这段写在正文里', 'handed back once, same turn'
+    _, nxt, _ = turn(store, key='body-2')
+    assert nxt['context']['unsent_from_program'] == '没发出去：「还是写在正文里」'
+    _, again, _ = turn(store, key='body-3')
+    assert 'unsent_from_program' not in again['context'], 'said once'
+
+
+def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeypatch):
+    """Owner 2026-10-14: in online chat a line break is another message, so her limit counts lines."""
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    code = '看这个：' + chr(10) + '```' + chr(10) + 'print(1)' + chr(10) + 'print(2)' + chr(10) + '```'
+    two = '第一行' + chr(10) + chr(10) + '第二行'
+    _, ep, lane = turn(store, calls=[said(two), said('第三行', '第四行'), said(code)])
+    results = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    assert results[0][1], 'a blank line is not a line'
+    assert not results[1][1] and '已经 3 行，第 2 条有 1 行' in results[1][0], 'two lines in one message count as two'
+    assert not results[2][1], 'a code block is one line, its words another: over 3'
+    assert [r['text'] for r in outbound(store, ep['_id'])] == [two]
+
+
+def test_silence_says_how_many_parts_reply_sent(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    _, _, lane = turn(store, calls=[said('嗯'), ('stay_silent', {'why': '说完了'})])
+    [result] = [row[4] for row in lane.tool_results if row[2] == 'stay_silent']
+    assert result['sent'] == 'reply 这回合发了 1 条。'
+    _, _, lane = turn(store, key='quiet', calls=[('stay_silent', {'why': '不说'})])
+    [result] = [row[4] for row in lane.tool_results if row[2] == 'stay_silent']
+    assert result['sent'] == '这回合 reply 一条都没发。'
+
+
+def test_only_a_platform_turn_is_told_how_its_words_leave(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    _, local, _ = turn(store, key='local', calls=[], content='好', channel=False)
     assert 'speak_from_program' not in local['context']
     channel_scene(store)
-    _, qq = turn(store, key='qq', speech='好')
-    speak = qq['context']['speak_from_program']
-    assert '---split---' in speak['messages'] and '最多 3 条' in speak['messages'] and '代码块' in speak['messages']
-    assert '不会再单独叫你' in speak['new_lines'] and '工具调用旁边' in speak['sent']
-    store.config['persona_model'] = model(1)
-    _, one = turn(store, key='one-message', speech='好')
-    assert set(one['context']['speak_from_program']) == {'sent', 'new_lines', 'one_self'}     # ADR-018 §5.7
+    _, plain, _ = turn(store, key='plain', calls=[], content='好')
+    assert set(plain['context']['speak_from_program']) == {'sent', 'new_lines', 'one_self'}     # ADR-018 §5.7
+    assert '作一条消息发出去' in plain['context']['speak_from_program']['sent']
+    channel_scene(store, monkeypatch)
+    _, replying, _ = turn(store, key='replying')
+    sent = replying['context']['speak_from_program']['sent']
+    assert sent.startswith('这里只有 reply 发得出去') and '最多 3 行' in sent and '一个代码块算一行' in sent
 
 
-def test_everything_she_wrote_in_the_turn_is_said(store):
+def test_where_words_are_speech_everything_she_wrote_is_one_message(store):
     channel_scene(store)
-    for count, texts in ((3, ['那必须的，被夸了我会更来劲。', '他教没教我不好说。']),
-                         (1, ['那必须的，被夸了我会更来劲。\n\n他教没教我不好说。'])):
-        store.config['persona_model'] = model(count)
-        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {})], '他教没教我不好说。', said=['那必须的，被夸了我会更来劲。'])])
-        event = {'event_id': 'said-%d' % count, 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你最近的回复好快！',
-                 'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-said-%d' % count}}
-        persist_input(store, event, managed=True)
-        ep = Coordinator(store, lane).ingest(event)
-        assert [r['text'] for r in outbound(store, ep['_id'])] == texts
+    store.config['persona_model'] = model(3)
+    lane = FakeLane(store, [FakeTurn([THINK, ('feel', {})], '他教没教我不好说。', said=['那必须的，被夸了我会更来劲。'])])
+    event = {'event_id': 'said-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你最近的回复好快！',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-said-1'}}
+    persist_input(store, event, managed=True)
+    ep = Coordinator(store, lane).ingest(event)
+    assert [r['text'] for r in outbound(store, ep['_id'])] == ['那必须的，被夸了我会更来劲。\n\n他教没教我不好说。']

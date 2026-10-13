@@ -67,7 +67,7 @@ CORE_DEFAULTS = {
                   'dice_asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4、待着 0'},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
-    'speak': {'max_messages': 1, 'split_marker': '[分条]', 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
+    'speak': {'max_messages': 1, 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
     'phrasing': {'window': 20},
     'self_development': {'every_min': None, 'night_start_hour': 1, 'night_hours': 5, 'night_every_min': 30},
     # How people read in group and private chats (people.py): her word for the owner, and other names she answers to;

@@ -15,6 +15,8 @@ A kind module knows one platform's id formats and adapter conventions:
                                                from the Web as the owner; default False
   SERVICE_ARGV (optional)                      its managed adapter's resident command, started by itself once
   REQUESTS (optional)                          its adapter brings friend and group requests her home answers
+  REPLY_PARTS (optional)                       she speaks there only through `reply`, in these parts (text,
+                                               sticker, picture, poke, react); without it her words are speech
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).
@@ -93,6 +95,11 @@ def sends_images(identifier):
 
 def sends_stickers(identifier):
     return bool(getattr(of(identifier), 'STICKERS', False))
+
+
+def reply_parts(identifier):
+    """The parts her `reply` takes in a conversation of this kind; empty where her words are speech."""
+    return tuple(getattr(of(identifier), 'REPLY_PARTS', None) or ())
 
 
 def sticker_of(item):

@@ -21,7 +21,7 @@ from dataclasses import replace
 import json
 import threading
 
-from .config import prompt_path, character_id
+from .config import prompt_path, character_id, excerpt
 from .context import ContextBuilder
 from .evidence import canonical, sha
 from .lanes import Lane
@@ -52,6 +52,10 @@ TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_develop
 # The one line of the turn instruction kept at the end of every notice, next to where she writes (ADR-056, 2026-10-14):
 # said only in her system prompt, a missing first think was refused 1.75 times as often.
 THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
+# ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
+UNSENT_NOTE = '这段没发出去：「%s」。在这里说话用 reply。'
+UNSENT_CHARS = 40
+REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 reply 说话，或者用 stay_silent 结束。'
 
 
 class Coordinator:
@@ -230,6 +234,8 @@ class Coordinator:
                         turn_thought=False if fresh else bool(ep.get('turn_thought')),**changes)
         operation=self._operation(ep['_id'],generation)
         instruction=self._notice(ep)
+        from . import channel_kinds
+        replying=bool(channel_kinds.reply_parts(ep['scene_id'])) and kind!='consult'
         handler=lambda call_id,name,args:self.tools.call(ep['_id'],call_id,name,args)
         note=''
         seen=[]
@@ -245,6 +251,26 @@ class Coordinator:
             if kind=='consult' and ep.get('answer'):
                 return self._update(ep,state='COMMITTED')
             speech=self._speech(ep,value)
+            if replying:
+                # ADR-064 phase 2: here only reply speaks. Words in the body never leave: written without reply or
+                # stay_silent they come back once in this turn, then her next turn here says they were not sent.
+                issue=None
+                if not ep.get('turn_thought') and not ep.get('reply'):
+                    issue,note='no_thought',REPLY_THINK_NOTE
+                elif speech and not ep.get('reply') and not ep.get('silent') and not attempt:
+                    issue,note='unsent',UNSENT_NOTE%excerpt(' '.join(speech.split()),UNSENT_CHARS)
+                if issue is None or attempt==answers.REPAIRS:
+                    if speech:
+                        self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'unsent':{
+                            'text':excerpt(' '.join(speech.split()),UNSENT_CHARS),'episode_id':ep['_id']}}})
+                        self.store.audit(ep['_id'],'turn.unsent_body',{'chars':len(speech)},ep['scope_key'])
+                    self._absorb(ep,seen)
+                    said=(ep.get('reply') or {}).get('parts')
+                    return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
+                        **({} if said else {'silent_reason':(ep.get('silent') or {}).get('reason') or '这回合没有 reply'}))
+                self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
+                    'request_refs':value.request_refs},ep['scope_key'])
+                continue
             # stay_silent ends the turn with nothing more to say: words she already wrote in it still leave.
             if ep.get('silent') and kind!='consult' and not speech:
                 self._absorb(ep,seen)
@@ -265,18 +291,9 @@ class Coordinator:
             'request_refs':value.request_refs},ensure_ascii=False))
 
     def _speech(self, ep, value):
-        """Every text she wrote this turn, in order; with more than one, each leaves as its own message where the
-        persona allows several (speak.max_messages), else they join as paragraphs of one."""
+        """Every text she wrote this turn, in order, as paragraphs of one message."""
         pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
                 if isinstance(text,str) and text.strip()]
-        if len(pieces)<=1:
-            return pieces[0] if pieces else ''
-        from .persona_model import effective
-        from .render import model_and_policy
-        from .rhythm import SPLIT_MARKER
-        model,policy=model_and_policy(self.store,ep['persona'])
-        if int(effective(model,'speak.max_messages',policy) or 1)>1:
-            return ('\n'+(effective(model,'speak.split_marker',policy) or SPLIT_MARKER)+'\n').join(pieces)
         return '\n\n'.join(pieces)
 
     def _absorb(self, ep, seen):
@@ -341,49 +358,64 @@ class Coordinator:
         return any((self.store.db.tasks.find_one({'_id':task_id},{'state':1}) or {}).get('state') in ('READY','RUNNING')
                    for task_id in ep.get('task_ids') or ())
 
-    def _publish(self, ep):
-        """ADR-009 §11.1: up to speak.max_messages segments, published in order (default 1)."""
+    def queue_reply(self, ep, planned):
+        """ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already
+        queued, each published at once; a part that fails cancels the ones after it. Returns each with its state."""
         from .persona_model import effective
         from .render import model_and_policy
-        from .rhythm import split_speech, pacing, SPLIT_MARKER
+        from .rhythm import pacing
+        from . import stickers
         from datetime import datetime as _dt, timezone as _tz
         ep_id=ep['_id']
         model,policy=model_and_policy(self.store,ep['persona'])
-        segments=split_speech(ep['speech'],effective(model,'speak.split_marker',policy) or SPLIT_MARKER,
-                              effective(model,'speak.max_messages',policy) or 1)
-        from . import stickers
-        segments=stickers.split(segments)       # ADR-016: a sticker leaves as a message of its own
-        scene=self.store.db.scenes.find_one({'_id':ep['scene_id']})
-        times=pacing(segments,_dt.now(_tz.utc),effective(model,'speak.chars_per_second',policy) or 12,
-                     effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)
-        keys=[]
-        # 这一回合被程序接受的那张图（没有就 None）：只挂在第一段上，字节仍在 BlobStore，行上只写元数据。
-        attach_meta=outbound_media.attachment_for_speak(ep)
-        for index,segment in enumerate(segments):
+        earlier=list(self.store.db.messages.find({'episode_id':ep_id,'phase':'SPEAK'},{'segment_index':1,'not_before':1,'text':1}))
+        start=max([_dt.now(_tz.utc)]+[_dt.fromisoformat(row['not_before']) for row in earlier if row.get('not_before')])
+        texts=([max(earlier,key=lambda row:row.get('segment_index') or 0).get('text') or ''] if earlier else [])+[part['text'] for part in planned]
+        times=pacing(texts,start,effective(model,'speak.chars_per_second',policy) or 12,
+                     effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)[-len(planned):]
+        first=len(earlier)
+        scene=self.store.db.scenes.find_one({'_id':ep['scene_id']},{'channel_id':1})
+        queued=[]
+        for offset,part in enumerate(planned):
+            index=first+offset
             key=ep_id+':speak:'+str(index)
-            keys.append(key)
-            if not self.store.db.messages.find_one({'_id':key}):
-                sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-                row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':segment,'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
-                sticker=stickers.outbound(self.store,ep['persona'],segment)
-                if sticker:
-                    row.update(sticker)
-                    stickers.sent(self.store,ep['persona'],sticker['sticker']['name'],ep['scene_id'])
-                elif attach_meta and not self.store.db.messages.find_one({'episode_id':ep_id,'phase':'SPEAK',
-                        'attachment':{'$exists':True},'sticker':{'$exists':False}},{'_id':1}):
-                    row['attachment']=dict(attach_meta)     # her attach_image picture: on her first words
-                if len(segments)>1:
-                    row.update(segment_index=index,segment_count=len(segments))
-                    if scene.get('channel_id'):
-                        row['not_before']=times[index].isoformat()
-                self.store.put('messages',row,stream=ep_id)
-        for key in keys:
-            published=self.publisher.publish(key)
-            if published.get('delivery_state') in ('FAILED','UNKNOWN'):
+            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,
+                 'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':part['text'],'direction':'outbound',
+                 'author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,
+                 'monologue_refs':ep.get('monologue_refs') or [],'delivery_state':'READY','segment_index':index,'reply_part':True,
+                 **(part.get('fields') or {})}
+            if (scene or {}).get('channel_id') and (index or offset):
+                row['not_before']=times[offset].isoformat()
+            self.store.put('messages',row,stream=ep_id)
+            if part['kind']=='sticker':
+                stickers.sent(self.store,ep['persona'],part['name'],ep['scene_id'])
+            queued.append({'number':offset+1,'shown':part['shown'],'key':key,'state':'READY'})
+        for item in queued:
+            published=self.publisher.publish(item['key'])
+            item['state']=published.get('delivery_state') or 'READY'
+            self.crash('after_reply_part_publish')
+            if item['state'] in ('FAILED','UNKNOWN'):
                 self.publisher.cancel_after(published)
+                for later in queued[queued.index(item)+1:]:
+                    later['state']='CANCELLED_AFTER_FAILURE'
                 break
-            if len(keys)>1:
-                self.crash('after_segment_publish')
+        return queued
+
+    def _publish(self, ep):
+        """Her words where they are speech (a conversation without reply): one message, carrying her attach_image
+        picture when she gave one."""
+        ep_id=ep['_id']
+        key=ep_id+':speak:0'
+        if not self.store.db.messages.find_one({'_id':key}):
+            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+            # 这一回合被程序接受的那张图（没有就 None）：字节仍在 BlobStore，行上只写元数据。
+            attach_meta=outbound_media.attachment_for_speak(ep)
+            if attach_meta:
+                row['attachment']=dict(attach_meta)
+            self.store.put('messages',row,stream=ep_id)
+        self.publisher.publish(key)
         self.crash('before_episode_commit')
         return self._update(self.store.db.episodes.find_one({'_id':ep_id}),
                             state='WAITING_TASK' if self._waits(ep) else 'COMMITTED')
@@ -505,8 +537,20 @@ class Coordinator:
 
     def recover(self):
         self.store.recover_commits()
-        return [self.advance(ep['_id']) for ep in self.store.db.episodes.find(
-            {'state':{'$in':['PREPARED','TURN','SPEAK_ACCEPTED']},'episode_kind':{'$ne':'consult'}})]
+        episodes=list(self.store.db.episodes.find(
+            {'state':{'$in':['PREPARED','TURN','SPEAK_ACCEPTED']},'episode_kind':{'$ne':'consult'}}))
+        for ep in episodes:
+            if ep['state']=='TURN':
+                self.publish_queued(ep['_id'])        # what her reply queued before the Host stopped still leaves
+        return [self.advance(ep['_id']) for ep in episodes]
+
+    def publish_queued(self, ep_id):
+        """Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a failed one cancels the rest."""
+        for row in self.store.db.messages.find({'episode_id':ep_id,'reply_part':True,'delivery_state':'READY'}).sort('segment_index',1):
+            published=self.publisher.publish(row['_id'])
+            if published.get('delivery_state') in ('FAILED','UNKNOWN'):
+                self.publisher.cancel_after(published)
+                break
 
     # ── working with the action brain (ADR-011 §4) ──────────────────
     def _grants(self, ep):

@@ -57,6 +57,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
+- def `reply_parts` — The parts her `reply` takes in a conversation of this kind; empty where her words are speech.
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
 - def `sticker_md5` — The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind).
 - def `image_hosts` — The media hosts the installed platforms deliver images from (vision's default allowlist).
@@ -131,7 +132,6 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `block` — stickers_from_program: the shelf by name, in a conversation that sends stickers or at home.
 - def `faces_block` — faces_from_program: the platform faces people here used lately, by name.
 - def `speech_problem` — What is wrong with the stickers and faces in what she is about to say; None when they can go.
-- def `split` — Each sticker token leaves as a message of its own, in the order she wrote it.
 - def `outbound` — The row fields of a message that is one sticker token: what the channel sends; None for words.
 - def `sent`
 - def `on_shelf` — A kept sticker's picture: it may go to any conversation that takes stickers (outbound_media.serve).

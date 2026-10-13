@@ -157,7 +157,6 @@
   },
   "speak": {
     "max_messages": 2,
-    "split_marker": "[分条]",
     "chars_per_second": 12,
     "min_gap_s": 1,
     "max_gap_s": 5
@@ -196,7 +195,7 @@
       "type": "integer",
       "min": 1,
       "max": 3,
-      "what": "一次发言最多分成几段"
+      "what": "一回合 reply 的 text 加起来最多几行（每一行都算，空行不算，代码块算一行）"
     },
     "memory.forgetting.half_life_days": {
       "type": "number",

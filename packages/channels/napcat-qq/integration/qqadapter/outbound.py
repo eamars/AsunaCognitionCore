@@ -519,7 +519,8 @@ class Outbound:
         if reason:
             self.report(pub, receipt_payload("failed", attempt, {"reason": reason, "target_type": ttype}), reason)
             return
-        if sticker is None and (not isinstance(text, str) or not text.strip()):
+        # a picture may leave without words (her reply's picture part); anything else needs words
+        if sticker is None and item.get(ATTACHMENT_KEY) is None and (not isinstance(text, str) or not text.strip()):
             self.report(pub, receipt_payload("failed", attempt, {"reason": "empty_text"}), "empty_text")
             return
         text = text if isinstance(text, str) else ""

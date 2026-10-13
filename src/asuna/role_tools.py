@@ -84,6 +84,11 @@ AFFECT_FIELDS = {
     'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 true'},
 }
 
+# The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
+REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react')
+# What reply carries itself where it is listed.
+REPLY_REPLACES = ('quote', 'await_answer', 'attach_image')
+
 TOOLS = {
     'think': {
         'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句，%d 字以内，不是完整的推理过程。'
@@ -119,8 +124,28 @@ TOOLS = {
                        'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
                        'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'}},
     },
+    'reply': {
+        'description': ('在这里说话：只有 reply 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 text、'
+                         'sticker、picture、poke、react，各写它的字段。有一条不对，这次一条都不发，回执说哪条、为什么。'
+                         '不想说话就不调用，或用 stay_silent。'),
+        'parameters': {
+            'parts': {'type': 'array', 'required': True,
+                      'description': '这次要发的，按顺序；text 一回合加起来最多几行，speak_from_program 写着',
+                      'items': {'type': 'object', 'additionalProperties': False, 'properties': {
+                          'kind': _s('哪一种', required=True, enum=list(REPLY_KINDS)),
+                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
+                          'name': _s('sticker：你收着的表情包的名字'),
+                          'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
+                          'who': _s('poke 戳谁、react 给谁的话点：照抄标签'),
+                          'line': _s('react：「这条」是叫你的那条，「刚才那条」是他十分钟内的最后一句', enum=['这条', '刚才那条']),
+                          'face': _s('react：表情名')}}},
+            'quote': _s('群里：source 引用叫你的那条，none 不引用；不写由程序定', enum=['source', 'none']),
+            'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
+                       enum=['no', 'question']),
+            'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天'])},
+    },
     'stay_silent': {
-        'description': ('结束这回合，不再说话：已经写在正文里的话照常发出。只写在心里话里的话没有说过。回执会说这一回合正文里写了几段。'),
+        'description': ('结束这回合，不再说话。回执会说这一回合发出了什么。只写在心里话里的话没有说过。'),
         'parameters': {'reason': _s(limit=1000, description='为什么不说', required=True)},
     },
     'quote': {
@@ -168,7 +193,7 @@ TOOLS = {
                          '；只有表情包能收，架子满了先 drop。drop 按名字放下一个；rename 改 name 或 use_for；'
                          'pool 看候选池（群里有人发过、程序存着的）；remember 看过但不收的，记个名字和它在说什么（use_for）'
                          '，以后有人发它会标出你认得。候选（candidate）先 read_image 看过再 keep。名字和用法在群里也看得到。'
-                         '发的时候在要说的话里单独写一行「[表情包:名字]」。'),
+                         '发的时候用 reply 的 sticker。'),
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内；pool 不用写'),
                        'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
@@ -595,7 +620,12 @@ def _turn_rules(store, ep):
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
         names.append('visit')
     # ADR-018: a note to another of her conversations, wherever there is somewhere it may go from this turn.
-    return names + note_tool
+    names += note_tool
+    from . import channel_kinds
+    if channel_kinds.reply_parts(ep['scene_id']):
+        # ADR-064 phase 2: here she speaks only through reply, whose parts carry the quote, the wait and pictures.
+        names = [name for name in names if name not in REPLY_REPLACES] + ['reply']
+    return names
 
 
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
@@ -664,6 +694,8 @@ def abilities(store, ep):
         names += LOCAL_CHAT
         if channel_kinds.answers_requests(config):
             names.append('group_action')        # answering the friend and group requests listed at home
+    if channel_kinds.reply_parts(ep['scene_id']):
+        names = [name for name in names if name not in REPLY_REPLACES] + ['reply']      # ADR-064 phase 2
     from . import memory_tiers
     if memory_tiers.ENABLED:
         names = [name for name in names if name != 'update_self']     # retired into write_document (ADR-062)
@@ -909,6 +941,31 @@ def words(exc):
 _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words for her
 
 
+def chat_lines(text):
+    """How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message):
+    each line with words counts, a blank line does not, a fenced code block counts as one."""
+    count, fenced = 0, False
+    for line in str(text or '').splitlines():
+        if line.lstrip().startswith('```'):
+            if not fenced:
+                count += 1
+            fenced = not fenced
+        elif not fenced and line.strip():
+            count += 1
+    return count
+
+
+def reply_receipt(queued):
+    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2)."""
+    done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
+    listed = '；'.join('%d %s' % (row['number'], row['shown']) for row in done)
+    if len(done) == len(queued):
+        return '发出 %d 条，都排上了：%s。送没送到看下一回合的历史。' % (len(queued), listed)
+    failed = next(row for row in queued if row not in done)
+    return ('发出 %d 条：%s。第 %d 条没发出去，它后面的都取消了；送没送到看下一回合的历史。'
+            % (len(queued), listed or '一条都没排上', failed['number']))
+
+
 def _given(args, field):
     """What she gave for an enum field, for a refusal: '（给的是「x」）' or '（没写 x）'."""
     value = (args or {}).get(field) if isinstance(args, dict) else None
@@ -1146,7 +1203,13 @@ class RoleTools:
 
     def tool_stay_silent(self, ep, call_id, args):
         reason = self._text(args, 'reason', 1000)
-        self.coordinator._update(self._fresh(ep), silent={'reason': reason})
+        ep = self.coordinator._update(self._fresh(ep), silent={'reason': reason})
+        from . import channel_kinds
+        if channel_kinds.reply_parts(ep['scene_id']):
+            # ADR-064 phase 2 (her condition): how many parts reply queued this turn, 0 included.
+            parts = int((ep.get('reply') or {}).get('parts') or 0)
+            return {'silent': True, 'note': '这回合到此结束。',
+                    'sent': 'reply 这回合发了 %d 条。' % parts if parts else '这回合 reply 一条都没发。'}, True
         # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
         return {'silent': True, 'note': '这回合到此结束。'}, True
 
@@ -1186,6 +1249,104 @@ class RoleTools:
         why = self._text(args, 'why', 200)
         self.coordinator._update(self._fresh(ep), await_answer={'why': why})
         return {'note': '这句发出去后约三分钟里，你 @ 的人、你回的人（都没有时这里任何人）下一句没 @ 你也会叫你看一眼。'}, False
+
+    def tool_reply(self, ep, call_id, args):
+        """ADR-064 phase 2: her speech here, in parts. Every part is checked before any is queued: one wrong part
+        means none of this call leaves, and the result says which and why."""
+        from . import channel_kinds, stickers
+        from .persona_model import effective
+        from .render import model_and_policy
+        ep = self._fresh(ep)
+        kinds = channel_kinds.reply_parts(ep['scene_id'])
+        parts = args.get('parts')
+        if not isinstance(parts, list) or not parts:
+            raise Refused('parts 要列出这次要发的，至少一个。')
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        group = scene.get('kind') == 'group'
+        model, policy = model_and_policy(self.store, ep['persona'])
+        most = int(effective(model, 'speak.max_messages', policy) or 1)
+        before = ep.get('reply') or {}
+        texts = list(before.get('texts') or [])
+        lines = int(before.get('lines') or 0)
+        problems, planned = [], []
+        for index, part in enumerate(parts, 1):
+            part = part if isinstance(part, dict) else {}
+            kind = part.get('kind')
+            if kind not in REPLY_KINDS:
+                problems.append('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
+            elif kind not in kinds:
+                problems.append('第 %d 条 %s 这里发不了' % (index, kind))
+            elif kind == 'text':
+                text = part.get('text') if isinstance(part.get('text'), str) else ''
+                same = ' '.join(text.split())
+                face = same and stickers.speech_problem(self.store, ep, text)
+                if not same:
+                    problems.append('第 %d 条是空的' % index)
+                elif stickers.TOKEN.search(text):
+                    problems.append('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
+                elif '[分条]' in text:
+                    problems.append('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
+                elif face:
+                    problems.append('第 %d 条：%s' % (index, face))
+                elif same in texts:
+                    problems.append('第 %d 条这回合已经发过一样的' % index)
+                elif lines + chat_lines(text) > most:      # lines: this turn's, earlier calls and this one so far
+                    problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行），'
+                                    '已经 %d 行，第 %d 条有 %d 行' % (most, lines, index, chat_lines(text)))
+                else:
+                    texts.append(same)
+                    lines += chat_lines(text)
+                    planned.append({'kind': 'text', 'text': text.strip(), 'shown': 'text'})
+            elif kind == 'sticker':
+                name = str(part.get('name') or '').strip()
+                fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
+                if not fields:
+                    problems.append('第 %d 条 sticker「%s」你没收着' % (index, name) if name else '第 %d 条 sticker 要写 name' % index)
+                else:
+                    planned.append({'kind': 'sticker', 'text': '[表情包:%s]' % name, 'fields': fields, 'name': name,
+                                    'shown': 'sticker「%s」' % name})
+            elif kind == 'picture':
+                try:
+                    meta = self._picture(ep, scene, str(part.get('artifact_id') or ''))
+                except (Refused, Denied) as exc:
+                    problems.append('第 %d 条 picture %s' % (index, words(exc)))
+                else:
+                    planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
+                                    'shown': 'picture'})
+        quote, wait = args.get('quote'), args.get('wait')
+        if quote not in (None, 'source', 'none'):
+            problems.append('quote 是 source 或 none')
+        if wait not in (None, 'no', 'question'):
+            problems.append('wait 是 no 或 question')
+        if (quote or wait) and not group:
+            problems.append('quote 和 wait 只在群里用')
+        if problems:
+            raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems))
+        changes = {}
+        if quote:
+            changes['quote'] = quote
+        if wait == 'no':
+            changes['await_answer'] = {'off': True}
+        queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned)
+        self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
+                                                          'calls': int(before.get('calls') or 0) + 1})
+        return {'note': reply_receipt(queued)}, False
+
+    def _picture(self, ep, scene, artifact):
+        """The attachment of a picture she may send here, or Refused in words."""
+        from . import outbound_media
+        from .blobs import BlobStore
+        cls = self._cls(ep)
+        allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
+        if not allowed:
+            raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason))
+        offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
+        if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
+            raise Refused('不在 image_artifacts_from_program 里')
+        mine_only = outbound_media.own_only(self.store.config, scene, cls)
+        return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
+            [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
+            produced_only=mine_only)
 
     def tool_task_answer(self, ep, call_id, args):
         answer = self._text(args, 'answer', 20000)

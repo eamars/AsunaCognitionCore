@@ -22,6 +22,7 @@ ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
 from qqadapter import fixtures, inbound, notices as adapter_notices   # noqa: E402
 from qqadapter.outbound import Outbound                                # noqa: E402
+from reply_parts import said
 
 CFG = fixtures.load_config()
 OWN, G1 = fixtures.ACCOUNT, fixtures.GROUPS[0]
@@ -322,7 +323,7 @@ def test_a_turn_shows_the_held_notice_once_without_repeating_a_line(store):
     channels, received, _ = bridge(store)
     store.db.messages.update_one({'_id': 'in-20002'}, {'$set': {'received_at': now()}})
     channels.receive('qq', posted('20003', '撤回了{line}', 'recall', line={'message_id': '720002', 'mine': False}))
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'})], '在的')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'}), said('在的')])])
     event = {'event_id': 'at-1', 'scene_id': SCENE, 'person_id': 'qq:20004', 'text': '@演示 在吗',
              'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}, 'sender_id': '20004',

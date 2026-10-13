@@ -37,8 +37,10 @@ One character turn per episode (ADR-011 §3).
 - class `Coordinator`
   - `ingest`
   - `consult` — One internal turn in her role session: she answers the action brain with task op answer.
+  - `queue_reply` — ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already queued, each published at once; a part that fails cancels the ones after it.
   - `advance`
   - `recover`
+  - `publish_queued` — Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a failed one cancels the rest.
   - `delegate` — A new task: the action brain's first message is her brief (§4).
   - `message_action` — Her words to the action brain about one task: steered into a running one, or continuing a finished one.
   - `collab` — One entry of the collaboration thread in her conversation (§7.1); the plugin draws it.
@@ -141,6 +143,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
 - def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words.
 - def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
+- def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
+- def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
   - `tool_think`
@@ -150,6 +154,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_credential`
   - `tool_watch`
   - `tool_await_answer`
+  - `tool_reply` — ADR-064 phase 2: her speech here, in parts.
   - `tool_task_answer`
   - `tool_delegate`
   - `tool_task_message`

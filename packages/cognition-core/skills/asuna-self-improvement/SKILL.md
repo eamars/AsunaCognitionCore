@@ -77,9 +77,11 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 ## git 和 ssh（家里的任务，`sandbox_run`）
 
-- 你有一份自己的工作副本：家里工作区的 `/task/working-copy`（本机聊天、agent 线、peer 线的任务都在这个工作区）。它是项目的完整 clone，`origin` 就是 GitHub 上的仓库；宿主缺它的时候建一次，以后不重建、不重置，里面的东西都是你的。
+- 家里每个地方（本机聊天、每条 agent 线、peer 线）各有一份自己的工作副本，就是那个地方的 `/task/working-copy`：各自独立的完整 clone（每份约 108 MB），`origin` 是 GitHub 上的仓库。宿主缺哪份建哪份，以后不重建、不重置，里面的东西都是你的。QQ 的地方没有。
+- 在工作副本里做每件事，第一步都是 `git fetch origin` 再 `git rebase origin/main`，没有例外：别的地方的副本可能已经推过，不先取下来就是在旧内容上改，分叉要到推的时候才露出来。
+- 要看 GitHub 上现在是什么，用 `git ls-remote` 或在工作副本里 fetch，别看本机检出里的 `origin/*`：检出对你只读，你在那里 fetch 不了，它的 `origin/*` 只在宿主取的时候才动，可能是旧的。
 - 本机的项目检出在你的命令里是只读的；改动从工作副本走：
-  - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），先 `git fetch` 再 rebase 到 `origin/main`，再 `git push origin HEAD:main`（或推一个分支）。
+  - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），推之前再 fetch 一次、rebase 到 `origin/main`，然后 `git push origin HEAD:main`（或推一个分支）。
   - 你要的重启（`restart` 工具）在能快进的时候先把 `origin/main` 带进本机检出再装上；快进不了时，重启结果的 `checkout` 写着为什么。
   - 想不重启就生效的改动（技能、种子、persona-model、认知核的 Python）和适配器，还是走候选和 `development_publish`：适配器只从发布的快照运行，原生 skill 工具读的是已发布的版本。
 - 推送用的是这台机器上主人的 GitHub 账号：git 要账号时，程序让它直接问主人的凭据管理器，你不用碰密码，也不用把它写进 URL 或脚本。以前那些自己读凭据、拼进 URL 的推送脚本（`push*.py` 这类）用不着了。

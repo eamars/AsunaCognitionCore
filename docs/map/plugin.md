@@ -493,7 +493,8 @@ Runs the Python business worker (`asuna.native_worker`) as a child process in th
 
 [packages/cognition-core/src/working-copy.js](../../packages/cognition-core/src/working-copy.js)
 
-Her own working copy of the local checkout (owner 2026-10-13, ADR-065): a full clone in her home working folder, where her confined commands may write, commit and push. Its `origin` is the checkout's own origin. The Host makes it when it is missing and never changes one that is there; it is never the checkout, and nothing the Host runs is in it.
+Her own working copies of the local checkout (owner 2026-10-13, ADR-065): a full clone in each home place's working folder (a command writes only its own folder), where her confined commands may write, commit and push. Its `origin` is the checkout's own origin. The Host makes each when it is missing and never changes one that is there; none is the checkout, and nothing the Host runs is in one.
 
 - def `FOLDER`
 - def `ensureWorkingCopy` — Make `<workspace>/working-copy` from `checkout` unless it exists: {state: 'present' | 'created' | 'no checkout', path}.
+- def `ensureWorkingCopies` — A working copy in each of these folders (the worker's home_workspaces), one after another; says what it made or could not make.

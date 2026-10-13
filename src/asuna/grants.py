@@ -1,5 +1,25 @@
 """Host-owned resource grants, never inferred from a message or model role."""
+from pathlib import Path
+
 from .state import Denied
+
+
+def home_workspaces(config):
+    """The working folders of her home places: the local chat's, and each of a home line's speakers' (agent lines,
+    the peer line). A task there runs in its own place's folder (/task). Platform places, the owner's DM included,
+    are not among them."""
+    from . import channel_kinds
+    from .channels import route_members
+    folders = [(config.get('chat') or {}).get('workspace')]
+    for channel in (config.get('channels') or {}).values():
+        for route in (channel.get('routes') or {}).values() if isinstance(channel, dict) else ():
+            if isinstance(route, dict) and route.get('scene_id') and channel_kinds.home(route['scene_id']):
+                folders += [grant.get('workspace') for grant in route_members(route).values()]
+    seen = []
+    for folder in folders:
+        if folder and str(Path(folder).resolve()) not in seen:
+            seen.append(str(Path(folder).resolve()))
+    return seen
 
 
 def workspace_grant(config, scene_id, person_id, *, required=True):

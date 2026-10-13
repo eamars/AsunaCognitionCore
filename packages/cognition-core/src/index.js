@@ -16,8 +16,7 @@ import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
 import { composeContext, restoreContext, trimTurn, visibleCarried, withoutVisibleAnswers } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
-import { ensureWorkingCopy } from './working-copy.js';
-import { localWorkspace } from './paths.js';
+import { ensureWorkingCopies } from './working-copy.js';
 import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
@@ -263,10 +262,9 @@ export class CognitionCore {
         ui_titles: this.uiTitles ??= (await languageWords(await savedLanguage(this.ctx.asunaFloor.dataRoot))).titles });
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
-      // Her own working copy of the checkout, in her home working folder: made once, never reset (ADR-065).
-      ensureWorkingCopy(this.ctx.asunaFloor.checkout(), localWorkspace(this.ctx.asunaFloor.dataRoot)).then(
-        copy => copy.state === 'created' && this.ctx.logger.info('Asuna: made her working copy at ' + copy.path),
-        error => this.ctx.logger.warn('Asuna: her working copy was not made: ' + String(error?.message ?? error)));
+      // Her own working copy of the checkout in each home place's folder: each made once, never reset (ADR-065).
+      ensureWorkingCopies(this.ctx.asunaFloor.checkout(), status.home_workspaces ?? [],
+        text => this.ctx.logger.info(text), text => this.ctx.logger.warn(text));
       await this.schedules.retitle().catch(error => this.ctx.logger.warn('Asuna: scheduler session not retitled: ' + String(error)));
       // Publish the native controller's own summaries after cold metadata
       // repair, including to clients already connected during worker startup.

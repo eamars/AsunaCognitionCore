@@ -398,7 +398,9 @@ class BusinessWorker:
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
-        return {**self.status(), 'navigation': self.navigation}
+        from .grants import home_workspaces
+        # The Host makes her working copy in each (working-copy.js, ADR-065).
+        return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config)}
 
     def prepare_navigation(self, native_sessions):
         """Bind real native conversations; the Host owns their logs and workspaces."""

@@ -70,7 +70,8 @@ Cost: no tool, prompt or per-turn change; the core skill `asuna-self-improvement
 
 The owner wanted her to work on the project as the coding agents do: commit and push. Three ways were weighed:
 
-- **A, chosen:** her own permanent working copy in her home working folder, which her commands may already write.
+- **A, chosen:** her own permanent working copy in each home place's working folder, which her commands there may
+  already write.
 - **B, not chosen:** her commands write the whole local checkout. Built and measured on a branch, then dropped: DSH's
   Windows grant labels everything under its root Low integrity, and Windows starts a program whose file is labelled
   Low at Low integrity. The checkout holds `.venv`, whose Python is the worker's: started from it, the test suite could
@@ -83,9 +84,16 @@ The owner also decided that she pushes with the owner's GitHub account.
 
 Decisions for the build:
 
-- **The working copy:** `<her home working folder>/working-copy` (`.runtime/work/local-user/working-copy` in a
-  checkout's own data folder), the folder her local chat, agent lines and peer line work in. The Host makes it at start
-  (`working-copy.js`, called after the worker is up) when it is missing: a clone of the checkout's default branch from
+- **The working copies:** `<home place's folder>/working-copy` in each home place: the local chat's
+  (`.runtime/work/local-user` in a checkout's own data folder) and each home line speaker's (`.runtime/channels/<channel>-<route>`:
+  every agent line and the peer line; `grants.home_workspaces`, which the worker returns at initialize). A task's
+  `/task` is its own place's folder and DSH gives a command one writable root, so one shared copy outside them could not
+  be written; each place has its own clone (about 108 MB each), and her skill makes fetch and rebase the first step of
+  every job in one, since another place may have pushed. Platform places, the owner's QQ DM included, get none. The
+  checkout stays read-only to her: a confined `git fetch` there fails (`.git/FETCH_HEAD` denied), so its `origin/*`
+  moves only when the Host fetches; her skill says to read GitHub with `git ls-remote` or a fetch in a working copy. The
+  Host makes each copy at start (`working-copy.js`, after the worker is up, one after another) when it is missing: a
+  clone of the checkout's default branch from
   disk (no network at start; its own object files, no hard links), `origin` set to the checkout's origin, fetching every
   branch. Made beside it and renamed, so a half-made copy is never taken for hers; one that is there is never changed.
   It is never the checkout, and nothing the Host runs is in it. Her author name comes from `character_git` as for every

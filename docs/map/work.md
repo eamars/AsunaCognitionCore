@@ -56,6 +56,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 
 Host-owned resource grants, never inferred from a message or model role.
 
+- def `home_workspaces` — The working folders of her home places: the local chat's, and each of a home line's speakers' (agent lines, the peer line).
 - def `workspace_grant`
 - def `conversation_workspace` — Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it; each turn still checks its own speaker with workspace_grant).
 - def `development_granted` — Who may hand work with the development tools to the action brain (ADR-011 §6.1).

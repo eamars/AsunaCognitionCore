@@ -13,6 +13,18 @@ added under "Her review" as Claude's paraphrase for her to sign or correct, as A
 **If you do not learn to forget, you leave no room to learn new things.** Everything below serves that sentence:
 forgetting is part of learning, not a loss to be prevented. It is how this ADR is first put to her.
 
+Put to her as: forgetting here means putting down, not throwing away; what you stop using moves to a shelf, its words
+kept, and something can always bring it back.
+
+**What stays is what is memorable, not what is chosen** (the owner, 2026-10-13: a person has no choice over what to
+remember and what fades; only the most memorable stays). Revision owed before this ADR is built: her explicit keep
+acts (pin, 带着 / 放手 / 改写 at night, confirmation doubling a stay) go; what fades is decided by memorability, which
+for a person is rehearsal (use: surfaced or recalled, already here), feeling at the time (her affect when the item was
+written, not yet used here), repetition from several sides (the same idea in different conversations or from
+different people) and surprise (an item that corrected or contradicted what she held). Her influence stays indirect,
+as a person's is: what she keeps using, what moved her, what she writes in her diary. The gist step and recall
+bringing an item back stay.
+
 ## 1. Context: every store of hers only grows
 
 Measured 2026-10-13 on her live database (counts, lengths and dates only; no content read):

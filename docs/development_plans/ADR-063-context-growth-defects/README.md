@@ -62,6 +62,29 @@ Claude's scratchpad `growth/`.
 Not a defect: her sister's host answers `session/page` without authentication on the LAN. That is by design (owner
 2026-10-13: a local server, no login wanted).
 
+### Measured after (2026-10-13 13:20 NZDT)
+
+All of the above live since her restart at 11:37:54 NZDT (main a9e3f7c3); the size-floor fix af8935e6 and the stale
+readings cleared live at 11:47 (ADR-049). Same scripts as the survey, turns since that restart; samples are small
+(about 1.5 hours) and are re-read after a full day.
+
+| Conversation | Before (characters a turn) | After |
+|---|---|---|
+| Local chat, whole turn | 27,976 | 14,001 (7 turns) |
+| Local chat, notice median | 19,627 | 6,709 |
+| Agent line, notice median | about 12,750 a turn | 6,049 (4 turns; her reasoning that hour was long, so the whole turn was not smaller) |
+
+Duplicated blocks within the conversation: none in either (the report's duplicate columns are zero). The largest block
+left in the local chat is recalled memories (median 3.6k, different every turn), ADR-062's ground.
+
+Prompt cache (her requests, cached share of input): local chat 89.8% (200 requests, 10-12 08:21 to 10-13 10:37
+NZDT) to 95.3% (23 since); agent line 86.6% to 96.7%; uncached input per request across her conversations 13,450 to
+7,253 tokens. Group conversations after include the condense requests of the size-floor loop before 11:47 (summaries
+are not cached), so their hit rates are not compared yet.
+
+Seen: a group's first turn after a condense sends its whole notice (37.6k in one group), since nothing is on the
+surface yet; expected once per condense.
+
 ## How it is worked
 
 One fix at a time in this order, each with its test, the full suites green, merged to main; her restart installs each

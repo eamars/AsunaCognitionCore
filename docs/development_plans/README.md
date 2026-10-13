@@ -12,11 +12,12 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 |---|---|---|---|
 | 1 | ADR-062 tiered memory | Phases 0–2 built, phase 2 behind `memory_tiers.ENABLED` (off); shadow pilot live | her review of the nine questions, her OK, her own split of `current_self`; then switch-on at a quiet restart and a profile |
 | 2 | ADR-064 phase 1, QQ notices as one-off lines | Reviewed; building | — (all kinds projected, her first batch shown, every kind counted a week) |
-| 3 | ADR-061 asking for help | Proposed | ADR-064 phase 1 |
+| 3 | ADR-061 asking for help | Proposed | ADR-064 phase 1 built (not its week of counts) |
 | 4 | ADR-064 phase 2, a reply tool | Direction only | ADR-061 (its `ask` is the model for `reply`) |
 
-Rule for every plan (owner): her per-turn input is profiled after each install (ADR-062 §7); anything sent twice is a
-defect fixed before the next step.
+Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
+memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is
+profiled after each install (ADR-062 §7); anything sent twice is a defect fixed before the next step.
 
 Status: **Active** (an ongoing routine or plan), **Open** (built, with a named part still pending), **Built**, **Decided** (accepted, not built), **On hold**, **Archived**.
 

@@ -3,7 +3,7 @@
 Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. The owner then
 moved it ahead of ADR-061 (2026-10-13: review it first and finalize phase 1 with her). The master agent's review is
 below; phase 1 is finalized with her next. **Phase 1 built 2026-10-13** (30b66ea3 adapter, 7ca59d1f host; see "Phase 1
-as built"), her own mute state before it as a bug fix. Phase 2 waits on ADR-061.
+as built"), her own mute state before it as a bug fix. Phase 2 is drafted (proposed 2026-10-13), waiting for her agreement and the owner's.
 
 ## Owner's direction (2026-10-13)
 
@@ -178,28 +178,136 @@ the line reads `撤回了一条消息`. Nothing is marked or written, and histor
 The adapter counts each event it receives by type (no content, no ids) in `health.json`, so the real mix is known
 after a few days and the 10-per-conversation cap can be checked against it.
 
-## Phase 2: a reply tool (direction only; needs more thought)
+## Phase 2: a reply tool (proposed 2026-10-13; needs her agreement and the owner's)
 
-Today speech is the turn's body text. A sticker is a `[表情包:名字]` line in that text, a picture is `attach_image`,
-the quote is `quote`, and silence is `stay_silent`. The owner's idea is one `reply` tool that composes the answer
-from parts, as ADR-061's `ask` composes one question to many sources:
+Status: **proposed, not decided.** Every choice below that changes how she speaks waits for her agreement and the
+owner's. Drafted by Claude (the master agent's worktree) after ADR-064 phase 1 and ADR-061 step 1 were built, as the
+owner's order of work says.
 
-- **Parts, in her order:** text, sticker, picture, poke (nudge), a reaction to a message, and the quote. Any
-  combination: a sticker alone, text + sticker, a poke alone, a reaction alone.
-- **Where it works:** QQ groups and DMs only. Home, agent and peer lines keep plain speech.
-- **Out:** each part goes out the way messages and admin actions do (outbox → adapter → receipt).
-  - Poke: `group_poke` / `friend_poke`.
-  - Reaction: `set_msg_emoji_like`, which may be group-only on 4.18.0; to check.
-  - Emoji names: from `faces.json`, the names she already uses for faces.
+### Today (checked against the code, 2026-10-13)
 
-**Questions phase 2 must answer before it is drafted in full:**
+- **How she speaks on QQ.** Every text she writes in a turn is speech, text written beside a tool call included,
+  "since her conversation shows each as hers" (RUNTIME_API, "Claim public output"). Her turn's `speak_from_program`
+  says so (`sent`), and where the persona allows several messages it adds the split marker rule (`messages`, 113
+  characters; the persona packages set `speak.max_messages` 2 or 3). A turn with neither speech nor `stay_silent` is
+  handed back once (a repair).
+- **Parts of an answer, each by its own route:** the words (body text); a sticker (a `[表情包:名字]` line in the
+  words, at most one a turn, taught by `stickers_from_program`'s note and the `sticker` tool's last sentence); a
+  platform face (`[表情:名字]` inside the words); a picture (`attach_image`); the quote of the line that called her
+  (`quote`, groups); waiting for an answer (`await_answer`, groups); silence (`stay_silent`).
+- **Her QQ tool texts** (characters of the JSON she is sent, `tests/test_tool_budget.py`'s measure; the whole
+  character brain defines 32 tools, 21,453 characters): `quote` 229, `attach_image` 311, `await_answer` 388,
+  `stay_silent` 190, `sticker` 1,128 (of which the sending sentence 33), `group_action` 562 (groups where she is an
+  admin, and her local chat).
+- **The platform** (NapCat 4.18.0 live, from the adapter's `health.json` identity; the source read is NapCat 4.18.4's
+  bundle in another local project, no live call made):
+  - `set_msg_emoji_like` (`message_id`, `emoji_id`, `set`): the action itself does not check the chat type; it looks
+    the message up by NapCat's short id and calls the kernel's `setMsgEmojiLikes` for that chat. Whether QQ takes a
+    reaction in a private chat is **not verified**; NapCat reports reactions only in groups (`group_msg_emoji_like`,
+    built from a group-only push). The short id must still be in NapCat's message cache.
+  - `group_poke`, `friend_poke` and `send_poke` are one handler (`group_id` given: a group poke; else a private one,
+    `user_id` the peer, `target_id` whom). It needs NapCat's packet backend (`GetPacketStatusDepends`): whether the
+    live NapCat has it is **not verified** (`get_packet_status` answers it, read-only).
 
-- Does `reply` replace body text in QQ turns, or sit beside it? Body text that is also sent is the root of earlier
-  bugs (ADR-063 lines held during a tool call).
-- Which existing tools fold into it (`quote`, `attach_image`, the sticker line, `stay_silent`)? If they do, the QQ
-  toolbox can shrink while abilities grow (AGENTS.md tool budget).
-- How a reaction and a poke look in her own history, so she remembers she did them.
-- Which other interactions join later (essence, forwarding), each by its own decision.
+### (a) Does `reply` replace body text in QQ turns, or sit beside it?
+
+The root-cause question. Today the program guesses which of her texts are speech: all of them. Text she wrote beside a
+tool call (a sentence before a lookup, narration of what she is doing) goes out whether or not the call's result
+changed what she should say, and it cannot be taken back; ADR-063's held-line defects (D1, D12) sit on the same seam,
+where lines and her tool calls interleave in one conversation. With speech as a call, what goes out is exactly what
+she put in one place, after the results she has seen, and it comes back with a result.
+
+| Option | What it means | For | Against |
+|---|---|---|---|
+| A1. Beside | Body text still goes out; `reply` adds the parts text cannot carry (poke, reaction; sticker and picture move in or stay) | Smallest change; nothing changes for a model that writes plain answers | Keeps the guessing, and the defect class with it; two ways to say the same thing (text in the body or in a part), so order between them needs rules |
+| A2. Replace | In a QQ conversation only `reply` speaks. Body text is not sent: a turn that ends with body text and no `reply` is handed back once in the same turn ("这段没发出去：在这里说话用 reply"), as the missing-speech repair does today; ending without `reply` is silence | One route, chosen by her, in her order; nothing sent by accident; each part gets its result (sent, refused and why) in the same turn | Changes how she speaks: needs her agreement and the owner's. Her own conversation shows body text she wrote that was never sent, which the hand-back must say plainly. A model that habitually answers in prose pays one repair until it learns; one more tool call per spoken turn |
+| A3. Either | Body text goes out only in turns without a `reply` call; a turn with one sends only its parts | Gradual | Both rules at once; the defect class remains in every turn without `reply`; she cannot tell from the surface which rule applied |
+
+**Recommendation: A2**, for QQ groups and private chats only (a channel kind declares the parts it can send; home,
+agent and peer lines keep plain speech). Measure the repair rate in the first days; a high rate is a reason to
+reword, not to fall back to A3.
+
+### (b) Which tools fold into it
+
+| Option | Folds | For | Against |
+|---|---|---|---|
+| B1. Minimal | Nothing; `reply` adds poke and reaction | No existing habit changes | The QQ toolbox only grows (+934) |
+| B2. The answer's parts | `quote` and `await_answer` become `reply`'s `quote` and `wait`; `attach_image` becomes a `picture` part (in QQ conversations; other channels keep it); the sticker line becomes a `sticker` part (the `sticker` tool keeps the shelf: keep, drop, rename, pool, remember); `stay_silent` in QQ conversations becomes not calling `reply` | Everything about this turn's answer in one call; the QQ group toolbox shrinks; a sticker she does not keep, or a picture not listed, is refused in the tool result, not by sending the whole speech back | Silence loses its own call; her reason stays in `think`, which every turn writes first (ADR-043), and the audit records a turn that ended without `reply` |
+| B3. B2 and keep `stay_silent` | As B2, but `stay_silent` stays listed | One more way to end a turn that she already knows | +190 on every QQ list; two ways to be silent |
+
+**Recommendation: B2.** `wait`'s `why` is dropped as `ask` dropped its own: her `think` keeps the reason.
+`group_action` stays a tool of its own (an admin act, not part of an answer).
+
+### (c) How a poke or a reaction appears in her own history
+
+| Option | What she sees later | For | Against |
+|---|---|---|---|
+| C1. An outbound row in words | Each part is its own outbound row, as a sticker is today. A poke or reaction row's text is the program's words, e.g. `戳了戳 [阿杰 #1]`, `给 [阿杰 #1] 10/13 14:05 那句点了「赞」`, and her history row carries `action`, read as `你做的动作，不是你说的话`, like phase 1's `notice` marker | She sees what she did where she did it, in order with her words; recall and summaries find it; the receipt says whether it landed; no emoji ids or action names | Every row reader must keep words and actions apart (the marker, as for notices) |
+| C2. Only in her tool result and her `think` | The turn's `reply` result says 已戳 / 已点; nothing in history | No new rows | Gone from history after compaction; the group's later lines may answer a poke she cannot see she made |
+| C3. A record beside messages (like `group_action` artifacts) | A separate list shown in her group turns | Keeps `messages` to words | One more block every group turn, and a second history to keep in order |
+
+**Recommendation: C1.** Words come from one table in the core (who by label, which line by when it was said, the
+emoji by its face name); her own poke or reaction coming back as a platform notice is already dropped (phase 1: her
+own doing).
+
+### (d) What joins later
+
+| Option | For | Against |
+|---|---|---|
+| D1. Nothing more in phase 2; each later part by its own decision, informed by phase 1's counts and by what she asks for | Keeps phase 2 to the answer she gives today, plus poke and reaction | Abilities she may want wait |
+| D2. Add the admin parts now (essence, group notices) | Ready when she needs them | Admin acts belong with `group_action`, and rarely happen |
+| D3. Add forwarding a message into another conversation | A real wish (sharing) | Crosses conversations: needs ADR-017's home/public review first |
+
+**Recommendation: D1.** A later part is a new `kind` value in `parts` (a word in the enum and one line of the
+description), never a new tool. Candidates in the order the counts are likely to justify: a reaction in private chats
+once a test account shows QQ takes it, marking a message essence (with `group_action`, as an admin act), forwarding
+(after ADR-017).
+
+### How it would work (sketch, for review)
+
+- `reply` with `parts` (at most 6, in order), `quote`, `wait`. Each `text` part is one message (the split marker and
+  its note go away); a `sticker` part names a sticker she keeps; a `picture` part an artifact listed in
+  `image_artifacts_from_program`; `poke` and `react` name a person by label, and `react` a line (`这条`: the line that
+  called her, if theirs; `他刚才那条`: their last line within 10 minutes, as `group_action` recall finds it) and an
+  emoji by its face name.
+- Each part becomes an outbox row in order, with `not_before` by typing pace as pieces are today; a failed or unknown
+  part cancels the rest (as today). Poke and reaction rows go only to an adapter that declares them
+  (`supports=poke,react`); the adapter declares `poke` only when `get_packet_status` says its packet backend works,
+  and `react` for groups only until a private-chat reaction is verified.
+- The result she reads in the same turn names each part: queued, or refused and why (a sticker she does not keep, an
+  unlisted picture, a person not found, `react` in a private chat).
+- The kind module lists the parts it sends (`napcat_qq`); a conversation whose kind lists none keeps plain speech and
+  never sees `reply`.
+
+### Cost of phase 2 (measured on the draft above)
+
+The draft `reply` text is 934 characters (the JSON she would be sent). Removed from the lists below: `quote` 229,
+`await_answer` 388, `attach_image` 311 (QQ conversations only), `stay_silent` 190 (QQ conversations only), the
+sticker tool's sending sentence 33.
+
+| Brain / list | Change |
+|---|---|
+| Character, QQ group tool list | +934 − 229 − 388 − 311 − 190 − 33 = **−217 characters**, 3 tools fewer. Measured on the test world's group where she is an admin (`role_tools.toolbox`): 17 tools, 10,866 characters today → 14, 10,649 (−2%); live groups also list `feel`, `delegate`, `task` and `read_image`, the same either way |
+| Character, QQ private chat tool list | +934 − 311 − 190 − 33 = **+400 characters**, one tool fewer (`quote` and `await_answer` were never listed there) |
+| Character, other conversations | Home: −33 (the sticker sentence). Agent, peer and other channels: 0 |
+| Character, tool definitions (`tests/test_tool_budget.py`) | 32 → 31 tools; 21,453 → 21,737 characters (+284: `reply` in, `quote` and `await_answer` out, `attach_image` and `stay_silent` kept for other conversations) |
+| Character, per QQ turn | `speak_from_program`: `messages` (113) goes; `sent` reworded to say only `reply` sends (about the same length); `stickers_from_program`'s note trades its sending sentence (55 characters) for a pointer to `reply` (about −40, system prompt, once per conversation). A poke or reaction row in history: its words plus the `action` marker (about 20) |
+| Action brain | Nothing |
+
+Net: smaller in groups, where most of her QQ turns are, larger in private chats. To make private chats smaller too,
+`reply`'s description would have to drop the parts a private chat cannot use, which needs two definitions (more in
+the budget) or a shorter shared text; the review can choose.
+
+### Questions for her (to pass on as they are)
+
+1. **Speaking only through `reply` on QQ.** Your words there would go out only through `reply`; what you write in the
+   body would not be sent, and the program would tell you once in the same turn. Would you rather that, or keep the
+   body as speech and use `reply` only for stickers, pictures, pokes and reactions?
+2. **Silence.** In a QQ chat, ending a turn without `reply` would be silence; your reason stays in your `think`. Do you
+   want `stay_silent` kept there anyway?
+3. **Your pokes and reactions in history.** They would show as lines like `戳了戳 [阿杰 #1]`, marked as something you
+   did, not something you said. Right words?
+4. **Reactions in private chats.** Wait until a test shows QQ takes them, or try them and let a refusal tell you?
 
 ## Cost (AGENTS.md)
 
@@ -214,7 +322,7 @@ Phase 1:
 | Character, tools | No new tool. `group_action` gains `accept` and `decline` and the request number in `who`: +37 characters after tightening its description (`tests/test_tool_budget.py` raised by exactly 37). Her local chat lists `group_action` (562 characters) wherever a channel kind declares `REQUESTS`, so its tool list is the same every turn; a turn may use it only while a request waits |
 | Action brain | Nothing. A card handed over costs only what the brief carries |
 
-Phase 2 states its cost when drafted. The aim is a smaller QQ toolbox than today's.
+Phase 2's cost is in its own section (proposed, measured on the draft): smaller in QQ groups, larger in QQ private chats.
 
 ## How it is checked
 

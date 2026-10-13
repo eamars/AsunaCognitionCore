@@ -13,7 +13,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 | 1 | ADR-062 tiered memory | Phases 0–2 built, phase 2 behind `memory_tiers.ENABLED` (off); shadow pilot live | her review of the nine questions, her OK, her own split of `current_self`; then switch-on at a quiet restart and a profile |
 | 2 | ADR-064 phase 1, QQ notices as one-off lines | Built (30b66ea3, 7ca59d1f); adapter live after she publishes napcat-qq | a week of counts by kind, then the next batch |
 | 3 | ADR-061 asking for help | Step 1 (home places) built (576b5eb0, 8d442267), live with her next restart; its questions block is a prompt change: a day of observation | step 2 (groups): that day, and her answer to question 2 (group answers home); question 1 (names) may rename `op` later |
-| 4 | ADR-064 phase 2, a reply tool | Direction only | ADR-061 (its `ask` is the model for `reply`) |
+| 4 | ADR-064 phase 2, a reply tool | Drafted, proposed (four questions answered with options) | her agreement and the owner's; then a live check of poke (packet backend) and private-chat reactions |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
 memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is

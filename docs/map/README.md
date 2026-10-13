@@ -276,6 +276,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`channels`](../../src/asuna/channels.py) — Authenticated transport-neutral adapter seam.
 - [`channel_kinds`](../../src/asuna/channel_kinds.py) — Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq).
 - [`channel_admission`](../../src/asuna/channel_admission.py) — Owner-configured channel admission.
+- [`notices`](../../src/asuna/notices.py) — Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a notice into words, the host passes them on as the program's line, never as the words of the person who did it.
 - [`caught_up`](../../src/asuna/caught_up.py) — Lines caught up after a gap: a channel adapter fetched them from the platform's history once it was back.
 - [`forwards`](../../src/asuna/forwards.py) — Merged forwards in her conversations (QQ 合并转发): what a forward carried, kept on the line that brought it.
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).
@@ -376,6 +377,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/media_keys.py`](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py) — The current picture-link signatures for the host (ADR-035).
 - [`napcat-qq/integration/qqadapter/members.py`](../../packages/channels/napcat-qq/integration/qqadapter/members.py) — Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 - [`napcat-qq/integration/qqadapter/mutes.py`](../../packages/channels/napcat-qq/integration/qqadapter/mutes.py) — Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/own_mute`).
+- [`napcat-qq/integration/qqadapter/notices.py`](../../packages/channels/napcat-qq/integration/qqadapter/notices.py) — NapCat notices and requests as one-off lines (ADR-064 phase 1): every kind projected, the shown ones posted.
 - [`napcat-qq/integration/qqadapter/onebot.py`](../../packages/channels/napcat-qq/integration/qqadapter/onebot.py) — Forward WebSocket client: one read-only /event connection, one /api call connection, with echo correlation and late-ack tolerance.
 - [`napcat-qq/integration/qqadapter/outbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/outbound.py) — Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - [`napcat-qq/integration/qqadapter/peers.py`](../../packages/channels/napcat-qq/integration/qqadapter/peers.py) — Peer identity: who is speaking, and whether it is still the same person.

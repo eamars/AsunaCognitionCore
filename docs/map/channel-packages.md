@@ -175,6 +175,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
   - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
+  - `post_notice` — A line about her own account for her home session (notices.py); `accepted` once the host took it.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `post_receipt`
@@ -260,6 +261,27 @@ Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/o
   - `post` — 'posted', 'refused' (the host will not take it: nothing to do there) or 'retry'.
   - `look` — Read her mute in one group and post it; 'muted', 'free', or why it could not.
   - `sweep_now`
+
+## `napcat-qq/integration/qqadapter/notices.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/notices.py](../../packages/channels/napcat-qq/integration/qqadapter/notices.py)
+
+NapCat notices and requests as one-off lines (ADR-064 phase 1): every kind projected, the shown ones posted.
+
+- def `duration_words`
+- def `emoji_words` — An emoji reaction by name: a QQ face's name, a Unicode emoji itself, else 一个表情.
+- def `kind_of` — The kind this notice or request counts under, before any check: (kind, known).
+- def `project` — One notice as {kind, words, where, actor, group_id, people, ...}, or None when it is not projected (a kind without words, her own doing, or a shape that names nobody).
+- class `Counts` — How many of each kind arrived, by UTC day, with no content; kept across restarts.
+  - `add`
+  - `save`
+  - `summary`
+- def `envelope` — (the event to post for a shown group or private-chat line, None) or (None, why it is dropped): the same gates as a message from the person who did it.
+- class `HomePoster` — Posts the lines about her own account to the host from its own thread, with the names they need (read-only `get_stranger_info` for who did it, `get_group_info` for a group she has no conversation in).
+  - `put`
+  - `loop`
+  - `body`
+  - `post`
 
 ## `napcat-qq/integration/qqadapter/onebot.py`
 
@@ -377,6 +399,7 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
 - class `Adapter`
   - `log`
   - `on_event`
+  - `on_notice` — A notice, request or meta event: counted by kind; her own mute to its state; a shown kind posted.
   - `submit_pending`
   - `health_snapshot`
   - `maybe_status`

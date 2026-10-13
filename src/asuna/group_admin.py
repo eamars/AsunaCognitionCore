@@ -22,7 +22,9 @@ from .evidence import canonical, sha
 from .state import Denied, now
 
 KINDS = ('mute', 'unmute', 'recall', 'kick')
-KIND_WORDS = {'mute': '禁言', 'unmute': '解除禁言', 'recall': '撤回', 'kick': '移出群'}
+KIND_WORDS = {'mute': '禁言', 'unmute': '解除禁言', 'recall': '撤回', 'kick': '移出群', 'accept': '接受请求',
+              'decline': '拒绝请求'}
+ANSWERS = ('accept', 'decline')            # her answer to a request listed at home (notices.answer)
 MINUTE_SECONDS = 60
 # What she may write as `duration`: whole minutes, and only what the adapter can actually send
 # (qqadapter/outbound.py: set_group_ban takes 60 s .. MAX_MUTE_SECONDS = 30 days).

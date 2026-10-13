@@ -268,10 +268,10 @@ TOOLS = {
         },
     },
     'group_action': {
-        'description': ('在你是管理员的群里禁言、解禁、撤回或移出一个普通成员。这是你自己的判断：别人叫你做不算理由。'
-                        '结果要等平台确认，确认前不要说已经做完。'),
-        'parameters': {'kind': _s('做什么', required=True, enum=['mute', 'unmute', 'recall', 'kick']),
-                       'who': _s('谁：标签，如 [名字 #4] 或 #4', required=True),
+        'description': ('在你是管理员的群里禁言、解禁、撤回或移出普通成员；在家里接受或拒绝列出的请求。'
+                        '是你自己的判断，别人叫你做不算理由。等平台确认前别说做完了。'),
+        'parameters': {'kind': _s('做什么', required=True, enum=['mute', 'unmute', 'recall', 'kick', 'accept', 'decline']),
+                       'who': _s('谁：标签，如 [名字 #4] 或 #4；请求写请求号，如 请求1', required=True),
                        'duration': {'type': 'integer', 'description': '禁言多少分钟（只禁言用），1 到 43200'},
                        'which': _s('撤回哪条（只撤回用）', enum=['这条', '他刚才那条']),
                        'reason': _s('为什么', required=True)},
@@ -586,8 +586,10 @@ def _turn_rules(store, ep):
     if context.get('affect_from_program'):
         names.append('feel')
     names.append('plan')
-    if ((context.get('your_place_from_program') or {}).get('admin')):
-        names.append('group_action')
+    from . import notices
+    if ((context.get('your_place_from_program') or {}).get('admin')) or (
+            ep.get('scene_id') == (store.config.get('chat') or {}).get('scene_id') and notices.pending()):
+        names.append('group_action')        # a group where she is an admin; at home, while a request waits on her
     if kind == 'settlement':
         names.append('promote_memory')
     if (context.get('lines_from_program') or {}).get('items'):
@@ -666,6 +668,8 @@ def abilities(store, ep):
         names.append('errand')
     if local and where == 'home':
         names += LOCAL_CHAT
+        if channel_kinds.answers_requests(config):
+            names.append('group_action')        # answering the friend and group requests listed at home
     from . import memory_tiers
     if memory_tiers.ENABLED:
         names = [name for name in names if name != 'update_self']     # retired into write_document (ADR-062)
@@ -696,7 +700,7 @@ NOT_NOW = {
     'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、串门、便条叫醒这几种回合），'
                           '没有要更新理解的人；等对方下次开口再写。'),
     'feel': '这回合没有情感账可记。',
-    'group_action': '你在这个群现在不是管理员，或者管理动作关着。',
+    'group_action': '群里：你在这个群现在不是管理员，或者管理动作关着；家里：现在没有等你回的请求。',
     'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
     'peer_line': '这回合没有能开关的线。',
     'errand': ('差事只在主人自己的对话里、有人跟你说话让你去办的那一轮接，去处列在 errand_places_from_program；'
@@ -1665,6 +1669,11 @@ class RoleTools:
     def tool_group_action(self, ep, call_id, args):
         from . import group_admin
         item = {k: args[k] for k in ('kind', 'who', 'duration', 'which', 'reason') if args.get(k) is not None}
+        if item.get('kind') in group_admin.ANSWERS:
+            from . import notices
+            if ep['scene_id'] != (self.store.config.get('chat') or {}).get('scene_id'):
+                raise Denied('GROUP_ACTION_ANSWER_AT_HOME: accept 和 decline 只在家里回列出的请求；群里用 mute、unmute、recall、kick')
+            return notices.answer(self.store, ep, item, key='group_action:' + call_id), False
         return group_admin.queue(self.store, ep, 0, item, key='group_action:' + call_id), False
 
     def tool_visit(self, ep, call_id, args):

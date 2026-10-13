@@ -24,6 +24,8 @@ GATED = {
     'awaited_answer': '你刚在这里问了人、说了在等回话；这句没 @ 你也没引用你，可能是在回你，也可能不是',
     'watched': '这个人在你的 watch 名单上，他在这里说话了；这句没 @ 你，不一定是对你说的',
     'catchup_mention': '这句是断线时漏收、恢复后补读进来的旧话，当时 @ 了你或回了你；那会儿你没看到，现在接不接由你定',
+    'poked': '有人戳了戳你（平台的戳一戳），没说话',
+    'reacted': '有人给你说过的一句话点了表情，没说话',
 }
 CHOICES = {'接话': 'join', '不理': 'quiet'}
 # Catch-up: the lines since she last spoke here, reaching back at least 10 and at most 60 minutes.
@@ -100,6 +102,10 @@ def material(store, scene, event, row, persona):
            **{'speaker_' + key: value for key, value in familiarity.words(store, event['person_id'], persona).items()},
            'since_you_spoke': since,
            'lines': lines or [people.transcript(scene, row)]}
+    from . import notices
+    held = notices.take(store, scene, persona, keep=True)      # after the stored lines; hers once, here or in the turn
+    if held:
+        out['notices'] = held
     from .affect import AffectLedger, interpret
     from .render import model_and_policy
     from . import visibility

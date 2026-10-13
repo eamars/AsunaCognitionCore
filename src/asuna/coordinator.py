@@ -429,6 +429,8 @@ class Coordinator:
             self.store.put('messages',{**row,'processing_outcome':'ATTEND_JOIN' if verdict['choice']=='join' else 'ATTEND_QUIET',
                                        'attend':verdict},expected=row['revision'],stream=ep['_id'])
         if verdict['choice']!='join':
+            from . import notices
+            notices.drop_seen(ep['scene_id'])        # the notices the gate showed were seen once
             return self._update(ep,state='COMMITTED',attend=verdict,silent_reason='不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])
         context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')

@@ -12,10 +12,10 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (32, 21018)       # ADR-062 phase 0: write_document kind, +137 characters
+CHARACTER = (32, 21055)       # ADR-064 phase 1: group_action accept/decline at home, +37 characters (description tightened)
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 20924)
+CHARACTER_TIERED = (31, 20961)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

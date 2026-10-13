@@ -28,6 +28,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
   - `members`
   - `media_keys`
+  - `notices`
   - `own_mute`
   - `receive`
   - `claim`
@@ -53,6 +54,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `faces_of` — The platform faces (name -> id) of the kind a scene id belongs to; empty when it has none.
 - def `home` — A scene or person of a kind whose conversations are trusted home ones (ADR-017).
 - def `owner_joins` — A scene of a kind the owner joins from the Web (ADR-051): a home line only.
+- def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
@@ -72,6 +74,22 @@ Owner-configured channel admission. Platform events never grant owner access.
 
 - def `restore_admissions`
 - def `admit` — Called only behind channel authentication; validate before changing state.
+
+## `notices`
+
+[src/asuna/notices.py](../../src/asuna/notices.py)
+
+Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a notice into words, the host passes them on as the program's line, never as the words of the person who did it.
+
+- def `kept` — The notice block the host keeps from an adapter's raw event, or None.
+- def `fill` — The notice's words with its {line} filled; None when it is about a line of hers that is not hers.
+- def `hold`
+- def `take` — The notices held for this conversation, as she reads them, once: {'items': [...], 'more': ...} or None.
+- def `drop_seen` — The gate showed them and she let the line pass: they were seen once.
+- def `forget`
+- def `home` — POST /v1/channels/<id>/notices: a line about her own account; held a minute, then one home event.
+- def `pending` — The requests she may answer now, by number.
+- def `answer` — group_action accept/decline at home: queue the answer to one listed request for the adapter.
 
 ## `caught_up`
 

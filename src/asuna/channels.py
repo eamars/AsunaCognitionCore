@@ -72,6 +72,10 @@ def kept_raw(event, raw, mentioned=None):
         kept[CATCHUP_KEY] = mark(raw)                         # a line fetched from history after a gap (caught_up.py)
     if raw.get(ASIDE_KEY) is True:
         kept[ASIDE_KEY] = True                                # not addressed to her: kept, does not wake her (ADR-045)
+    from . import notices
+    notice = notices.kept(raw)
+    if notice:
+        kept[notices.KEY] = notice                            # a platform notice projected to words (notices.py)
     own = raw.get('asuna_self')
     if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
             and own.get('role') in ('owner', 'admin', 'member'):
@@ -288,6 +292,10 @@ class Channels:
         from . import media_keys
         return media_keys.receive(channel_id, body)
 
+    def notices(self, channel_id, body):
+        from . import notices
+        return notices.home(self.store, self.controller, channel_id, body)
+
     def own_mute(self, channel_id, body):
         from . import own_mute
         with database_effects_lock(self.store.name):
@@ -348,15 +356,29 @@ class Channels:
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
         from . import media_keys
         media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
+        from . import notices
+        notice = event['raw'].get(notices.KEY)
+        scene = self.store.db.scenes.find_one({'_id': route['scene_id']}) if notice else None
+        if notice:
+            # A notice reads as the program's line (people.transcript); its {line} is the line it is about.
+            text = notices.fill(self.store, scene or {'_id': route['scene_id']}, notice, body['text'])
+            if text is None:
+                return {'status': 'dropped'}                # about a line that is not hers
+            event['text'] = text
         if route['target']['type'] == 'group':
-            event['group_context'] = group_context(self.store, route, body, event_id, member['person_id'])
+            event['group_context'] = group_context(self.store, route, body if not notice else
+                                                   {**body, 'text': '', 'mentioned_account_ids': []},
+                                                   event_id, None if notice else member['person_id'])
+            if notice:
+                event['group_context'].update(wake_reason=notice.get('gate'),
+                                              mentioned_account_ids=body.get('mentioned_account_ids', []))
         if 'occurred_at' in body:
             event['occurred_at'] = body['occurred_at']
         from . import lines
         if lines.is_closed(self.store, route['scene_id']):
             return {'status': 'line_closed'}           # she closed this peer line: passed over, never replayed
         from . import watches
-        watched = watches.seen(self.store, member['person_id'])
+        watched = None if notice else watches.seen(self.store, member['person_id'])
         if watched:
             # Someone on her watchlist spoke: she hears of it here, where they spoke (owner 2026-10-06).
             event['watched'] = watched['_id']
@@ -364,6 +386,8 @@ class Channels:
                 event['group_context']['wake_reason'] = 'watched'     # one look, through the relevance gate
         from . import switches
         blocked = switches.blocked(self.store, member['person_id'])
+        if blocked and notice:
+            return {'status': 'dropped'}                    # ADR-052: a notice from someone she blocked: nowhere
         if blocked:
             # ADR-052: someone she blocked: kept and searchable, wakes her nowhere, not addressed to her.
             event['blocked'] = blocked['_id']
@@ -376,6 +400,13 @@ class Channels:
             kept = focus.wake(self.store, self.store.db.scenes.find_one({'_id': route['scene_id']}), reason)
             if kept != reason:
                 event['group_context'].update(wake_reason=kept, resting=reason)
+            if notice and not event['group_context']['wake_reason']:
+                # Not for a look: shown once in this group's next turn, never stored (notices.py).
+                notices.hold(route['scene_id'], {'author': member['person_id'], 'text': event['text'],
+                                                 'scene_id': route['scene_id'], 'received_at': now(),
+                                                 **({'occurred_at': event['occurred_at']} if 'occurred_at' in event
+                                                    else {}), 'event': event})
+                return {'status': 'held'}
         return self.controller.receive(event)
 
     def _valid_publication(self, message, channel_id):
@@ -588,6 +619,8 @@ class ChannelServer:
                         value = channels.members(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['media_keys']:
                         value = channels.media_keys(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['notices']:
+                        value = channels.notices(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:
                         value = channels.own_mute(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:

@@ -488,7 +488,9 @@ class People:
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
         if stamp and is_caught_up(row):
             stamp += '（%s）' % CAUGHT_UP_WORD
-        lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')]
+        from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
+        lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
+                 + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line, not typed
         parent_id = group.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
                                            {'author': 1, 'text': 1, 'direction': 1}) if parent_id else None

@@ -14,6 +14,7 @@ A kind module knows one platform's id formats and adapter conventions:
   OWNER_JOINS (optional)                       the owner is a member of each of its conversations and writes there
                                                from the Web as the owner; default False
   SERVICE_ARGV (optional)                      its managed adapter's resident command, started by itself once
+  REQUESTS (optional)                          its adapter brings friend and group requests her home answers
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).
@@ -78,6 +79,12 @@ def home(identifier):
 def owner_joins(identifier):
     """A scene of a kind the owner joins from the Web (ADR-051): a home line only."""
     return home(identifier) and bool(getattr(of(identifier), 'OWNER_JOINS', False))
+
+
+def answers_requests(config):
+    """Whether a configured channel's kind brings requests her home answers (notices.py)."""
+    return any(getattr(_KINDS.get(str(channel_id).split(':')[0]), 'REQUESTS', False)
+               for channel_id in (config.get('channels') or {}))
 
 
 def sends_images(identifier):

@@ -17,7 +17,7 @@ from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
 from .familiarity import words as familiarity_words
-from . import attend, caught_up, own_mute
+from . import attend, caught_up, notices, own_mute
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -359,7 +359,8 @@ class ContextBuilder:
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
             'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1,   # a caught-up line shows when it was said
-            'platform_receipt.response.verification':1}   # what of her line the platform really stored
+            'platform_receipt.response.verification':1,   # what of her line the platform really stored
+            'event.raw.asuna_notice':1}                   # a platform notice is the program's line (notices.py)
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -379,7 +380,8 @@ class ContextBuilder:
                 stamp=schedule_rules.line_stamp(zone,said)
                 if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
         for row in history:
-            row.pop('event', None)
+            if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
+                row['notice']=notices.HISTORY_WORD
             # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
             lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
             if lost:row['not_landed']=lost
@@ -1006,6 +1008,10 @@ class ContextBuilder:
             # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
             from . import places
             context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
+            # Platform notices held for this group since its last turn, once (notices.py).
+            held=notices.take(self.store,scene,persona)
+            if held:
+                context['notices_from_program']=held
             # Muted there: every turn in that group says so before she speaks (own_mute.py).
             muted=own_mute.line(self.store,scene,schedule_zone,moment)
             if muted:

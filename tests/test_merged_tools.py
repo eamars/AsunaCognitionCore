@@ -33,13 +33,13 @@ def test_a_call_without_op_is_the_option_its_fields_plainly_name(store):
     Coordinator(store, lane).ingest(event('own-3', text='你感叹号好多'))
     noted, unclear = lane.tool_results[1], lane.tool_results[2]
     assert noted[5] and noted[4]['do'] == '没写 do：按你写的字段当作 note 办了。' and store.db.ideas.count_documents({}) == 1
-    assert not unclear[5] and unclear[4].startswith('ideas 的 op 是 note、read、review 之一')
+    assert not unclear[5] and unclear[4] == 'ideas 的 do 是 note、read、review 之一（没写 do）。'
     assert role_tools.infer_op('task', {'task': 't', 'page': 2}) == 'page'
     assert role_tools.infer_op('task', {'task': 't', 'message': 'm', 'reason': 'r'}) is None, 'two options: none'
     # DSH checks required fields before the program sees the call, so a field the program infers or defaults is
     # never required in the schema she is shown (an ideas call without op was refused 3 times in 8 on 10-12).
     shown = {spec['name']: spec['parameters'] for spec in role_tools.all_specs()}
-    assert not any(shown[name]['op'].get('required') for name in role_tools.OPS)
+    assert not any(shown[name]['do'].get('required') for name in role_tools.OPS)
     assert not shown['await_answer']['wait'].get('required')
 
 

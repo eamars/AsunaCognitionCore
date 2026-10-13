@@ -912,7 +912,8 @@ _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words
 def _given(args, field):
     """What she gave for an enum field, for a refusal: '（给的是「x」）' or '（没写 x）'."""
     value = (args or {}).get(field) if isinstance(args, dict) else None
-    return '（没写 %s）' % field if value is None else '（给的是「%s」）' % str(value)[:40]
+    shown = {'op': 'do', 'decision': 'do', 'how': 'quote_whom', **_SHOWN}.get(field, field)
+    return '（没写 %s）' % shown if value is None else '（给的是「%s」）' % str(value)[:40]
 
 
 # Why her understanding of someone was not saved (MemoryService.commit_understanding: NOT_COMMITTED), in words.

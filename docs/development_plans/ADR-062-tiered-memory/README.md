@@ -466,6 +466,9 @@ ADR-063 survey scripts, against the ADR-063 "Measured after" baseline. A finding
 phase, not a reading: any information sent twice (a block or row already on the surface, the same item carried in
 随身 and surfaced in memories or a recall result in one turn, the same text in two blocks of one notice), a block that
 changes every turn without new content, per-turn characters or uncached input rising, or anything else anomalous.
+The controlled bench is Claude's agent line with her (owner): Claude chooses what is sent, so a change in her input
+blocks or her answer is attributable; the other conversations are profiled as they come. Expected every turn and not a
+finding: the trigger, the clock, and a group's mute line while she is muted there (ADR-064, sent beside the trigger).
 
 **Measure before, during, after** (a script run daily, counts only):
 - store sizes per tier and per store; 随身 characters per turn by conversation kind (goal: `self` ≤ 2,400, persona

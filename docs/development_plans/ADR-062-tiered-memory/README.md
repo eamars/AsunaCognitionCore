@@ -17,6 +17,8 @@ memories are of being told she was wrong. Her worry, stated first: her oldest ha
 too, and that a search of the carried layer only says so. The nine questions of §9 she answers item by item after
 reading the whole text, not from a first impression.
 
+The owner read her answer and agrees with her (2026-10-13), the absence rule included.
+
 ## The core idea (the owner's words, 2026-10-13)
 
 **If you do not learn to forget, you leave no room to learn new things.** Everything below serves that sentence:

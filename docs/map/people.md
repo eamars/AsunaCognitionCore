@@ -63,6 +63,7 @@ The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls
 - def `roll` — The outcome for this beat: the occurrence seeds it, so the same beat always rolls the same.
 - def `line` — The one line her heartbeat opens with; `homes` names her lines for a reach_out.
 - def `waiting` — Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not).
+- def `losses` — What a 'nothing' beat would lose, by kind, so the roll's record says why it still reached her: {'waiting_groups': n} for groups where someone she waits for would drop off her list, {'asides_full': True}.
 - def `review` — dice_review_from_program: every roll since her last review (not this one), with what each beat did.
 
 ## `self_review`

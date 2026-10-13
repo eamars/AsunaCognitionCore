@@ -39,9 +39,14 @@ def test_nothing_does_not_reach_her_and_says_why_in_its_record(store):
 
 
 def test_nothing_still_reaches_her_when_only_a_heartbeat_would_show_what_waits(store, monkeypatch):
-    monkeypatch.setattr(dice, 'waiting', lambda *args: True)
+    monkeypatch.setattr(dice, 'losses', lambda *args: {'waiting_groups': 2})
     service, plan = beat(store, '歇着 1')
     assert plan['last_outcome'] == 'ENQUEUED' and service.controller.texts[0].startswith('这一拍掷到：歇着')
+    # The record says why a 'nothing' beat still reached her, so her day count and dice review can tell.
+    rolled = store.db.audit_events.find_one({'type': 'presence.rolled'})['payload']
+    assert rolled['reaches'] is True and rolled['lost'] == {'waiting_groups': 2}
+    item = dice.review(store, 'P1', 'another-beat')['rolls'][-1]
+    assert item['roll'] == '歇着' and '2 个群' in item['why']
 
 
 def test_what_waits_wakes_a_nothing_beat_only_when_an_hour_would_lose_it(store):

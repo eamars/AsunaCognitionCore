@@ -731,9 +731,13 @@ class ScheduleService:
         if not sum(weights.values()):
             weights = {**weights, 'interesting': 1}
         outcome = dice.roll(occurrence, weights)
-        reaches = outcome != 'nothing' or forced or dice.waiting(self.store, persona, moment)
+        lost = dice.losses(self.store, persona, moment) if outcome == 'nothing' and not forced else {}
+        reaches = outcome != 'nothing' or forced or bool(lost)
+        # Why a 'nothing' beat still reached her is kept with the roll, for her dice review and day counts.
         self.store.audit(plan['_id'], 'presence.rolled', {'occurrence': occurrence, 'period': period,
-                         'weights': weights, 'outcome': outcome, 'reaches': reaches}, plan['scope_key'])
+                         'weights': weights, 'outcome': outcome, 'reaches': reaches,
+                         **({'forced': True} if forced else {}), **({'lost': lost} if lost else {})},
+                         plan['scope_key'])
         if not reaches:
             return 'SKIPPED:DICE_NOTHING'
         opening = dice.line(outcome, period, weights, homes)

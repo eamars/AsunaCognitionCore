@@ -37,6 +37,8 @@ KEYS = {'awake': 'heartbeat.dice_awake', 'asleep': 'heartbeat.dice_asleep'}
 PERIOD_WORDS = {'awake': '醒着', 'asleep': '睡着'}
 ITEM = re.compile(r'(?P<name>[^\d\s]+?)\s*(?P<weight>\d{1,3})')
 SEPARATORS = re.compile(r'[、,，;；/\n]+')
+# Why a 'nothing' beat still reached her (dice review): what one more hour would have lost.
+LOST_WORDS = {'waiting_groups': '有 %d 个群里有人在等你回，再等一小时就掉出你的等待单', 'asides_full': '旁白单满了，再来一条最早的就看不见'}
 DEV_TEXT = '这是一次内部自我开发机会，不是用户消息或新授权；无需公开回复。'
 HINTS = {
     'nothing': '这一拍本来不叫你；叫你是因为有只在心跳里看得到、再等一小时就会丢的事（见下面的资料）。',
@@ -133,9 +135,21 @@ def line(outcome, period, weights, homes=()):
 
 def waiting(store, persona, moment):
     """Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not)."""
+    return bool(losses(store, persona, moment))
+
+
+def losses(store, persona, moment):
+    """What a 'nothing' beat would lose, by kind, so the roll's record says why it still reached her:
+    {'waiting_groups': n} for groups where someone she waits for would drop off her list, {'asides_full': True}."""
     from . import lines, places, waiting as _waiting
     groups = [scene_id for scene_id, _, _ in places.groups(store.config)]
-    return bool(_waiting.pending(store, groups, moment, persona)) or lines.asides_full(store)
+    pending = _waiting.pending(store, groups, moment, persona)
+    out = {}
+    if pending:
+        out['waiting_groups'] = len({row['scene_id'] for row in pending})
+    if lines.asides_full(store):
+        out['asides_full'] = True
+    return out
 
 
 def review(store, persona, occurrence, moment=None):
@@ -157,6 +171,10 @@ def review(store, persona, occurrence, moment=None):
         item = {'at': row['occurred_at'], 'roll': NAMES.get(p.get('outcome'), p.get('outcome')),
                 'period': PERIOD_WORDS.get(p.get('period'), p.get('period')),
                 'reached': '叫了你' if p.get('reaches') else '没叫你'}
+        lost = p.get('lost') or {}
+        if lost:                               # a 'nothing' beat that still reached her, and why
+            item['why'] = '、'.join(([LOST_WORDS['waiting_groups'] % lost['waiting_groups']] if lost.get('waiting_groups') else [])
+                                   + ([LOST_WORDS['asides_full']] if lost.get('asides_full') else []))
         if p.get('reaches'):
             source = ('self-development:dice:' if p.get('outcome') == 'self_development' else 'presence:') + p['occurrence']
             ep = store.db.episodes.find_one({'source_event_id': source}, {'silent_reason': 1})

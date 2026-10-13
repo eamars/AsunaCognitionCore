@@ -111,7 +111,7 @@ TOOLS = {
         'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一轮）；answer 回答它刚问你的问题（只在它问你的那一回合，'
                          '回答只给它看，答完这回合结束）；stop 叫停一件还在做或暂停着的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
                          '；page 翻读它交回的长报告原文。新的事用 delegate。'),
-        'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、reason、page 中的一样，就是那一样）',
+        'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
                              enum=['message', 'answer', 'stop', 'page']),
                        'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page 要）'),
                        'message': _s('要对行动脑说的话（message 要）'),
@@ -187,7 +187,7 @@ TOOLS = {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
             'reason': _s('为什么改', required=True),
-            'sid': _s('目标节的 sid（replace_section、correction、set_tags 用）'),
+            'sid': _s('目标节，照抄它的 section（replace_section、correction、set_tags 用）'),
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
@@ -209,7 +209,7 @@ TOOLS = {
                          '最多 168）屏蔽这个账号：他的话照存，但哪儿都不叫你，到点结束。'),
         'parameters': {'layer': _s('person（人那层）或 here（这里那层）', enum=['person', 'here']),
                        'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文'),
-                       'block': {'type': 'integer', 'description': '屏蔽他多少小时（不写理解时 layer、body 可省略）'}},
+                       'block': {'type': 'integer', 'description': '屏蔽他多少小时（不写理解时 layer、content 可省略）'}},
     },
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
@@ -246,7 +246,7 @@ TOOLS = {
             'intent': _s(limit=1000, description='届时要重新考虑的事'),
             'after_seconds': {'type': 'integer'}, 'every_seconds': {'type': 'integer'},
             'at': _s('本地时刻 YYYY-MM-DDTHH:MM'),
-            'line': _s('只在家里 create 时用：到点在哪条线里开一轮，照抄 lines_from_program 里的 line；不写就是这里'),
+            'line': _s('只在家里 create 时用：到点在哪条线里开一回合，照抄 lines_from_program 里的 place；不写就是这里'),
             'clock': {'type': 'object', 'additionalProperties': False, 'properties': {
                 'time': _s('HH:MM', required=True),
                 'weekdays': {'type': 'array', 'items': {'type': 'integer'}, 'description': '0=周一 … 6=周日；不写就是每天'}}},
@@ -306,7 +306,7 @@ TOOLS = {
     'peer_line': {
         'description': ('开或关你和另一个智能体之间的线（place 照抄 lines_from_program 里的）。关着时对方的话被跳过、不补发；'
                          '你的话照常发得出去。close_for 选 an_hour、until_morning（到早上八点）或 until_reopened。'),
-        'parameters': {'line': _s('哪条线：照抄 lines_from_program 里的 line', required=True),
+        'parameters': {'line': _s('哪条线：照抄 lines_from_program 里的 place', required=True),
                        'op': _s('开还是关', required=True, enum=['open', 'close']),
                        'close_for': _s('do=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
     },

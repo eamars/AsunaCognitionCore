@@ -22,6 +22,7 @@ Windows, `.venv/bin/python` elsewhere).
 | `check_staged_secrets.py` | Scans staged files (or `--all`) for secrets, and with `--personal` for personal data from `config/personal-denylist.local.txt`. Prints only `file:line:category`. Allowed literals: `personal_scan_allow.txt`. |
 | `cleanup_test_databases.py` | `--inventory <file>` lists leftover `asuna_v2_test_*` databases into a file; with `--apply`, drops exactly the inventoried ones. |
 | `check_dsh_release.py` | Compares the installed DSH version with the public registry's tags. |
+| `memory_pilot_report.py` | The shadow pilot's reading in counts (`memory_pilot.py`): would-be surfacings of her own items per day by turn kind, the floor that keeps them at or under one a turn and none in heartbeats, near-duplicate pairs, recall hits, the cost. `--since` limits it; `--drop` removes the pilot's collection. |
 
 ## Offline self-checks
 

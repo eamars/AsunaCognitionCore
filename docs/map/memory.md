@@ -26,6 +26,23 @@ Index persisted local dialogue off the generation thread; restart scans pending 
   - `close`
   - `request_stop` — Stop scheduling new index/summary work before host teardown begins.
 
+## `memory_pilot`
+
+[src/asuna/memory_pilot.py](../../src/asuna/memory_pilot.py)
+
+The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
+
+- def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
+- def `attach` — Start the pilot for a context builder that retrieves, when the switch is on: the Pilot, else None.
+- def `admitted` — Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor.
+- class `Pilot` — One background thread: turns are queued by `submit` and scored off the reply path.
+  - `start`
+  - `close`
+  - `submit`
+  - `run_job`
+  - `sync` — Embed new and changed items, mark the ones gone, and write the near-duplicate pairs the changes made.
+- def `report` — ADR-062 §7 phase 1, in counts: would-be surfacings per day by turn kind, the floor that keeps her own items at or under one a turn on average and none in heartbeats, near-duplicate pairs, recall hits, and what it cost.
+
 ## `retrieval`
 
 [src/asuna/retrieval.py](../../src/asuna/retrieval.py)
@@ -40,6 +57,7 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
   - `ensure_index`
   - `own_thoughts` — Her own thoughts (kind monologue) in the given conversations [(scope_key, policy_epoch)] matching the query, best first: vector and lexical ranks fused, each read back under the same filter.
   - `search`
+  - `query_vector` — The vector this retrieval last computed for the query, or None (a cached search computes none).
   - `close`
 
 ## `history_query`
@@ -125,6 +143,7 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 - class `DocumentStore`
   - `entity`
   - `key`
+  - `is_journal` — A running record: work_log, or a document she made with kind journal (it has rows, never a head).
   - `head`
   - `read` — (revision id, content) or (None, None).
   - `revision`

@@ -187,6 +187,9 @@ class FakeCollection:
         return FakeCursor([_project(doc, projection) for doc in self.rows.values()
                            if _match(doc, flt or {})])
 
+    def distinct(self, key, flt=None):
+        return sorted({doc[key] for doc in self.rows.values() if key in doc and _match(doc, flt or {})})
+
     def find_one(self, flt=None, projection=None, sort=None):
         cursor = self.find(flt, projection)
         if sort:

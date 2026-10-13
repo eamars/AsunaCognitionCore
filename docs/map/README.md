@@ -243,6 +243,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 
 - [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
+- [`memory_pilot`](../../src/asuna/memory_pilot.py) — The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
 - [`retrieval`](../../src/asuna/retrieval.py) — Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).
@@ -399,6 +400,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
+- [`memory_pilot_report.py`](../../tools/memory_pilot_report.py) — ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
 - [`outbound_image_offline_check.py`](../../tools/outbound_image_offline_check.py) — 出站图片附件（QQ 私聊 B 阶段第一步）的离线自检：不需要 Mongo、不需要 pytest、不联网、不发 QQ。
 - [`p1c_offline_check.py`](../../tools/p1c_offline_check.py) — ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。
 - [`p2_offline_check.py`](../../tools/p2_offline_check.py) — ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要闭环那批用例。

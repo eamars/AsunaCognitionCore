@@ -31,6 +31,9 @@ WRITE_STAGE_OPS = ('replace_section', 'append_section', 'correction')
 # Running records: one row per entry. As one document, work_log neared the 1 MiB revision limit within a week (about
 # 100 KB a day, 45 MB of whole-record copies).
 JOURNALS = ('work_log',)
+# What she may make a new document (ADR-062): a ledger reaches every turn where it is readable (ledgers_from_program),
+# a journal is a running record like work_log (rows), a working document is read by recall.
+NEW_KINDS = ('ledger', 'journal', 'working')
 SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects')
 
 
@@ -141,15 +144,20 @@ class DocumentStore:
     def key(self, slug):
         return self.entity(slug) + '|' + SCOPE
 
+    def is_journal(self, slug):
+        """A running record: work_log, or a document she made with kind journal (it has rows, never a head)."""
+        return slug in JOURNALS or bool(self.store.db.journal_entries.find_one({'persona': self.persona, 'slug': slug},
+                                                                               {'_id': 1}))
+
     def head(self, slug):
-        if slug in JOURNALS:
+        if self.is_journal(slug):
             revision_id, content = self._journal_read(slug)
             return ({'_id': self.key(slug), 'revision_id': revision_id}, {'content': content}) if content else None
         return self.store.head(self.entity(slug), SCOPE)
 
     def read(self, slug):
         """(revision id, content) or (None, None)."""
-        if slug in JOURNALS:
+        if self.is_journal(slug):
             return self._journal_read(slug)
         pair = self.head(slug)
         return (pair[0]['revision_id'], pair[1]['content']) if pair else (None, None)
@@ -160,8 +168,8 @@ class DocumentStore:
     def slugs(self, prefix=''):
         rows = self.store.db.state_heads.find({'_id': {'$regex': '^' + re.escape(f'doc:{self.persona}:' + prefix)}}, {'_id': 1})
         found = {row['_id'][len(f'doc:{self.persona}:'):-len('|' + SCOPE)] for row in rows}
-        found |= {slug for slug in JOURNALS if slug.startswith(prefix)
-                  and self.store.db.journal_entries.find_one({'persona': self.persona, 'slug': slug}, {'_id': 1})}
+        found |= {slug for slug in self.store.db.journal_entries.distinct('slug', {'persona': self.persona})
+                  if slug.startswith(prefix)}
         return sorted(found)
 
     # ── running records (JOURNALS): one row per entry ───────────────
@@ -348,7 +356,12 @@ class DocumentStore:
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:
             raise DocumentError('DOC_REASON_REQUIRED', 'reason %d 字，上限 2000 字' % len(reason)
                                 if isinstance(reason, str) and reason else 'reason 没写')
-        if slug in JOURNALS:
+        kind = intent.get('kind')
+        if kind is not None and kind not in NEW_KINDS:
+            raise DocumentError('DOC_KIND_INVALID', _bad_tag('kind', kind, NEW_KINDS))
+        if self.is_journal(slug) or (kind == 'journal' and op == 'append_section' and self.read(slug)[1] is None):
+            if kind not in (None, 'journal'):
+                raise DocumentError('DOC_KIND_FIXED', '「%s」已经是 journal；kind 只在新建文档时选，建好就不改' % slug)
             return self._journal_apply(slug, intent, body, base_revision_id=base_revision_id, author=author,
                                        mutation_id=mutation_id)
         replay = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
@@ -363,7 +376,10 @@ class DocumentStore:
             if slug.startswith('dossier:'):
                 # Person files are retired: what she knows about someone lives with that person (understand_person).
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写')
-            content = {'kind': 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
+            content = {'kind': kind or 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
+        elif kind is not None and kind != content['kind']:
+            raise DocumentError('DOC_KIND_FIXED', '「%s」已经是 %s；kind 只在新建文档时选，建好就不改'
+                                % (slug, content['kind']))
         content = copy.deepcopy(content)
         kind, sections = content['kind'], content['sections']
         if kind == 'contract':

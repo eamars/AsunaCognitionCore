@@ -244,6 +244,14 @@ class RuntimeHost:
                                              and self.controller.task_queue.empty()).start()
             self.app.memory_indexer = self.indexer
             self.stack.callback(self.indexer.close)
+            from . import memory_pilot
+            from .retrieval import Retrieval
+            # ADR-062 phase 1: measures which of her own items a turn would surface; delivers nothing.
+            self.pilot = memory_pilot.attach(getattr(getattr(self.app, 'coordinator', None), 'context', None),
+                                             self.app.store, self.settings.get('persona'),
+                                             lambda: Retrieval(self.app.store, self.evidence))
+            if self.pilot:
+                self.stack.callback(self.pilot.close)
             if self.config.get('channels'):
                 self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
                 self.stack.callback(self.channel_server.close)

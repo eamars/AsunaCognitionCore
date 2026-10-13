@@ -41,6 +41,7 @@ class Retrieval:
         self.weight_verified=False
         self.dim=768
         self.cache=OrderedDict()
+        self.vectors=OrderedDict()     # the last queries' vectors by query sha, for the shadow pilot (memory_pilot.py)
 
     def embed(self, texts, purpose):
         if self.cfg.get('manifest_sha256') and not self.weight_verified:
@@ -228,6 +229,8 @@ class Retrieval:
                 vector=[dict(row) for row in cached['vector']];self.cache.move_to_end(cache_key)
             else:
                 v=self.embed([query],'query')[0]
+                self.vectors[sha(query.encode())]=v
+                while len(self.vectors)>16:self.vectors.popitem(last=False)
                 pipeline=[{'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':192,'limit':24,'filter':vector_filter}},
                           {'$project':{'_id':1,'score':{'$meta':'vectorSearchScore'}}}]
                 vector=list(self.store.db.memory_units.aggregate(pipeline))
@@ -314,5 +317,9 @@ class Retrieval:
         self.evidence.record('retrieval.selection',manifest)
         self.store.audit('retrieval','retrieval.selected',manifest,scope)
         return selected,manifest
+
+    def query_vector(self, query):
+        """The vector this retrieval last computed for the query, or None (a cached search computes none)."""
+        return self.vectors.get(sha(query.encode()))
 
     def close(self):self.http.client.close()

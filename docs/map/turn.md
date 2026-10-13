@@ -59,7 +59,7 @@ Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene
   - `own_thoughts_elsewhere` — At home, what she herself thought in her groups about this (her monologue there, never their talk): each with the group's name and the time she thought it.
   - `said_at` — When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line.
   - `when` — A recalled record's time as her history lines show it, and how long ago: '10/11 19:16（3 小时前）'.
-  - `prepare`
+  - `prepare` — `turn_kind`: a recall's own turn kind, for the shadow pilot's row only.
 
 ## `context_budget`
 

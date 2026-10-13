@@ -200,6 +200,7 @@ TOOLS = {
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
             'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合（自动带上只限 persona、voice 的 always 节）', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
+            'kind': _s('新建文档时：ledger 活账，每回合带上；journal 流水；working 工作文档，默认', enum=['ledger', 'journal', 'working']),
         },
     },
     'update_self': {
@@ -1013,7 +1014,7 @@ class RoleTools:
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
-        _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True)
+        _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))
         documents, missing = read_sections(self.store, ep, sections, self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
@@ -1235,6 +1236,7 @@ class RoleTools:
             # tidy them by name from her nightly settlement (context_budget.review_block).
             if item.get('op') not in GROUP_NOTE_OPS:
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: op「%s」不行' % item.get('op'))
+            item = {k: v for k, v in item.items() if k != 'kind'}    # a group's notes are notes, whatever kind says
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'

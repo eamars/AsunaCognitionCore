@@ -187,6 +187,7 @@ INVENTED_MARK = '（自述编写，非共同经历）'
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
+        self.pilot=None    # ADR-062 phase 1: the shadow pilot the Host attaches (memory_pilot.py); measures, delivers nothing
 
     def _reply_context(self, rows, scene, *, keep_event=False):
         """Keep transport reply attribution when projecting scoped history."""
@@ -299,7 +300,8 @@ class ContextBuilder:
         hours=(moment-datetime.fromisoformat(str(said).replace('Z','+00:00'))).total_seconds()/3600
         return '%s（%s）'%(stamp,ago(hours))
 
-    def prepare(self, event: dict, persona='P1', recall=False):
+    def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
+        """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only."""
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
@@ -406,6 +408,17 @@ class ContextBuilder:
                 memories=[]
                 retrieval_manifest={'path':'scoped_history_without_rag','vector_verified':False,
                                     'error':redact_text(traceback.format_exc(),self.store.config)}
+            if self.pilot is not None and isinstance(event.get('text'),str):
+                try:
+                    # Queued only: scored off the reply path, written apart, never part of this context.
+                    self.pilot.submit(query=event['text'],vector=self.retrieval.query_vector(event['text']),scope=scope,
+                                      private_scope=visibility.owner_private_scope(persona)
+                                          if session_class==visibility.OWNER_PRIVATE else None,
+                                      scene=scene,session_class=session_class,
+                                      turn_kind=turn_kind or event.get('episode_kind') or 'external',event_id=event['event_id'],
+                                      recall=recall)
+                except Exception:
+                    pass
         else:
             readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
             if session_class==visibility.OWNER_PRIVATE:

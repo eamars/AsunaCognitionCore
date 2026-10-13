@@ -116,6 +116,14 @@ Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
 - def `build`
 - def `main`
 
+## `memory_pilot_report.py`
+
+[tools/memory_pilot_report.py](../../tools/memory_pilot_report.py)
+
+ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
+
+- def `main`
+
 ## `outbound_image_offline_check.py`
 
 [tools/outbound_image_offline_check.py](../../tools/outbound_image_offline_check.py)

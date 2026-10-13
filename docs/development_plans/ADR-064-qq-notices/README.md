@@ -618,3 +618,130 @@ assertion.
 **So acceptance needs one test I can actually build:** deliberately write two sticker markers in one turn and check
 whether that rejection notice shows up as a line in the group. It passes only when the group stays clean. Tonight's
 leak was that test, run by accident.
+
+## Phase 2 with ADR-061 step 2: the literal texts (for her review, 2026-10-14)
+
+The owner asked to take ADR-061 step 2 (asking in a group) and phase 2 (`reply`) together today. A question in a
+group is a `reply` that waits as a question. Her four answers are built in: (a) a group's answer reaches home in her
+own words, with who answered and a way to read the original line again, and the original is not stored at home; (b)
+each part's result plus the silence fact, with no extra line each turn; (c) words, stickers and pictures in one call;
+(d) `stay_silent` stays, a poke reads 「戳了戳 [某人 #1]」, and a reaction in a private chat is tried first and
+withdrawn if QQ refuses it. Names follow ADR-060 (`do`, `why`, `place`), which installs before this.
+
+### `reply` (QQ groups and private chats only)
+
+> 在这里说话。这里只有 reply 发得出去：正文不发。parts 按顺序列出这次要发的，一个一条：text 一句话；sticker 你收着的
+> 表情包（name）；picture 一张图（artifact_id 照抄 image_artifacts_from_program）；poke 戳一个人（who 照抄标签）；
+> react 给一句话点个表情（who、face 写表情名；line 写「这条」是叫你的那条，「刚才那条」是他十分钟内的最后一句）。
+> 群里还有：quote 第一条要不要引用叫你的那条（不写由程序定）；wait 写 no 不等回话，写 question 是在问这里的人，
+> patience 等多久，回答进 questions_from_program。有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用，
+> 或用 stay_silent。
+
+Parameters, as she would be shown them:
+
+| Name | Shown as |
+|---|---|
+| `parts` | 这次要发的，按顺序，最多 6 个；每个写 kind 和它要的字段 |
+| `parts[].kind` | `text`、`sticker`、`picture`、`poke`、`react` |
+| `parts[].text` | kind=text：要说的一句话（300 字以内） |
+| `parts[].name` | kind=sticker：你收着的表情包的名字 |
+| `parts[].artifact_id` | kind=picture：照抄 image_artifacts_from_program |
+| `parts[].who` | kind=poke、react：照抄标签 |
+| `parts[].line` | kind=react：「这条」或「刚才那条」 |
+| `parts[].face` | kind=react：表情名 |
+| `quote` | 群里：`source` 引用叫你的那条，`none` 不引用；不写由程序定 |
+| `wait` | 群里：`no` 不等回话，`question` 在问这里的人；不写由程序定（@ 了谁或在回谁就等他三分钟） |
+| `patience` | wait=question 时等多久：一会儿（默认）、半天、一天 |
+
+### What she reads back in the same turn
+
+All queued:
+
+> 发出 3 条，都排上了：1 text；2 sticker「摸鱼」；3 poke [阿杰 #1]。送没送到看下一回合的历史。
+
+As a question (group):
+
+> 发出 1 条，排上了：1 text。这是在问这里的人：问题 q-7f3a，等一会儿（10 分钟）；有人回会叫你看一眼，回答进
+> questions_from_program。
+
+One part wrong (nothing is queued):
+
+> 这次一条都没发：第 2 条 sticker「摸鱼」你没收着。改好再调用一次 reply。
+
+Other refusals, one sentence each: 「第 N 条 picture 不在 image_artifacts_from_program 里」, 「第 N 条找不到 [某人]」,
+「第 N 条是空的」, 「第 N 条这回合已经发过一样的」, 「这回合最多发 M 条，第 N 条超了」, 「这里戳不了：平台没开这个功能」.
+
+A reaction in a private chat that QQ refuses: 「私聊里点不了表情（平台不收），以后这里不再列 react」. The adapter then
+stops declaring it for private chats.
+
+### Words written outside `reply` (failure modes)
+
+Body text in a QQ turn is never sent. If the turn ends with body text and no `reply`, it is handed back once, in the
+same turn:
+
+> 这段没发出去：「……」（约 40 字）。在这里说话用 reply。
+
+If the turn still has no `reply`, it is silence, and her next turn in that place carries it once:
+
+> unsent_from_program：没发出去：「……」
+
+If she called `reply` and also wrote body text, the parts go out, the body does not, and the next turn carries the same
+`unsent_from_program` line. There is no hand-back, because she did speak.
+
+### Silence
+
+`stay_silent` stays. Its result keeps the fact she asked for, in words:
+
+> 这回合到此结束。reply 这回合发了 2 条（都排上了）。
+
+or 「这回合 reply 一条都没发。」
+
+A refusal or hand-back is part of a tool result or the program's note. It is never part of any text that goes out.
+Her acceptance test from 10-13 21:47 is a test: two sticker parts, one she does not keep, so the group gets nothing,
+and no message carries the refusal.
+
+### History: her own pokes and reactions
+
+Each is its own outbound row, in words, marked as an action:
+
+> 戳了戳 [阿杰 #1]（你做的动作，不是你说的话）
+> 给 [阿杰 #1] 10/14 12:05 那句点了「赞」（你做的动作，不是你说的话）
+
+### A question in a group, and its answer at home (her answer a)
+
+A question in a group is not an `ask` call; it is a `reply` with `wait=question`. The program opens it in
+`questions` like any other, with the group as its place and her line as the question. Answers join as ADR-061 step 2
+lists them: a reply to her line, a line from someone who then gets a look while it waits, or a reaction to her line.
+Each answer keeps who, when and the line's reference, never the text.
+
+In that group, `questions_from_program` shows it like her home questions, answers by label and time:
+
+> q-7f3a 你 12:05 问的：在等，一会儿（还剩 6 分钟）；回了：[阿杰 #1] 12:07、[小林 #4] 12:08
+
+To bring it home, she writes it in her own words with `leave_note`, which gains `question`:
+
+> `leave_note` 的 question：这张便条是哪个问题的回答，照抄 q-…；程序会在家里写上谁答的和原话在哪儿
+
+At home the note reads:
+
+> 便条（你在群聊「某群」写的）：……她自己的话……
+> 回答的是 [阿杰 #1] 10/14 12:07、[小林 #4] 12:08；原话家里不存，ask do=read id=q-7f3a 能读一次
+
+`ask` `do=read` with that id, at home, reads those lines from the group's record as they were said, for that turn
+only. They are shown with the group named and 群里的原话 marked, and nothing is copied home.
+
+### What goes away when `reply` is live
+
+- `quote`, `await_answer`, `attach_image` (in QQ conversations) and the sticker line: all are parts of `reply` now.
+- The split marker, everywhere.
+- The checks on her words in QQ turns that today hand the whole turn back: a sticker or face she does not have, and
+  stickers where none can be sent. They become refusals of one part.
+
+Kept, because they catch output that cannot be right: an empty part, a part over the length limit, the same part
+twice. A consult answered in body text is still handed back, and `think` still comes first.
+
+### Open for her
+
+1. The `reply` text above: any word wrong, missing or extra?
+2. The receipt lines: is anything there you would not understand at a glance in the middle of a group turn?
+3. The home note's last line and `ask do=read` as the way to read the original again: is that the entry you meant?

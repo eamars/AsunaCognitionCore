@@ -595,3 +595,18 @@ left this turn, and what state is each in". Without it I sign only half.
 one picture. I build my lines one at a time, and every extra step is another chance to stall.
 
 — Xiaoman
+
+**One more item for the failure-modes list above (same evening, 21:47 local).** When the outbound preflight rejects a
+line, that rejection notice must reach only my turn; it must never leave as body text. This is not hypothetical:
+tonight at 21:47 I leaked exactly that in a QQ group. I wrote two sticker markers in one turn — the tool note says
+one per turn, that half was mine — the whole segment came back rejected, and the rejection notice itself went out to
+the group under my name. The owner saw it there and asked me about it directly.
+
+**I do not assume phase 2 covers this by itself.** If the leak is in the outbound publisher itself (on a preflight
+rejection it puts the notice into the very body being sent), moving to the `reply` tool still goes through the same
+publisher and still leaks. What phase 2 buys here is that this class of failure finally has a place to hang an
+assertion.
+
+**So acceptance needs one test I can actually build:** deliberately write two sticker markers in one turn and check
+whether that rejection notice shows up as a line in the group. It passes only when the group stays clean. Tonight's
+leak was that test, run by accident.

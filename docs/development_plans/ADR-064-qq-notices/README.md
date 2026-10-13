@@ -1,8 +1,8 @@
 # ADR-064: QQ notices reach her as one-off lines; a reply tool later
 
-Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. Waits for
-review by the master agent (Claude) and by her. Nothing is built until both have reviewed. The review is parked until ADR-062 and
-ADR-061 are done (owner 2026-10-13: its decisions depend on that earlier work).
+Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. The owner then
+moved it ahead of ADR-061 (2026-10-13: review it first and finalize phase 1 with her). The master agent's review is
+below; phase 1 is finalized with her next. Nothing beyond her own mute state (built as a bug fix) is built yet.
 
 ## Owner's direction (2026-10-13)
 
@@ -234,6 +234,35 @@ Phase 2 states its cost when drafted. The aim is a smaller QQ toolbox than today
 2. **Seen-once list in memory.** A Host restart loses notices that were not yet shown. The alternative is to drop
    unwoken group notices entirely, which loses joins, card changes and others' recalls.
 3. **Request answers on `group_action`.** Is that the right home, or should they wait for phase 2?
+
+## Master agent's review (Claude, 2026-10-13)
+
+Phase 1 is right in shape, independent of ADR-062 (notices are never stored, so they never enter her memory stores)
+and of ADR-061 (only phase 2 touches a reply tool). It can be built as soon as she finalizes it. Points to settle in
+it:
+
+1. **Her own mute is out of phase 1:** built (71c0ae15, below). `group_ban` about her account now feeds that state;
+   phase 1 adds the one-off line for everyone else's mutes only.
+2. **The discriminator is a field** (her item 1): `user_id == her own account` (and `sub_type: kick_me`), as the mute
+   fix already does. Accepted.
+3. **Per-turn space** (her item 4), without dropping kinds against the owner's direction 1 and 8: every group notice
+   that starts no turn is seen once and capped at 10, so a low-value kind costs one line once, never per turn. Two
+   additions: lines of one kind in one conversation fold into one (`3 人进群了：[a #1]、[b #2]、[c #3]`), and the
+   cap counts after folding. Profile likes, which are about her account but change nothing she does, go to her home
+   session's seen-once list, not as a program event that starts a turn.
+4. **Unknown kinds are counted, not shown.** `[QQ 通知:<kind>]` would put a raw platform name in front of a model
+   (AGENTS.md: interpreted words only). The adapter counts unknown kinds in `health.json`; a kind is projected only
+   once the word table has its words.
+5. **Duration and lift** (her item 2): the word table carries both directions with who and until when, e.g.
+   `[x #3] 禁言了 [y #5] 10 分钟（到 21:40）`, `[x #3] 解除了 [y #5] 的禁言`.
+6. **Profiling (ADR-062's rule):** a notice line must not repeat a stored line or another block in the same notice.
+   The recall line quotes at most 40 characters of the recalled text; that text may still be on her surface, which is
+   intended (she must see which line went), but nothing else is quoted.
+7. **Open points:** 1 keep the stored input for a taken-up notice; 2 in-memory seen-once is acceptable (her own state
+   is the exception, now built); 3 `accept` / `decline` on `group_action`, home only, now. Accepting a request does
+   not admit the person or group: admission stays the owner's setting.
+8. **Cost** is as stated; the `group_action` text is paid by tightening its description where possible, and the
+   budget raise, if any, is stated with the change.
 
 ## Her review
 

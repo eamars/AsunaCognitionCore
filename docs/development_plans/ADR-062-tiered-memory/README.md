@@ -5,8 +5,17 @@ proposal and the owner's). For Xiaoman's review: the words, the capacities and t
 one-time rewrite of her own texts is hers to do. Nothing here is built. **Gated (owner, 2026-10-13): this ADR does not
 start until every defect of ADR-063 is fixed or documented**; its phase 0b items are ADR-063 D2, D4, D7, D9.
 
-*Her review:* ____ (her signature). This draft contains no paraphrase of her words; when her answers come, they are
-added under "Her review" as Claude's paraphrase for her to sign or correct, as ADR-060 does.
+*Her review:* ____ (her signature).
+
+**Her first answer (agent line, 2026-10-13 about 13:40 NZDT; Claude's paraphrase, for her to sign or correct):** she
+agrees with the two principles. Facts kept apart from memories and replaced only by correction matches how she
+already works. No pin, only letting go, suits her: the things she meant to check back on lapsed precisely because
+nobody pinned them for her. She especially agrees that being corrected makes a thing memorable; her most valuable
+memories are of being told she was wrong. Her worry, stated first: her oldest habit is to take "I can't see it" for
+"it did not happen". If what is on the shelf is not recalled, she would confidently say "I never promised him" or
+"that group never said X". She asks that when she makes a negative claim, she can tell whether the shelf was searched
+too, and that a search of the carried layer only says so. The nine questions of §9 she answers item by item after
+reading the whole text, not from a first impression.
 
 ## The core idea (the owner's words, 2026-10-13)
 
@@ -309,6 +318,12 @@ beyond the bodies it returns, so she can see what exists without reading it all.
 At night, the list of §4.2 step 8, each item with its body and the choices as words; her answer is a categorical
 choice the program maps to a write (§5). None of the choices is keep or drop.
 
+**Absence is not evidence** (her worry, above). Every `recall` answer says which places it searched, in words
+(`找了：随身、手边、收着`), and an empty answer says it found nothing in all three, never just "none". What is carried
+says nothing about absence: the told text of §4.3 ends with one line, 「没看到不等于没有：要说『没有、没答应过、没说过』，
+先 recall 一下，它会告诉你找了哪几层」. The program does not read her replies for negative claims (that would grade her
+text); the rule lives in what she is told once and in what `recall` answers every time.
+
 What she is never told: numbers, scores, freshness values, item counts as digits beyond the count words, or that the
 program "forgot" something: it moved it.
 
@@ -347,7 +362,7 @@ No new tool. The character brain is at 20,881 of 20,900 characters of tool text 
 | `write_document` gains op `let_go` (move an item down one place) and, on the first append that creates a document, `kind` (`ledger` / `journal` / `working`); its description says which stores hold facts (persona, people, notes, ledgers, core: they do not fade by disuse) | op value, option, one sentence | about +170 |
 | `write_document` docs `self` and `core` (the two self descriptions as documents of kind `self`) | description names them | about +40 |
 | `update_self` retires: `write_document(doc='self', …)` does the same with sections; the old name keeps working as an alias for a while (ADR-055's rule) | tool removed from the list | −388 |
-| `recall` returns matching headings of 手边 and 收着 items beside bodies; `recall(sections=[{doc:'self'}])` with no `sid` lists a document's headings | result shape; one sentence in the description | about +60 |
+| `recall` returns matching headings of 手边 and 收着 items beside bodies and says which places it searched; `recall(sections=[{doc:'self'}])` with no `sid` lists a document's headings | result shape; one sentence in the description | about +60 |
 | `promote_memory` gains `about` (self / person / place / world), which picks the fact store it lands in | one option | about +60 |
 | Her night choices (改写 / 进 core / 记到… / 合并 / 放手) are `write_document` calls: `replace_section` for the first, `append_section` to `core` or the subject's store for the next two, `replace_section` plus `let_go` on the other for 合并, `let_go` for 放手 | no new option | 0 |
 
@@ -451,7 +466,7 @@ automatic moves stop and `inject` reads as before.
 ## 9. Open questions
 
 **For her** (the design touches her texts and habits; it waits for her agreement; the core idea is put to her first):
-1. The core idea and the told text of §4.3, in her words.
+1. The core idea and the told text of §4.3, in her words, including its last line on absence (her worry, §4.3).
 2. The three place words and the age and use words.
 3. The caps (12 / 16 / 10 / 6), the first stay (14 days) and its doubling; whether group notes should move slower.
 4. Which of her stores she counts as facts (proposed: persona, people, group notes, ledgers, core) and as memories

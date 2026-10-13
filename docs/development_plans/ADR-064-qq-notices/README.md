@@ -641,7 +641,10 @@ Parameters, as she would be shown them:
 
 | Name | Shown as |
 |---|---|
-| `parts` | 这次要发的，按顺序；每个写 kind 和它要的字段。text 一回合最多几条照你的 speak.max_messages（set_policy 能改），别的不限条数 |
+| `parts` | 这次要发的，按顺序；每个写 kind 和它要的字段。text 一回合最多几条照你的 speak.max_messages，别的不限条数 |
+(Her persona sets `speak.max_messages` to 3 but does not declare it as a policy key, so `set_policy` cannot change it
+until her own package declares it, as the other personas do; that is hers to add.)
+
 | `parts[].kind` | `text`、`sticker`、`picture`、`poke`、`react` |
 | `parts[].text` | kind=text：一条消息的话，原样作一条发出，不拆；程序不另设字数，平台收不下的回执会说 |
 | `parts[].name` | kind=sticker：你收着的表情包的名字 |

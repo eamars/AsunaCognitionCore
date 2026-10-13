@@ -11,6 +11,7 @@ tools a task is given (coordinator._grants). Backends:
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 BACKENDS = ('auto', 'none')
 _CONFINE = {'call': None}
@@ -68,6 +69,11 @@ def confine(config, argv, root):
 
 SITE = Path(__file__).with_name('sandbox_site')   # sitecustomize for the Pythons a confined command starts
 TEMP_FOLDER = '.tmp'                             # inside the command's own folder: the only place it may write
+# Windows gives a restricted token no SSPI credentials, so Schannel (Git for Windows' default TLS) fails there with
+# SEC_E_NO_CREDENTIALS: git uses its bundled OpenSSL and CA file instead (ADR-065). Elsewhere git may have only one
+# TLS backend and would refuse the setting.
+GIT_TLS = ({'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'http.sslBackend', 'GIT_CONFIG_VALUE_0': 'openssl'}
+           if sys.platform == 'win32' else {})
 
 
 def environment(extra=None, cwd=None):
@@ -82,7 +88,7 @@ def environment(extra=None, cwd=None):
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                PYTHON_MANAGER_AUTOMATIC_INSTALL='false',
                # Nobody can answer a prompt here: git fails at once instead of waiting out the command's time.
-               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE))
+               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE), **GIT_TLS)
     if cwd is not None:
         temp = Path(cwd) / TEMP_FOLDER
         temp.mkdir(parents=True, exist_ok=True)

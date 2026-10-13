@@ -11,10 +11,13 @@ from conftest import needs_git
 ALLOWED = {
     'src/asuna/queue.py': 'cross-process byte locks: msvcrt on Windows, fcntl elsewhere',
     'packages/cognition-core/src/python-env.js': 'venv layout (Scripts/python.exe or bin/python) and Python launcher names',
-    'packages/cognition-core/src/floor.js': 'npm pack goes through cmd.exe as npm.cmd on Windows',
+    'packages/cognition-core/src/floor.js': 'npm pack goes through cmd.exe as npm.cmd on Windows; git TLS in the '
+                                            'sandbox as in sandbox_backend.py',
     'tools/asuna-launch.mjs': 'pnpm/corepack shim names; the checkout venv layout',
     'tools/pack_plugins.py': 'npm or npm.cmd',
     'tools/setup_native_profile.py': 'pnpm/corepack shim names',
+    'src/asuna/sandbox_backend.py': "Git for Windows' Schannel has no credentials under the sandbox's restricted "
+                                    'token; git uses its OpenSSL (ADR-065)',
     'src/asuna/sandbox_site/sitecustomize.py': "CPython's own mkdir(0o700) on Windows drops inherited ACLs (ADR-065)",
 }
 # What runs, and the start path that installs it. Operator diagnostics in tools/ and tests are outside.

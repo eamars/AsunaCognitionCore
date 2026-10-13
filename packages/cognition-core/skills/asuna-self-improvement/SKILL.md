@@ -77,7 +77,10 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 ## git 和 ssh（家里的任务，`sandbox_run`）
 
-- `git`、`ssh` 用的是这台机器上主人的钥匙和账号；你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。
+- 本机的项目检出在你的命令里是只读的。代码改动经候选（`development_*`）和 `development_publish` 进去；文档和审阅在任务文件夹里 `git clone` 一份，在那里提交再推送。
+- 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是这台机器上主人的钥匙。
+- HTTPS 直接用 `git`：程序已经让 git 用它自带的 OpenSSL 和证书，不用再加 `-c http.sslBackend=openssl` 或别的证书文件。Windows 的沙箱里 Schannel 拿不到凭据，所以 `curl.exe` 开不了 HTTPS；要下载就用 Python。
+- 沙箱里 git 起不了凭据管理器：它要经 Git 自带的 `sh.exe` 启动，而 `sh.exe` 在沙箱里起不来；钩子和 `!` 别名也一样。
 - 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），比如跑全套测试；跑满被停下时会带回停下前的输出。整库 clone 用 `git clone --depth 1`，或 `git clone --reference <本机仓库路径> <远端>` 借本机已有的对象。
 - 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。

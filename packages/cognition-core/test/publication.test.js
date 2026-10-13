@@ -140,6 +140,10 @@ test('a refused development call says what was wrong, with the values, and what 
   assert.match(stopped.stdout, /half done/); assert.match(stopped.stopped, /2 秒/);
   const quick = await floor.call('development_run', { argv: [process.execPath, '-e', 'console.log(1)'] });
   assert.equal(quick.timed_out, false); assert.equal(quick.stopped, undefined);
+  // On Windows git in a confined command uses OpenSSL: Schannel has no credentials under the restricted token.
+  const tls = await floor.call('development_run', { argv: [process.execPath, '-e',
+    'console.log(process.env.GIT_CONFIG_KEY_0 + "=" + process.env.GIT_CONFIG_VALUE_0)'] });
+  assert.equal(tls.stdout.trim(), process.platform === 'win32' ? 'http.sslBackend=openssl' : 'undefined=undefined');
 });
 
 test('a repository candidate publishes only the project paths, not what a command left beside them', async t => {

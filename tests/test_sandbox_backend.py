@@ -143,3 +143,23 @@ def test_a_command_can_use_temporary_folders_inside_its_own_folder():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+
+def test_git_in_a_command_uses_a_tls_that_works_inside_the_sandbox():
+    """Her git over HTTPS failed in the sandbox: Windows gives a restricted token no SSPI credentials, so Git for
+    Windows' Schannel says SEC_E_NO_CREDENTIALS; git uses its OpenSSL there (ADR-065). No network: the effective
+    setting is what git reads inside the confined command."""
+    import shutil, sys, uuid
+    from asuna.config import DATA
+    if sys.platform != 'win32':
+        assert 'GIT_CONFIG_COUNT' not in sandbox_backend.environment()   # other gits may have one TLS backend only
+        return
+    if not shutil.which('git'):
+        pytest.skip('UNCHECKED, not passed: no git on PATH')
+    root = DATA / 'work' / ('git-tls-' + uuid.uuid4().hex)
+    box = Sandbox(root / 't1', config={'_host_sandbox': {'available': True}})
+    result = box.run(['git', 'config', 'http.sslBackend'])
+    try:
+        assert result['exit_code'] == 0 and result['stdout'].strip() == 'openssl', result
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+

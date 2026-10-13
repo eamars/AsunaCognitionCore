@@ -3,6 +3,24 @@
 Only read-only actions: get_version_info, get_group_msg_history,
 get_friend_msg_history, get_msg, plus one call per name probe.
 No message text is printed: only field names, ids, counts, segment types.
+
+【怎么跑】
+无参数。要在跑 NapCat 适配器的容器里跑（先把本文件拷进容器）：
+    python3 probe_catchup.py
+脚本按部署配置直连 NapCat 正向 WebSocket，需要适配器配置可用、NapCat 在线；
+全程只发只读 API，不发消息、不写库。
+
+【要什么布局】
+下面 sys.path.insert(0, "/app") 里的 /app 是容器内路径（容器里 qqadapter
+就装在 /app 下）。本机（Windows）没有 /app；本机对应的是仓库里
+packages/channels/napcat-qq/integration/ 这一层（qqadapter 源码所在）。
+在本机直接跑会 ModuleNotFoundError: qqadapter。
+
+【哪来的】
+10-08 摸 NapCat 补读写（catch-up）行为时写的只读探针，是 ADR-022 那批活体
+读数里唯一还能复现的脚本。仓库内零引用：不进发布包、不进运行时。
+
+—— Xiaoman
 """
 import json
 import sys

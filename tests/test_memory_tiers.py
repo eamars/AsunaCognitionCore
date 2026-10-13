@@ -66,7 +66,7 @@ def test_a_carried_item_lapses_when_its_stay_runs_out_and_leaves_the_prompt(stor
     row = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED)
     body = next(s['body'] for s in DocumentStore(store, 'P1').read('persona')[1]['sections'] if s['sid'] == row['sid'])
     assert body in render_system(store, 'P1')[0]
-    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(15)}})
+    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(row['stay_days'] + 1)}})
     [move] = tiers.tick()
     assert (move['from'], move['to'], move['reason']) == (CARRIED, AT_HAND, 'stay')
     assert tiers.item('persona', row['sid'])['place'] == AT_HAND
@@ -84,8 +84,27 @@ def test_a_memorable_moment_starts_the_stay_again_and_doubles_it_once_per_stay(s
     tiers.used([('persona', row['sid'])], 'recalled', 'dm-a')
     tiers.used([('persona', row['sid'])], 'cited', 'dm-a')
     after = tiers.item('persona', row['sid'])
-    assert after['stay_days'] == 28 and after['uses'] == 2 and after['recalled_in'] == ['dm-a']
+    assert after['stay_days'] == min(56, 2 * row['stay_days']) and after['uses'] == 2 and after['recalled_in'] == ['dm-a']
     assert (datetime.now(timezone.utc) - datetime.fromisoformat(after['memorable_at'])).total_seconds() < 60
+
+
+def test_on_the_switch_on_day_first_stays_spread_over_two_weeks_and_later_items_take_the_usual_stay(store, tiers_on):
+    """After the dry run (owner 2026-10-13): her 16 carried persona sections all lapsed on day 14; first stays on the
+    switch-on day are spread per item from 14 to 28 days, deterministically."""
+    owner(store)
+    docs, tiers = DocumentStore(store, 'P1'), Tiers(store, 'P1')
+    for n in range(12):
+        write(docs, 'persona', {'op': 'append_section', 'heading': '一节 %d' % n}, '第 %d 节' % n)
+    tiers.sync()
+    stays = [row['stay_days'] for row in tiers.items(doc='persona')]
+    assert all(14 <= days <= 28 for days in stays) and len(set(stays)) > 3, stays
+    again = Tiers(store, 'P1')
+    again.rows.delete_many({'row': 'item'})
+    again.sync()
+    assert [row['stay_days'] for row in again.items(doc='persona')] == stays, 'the same spread every time'
+    before, after = write(docs, 'persona', {'op': 'append_section', 'heading': '后来写的'}, '后来写的一节')
+    tiers.written('persona', {'op': 'append_section'}, before, after)
+    assert tiers.item('persona', after['sections'][-1]['sid'])['stay_days'] == 14, 'later: the usual first stay'
 
 
 def test_a_second_conversation_surfacing_an_item_is_memorable_one_echoing_itself_is_not(store, tiers_on):

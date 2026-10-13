@@ -262,7 +262,14 @@ above 0.5 / above 0.1 / below). No number reaches her.
 2. **Staying up is what is memorable, with spacing.** A 随身 item has a stay: 14 days from its last memorable moment at
    first; each memorable moment (§4.1), counted at most once per stay, doubles the next (28, 56, capped at 56). When
    the stay runs out the item lapses to 手边 by itself. No refusal, no shortening, no keep act. The turn after a lapse
-   says so once, at the tail, with a clock time (ADR-056).
+   says so once, at the tail, with a clock time (ADR-056). Two rules from the dry run on a copy of her data
+   (2026-10-13, owner's decision), where all 16 carried persona sections lapsed on day 14: (a) a carried item is
+   never brought up into a turn (it is in front of her), so it could not show use that way; a carried item the
+   turn's retrieval would have brought up above the floor counts as surfaced in that conversation, and in a second,
+   different conversation that is a memorable moment, as for an item at hand. (b) On the switch-on day only, each first
+   stay is spread per item, deterministically, from its usual length to twice that (14 to 28 days; a group's notes,
+   28 to 56: the same cliff on day 28 otherwise, 31 sections), never past the 56-day cap, so the first lapses come
+   gradually; later items take the usual first stay.
 3. **Capacity by count.** 随身 holds at most N items per store (proposed: `self` 12, persona 16, each ledger 10, each
    group's notes 6; her numbers), facts included. Adding a 13th does not refuse: the item least recently memorable
    lapses, and the write's result names it. This is the flip: today the oldest stays and the newest is refused.
@@ -271,6 +278,7 @@ above 0.5 / above 0.1 / below). No number reaches her.
    existing `replace_section`; the program keeps the verbatim as the gist's source (`detail_of`), moves the verbatim
    to 收着 at once, and the gist stays 手边. If she passes it over on two nights, the verbatim goes 收着 without a gist:
    the detail is out of her default view either way. A short item (≤ 160 characters) is already gist and skips this.
+   A fact passed over twice stays 手边 with its verbatim and is not listed again: a fact never goes 收着 by disuse.
    Nothing is deleted; `recall` reads the verbatim through the gist's `detail_of` or by a word.
 5. **Use keeps 手边 alive; facts do not cool.** 手边 items sit in the same index as her memories (one per idea;
    owner-private items in her owner-private scope, public ones in `global-safe`, a group's notes in that group's scene

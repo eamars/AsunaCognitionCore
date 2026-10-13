@@ -54,6 +54,9 @@ JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实：要有�
 CAPS = {'self': 12, 'persona': 16, 'ledger': 10, 'group_notes': 6, 'core': 12, 'voice': 6}
 FIRST_STAY_DAYS = {'group_notes': 28, 'core': 56, 'voice': 56}
 STAY_DAYS, STAY_CAP_DAYS = 14, 56
+# The switch-on day only: each first stay spread per item from its usual length up to twice that (14..28 days; a
+# group's notes 28..56), never past the stay cap, so what nothing uses lapses gradually, not all on one day (owner
+# 2026-10-13, after the dry run). Later items take the usual first stay.
 JOURNAL_COOL_DAYS = 30
 AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '上周'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
@@ -186,12 +189,14 @@ class Tiers:
 
     def sync(self, moment=None):
         """Every item has a row. One the program has not seen takes its place from its `inject` (always 随身,
-        on_demand 手边, never 收着) with a fresh stay: nothing lapses on the day the switch goes on."""
+        on_demand 手边, never 收着) with a fresh stay: nothing lapses on the day the switch goes on. On that day (no
+        rows yet), each first stay is spread per item from its usual length to twice that, within the cap."""
         from .documents import DocumentStore
         moment = moment or _now()
         docs = DocumentStore(self.store, self.persona)
         known = {(row['doc'], row['sid']) for row in self.rows.find({'row': 'item', 'persona': self.persona},
                                                                      {'doc': 1, 'sid': 1})}
+        switch_on = not known
         for slug in docs.slugs():
             content = docs.read(slug)[1] or {}
             kind = store_of(slug, content.get('kind'))
@@ -201,8 +206,12 @@ class Tiers:
                 if (slug, section['sid']) in known:
                     continue
                 place = FROM_INJECT.get(section.get('inject'), AT_HAND)
-                self._new(slug, section['sid'], kind, section, AT_HAND if kind == 'journal' and place == CARRIED
-                          else place, moment)
+                row = self._new(slug, section['sid'], kind, section, AT_HAND if kind == 'journal' and place == CARRIED
+                                else place, moment)
+                usual = int(row.get('stay_days') or STAY_DAYS)
+                if switch_on and usual < STAY_CAP_DAYS:
+                    spread = int(sha(row['_id'].encode())[:8], 16) % (min(usual, STAY_CAP_DAYS - usual) + 1)
+                    self.rows.update_one({'_id': row['_id']}, {'$set': {'stay_days': usual + spread}})
 
     def placed(self, slug, content):
         """A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched)."""
@@ -489,8 +498,14 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         text = body(row) if lapsed else ''
         if not lapsed or not (len(text) > GIST_LIST_ABOVE or DATED.search(text) or gist.get('no_basis')):
             continue
+        if gist.get('skipped'):
+            continue
         if len(gist.get('nights') or []) >= GIST_NIGHTS and night not in gist['nights']:
-            tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
+            if row.get('fact'):
+                # A fact never goes put away by disuse: its verbatim stays at hand, no longer listed.
+                tiers.rows.update_one({'_id': row['_id']}, {'$set': {'gist.skipped': _iso(moment)}})
+            else:
+                tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
             continue
         items.append(('gist', entry('gist', row, NIGHT_WHY['gist_basis' if gist.get('no_basis') else 'gist']), [row]))
     # 合并: near-duplicate pairs in one store (the item index's pairs), facts first.
@@ -656,14 +671,25 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     tiers = Tiers(store, persona)
     rows = {(row['doc'], row['sid']): row for row in tiers.items()}
     allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
-    pool = [item for item in items if item['scope_key'] in readable
-            and (rows.get((item['doc'], item['sid'])) or {}).get('place') in allowed]
-    if not pool:
+    def place(item):
+        return (rows.get((item['doc'], item['sid'])) or {}).get('place')
+    readable_items = [item for item in items if item['scope_key'] in readable and place(item)]
+    pool = [item for item in readable_items if place(item) in allowed]
+    carried = [item for item in readable_items if place(item) == CARRIED]
+    if not pool and not carried:
         return []
     vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
+    moment = moment or _now()
+    if carried and not recall:
+        # A carried item is never brought up (it is in front of her), so it cannot show use that way: one the turn
+        # would have brought up above the floor, had it not been carried, is used in this conversation.
+        order, scores, _ = rank(pool + carried, query, vector)
+        would = admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS)
+        tiers.surfaced([(item['doc'], item['sid']) for item in carried if item['key'] in would], scene_id, moment)
+    if not pool:
+        return []
     order, scores, _ = rank(pool, query, vector)
     by_key = {item['key']: item for item in pool}
-    moment = moment or _now()
     out, refs = [], []
     for key in admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS):
         item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]

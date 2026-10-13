@@ -323,7 +323,8 @@ then, `current_self` and `character_core` as before). A section she writes start
 `on_demand` or `never`, at that place). `inject` `on_demand` or `never` on an item lets it go to that place; `inject:
 always` never moves an item up, and its result says how one comes back (used again, rewritten with a change, or
 corrected). A 随身 item lapses to 手边 when its stay runs out: 14 days
-from its last memorable moment (group notes 28, `core` and voice 56); a memorable moment (`recall` returned it, a
+from its last memorable moment (group notes 28, `core` and voice 56; on the day the switch goes on, each first stay is
+spread per item from its usual length to twice that, at most 56 days); a memorable moment (`recall` returned it, a
 rewrite changed its body, its `doc:` ref cited in a tool call, a second conversation it came up in) starts the stay
 again and, once per stay, doubles the next, up to 56 days. A rewrite that changes an item brings it back to 随身. A
 store over its count of 随身 items (`self` 12, persona 16, each ledger 10, each group's notes 6, `core` 12, voice 6)
@@ -349,6 +350,8 @@ names, or adds one headed by its `heading` (else the body's first line).
 With the switch on and the shadow pilot running (it holds her items' vectors), a turn brings up her own items at hand
 by itself: scored against the turn's query as memories are (`memory_pilot.rank`), at most two (`OWN_SLOTS`) of the six
 memory slots, only above the absolute floor `FLOOR` (0.83), never one she carries (随身 is in front of her already).
+A carried item the turn would have brought up above the floor, had it not been carried, counts as brought up in that
+conversation (so a second conversation makes it memorable).
 Each is a `memories` entry of kind `own_item` with its `doc:slug#sid` ref as `_id`, its heading, its text, its store,
 its place and its age in words (`事实` for a fact). A conversation bringing up an item another conversation already
 brought up makes it memorable; one conversation bringing it up again does not. A `recall` reaches items put away as
@@ -370,8 +373,9 @@ she can do with it, none of them a keep or drop choice. 写一句意思: an item
 characters) or carries dates waits for her gist: a `replace_section` of 160 characters or fewer is taken as the gist; it
 stays 手边 and the text it replaced stays behind it (`detail_of`; reading the section by `recall` returns it as
 `detail`). When the text it replaced had a basis (a marker word such as 依据 or 来源, or a source she declared) and the
-gist keeps neither a basis nor a second line, the write's result says so (`gist`) and the item is listed again. An
-item listed on two nights and not rewritten goes 收着 as it is. 几处都提到: a memory brought up or recalled in two
+gist keeps neither a basis nor a second line, the write's result says so (`gist`) and the item is listed again. A
+memory listed on two nights and not rewritten goes 收着 as it is; a fact stays 手边 with its verbatim and is not
+listed again. 几处都提到: a memory brought up or recalled in two
 different conversations, or carried through three stays, at most once a week; what it means is hers (into `core`,
 to that person, to that group's notes, to a ledger, or still changing; 记成事实 is offered only for one that someone
 else decided or said, or that she checked, or a judgment of hers the same said elsewhere confirmed). 合并: two items of one document the

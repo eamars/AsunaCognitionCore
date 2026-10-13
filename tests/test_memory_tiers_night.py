@@ -65,13 +65,25 @@ def test_a_lapsed_long_item_is_listed_for_its_gist_and_the_gist_keeps_the_verbat
     assert read['body'].startswith('周六早上烤松饼。') and read['detail'].startswith(LONG[:20]), 'the verbatim behind it'
 
 
-def test_a_gist_passed_over_on_two_nights_goes_put_away_as_it_is(on):
-    sid = append(on, 'persona', '周六', LONG)
+def test_a_memorys_gist_passed_over_on_two_nights_goes_put_away_as_it_is(on):
+    sid = append(on, 'persona', '周六', LONG, **{'from': '我自己的判断'})
     lapse(on, 'persona', sid)
     for night in range(2):
         assert night_list(on, 'P1', NIGHT + timedelta(days=night))['items'][0]['what'] == '写一句意思'
     assert night_list(on, 'P1', NIGHT + timedelta(days=2)) is None
     assert Tiers(on, 'P1').item('persona', sid)['place'] == PUT_AWAY
+
+
+def test_a_facts_gist_passed_over_twice_stays_at_hand_with_its_verbatim(on):
+    """A fact never goes put away by disuse (owner 2026-10-13): a skipped gist leaves it at hand, no longer listed."""
+    sid = append(on, 'persona', '周六', LONG)
+    lapse(on, 'persona', sid)
+    for night in range(2):
+        assert night_list(on, 'P1', NIGHT + timedelta(days=night))['items'][0]['what'] == '写一句意思'
+    assert night_list(on, 'P1', NIGHT + timedelta(days=2)) is None
+    assert night_list(on, 'P1', NIGHT + timedelta(days=3)) is None, 'not listed again'
+    row = Tiers(on, 'P1').item('persona', sid)
+    assert row['place'] == AT_HAND and row['gist']['skipped']
 
 
 def test_a_memory_met_in_two_conversations_is_offered_its_meaning_once_a_week(on):

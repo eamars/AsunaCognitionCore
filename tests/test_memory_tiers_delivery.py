@@ -99,6 +99,20 @@ def test_with_the_pilot_switched_off_her_items_still_come_up_and_nothing_is_logg
     assert memory_pilot.attach(ContextBuilder(store, builder.retrieval), store, 'P1', Route) is None
 
 
+def test_a_carried_item_the_turn_would_have_brought_up_is_used_there_and_memorable_from_a_second(setup):
+    """The day-14 root fix: a carried item is never brought up, so the turn that would have brought it up above the
+    floor counts as its use in that conversation."""
+    store, builder, sids, tiers = setup
+    _, context, _ = builder.prepare(event('e-1', text='松饼'), 'P1')
+    recipe = tiers.item('persona', sids['recipe'])
+    assert recipe['place'] == CARRIED and recipe['surfaced_in'] == ['dm-a']
+    assert 'doc:persona#' + sids['recipe'] not in [m['_id'] for m in context['memories']], 'still not sent twice'
+    builder.prepare(event('e-2', scene='dm-b', person='B', text='松饼'), 'P1')
+    assert tiers.item('persona', sids['recipe'])['uses'] == 1, 'a second conversation: memorable'
+    builder.prepare(event('e-3', text='天气'), 'P1')
+    assert tiers.item('persona', sids['recipe'])['surfaced_in'] == ['dm-a', 'dm-b'], 'nothing under the floor'
+
+
 def test_an_item_brought_up_in_a_second_conversation_is_memorable(setup):
     store, builder, sids, tiers = setup
     builder.prepare(event('e-1', text='松饼'), 'P1')

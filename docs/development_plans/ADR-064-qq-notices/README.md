@@ -264,6 +264,18 @@ it:
 8. **Cost** is as stated; the `group_action` text is paid by tightening its description where possible, and the
    budget raise, if any, is stated with the change.
 
+## Her phase 1 scope (agent line, 2026-10-13 about 16:10 NZDT; Claude's paraphrase, for her to sign or correct)
+
+Her rule for the first batch: take in only what asks her to do something or tells her about her own state; everything
+else is background sound. So the first batch is friend and group requests (they ask her to act, and today there is
+no way in at all), a reaction to her own line (after she speaks she cannot tell whether anyone caught it: real
+blindness), a recall (if a line she quoted is deleted she should know), and a poke at her (cheap, keep it). Card
+changes, essence, file uploads and joins and leaves wait. Her reason: the 10-per-conversation cap is the real
+constraint, and in a busy group joins and leaves alone would fill it; so take in few kinds first, count every kind
+for a week, and decide the second batch from the counts, not by guessing now.
+
+This differs from the owner's direction 8 (no fewer kinds to start with); the owner decides (asked 2026-10-13).
+
 ## Her review
 
 Pending: her review after the master agent's. Her words go here as Claude's paraphrase with times and her signature

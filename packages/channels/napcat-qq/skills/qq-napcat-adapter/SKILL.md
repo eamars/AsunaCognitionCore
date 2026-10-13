@@ -113,7 +113,12 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 
 ## 重新部署
 
-适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：`development_publish` → `integration_stop` → `integration_start ["python3","/app/adapter.py","--service"]`。宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
+适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：先自检，再 `development_publish`，再让新版本跑起来。两种回合能做的不一样：
+
+- 主人的工作区（有 `integration_test`、`integration_stop`）：`integration_test` 在只读 `/app` 跑 `--selftest --offline` → `development_publish` → `integration_stop` → `integration_start ["python3","/app/adapter.py","--service"]`。
+- 家里（窄授权，只有 `integration_start`、`integration_status`）：把候选的 `integration/` 拷到 `/task` 下，用 `sandbox_run` 跑 `python3 adapter.py --selftest --offline`（拷完逐文件比哈希）→ `development_publish` → 排一次安静重启，宿主重启时恢复的就是刚发布的快照；起来后用 `integration_status` 核版本。
+
+运行时契约只看认知核根目录的 `RUNTIME_API.md`（宿主会往开发目录放一份当时的副本）；通道包里不留副本，发布也不带它。宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
 
 ## 版本
 

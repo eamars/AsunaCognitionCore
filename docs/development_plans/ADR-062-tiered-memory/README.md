@@ -2,7 +2,8 @@
 
 Status: **Proposed 2026-10-13** (the owner's finding and direction; the design by Claude, building on Claude's earlier
 proposal and the owner's). For Xiaoman's review: the words, the capacities and the lapse times are hers to set; the
-one-time rewrite of her own texts is hers to do. Nothing here is built. **Gated (owner, 2026-10-13): this ADR does not
+one-time rewrite of her own texts is hers to do. Built: phase 0 and the phase 1 pilot (§7); phase 2 waits for her
+review. **Gated (owner, 2026-10-13): this ADR does not
 start until every defect of ADR-063 is fixed or documented**; its phase 0b items are ADR-063 D2, D4, D7, D9.
 
 *Her review:* ____ (her signature).
@@ -357,7 +358,8 @@ are untouched: nothing here moves text between home and outside.
 
 ## 5. Tools and operations: options on what exists
 
-No new tool. The character brain is at 20,881 of 20,900 characters of tool text (32 tools).
+No new tool. The character brain was at 20,881 of 20,900 characters of tool text (32 tools); phase 0's `kind` brought
+it to 21,018, and the budget was raised by exactly that (§7).
 
 | Change | Where | Characters |
 |---|---|---|
@@ -408,6 +410,15 @@ length, the floor, and the list sizes.
   revisions stay as history. It stops the 1 MiB wall and the copies. Indexing the rows at 手边 is phase 1/2.
 - Ledgers reach her: `write_document` takes `kind` on creation; she re-creates her two ledgers as `ledger` (or the
   owner sets the kind on the two documents once; his call). `ledgers_from_program` then shows them.
+  **Built 2026-10-13 (d4374fbd):** `kind` (`ledger` / `journal` / `working`) on the `append_section` that creates a
+  document; a `journal` is a running record of rows like `work_log`; a different kind on a later write is refused
+  (`DOC_KIND_FIXED`). Cost to the character brain: one option, +137 characters of tool text (20,881 → 21,018; the
+  budget in `tests/test_tool_budget.py` raised by exactly that, from 20,900 to 21,018); no new tool, no per-turn line;
+  the action brain unchanged. Her live database, read-only the same day: two documents look like ledgers, both kind
+  `working`, both with every section `on_demand` (one of 1 section and 3,816 bytes, one of 2 sections and 3,037 bytes).
+  A ledger block shows only `inject: always` sections, so changing the kind alone would still show nothing: re-created
+  with `kind: ledger` their new sections default to `always`; set on the existing two, their sections also need
+  `inject: always`. Their kind is not changed; that is decided with her.
 - Nothing else changes. Measure: `ledgers_from_program` present at home; journal bytes per day; no refusal.
 
 **Phase 0b, delivery prerequisites: done** (ADR-063, all live 2026-10-13 11:37 NZDT): nested lists fold, the ceiling
@@ -420,6 +431,24 @@ journal rows, group notes) into the memory index with a `shadow` flag that retri
 Measure per item: would-be surfacings per day by turn kind, the floor that keeps crowding at or under one own item
 per turn on average and none in heartbeats, near-duplicate pairs found, and `recall` hits by heading. Decide the
 floor and the two reserved slots from this; the ADR is amended with the numbers.
+**Built 2026-10-13 (d4374fbd), live with her restart that night; the switch is `memory_pilot.SHADOW_PILOT`.**
+Not a flag in the memory index: her items go to a collection of their own, `memory_shadow`, which retrieval never
+reads, so the pilot cannot reach a turn by mistake, and one drop removes it (`tools/memory_pilot_report.py --drop`).
+Items: persona sections, `current_self` list lines of 30 characters or more (as split in §1.1), running-record rows
+and each group's notes sections, each in the scope of its visibility (a group's notes in that group's scope);
+re-read at most every ten minutes, only new or changed ones embedded, on the memory route. Each character turn is
+queued after its context is prepared; a background thread scores the items as retrieval scores memories (vector and
+lexical ranks fused, the index's (1 + cosine) / 2 score, the turn's own query vector reused), admits at most two above
+the floor 0.83 (`FLOOR`, `OWN_SLOTS` of `SLOTS`), and writes ids, stores, scores, the best six above 0.75, the turn's
+kind, the conversation and its kind; a `recall` query writes a row of its own, and `recall.read`'s sections give the
+reads by heading. `surfaced_in` marks which conversations surfaced an item; pairs in one store at 0.93 or more are
+written as found. `tools/memory_pilot_report.py` gives the daily counts (per day by turn kind, the floor table from
+0.80 to 0.90 and the lowest floor that fits, items surfaced in two or more conversations, pairs at 0.93 / 0.95 / 0.97,
+recall hits, the cost). Measured before going live, on her real item set (317 items: persona 45, `current_self` 16,
+journal 205, group notes 51) with synthetic vectors, read-only: the reply path pays one queue put (median 0.003 ms);
+the background job takes a median of 31 ms in a home turn (266 readable items) and 2 ms in a public one, plus one
+query embedding when the turn's retrieval came from its cache. The first job also embeds every item once (about 20
+requests on the memory route). Prompt, tool texts and the cache are unchanged apart from `kind`.
 
 **Phase 2, the cycle on `self`, persona, ledgers and group notes:** places, stays by memorable moments, caps, lapse
 and overflow, facts not cooling and superseded by correction, `let_go`, the `things_from_program` block, delivery of
@@ -488,7 +517,7 @@ automatic moves stop and `inject` reads as before.
 3. `promote_memory`'s quota (2 a night) with its new candidates.
 4. Retiring `update_self` (one less tool) against keeping her habit.
 5. Whether the pilot's shadow index may run on the live profile (it writes index rows, no delivery) or should wait for
-   a copy of her database.
+   a copy of her database. Built to run live, in a collection of its own (§7); `SHADOW_PILOT` off keeps it out.
 
 ## 10. References
 

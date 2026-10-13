@@ -54,7 +54,7 @@ def asides(store, zone):
         rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1, 'scene_seq': 1})
                     .sort('scene_seq', -1).limit(ASIDES_SHOWN))
         store.db.scenes.update_one({'_id': line['scene_id']}, {'$max': {'asides_shown_seq': rows[0]['scene_seq']}})
-        out.append({'line': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
+        out.append({'place': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
                                                      'text': excerpt(' '.join((row.get('text') or '').split()), ASIDE_EXCERPT)}
                                                     for row in reversed(rows)],
                     **({'more': '更早还有 %d 条' % (count - len(rows))} if count > len(rows) else {})})
@@ -137,6 +137,6 @@ def describe(until, zone):
 
 
 def view(store, lines, zone, moment=None):
-    return {'items': [{'line': line['label'], 'state': describe(closed_until(store, line['scene_id'], moment), zone)}
+    return {'items': [{'place': line['label'], 'state': describe(closed_until(store, line['scene_id'], moment), zone)}
                       for line in lines],
             'note': VIEW_NOTE}

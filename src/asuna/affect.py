@@ -499,7 +499,7 @@ class AffectLedger:
             return self.store.db.affect_events.find_one({'_id': decided['event_id']}) if decided.get('event_id') else None
         if self.proposal_state(proposal) != 'pending':
             state = self.proposal_state(proposal)
-            raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', '这条提案已经%s，不能再决定；想记这份心情就用 op=record 自己记一笔'
+            raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', '这条提案已经%s，不能再决定；想记这份心情就用 do=record 自己记一笔'
                               % {'expired': '过期了', 'accept': '接受了', 'decline': '拒绝了',
                                  'accepted_edited': '改过后接受了'}.get(state, '是 ' + str(state)))
         event = None

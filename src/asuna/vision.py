@@ -799,16 +799,10 @@ def media_note(message, config):
 
 READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
-    'description': ('按需拉取本授权场景某条消息里的图片附件，并把它变成这一轮真实的视觉输入（Pull 模式：'
-                    '入站只带元数据与占位符，没调用就等于没看过）。ref 照抄附件清单（attachments、media_from_program）'
-                    '或对话里图片旁标出的 ref；抄下来的 ref 7 天内都认。'
-                    '按配置只读联动的场景（同一个人在另一个入口）里的图也在范围内，清单会标 linked_scene=true。'
-                    'ref 也可以是一张已存好的图的 artifact_id（blob-…）：自己画的图（generate_image 回执里的 '
-                    'artifact.artifact_id）、本场景存过的图、这一轮可发的图——画完或发之前用它亲眼看一遍。'
-                    '家里（本机、主人私聊这类可信的对话）还能看你其他对话（群、别人的私聊）里 7 天内的图，ref 照抄那张图旁标的；也能按路径读盘上的图：ref 给绝对路径，或行动任务自己'
-                    '工作区的 /task/… 相对路径；在群里或别人的私聊里传路径会吃 IMAGE_PATH_HOME_ONLY，那里照旧只看消息里的图。'
-                    '大小不用管：程序按自己的上限拉，给模型之前会自己缩放。'
-                    '路由不支持图片、主机不在白名单、超过程序上限或不是 png/jpeg/webp/gif 都会返回真实错误码，不会假装看过。'),
+    'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单（attachments、media_from_program）里的，7 天内都认；'
+                    '也可以是一张存好的图的 artifact_id（blob-…），比如你自己画的、这回合能发的，画完或发之前用它看一遍。'
+                    '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
+                    '或行动任务工作区里的 /task/… 路径）。看不了会照实说原因。'),
     'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 

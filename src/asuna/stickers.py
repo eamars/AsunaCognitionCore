@@ -94,7 +94,7 @@ CANDIDATE_GONE = 'STICKER_CANDIDATE_GONE: 「%s」；照抄 sticker_candidates_f
 
 
 def _ref_problem(ref):
-    return '「%s」' % ref if ref else '没写 ref（也没写 candidate）；想从候选池里收，先用 op=pool 看池子'
+    return '「%s」' % ref if ref else '没写 ref（也没写 candidate）；想从候选池里收，先用 do=pool 看池子'
 
 
 def fullness(count):

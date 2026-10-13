@@ -217,7 +217,7 @@ def set_zone(store, place, name):
     from . import schedule_rules
     found = find(store.config, place)
     if not found:
-        raise ValueError('没有这个群（place 照抄 places_from_program 或 op=list 里的 place）')
+        raise ValueError('没有这个群（place 照抄 places_from_program 或 do=list 里的 place）')
     if name is not None:
         zone = schedule_rules._zone(name)
         if zone['zone_unavailable'] is not None:

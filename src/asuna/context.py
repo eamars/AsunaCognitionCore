@@ -166,7 +166,9 @@ def order_context(context, order=None):
 
 
 def _section_view(section):
-    return {k: section[k] for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
+    # The id she copies is shown as `section`, the name write_document and recall take it by (ADR-060).
+    return {('section' if k == 'sid' else k): section[k]
+            for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
 
 
 def ledger_block(docs, cls):

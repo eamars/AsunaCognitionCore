@@ -350,7 +350,7 @@ class DocumentStore:
         """One write intent. ``budget(slug, new_content)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET)."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
-            raise DocumentError('DOC_OP_UNKNOWN', ('没写 op' if op is None else 'op「%s」不认识' % op)
+            raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
                                 + '；op 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
         reason = intent.get('reason')
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:

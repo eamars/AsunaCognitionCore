@@ -17,7 +17,7 @@ from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
 from .familiarity import words as familiarity_words
-from . import attend, caught_up
+from . import attend, caught_up, own_mute
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -121,6 +121,8 @@ def refs(context):
 
 CONTEXT_TAIL = ('understanding_update_from_program', 'action_capabilities_from_program', 'proactive_from_program',
                 'recent_experience_from_program')
+# Read right before the turn's trigger: where her words cannot go out (own_mute.py).
+BESIDE_EVENT = ('muted_here_from_program',)
 
 
 def catch_up(store, scene, rows, now_ts=None):
@@ -155,8 +157,8 @@ def order_context(context, order=None):
     blocks = [b for b in (order or []) if b in BLOCKS] + [b for b in BLOCKS if b not in (order or [])]
     keys = [*CONTEXT_HEAD, *[k for b in blocks for k in BLOCKS[b]]]
     rest = [k for k in context if k not in keys and k not in CONTEXT_TAIL and k not in ('ref_index', 'event')
-            and not k.endswith('_from_host')]
-    tail = [*CONTEXT_TAIL, *[k for k in context if k.endswith('_from_host')], 'ref_index', 'event']
+            and k not in BESIDE_EVENT and not k.endswith('_from_host')]
+    tail = [*CONTEXT_TAIL, *[k for k in context if k.endswith('_from_host')], 'ref_index', *BESIDE_EVENT, 'event']
     return {k: context[k] for k in [*keys, *rest, *tail] if k in context}
 
 
@@ -363,11 +365,13 @@ class ContextBuilder:
             # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
             lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
             if lost:row['not_landed']=lost
-        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1}).sort('scene_seq',-1).limit(4))
+        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            reason=((row.pop('platform_receipt',None) or {}).get('response') or {}).get('reason')
             # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
-            row['delivery_state']=UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state'))
+            row['delivery_state']=(own_mute.FAILED_WORDS if row.get('delivery_state')=='FAILED' and reason==own_mute.REASON
+                                   else UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state')))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         # Her last few thoughts here reach every turn (recent_thoughts, or still on screen): in view like these lines.
         tail_sources.update(m['_id'] for m in self.store.db.memory_units.find(
@@ -962,6 +966,10 @@ class ContextBuilder:
             # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
             from . import places
             context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
+            # Muted there: every turn in that group says so before she speaks (own_mute.py).
+            muted=own_mute.line(self.store,scene,schedule_zone,moment)
+            if muted:
+                context['muted_here_from_program']=muted
             from . import condense
             condensed=condense.condensed_block(self.store,scene,event.get('event_id'),moment)
             if condensed:

@@ -182,6 +182,23 @@ Content-Type: application/json
 
 A platform that signs its media links with a key that expires within minutes (QQ: `rkey`) has its adapter post the current keys, 1–8 of them, each a name its channel kind declares (`MEDIA_KEYS`; QQ `qq-group`, `qq-private`), a key of 1–1,024 printable characters without `&`, and the seconds it still lasts (60–86,400). The host keeps them in memory only (`media_keys.py`): never in the database, the audit or a log, and the answer `{"status": "stored", "names": [...]}` does not repeat them. Refusals: `400 MEDIA_KEYS_INVALID`, `MEDIA_KEY_NAME_DENIED`, `MEDIA_KEY_INVALID`, `MEDIA_KEY_SECONDS_INVALID`. A signed link in an inbound event also gives its key for `media_keys.LINK_KEY_SECONDS` (300), unless the adapter's key of that name still lasts.
 
+### Post her own mute in a group
+
+```http
+POST /v1/channels/{channel_id}/own_mute
+Content-Type: application/json
+```
+
+```json
+{"group_id": "group-id", "source": "notice", "muted": true, "whole_group": false, "operator_id": "10001"}
+```
+
+Whether her own account is muted in one admitted group (not a blocked one). `source` is `notice` (the platform said she, or the whole group, was just muted or unmuted) or `lookup` (the adapter read her state from the platform; a lookup that finds no mute clears any). Optional `until` (when it ends) and `at` (when it began) are platform epoch seconds; `until` is left out when the end is unknown, as it is for a whole-group mute; `operator_id` is the account that did it, when the platform says. The host keeps one row per group in `own_mutes` (`own_mute.py`): muted or not, since and until when if known, whole group or not, and by whom. A notice that lifts one kind (her own mute, the whole group's) leaves the other; a whole-group mute does not hold her where she is the group's owner or an admin. The answer is `{"status": "muted" | "cleared" | "unchanged" | "not_her"}`. Refusals: `403 OWN_MUTE_GROUP_NOT_ROUTED`, `403 OWN_MUTE_SCENE_UNKNOWN` (no conversation for the group yet), `403 OWN_MUTE_FIELD_DENIED`, `400 OWN_MUTE_INVALID`.
+
+A `failed` receipt whose `response.reason` is `muted` (the platform refused the send because she is muted there) sets the same row, until and by whom unknown, unless a mute is already known; a `platform_accepted` receipt in that group clears it. The row also ends by itself when `until` passes. A send is always attempted, muted or not.
+
+While she is muted in a group, every turn there (a call, a reply, a gate-passed line, a visit) carries `muted_here_from_program` right before `event`, sent in every notice like the trigger: one line saying she is muted (or that the whole group is), until when on her clock or that it is not known, and by whom by their label there or that it is not known, and that her words do not go out. Her line refused this way reads `没发出去：你在这个群被禁言了` in `undelivered_outbound_not_public`. At home, her places (`places_from_program`) mark such a group with `muted_you`, the same words for choosing whether to go; the visit itself stays allowed.
+
 ### Record a platform receipt
 
 ```http

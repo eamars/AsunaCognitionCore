@@ -37,6 +37,8 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                'host_stops',
                # Her switches: a muted group, tools off in a conversation, a blocked person (switches.py, ADR-052).
                'switches',
+               # Her own mute in each group, as the platform last said it (own_mute.py).
+               'own_mutes',
                # Her running records, one row per entry, each change kept beside its entry (documents.JOURNALS).
                'journal_entries','journal_revisions')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
@@ -135,6 +137,7 @@ class Store:
             'developer_inbox': [([('persona',1),('created_at',-1)],{}), ([('state',1),('created_at',1)],{})],
             'host_stops': [([('how',1),('back_at',-1)],{})],
             'switches': [([('state',1),('kind',1),('until',1)],{}), ([('persona',1),('state',1)],{})],
+            'own_mutes': [([('muted',1)],{})],
             'journal_entries': [([('persona',1),('slug',1),('seq',1)],{'unique':True}),
                                 ([('persona',1),('slug',1),('sid',1)],{'unique':True}), ([('last_mutation',1)],{})],
             'journal_revisions': [([('mutation_id',1)],{'unique':True}), ([('persona',1),('slug',1),('created_at',-1)],{}),

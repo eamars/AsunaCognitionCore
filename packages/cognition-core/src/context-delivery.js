@@ -20,8 +20,9 @@
  * prompt (block_guide.py), so they carry no explanation of their own. */
 import { createHash } from 'node:crypto';
 
-/** Orientation and the turn's trigger are always sent. */
-const ALWAYS = new Set(['scene', 'speaker', 'session_class', 'event']);
+/** Orientation and the turn's trigger are always sent, and so is the line beside the trigger saying her words cannot
+ * go out where she is muted. */
+const ALWAYS = new Set(['scene', 'speaker', 'session_class', 'muted_here_from_program', 'event']);
 const HEAD = ['scene', 'speaker', 'session_class'];
 const NOTES = new Set(['unchanged_from_program', 'repeated_from_program']);
 

@@ -28,6 +28,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
   - `members`
   - `media_keys`
+  - `own_mute`
   - `receive`
   - `claim`
   - `attachment` — 字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…

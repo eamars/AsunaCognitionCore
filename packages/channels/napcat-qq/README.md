@@ -38,6 +38,15 @@ with Core (`registerChannel`).
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.
+- Her own mute in each admitted group goes to Core's `own_mute` endpoint. A `group_ban` notice (`ban` / `lift_ban`)
+  about her account, or about the whole group (`user_id` 0), is posted at once as state (until = notice time +
+  duration, the operator's account); every other notice is dropped. A send NapCat refuses with retcode 1200 and QQ
+  result 120 is a `failed` receipt with `response.reason` `muted`, and that group is looked at at once. When the
+  adapter starts or its event socket comes back, each admitted group not looked at in the last 6 hours is looked at,
+  one a second; the times are kept in `mutes/checked.json` in the adapter's data folder. A look is
+  `get_group_member_info` for her account (`shut_up_timestamp`) and `get_group_info` (`group_all_shut`), both with
+  `no_cache`; it never sends, mutes or unmutes. The log (`OWN_MUTE*`) carries the group, the outcome and the seconds
+  a round took.
 
 `resources-provenance.json` records the source hashes of the distributed resources. No private configuration,
 account, route, log, inbox/outbox or media is included.

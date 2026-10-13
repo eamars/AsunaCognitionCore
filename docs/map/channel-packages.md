@@ -174,6 +174,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_event`
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
+  - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `post_receipt`
@@ -242,6 +243,24 @@ Group member lists for the host (0.7.1): who is in each admitted group, not only
   - `groups`
   - `run`
 
+## `napcat-qq/integration/qqadapter/mutes.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/mutes.py](../../packages/channels/napcat-qq/integration/qqadapter/mutes.py)
+
+Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/own_mute`).
+
+- def `notice_body` — The state report for a mute notice about her (or the whole group) in an admitted group, else None.
+- def `look_body` — The state report from one look, or None when either answer is missing.
+- class `Mutes`
+  - `notice`
+  - `look_now`
+  - `sweep`
+  - `loop`
+  - `run`
+  - `post` — 'posted', 'refused' (the host will not take it: nothing to do there) or 'retry'.
+  - `look` — Read her mute in one group and post it; 'muted', 'free', or why it could not.
+  - `sweep_now`
+
 ## `napcat-qq/integration/qqadapter/onebot.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/onebot.py](../../packages/channels/napcat-qq/integration/qqadapter/onebot.py)
@@ -269,6 +288,7 @@ Forward WebSocket client: one read-only /event connection, one /api call connect
 Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 
 - def `platform_send_timed_out` — NapCat's retcode 1200 for sendMsg whose own confirmation event never came: the send's outcome is unknown.
+- def `platform_muted` — NapCat's retcode 1200 for sendMsg whose QQ result is 120: she is muted in that group.
 - def `send_outcome` — A send's answer, on time or late: (status, platform_message_id, tag, response object to store).
 - def `encode_group_text` — Split host group text into text/at segments, promoting @qq:<digits>.
 - def `encode_faces` — Split text into text/face segments: each `[表情:名字]` whose name is in faces.json becomes a real QQ face at that position (0.6); an unknown name stays text.
@@ -284,6 +304,7 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
   - `handle_admin`
   - `handle_item`
   - `settle`
+  - `muted`
   - `verify_send` — Ask the platform for the message this send just created, by that id.
   - `report`
   - `replay_receipts`

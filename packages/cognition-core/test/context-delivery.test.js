@@ -44,6 +44,16 @@ test('a role notice repeats only what the visible session no longer shows', () =
   assert.equal(third.context.delivered_history.length, 1);
 });
 
+test('the line saying she is muted in this group is sent with every trigger, never folded as unchanged', () => {
+  const muted = '你在这个群被禁言了，到 11/10 08:00，谁禁的不知道：你说的话发不出去。';
+  const prepared = () => { const { event, ...rest } = context([]); return { ...rest, muted_here_from_program: muted, event }; };
+  const first = composeContext(prepared(), visibleCarried(surface([])));
+  const second = composeContext(prepared(), visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.equal(second.context.muted_here_from_program, muted);
+  assert.ok(!second.omitted.blocks.includes('muted_here_from_program'));
+  assert.deepEqual(Object.keys(second.context).slice(-2), ['muted_here_from_program', 'event'], 'read beside the trigger');
+});
+
 test('group lines already projected into the conversation are not listed again as history', () => {
   const line = (id, text) => ({ type: 'user/message', data: { content: [{ type: 'text', text }],
     source: { kind: 'user', channel: 'qq', receipt: id } } });

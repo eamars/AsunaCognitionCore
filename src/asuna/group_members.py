@@ -39,15 +39,21 @@ def _member(raw, account):
     return out
 
 
-def receive(store, channel_id, body):
-    """POST /v1/channels/<id>/members: one group's whole list from the adapter."""
-    from .state import now
+def routed_group(store, channel_id, group, code):
+    """The admitted route of a group (not a blocked one), else `<code>_GROUP_NOT_ROUTED`."""
     channel = store.config['channels'][channel_id]
-    group = str(body.get('group_id') or '')
     route = next((r for r in channel.get('routes', {}).values()
                   if r['target']['type'] == 'group' and r['target']['id'] == group), None)
     if not route or group in channel.get('blocked_groups', []):
-        raise PermissionError('MEMBERS_GROUP_NOT_ROUTED: 群 %s 没有已准入的路由；只收已准入群的名单' % group[:64])
+        raise PermissionError('%s_GROUP_NOT_ROUTED: 群 %s 没有已准入的路由；只收已准入的群' % (code, group[:64]))
+    return route
+
+
+def receive(store, channel_id, body):
+    """POST /v1/channels/<id>/members: one group's whole list from the adapter."""
+    from .state import now
+    group = str(body.get('group_id') or '')
+    route = routed_group(store, channel_id, group, 'MEMBERS')
     members = body.get('members')
     if not isinstance(members, list) or not 1 <= len(members) <= MAX_MEMBERS:
         raise ValueError('MEMBERS_INVALID: members 要是 1..%d 人的列表（给的是 %s）'

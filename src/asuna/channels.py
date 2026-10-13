@@ -288,6 +288,11 @@ class Channels:
         from . import media_keys
         return media_keys.receive(channel_id, body)
 
+    def own_mute(self, channel_id, body):
+        from . import own_mute
+        with database_effects_lock(self.store.name):
+            return own_mute.receive(self.store, channel_id, body)
+
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
         with self.controller.ingress_lock:
@@ -532,6 +537,8 @@ class Channels:
             if state != 'DELIVERED':
                 from .publish import PublishService
                 PublishService(self.store).cancel_after({**row, 'delivery_state': state})
+            from . import own_mute
+            own_mute.after_receipt(self.store, row, state, body)     # refused for a mute, or accepted: her mute there
             return {'status': state}
 
     def recover_sending(self):
@@ -581,6 +588,8 @@ class ChannelServer:
                         value = channels.members(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['media_keys']:
                         value = channels.media_keys(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['own_mute']:
+                        value = channels.own_mute(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         owner = []

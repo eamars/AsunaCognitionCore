@@ -158,6 +158,7 @@ Group administration where she is an admin (owner direction 2026-10-04: on by de
 
 Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed. The host keeps one list per group in `group_members`, apart from `scene_people` (that roster stays "people who appeared here": a thousand members there would change what a label means and make every turn scan them). A group turn shows a chosen slice in words — the people she already knows here, the most recently active, anyone @-mentioned lately — and `find_member` searches the whole list. Names, roles and when someone last spoke (a timestamp field, shown on the local clock); never raw numbers.
 
+- def `routed_group` — The admitted route of a group (not a blocked one), else `<code>_GROUP_NOT_ROUTED`.
 - def `receive` — POST /v1/channels/<id>/members: one group's whole list from the adapter.
 - def `block` — members_from_program for a group turn, or None when no list was received.
 - def `find` — find_member: members whose name contains the words (at most FIND_LIMIT), in words.
@@ -250,6 +251,20 @@ Her switches (ADR-052): mute a group, turn tools off in a conversation, block a 
 - def `blocked`
 - def `here_block` — switches_from_program in the switched conversation: what she switched here from home, and until when.
 - def `home_block` — switches_from_program at home: every switch on, and the ones that ended in the last hours (said once a while).
+
+## `own_mute`
+
+[src/asuna/own_mute.py](../../src/asuna/own_mute.py)
+
+Her own mute in a group: one state slot per group conversation, so she knows where her words cannot go out.
+
+- def `row_of`
+- def `active` — The mute on her in this group now, or None (not muted, lifted, or past its end).
+- def `apply` — Set or clear the slot; returns what it now says ('muted', 'cleared', 'unchanged' or 'not_her').
+- def `receive` — POST /v1/channels/<id>/own_mute: {group_id, source, muted, whole_group?, until?, operator_id?, at?}.
+- def `after_receipt` — A send's receipt: refused for a mute sets the slot; one the platform accepted clears it.
+- def `line` — Her turn's line in a group where she is muted, or None: muted, until when on her clock, by whom.
+- def `place_words` — The same in her places at home, said for choosing whether to go.
 
 ## `condense`
 

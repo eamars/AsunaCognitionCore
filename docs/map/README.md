@@ -230,6 +230,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`places`](../../src/asuna/places.py) — Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what a visit sees.
 - [`focus`](../../src/asuna/focus.py) — Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
 - [`switches`](../../src/asuna/switches.py) — Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
+- [`own_mute`](../../src/asuna/own_mute.py) — Her own mute in a group: one state slot per group conversation, so she knows where her words cannot go out.
 - [`condense`](../../src/asuna/condense.py) — Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation.
 - [`notes`](../../src/asuna/notes.py) — Notes between her own conversations (ADR-018, owner 2026-10-07).
 - [`scene_links`](../../src/asuna/scene_links.py) — 跨场景只读联动（A2）：一条有向边 + 一个 canonical person，配置是唯一真相。
@@ -373,6 +374,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/journal.py`](../../packages/channels/napcat-qq/integration/qqadapter/journal.py) — Disk-backed spool, journals and counters.
 - [`napcat-qq/integration/qqadapter/media_keys.py`](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py) — The current picture-link signatures for the host (ADR-035).
 - [`napcat-qq/integration/qqadapter/members.py`](../../packages/channels/napcat-qq/integration/qqadapter/members.py) — Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
+- [`napcat-qq/integration/qqadapter/mutes.py`](../../packages/channels/napcat-qq/integration/qqadapter/mutes.py) — Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/own_mute`).
 - [`napcat-qq/integration/qqadapter/onebot.py`](../../packages/channels/napcat-qq/integration/qqadapter/onebot.py) — Forward WebSocket client: one read-only /event connection, one /api call connection, with echo correlation and late-ack tolerance.
 - [`napcat-qq/integration/qqadapter/outbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/outbound.py) — Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - [`napcat-qq/integration/qqadapter/peers.py`](../../packages/channels/napcat-qq/integration/qqadapter/peers.py) — Peer identity: who is speaking, and whether it is still the same person.

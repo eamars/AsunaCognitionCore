@@ -12,6 +12,7 @@ import time
 
 from . import forward as forward_mod
 from . import inbound as inbound_mod
+from . import mutes as mutes_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
@@ -78,8 +79,11 @@ class Adapter:
         self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, log=self.log)
         # the current picture-link keys, posted to the host every few minutes (media_keys.py)
         self.media_keys = MediaKeys(self.onebot, self.host, self.counters, log=self.log)
-        self.onebot.on_up = lambda path, gap: (self.catchup.request("reconnect")
-                                               if path == "/event" and gap is not None else None)
+        # her own mute in each admitted group: notices about her, refused sends, a look at start (mutes.py)
+        self.mutes = mutes_mod.Mutes(cfg, data_dir, self.onebot, self.host, self.counters, self.members.groups,
+                                     log=self.log)
+        self.out.on_muted = self.mutes.look_now
+        self.onebot.on_up = self._on_up
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.claim_wait = claim_wait
@@ -90,8 +94,19 @@ class Adapter:
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)
 
+    def _on_up(self, path, gap):
+        if path == "/event" and gap is not None:
+            self.catchup.request("reconnect")
+            self.mutes.sweep("reconnect")
+
     # ---- inbound (WS reader thread) ------------------------------------
     def on_event(self, event):
+        muted = mutes_mod.notice_body(event, self.cfg)
+        if muted is not None:
+            # a state report, not a chat line: posted from the mutes thread, never spooled as a turn
+            self.counters.inc("inbound_own_mute_notice")
+            self.mutes.notice(muted)
+            return
         result, reason = inbound_mod.classify(event, self.cfg, self.seen)
         if reason == "accepted":
             envelope, meta = result
@@ -293,7 +308,7 @@ class Adapter:
                     "up" if snap["ws_api_up"] else "down",
                     snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
                     json.dumps({k: v for k, v in sorted(snap.items())
-                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_"))},
+                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_"))},
                                sort_keys=True)))
 
     # ---- identity -------------------------------------------------------
@@ -352,7 +367,9 @@ class Adapter:
         threading.Thread(target=self.catchup.loop, args=(self.stop,), name="catchup", daemon=True).start()
         threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
         threading.Thread(target=self.media_keys.loop, args=(self.stop,), name="media_keys", daemon=True).start()
+        threading.Thread(target=self.mutes.loop, args=(self.stop,), name="mutes", daemon=True).start()
         self.catchup.request("startup")
+        self.mutes.sweep("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"
                  % (os.getpid(), self.identity.get("user_id"),
                     "up" if self.onebot.event_up else "down",

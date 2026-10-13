@@ -54,6 +54,17 @@ def platform_send_timed_out(resp):
     return "Timeout" in text and "sendMsg" in text
 
 
+MUTED_RESULT = re.compile(r'"result"\s*:\s*120(?!\d)')
+
+
+def platform_muted(resp):
+    """NapCat's retcode 1200 for sendMsg whose QQ result is 120: she is muted in that group. The send failed."""
+    if not isinstance(resp, dict) or resp.get("retcode") != 1200:
+        return False
+    text = str(resp.get("message") or "") + str(resp.get("wording") or "")
+    return "sendMsg" in text and MUTED_RESULT.search(text) is not None
+
+
 def send_outcome(resp):
     """A send's answer, on time or late: (status, platform_message_id, tag, response object to store)."""
     retcode = resp.get("retcode") if isinstance(resp, dict) else None
@@ -65,6 +76,9 @@ def send_outcome(resp):
         # NapCat stopped waiting for QQ's own confirmation (a fresh picture's first upload is slow); QQ delivered
         # every such send we have seen (owner 2026-10-06). Not failed: unknown, which is never re-sent.
         return "unknown", None, "platform_send_timeout", dict(resp, reason="platform_send_timeout")
+    if platform_muted(resp):
+        # the host reads `reason` (own_mute.REASON): the line did not go out because she is muted there
+        return "failed", None, "platform_muted", dict(resp, reason="muted")
     return ("failed", None, "retcode_%s" % retcode,
             resp if isinstance(resp, dict) else {"unparsed_response": True})
 MAX_SPOOL_TRIES = 20
@@ -354,6 +368,7 @@ class Outbound:
         self.verify_delay = float(verify_delay)
         self.verify_retry_delay = float(verify_retry_delay)
         self.verify_timeout = float(verify_timeout)
+        self.on_muted = None          # (group id): a send refused because she is muted there (mutes.py looks)
 
     # ---- one claimed publication's image attachment ---------------------
     def fetch_attachment(self, pub, attempt, plan):
@@ -584,12 +599,17 @@ class Outbound:
                                         "%s/%s" % (verification.get("stored_target_type"),
                                                    verification.get("stored_target_id")))))
         self.report(pub, receipt_payload(status, attempt, response, pmid), tag)
+        self.muted(tag, meta)
         self.journal.append("sends.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
                                            "status": status, "retcode": retcode,
                                            "platform_message_id": pmid, "chars": meta.get("chars"),
                                            "segments": meta.get("segments"),
                                            "attachment": meta.get("attachment"),
                                            "verification": verification})
+
+    def muted(self, tag, meta):
+        if tag == "platform_muted" and (meta or {}).get("target_type") == "group" and self.on_muted is not None:
+            self.on_muted(str(meta.get("target_id")))
 
     # ---- read-back verification (observation only) ----------------------
     def verify_send(self, pmid, meta, stopping=False):
@@ -693,7 +713,8 @@ class Outbound:
             # an admin action has no message of its own: the platform's retcode is the whole answer
             status, pmid = ("platform_accepted" if retcode == 0 else "failed"), None
         else:
-            status, pmid, _tag, response = send_outcome(response)
+            status, pmid, tag, response = send_outcome(response)
+            self.muted(tag, meta)
         self.log("LATE_ACK pub=%s attempt=%s retcode=%s -> %s" % (pub, attempt, retcode, status))
         self.journal.append("late_acks.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
                                                "retcode": retcode, "platform_message_id": pmid})

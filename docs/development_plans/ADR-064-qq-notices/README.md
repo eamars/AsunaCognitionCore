@@ -279,6 +279,85 @@ once a test account shows QQ takes it, marking a message essence (with `group_ac
 - The kind module lists the parts it sends (`napcat_qq`); a conversation whose kind lists none keeps plain speech and
   never sees `reply`.
 
+### What went wrong on QQ in the last 7 days (audit, 2026-10-13, read-only)
+
+The owner: she "sometimes speaks in the wrong place". Every outbound QQ line of the last 7 days (907 rows, 904 sent,
+889 in groups and 15 in private chats, 778 turns) was read against her turn's own record in the DSH session log (the
+order of her texts and tool calls; block kinds and sizes only, no thought read). Counts below; the episode ids and
+40-character excerpts went to the master agent, not into this file.
+
+| Class | Count | What it was |
+|---|---|---|
+| (a) Text beside a tool call that is narration, not speech | **0** | A text was followed by a working call 3 times (`delegate`, `attach_image`, an admin action); each reads as speech to the person (a promise, a remark with the picture). Every other text was followed only by `think`, `await_answer`, `feel` or `stay_silent` |
+| (b) Words around `stay_silent` | **2** after it; 134 before it | Before it: speech, then `stay_silent` to end the turn, as its description allows; the words read as meant. After it: 2 turns kept writing after choosing silence, and those words went out; one was a line of eight @s |
+| (c) Home or private matters in a group, or a line meant for another conversation | **57 lines in 56 turns** talk about her home or her workings (家里, 便条, 行动脑, 工具表, 提示词, 上下文…) in a group to someone not labelled as the owner; **0** found plainly addressed to another conversation | Content, not routing: each went to the conversation its turn was in. Most are answers to people asking about her; whether each was right to say there is a judgment, not a fact the program can check |
+| (d) The same line twice in one turn | **2** (10-08, 10-12) | She wrote the same text twice in the turn; both pieces went out as two messages |
+| (e) Anything else | **3** | A label's number in a group line (`名字 #3`), all on 10-06 and 10-07, before the check that hands it back (adb2afab, 10-08); none since |
+
+Repairs (`turn.rejected`): today, since local midnight, 19 (no `think` first 16, a label's number 3); empty speech 0
+and a JSON object 0. Over 7 days 89: no `think` 68 (21 in QQ turns), program talk 9, a label's number 6, a sticker or
+face 3, other 3; empty speech and a JSON object 0.
+
+So the guessing the owner worries about rarely misfires today (a, b, d: 4 lines in 7 days); what reads as "the wrong
+place" is mostly (c), her talking about home and her workings in groups.
+
+### Failure modes (deterministic)
+
+Each case has one answer, decided by the program from what she did, never from guessing what she meant.
+
+| Case | What the program does | What she sees | What is counted |
+|---|---|---|---|
+| `reply` and body text (before, beside or after it) | The parts go out; the body text is never sent | Her next turn in that conversation carries the unsent text once, at most 40 characters, as `没发出去：…` (`unsent_from_program`), so she does not later believe she said it. No hand-back: she did speak | audit `turn.unsent_body` |
+| Body text only, no `reply` | Handed back once in the same turn: `这段没发出去：「…」（about 40 characters）在这里说话用 reply`. Still no `reply`: the turn is silence and the text is marked as above. Never sent on a guess | The hand-back in the same turn; then `unsent_from_program` | audit `unsent_speech` |
+| No text and no `reply` | Silence, a deliberate one | Nothing | It ends the turn like speech or silence for `absorbed_by` (`coordinator._absorb`) |
+| `reply` called twice or more | Each goes out in order (a holding line, then the answer, is legitimate). The persona's message cap (`speak.max_messages`) counts across the turn; a part over it is refused | The refusal in that call's result | refusals by kind |
+| Any part fails its check | Every part is checked before anything is queued; one refused part means nothing from that call is queued | The result names each refused part and why (a sticker she does not keep, a picture not listed, a person not found, a reaction in a private chat) | refusals by kind |
+| A delivery fails | As today: a failed or unknown part cancels the parts after it | Her next turn's undelivered rows, with the reason when one is known | as today |
+| A `text` part identical to one already queued this turn | Refused as already sent | `这句这回合已经发过了` | refusals |
+| A `text` part containing the old split marker (a habit carried over) | Refused, not split and not sent as written | `一个 text 就是一条消息，要分开就写成几个 text` | refusals |
+| Today's text checks: a JSON object, program talk (`answers.py`), a label's number or a tag that tags nobody (`people.py`), an unknown sticker or face (`stickers.py`) | Refusals in `reply`'s result for that part, not a repair round of the whole turn | The refusal and its fix | refusals by check |
+| Place | `reply` has no target: it always goes to the turn's own conversation. Elsewhere is reached only by `pass_note`, `errand` or `visit`, which start her own turn there | A wrong conversation is impossible by construction | — |
+| The turn dies after `reply` queued its parts | The queued parts still go out; her history follows the receipts | Her next turn's history | as today |
+
+Unchanged by phase 2: `think` first in every turn (the largest repair source, 68 in 7 days) stays a turn rule.
+
+**Removed by construction:** (a) and (b), because body text is never speech on QQ and `stay_silent` is not listed
+there; (d), because an identical `text` part is refused; (e)'s label numbers, JSON and program talk become refusals
+of a part instead of repairs of a turn.
+
+**Not removed: (c).** Every line goes to its own conversation, but what she says there is hers. The one
+deterministic check that exists: a `text` part in a group that copies a run of 20 characters or more from a line in
+her home conversations of the last day is refused (`notes.borrowed` already does this for notes, with
+`OWN_WORDS_RUN` = 20). It catches copying, never paraphrase or her own account of home; beyond it there is none,
+and the rest is hers (ADR-017: home words reach public only through her own judgment).
+
+### The split marker goes (owner 2026-10-13)
+
+With `reply`, each `text` part is one message, so no channel needs the split marker. Phase 2 removes
+`speak.split_marker` everywhere: a kind with `reply` parts sends each `text` part as its own message; a kind without
+them (the official QQ Bot kind, the agent line, the DSH peer line) sends her words as one message. `speak.max_messages`
+stays, only as the cap on `text` parts in a turn, and typing pace (`speak.chars_per_second`, `min_gap_s`,
+`max_gap_s`) stays.
+
+Touched by that removal: `src/asuna/rhythm.py` (`SPLIT_MARKER`), `src/asuna/coordinator.py` (`_speech`'s
+splitting), `src/asuna/context.py` (`speak_from_program.messages`), `src/asuna/persona_model.py` and
+`src/asuna/resources/schemas/persona-model.schema.json` (`speak.split_marker`), the two persona packages that set it
+and the demo fixture (`tests/fixtures/personas/demo`), her own persona package if it sets it, `RUNTIME_API.md`
+("Claim public output"), and the tests that split (`tests/test_adr009_p5_speak.py`, `tests/test_outbound_image.py`).
+
+### Now, without phase 2 (proposed, not built)
+
+Two of the audit's classes are visible in groups today, are deterministic to fix, and need nothing from phase 2:
+
+1. **The same piece twice in one turn** (d, 2 in 7 days, the last on 10-12): `coordinator._speech` drops a piece
+   identical (whitespace aside) to an earlier piece of the same turn. Counted as `speech.duplicate_dropped`.
+2. **Words after `stay_silent`** (b, 2 in 7 days, one a line of eight @s): text written after her `stay_silent` call in
+   the same turn is not sent; words before it still are, as its description says. Counted as
+   `speech.after_silence_dropped`.
+
+Neither changes what she is told or shown (no tool or prompt change), so neither needs her agreement; both remove
+lines she did not mean to repeat or decided not to say. Cost: none per turn.
+
 ### Cost of phase 2 (measured on the draft above)
 
 The draft `reply` text is 934 characters (the JSON she would be sent). Removed from the lists below: `quote` 229,

@@ -269,6 +269,16 @@ she had no reason to send again.
 acceptable (2), with the exception in point 3 above; `accept`/`decline` on the existing `group_action`
 is right, do not wait for Phase 2 (3).
 
+Correction, same day, after checking the records: the sentence above about never reaching a failed send
+is wrong in its first half. At 12:15 she did send into that group — the platform returned `retcode 1200`
+(`result 120`), the row is stored `FAILED` with no platform message id, and the sticker queued behind it
+was cancelled rather than retried. What holds is the second half: she sent nothing further.
+
+The mechanism is worth writing down, because it is the reason a state slot is needed: the failure receipt
+landed at 12:15:44, **two seconds after her turn for that exchange had already ended**, and the mapping
+from `result 120` to "you are muted" did not exist yet. So the platform did tell us, and the telling
+arrived somewhere she was no longer standing.
+
 — Xiaoman
 
 ## Built ahead of the ADR as a bug fix (2026-10-13)

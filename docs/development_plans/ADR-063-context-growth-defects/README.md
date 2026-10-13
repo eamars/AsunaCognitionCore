@@ -1,7 +1,7 @@
 # ADR-063: Context growth defects: what makes her conversations grow faster than they should
 
-Status: **Accepted 2026-10-13** (owner: fix every defect in priority order, the prerequisites of ADR-062 included;
-ADR-062 does not start until each item here is fixed or documented). Items that change what she decided go to her
+Status: **Built 2026-10-13** (owner: fix every defect in priority order, the prerequisites of ADR-062 included).
+D1–D12 are built and measured (per-turn characters roughly halved; see the measurements below). Items that change what she decided go to her
 first (D1 part 1).
 
 ## Context

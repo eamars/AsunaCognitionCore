@@ -1,9 +1,10 @@
 # ADR-061: Asking for help: one question, many people, her own judgement
 
-Status: **Proposed 2026-10-13** (owner's idea, written by Claude; the owner's three calls are in). Brought up to date
-with the code of 2026-10-13 evening (ADR-062 phase 2 built off, ADR-063 fixed, ADR-064 phase 1 built): see "Fit with
-today's code". Buildable in two steps (see "Build plan"); step 1 waits on her answer to question 1 below, step 2 on
-question 2. For Xiaoman's review.
+Status: **Step 1 built 2026-10-13** (576b5eb0, 8d442267; see "Step 1 as built"), live with her next restart; its block is
+a prompt change and gets a day of observation before step 2. Step 2 (groups) waits on her answer to question 2.
+Proposed 2026-10-13 (owner's idea, written by Claude; the owner's three calls are in), brought up to date with the code
+of 2026-10-13 evening (ADR-062 phase 2 built off, ADR-063 fixed, ADR-064 phase 1 built): see "Fit with today's code".
+For Xiaoman's review.
 
 *Her review:* ____ (her signature).
 
@@ -236,6 +237,47 @@ Then a restart and a day of observation as before.
 
 **After both:** ADR-064 phase 2 (`reply`) is drafted on `ask`'s pattern: one tool with `do`, said in the place's
 own turn, the program keeping the record and the receipts.
+
+## Step 1 as built (2026-10-13)
+
+Commits 576b5eb0, 8d442267. Decisions taken for the build (coordinator, 2026-10-13): the chooser is `op` (ask / read /
+close) like her other tools, until her question 1 says otherwise (a later rename is cheap); questions 3–10 take the
+defaults above; groups are not built (question 2).
+
+- **Record and tool** (`questions.py`, `role_tools.py`): as in "Proposal", with `op` for `do`. `to` takes 这里 (or this
+  conversation's place), a home place from `note_places_from_program`, or 行动脑, at most three; a group or someone
+  else's chat is refused (`ASK_PLACE_NOT_HOME`, pointing to `pass_note`). No `why`: her `think` keeps it (ADR-043), and
+  `ask`'s ask and close are actions with consequences there (`reasons._action`).
+- **Joins** as in "Fit" item 3 for home places; a late answer after the patience still joins (the place reads 答了).
+  `--answers` on `tools/agent_line.py send`; `raw.asuna_answer` is kept only for a home kind (`channels.kept_raw`).
+- **The developer's line**, where `message_developer` goes: the home route marked `"developer": true`, else the route
+  named `claude-code` (her live config needs no change).
+- **Her inbox rows** become closed questions at her first home turn after the install (`questions.migrate`, once
+  each, closed `by: migrated`, never shown in the block); the program's own handover notes stay in `developer_inbox`.
+- **What changes for Claude's hourly check:** read open questions to the developer's line instead of her inbox rows
+  (`db.questions.find({'state': 'open', 'sources.scene_id': '<the claude-code line's scene id>'})`; each source shows
+  its state, `until` and answers). There is no marking: an answer is a message on the line (the first after her
+  question line joins by itself; `send --answers <id>` for an earlier question or one of several). Keep reading
+  `developer_inbox` for rows with `source.by: program` and mark those `seen` / `answered` as before.
+- **Not sent twice** (tested): in the turn a question's note opens, the question's text is in the note only and the
+  block names it by id; the note lists (`notes_from_program`, `notes_sent_from_program`) leave question notes out; the
+  block folds item by item and is named unchanged when nothing changed; an `ask` read leaves out an answer's text
+  while its line is on the surface (by message id, or a Web line's event id; `withoutVisibleAnswers`).
+- **Fixed on the way:** `tests/test_agent_line_tool.py` imported `tools/agent_line.py` as `agent_line`, the channel
+  kind's module name, so the agent-line kind test failed whenever both ran; it now loads the CLI under its own name.
+
+**Cost as built:** character brain tools 32 → 32, 21,055 → 21,453 characters (+398: `ask` 827 replaces
+`message_developer` 429); with tiered memory on 31, 20,961 → 21,359; `tests/test_tool_budget.py` raised by exactly
+that. Listed only at home (her local chat, the owner's private chats, the agent and peer lines): +398 on those tool
+lists, nothing in groups or other chats. System prompt: the block guide's `developer_inbox_from_program` line (101
+characters) gives way to `questions_from_program` (107), +6 once per conversation. Per turn
+at home: `questions_from_program` only while a question is open or the program just closed one, about 100–160
+characters a question when it changes, folded or named unchanged otherwise; `developer_inbox_from_program` gone.
+Action brain: nothing.
+
+**To watch after the install** (the observation day): her per-turn input profiled (ADR-062 §7) for the block sent
+twice or changing without news; how often she asks, where, with what patience; lapses, `没问`, program closes; whether
+`message_developer` still gets called (the alias's renamed note).
 
 ## Questions for her
 

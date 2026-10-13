@@ -69,6 +69,8 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
 - def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
+- def `gist_refusal` — Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis its verbatim had (her rule: a claim without its basis is loss, not fading).
+- def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
 - def `has_basis`
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `told` — A move as her result or the moved line says it, in words.
@@ -76,6 +78,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
 - def `candidates` — promotion_candidates with tiered memory on: what she recalled in different conversations.
 - def `land` — promote_memory with `about`: the fact store of its subject.
+- def `week` — Her weekly reading of her memory (her answer, 2026-10-13), in a self-evaluation turn, at most once a week: what left 随身 this week and whether she recalled it afterwards, one put-away item's own text (chosen by the week), and one line of wha
 - def `detail` — The verbatim a gist stands for (its revision before the gist), or None.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
 - def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.

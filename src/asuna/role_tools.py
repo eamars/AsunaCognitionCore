@@ -1362,6 +1362,12 @@ class RoleTools:
                     raise Refused('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)))
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
             return self._let_go(ep, slug, item.get('sid'), before), False
+        if memory_tiers.ENABLED and item.get('op') == 'replace_section' and item.get('sid'):
+            verbatim = next((s.get('body') for s in (before or {}).get('sections') or [] if s['sid'] == item['sid']), None)
+            dropped = memory_tiers.gist_refusal(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item['sid']),
+                                                verbatim, args.get('body'))
+            if dropped:
+                raise Refused(dropped)
         if memory_tiers.ENABLED and (item.get('nature') or item.get('from')):
             unsigned = memory_tiers.signing(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item.get('sid'))
                                             if item.get('sid') else None, item, args.get('body'))
@@ -1398,8 +1404,7 @@ class RoleTools:
             felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
             moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base)
-            if tiers.notes:
-                result['gist'] = tiers.notes[-1]
+
             if moves:
                 result['moved'] = [memory_tiers.told(move) for move in moves]
             placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None

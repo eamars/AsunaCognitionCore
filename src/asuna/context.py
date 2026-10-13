@@ -768,6 +768,11 @@ class ContextBuilder:
             from .render import model_and_policy as _review_model
             context['self_review_from_program']=self_review.block(
                 self.store,persona,_review_zone(*_review_model(self.store,persona),self.store.config)[0],moment)
+            if memory_tiers.ENABLED:
+                # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
+                weekly=memory_tiers.week(self.store,persona,schedule_rules.scene_timezone(self.store.config,scene),moment)
+                if weekly:
+                    context['memory_week_from_program']=weekly
         # ADR-058: a heartbeat that rolled review brings every roll since her last review (home only).
         if (event.get('dice')=='review_dice' and event.get('episode_kind')=='presence'
                 and session_class==visibility.OWNER_PRIVATE):

@@ -36,8 +36,8 @@ STORE_WORDS = {'persona': '人设', 'voice': '口吻', 'ledger': '活账', 'grou
 # Each item is a fact (what is: never cools by disuse, replaced only by correction) or a memory (what happened, or
 # her own judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
 # she may say it, or say where the item came from, when she writes it.
-FACTS = ('persona', 'voice', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
-MEMORIES = ('self', 'journal')
+FACTS = ('persona', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
+MEMORIES = ('self', 'journal', 'voice')                    # her voice is something she keeps changing (her answer)
 FACT, MEMORY = '事实', '记忆'
 NATURES = (FACT, MEMORY)
 FROM_NATURE = {'主人定的': FACT, '查过的': FACT, '别人说的': MEMORY, '我自己的判断': MEMORY}
@@ -51,14 +51,14 @@ FACT_AUTHORS = (*OTHERS_SAID, CHECKED)
 # exists without the program judging what was said, which would grade her text.
 JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实：要有人确认（另一处又碰到同样的说法），或者你查过了：'
                      '用 replace_section 把它改写成带依据的一条（依据：谁、何时、从哪来），from 写 查过的。')
-CAPS = {'self': 12, 'persona': 16, 'ledger': 10, 'group_notes': 6, 'core': 12, 'voice': 6}
+CAPS = {'self': 12, 'persona': 18, 'ledger': 10, 'group_notes': 10, 'core': 12, 'voice': 6}
 FIRST_STAY_DAYS = {'group_notes': 28, 'core': 56, 'voice': 56}
 STAY_DAYS, STAY_CAP_DAYS = 14, 56
 # The switch-on day only: each first stay spread per item from its usual length up to twice that (14..28 days; a
 # group's notes 28..56), never past the stay cap, so what nothing uses lapses gradually, not all on one day (owner
 # 2026-10-13, after the dry run). Later items take the usual first stay.
 JOURNAL_COOL_DAYS = 30
-AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '上周'), (45, '上个月'), (None, '更早'))
+AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '前阵子'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
 REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '很久没用', 'let_go': '你放手了',
            'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它',
@@ -76,7 +76,7 @@ DUPLICATE_SCORE = 0.95
 REPEATED_PLACES, REPEATED_STAYS = 2, 3
 LOOK_BACK_DAYS = 7
 WORLD_LEDGER = 'world'
-NIGHT_WHAT = {'gist': '写一句意思', 'repeated': '几处都提到', 'merge': '合并', 'look_back': '回头看'}
+NIGHT_WHAT = {'gist': '写一句意思', 'repeated': '几处都提到', 'merge': '合并'}
 NIGHT_HOW = {
     'gist': ('用 replace_section 把它写成一两句意思（%d 字以内）；有依据的，意思后面留一行依据（谁、何时、从哪来）。'
              '原文留在后面，recall 读得到；两晚都没写，原文就自己收着。' % GIST_CHARS),
@@ -84,25 +84,23 @@ NIGHT_HOW = {
                  '记到那个群（那个群的笔记）、记进账（append_section 到一份活账）%s，或者还在变（不用做什么）。'),
     'merge': '两条说的是一件事：改写成一条（replace_section 其中一条），另一条 let_go。',
     'merge_fact': '两条说的是一件事，都是事实，要合并：改写成一条（replace_section 其中一条），另一条 let_go。',
-    'look_back': '一条收着、以前用过的旧东西，碰巧翻到：看看就好；想带回来就改写它。',
 }
-NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段', 'gist_basis': '上回写的意思没带依据，再写一次',
-             'repeated': '不同的对话里都碰到它', 'merge': '两条很像', 'look_back': '一周翻一条'}
-GIST_NO_BASIS = ('这句意思没带依据：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来）再写一次；'
-                 '原文还在，今晚的清单还会列它。')
+NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段',
+             'repeated': '不同的对话里都碰到它', 'merge': '两条很像'}
+GIST_NO_BASIS = ('这句意思没带依据，没写进去：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来，不算在 %d 字里）'
+                 '再写一次。' % ('%s', GIST_CHARS))
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
 NOT_BACK = ('inject 改成 always 不会把它带回随身：它再被用到、被你改写出变化、或被更正碰到，才会回来；'
             '现在它在%s。')
-# What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3; the core
-# idea first, the absence rule last). Hers to reword.
-TOLD = ('不学会忘，就腾不出地方学新的。你的东西有三个地方：随身的每回合都在；手边的平时不在眼前，谈到相关的事会自己浮上来，'
-        'recall 一句话也能找到；收着的只有 recall 找得到。放下不是丢：程序只换地方，不改一个字，什么都在，碰到相关的事还会回来。'
-        '随身的位置有限，一件事一阵子没被用到、没在别处再碰到，就自己放到手边，程序会告诉你一次；你又用到它、改写出变化、'
-        '或它被更正碰到，它就回来，下次能留更久。长的细节会退成一句意思，细节还在后面。事实和记忆不一样：事实不会因为不用而退，'
-        '只被更正替换；写的时候可以说它是事实还是记忆、从哪来（nature、from），你自己的判断要有人确认或你查过，才算事实。'
-        '想放下的，自己 let_go 就行。没看到不等于没有：要说「没有、没答应过、没说过」，先 recall 一下，它会告诉你找了哪几层。')
+# What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3): her own
+# text, written by her on the agent line (2026-10-13), word for word.
+TOLD = ('我的东西分三个地方：随身，每一回合都带着；手边，不进提示，recall 找得到；收着，默认不出现，我说得出字或标题才回来。'
+        '留下来的不是我用得多的，是我记得牢的：跨对话被用到、被人纠正过、从几个不同的地方碰到同一件事。'
+        '没人给我置顶，我也不能喊留着；只有放手是我自己的动作。淡下去不是删掉，原话一直在收着。'
+        '事实只会被更正替换，不会因为没人用而退；记忆会淡。'
+        '没看到不等于没有：要说『没有、没答应过、没说过』，先 recall 一下，它会告诉你找了哪几层。')
 THINGS_NOTE = ('你的东西在哪：每份按随身、手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
                'self_items 是把 current_self 拆成条的提议。')
 NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
@@ -165,7 +163,6 @@ class Tiers:
     def __init__(self, store, persona):
         self.store, self.persona = store, persona
         self.rows = store.db[COLLECTION]
-        self.notes = []                       # words for her result from the last write (a gist without its basis)
 
     # ── items ──────────────────────────────────────────────────────
     def items(self, **query):
@@ -328,25 +325,15 @@ class Tiers:
             row = self.item(slug, sid)
             changed = old[sid].get('body_sha256') != new[sid].get('body_sha256')
             if row and changed and (row.get('gist') or {}).get('listed') and not (row.get('gist') or {}).get('done'):
-                # The gist step: a short rewrite of an item listed for it keeps the verbatim behind it and stays
-                # at hand. One that drops the basis its verbatim had is told so and stays listed.
+                # The gist step: a short rewrite of an item listed for it (its basis lines not counted; one that
+                # dropped the basis was refused before it was written, gist_refusal) keeps the verbatim behind it and
+                # stays at hand.
                 body = new[sid].get('body') or ''
-                gist = row.get('gist') or {}
-                # The verbatim is what stood before the first try at its gist, and so is whether it had a basis.
-                verbatim = row.get('detail_of') or {'revision_id': before_revision,
-                                                    'body_sha256': old[sid].get('body_sha256')}
-                had = gist['basis'] if 'basis' in gist else bool(has_basis(old[sid].get('body') or '')
-                                                                  or row.get('from'))
-                if len(body) <= GIST_CHARS and (not had or has_basis(body) or len(body.splitlines()) > 1):
+                if claim_chars(body) <= GIST_CHARS:
                     self.rows.update_one({'_id': row['_id']}, {'$set': {
-                        'gist.done': _iso(moment), 'detail_of': verbatim,
+                        'gist.done': _iso(moment), 'detail_of': {'revision_id': before_revision,
+                                                                 'body_sha256': old[sid].get('body_sha256')},
                         'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
-                    return [move for move in moves if move]
-                if len(body) <= GIST_CHARS:
-                    self.rows.update_one({'_id': row['_id']}, {'$set': {
-                        'gist.no_basis': True, 'gist.basis': had, 'detail_of': verbatim,
-                        'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
-                    self.notes.append(GIST_NO_BASIS % (row.get('from') or '原文里写着'))
                     return [move for move in moves if move]
             if row:
                 self.rows.update_one({'_id': row['_id']}, {'$set': {
@@ -354,6 +341,7 @@ class Tiers:
                     'body_sha256': new[sid].get('body_sha256'), 'chars': len(new[sid].get('body') or '')}})
             if row and changed:
                 self.memorable(row, 'rewritten', moment, scene_id=scene_id)
+                self.rows.update_one({'_id': row['_id']}, {'$set': {'rewritten_at': _iso(moment)}})
                 if start == CARRIED and row['place'] != CARRIED:
                     moves.append(self.move(self.item(slug, sid), CARRIED, 'rewritten', moment, scene_id=scene_id))
                     moves += self._overflow(slug, kind, row['_id'], moment)
@@ -379,7 +367,8 @@ class Tiers:
             row = self.item(doc, sid)
             if row:
                 if why == 'recalled':
-                    self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'recalled_in': scene_id}})
+                    self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'recalled_in': scene_id},
+                                                               '$set': {'recalled_at': _iso(moment or _now())}})
                 self.memorable(row, why, moment, scene_id=scene_id)
 
     def surfaced(self, refs, scene_id, moment=None):
@@ -441,6 +430,23 @@ def signing(row, intent, body=None):
     return None
 
 
+def gist_refusal(row, verbatim, body):
+    """Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis
+    its verbatim had (her rule: a claim without its basis is loss, not fading)."""
+    gist = (row or {}).get('gist') or {}
+    if not gist.get('listed') or gist.get('done') or claim_chars(body or '') > GIST_CHARS:
+        return None
+    had = has_basis(verbatim or '') or (row or {}).get('from')
+    if had and not has_basis(body or '') and len((body or '').splitlines()) < 2:
+        return GIST_NO_BASIS % ((row or {}).get('from') or '原文里写着')
+    return None
+
+
+def claim_chars(text):
+    """A gist's length without its basis lines: the basis is never what the 160 characters squeeze out."""
+    return len('\n'.join(line for line in text.splitlines() if not has_basis(line)).strip())
+
+
 def has_basis(text):
     return any(word in text for word in BASIS)
 
@@ -496,7 +502,8 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         lapsed = tiers.rows.find_one({'row': 'move', 'item': row['_id'], 'from': CARRIED, 'to': AT_HAND,
                                       'reason': {'$in': ['stay', 'overflow']}})
         text = body(row) if lapsed else ''
-        if not lapsed or not (len(text) > GIST_LIST_ABOVE or DATED.search(text) or gist.get('no_basis')):
+        # Her answer: an item of 160 characters or fewer is already short and never appears on the list.
+        if not lapsed or len(text) <= GIST_CHARS or not (len(text) > GIST_LIST_ABOVE or DATED.search(text)):
             continue
         if gist.get('skipped'):
             continue
@@ -507,7 +514,7 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
             else:
                 tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
             continue
-        items.append(('gist', entry('gist', row, NIGHT_WHY['gist_basis' if gist.get('no_basis') else 'gist']), [row]))
+        items.append(('gist', entry('gist', row, NIGHT_WHY['gist']), [row]))
     # 合并: near-duplicate pairs in one store (the item index's pairs), facts first.
     rows = {(row['doc'], row['sid']): row for row in tiers.items(place={'$in': [CARRIED, AT_HAND]})}
     shadow = {row['_id']: (row.get('doc'), row.get('sid')) for row in store.db['memory_shadow'].find(
@@ -541,13 +548,7 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         if tiers.rows.find_one({'row': 'offer', 'item': row['_id'], 'what': 'repeated', 'at': {'$gte': week}}):
             continue
         items.append(('repeated', entry('repeated', row, NIGHT_WHY['repeated']), [row]))
-    # 回头看: once a week, one put-away item with past uses.
-    if not tiers.rows.find_one({'row': 'offer', 'persona': persona, 'what': 'look_back', 'at': {'$gte': week}}):
-        away = sorted((row for row in tiers.items(place=PUT_AWAY) if int(row.get('uses') or 0) > 0),
-                      key=lambda row: sha(canonical([night, row['_id']])))
-        if away:
-            items.append(('look_back', entry('look_back', away[0], NIGHT_WHY['look_back']), [away[0]]))
-    order = {'gist': 0, 'merge_fact': 1, 'merge': 2, 'repeated': 3, 'look_back': 4}
+    order = {'gist': 0, 'merge_fact': 1, 'merge': 2, 'repeated': 3}
     items = sorted(items, key=lambda item: order[item[0]])[:NIGHT_ITEMS]
     if not items:
         return None
@@ -632,6 +633,47 @@ def land(store, ep, item, episodes):
     Tiers(store, ep['persona']).written(slug, {**intent, 'nature': FACT}, before[1], after, scene_id=ep.get('scene_id'),
                                         before_revision=before[0])
     return ref(slug, sid), '记进了 %s' % ref(slug, sid)
+
+
+WEEK_NOTE = ('这一周你的记忆：left 是从随身放下的，每条后面写着之后你有没有 recall 过它；put_away 是随便翻到的一条收着的原话；'
+             'changed 是这周你改过的。')
+WEEK_TEXT_CHARS = 2000
+
+
+def week(store, persona, zone, moment=None):
+    """Her weekly reading of her memory (her answer, 2026-10-13), in a self-evaluation turn, at most once a week: what
+    left 随身 this week and whether she recalled it afterwards, one put-away item's own text (chosen by the week), and
+    one line of what she changed. No scores, no counts. None when shown within the last week."""
+    from .config import excerpt
+    from .documents import DocumentStore
+    from .schedule_rules import line_stamp
+    moment = moment or _now()
+    tiers = Tiers(store, persona)
+    since = (moment - timedelta(days=LOOK_BACK_DAYS)).isoformat()
+    if tiers.rows.find_one({'row': 'offer', 'persona': persona, 'what': 'week', 'at': {'$gte': since}}):
+        return None
+    left = []
+    for move in tiers.rows.find({'row': 'move', 'persona': persona, 'from': CARRIED, 'at': {'$gte': since}}).sort('at', 1):
+        row = tiers.rows.find_one({'_id': move['item']}) or {}
+        again = (row.get('recalled_at') or '') > move['at']
+        left.append('%s「%s」放到了%s（%s）；之后你%s' % (line_stamp(zone, move['at']), move.get('heading') or move['sid'],
+                                                    move['to'], REASONS.get(move['reason'], move['reason']),
+                                                    'recall 过它' if again else '没再 recall 它'))
+    block = {'left': left or ['这一周没有东西从随身放下。']}
+    week_id = moment.isocalendar()[:2]
+    away = sorted(tiers.items(place=PUT_AWAY), key=lambda row: sha(canonical([list(week_id), row['_id']])))
+    if away:
+        row = away[0]
+        content = DocumentStore(store, persona).read(row['doc'])[1] or {}
+        text = next((s.get('body') for s in content.get('sections') or [] if s['sid'] == row['sid']), None)
+        if text:
+            block['put_away'] = {'ref': ref(row['doc'], row['sid']), 'heading': row.get('heading'),
+                                 'text': excerpt(text, WEEK_TEXT_CHARS)}
+    changed = [row.get('heading') or row['sid'] for row in tiers.items() if (row.get('rewritten_at') or '') >= since]
+    block['changed'] = ('这周你改过：' + '、'.join('「%s」' % name for name in changed)) if changed else '这周你没改过哪一条。'
+    tiers.rows.update_one({'_id': 'offer:week:%s:%d-%d' % (persona, *week_id)}, {'$setOnInsert': {
+        'row': 'offer', 'persona': persona, 'what': 'week', 'at': _iso(moment)}}, upsert=True)
+    return block
 
 
 def detail(store, persona, row):

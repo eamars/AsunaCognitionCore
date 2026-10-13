@@ -49,7 +49,8 @@ def _tiered_notes():
     from . import memory_tiers
     if not memory_tiers.ENABLED:
         return {}
-    return {'things_from_program': (memory_tiers.THINGS_NOTE,), 'night_list_from_program': (memory_tiers.NIGHT_NOTE,)}
+    return {'things_from_program': (memory_tiers.THINGS_NOTE,), 'night_list_from_program': (memory_tiers.NIGHT_NOTE,),
+            'memory_week_from_program': (memory_tiers.WEEK_NOTE,)}
 
 
 # How the delivery's own lines read (context-delivery.js writes them without their explanation).

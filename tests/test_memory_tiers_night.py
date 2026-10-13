@@ -53,16 +53,27 @@ def test_a_lapsed_long_item_is_listed_for_its_gist_and_the_gist_keeps_the_verbat
     lapse(on, 'persona', sid)
     [entry] = night_list(on, 'P1', NIGHT)['items']
     assert (entry['what'], entry['ref']) == ('写一句意思', 'doc:persona#' + sid) and '依据' in entry['how']
-    tiers = rewrite(on, 'persona', sid, '周六早上烤松饼。')
-    assert tiers.notes and '没带依据' in tiers.notes[-1], 'a gist that drops the basis is told so'
-    assert not tiers.item('persona', sid)['gist'].get('done') and tiers.item('persona', sid)['place'] == AT_HAND
-    assert night_list(on, 'P1', NIGHT + timedelta(days=1))['items'][0]['why'] == memory_tiers.NIGHT_WHY['gist_basis']
-    tiers = rewrite(on, 'persona', sid, '周六早上烤松饼。\n依据：主人说过三次')
+    row = Tiers(on, 'P1').item('persona', sid)
+    verbatim = LONG + '\n依据：主人说过三次'
+    refused = memory_tiers.gist_refusal(row, verbatim, '周六早上烤松饼。')
+    assert refused and '没带依据' in refused, 'a gist that drops the basis is refused before it is written'
+    claim = '周六早上烤松饼，' * 17                                     # 153 characters of claim
+    assert memory_tiers.gist_refusal(row, verbatim, claim + '\n依据：主人说过三次，10/12 在家里') is None, \
+        'the basis line is not counted in the 160 (her answer)'
+    tiers = rewrite(on, 'persona', sid, claim + '\n依据：主人说过三次，10/12 在家里')
     row = tiers.item('persona', sid)
     assert row['gist']['done'] and row['place'] == AT_HAND, 'the gist stays at hand'
     from asuna.role_tools import read_sections
     [read], _ = read_sections(on, {'persona': 'P1', 'scene_id': 'dm-a'}, [{'doc': 'persona', 'sid': sid}], 'owner_private')
-    assert read['body'].startswith('周六早上烤松饼。') and read['detail'].startswith(LONG[:20]), 'the verbatim behind it'
+    assert read['body'].startswith('周六早上烤松饼，') and read['detail'].startswith(LONG[:20]), 'the verbatim behind it'
+
+
+def test_an_item_of_160_characters_or_fewer_never_appears_on_the_night_list(on):
+    """Her answer: a short item is already its gist, dated or not."""
+    sid = append(on, 'persona', '那天', '10/12 下午三点去了河边，' * 5)
+    assert len(DocumentStore(on, 'P1').read('persona')[1]['sections'][-1]['body']) <= 160
+    lapse(on, 'persona', sid)
+    assert night_list(on, 'P1', NIGHT) is None
 
 
 def test_a_memorys_gist_passed_over_on_two_nights_goes_put_away_as_it_is(on):
@@ -162,19 +173,36 @@ def test_near_duplicates_in_a_fact_store_must_merge_and_meeting_one_elsewhere_is
     assert tiers.item('persona', a)['last_moment'] == 'duplicate_elsewhere'
 
 
-def test_one_put_away_thing_a_week_comes_back_to_look_at_and_the_list_holds_five_at_most(on):
+def test_the_night_list_holds_five_at_most_and_no_old_thing_to_look_back_at(on):
     tiers = Tiers(on, 'P1')
     for n in range(7):
         sid = append(on, 'persona', '长的 %d' % n, LONG + str(n))
         lapse(on, 'persona', sid)
-    old = append(on, 'work_log', '旧事', '很早以前的一件事')
-    row = tiers.item('work_log', old)
-    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'place': PUT_AWAY, 'uses': 2}})
     listed = night_list(on, 'P1', NIGHT)['items']
     assert len(listed) == memory_tiers.NIGHT_ITEMS and all(entry['what'] == '写一句意思' for entry in listed)
-    tiers.rows.delete_many({'row': 'item', 'doc': 'persona'})
-    assert night_list(on, 'P1', NIGHT)['items'][0]['what'] == '回头看'
-    assert night_list(on, 'P1', NIGHT + timedelta(days=1)) is None, 'once a week'
+    assert '回头看' not in memory_tiers.NIGHT_WHAT.values(), 'the random put-away item is in her weekly reading'
+
+
+def test_her_weekly_reading_shows_what_left_whether_she_recalled_it_one_put_away_text_and_what_she_changed(on):
+    """Her answer 9: three things only, no scores and no counts, once a week."""
+    tiers = Tiers(on, 'P1')
+    gone = append(on, 'persona', '走了的', '一条会放下的')
+    kept = append(on, 'persona', '又想起的', '一条放下后又想起的')
+    lapse(on, 'persona', gone)
+    lapse(on, 'persona', kept)
+    tiers.used([('persona', kept)], 'recalled', 'dm-a')
+    old = append(on, 'work_log', '旧事', '很早以前的一件事，原话都在')
+    tiers.rows.update_one({'_id': tiers.item('work_log', old)['_id']}, {'$set': {'place': PUT_AWAY}})
+    rewrite(on, 'persona', kept, '一条放下后又想起的，改过了')
+    zone = {'tz': timezone.utc, 'name': 'UTC'}
+    reading = memory_tiers.week(on, 'P1', zone)
+    assert set(reading) == {'left', 'put_away', 'changed'}
+    assert any('走了的' in line and '没再 recall' in line for line in reading['left'])
+    assert any('又想起的' in line and 'recall 过它' in line for line in reading['left'])
+    assert reading['put_away']['text'] == '很早以前的一件事，原话都在', 'its own text, not an index line'
+    assert reading['changed'] == '这周你改过：「又想起的」'
+    assert not any(ch.isdigit() for ch in reading['changed']), 'no counts'
+    assert memory_tiers.week(on, 'P1', zone) is None, 'once a week'
 
 
 def test_the_settlement_turn_has_the_night_list_instead_of_the_notes_review(on):
@@ -204,3 +232,18 @@ def test_a_promotion_about_herself_lands_in_core_as_a_carried_fact(on):
     assert (row['place'], row['nature'], row['stay_days']) == (CARRIED, '事实', 56)
     body = DocumentStore(on, 'P1').read('core')[1]['sections'][-1]['body']
     assert body == '我做事先查再说\n依据：两天里两次都这样', 'a claim with its basis'
+
+
+def test_her_rewrite_that_drops_the_basis_of_a_listed_item_is_refused_in_her_turn(on):
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane, FakeTurn
+    from test_adr009_p2 import THINK
+    sid = append(on, 'persona', '周六', LONG + '\n依据：主人说过三次')
+    lapse(on, 'persona', sid)
+    night_list(on, 'P1', NIGHT)
+    short = {'doc': 'persona', 'op': 'replace_section', 'sid': sid, 'body': '周六早上烤松饼。', 'reason': '写一句意思'}
+    ep = Coordinator(on, FakeLane(on, [FakeTurn([THINK, ('write_document', short)], '好。')])).ingest(event('e-gist'))
+    call = next(c for c in ep['tool_calls'].values() if c['tool'] == 'write_document')
+    assert '没带依据' in call['refused']
+    body = next(s['body'] for s in DocumentStore(on, 'P1').read('persona')[1]['sections'] if s['sid'] == sid)
+    assert body.startswith(LONG[:20]), 'nothing written'

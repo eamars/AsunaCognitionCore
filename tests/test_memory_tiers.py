@@ -211,6 +211,20 @@ def test_a_tag_lets_an_item_go_down_but_never_carries_it_back_up(store, tiers_on
     assert pinned['result']['place'] == memory_tiers.NOT_BACK % AT_HAND
 
 
+def test_her_numbers_and_words(store, tiers_on):
+    """Her answers (2026-10-13): persona carries 18, a group's notes 10; her voice is a memory; 7 to 14 days ago is
+    前阵子."""
+    from datetime import datetime, timedelta, timezone
+    assert (memory_tiers.CAPS['persona'], memory_tiers.CAPS['group_notes'], memory_tiers.CAPS['self']) == (18, 10, 12)
+    assert 'voice' in memory_tiers.MEMORIES and 'voice' not in memory_tiers.FACTS
+    moment = datetime.now(timezone.utc)
+    assert memory_tiers.age_word((moment - timedelta(days=10)).isoformat(), moment) == '前阵子'
+    owner(store)
+    tiers = Tiers(store, 'P1')
+    tiers.sync()
+    assert all(row['nature'] == '记忆' for row in tiers.items(doc='voice'))
+
+
 def test_an_item_is_a_fact_or_a_memory_by_what_she_says_not_by_its_store(store, tiers_on):
     """Her answer (2026-10-13): her persona holds her own judgments (memories), her self holds checked facts."""
     owner(store)

@@ -17,11 +17,12 @@ def test_off_her_system_prompt_is_as_before_and_on_it_tells_her_once(store, monk
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     on = render_system(store, 'P1')[0]
     assert on.count(memory_tiers.TOLD) == 1
-    assert memory_tiers.TOLD.startswith('不学会忘') and memory_tiers.TOLD.endswith('找了哪几层。')
+    assert memory_tiers.TOLD.startswith('我的东西分三个地方') and memory_tiers.TOLD.endswith('找了哪几层。'), 'her text'
     assert '- things_from_program：' + memory_tiers.THINGS_NOTE in on
     assert len(on) - len(off) == len('\n\n# 记忆放在哪\n' + memory_tiers.TOLD) + sum(
         len('\n- %s：%s' % pair) for pair in (('things_from_program', memory_tiers.THINGS_NOTE),
-                                               ('night_list_from_program', memory_tiers.NIGHT_NOTE)))
+                                               ('night_list_from_program', memory_tiers.NIGHT_NOTE),
+                                               ('memory_week_from_program', memory_tiers.WEEK_NOTE)))
 
 
 def test_on_update_self_is_unlisted_but_still_runs_where_write_document_is_hers(store, monkeypatch):

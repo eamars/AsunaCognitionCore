@@ -350,10 +350,10 @@ from its last memorable moment (group notes 28, `core` and voice 56; on the day 
 spread per item from its usual length to twice that, at most 56 days); a memorable moment (`recall` returned it, a
 rewrite changed its body, its `doc:` ref cited in a tool call, a second conversation it came up in) starts the stay
 again and, once per stay, doubles the next, up to 56 days. A rewrite that changes an item brings it back to 随身. A
-store over its count of 随身 items (`self` 12, persona 16, each ledger 10, each group's notes 6, `core` 12, voice 6)
+store over its count of 随身 items (`self` 12, persona 18, each ledger 10, each group's notes 10, `core` 12, voice 6)
 lapses its least recently memorable one (one written in a turn where she recorded a feeling last), and the write's
 result names it under `moved`. Each item is a fact (事实) or a memory (记忆): by default
-facts in persona, voice, ledgers, group notes and `core`, memories in `self` and running records; `write_document`
+facts in persona, ledgers, group notes and `core`, memories in `self`, voice and running records; `write_document`
 takes `nature` (事实 or 记忆) or `from` (主人定的 and 查过的 make a fact, 别人说的 and 我自己的判断 a memory) for the item
 it writes, and a `set_tags` carrying only these changes nothing in the document. Her own judgment is not made a fact
 by her alone: `nature: 事实` on an item from 我自己的判断, or relabelling one 查过的 without rewriting it with a basis,
@@ -387,24 +387,29 @@ With the switch on, her tools are `role_tools.TIERED` (`role_tools.tools()`): `u
 still runs where `write_document` is hers (registered unlisted, an alias of `write_document`); `write_document` takes
 `op: let_go`, `nature` and `from`; `recall`'s `sections` take a `doc` without `sid`; `promote_memory` takes `about`.
 Her system prompt says once, where the memory rules are, what the places are and that absence is not evidence
-(`memory_tiers.TOLD`, a section `# 记忆放在哪`), and the block guide explains `things_from_program` and
-`night_list_from_program`. Off, her tools and system prompt are exactly as without it.
+(`memory_tiers.TOLD`, a section `# 记忆放在哪`), and the block guide explains `things_from_program`,
+`night_list_from_program` and `memory_week_from_program`. Off, her tools and system prompt are exactly as without it.
+
+With the switch on, a home heartbeat that rolled self evaluation carries, at most once a week,
+`memory_week_from_program` (`memory_tiers.week`): what left 随身 that week, each with whether she recalled it
+afterwards; one put-away item's own text (chosen by the week); and one line naming the items she changed that week. It
+has no scores and no counts.
 
 With the switch on, her nightly settlement turn carries `night_list_from_program` instead of `notes_review_from_program`:
 at most five items (`memory_tiers.night_list`), each with its ref, heading, store, nature, text, why it is there and what
 she can do with it, none of them a keep or drop choice. 写一句意思: an item that lapsed from 随身 and is long (over 240
-characters) or carries dates waits for her gist: a `replace_section` of 160 characters or fewer is taken as the gist; it
-stays 手边 and the text it replaced stays behind it (`detail_of`; reading the section by `recall` returns it as
-`detail`). When the text it replaced had a basis (a marker word such as 依据 or 来源, or a source she declared) and the
-gist keeps neither a basis nor a second line, the write's result says so (`gist`) and the item is listed again. A
-memory listed on two nights and not rewritten goes 收着 as it is; a fact stays 手边 with its verbatim and is not
+characters, or over 160 with dates; one of 160 characters or fewer is never listed) waits for her gist: a
+`replace_section` whose claim is 160 characters or fewer (lines carrying a basis are not counted) is taken as the
+gist; it stays 手边 and the text it replaced stays behind it (`detail_of`; reading the section by `recall` returns it
+as `detail`). When the text it replaced had a basis (a marker word such as 依据 or 来源, or a source she declared), a
+rewrite that keeps neither a basis nor a second line is refused and nothing is written. A memory listed on two nights and not rewritten goes 收着 as it is; a fact stays 手边 with its verbatim and is not
 listed again. 几处都提到: a memory brought up or recalled in two
 different conversations, or carried through three stays, at most once a week; what it means is hers (into `core`,
 to that person, to that group's notes, to a ledger, or still changing; 记成事实 is offered only for one that someone
 else decided or said, or that she checked, or a judgment of hers the same said elsewhere confirmed). 合并: two items of one document the
 item index scores 0.95 or more alike (a pair of facts is to be merged); items met again from another conversation are
 memorable; a judgment of hers is confirmed by its near-duplicate written in another conversation or one from
-someone else (别人说的, 主人定的). 回头看: once a week, one put-away item with past uses. `promote_memory`'s candidates are then the memories
+someone else (别人说的, 主人定的). `promote_memory`'s candidates are then the memories
 she recalled in two different conversations, and its `about` (self, person, place, world) lands the promoted fact,
 written as the fact and a line of its basis, in the fact store of its subject: `core` for herself, the ledger `world`
 for the world, the group's notes when every source is from one group and the memory is public; a person's facts are

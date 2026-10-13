@@ -809,7 +809,7 @@ class ContextBuilder:
             asked=_questions.block(self.store,persona,scene['_id'],moment,(first_note or {}).get('question'))
             if asked:context['questions_from_program']=asked
             from . import host_stops as _host_stops
-            away=_host_stops.block(self.store,schedule_zone,moment)
+            away=_host_stops.block(self.store,schedule_zone,moment,persona)
             if away:context['host_from_program']=away
             from . import restarts as _restarts
             restarted=_restarts.block(self.store,schedule_zone,moment)

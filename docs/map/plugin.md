@@ -50,9 +50,9 @@ The optional affect appraiser's preset plugin: a tool-free session that proposes
 
 [packages/cognition-core/src/attend.js](../../packages/cognition-core/src/attend.js)
 
-The relevance gate's preset plugin: one small tool-free session per group that decides whether she joins in (attend.py), never speaking itself.
+The relevance gate's preset plugin: a small tool-free session for each question, deciding whether she joins in (attend.py), never speaking itself.
 
-- def `name` — The relevance gate's preset plugin: one small tool-free session per group that decides whether she joins in (attend.py), never speaking itself.
+- def `name` — The relevance gate's preset plugin: a small tool-free session for each question, deciding whether she joins in (attend.py), never speaking itself.
 - def `inject`
 - def `apply`
 

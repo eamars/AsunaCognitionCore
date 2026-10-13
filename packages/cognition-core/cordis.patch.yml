@@ -104,20 +104,8 @@
           en: "Decides whether she joins in a group conversation"
           zh: 判断她要不要在群里接话
         plugins:
+          # One question per session: nothing to compact.
           - name: '@asuna/cognition-core/attend'
-          # Each group's gate session stays small: it compacts at about 5% of the window and keeps a short tail.
-          - id: compaction
-            name: cordis:group
-            group: true
-            isolate:
-              compaction: true
-            config:
-              - id: compaction-basic
-                name: '@deepseek-ai/dsh-compaction-basic'
-                config:
-                  maxTokens: 2048
-                  thresholdRatio: 0.05
-                  retainRatio: 0.012
     # ADR-012 §8: DSH's own task page and session reminder catalog over the Schedule this plugin mounts, so
     # the owner sees her heartbeat and plans with their next run and delivery records. Only the page: the
     # optional schedule bundle's time context would add the browser's zone to her turns, including public ones.

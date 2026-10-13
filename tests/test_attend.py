@@ -98,13 +98,29 @@ def test_a_line_changed_while_the_gate_thinks_still_gets_its_turn(store):
     assert message['processing_outcome'] == 'ATTEND_JOIN' and message['memory_chunk_version'] == 2
 
 
-def test_a_gate_that_cannot_answer_lets_the_message_pass(store):
+def test_a_gate_that_cannot_answer_lets_the_message_pass_as_the_programs_failure_not_her_choice(store):
     setup(store)
     coordinator = Coordinator(store, FakeLane(store, []))
     coordinator.attend = Boom()
     ep = coordinator.ingest(gated_event(20003, '有人吗', 'reply_in_active_topic'), persona='P1')
-    assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'quiet'
+    assert ep['state'] == 'COMMITTED' and ep['attend'] == {'choice': 'failed', 'reason': '没判出来：程序出错（RuntimeError）'}
+    assert ep['silent_reason'].startswith('没判出来') and '不理' not in ep['silent_reason']
+    assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_FAILED'
     assert store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'attend.failed'})
+    # Her home turns count it for a day, by group, in words.
+    from datetime import datetime, timedelta, timezone
+    from asuna import host_stops
+    said = host_stops.block(store, 'UTC', datetime.now(timezone.utc), 'P1')
+    assert said == {'missed_looks': host_stops.MISSED % (said['missed_looks'].split('：')[-1])}
+    assert said['missed_looks'].endswith(' 1 次') and '不是你选的不理' in said['missed_looks']
+    assert host_stops.block(store, 'UTC', datetime.now(timezone.utc) + timedelta(hours=25), 'P1') is None
+
+
+def test_each_gate_question_has_its_own_session_and_its_repairs_stay_in_it():
+    from asuna.native_worker import gate_session_id
+    first, again = gate_session_id('c:g:1:P1', 'ep-1:ATTEND:0'), gate_session_id('c:g:1:P1', 'ep-2:ATTEND:0')
+    assert first != again and first.startswith('asuna-attend-')
+    assert gate_session_id('c:g:1:P1', 'ep-1:ATTEND:0:fix-1') == first
 
 
 def test_addressed_messages_skip_the_gate(store):

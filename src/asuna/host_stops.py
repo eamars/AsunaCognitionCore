@@ -13,6 +13,8 @@ from datetime import datetime, timedelta, timezone
 
 SHOWN_HOURS = 24
 WHAT = '宿主上次是被外部终止的（不是正常停下）'
+# Looks in a group the relevance gate could not decide (her ask, 2026-10-14): the program's failure, never her 不理.
+MISSED = '过去一天里，群里有该让你判断接不接话的时候，程序没判出来（出错了，不是你选的不理），那几句你没看到：%s'
 NOTE = ('这段时间宿主没在运行：你没有收到、也没有处理任何东西。之后补进来的消息不代表你当时在场；'
         '这一条是程序按记录写的，不用回复，也不用为它做什么。')
 
@@ -41,19 +43,49 @@ def _span(seconds):
     return '%d 天' % round(hours / 24)
 
 
-def block(store, zone, moment=None):
-    """host_from_program for a home turn: the latest external termination of the last day, or None."""
+MISSED_KEPT_DAYS = 7
+
+
+def missed_look(store, ep):
+    """One look the gate could not decide, in its own small collection (the home turn counts them)."""
+    from .state import now
+    store.db.missed_looks.update_one({'_id': ep['_id']}, {'$set': {'scene_id': ep['scene_id'], 'at': now()}},
+                                     upsert=True)
+
+
+def missed_looks(store, persona, since):
+    """'某群 3 次、某群 1 次' for the gate's failed looks since then, or None."""
+    old = (datetime.fromisoformat(since) - timedelta(days=MISSED_KEPT_DAYS)).isoformat()
+    store.db.missed_looks.delete_many({'at': {'$lt': old}})
+    counts = {}
+    for row in store.db.missed_looks.find({'at': {'$gte': since}}, {'scene_id': 1}):
+        counts[row['scene_id']] = counts.get(row['scene_id'], 0) + 1
+    if not counts:
+        return None
+    from .people import People
+    people = People(store, persona)
+    return '、'.join('%s %d 次' % (people.scene_title(store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}), n)
+                    for scene_id, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
+def block(store, zone, moment=None, persona=None):
+    """host_from_program for a home turn: the latest external termination of the last day and the gate's failed
+    looks of the last day, or None."""
     from .schedule_rules import line_stamp
     moment = moment or datetime.now(timezone.utc)
     since = (moment - timedelta(hours=SHOWN_HOURS)).isoformat()
+    out = {}
     row = store.db.host_stops.find_one({'how': 'killed', 'back_at': {'$gte': since}}, sort=[('back_at', -1)])
-    if not row:
-        return None
-    gone = (datetime.fromisoformat(row['back_at']) - datetime.fromisoformat(row['alive_until'])).total_seconds()
-    return {'what': WHAT,
-            'when': '最后确认还在运行约是 %s，重新起来是 %s，中间约 %s宿主没有运行'
-                    % (line_stamp(zone, row['alive_until']), line_stamp(zone, row['back_at']), _span(gone)),
-            'note': NOTE}
+    if row:
+        gone = (datetime.fromisoformat(row['back_at']) - datetime.fromisoformat(row['alive_until'])).total_seconds()
+        out = {'what': WHAT,
+               'when': '最后确认还在运行约是 %s，重新起来是 %s，中间约 %s宿主没有运行'
+                       % (line_stamp(zone, row['alive_until']), line_stamp(zone, row['back_at']), _span(gone)),
+               'note': NOTE}
+    missed = missed_looks(store, persona, since)
+    if missed:
+        out['missed_looks'] = MISSED % missed
+    return out or None
 
 
 def main(argv=None):

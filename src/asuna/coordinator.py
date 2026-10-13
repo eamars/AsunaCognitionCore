@@ -417,25 +417,33 @@ class Coordinator:
                     'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
             value,verdict=answers.ask(generate,attend.NEED,attend.check,rejected=rejected)
             if verdict is None:          # not the model's mistake: the gate could not answer
-                verdict={'choice':'quiet','reason':'没能判断：'+value.finish_reason}
+                verdict={'choice':'failed','reason':'没判出来：'+value.finish_reason}
         except (Denied,ProtocolFailure):
             raise
         except answers.Rejected as exc:
-            verdict={'choice':'quiet','reason':'没能判断：没有按 接话／不理 回答'}
+            verdict={'choice':'failed','reason':'没判出来：没有按 接话／不理 回答'}
             self.store.audit(ep['_id'],'attend.failed',{'problem':exc.problem},ep['scope_key'])
         except Exception as exc:
             # A gate that cannot answer lets the message pass quietly; it never fails the turn.
-            verdict={'choice':'quiet','reason':'没能判断：'+type(exc).__name__}
+            verdict={'choice':'failed','reason':'没判出来：程序出错（%s）'%type(exc).__name__}
             self.store.audit(ep['_id'],'attend.failed',{'error':str(exc)[:300]},ep['scope_key'])
         self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
+        if verdict['choice']=='failed':
+            from . import host_stops
+            host_stops.missed_look(self.store,ep)
         row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})     # the chunker may have stamped it meanwhile
         if row:
-            self.store.put('messages',{**row,'processing_outcome':'ATTEND_JOIN' if verdict['choice']=='join' else 'ATTEND_QUIET',
+            # A gate that could not decide is the program's failure, never her 不理 (her ask, 2026-10-14): it is
+            # counted apart and shown at home (host_stops.block).
+            outcome={'join':'ATTEND_JOIN','failed':'ATTEND_FAILED'}.get(verdict['choice'],'ATTEND_QUIET')
+            self.store.put('messages',{**row,'processing_outcome':outcome,
                                        'attend':verdict},expected=row['revision'],stream=ep['_id'])
         if verdict['choice']!='join':
             from . import notices
-            notices.drop_seen(ep['scene_id'])        # the notices the gate showed were seen once
-            return self._update(ep,state='COMMITTED',attend=verdict,silent_reason='不理：'+verdict['reason'])
+            if verdict['choice']=='quiet':
+                notices.drop_seen(ep['scene_id'])    # the notices the gate showed were seen once
+            return self._update(ep,state='COMMITTED',attend=verdict,
+                                silent_reason=verdict['reason'] if verdict['choice']=='failed' else '不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])
         context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
         self.store.audit(ep['_id'],'context.prepared',{'manifest':manifest,'context':context},ep['scope_key'])

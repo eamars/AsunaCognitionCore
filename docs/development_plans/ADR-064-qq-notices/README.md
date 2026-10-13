@@ -210,7 +210,7 @@ Phase 1:
 | Character, group turn | `notices_from_program`, only when a group notice is held: up to 10 lines after folding, each the label, the time, `（平台通知）` (6 characters) and the words (about 30–80 characters a line), plus a `more` count; 0 otherwise. A stored notice line ends its label line with the same 6 characters, and a history row of one carries `notice` (25 characters with its key) |
 | Character, relevance gate | Two reasons in `GATED`: `poked` 18 characters, `reacted` 18 characters, shown only when they apply; held notices after the lines, as in a turn |
 | Character, system prompt | One line in the block guide for `notices_from_program`, 63 characters, fixed per conversation |
-| Character, home turn | One program event per minute's batch: a 16-character head, a line per notice (time, name, words), and 56 characters per request saying how to answer it; 0 when none |
+| Character, home turn | One program event per minute's batch: a 16-character head, a line per notice (time, name, words), and 56 characters per request saying how to answer it; 0 when none. After a Host start with requests still open, one more event: the head and a 14-character second head, then each open request's line and its 56 characters; 0 when none is open |
 | Character, tools | No new tool. `group_action` gains `accept` and `decline` and the request number in `who`: +37 characters after tightening its description (`tests/test_tool_budget.py` raised by exactly 37). Her local chat lists `group_action` (562 characters) wherever a channel kind declares `REQUESTS`, so its tool list is the same every turn; a turn may use it only while a request waits |
 | Action brain | Nothing. A card handed over costs only what the brief carries |
 
@@ -361,8 +361,12 @@ project; the host part with her next restart.
   after folding. A reaction to a line not hers is dropped by the host (the adapter cannot tell whose line it was
   without reading it). A reaction names her line by when she said it and never quotes it; only a recall quotes.
 - **Her home.** Requests, a kick of her account and a change of her admin role arrive through `POST /notices`, held a
-  minute and sent as one program event in her local chat (a `presence` event, like a restart notice). Requests get a
-  number kept in memory; `group_action` `accept` / `decline` with that number answers one in her local chat only.
+  minute and sent as one program event in her local chat (a `presence` event, like a restart notice). A request is a
+  row in `artifacts` (kind `platform_request`, one per platform flag) with a number given once and never reused, open
+  until she answers it; her answer's receipt marks it answered, or gone when the platform refuses the answer. At each
+  Host start the open ones are listed again in one program event. `group_action` `accept` / `decline` with that
+  number answers one in her local chat only. (Owner's call on point 2 below, 2026-10-13: fixed in 14a6ecf4, host
+  only.)
 - **Profiling.** A synthetic group turn with a held recall shows the recall once, in its own block, and nowhere else
   in the notice (`tests/test_notices.py`).
 
@@ -370,7 +374,7 @@ Differences from the text above and points to watch:
 
 1. A gated notice (a poke she is asked about) is stored even when she answers 不理, because the gate runs on stored
    input; only notices that start no look are never stored.
-2. A Host restart loses the request numbers: a request still pending on the platform can no longer be answered from
-   her home until it is sent again. Requests are rare; if that matters, the number table can move to Mongo.
+2. ~~A Host restart loses the request numbers.~~ Fixed (owner 2026-10-13: a request stays pending on the platform
+   for days): requests are kept in Mongo with stable numbers and listed again after a restart.
 3. Gate material and the turn after a 接话 both carry the held notices (the gate is its own small session), so a
    taken-up look sees them twice across two sessions, never twice in one.

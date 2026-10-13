@@ -754,3 +754,27 @@ twice. A consult answered in body text is still handed back, and `think` still c
 1. The `reply` text above: any word wrong, missing or extra?
 2. The receipt lines: is anything there you would not understand at a glance in the middle of a group turn?
 3. The home note's last line and `ask do=read` as the way to read the original again: is that the entry you meant?
+
+## Phase 2 with ADR-061 step 2 as built (2026-10-14, branch `claude/reply`, not installed)
+
+Built in three stages on top of ADR-060 (781b07be, 156b4591, 2cab3cf1 and a wording fix). Differences from the literal
+texts above, each settled with her or the owner the same day:
+
+- `speak.max_messages` counts **lines** across a turn's text parts, not messages (owner: in online chat a line break
+  is another message); a blank line does not count, a fenced code block counts as one (Claude's addition so a script
+  can still be sent; the owner may overrule). Her own package declares the key from her next publish.
+- In a private chat `who` may be left out for a poke or reaction: it is the other person.
+- A refused private-chat reaction: 「私聊里点不了表情（平台不收），到下次重启前私聊里不用 react」.
+- A part's own refusal is its words, never wrapped; a line-limit refusal states the rule once, then each part's lines.
+- Recovery publishes a turn's queued parts before the turn resumes, so a Host that stops mid-turn still sends what
+  `reply` already reported as queued.
+- A group answer once joined stays recorded, so a line gone from the group's record reads as gone, never as no answer.
+
+**Cost as built** (`tests/test_tool_budget.py`): character brain 32 → 33 tools, 19,717 → 21,121 characters (after
+ADR-060). `reply` 1,334; `leave_note` +88 (`question`); `stay_silent` −16. Per list: a QQ group +451 net (`reply` in;
+`quote` 225, `await_answer` 352, `attach_image` 306 out), a QQ private chat +1,028 (`attach_image` out), home and
+other channels −16. Per turn on QQ: `speak_from_program.sent` says `reply` speaks and the line limit (about +30 over
+the old sentence); `unsent_from_program` once after unsent words; a group's `questions_from_program` only while a
+question of hers there is open. System prompt: the sticker note's sending sentence changed length by a few
+characters. Action brain: nothing. The adapter needs her publish (a picture without words; `group_poke`,
+`friend_poke`, `set_msg_emoji_like`; `poke` declared only when NapCat's packet backend answers).

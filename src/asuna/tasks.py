@@ -569,8 +569,11 @@ class ToolBroker:
         from .image_generation import GENERATE_IMAGE_TOOL
         from .svg_render import RENDER_SVG_TOOL
         from .private_words import PRIVATE_WORDS_TOOL
-        return [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, PRIVATE_WORDS_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS,
-                *PERSONA_JOB_TOOLS]
+        from . import param_names
+        tools = [*WORKSPACE_TOOLS, GENERATE_IMAGE_TOOL, RENDER_SVG_TOOL, PRIVATE_WORDS_TOOL, *INTEGRATION_TOOLS, *DEVELOPMENT_TOOLS,
+                 *PERSONA_JOB_TOOLS]
+        # Shown by their new names (ADR-060); a call is mapped back before the tool reads it (call below).
+        return [{**tool, 'parameters': param_names.shown(tool['name'], tool['parameters'])} for tool in tools]
 
     def bind(self,session,task,workspace):
         from .grants import workspace_grant
@@ -581,7 +584,10 @@ class ToolBroker:
 
     def call(self,session,call_id,tool,args):
         from .tool_args import normalize
+        from . import param_names
+        args,old_names=param_names.inbound(tool,args)  # the new names mapped to what the tool reads (ADR-060)
         args,adjusted=normalize(tool,args)          # what she plainly meant; said back in the result (tool_args.py)
+        adjusted=[*old_names,*adjusted]
         with self.service.lock:
             if session not in self.bindings:
                 raise Denied('UNBOUND_EXECUTOR: 这个行动会话没有绑定到任务（任务已结束或宿主重启过）；不是参数的问题，'

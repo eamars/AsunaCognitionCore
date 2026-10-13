@@ -31,7 +31,8 @@ from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 300                  # what she is asked for; a longer thought is kept, and only its own result says by how much
 # How a length limit counts, said with every over-length refusal so one cut is enough.
-COUNTED = '标点、空格、换行和字母也各算一个字'
+# A field a refusal names, by the name she is shown (ADR-060).
+_SHOWN = {'body': 'content', 'reason': 'why', 'sid': 'section', 'line': 'place'}
 RECALLS_PER_TURN = 3
 CALLS_PER_TURN = 12
 IDEAS_PER_TURN = 3
@@ -891,11 +892,16 @@ WORDS = {
 
 
 def words(exc):
+    """A refusal in words for her (ADR-060): what is wrong and what to do. The code stays in the record (the audit
+    keeps the exception); a detail in words is kept, a machine detail (a platform's raw reply, an id) is not."""
     code = getattr(exc, 'code', None) or str(exc).split(':', 1)[0].strip() or type(exc).__name__
     detail = getattr(exc, 'detail', '') or (str(exc).split(':', 1)[1].strip() if ':' in str(exc) else '')
-    said = WORDS.get(code)
-    return (said + (' （' + code + (': ' + detail if detail else '') + '）') if said
-            else code + (': ' + detail if detail else ''))
+    said = WORDS.get(code, '')
+    plain = detail if _HAN.search(detail or '') else ''
+    return (said + plain) if (said or plain) else '这次没办成（%s）。' % code
+
+
+_HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words for her
 
 
 def _given(args, field):
@@ -1035,8 +1041,8 @@ class RoleTools:
             raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
                           % (field, limit))
         if len(value) > limit:
-            raise Refused('%s 太长了（%d 字），%d 字以内，超了 %d 字（%s）：精简后再调用。'
-                          % (field, len(value), limit, len(value) - limit, COUNTED))
+            raise Refused('%s 太长了：%d 字，%d 字以内，超了 %d 字。精简后再调用。'
+                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit))
         return value.strip()
 
     # ── mind ────────────────────────────────────────────────────────
@@ -1055,7 +1061,7 @@ class RoleTools:
                                  monologue_refs=[*dict.fromkeys([*(ep.get('monologue_refs') or []), memory_id])])
         over = len(thought) - THOUGHT_CHARS
         # Kept whatever its length (her decision, 2026-10-14): a refusal cost a whole retry. Only this result says it.
-        return {'saved': True, 'note': '已存档。' + ('超了 %d 字（%s）。' % (over, COUNTED) if over > 0 else '')}, False
+        return {'saved': True, 'note': '已存档。' + ('超了 %d 字。' % over if over > 0 else '')}, False
 
     def tool_recall(self, ep, call_id, args):
         query = self._text(args, 'query', 500)

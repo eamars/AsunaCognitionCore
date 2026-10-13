@@ -386,7 +386,7 @@ def local_clock(zone, moment=None):
     note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
             'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
-    return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
+    return {'now_local': local.strftime('%Y-%m-%d %H:%M'), 'weekday': WEEKDAY_NAMES[local.weekday()],
             'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 

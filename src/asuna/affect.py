@@ -57,7 +57,7 @@ def fold(events, amendments):
             target['_void'] = True
         elif op == 'close':
             if not target.get('open'):
-                raise ValueError(f"CLOSE_REQUIRES_OPEN: {amendment['target']}")
+                raise ValueError(f"CLOSE_REQUIRES_OPEN: 「{amendment['target']}」记的时候没挂着，没有可了结的；它会自己淡下去")
             if target['_closed_at'] is None:
                 target['_closed_at'] = parse_ts(amendment['at'])
         elif op == 'fix_ts':
@@ -423,7 +423,7 @@ class AffectLedger:
             return made          # 这一处修订已经记过了：同一轮重复、回想那一轮之前记过、崩溃重放
         if item['op'] == 'close':
             if not target.get('open'):
-                raise AffectError('CLOSE_REQUIRES_OPEN', '「%s」记的时候没挂着（open 不是 true），没有可了结的；'
+                raise AffectError('CLOSE_REQUIRES_OPEN', '「%s」记的时候没挂着（unresolved 不是 yes），没有可了结的；'
                                   '它会自己淡下去，不用管；前提不成立就用 void' % item['event_id'])
             if self.store.db.affect_amendments.find_one({'target': target['_id'], 'op': 'close'}):
                 raise AffectError('ALREADY_CLOSED', '「%s」已经了结过了，不用再 close' % item['event_id'])

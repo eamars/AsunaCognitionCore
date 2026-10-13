@@ -295,15 +295,9 @@ class ContextBuilder:
         return unit.get('occurred_at') or unit.get('formed_at') or unit.get('generated_at')
 
     def when(self, unit, zone, moment):
-        """A recalled record's time as her history lines show it, and how long ago: '10/11 19:16（3 小时前）'."""
-        from datetime import datetime
-        from .config import ago
-        said=self.said_at(unit)
-        stamp=schedule_rules.line_stamp(zone,said)
-        if not stamp:
-            return None
-        hours=(moment-datetime.fromisoformat(str(said).replace('Z','+00:00'))).total_seconds()/3600
-        return '%s（%s）'%(stamp,ago(hours))
+        """A recalled record's time as her history lines show it: '10/11 19:16'. A stamp, not "how long ago",
+        which would change with every turn and read on the speaker's terms (ADR-056 rule 2, her ask 2026-10-14)."""
+        return schedule_rules.line_stamp(zone,self.said_at(unit)) or None
 
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
         """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only."""
@@ -485,6 +479,14 @@ class ContextBuilder:
         # derived_summary 显式与 public_statement 同层：它是程序按原文整理的转述，既不是
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
+        for fact in facts:
+            # Only what she reads (ADR-060): the time once (when), no storage state, no 1-of-1 segment numbers.
+            fact.pop('status',None)
+            if not fact.get('historical_sources'):fact.pop('historical_sources',None)
+            if fact.get('when'):
+                fact.pop('occurred_at',None);fact.pop('generated_at',None)
+            if fact.get('segment_count')==1:
+                fact.pop('segment_index',None);fact.pop('segment_count',None)
         facts.extend(own)
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so

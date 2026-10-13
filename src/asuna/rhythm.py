@@ -40,8 +40,8 @@ def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
     if cls != visibility.OWNER_PRIVATE:
         if not effective(model, 'rhythm.public_clock', policy):
             return None
-        return {'local_time': local.isoformat(timespec='minutes')}
-    block = {'local_time': local.isoformat(timespec='minutes'), 'timezone': zone,
+        return {'local_time': local.strftime('%Y-%m-%d %H:%M')}
+    block = {'local_time': local.strftime('%Y-%m-%d %H:%M'), 'timezone': zone,
              'in_sleep_window': in_window(local, effective(model, 'rhythm.sleep_window', policy))}
     if source == 'unset':
         block['note'] = '未设置时区，以 UTC 显示'

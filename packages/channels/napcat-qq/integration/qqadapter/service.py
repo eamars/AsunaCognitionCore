@@ -20,7 +20,7 @@ from .members import Members
 from .hostapi import CAPABILITIES, HostApi
 from .journal import Counters, Journal
 from .onebot import OneBot
-from .outbound import Outbound
+from .outbound import Outbound, _now
 from .peers import PeerDirectory
 from .selfrole import SelfRoles
 
@@ -363,6 +363,8 @@ class Adapter:
             self.log("PACKET_STATUS_UNKNOWN type=%s" % type(exc).__name__)
         # the answer's own code, so a NapCat that does not know the action is told from one whose backend is off
         self.log("CAPABILITIES %s packet_status_retcode=%s" % (",".join(caps), retcode))
+        self.journal.append("actions.jsonl", {"ts": _now(), "probe": "get_packet_status", "retcode": retcode,
+                                             "capabilities": caps})
         return caps
 
     # ---- identity -------------------------------------------------------

@@ -725,10 +725,11 @@ To bring it home, she writes it in her own words with `leave_note`, which gains 
 At home the note reads:
 
 > 便条（你在群聊「某群」写的）：……她自己的话……
-> 回答的是 [阿杰 #1] 10/14 12:07、[小林 #4] 12:08；原话家里不存，ask do=read id=q-7f3a 能读一次
+> 回答的是 [阿杰 #1] 10/14 12:07、[小林 #4] 12:08；原话家里不存，随时用 ask do=read id=q-7f3a 读
 
-`ask` `do=read` with that id, at home, reads those lines from the group's record as they were said, for that turn
-only. They are shown with the group named and 群里的原话 marked, and nothing is copied home.
+`ask` `do=read` with that id, at home, reads those lines from the group's record as they were said, at any time
+later, as often as she likes (the group's lines are kept, like all her conversations'). Each read shows them in
+that turn's result, with the group named and 群里的原话 marked; nothing is copied into home's records.
 
 ### What goes away when `reply` is live
 

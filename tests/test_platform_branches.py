@@ -15,6 +15,7 @@ ALLOWED = {
     'tools/asuna-launch.mjs': 'pnpm/corepack shim names; the checkout venv layout',
     'tools/pack_plugins.py': 'npm or npm.cmd',
     'tools/setup_native_profile.py': 'pnpm/corepack shim names',
+    'src/asuna/sandbox_site/sitecustomize.py': "CPython's own mkdir(0o700) on Windows drops inherited ACLs (ADR-065)",
 }
 # What runs, and the start path that installs it. Operator diagnostics in tools/ and tests are outside.
 SCOPE = ('src', 'packages', 'tools/asuna-launch.mjs', 'tools/pack_plugins.py', 'tools/setup_native_profile.py')

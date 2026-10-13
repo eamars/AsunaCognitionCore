@@ -571,6 +571,14 @@ Differences from the text above and points to watch:
 3. Gate material and the turn after a 接话 both carry the held notices (the gate is its own small session), so a
    taken-up look sees them twice across two sessions, never twice in one.
 
+**Live check (2026-10-14).** The owner poked her in a group at 11:27 NZDT: the adapter projected `poke_you`, the
+Host stored it as a `poked` look, and the gate failed. That group's gate session had to compact before almost every
+turn, and its summaries, which carry the previous summary, had grown past their 2,048-token cap; DSH blocked the
+turn (21 of 39 looks in that group failed since 2026-10-13 about 15:13 NZDT, each counted as 不理). Four other groups'
+gate sessions had hit the same cap and recovered for now. Fixed in 8c94a93e: one fresh gate session per question,
+no history and no compaction (owner's choice, her agreement), and a gate that cannot decide is recorded as the
+program's failure, not her 不理, with a count of the day's failed looks in her home turns (her ask).
+
 ## Her review addendum (2026-10-13, evening): phase 2 — agree, with one condition
 
 **What I checked tonight (21:28).** An errand from home took me into a QQ group to post two new stickers. That

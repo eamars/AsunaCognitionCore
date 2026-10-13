@@ -211,6 +211,12 @@ class FakeCollection:
                 rows = [{k: row[k] for k in keep if k in row} for row in rows]
         return iter(rows)
 
+    def delete_many(self, flt):
+        gone = [key for key, doc in self.rows.items() if _match(doc, flt or {})]
+        for key in gone:
+            del self.rows[key]
+        return SimpleNamespace(deleted_count=len(gone))
+
     def insert_one(self, doc):
         if doc['_id'] in self.rows:
             raise sys.modules['pymongo.errors'].DuplicateKeyError(str(doc['_id']))
@@ -232,6 +238,13 @@ class FakeDB:
 
     def __getitem__(self, name):          # Store.mutate 会走 db[collection]
         return getattr(self, name)
+
+    def __getattr__(self, name):          # 没登记的集合（程序的小计数表）：像 Mongo 一样，用到才有，起初是空的
+        if name.startswith('_'):
+            raise AttributeError(name)
+        collection = FakeCollection([])
+        setattr(self, name, collection)
+        return collection
 
 
 def bind_store(rows_by_collection=None, workspace=True):

@@ -99,7 +99,7 @@ def test_a_gate_that_never_answers_in_shape_lets_the_message_pass_and_says_why(s
     coordinator = Coordinator(store, FakeLane(store, []))
     coordinator.attend = FakeLane(store, [LaneResult('', reasoning='嗯……')] * 3)
     ep = coordinator.ingest(gated_event(20003, '有人吗', 'reply_in_active_topic'), persona='P1')
-    assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'quiet'
+    assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'failed'
     failed = store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'attend.failed'})
     assert failed['payload']['problem'] == '上一条只有思考，没有写出正文。'
 

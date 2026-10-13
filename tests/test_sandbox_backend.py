@@ -57,7 +57,6 @@ def test_commands_are_for_the_owners_own_scenes(store):
     assert '不能跑代码' in theirs['context']['action_capabilities_from_program']['run_code']
 
 
-@pytest.mark.skipif(not HOST_SANDBOX, reason='no Host sandbox runner here')
 def test_a_command_writes_only_its_task_folder_and_names_it_task():
     import shutil, uuid
     from asuna.config import DATA

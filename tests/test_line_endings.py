@@ -6,6 +6,7 @@ rewritten on Windows in the working tree (an editor, a shell tool) before it is 
 import subprocess
 
 from asuna.config import ROOT
+from conftest import needs_git
 
 
 def test_gitattributes_keeps_text_as_lf():
@@ -14,6 +15,7 @@ def test_gitattributes_keeps_text_as_lf():
     assert rules == ['* text=auto eol=lf']
 
 
+@needs_git
 def test_no_tracked_text_file_has_crlf():
     listed = subprocess.run(['git', 'ls-files', '--eol'], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     crlf = []

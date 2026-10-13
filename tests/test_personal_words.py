@@ -9,6 +9,7 @@ import pytest
 
 from asuna import private_words
 from asuna.config import ROOT
+from conftest import needs_git
 
 TEXT_LIMIT = 2 * 1024 * 1024
 
@@ -25,6 +26,7 @@ def committed_texts():
         yield path, data.decode('utf-8', 'replace')
 
 
+@needs_git
 def test_no_committed_file_names_a_real_person_or_place():
     entries = private_words.load()
     if entries is None:

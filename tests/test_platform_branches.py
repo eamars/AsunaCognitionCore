@@ -6,6 +6,7 @@ import re
 import subprocess
 
 from asuna.config import ROOT
+from conftest import needs_git
 
 ALLOWED = {
     'src/asuna/queue.py': 'cross-process byte locks: msvcrt on Windows, fcntl elsewhere',
@@ -20,6 +21,7 @@ SCOPE = ('src', 'packages', 'tools/asuna-launch.mjs', 'tools/pack_plugins.py', '
 BRANCH = re.compile(rb'process\.platform|os\.name\b|sys\.platform|platform\.system\(')
 
 
+@needs_git
 def test_only_the_listed_files_branch_on_the_operating_system():
     listed = subprocess.run(['git', 'ls-files', '--', *SCOPE], cwd=ROOT, capture_output=True, text=True,
                             check=True).stdout.split()

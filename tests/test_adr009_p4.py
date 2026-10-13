@@ -16,7 +16,7 @@ from asuna.persona_data import DataError, PersonaDataAPI, check_export_path, exp
 from asuna.persona_jobs import DirectLauncher, JobRunner, SandboxLauncher
 from asuna.retrieval import Retrieval
 from asuna.role_tools import Refused
-from conftest import FIXTURES
+from conftest import FIXTURES, needs_git
 from test_adr009_p2 import owner, THINK
 from test_engineering_m1 import event
 
@@ -136,6 +136,7 @@ sys.stdout.write(json.dumps({"kind":"report","status":"ok","summary":json.dumps(
             shutil.rmtree(path, ignore_errors=True)
 
 
+@needs_git                      # an export inside the tree must be git-ignored: read from git
 def test_T4_7_export_paths_and_content(store, tmp_path):
     owner(store)
     with pytest.raises(DataError, match='EXPORT_PATH_TRACKED'):

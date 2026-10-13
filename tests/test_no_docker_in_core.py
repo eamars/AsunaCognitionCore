@@ -4,11 +4,13 @@ import re
 import subprocess
 
 from asuna.config import ROOT
+from conftest import needs_git
 
 SOURCES = ('src', 'packages')             # what runs: the core and its plugins (tools/ holds operator diagnostics)
 BUILT_COPY = 'packages/cognition-core/python/'          # pack_plugins' copy of src/asuna, checked through src
 
 
+@needs_git
 def test_core_and_plugins_do_not_know_about_docker():
     listed = subprocess.run(['git', 'ls-files', '--', *SOURCES], cwd=ROOT, capture_output=True, text=True,
                             check=True).stdout.split()

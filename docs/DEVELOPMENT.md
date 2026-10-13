@@ -89,10 +89,12 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   `python3 -c "import os,sys,pytest; os.environ['ASUNA_DATA_ROOT']=sys.argv[1]; sys.exit(pytest.main(sys.argv[2:]))" <folder>/data -q -p no:cacheprovider --basetemp <folder>/tmp tests`.
 - Test temporary folders (`tmp_path`, `tempfile`) take their parent folder's permissions (`tests/sandbox_temp.py`):
   on Windows a private folder would drop the write grant DSH's sandbox gives by inheritance.
-- The pytest header (without `-q`) names the data folder and whether the Host sandbox confines commands in this run,
-  measured by running one confined command in the data folder. Where it cannot (a folder the user may not
-  re-permission, or a run that is itself confined), each test reaching a confined command skips there with a reason
-  starting `UNCHECKED, not passed`; so does the `uv.lock` check when uv cannot use its cache.
+- The tests run as a Host that has a sandbox, so what the program grants with one is checked on every machine. The
+  pytest header (without `-q`) names the data folder, whether a confined command runs here (measured by running one in
+  the data folder) and whether the tree is a git checkout. Where no confined command runs (no DSH sandbox runner or
+  no `node_modules`, a folder the user may not re-permission, or a run that is itself confined), each test reaching
+  one skips there with a reason starting `UNCHECKED, not passed`; so do the repository guards that read git outside a
+  git checkout, and the `uv.lock` check when uv cannot use its cache.
 - **Repository guards** fail the suite when the tree drifts: `test_line_endings` (LF everywhere),
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),

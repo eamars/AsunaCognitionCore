@@ -21,7 +21,7 @@ WORK=DATA/'work'
 
 # Commands run under the Host's sandbox (sandbox_backend.py). Tests wrap them the way the live Host's ctx.sandbox does:
 # DSH's own provider (tests/dsh_sandbox.mjs) picks this OS's runner, writes confined to the given root (ADR-019: the
-# plugin inherits DSH's platform layer). Without a runner, sandboxed features are off. One wrap per root.
+# plugin inherits DSH's platform layer). One wrap per root.
 _WRAPS={}
 
 
@@ -46,7 +46,8 @@ def _cannot_confine():
     except OSError as error:return 'the data folder %s is not writable (%s)'%(DATA,error.strerror or error)
     try:
         wrap=_dsh_wrap(str(root))
-        if 'prefix' not in wrap:return 'no Host sandbox runner'
+        if 'prefix' not in wrap:
+            return 'no Host sandbox runner here: %s'%(wrap.get('error') or 'node or the DSH sandbox package not found')
         argv=[*wrap['prefix'],sys.executable,'-c',"open('probe.txt','w').write('ok')",*wrap['suffix']]
         try:ran=subprocess.run(argv,cwd=root,env=sandbox_backend.environment(),capture_output=True,text=True,timeout=60)
         except (OSError,subprocess.SubprocessError) as error:return 'the runner did not start (%s)'%error
@@ -57,22 +58,32 @@ def _cannot_confine():
         remove_workspace(root);_WRAPS.pop(str(root),None)
 
 
-def _host_sandbox():
-    import tempfile
-    return 'prefix' in _dsh_wrap(tempfile.gettempdir())
+# The tests run as a Host that has a sandbox, so what the program grants with one is checked on every machine.
+# Whether a confined command really runs here is measured once (one confined write); where none can (no runner, as on
+# a host without DSH's sandbox package, or a run that is itself confined), a test skips at the command it would run:
+# what it checks there is unchecked, not passed.
+HOST_SANDBOX=True
+CANNOT_CONFINE=_cannot_confine()
+UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CANNOT_CONFINE
 
 
-# What the program is told: the Host has a sandbox runner, so tools that run commands are granted.
-HOST_SANDBOX=_host_sandbox()
-# Whether a confined command actually runs here. When it cannot, a test that runs one skips at that command: what
-# it checks there is unchecked, not passed.
-CANNOT_CONFINE=_cannot_confine() if HOST_SANDBOX else None
-UNCHECKED='UNCHECKED, not passed: the Host sandbox runner cannot confine a command in this run (%s)'%CANNOT_CONFINE
+def _git_checkout():
+    try:
+        return subprocess.run(['git','rev-parse','--is-inside-work-tree'],cwd=ROOT,capture_output=True,text=True,
+                              timeout=30).stdout.strip()=='true'
+    except (OSError,subprocess.SubprocessError):
+        return False
+
+
+# Repository guards read git; a copy that is not a checkout (an installed package, a Docker image) cannot be guarded.
+GIT_CHECKOUT=_git_checkout()
+needs_git=pytest.mark.skipif(not GIT_CHECKOUT,reason='UNCHECKED, not passed: %s is not a git checkout'%ROOT)
 
 
 def pytest_report_header(config):
     return ['asuna data folder: %s'%DATA,
-            'Host sandbox: '+('none' if not HOST_SANDBOX else UNCHECKED if CANNOT_CONFINE else 'confines commands')]
+            'Host sandbox: '+(UNCHECKED if CANNOT_CONFINE else 'confines commands'),
+            'git checkout: '+('yes' if GIT_CHECKOUT else 'no, repository guards skip as unchecked')]
 
 
 def host_confine(argv,root):
@@ -85,7 +96,7 @@ def host_confine(argv,root):
 @pytest.fixture(autouse=True)
 def host_sandbox():
     from asuna import sandbox_backend
-    sandbox_backend.attach(host_confine if HOST_SANDBOX else None)
+    sandbox_backend.attach(host_confine)
     yield
     sandbox_backend.attach(None)
 
@@ -204,7 +215,7 @@ def store(request):
     for lane,modalities in (('character',['text']),('executor',['text','image'])):
         config[lane]={'model':'fixture-'+lane,'provider':'fixture','max_tokens':4096,'context_window':65536,
                       'input_modalities':modalities,'token_counter':'native-host'}
-    config['_host_sandbox']={'available':HOST_SANDBOX,'reason':None if HOST_SANDBOX else 'no Host sandbox runner in tests'}
+    config['_host_sandbox']={'available':True,'reason':None}
     pooled=Store.seed is _ORIGINAL_SEED
     name=_POOL.pop() if pooled and _POOL else isolated_database('asuna_v2_test_M1')
     if pooled:_OWNED.add(name)

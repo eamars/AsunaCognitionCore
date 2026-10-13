@@ -353,18 +353,20 @@ class Adapter:
     # ---- what this NapCat can do for her reply (ADR-064 phase 2) --------
     def find_capabilities(self):
         """Pictures, stickers and reactions always; a poke only when NapCat's packet backend answers."""
-        caps, retcode = list(CAPABILITIES) + ["react"], None
+        caps, retcode, said = list(CAPABILITIES) + ["react"], None, None
         try:
             resp = self.onebot.api_call("get_packet_status", {}, timeout=5, meta={"probe": "packet_status"})
             retcode = resp.get("retcode") if isinstance(resp, dict) else "unparsed"
+            # NapCat's own words with its code: nothing here guesses what a code means
+            said = str((resp or {}).get("message") or (resp or {}).get("wording") or "")[:120] if isinstance(resp, dict) else None
             if retcode == 0:
                 caps.append("poke")
         except Exception as exc:
             self.log("PACKET_STATUS_UNKNOWN type=%s" % type(exc).__name__)
         # the answer's own code, so a NapCat that does not know the action is told from one whose backend is off
-        self.log("CAPABILITIES %s packet_status_retcode=%s" % (",".join(caps), retcode))
+        self.log("CAPABILITIES %s packet_status_retcode=%s message=%s" % (",".join(caps), retcode, said or "-"))
         self.journal.append("actions.jsonl", {"ts": _now(), "probe": "get_packet_status", "retcode": retcode,
-                                             "capabilities": caps})
+                                             "message": said, "capabilities": caps})
         return caps
 
     # ---- identity -------------------------------------------------------

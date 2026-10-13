@@ -17,6 +17,9 @@ def test_the_committed_runtime_manifest_matches_the_sources():
         relative = path.relative_to(resources).as_posix()
         files.append([f'src/asuna/resources/{relative}', f'python/asuna/resources/{relative}'])
     files.append(['RUNTIME_API.md', 'python/asuna/resources/RUNTIME_API.md'])
+    # What her confined commands load (sandbox_backend.SITE) ships too; without it they ran without it (2026-10-13).
+    files += [[f'src/asuna/sandbox_site/{p.name}', f'python/asuna/sandbox_site/{p.name}']
+              for p in sorted((ROOT / 'src/asuna/sandbox_site').iterdir()) if p.is_file()]
     manifest = json.loads((ROOT / 'packages/cognition-core/runtime-manifest.json').read_text(encoding='utf-8'))
     # A stale list (a deleted module still named, a new one missing) breaks her next core publication.
     assert manifest == {'files': files, 'developmentTools': DEVELOPMENT_TOOLS}, \

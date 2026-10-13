@@ -174,6 +174,7 @@ Minimal publication floor, deliberately independent of the business worker. Immu
   - `channel` — A channel plugin's paths, against its own published artifact when one is selected.
   - `workerReady` — The worker has started on the selections: each APPLIED one becomes ACTIVE, the one that last ran (index.js calls this once the worker is ready).
   - `integrationProject` — The writable development copy of a channel plugin's adapter: her integration_* tools work there.
+  - `checkout` — The local checkout: the repository project's source root, or undefined when this Host has none.
   - `ensure` — A development project by id, refused in words when this Host has no such project.
   - `call` — One development_* tool call on a project's candidate copy.
   - `publish` — Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED.
@@ -487,3 +488,12 @@ Runs the Python business worker (`asuna.native_worker`) as a child process in th
   - `fail`
   - `call`
   - `dispose`
+
+## `working-copy.js`
+
+[packages/cognition-core/src/working-copy.js](../../packages/cognition-core/src/working-copy.js)
+
+Her own working copy of the local checkout (owner 2026-10-13, ADR-065): a full clone in her home working folder, where her confined commands may write, commit and push. Its `origin` is the checkout's own origin. The Host makes it when it is missing and never changes one that is there; it is never the checkout, and nothing the Host runs is in it.
+
+- def `FOLDER`
+- def `ensureWorkingCopy` — Make `<workspace>/working-copy` from `checkout` unless it exists: {state: 'present' | 'created' | 'no checkout', path}.

@@ -355,6 +355,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`tool-output.js`](../../packages/cognition-core/src/tool-output.js) — Save images before exposing their durable native attachment references.
 - [`ui-language.js`](../../packages/cognition-core/src/ui-language.js) — The language of the names the program gives what DSH shows as plain text: her rhythm tasks in the task page and the scheduler session's title.
 - [`worker.js`](../../packages/cognition-core/src/worker.js) — Runs the Python business worker (`asuna.native_worker`) as a child process in the profile's data folder and talks to it in JSON lines: `call` sends a request and waits for its answer; a line without an id is an event for index.js.
+- [`working-copy.js`](../../packages/cognition-core/src/working-copy.js) — Her own working copy of the local checkout (owner 2026-10-13, ADR-065): a full clone in her home working folder, where her confined commands may write, commit and push.
 
 ### [Channel packages](channel-packages.md)
 

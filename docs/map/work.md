@@ -146,6 +146,7 @@ Where commands the worker does not write itself run: DSH's own sandbox (owner 20
 - def `require`
 - def `confine` — The Host's wrapped argv that runs `argv` with writes confined to `root`.
 - def `environment` — What a confined command inherits: enough for Windows and Python to start, no credentials.
+- def `git_login` — How git in her own commands (sandbox_run) logs in to an HTTPS remote: with the Host user's login (owner 2026-10-13).
 - def `git_identity` — The character's own name on what her commands commit (`character_git` {name, email} in local config), or {}.
 
 ## `development`

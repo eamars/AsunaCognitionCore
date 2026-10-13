@@ -166,6 +166,7 @@ Build the core plugin and the persona and channel packages passed with --persona
 - def `runtime_modules`
 - def `prepare_resources` — Copy behavior resources next to the worker modules; no npm, no network.
 - def `pinned_requirements` — The worker's dependency closure at the exact versions this tested environment has (ADR-010 D2): the plugin builds its first-start environment from it.
+- def `prepare_sandbox_site` — What her confined commands load from the worker's package (sandbox_backend.SITE): the sitecustomize their Pythons start with and git's askpass program.
 - def `bundle_python` — An explicit runtime allowlist; no debug CLI, local state or secrets.
 - def `prune` — Remove packed files that neither this manifest nor any profile's installed packages or activation still name.
 - def `main`

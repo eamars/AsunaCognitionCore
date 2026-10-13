@@ -71,6 +71,20 @@ def pinned_requirements(roots):
     return '\n'.join([header, *(lines[key] for key in sorted(lines))]) + '\n'
 
 
+def prepare_sandbox_site(destination: Path) -> list:
+    """What her confined commands load from the worker's package (sandbox_backend.SITE): the sitecustomize their
+    Pythons start with and git's askpass program."""
+    source, target = ROOT / 'src/asuna/sandbox_site', destination / 'sandbox_site'
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True)
+    mappings = []
+    for path in sorted(p for p in source.iterdir() if p.is_file()):
+        shutil.copyfile(path, target / path.name)
+        mappings.append([f'src/asuna/sandbox_site/{path.name}', f'python/asuna/sandbox_site/{path.name}'])
+    return mappings
+
+
 def bundle_python():
     """An explicit runtime allowlist; no debug CLI, local state or secrets."""
     destination = ROOT / 'packages/cognition-core/python/asuna'
@@ -89,6 +103,7 @@ def bundle_python():
     from asuna.development import DEVELOPMENT_TOOLS
     mappings = [[f'src/asuna/{name}.py', f'python/asuna/{name}.py'] for name in modules]
     mappings += prepare_resources(destination)
+    mappings += prepare_sandbox_site(destination)
     (ROOT / 'packages/cognition-core/runtime-manifest.json').write_text(
         json.dumps({'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS}, indent=2), encoding='utf-8', newline='\n')
     (destination.parent / 'pyproject.toml').write_text('''[build-system]

@@ -91,7 +91,7 @@ class Sandbox:
         if problem:
             raise ValueError('INVALID_COMMAND: ' + problem)
         command = sandbox_backend.confine(self.config, self.native(argv), self.task_dir)
-        value = run_bounded(command, self.task_dir, timeout, env=env)
+        value = run_bounded(command, self.task_dir, timeout, env={**sandbox_backend.git_login(), **(env or {})})
         if value['launch_failed']:
             raise RuntimeError('SANDBOX_LAUNCH_FAILED: ' + launch_problem(argv, value['exit_code'], value['stderr']))
         if value['output_limit']:

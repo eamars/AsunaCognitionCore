@@ -112,10 +112,10 @@ function commandEnvironment(candidate) {
     TMPDIR: path.join(candidate, '.tmp'), PYTHONPATH: site } : {};
   // A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
   // Python into the candidate (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
-  // Windows gives a restricted token no SSPI credentials, so Schannel (Git for Windows' default TLS) fails there:
-  // git uses its bundled OpenSSL instead (ADR-065). Elsewhere git may have only one TLS backend and would refuse it.
-  const tls = process.platform === 'win32'
-    ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.sslBackend', GIT_CONFIG_VALUE_0: 'openssl' } : {};
+  // As sandbox_backend.GIT_CONFIG: on Windows git uses its bundled OpenSSL (Schannel has no credentials under the
+  // restricted token) and no credential helper (they start through sh.exe, which cannot start there) (ADR-065).
+  const tls = process.platform === 'win32' ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.sslBackend',
+    GIT_CONFIG_VALUE_0: 'openssl', GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {};
   return { ...env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
     PYTHON_MANAGER_AUTOMATIC_INSTALL: 'false', ...tls, ...own };
 }
@@ -211,6 +211,12 @@ export class PublicationFloor {
     const directory = path.resolve(project.candidate, channel.integration_directory);
     if (!inside(project.candidate, directory)) throw new Error('CHANNEL_INTEGRATION_PATH_INVALID');
     return directory;
+  }
+
+  /** The local checkout: the repository project's source root, or undefined when this Host has none. */
+  checkout() {
+    const repository = [...this.projects.values()].find(project => project.format === 'repository');
+    return repository ? path.resolve(repository.root) : undefined;
   }
 
   /** A development project by id, refused in words when this Host has no such project. */

@@ -144,22 +144,54 @@ def test_a_command_can_use_temporary_folders_inside_its_own_folder():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_git_in_a_command_uses_a_tls_that_works_inside_the_sandbox():
+def test_git_in_a_command_uses_a_tls_and_a_login_that_work_inside_the_sandbox():
     """Her git over HTTPS failed in the sandbox: Windows gives a restricted token no SSPI credentials, so Git for
-    Windows' Schannel says SEC_E_NO_CREDENTIALS; git uses its OpenSSL there (ADR-065). No network: the effective
-    setting is what git reads inside the confined command."""
+    Windows' Schannel says SEC_E_NO_CREDENTIALS, and git starts credential helpers through sh.exe, which cannot start
+    there. Git uses its OpenSSL and no helper; her own commands log in through the askpass program (ADR-065). No
+    network: the effective settings are what git reads inside the confined command."""
     import shutil, sys, uuid
     from asuna.config import DATA
     if sys.platform != 'win32':
         assert 'GIT_CONFIG_COUNT' not in sandbox_backend.environment()   # other gits may have one TLS backend only
+        assert sandbox_backend.git_login() == {}                          # and their credential helpers start
         return
     if not shutil.which('git'):
         pytest.skip('UNCHECKED, not passed: no git on PATH')
     root = DATA / 'work' / ('git-tls-' + uuid.uuid4().hex)
     box = Sandbox(root / 't1', config={'_host_sandbox': {'available': True}})
-    result = box.run(['git', 'config', 'http.sslBackend'])
+    code = ("import os, subprocess\n"
+            "get = lambda key: subprocess.run(['git', 'config', '--get', key], capture_output=True, text=True)\n"
+            "helper = get('credential.helper')\n"
+            "print(get('http.sslBackend').stdout.strip(), helper.returncode, repr(helper.stdout.strip()),"
+            " os.path.isfile(os.environ['GIT_ASKPASS']))")
+    result = box.run(['python3', '-c', code])
     try:
-        assert result['exit_code'] == 0 and result['stdout'].strip() == 'openssl', result
+        assert result['exit_code'] == 0 and result['stdout'].strip() == "openssl 0 '' True", result
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+
+def test_the_askpass_hands_git_only_the_part_it_asked_for(monkeypatch, capsys):
+    """git asks for a username, then a password; the askpass asks the credential manager for that remote and prints
+    only the asked part. A prompt it does not know gets nothing."""
+    import importlib.util, subprocess
+    spec = importlib.util.spec_from_file_location('git_askpass', sandbox_backend.SITE / 'git_askpass.py')
+    askpass = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(askpass)
+    queries = []
+
+    def run(argv, input=None, **_):
+        if argv[1] == '--exec-path':
+            return subprocess.CompletedProcess(argv, 0, 'C:/Git/mingw64/libexec/git-core\n', '')
+        queries.append((argv[0], input))
+        return subprocess.CompletedProcess(argv, 0, 'protocol=https\nhost=example.org\nusername=someone\n'
+                                                    'password=not-a-real-secret\n', '')
+    monkeypatch.setattr(askpass.subprocess, 'run', run)
+    assert askpass.main("Username for 'https://example.org': ") == 0
+    assert askpass.main("Password for 'https://someone@example.org': ") == 0
+    assert capsys.readouterr().out == 'someone\nnot-a-real-secret\n'
+    from pathlib import PureWindowsPath
+    assert PureWindowsPath(queries[0][0]).as_posix().endswith('mingw64/bin/git-credential-manager.exe')
+    assert queries[0][1] == 'protocol=https\nhost=example.org\n\n'
+    assert queries[1][1] == 'protocol=https\nhost=example.org\nusername=someone\n\n'
+    assert askpass.main('Are you sure you want to continue connecting (yes/no)? ') == 1 and len(queries) == 2

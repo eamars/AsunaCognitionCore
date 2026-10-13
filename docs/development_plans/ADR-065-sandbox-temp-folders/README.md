@@ -59,10 +59,57 @@ herself (a fault of the environment she would have to remember).
 
 Found on the way, not changed: MSYS programs (Git for Windows' `sh.exe`) do not start in a confined command. The
 token has Low integrity, and the MSYS shared object folder, already made by the Host user's own MSYS processes, refuses
-it create access (`NtCreateDirectoryObject` `0xC0000022`; the same open succeeds outside the sandbox). Git starts credential helpers, hooks and `!` aliases through
-`sh.exe`, so `git credential fill` finds nothing there, although `git-credential-manager.exe get` run directly does
-find the Host user's login. Whether her confined git may push with the Host user's login, and how, is the owner's
-decision. `curl.exe` (System32's, and Git's even with `CURL_SSL_BACKEND=openssl`) stays on Schannel and cannot open HTTPS
+it create access (`NtCreateDirectoryObject` `0xC0000022`; the same open succeeds outside the sandbox). Git
+starts credential helpers, hooks and `!` aliases through `sh.exe`, so `git credential fill` finds nothing there, although `git-credential-manager.exe get` run directly does
+find the Host user's login. `curl.exe` (System32's, and Git's even with `CURL_SSL_BACKEND=openssl`) stays on Schannel and cannot open HTTPS
 there; Python's HTTPS works.
 
 Cost: no tool, prompt or per-turn change; the core skill `asuna-self-improvement` states the facts.
+
+## Her own working copy, and pushing with the owner's account (owner, 2026-10-13)
+
+The owner wanted her to work on the project as the coding agents do: commit and push. Three ways were weighed:
+
+- **A, chosen:** her own permanent working copy in her home working folder, which her commands may already write.
+- **B, not chosen:** her commands write the whole local checkout. Built and measured on a branch, then dropped: DSH's
+  Windows grant labels everything under its root Low integrity, and Windows starts a program whose file is labelled
+  Low at Low integrity. The checkout holds `.venv`, whose Python is the worker's: started from it, the test suite could
+  no longer write `%TEMP%` or uv's cache, and the Host's worker would have failed the same way at its next start. The
+  grant was removed again; the owner account's inherited Full control of the checkout, which it needed, stays (harmless).
+- **C, not chosen:** a patch to DSH's Windows runner, kept on the fork for every DSH alpha (ADR-037), for what A gives
+  without one.
+
+The owner also decided that she pushes with the owner's GitHub account.
+
+Decisions for the build:
+
+- **The working copy:** `<her home working folder>/working-copy` (`.runtime/work/local-user/working-copy` in a
+  checkout's own data folder), the folder her local chat, agent lines and peer line work in. The Host makes it at start
+  (`working-copy.js`, called after the worker is up) when it is missing: a clone of the checkout's default branch from
+  disk (no network at start; its own object files, no hard links), `origin` set to the checkout's origin, fetching every
+  branch. Made beside it and renamed, so a half-made copy is never taken for hers; one that is there is never changed.
+  It is never the checkout, and nothing the Host runs is in it. Her author name comes from `character_git` as for every
+  command.
+- **The login:** git starts a credential helper through `sh.exe` whatever the helper's value: it appends the operation
+  (` get`), and a command with a space goes through the shell, so an absolute or 8.3 path to Git Credential Manager does
+  not help (tried: both went through `sh.exe`). Git starts its askpass program directly. A confined command on Windows
+  gets an empty credential helper list (`credential.helper=` through `GIT_CONFIG_COUNT`, beside `http.sslBackend`), and
+  a `sandbox_run` command gets `GIT_ASKPASS` = `asuna/sandbox_site/git-askpass.cmd`, which runs `git_askpass.py` with the
+  worker's Python: it asks `git-credential-manager.exe get` (never interactively) for that remote and prints only the
+  username or the password git asked for. The token reaches git through a pipe, never a command line or a file.
+  Persona jobs and managed integrations do not get it (an adapter handles public input). Verified in the real sandbox
+  from a working copy made by `working-copy.js`: `git push --dry-run origin HEAD:refs/heads/probe/askpass-dry-run`
+  succeeds (GitHub asks for a login even for a dry run), and without the askpass it fails with "could not read
+  Username"; nothing was pushed.
+- **Getting her work into what runs:** nothing syncs the checkout from `origin` today (the launcher installs what the
+  checkout holds). Her pushed work reaches the checkout when the owner or a coding agent fast-forwards it, and runs from
+  the next start. An automatic fast-forward at her restart is proposed, not built.
+- **Found on the way:** the packer shipped only the worker's top-level modules and `resources/`, so the installed
+  package had no `sandbox_site/`: a live Host's confined Pythons ran without the sitecustomize above (its temporary
+  folder fix reached only a checkout's own runs and core candidates). `pack_plugins.py` ships `sandbox_site/` now,
+  listed in `runtime-manifest.json` (`test_runtime_manifest.py`); it reaches the live Host at its next start.
+- Her own push scripts, which read the credential and put it in the push URL, are left as they are; her skill says they
+  are no longer needed.
+
+Cost: no new tool and no per-turn line; `sandbox_run`'s description is unchanged (it already said git uses the Host
+user's logins).

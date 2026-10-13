@@ -70,10 +70,11 @@ def confine(config, argv, root):
 SITE = Path(__file__).with_name('sandbox_site')   # sitecustomize for the Pythons a confined command starts
 TEMP_FOLDER = '.tmp'                             # inside the command's own folder: the only place it may write
 # Windows gives a restricted token no SSPI credentials, so Schannel (Git for Windows' default TLS) fails there with
-# SEC_E_NO_CREDENTIALS: git uses its bundled OpenSSL and CA file instead (ADR-065). Elsewhere git may have only one
-# TLS backend and would refuse the setting.
-GIT_TLS = ({'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'http.sslBackend', 'GIT_CONFIG_VALUE_0': 'openssl'}
-           if sys.platform == 'win32' else {})
+# SEC_E_NO_CREDENTIALS: git uses its bundled OpenSSL and CA file instead. Its credential helpers start through sh.exe,
+# which cannot start there either: the list is emptied (her commands log in through git_login). Elsewhere git may
+# have only one TLS backend and would refuse the setting (ADR-065).
+GIT_CONFIG = ({'GIT_CONFIG_COUNT': '2', 'GIT_CONFIG_KEY_0': 'http.sslBackend', 'GIT_CONFIG_VALUE_0': 'openssl',
+               'GIT_CONFIG_KEY_1': 'credential.helper', 'GIT_CONFIG_VALUE_1': ''} if sys.platform == 'win32' else {})
 
 
 def environment(extra=None, cwd=None):
@@ -88,7 +89,7 @@ def environment(extra=None, cwd=None):
     env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                PYTHON_MANAGER_AUTOMATIC_INSTALL='false',
                # Nobody can answer a prompt here: git fails at once instead of waiting out the command's time.
-               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE), **GIT_TLS)
+               GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE), **GIT_CONFIG)
     if cwd is not None:
         temp = Path(cwd) / TEMP_FOLDER
         temp.mkdir(parents=True, exist_ok=True)
@@ -97,9 +98,18 @@ def environment(extra=None, cwd=None):
     return env
 
 
+def git_login():
+    """How git in her own commands (sandbox_run) logs in to an HTTPS remote: with the Host user's login (owner
+    2026-10-13). On Windows git starts the askpass program in sandbox_site directly, which asks the credential manager;
+    elsewhere git's own credential helpers work in the sandbox."""
+    if sys.platform != 'win32':
+        return {}
+    return {'GIT_ASKPASS': str(SITE / 'git-askpass.cmd'), 'ASUNA_PYTHON': sys.executable}
+
+
 def git_identity(config):
     """The character's own name on what her commands commit (`character_git` {name, email} in local config), or {}.
-    Pushing and ssh use whatever credentials the Host's user has; only the name on her commits is hers."""
+    Pushing (git_login) and ssh use the Host user's logins; only the name on her commits is hers."""
     who = (config or {}).get('character_git') or {}
     name, email = str(who.get('name') or '').strip(), str(who.get('email') or '').strip()
     if not (name and email):

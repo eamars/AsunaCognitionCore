@@ -77,11 +77,16 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 ## git 和 ssh（家里的任务，`sandbox_run`）
 
-- 本机的项目检出在你的命令里是只读的。代码改动经候选（`development_*`）和 `development_publish` 进去；文档和审阅在任务文件夹里 `git clone` 一份，在那里提交再推送。
+- 你有一份自己的工作副本：家里工作区的 `/task/working-copy`（本机聊天、agent 线、peer 线的任务都在这个工作区）。它是项目的完整 clone，`origin` 就是 GitHub 上的仓库；宿主缺它的时候建一次，以后不重建、不重置，里面的东西都是你的。
+- 本机的项目检出在你的命令里是只读的；改动从工作副本走：
+  - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），先 `git fetch` 再 rebase 到 `origin/main`，再 `git push origin HEAD:main`（或推一个分支）。
+  - 推上去的东西进本机检出，要等主人或开发 agent 把检出快进到 `origin/main`；之后宿主重启时装上。
+  - 想不重启就生效的改动（技能、种子、persona-model、认知核的 Python）和适配器，还是走候选和 `development_publish`：适配器只从发布的快照运行，原生 skill 工具读的是已发布的版本。
+- 推送用的是这台机器上主人的 GitHub 账号：git 要账号时，程序让它直接问主人的凭据管理器，你不用碰密码，也不用把它写进 URL 或脚本。以前那些自己读凭据、拼进 URL 的推送脚本（`push*.py` 这类）用不着了。
 - 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是这台机器上主人的钥匙。
 - HTTPS 直接用 `git`：程序已经让 git 用它自带的 OpenSSL 和证书，不用再加 `-c http.sslBackend=openssl` 或别的证书文件。Windows 的沙箱里 Schannel 拿不到凭据，所以 `curl.exe` 开不了 HTTPS；要下载就用 Python。
-- 沙箱里 git 起不了凭据管理器：它要经 Git 自带的 `sh.exe` 启动，而 `sh.exe` 在沙箱里起不来；钩子和 `!` 别名也一样。
-- 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），比如跑全套测试；跑满被停下时会带回停下前的输出。整库 clone 用 `git clone --depth 1`，或 `git clone --reference <本机仓库路径> <远端>` 借本机已有的对象。
+- Git 自带的 `sh.exe` 在沙箱里起不来，所以 git 的钩子和 `!` 别名不能用。
+- 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），比如跑全套测试；跑满被停下时会带回停下前的输出。
 - 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
 

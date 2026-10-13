@@ -1,5 +1,5 @@
 """ADR-058: the heartbeat rolls a die before it reaches her. Nothing (no turn, unless an hour would lose something
-only a heartbeat shows), interesting, self development, self evaluation, review the dice, reach out at home; awake and
+only a heartbeat shows), interesting, self development, self evaluation, review the dice, reach out at home, and idle (nothing but its hint, the seventh face); awake and
 asleep weights she sets by name; the roll is one line of text, reproducible from the beat, and recorded."""
 import collections
 
@@ -82,7 +82,7 @@ def test_what_waits_wakes_a_nothing_beat_only_when_an_hour_would_lose_it(store):
 def test_each_outcome_opens_with_its_line_and_goes_where_it_belongs(store):
     service, _ = beat(store, '自我开发 1')
     assert service.controller.offers[0][0] == 'self_development'
-    assert service.controller.texts[0].startswith('这一拍掷到：自我开发（醒着的分布：歇着 0、有趣 0、自我开发 1、自我评估 0、复盘 0、找人 0）')
+    assert service.controller.texts[0].startswith('这一拍掷到：自我开发（醒着的分布：歇着 0、有趣 0、自我开发 1、自我评估 0、复盘 0、找人 0、待着 0）')
     store.db.plans.delete_many({})
     service, _ = beat(store, '自我评估 1')
     assert service.controller.offers[-1][0] == 'presence' and service.controller.envelopes[-1] == {'dice': 'self_evaluation'}
@@ -182,6 +182,44 @@ def test_set_policy_shows_the_whole_table_it_stored(store):
           'source_event_id': 'presence:x', 'manifest': {'session_class': 'owner_private'}}
     result, _ = tools.tool_set_policy(ep, 'c1', {'key': 'heartbeat.dice_awake', 'value': '歇着 50、有趣 50',
                                                  'reason': '先试试'})
-    assert result['stored_table'] == '歇着 50、有趣 50、自我开发 0、自我评估 0、复盘 0、找人 0'
+    assert result['stored_table'] == '歇着 50、有趣 50、自我开发 0、自我评估 0、复盘 0、找人 0、待着 0'
     with pytest.raises(role_tools.Refused, match='能写的名字'):
         tools.tool_set_policy(ep, 'c2', {'key': 'heartbeat.dice_awake', 'value': '睡觉 10', 'reason': '错名'})
+
+def test_the_seventh_face_idle_parses_defaults_to_zero_and_is_listed_even_at_zero():
+    assert 'idle' in dice.OUTCOMES and dice.NAMES['idle'] == '待着'
+    assert dice.parse('待着 5、有趣 95')['idle'] == 5
+    assert dice.parse(dice.DEFAULTS['awake']) == {'nothing': 40, 'interesting': 31, 'self_development': 10,
+                                                  'self_evaluation': 12, 'review_dice': 2, 'reach_out': 5, 'idle': 0}
+    assert dice.parse(dice.DEFAULTS['asleep']) == {'nothing': 66, 'interesting': 0, 'self_development': 20,
+                                                   'self_evaluation': 8, 'review_dice': 2, 'reach_out': 4, 'idle': 0}
+    for period in ('awake', 'asleep'):
+        assert dice.weights_for({}, {}, period)['idle'] == 0, 'the core persona defaults weigh it 0 too'
+    assert dice.words(dice.parse('有趣 1')).endswith('待着 0'), 'words lists the new face even at 0'
+
+
+def test_idle_reaches_her_with_just_its_hint_no_readings_and_no_task(store):
+    service, _ = beat(store, '待着 1')
+    assert service.controller.offers[-1][0] == 'presence'
+    assert service.controller.envelopes[-1] == {}, 'no dice envelope: no readings ride this face'
+    text = service.controller.texts[-1]
+    assert text.startswith('这一拍掷到：待着')
+    assert '这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。' in text
+    assert '不是用户消息或新授权' not in text, 'the heartbeat framing is not bolted onto this face'
+    rolled = store.db.audit_events.find_one({'type': 'presence.rolled'})['payload']
+    assert rolled['outcome'] == 'idle' and rolled['reaches'] is True
+
+
+def test_set_policy_accepts_the_new_name(store):
+    from asuna import role_tools
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    from test_adr009_p2 import owner
+    owner(store)
+    tools = role_tools.RoleTools(Coordinator(store, FakeLane(store, [])))
+    ep = {'_id': 'ep-home', 'persona': 'P1', 'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'episode_kind': 'presence',
+          'source_event_id': 'presence:x', 'manifest': {'session_class': 'owner_private'}}
+    result, _ = tools.tool_set_policy(ep, 'c1', {'key': 'heartbeat.dice_awake',
+                                                 'value': '歇着 40、有趣 31、自我开发 10、自我评估 10、复盘 4、找人 5、待着 3',
+                                                 'reason': '第七面自己调'})
+    assert result['stored_table'].endswith('待着 3')

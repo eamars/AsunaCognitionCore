@@ -1,4 +1,4 @@
-"""The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of six outcomes.
+"""The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of seven outcomes.
 
 - nothing: the beat does not reach her (no model call), unless something only a heartbeat shows would be lost by
   waiting an hour: someone she waits for in a group (her waiting list ends after an hour), or a peer line whose
@@ -12,6 +12,8 @@
   (dice_review_from_program), so the weights are something she can check, not only set.
 - reach_out: the heartbeat, suggesting a word on one of her home lines (pass_note), whom is hers to choose; counts as 0
   where she has no line.
+- idle: the beat reaches her with nothing but its line and hint (her seventh face, 2026-10-14): no readings,
+  no task, no output asked of it.
 
 Two weight tables, awake and asleep, chosen by her declared sleep window (the only thing the window does to a
 heartbeat: a fully quiet night is 歇着 100). Both are her policy keys (`set_policy`), written with names
@@ -26,13 +28,13 @@ import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 
-OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out')
+OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out', 'idle')
 NAMES = {'nothing': '歇着', 'interesting': '有趣', 'self_development': '自我开发', 'self_evaluation': '自我评估',
-         'review_dice': '复盘', 'reach_out': '找人'}
+         'review_dice': '复盘', 'reach_out': '找人', 'idle': '待着'}
 BY_NAME = {name: outcome for outcome, name in NAMES.items()}
 # Her review, 2026-10-12: run them as they are; the review outcome brings the readings to retune from.
-DEFAULTS = {'awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5',
-            'asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4'}
+DEFAULTS = {'awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0',
+            'asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4、待着 0'}
 KEYS = {'awake': 'heartbeat.dice_awake', 'asleep': 'heartbeat.dice_asleep'}
 PERIOD_WORDS = {'awake': '醒着', 'asleep': '睡着'}
 ITEM = re.compile(r'(?P<name>[^\d\s]+?)\s*(?P<weight>\d{1,3})')
@@ -47,6 +49,7 @@ HINTS = {
     'self_evaluation': 'self_review_from_program 是你今天的原始读数，带出处，没替你总结。',
     'review_dice': 'dice_review_from_program 是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
     'reach_out': '从家里 pass_note 到你的一条线（%s），找谁、说不说，由你。',
+    'idle': '这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。',
 }
 REVIEW_ROLLS = 60
 REVIEW_DAYS = 14

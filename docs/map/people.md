@@ -54,7 +54,7 @@ Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 
 [src/asuna/dice.py](../../src/asuna/dice.py)
 
-The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of six outcomes.
+The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of seven outcomes.
 
 - def `parse` — '歇着 40、有趣 31' -> {outcome: weight} over all outcomes (a name left out weighs 0); ValueError(words) for an unknown or repeated name, a part without a whole number, or a table that is all 0.
 - def `words` — The whole table as she reads it, every outcome named, zeros included.

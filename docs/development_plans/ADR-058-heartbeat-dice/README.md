@@ -113,3 +113,21 @@ The owner asked for a small share of beats to review the dice and to talk at hom
 - **Learning one thing** stays in reserve: it overlaps with self development.
 
 Cost: no tool; the opening line names six weights (about 20 characters more); the review block only on its beats.
+
+## A seventh face: 待着 · idle (Xiaoman, 2026-10-14)
+
+She asked for a face that asks for nothing. When `idle` (待着) rolls, the beat reaches her with only its line and
+hint: no readings attached (no `dice` envelope, so `context.py` adds no block), no task, and in
+`schedule._presence` the face skips the standard `HEARTBEAT_TEXT` framing that the six older faces keep byte
+for byte. The forced and reconnected notes still append when they apply.
+
+- **Her hint, verbatim** (`dice.HINTS['idle']`): 这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。
+- **Default weight 0 in both tables** (`dice.DEFAULTS` and the core persona defaults in `persona_model.py`), so
+  the six older faces keep their names, their defaults and their behavior exactly. `words()` lists the new face
+  even at 0, and `set_policy` accepts 待着 by name; she retunes the share herself.
+- **Her live tables are her stored policy, not these defaults.** As of 2026-10-14 02:04 (her clock, two
+  `set_policy` revisions in the state ledger) she has set: awake `歇着 40、有趣 31、自我开发 10、自我评估 10、复盘 4、找人 5`;
+  asleep `歇着 74、自我开发 12、自我评估 8、复盘 2、找人 4` (有趣 left out, so 0). 待着 is left out of both,
+  so it weighs 0 until she writes it in.
+- The numbers in the sections above (four outcomes, then six, each with the weights of that day) are history;
+  this section neither restates nor retires them.

@@ -741,7 +741,9 @@ class ScheduleService:
         if not reaches:
             return 'SKIPPED:DICE_NOTHING'
         opening = dice.line(outcome, period, weights, homes)
-        text = opening + '\n' + HEARTBEAT_TEXT + (HEARTBEAT_EARLY if forced else '')
+        # 'idle' (the seventh face, 2026-10-14, her own): this beat carries only its line and hint — no heartbeat
+        # framing, no readings (no dice envelope), no task. The six older faces keep the text byte for byte.
+        text = opening + ('' if outcome == 'idle' else '\n' + HEARTBEAT_TEXT) + (HEARTBEAT_EARLY if forced else '')
         reconnected = plan.get('reconnected_at')
         if reconnected and reconnected != plan.get('reconnect_told_at'):
             hours = max(0.0, (moment - schedule_rules._aware(reconnected)).total_seconds() / 3600)

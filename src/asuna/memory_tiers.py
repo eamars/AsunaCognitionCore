@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from .evidence import canonical, sha
 
 TIERS_VERSION = 1
-ENABLED = False                    # the switch (ADR-062 phase 2): hers and the owner's to turn on
+ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
 COLLECTION = 'memory_tiers'
 
 CARRIED, AT_HAND, PUT_AWAY = '随身', '手边', '收着'
@@ -679,6 +679,8 @@ def week(store, persona, zone, moment=None):
 def detail(store, persona, row):
     """The verbatim a gist stands for (its revision before the gist), or None."""
     behind = (row or {}).get('detail_of') or {}
+    if not behind:
+        return None                     # not a gist (or no item at all, as for a working document): nothing behind
     revision = store.db.state_revisions.find_one({'_id': behind.get('revision_id')}) if behind.get('revision_id') else None
     for section in ((revision or {}).get('content') or {}).get('sections') or []:
         if section.get('sid') == row['sid']:

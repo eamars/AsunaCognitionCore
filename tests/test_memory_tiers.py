@@ -35,7 +35,8 @@ def persona_sids(store):
     return [s['sid'] for s in DocumentStore(store, 'P1').read('persona')[1]['sections']]
 
 
-def test_with_the_switch_off_nothing_is_kept_and_her_turn_has_no_things_block(store):
+def test_with_the_switch_off_nothing_is_kept_and_her_turn_has_no_things_block(store, monkeypatch):
+    monkeypatch.setattr(memory_tiers, 'ENABLED', False)
     owner(store)
     Coordinator(store, FakeLane(store, [FakeTurn([THINK], '在呢。')])).ingest(event('e-off'))
     assert memory_tiers.COLLECTION not in store.db.list_collection_names()

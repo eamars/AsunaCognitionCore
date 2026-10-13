@@ -87,6 +87,8 @@ SEND_ACTIONS = {"dm": "send_private_msg", "group": "send_group_msg"}
 # Group admin actions the host may queue (its own checks decide whether she may): mute/unmute/kick a
 # member by account, or recall one message by its platform id.  Nothing else is ever called.
 ADMIN_KINDS = ("mute", "unmute", "kick", "recall")
+# Her answer to a friend or group request her home was told of (notices.py): the request's own flag, nothing else.
+ANSWER_KINDS = ("accept", "decline")
 MAX_MUTE_SECONDS = 30 * 86400
 # a group send may carry these; a private send carries `text`; either may carry
 # one `image` before the words when the host attached a picture to this publication
@@ -417,6 +419,16 @@ class Outbound:
         target = item.get("target") or {}
         group = str(target.get("id") or "")
         kind = admin.get("kind")
+        if target.get("type") == "request":
+            flag = admin.get("flag")
+            if kind not in ANSWER_KINDS or not isinstance(flag, str) or not 1 <= len(flag) <= 200:
+                return None, "bad_request_answer"
+            approve = kind == "accept"
+            if admin.get("request") == "friend":
+                return "set_friend_add_request", {"flag": flag, "approve": approve}
+            if admin.get("request") == "group" and admin.get("sub_type") in ("add", "invite"):
+                return "set_group_add_request", {"flag": flag, "sub_type": admin["sub_type"], "approve": approve}
+            return None, "bad_request_answer"
         if target.get("type") != "group" or not group.isdigit():
             return None, "admin_needs_a_group"
         if kind not in ADMIN_KINDS:
@@ -448,7 +460,8 @@ class Outbound:
             return
         if not pub or not attempt:
             return
-        if self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
+        if target.get("type") != "request" and                 self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
+            # a request is answered by its flag: it has no route, and accepting it admits nobody
             self.report(pub, receipt_payload("failed", attempt, {"reason": "target_not_authorized"}), "target_not_authorized")
             return
         action, params = self.admin_call(item, self.cfg.napcat["account_id"])

@@ -38,6 +38,19 @@ with Core (`registerChannel`).
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.
+- Every NapCat notice and request is projected into one line of words from a versioned table
+  (`qqadapter/notices.py`, `WORDS`): a person in a group line is `@<account>` (Core shows their label), her own
+  account is 你, text a person controls stays in 「」. Which kinds she is shown is the switch table `SHOWN`: a poke at
+  her, a reaction (Core keeps only one to a line of hers), a recall, friend and group requests, a kick of her account
+  and a change of her admin role. A shown group or private-chat line goes to Core's `events` endpoint from the person
+  who did it, under a message's gates, with `raw.asuna_notice` (`kind`, `gate` `poked` / `reacted`, `line`); a
+  request or news about her account goes to the `notices` endpoint for her home, with the person's nickname
+  (`get_stranger_info`) and, for a group she has no conversation in, its name (`get_group_info`). Her answer to a
+  request comes back as an admin action and becomes `set_friend_add_request` or `set_group_add_request` with the
+  request's flag. Every kind is counted, with no content: `health.json` `notices` shows today's and the last 7 days'
+  counts by kind and outcome (`posted`, `home`, `not_shown`, `not_projected`, `unknown`, a gate that dropped it),
+  kept by UTC day for 14 days in `notices/counts.json` in the adapter's data folder. Typing, connection events, her
+  messages sent elsewhere and online-file transfers are counted, never projected.
 - Her own mute in each admitted group goes to Core's `own_mute` endpoint. A `group_ban` notice (`ban` / `lift_ban`)
   about her account, or about the whole group (`user_id` 0), is posted at once as state (until = notice time +
   duration, the operator's account); every other notice is dropped. A send NapCat refuses with retcode 1200 and QQ

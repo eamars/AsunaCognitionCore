@@ -128,6 +128,13 @@ class HostApi:
             res = Result("accepted", res.code, res.obj)
         return res
 
+    def post_notice(self, body):
+        """A line about her own account for her home session (notices.py); `accepted` once the host took it."""
+        res = self._request("POST", "/v1/channels/%s/notices" % self.channel_id, body, timeout=15)
+        if res.kind == "ok" and isinstance(res.obj, dict) and res.obj.get("status") in ("held", "dropped"):
+            res = Result("accepted", res.code, res.obj)
+        return res
+
     def claim_outbox(self, wait_seconds=25, timeout=None, supports=CAPABILITIES):
         path = "/v1/channels/%s/outbox?wait_seconds=%d" % (self.channel_id, int(wait_seconds))
         caps = [str(c) for c in (supports or ()) if c]

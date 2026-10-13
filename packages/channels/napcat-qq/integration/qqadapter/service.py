@@ -13,6 +13,7 @@ import time
 from . import forward as forward_mod
 from . import inbound as inbound_mod
 from . import mutes as mutes_mod
+from . import notices as notices_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
@@ -83,6 +84,9 @@ class Adapter:
         self.mutes = mutes_mod.Mutes(cfg, data_dir, self.onebot, self.host, self.counters, self.members.groups,
                                      log=self.log)
         self.out.on_muted = self.mutes.look_now
+        # notices and requests: every kind projected and counted, the shown ones posted (notices.py)
+        self.notice_counts = notices_mod.Counts(data_dir)
+        self.home_notices = notices_mod.HomePoster(cfg, self.onebot, self.host, self.counters, log=self.log)
         self.onebot.on_up = self._on_up
         self.stop = threading.Event()
         self.wake = threading.Event()
@@ -101,12 +105,8 @@ class Adapter:
 
     # ---- inbound (WS reader thread) ------------------------------------
     def on_event(self, event):
-        muted = mutes_mod.notice_body(event, self.cfg)
-        if muted is not None:
-            # a state report, not a chat line: posted from the mutes thread, never spooled as a turn
-            self.counters.inc("inbound_own_mute_notice")
-            self.mutes.notice(muted)
-            return
+        if isinstance(event, dict) and event.get("post_type") not in (None, "message"):
+            return self.on_notice(event)
         result, reason = inbound_mod.classify(event, self.cfg, self.seen)
         if reason == "accepted":
             envelope, meta = result
@@ -144,6 +144,43 @@ class Adapter:
             self.log("INBOUND_IGNORED reason=%s post_type=%s message_type=%s group_id=%s user_id=%s message_id=%s"
                      % (reason, event.get("post_type"), event.get("message_type"), event.get("group_id"),
                         event.get("user_id"), event.get("message_id")))
+
+    def on_notice(self, event):
+        """A notice, request or meta event: counted by kind; her own mute to its state; a shown kind posted."""
+        kind, known = notices_mod.kind_of(event)
+        muted = mutes_mod.notice_body(event, self.cfg)
+        if muted is not None:
+            # a state report, not a chat line: posted from the mutes thread, never spooled as a turn
+            self.notice_counts.add(kind, "own_state")
+            self.counters.inc("inbound_own_mute_notice")
+            self.mutes.notice(muted)
+            return
+        proj = notices_mod.project(event, str(self.cfg.napcat["account_id"])) if known else None
+        if proj is None or proj["kind"] not in notices_mod.SHOWN:
+            self.notice_counts.add(proj["kind"] if proj else kind,
+                                   "not_shown" if proj else "not_projected" if known else "unknown")
+            self.counters.inc("inbound_nonmessage")
+            return
+        kind = proj["kind"]
+        if proj["where"] == "home":
+            if proj.get("group_id") and kind != "request_invite" and self.cfg.route_for_group(proj["group_id"]) is None:
+                self.notice_counts.add(kind, "group_not_allowed")
+                return
+            self.notice_counts.add(kind, "home")
+            self.home_notices.put(proj, event)
+            return
+        envelope, why = notices_mod.envelope(proj, event, self.cfg, self.seen)
+        if envelope is None:
+            self.notice_counts.add(kind, why)
+            self.counters.inc("inbound_" + why)
+            return
+        self.notice_counts.add(kind, "posted")
+        self.journal.spool_add("inbound", {"envelope": envelope, "meta": {"route_id": envelope["route_id"],
+                                                                         "notice": kind}},
+                               key="%s-%s" % (envelope["route_id"], envelope["event_id"]))
+        self.counters.inc("inbound_notice_spooled")
+        self.log("NOTICE_SPOOLED kind=%s route=%s event_id=%s" % (kind, envelope["route_id"], envelope["event_id"]))
+        self.wake.set()
 
     # ---- inbound submitter (own thread) --------------------------------
     def submit_pending(self):
@@ -287,6 +324,7 @@ class Adapter:
             "group_routes": sum(1 for r in self.cfg.routes.values() if r.message_type == "group"),
             "identity": self.identity,
             "peers": self.peers.summary() if self.peers is not None else None,
+            "notices": self.notice_counts.summary(),
         })
         return snap
 
@@ -368,6 +406,7 @@ class Adapter:
         threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
         threading.Thread(target=self.media_keys.loop, args=(self.stop,), name="media_keys", daemon=True).start()
         threading.Thread(target=self.mutes.loop, args=(self.stop,), name="mutes", daemon=True).start()
+        threading.Thread(target=self.home_notices.loop, args=(self.stop,), name="home_notices", daemon=True).start()
         self.catchup.request("startup")
         self.mutes.sweep("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"
@@ -396,6 +435,10 @@ class Adapter:
                 pass
             try:
                 self.catchup.flush(force=True)
+            except Exception:
+                pass
+            try:
+                self.notice_counts.save()
             except Exception:
                 pass
             self.journal.release_lock()

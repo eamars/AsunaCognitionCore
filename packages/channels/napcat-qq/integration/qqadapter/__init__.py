@@ -3,4 +3,4 @@
 Inbound events go to the host, outbound text comes only from the host outbox,
 and every send is settled by the platform's real response (or `unknown`).
 """
-__version__ = "0.7.2"
+__version__ = "0.8.0"

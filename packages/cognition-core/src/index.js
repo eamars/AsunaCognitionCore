@@ -791,7 +791,7 @@ export class CognitionCore {
   }
 
   /** Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's
-   * data, since the Host's own log is not kept. */
+   * data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part). */
   async restart(reason = 'unspecified') {
     if (this.restarting) return this.restarting;
     const entry = { at: new Date().toISOString(), reason: String(reason).slice(0, 500) };

@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readySince, revertSelections, supervise, writeRecord, RUNGS } from '../../../tools/asuna-supervisor.mjs';
+import { hostLog, readySince, revertSelections, supervise, writeRecord, RUNGS } from '../../../tools/asuna-supervisor.mjs';
 
 /**
  * A fake DSH world. `starts` scripts each start: 'ready', 'exit' (dies before ready), 'never' (no ready), or
@@ -163,5 +163,17 @@ test('a finished restart is also kept in history.jsonl, so a later one does not 
     const history = (await fs.readFile(path.join(dir, 'restart', 'history.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
     assert.deepEqual(history.map(r => [r.why, r.result]), [['one', 'fell_back'], ['two', 'running']]);
     assert.equal(JSON.parse(await fs.readFile(path.join(dir, 'restart', 'last.json'), 'utf8')).why, 'two');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('the Host log keeps its newest lines: past the limit the file becomes host.log.1 and a new one starts', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-hostlog-'));
+  try {
+    const file = path.join(dir, 'restart', 'host.log');
+    const keep = hostLog(file, 10);
+    keep(Buffer.from('aaaaaa')); keep(Buffer.from('bbbbbb'));             // the second would pass 10 bytes
+    keep(Buffer.from('cc'));
+    assert.equal(await fs.readFile(file + '.1', 'utf8'), 'aaaaaa');
+    assert.equal(await fs.readFile(file, 'utf8'), 'bbbbbbcc');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

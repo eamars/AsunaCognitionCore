@@ -281,16 +281,23 @@ async function main() {
   const launchFile = path.join(launch.base, 'launch.json');
   // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
   const logFile = path.join(supervisor.restartFolder(env), 'prepare.log');
+  const keep = supervisor.hostLog(path.join(supervisor.restartFolder(env), 'host.log'));
   await supervisor.supervise({
     prepare: async (rung, { fastForward = false } = {}) =>
       rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile }) : [],
-    spawnHost: () => spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },
-      windowsHide: true, stdio: 'inherit', detached: process.platform !== 'win32' }),
+    spawnHost: () => {
+      // Its output goes to the console as before and into restart/host.log, so a start that dies leaves its words.
+      const child = spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },
+        windowsHide: true, stdio: ['inherit', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+      child.stdout.on('data', chunk => { process.stdout.write(chunk); keep(chunk); });
+      child.stderr.on('data', chunk => { process.stderr.write(chunk); keep(chunk); });
+      return child;
+    },
     ready: since => supervisor.readySince(path.join(supervisor.dataRoot(env), 'reports'), since),
     takeRequest: () => supervisor.takeRequest(env),
     loaded: () => supervisor.loaded(launch.base, launchFile),
     writeRecord: record => supervisor.writeRecord(env, record),
-    note: text => process.stderr.write(text + '\n'),
+    note: text => { process.stderr.write(text + '\n'); keep(new Date().toISOString() + ' ' + text + '\n'); },
     now: () => Date.now(),
     sleep: ms => new Promise(resolve => { const timer = setTimeout(resolve, ms); stops.push(() => { clearTimeout(timer); resolve(); }); }),
     stopped: () => stopped,

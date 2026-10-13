@@ -8,6 +8,7 @@
  *   last.json     the record of the latest restart, written here once she is back; the worker reads it
  */
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,25 @@ export const RUNGS = [
 
 export const dataRoot = (env = process.env) => path.resolve(env.ASUNA_DATA_ROOT || path.join(root, '.runtime'));
 export const restartFolder = env => path.join(dataRoot(env), 'restart');
+
+/** The Host's console, kept: `restart/host.log` takes what the Host and the supervisor write, and at HOST_LOG_BYTES
+ * it becomes `host.log.1` (the one before it goes), so the newest 5 MB or more are always there after a crash. */
+export const HOST_LOG_BYTES = 5 * 1024 * 1024;
+export function hostLog(file, limit = HOST_LOG_BYTES) {
+  fsSync.mkdirSync(path.dirname(file), { recursive: true });
+  let size = 0;
+  try { size = fsSync.statSync(file).size; } catch { /* a new log */ }
+  return chunk => {
+    try {
+      if (size + chunk.length > limit && size > 0) {
+        fsSync.renameSync(file, file + '.1');
+        size = 0;
+      }
+      fsSync.appendFileSync(file, chunk);
+      size += chunk.length;
+    } catch { /* the console still has it */ }
+  };
+}
 
 /** Whether a worker that started after `since` (ms) has written runtime.ready in its reports folder. */
 export async function readySince(reports, since) {

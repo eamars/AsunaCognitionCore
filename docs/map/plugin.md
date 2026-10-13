@@ -241,7 +241,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `conversationSize` — ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction threshold uses), and the floor its character preset's compaction engine sets (compaction.js `floorTokens`).
   - `result`
   - `workerFailed`
-  - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data, since the Host's own log is not kept.
+  - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part).
   - `exposed` — The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use) or the action task's grant.
   - `attachPreset`
   - `attachRole` — Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()).

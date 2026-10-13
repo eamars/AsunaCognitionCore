@@ -48,6 +48,8 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 - def `RUNGS`
 - def `dataRoot`
 - def `restartFolder`
+- def `HOST_LOG_BYTES` — The Host's console, kept: `restart/host.log` takes what the Host and the supervisor write, and at HOST_LOG_BYTES it becomes `host.log.1` (the one before it goes), so the newest 5 MB or more are always there after a crash.
+- def `hostLog`
 - def `readySince` — Whether a worker that started after `since` (ms) has written runtime.ready in its reports folder.
 - def `revertSelections` — A selection being applied goes straight back to the one that ran before it (rung 1).
 - def `killTree`
@@ -55,6 +57,7 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 - def `loaded` — What actually runs after a start: the checkout's commit and each selected package.
 - def `takeRequest`
 - def `writeRecord`
+- def `HISTORY_KEPT` — history.jsonl keeps the newest HISTORY_KEPT finished restarts, one line each.
 
 ## `build_dsh_inline.mjs`
 

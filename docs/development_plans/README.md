@@ -12,7 +12,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 |---|---|---|---|
 | 1 | ADR-062 tiered memory | Phases 0–2 built, phase 2 behind `memory_tiers.ENABLED` (off); shadow pilot live | her review of the nine questions, her OK, her own split of `current_self`; then switch-on at a quiet restart and a profile |
 | 2 | ADR-064 phase 1, QQ notices as one-off lines | Built (30b66ea3, 7ca59d1f); adapter live after she publishes napcat-qq | a week of counts by kind, then the next batch |
-| 3 | ADR-061 asking for help | Proposed | ADR-064 phase 1 built (not its week of counts) |
+| 3 | ADR-061 asking for help | Updated to today's code (ca457d83); step 1 home places, step 2 groups | her answers to its questions 1 (names) and 2 (group answers home); the rest have defaults |
 | 4 | ADR-064 phase 2, a reply tool | Direction only | ADR-061 (its `ask` is the model for `reply`) |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her

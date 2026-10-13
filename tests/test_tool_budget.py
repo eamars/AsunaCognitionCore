@@ -12,10 +12,10 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (32, 19651)       # ADR-060: new names and the wording audit, -1,839 characters (eight unenforced rules kept after her review)
+CHARACTER = (32, 19706)       # ADR-060: new names and the wording audit, 21,490 -> 19,706 (rules the program does not enforce kept, her review)
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 19553)
+CHARACTER_TIERED = (31, 19608)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -95,3 +95,18 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
             if role_tools.LIMIT_WORDS % value not in params[field].get('description', ''):
                 unstated.append('%s.%s (%d)' % (tool, field, value))
     assert not unstated, 'state these limits with _s(limit=...): ' + ', '.join(unstated)
+
+
+# The harness prompt files (src/asuna/resources/prompts), characters at most. Same rule as the tools: growing one
+# raises its number here in the same change, with the cost stated in its ADR; a new file gets a line.
+PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 562, 'stage_attend.md': 355,
+           'stage_appraise.md': 413}
+
+
+def test_the_harness_prompts_stay_within_their_budget():
+    from pathlib import Path
+    folder = Path(role_tools.__file__).parent / 'resources' / 'prompts'
+    have = {path.name: len(path.read_text(encoding='utf-8')) for path in folder.glob('*.md')}
+    assert set(have) == set(PROMPTS), 'every prompt file has a budget line: %s' % sorted(set(have) ^ set(PROMPTS))
+    over = ['%s is %d characters, over %d' % (name, have[name], PROMPTS[name]) for name in have if have[name] > PROMPTS[name]]
+    assert not over, '; '.join(over) + ': shorten it, or state the cost in the ADR and raise the budget here.'

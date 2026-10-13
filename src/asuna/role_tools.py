@@ -94,7 +94,7 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
                          '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
-                         '对话里说过的话用它想起来；记不起来就照实说。在家里还会带上你在群里那时的心里话。' % RECALLS_PER_TURN),
+                         '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。' % RECALLS_PER_TURN),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说', required=True),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
@@ -104,7 +104,7 @@ TOOLS = {
     'delegate': {
         'description': ('把一件要在外面做的事交给行动脑：查资料、查完整原话、跑代码、改文件、画图、改能力。title 是简短标题；'
                          'brief 是完整交代：要什么、为什么、有什么限制。行动脑只看得到 brief 和对方的原话。交出去后照常聊天，'
-                         '结果回来会再叫你。已经交出去的那件要补话、改或接着做，用 task 的 message。'),
+                         '结果回来会再叫你；回来之前这件事还没做完。已经交出去的那件要补话、改或接着做，用 task 的 message。'),
         'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
     },
     'task': {
@@ -274,7 +274,7 @@ TOOLS = {
     'errand': {
         'description': ('替家里托你的人去别处说一句：去 errand_places_from_program 里的某个群或私聊，'
                          '只在这回合跟你说话的人让你办时用。request 照抄要带过去的话或交代的事；exactly=yes 是要原样转达。'
-                         '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
+                         '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说，不合适就不发。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
                        'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
                        'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
@@ -291,14 +291,14 @@ TOOLS = {
     },
     'leave_note': {
         'description': ('给别的对话里的你留一张便条（你在外面）：to 写「家里」就送回家并叫醒家里，或照抄 note_places_from_program 里另一个群的 place。'
-                         '用你自己的话写许下的事、要记得的事；别人托你的写清是谁的意思。那边读了只当消息。300 字以内，一回合最多两张。'),
+                         '用你自己的话写许下的事、要记得的事；别人托你的写清是谁的意思。那边读了只当消息，不会因为便条去做有后果的事。300 字以内，一回合最多两张。'),
         'parameters': {'to': _s('送到哪儿：「家里」或 note_places_from_program 里的 place', required=True),
                        'text': _s('便条：你自己的话，300 字以内', required=True)},
     },
     'restart': {
         'description': ('重启宿主（只在家里）。preview 先看会打断什么；request 交给监工重启，why 写原因，when 选 now、quiet（默认：'
                          '等没有在跑的回合、任务和排队消息，最多 30 分钟）或本地时刻 HH:MM；drill 演练，第一次启动故意失败，'
-                         '让兜底真跑一遍；cancel 撤回还没执行的请求。结果在下一次家里那回合的 restart_from_program 里。'),
+                         '让兜底真跑一遍；cancel 撤回还没执行的请求。结果在下一次家里那回合的 restart_from_program 里；退回旧版本时会马上叫你。'),
         'parameters': {'op': _s('做什么', required=True, enum=['preview', 'request', 'drill', 'cancel']),
                        'why': _s(limit=200, description='request/drill 要写：为什么重启，一句话'),
                        'when': _s('request/drill 可选：now、quiet 或当地时刻 HH:MM，默认 quiet')},
@@ -333,7 +333,7 @@ TOOLS = {
     'ask': {
         'description': ('问人或报问题，程序记着问了谁、谁答了、多久。do=ask 提问，可同时问几处，过了耐心就不等；read 读一个问题的回答，'
                          '或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（本机、主人的私聊、开发代理的线）'
-                         '时，程序在那边开一回合，带着 question。拍板的事（权限、花钱、开哪条道）问主人。'),
+                         '时，程序在那边开一回合，带着 question。拍板的事（权限、花钱、开哪条道）问主人，不问开发代理。'),
         'parameters': {'op': _s('做哪一样（不写时：有 question 是 ask，有 took 是 close，否则 read）',
                                 enum=['ask', 'read', 'close']),
                        'question': _s(limit=800, description='问什么，或报什么问题（ask）'),

@@ -391,4 +391,35 @@ def test_she_answers_a_listed_request_at_home_and_the_adapter_gets_its_flag(stor
     item = group_admin.claim(store, 'qq')
     assert item['target'] == {'type': 'request', 'id': 'friend'}
     assert item['admin'] == {'kind': 'accept', 'flag': 'f-9', 'request': 'friend'}
-    assert notices.pending() == {}, 'answered once'
+    assert notices.pending(store) == {}, 'answered once'
+
+
+def test_a_request_keeps_its_number_across_a_restart_and_is_listed_again_until_answered(store):
+    from asuna import group_admin
+    home_world(store)
+    _, _, controller = bridge(store)
+    for flag in ('f-1', 'f-2', 'f-1'):
+        notices.home(store, controller, 'qq', {'kind': 'request_friend', 'words': '想加你好友',
+                                               'request': {'flag': flag, 'type': 'friend'}}, delay=3600)
+    assert sorted(notices.pending(store)) == ['请求1', '请求2'], 'the same flag again is the same request'
+    notices.forget()                                                # a Host restart: memory gone, Mongo kept
+    assert sorted(notices.pending(store)) == ['请求1', '请求2']
+    notices.remind_open(store, controller)
+    text = controller.offers[-1][4]
+    assert notices.OPEN_HEAD in text and '请求1' in text and '请求2' in text
+    notices.home(store, controller, 'qq', {'kind': 'request_friend', 'words': '想加你好友',
+                                           'request': {'flag': 'f-3', 'type': 'friend'}}, delay=3600)
+    assert '请求3' in notices.pending(store), 'numbers go on after a restart, never reused'
+    ep = {'_id': 'ep-home', 'scene_id': 'dm-a', 'person_id': 'local-user', 'persona': 'demo'}
+    notices.answer(store, ep, {'kind': 'accept', 'who': '请求1'}, key='a1')
+    notices.answer(store, ep, {'kind': 'decline', 'who': '2'}, key='a2')
+    assert sorted(notices.pending(store)) == ['请求3'], 'answered ones wait for the platform, not for her'
+    for state in ('platform_accepted', 'failed'):
+        item = group_admin.claim(store, 'qq')
+        group_admin.receipt(store, 'qq', item['publication_id'],
+                            {'attempt_id': item['attempt_id'], 'status': state, 'response': {'retcode': 0}})
+    states = {row['number']: row['state'] for row in store.db.artifacts.find({'kind': notices.REQUEST_KIND})}
+    assert states == {1: 'answered', 2: 'gone', 3: 'open'}
+    controller.offers.clear()
+    notices.answer(store, ep, {'kind': 'accept', 'who': '请求3'}, key='a3')
+    assert notices.remind_open(store, controller) is None and controller.offers == [], 'nothing open: no event'

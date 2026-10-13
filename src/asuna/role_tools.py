@@ -588,7 +588,7 @@ def _turn_rules(store, ep):
     names.append('plan')
     from . import notices
     if ((context.get('your_place_from_program') or {}).get('admin')) or (
-            ep.get('scene_id') == (store.config.get('chat') or {}).get('scene_id') and notices.pending()):
+            ep.get('scene_id') == (store.config.get('chat') or {}).get('scene_id') and notices.pending(store)):
         names.append('group_action')        # a group where she is an admin; at home, while a request waits on her
     if kind == 'settlement':
         names.append('promote_memory')

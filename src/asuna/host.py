@@ -269,6 +269,12 @@ class RuntimeHost:
                 restarts.call_after_fallback(self.app.store, self.controller, self.config)
             except Exception as exc:
                 self.evidence.record('restart.call_failed', {'error': str(exc)[:300]})
+            if self.config.get('channels'):
+                from . import notices
+                try:
+                    notices.remind_open(self.app.store, self.controller)   # requests still waiting on her
+                except Exception as exc:
+                    self.evidence.record('notices.remind_failed', {'error': str(exc)[:300]})
             self.schedule = None
             if self.schedule_lane is not False:          # False: the native Host has no Schedule (mountSchedule=false)
                 from .schedule import ScheduleService

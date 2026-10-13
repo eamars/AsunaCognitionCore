@@ -203,6 +203,9 @@ def receipt(store, channel_id, action_id, body):
     store.put('artifacts', {**row, 'state': state, 'platform_receipt': body, 'receipt_at': now()},
               expected=row['revision'], stream=row['_id'])
     store.audit(row['episode_id'], 'group_action.receipt', {'action': row['_id'], 'state': state}, row['scope_key'])
+    if (row.get('target') or {}).get('type') == 'request':
+        from . import notices
+        notices.settled(store, row, state)              # her answer to a request: answered, or gone there
     return {'status': state}
 
 
@@ -211,3 +214,6 @@ def recover_sending(store):
     for row in store.db.artifacts.find({'kind': 'group_action', 'state': 'SENDING'}):
         store.put('artifacts', {**row, 'state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
                   expected=row['revision'], stream=row['_id'])
+        if (row.get('target') or {}).get('type') == 'request':
+            from . import notices
+            notices.settled(store, row, 'UNKNOWN')

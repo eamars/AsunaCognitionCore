@@ -89,6 +89,8 @@ Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a noti
 - def `forget`
 - def `home` — POST /v1/channels/<id>/notices: a line about her own account; held a minute, then one home event.
 - def `pending` — The requests she may answer now, by number.
+- def `remind_open` — After a start: the requests still waiting on her, listed once in her home; None when there are none.
+- def `settled` — Her answer's receipt: the request is answered, gone from the platform, or its fate unknown.
 - def `answer` — group_action accept/decline at home: queue the answer to one listed request for the adapter.
 
 ## `caught_up`

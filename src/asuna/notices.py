@@ -14,9 +14,12 @@ A notice arrives as an event from the person who did it with `raw.asuna_notice` 
 - in a private chat it is that chat's input, as a message would be.
 
 Notices about her own account or asking her to act (requests, a kick, an admin change) come by another endpoint
-(`home`): held for HOME_BATCH_SECONDS, then one program event in her home session lists them. A request there has a
-number; she answers it with `group_action` `accept` or `decline` and `who` the number (`answer`). Accepting a request
-does not admit anyone: who may talk to her stays the channel's admission setting.
+(`home`): held for HOME_BATCH_SECONDS, then one program event in her home session lists them. A request is kept in
+`artifacts` (kind `platform_request`, one row per platform flag) with a number that stays the same across restarts,
+open until she answers it or the platform refuses the answer (it is gone there); after a restart the open ones are
+listed in her home again (`remind_open`). She answers one with `group_action` `accept` or `decline` and `who` the
+number (`answer`). Accepting a request does not admit anyone: who may talk to her stays the channel's admission
+setting.
 """
 from __future__ import annotations
 
@@ -33,20 +36,20 @@ QUOTE_DAYS = 1
 HELD_MAX = 10
 HELD_KEPT = 50                               # held per conversation before the oldest go uncounted
 HOME_BATCH_SECONDS = 60
-REQUESTS_KEPT = 20
-REQUEST_HOURS = 24
+REQUEST_KIND = 'platform_request'
 MARK = '（平台通知）'                         # after the label line of a notice: the program's line, not typed text
 HISTORY_WORD = '平台通知，不是这个人打的字'
 HELD_NOTE = '平台转来的通知（谁撤回了消息之类），这里只给一次；每条是程序的话，不是谁打的字。'
 HOME_HEAD = '这是平台转来的通知，不是用户消息'
 ANSWER_HINT = '（%s：用 group_action 回，kind 写 accept 或 decline，who 写 %s）'
+OPEN_HEAD = '重启以后还开着、等你回的请求'
+# What became of her answer (group_admin.receipt): the platform took it, or refused it (the request is gone there).
+ANSWERED = {'DONE': 'answered', 'FAILED': 'gone', 'UNKNOWN': 'unknown'}
 
 _lock = threading.Lock()
 _held = {}                                   # scene_id -> [row]
 _peeked = {}                                 # scene_id -> how many of them the relevance gate showed
 _home = {'items': [], 'timer': None}
-_requests = {}                               # '请求N' -> request
-_counter = {'n': 0}
 
 
 def kept(raw):
@@ -156,8 +159,6 @@ def forget():
         if _home['timer']:
             _home['timer'].cancel()
         _home['timer'] = None
-        _requests.clear()
-        _counter['n'] = 0
 
 
 # ---- her home session ---------------------------------------------------------------------------------------------
@@ -193,16 +194,9 @@ def home(store, controller, channel_id, body, delay=HOME_BATCH_SECONDS):
             raise ValueError('NOTICE_INVALID: request 要有 flag、type（friend 或 group）和群请求的 sub_type')
     at = body.get('at')
     moment = datetime.fromtimestamp(at, timezone.utc) if type(at) is int and at > 0 else datetime.now(timezone.utc)
+    if request is not None:
+        line += _hint(_keep_request(store, channel_id, request, line, moment))
     with _lock:
-        if request is not None:
-            _counter['n'] += 1
-            number = '请求%d' % _counter['n']
-            _requests[number] = {'channel_id': channel_id, 'flag': request['flag'], 'type': request['type'],
-                                 **({'sub_type': request['sub_type']} if request['type'] == 'group' else {}),
-                                 'line': line, 'at': now()}
-            for old in sorted(_requests, key=lambda n: _requests[n]['at'])[:-REQUESTS_KEPT]:
-                del _requests[old]
-            line += ANSWER_HINT % (number, number)
         _home['items'].append((moment, line))
         if _home['timer'] is None:
             timer = threading.Timer(delay, _send_home, args=(store, controller))
@@ -229,19 +223,71 @@ def _send_home(store, controller):
     return event_id
 
 
-def pending():
+def _number(row):
+    return '请求%d' % row['number']
+
+
+def _hint(row):
+    return ANSWER_HINT % (_number(row), _number(row))
+
+
+def _keep_request(store, channel_id, request, line, moment):
+    """The request's row: one per platform flag, numbered once (the next number after the highest ever given)."""
+    from .evidence import sha
+    from .state import Conflict
+    row_id = 'request-' + sha(('%s|%s' % (channel_id, request['flag'])).encode())[:24]
+    for _ in range(5):
+        row = store.db.artifacts.find_one({'_id': row_id})
+        if row:
+            return row
+        last = store.db.artifacts.find_one({'kind': REQUEST_KIND}, {'number': 1}, sort=[('number', -1)])
+        try:
+            return store.put('artifacts', {'_id': row_id, 'kind': REQUEST_KIND, 'channel_id': channel_id,
+                                           'number': (last or {}).get('number', 0) + 1, 'flag': request['flag'],
+                                           'type': request['type'],
+                                           **({'sub_type': request['sub_type']} if request['type'] == 'group' else {}),
+                                           'line': line, 'received_at': moment.isoformat(), 'state': 'open',
+                                           'created_at': now()}, stream='requests')
+        except Conflict:
+            continue
+    raise Conflict('REQUEST_BUSY')
+
+
+def pending(store):
     """The requests she may answer now, by number."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=REQUEST_HOURS)).isoformat()
-    with _lock:
-        for number in [n for n, r in _requests.items() if r['at'] < cutoff]:
-            del _requests[number]
-        return dict(_requests)
+    rows = store.db.artifacts.find({'kind': REQUEST_KIND, 'state': 'open'}).sort('number', 1)
+    return {_number(row): row for row in rows}
+
+
+def remind_open(store, controller):
+    """After a start: the requests still waiting on her, listed once in her home; None when there are none."""
+    from .schedule_rules import line_stamp
+    from . import local_time
+    rows = list(pending(store).values())
+    if not rows:
+        return None
+    chat = store.config.get('chat') or {}
+    zone = local_time.zone_of(store, chat.get('scene_id'))
+    text = HOME_HEAD + '。' + OPEN_HEAD + '：\n' + '\n'.join(
+        '- %s %s%s' % (line_stamp(zone, row['received_at']), row['line'], _hint(row)) for row in rows)
+    event_id = 'presence:requests-' + uuid.uuid4().hex[:16]
+    controller.offer_internal('presence', event_id, chat['scene_id'], chat['person_id'], text)
+    store.audit('notices', 'notice.requests_open', {'event_id': event_id, 'open': len(rows)}, 'operator')
+    return event_id
+
+
+def settled(store, action, state):
+    """Her answer's receipt: the request is answered, gone from the platform, or its fate unknown."""
+    row = store.db.artifacts.find_one({'kind': REQUEST_KIND, 'answer': action['_id']})
+    if row and state in ANSWERED:
+        store.put('artifacts', {**row, 'state': ANSWERED[state], 'settled_at': now()}, expected=row['revision'],
+                  stream='requests')
 
 
 def answer(store, ep, item, key):
     """group_action accept/decline at home: queue the answer to one listed request for the adapter."""
     from .evidence import canonical, sha
-    found = pending()
+    found = pending(store)
     who = ''.join(str(item.get('who') or '').split())
     number = who if who.startswith('请求') else '请求' + who.lstrip('#')
     request = found.get(number)
@@ -259,7 +305,7 @@ def answer(store, ep, item, key):
                                           **({'sub_type': request['sub_type']} if 'sub_type' in request else {})},
                                 'who': number, 'reason': item.get('reason', ''), 'state': 'QUEUED', 'created_at': now()},
                   stream=row_id)
-    with _lock:
-        _requests.pop(number, None)
+    store.put('artifacts', {**request, 'state': 'answering', 'answer': row_id, 'answered_at': now()},
+              expected=request['revision'], stream='requests')
     from .group_admin import KIND_WORDS, STATE_WORDS
     return {'action': KIND_WORDS[item['kind']], 'who': number, 'state': STATE_WORDS['QUEUED']}

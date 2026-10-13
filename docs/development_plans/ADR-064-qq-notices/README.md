@@ -2,7 +2,8 @@
 
 Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. The owner then
 moved it ahead of ADR-061 (2026-10-13: review it first and finalize phase 1 with her). The master agent's review is
-below; phase 1 is finalized with her next. Nothing beyond her own mute state (built as a bug fix) is built yet.
+below; phase 1 is finalized with her next. **Phase 1 built 2026-10-13** (30b66ea3 adapter, 7ca59d1f host; see "Phase 1
+as built"), her own mute state before it as a bug fix. Phase 2 waits on ADR-061.
 
 ## Owner's direction (2026-10-13)
 
@@ -204,12 +205,13 @@ from parts, as ADR-061's `ask` composes one question to many sources:
 
 Phase 1:
 
-| Brain | Adds |
+| Brain | Adds (measured as built) |
 |---|---|
-| Character, group turn | Up to 10 one-off notice lines (each about 60 characters or less), only when there are any; 0 otherwise |
-| Character, relevance gate | Two reasons in `GATED`, about 30 characters each, shown only when they apply |
-| Character, home turn | A program event per batch of notices about her, about 60 characters per line; 0 when none |
-| Character, tools | No new tool. `group_action` gains `accept` and `decline` plus about 80 characters of description; `tests/test_tool_budget.py` is raised in the same change |
+| Character, group turn | `notices_from_program`, only when a group notice is held: up to 10 lines after folding, each the label, the time, `（平台通知）` (6 characters) and the words (about 30–80 characters a line), plus a `more` count; 0 otherwise. A stored notice line ends its label line with the same 6 characters, and a history row of one carries `notice` (25 characters with its key) |
+| Character, relevance gate | Two reasons in `GATED`: `poked` 18 characters, `reacted` 18 characters, shown only when they apply; held notices after the lines, as in a turn |
+| Character, system prompt | One line in the block guide for `notices_from_program`, 63 characters, fixed per conversation |
+| Character, home turn | One program event per minute's batch: a 16-character head, a line per notice (time, name, words), and 56 characters per request saying how to answer it; 0 when none |
+| Character, tools | No new tool. `group_action` gains `accept` and `decline` and the request number in `who`: +37 characters after tightening its description (`tests/test_tool_budget.py` raised by exactly 37). Her local chat lists `group_action` (562 characters) wherever a channel kind declares `REQUESTS`, so its tool list is the same every turn; a turn may use it only while a request waits |
 | Action brain | Nothing. A card handed over costs only what the brief carries |
 
 Phase 2 states its cost when drafted. The aim is a smaller QQ toolbox than today's.
@@ -339,3 +341,36 @@ without knowing (owner-confirmed). Nothing else in this ADR is built, and its re
   unknown, never left out. Her places at home add `muted_you` to that group's row (about 50 characters, heartbeat
   only). A line refused this way reads `没发出去：你在这个群被禁言了` (10 characters more than `没发出去`). No new tool,
   nothing in a turn of a group where she is not muted.
+
+## Phase 1 as built (2026-10-13)
+
+Commits 30b66ea3 (adapter 0.8.0) and 7ca59d1f (host). The adapter part goes live when she publishes the napcat-qq
+project; the host part with her next restart.
+
+- **Projection and switch table (adapter, `qqadapter/notices.py`).** Every kind in the table has words in one
+  versioned table (`WORDS`, `WORDS_VERSION` 1), both directions for mutes and admin changes, with the duration in
+  words. `SHOWN` holds her first batch (owner 2026-10-13): `poke_you`, `reaction`, `recall`, `request_friend`,
+  `request_join`, `request_invite`, `kicked_you`, `admin_you`. Flipping the next batch is a change to that table.
+  Her own mute is not a line (its state, above).
+- **Counts.** Every kind, with no content, by outcome (`posted`, `home`, `not_shown`, `not_projected`, `unknown`, or
+  the gate that dropped it), by UTC day for 14 days in the adapter's `notices/counts.json`; `health.json` `notices`
+  shows today and the last 7 days. Unknown kinds count under their platform name and are never shown.
+- **Groups and private chats (host, `notices.py`).** As designed: the same gates as a message, a blocked person's
+  notice dropped; `poked` and `reacted` through the gate (`poked` also wakes a resting group; `reacted` there is held
+  instead); everything else in a group held in memory and shown once, folded by kind and identical words, the cap
+  after folding. A reaction to a line not hers is dropped by the host (the adapter cannot tell whose line it was
+  without reading it). A reaction names her line by when she said it and never quotes it; only a recall quotes.
+- **Her home.** Requests, a kick of her account and a change of her admin role arrive through `POST /notices`, held a
+  minute and sent as one program event in her local chat (a `presence` event, like a restart notice). Requests get a
+  number kept in memory; `group_action` `accept` / `decline` with that number answers one in her local chat only.
+- **Profiling.** A synthetic group turn with a held recall shows the recall once, in its own block, and nowhere else
+  in the notice (`tests/test_notices.py`).
+
+Differences from the text above and points to watch:
+
+1. A gated notice (a poke she is asked about) is stored even when she answers 不理, because the gate runs on stored
+   input; only notices that start no look are never stored.
+2. A Host restart loses the request numbers: a request still pending on the platform can no longer be answered from
+   her home until it is sent again. Requests are rare; if that matters, the number table can move to Mongo.
+3. Gate material and the turn after a 接话 both carry the held notices (the gate is its own small session), so a
+   taken-up look sees them twice across two sessions, never twice in one.

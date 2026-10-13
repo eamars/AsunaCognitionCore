@@ -641,12 +641,12 @@ Parameters, as she would be shown them:
 
 | Name | Shown as |
 |---|---|
-| `parts` | 这次要发的，按顺序；每个写 kind 和它要的字段。text 一回合最多几条照你的 speak.max_messages，别的不限条数 |
+| `parts` | 这次要发的，按顺序；每个写 kind 和它要的字段。text 一回合加起来最多几行照你的 speak.max_messages，别的不限 |
 (Her persona sets `speak.max_messages` to 3 but does not declare it as a policy key, so `set_policy` cannot change it
 until her own package declares it, as the other personas do; that is hers to add.)
 
 | `parts[].kind` | `text`、`sticker`、`picture`、`poke`、`react` |
-| `parts[].text` | kind=text：一条消息的话，原样作一条发出，不拆；程序不另设字数，平台收不下的回执会说 |
+| `parts[].text` | kind=text：一条消息的话，原样作一条发出，不拆；里面每一行都算进一回合的行数（owner 2026-10-14: in online chat a line break is another message; a blank line does not count, a fenced code block counts as one); no length of the program's own, the platform's refusal says when it is too long |
 | `parts[].name` | kind=sticker：你收着的表情包的名字 |
 | `parts[].artifact_id` | kind=picture：照抄 image_artifacts_from_program |
 | `parts[].who` | kind=poke、react：照抄标签 |
@@ -673,8 +673,7 @@ One part wrong (nothing is queued):
 
 Other refusals, one sentence each: 「第 N 条 picture 不在 image_artifacts_from_program 里」, 「第 N 条找不到 [某人]」,
 「第 N 条是空的」, 「第 N 条这回合已经发过一样的」 (the same text twice within one turn, across its `reply` calls; never across turns, so
-repeating a line on purpose, as when a group chains one, is untouched), 「text 这回合最多 M 条（你的 speak.max_messages），
-第 N 条超了」, 「这里戳不了：平台没开这个功能」, 「第 N 条太长，平台收不下（最多约 X 字）」 (once the adapter knows the
+repeating a line on purpose, as when a group chains one, is untouched), 「text 一回合最多 M 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行），已经 K 行，第 N 条有 L 行」, 「这里戳不了：平台没开这个功能」, 「第 N 条太长，平台收不下（最多约 X 字）」 (once the adapter knows the
 limit from a refusal).
 
 A reaction in a private chat that QQ refuses: 「私聊里点不了表情（平台不收），到下次重启前私聊不再列 react」. The adapter

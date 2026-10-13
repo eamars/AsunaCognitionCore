@@ -641,9 +641,9 @@ Parameters, as she would be shown them:
 
 | Name | Shown as |
 |---|---|
-| `parts` | 这次要发的，按顺序，最多 6 个；每个写 kind 和它要的字段 |
+| `parts` | 这次要发的，按顺序；每个写 kind 和它要的字段。text 一回合最多几条照你的 speak.max_messages（set_policy 能改），别的不限条数 |
 | `parts[].kind` | `text`、`sticker`、`picture`、`poke`、`react` |
-| `parts[].text` | kind=text：要说的一句话（300 字以内） |
+| `parts[].text` | kind=text：一条消息的话，原样作一条发出，不拆；程序不另设字数，平台收不下的回执会说 |
 | `parts[].name` | kind=sticker：你收着的表情包的名字 |
 | `parts[].artifact_id` | kind=picture：照抄 image_artifacts_from_program |
 | `parts[].who` | kind=poke、react：照抄标签 |
@@ -669,10 +669,13 @@ One part wrong (nothing is queued):
 > 这次一条都没发：第 2 条 sticker「摸鱼」你没收着。改好再调用一次 reply。
 
 Other refusals, one sentence each: 「第 N 条 picture 不在 image_artifacts_from_program 里」, 「第 N 条找不到 [某人]」,
-「第 N 条是空的」, 「第 N 条这回合已经发过一样的」, 「这回合最多发 M 条，第 N 条超了」, 「这里戳不了：平台没开这个功能」.
+「第 N 条是空的」, 「第 N 条这回合已经发过一样的」 (the same text twice within one turn, across its `reply` calls; never across turns, so
+repeating a line on purpose, as when a group chains one, is untouched), 「text 这回合最多 M 条（你的 speak.max_messages），
+第 N 条超了」, 「这里戳不了：平台没开这个功能」, 「第 N 条太长，平台收不下（最多约 X 字）」 (once the adapter knows the
+limit from a refusal).
 
-A reaction in a private chat that QQ refuses: 「私聊里点不了表情（平台不收），以后这里不再列 react」. The adapter then
-stops declaring it for private chats.
+A reaction in a private chat that QQ refuses: 「私聊里点不了表情（平台不收），到下次重启前私聊不再列 react」. The adapter
+stops declaring it for private chats until it restarts, then tries again (her call: the platform may start taking it).
 
 ### Words written outside `reply` (failure modes)
 
@@ -726,6 +729,9 @@ At home the note reads:
 
 > 便条（你在群聊「某群」写的）：……她自己的话……
 > 回答的是 [阿杰 #1] 10/14 12:07、[小林 #4] 12:08；原话家里不存，随时用 ask do=read id=q-7f3a 读
+
+A question id never expires. If a line can no longer be read (its record is gone), the read says so plainly, never
+an empty result: 「这条原话在群的记录里已经取不到了」.
 
 `ask` `do=read` with that id, at home, reads those lines from the group's record as they were said, at any time
 later, as often as she likes (the group's lines are kept, like all her conversations'). Each read shows them in

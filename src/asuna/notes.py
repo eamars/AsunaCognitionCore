@@ -254,7 +254,8 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,
             'trust': trust, 'mode': mode, 'hop': hop, 'reply_to': (reply or {}).get('_id'),
             'tables_version': TABLES_VERSION, 'created_at': now(), 'seen_in': [],
-            **({'question': question} if question else {})}, None
+            **({'question': question} if question else {}),
+            **({'answers': args['answers']} if args.get('answers') else {})}, None
 
 
 def record(store, draft, event_id=None):
@@ -303,11 +304,25 @@ def opening_block(store, persona, row, cls, episode, moment):
         note = OUTSIDE_NOTE % where
     block = {'from': where, 'at': row['created_at'], 'written': TRUST_WORDS[row['trust']],
              'text': row['text'], 'note': note}
+    tail = answers_tail(store, persona, row)
+    if tail:
+        block['answers'] = tail
     if row.get('reply_to'):
         block['reply_to_yours'] = '这是对你之前那张便条的回信。'
     block['reply'] = ('要回就写便条回给%s（只回这一次）。' % where) if can_send(row) else '这是回信，不用再回。'
     _seen(store, row, episode)
     return block
+
+
+def answers_tail(store, persona, row):
+    """A note that brings a group's answer home (ADR-061 step 2): the program's line on who answered and where the
+    original is; None for any other note."""
+    if not row.get('answers'):
+        return None
+    from . import questions
+    from .schedule_rules import scene_timezone
+    scene = store.db.scenes.find_one({'_id': row['from_scene']}) or {'_id': row['from_scene']}
+    return questions.answer_tail(store, persona, row['answers'], scene_timezone(store.config, scene))
 
 
 def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=None):
@@ -332,6 +347,9 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
         elif words == 'waiting':
             item['text'] = row['text']
             item['waiting_on_you'] = True           # never folded into "as before" (ADR-056)
+            tail = answers_tail(store, persona, row)
+            if tail:
+                item['answers'] = tail
             if row['trust'] == UNTRUSTED and cls == visibility.OWNER_PRIVATE:
                 item['caution'] = CAUTION % item['from']
             _seen(store, row, episode)

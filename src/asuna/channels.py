@@ -209,6 +209,10 @@ def group_context(store, route, body, event_id, person_id=None):
         reason = 'name_called'
     if not reason and person_id and not late and awaited_answer(store, scene, person_id, mentions, reply):
         reason = 'awaited_answer'          # one look, through the relevance gate (attend.py)
+    if not reason and person_id and not late and not mentions and not reply:
+        from . import questions
+        if questions.wants_look(store, scene, person_id):
+            reason = 'question_wait'       # her question here still waits: one look per person (ADR-061 step 2)
     if late and reason in ('mentioned_account', 'reply_to_character'):
         reason = 'catchup_mention'         # an old @ or reply to her asks her first (attend.GATED)
     if topic is None:

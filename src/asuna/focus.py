@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 ACTIVE_GROUPS = 4
 # What still wakes her in a resting group: words addressed to her, and the people she is waiting for.
 RESTING_WAKES = frozenset({'mentioned_account', 'reply_to_character', 'catchup_mention', 'awaited_answer', 'watched',
-                           'poked'})
+                           'poked', 'question_wait'})
 DAY = timedelta(days=1)
 # What a resting group's conversation title starts with in the sidebar; active groups and other conversations have none.
 RESTING_MARK = '💤 '

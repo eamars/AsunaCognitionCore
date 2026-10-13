@@ -307,6 +307,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `result` — What the sending turn reads back.
 - def `state`
 - def `opening_block` — note_from_program: the note that opened this turn, its source named, never a line of this conversation.
+- def `answers_tail` — A note that brings a group's answer home (ADR-061 step 2): the program's line on who answered and where the original is; None for any other note.
 - def `received_block` — notes_from_program: notes to this conversation lately.
 - def `sent_block` — notes_sent_from_program: what came of the notes she wrote here, in program words only.
 - def `receiver` — Who a note's turn enters the conversation as: only so it is authorized there; never shown as a sender.
@@ -321,6 +322,10 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 - def `until`
 - def `developer_place` — The home line of the agent that changes her program: a home route marked `developer`, else the route named `claude-code` (the route for Claude Code).
 - def `record` — The question as asked (idempotent by its id).
+- def `ask_in_group` — Her reply's question in this group, opened like any other (idempotent per turn).
+- def `wants_look` — Whether this person's unaddressed line gets her a look: a question of hers here waits, within LOOK_MINUTES of being asked, and this person has not had a look for it yet.
+- def `group_block` — questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered.
+- def `answer_tail` — The program's last line on a note that brings a group's answer home: who answered and when, and where the original lines are (never their text).
 - def `refresh` — Bring one question up to date with what came back; closes it when it has run past its end.
 - def `state_of`
 - def `place_words` — One place of a question as she reads it.

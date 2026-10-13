@@ -118,6 +118,102 @@ def record(store, ep, qid, text, patience, sources):
     return row
 
 
+# ── a question in a group (ADR-061 step 2): a reply with wait=question ──
+GROUP_PATIENCE = ('一会儿', '半天', '一天')
+LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
+GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
+GONE = '这条原话在群的记录里已经取不到了'
+GROUP_NOTE = '你在这里问的问题：等到几点、谁回了（按标签和时间）；回答怎么带回家由你，用 leave_note 写 question。'
+
+
+def ask_in_group(store, ep, scene, text, patience):
+    """Her reply's question in this group, opened like any other (idempotent per turn)."""
+    from .people import People
+    patience = patience or GROUP_PATIENCE[0]
+    qid = question_id([ep['_id'], 'reply'])
+    title = People(store, ep['persona']).scene_title(scene)
+    return record(store, ep, qid, text, patience, [{'to': '这里', 'scene_id': scene['_id'], 'kind': 'group',
+                                                     'name': title, 'episode': ep['_id']}])
+
+
+def _open_here(store, scene_id):
+    """Her open questions with a group source in this conversation."""
+    return list(store.db.questions.find({'state': 'open', 'sources': {'$elemMatch': {'scene_id': scene_id,
+                                                                                     'kind': 'group'}}}))
+
+
+def wants_look(store, scene, person_id, moment=None):
+    """Whether this person's unaddressed line gets her a look: a question of hers here waits, within LOOK_MINUTES of
+    being asked, and this person has not had a look for it yet."""
+    moment = moment or _now()
+    for row in _open_here(store, scene['_id']):
+        asked = _at(row['asked_at'])
+        if not asked or moment > asked + timedelta(minutes=LOOK_MINUTES):
+            continue
+        source = next(s for s in row['sources'] if s.get('kind') == 'group')
+        line = _question_line(store, source)
+        if not line:
+            continue
+        if not store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound', 'author': person_id,
+                                           'scene_seq': {'$gt': line.get('scene_seq') or 0},
+                                           'event.group_context.wake_reason': 'question_wait'}, {'_id': 1}):
+            return True
+    return False
+
+
+def _group_answers(store, source, line):
+    """Answers in a group: a reply to one of her question's lines, a line that got her a look while it waited, or
+    a reaction to her question line. Each kept by reference, never its text."""
+    mine = list(store.db.messages.find({'scene_id': source['scene_id'], 'episode_id': source.get('episode'),
+                                        'direction': 'outbound', 'phase': 'SPEAK'}, {'_id': 1, 'platform_message_id': 1}))
+    ids = [row['_id'] for row in mine]
+    platform = [row['platform_message_id'] for row in mine if row.get('platform_message_id')]
+    query = {'scene_id': source['scene_id'], 'direction': 'inbound', 'scene_seq': {'$gt': line.get('scene_seq') or 0},
+             '$or': [{'event.group_context.reply_message_id': {'$in': ids}},
+                     {'event.group_context.wake_reason': 'question_wait'},
+                     {'event.raw.asuna_notice.kind': 'reaction', 'event.raw.asuna_notice.line.message_id': {'$in': platform}}]}
+    if source.get('until'):
+        query['received_at'] = {'$lte': source['until']}
+    return list(store.db.messages.find(query).sort('scene_seq', 1))
+
+
+def group_block(store, persona, scene, moment=None):
+    """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered."""
+    from .schedule_rules import line_stamp, scene_timezone
+    moment = moment or _now()
+    rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
+    rows = [row for row in rows if row.get('state') == 'open']
+    if not rows:
+        return None
+    zone = scene_timezone(store.config, scene)
+    items = []
+    for row in rows:
+        source = next(s for s in row['sources'] if s.get('kind') == 'group')
+        words = '%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), STATE_WORDS[source['state']])
+        if source['state'] in ('pending', 'waiting') and source.get('until'):
+            left = int((_at(source['until']) - moment).total_seconds() // 60)
+            words += '，%s（还剩 %d 分钟）' % (row['patience'], max(left, 0))
+        answers = [a for a in source.get('answers') or [] if a.get('by')]
+        if answers:
+            words += '；回了：' + '、'.join('%s %s' % (a['by'], line_stamp(zone, a.get('at'))) for a in answers)
+        items.append(words)
+    return {'items': items, 'note': GROUP_NOTE}
+
+
+def answer_tail(store, persona, qid, zone):
+    """The program's last line on a note that brings a group's answer home: who answered and when, and where the
+    original lines are (never their text)."""
+    from .schedule_rules import line_stamp
+    row = store.db.questions.find_one({'_id': qid, 'persona': persona})
+    if not row:
+        return None
+    row = refresh(store, row)
+    answers = [a for source in row['sources'] for a in source.get('answers') or [] if a.get('by')]
+    who = '、'.join('%s %s' % (a['by'], line_stamp(zone, a.get('at'))) for a in answers)
+    head = ('回答的是 %s；' % who) if who else '这个问题的记录里还没有人回；'
+    return head + '原话家里不存，随时用 ask do=read id=%s 读' % qid
+
+
 # ── what came back ─────────────────────────────────────────────────
 def _question_line(store, source):
     """Her first line in the turn that asks there, or None."""
@@ -165,7 +261,13 @@ def _source_now(store, qid, source, persona, moment):
         return 'not_sent', []
     scene = store.db.scenes.find_one({'_id': source['scene_id']}) or {'_id': source['scene_id']}
     people = People(store, persona)
-    found = [_answer(row, people, scene) for row in _lines_after(store, qid, source, line)]
+    lines = _group_answers(store, source, line) if source.get('kind') == 'group' else _lines_after(store, qid, source, line)
+    found = [_answer(row, people, scene) for row in lines]
+    if source.get('kind') == 'group':
+        # An answer once recorded stays recorded: a line gone from the group's record is said so on read (GONE).
+        seen = {answer['line'] for answer in found}
+        found = [*[a for a in source.get('answers') or [] if a.get('line') not in seen], *found]
+        found.sort(key=lambda answer: str(answer.get('at') or ''))
     if found:
         return 'answered', found
     if source.get('until') and moment >= _at(source['until']):
@@ -317,11 +419,17 @@ def read(store, persona, qid, moment=None):
                                 'text': pages[0] if pages else '',
                                 **({'more': '共 %d 页：task 的 page 接着读' % len(pages)} if len(pages) > 1 else {})})
             elif answer.get('line'):
-                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1}) or {}
-                text = str(line.get('text') or '')
-                answers.append({'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
-                                'event_id': answer.get('event_id'),
-                                'text': text if len(text) <= ANSWER_CHARS else text[:ANSWER_CHARS] + '…'})
+                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1})
+                text = str((line or {}).get('text') or '')
+                said = {'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
+                        'event_id': answer.get('event_id'),
+                        'text': text if len(text) <= ANSWER_CHARS else text[:ANSWER_CHARS] + '…'}
+                if source.get('kind') == 'group':
+                    # A group's own words, read from its record for this turn only; home keeps none (her answer a).
+                    said['where'] = GROUP_ORIGINAL % (source.get('name') or '那个群')
+                    if line is None:
+                        said['text'] = GONE
+                answers.append(said)
             else:
                 answers.append({'by': answer.get('by'), 'at': answer.get('at')})
         if answers:

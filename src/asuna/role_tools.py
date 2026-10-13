@@ -318,7 +318,8 @@ TOOLS = {
         'description': ('给别的对话里的你留一张便条（你在外面）：to 写「家里」就送回家并叫醒家里，或照抄 note_places_from_program 里另一个群的 place。'
                          '用你自己的话写许下的事、要记得的事；别人托你的写清是谁的意思。那边读了只当消息，不会因为便条去做有后果的事。300 字以内，一回合最多两张。'),
         'parameters': {'to': _s('送到哪儿：「家里」或 note_places_from_program 里的 place', required=True),
-                       'text': _s('便条：你自己的话，300 字以内', required=True)},
+                       'text': _s('便条：你自己的话，300 字以内', required=True),
+                       'question': _s('这张便条是哪个问题的回答：照抄 q-…；程序会在家里写上谁答的和原话在哪儿')},
     },
     'restart': {
         'description': ('重启宿主（只在家里）。preview 先看会打断什么；request 交给监工重启，why 写原因，when 选 now、quiet（默认：'
@@ -976,6 +977,9 @@ def chat_lines(text):
     return count
 
 
+QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进 questions_from_program。'
+
+
 def reply_receipt(queued):
     """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2)."""
     done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
@@ -1348,6 +1352,12 @@ class RoleTools:
             problems.append('wait 是 no 或 question')
         if (quote or wait) and not group:
             problems.append('quote 和 wait 只在群里用')
+        patience = args.get('patience')
+        from . import questions
+        if patience is not None and (wait != 'question' or patience not in questions.GROUP_PATIENCE):
+            problems.append('patience 只跟 wait=question 一起用，写 %s 之一' % '、'.join(questions.GROUP_PATIENCE))
+        if wait == 'question' and not any(row['kind'] == 'text' for row in planned):
+            problems.append('wait=question 要有一个 text 写问题')
         if problems:
             raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems))
         changes = {}
@@ -1356,9 +1366,18 @@ class RoleTools:
         if wait == 'no':
             changes['await_answer'] = {'off': True}
         queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned)
+        asked = None
+        if wait == 'question':
+            # ADR-061 step 2: a question here is her reply's words; answers join by the program (questions.py).
+            asked = questions.ask_in_group(self.store, self._fresh(ep), scene,
+                                           '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
         self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
-        return {'note': reply_receipt(queued)}, False
+        out = {'note': reply_receipt(queued)}
+        if asked:
+            out['question'] = QUESTION_RECEIPT % (asked['_id'], asked['patience'],
+                                                  questions.PATIENCE[asked['patience']])
+        return out, False
 
     def _action_part(self, ep, scene, kind, part):
         """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action."""
@@ -1978,7 +1997,14 @@ class RoleTools:
     def tool_leave_note(self, ep, call_id, args):
         if self._cls(ep) == visibility.OWNER_PRIVATE:
             raise Refused('在家里用 pass_note。')
-        return self._note(ep, call_id, args, visibility.PUBLIC)
+        qid = args.get('question')
+        if qid is not None:
+            # ADR-061 step 2 (her answer a): a group's answer goes home in her words; the program adds who and where.
+            row = self.store.db.questions.find_one({'_id': str(qid), 'persona': ep['persona']})
+            if not row or not any(s.get('kind') == 'group' and s.get('scene_id') == ep['scene_id'] for s in row['sources']):
+                raise Refused('question「%s」不是你在这里问的问题：照抄 questions_from_program 里的 q-…' % qid)
+            args = {**args, 'answers': row['_id']}
+        return self._note(ep, call_id, {k: v for k, v in args.items() if k != 'question'}, visibility.PUBLIC)
 
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_restart(self, ep, call_id, args):

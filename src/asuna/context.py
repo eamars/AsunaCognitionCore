@@ -812,6 +812,11 @@ class ContextBuilder:
         if got:context['notes_from_program']=got
         sent=_notes.sent_block(self.store,persona,scene['_id'],moment)
         if sent:context['notes_sent_from_program']=sent
+        if scene.get('kind')=='group':
+            # ADR-061 step 2: her questions in this group, by id, with who answered (labels and times).
+            from . import questions as _group_questions
+            here=_group_questions.group_block(self.store,persona,scene,moment)
+            if here:context['questions_from_program']=here
         if session_class==visibility.OWNER_PRIVATE:
             # ADR-061: her questions still open, and once each one the program closed; a question whose note opened
             # this turn is named by its id only (the note carries its text).

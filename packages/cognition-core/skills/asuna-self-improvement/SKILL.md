@@ -80,7 +80,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 你有一份自己的工作副本：家里工作区的 `/task/working-copy`（本机聊天、agent 线、peer 线的任务都在这个工作区）。它是项目的完整 clone，`origin` 就是 GitHub 上的仓库；宿主缺它的时候建一次，以后不重建、不重置，里面的东西都是你的。
 - 本机的项目检出在你的命令里是只读的；改动从工作副本走：
   - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），先 `git fetch` 再 rebase 到 `origin/main`，再 `git push origin HEAD:main`（或推一个分支）。
-  - 推上去的东西进本机检出，要等主人或开发 agent 把检出快进到 `origin/main`；之后宿主重启时装上。
+  - 你要的重启（`restart` 工具）在能快进的时候先把 `origin/main` 带进本机检出再装上；快进不了时，重启结果的 `checkout` 写着为什么。
   - 想不重启就生效的改动（技能、种子、persona-model、认知核的 Python）和适配器，还是走候选和 `development_publish`：适配器只从发布的快照运行，原生 skill 工具读的是已发布的版本。
 - 推送用的是这台机器上主人的 GitHub 账号：git 要账号时，程序让它直接问主人的凭据管理器，你不用碰密码，也不用把它写进 URL 或脚本。以前那些自己读凭据、拼进 URL 的推送脚本（`push*.py` 这类）用不着了。
 - 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是这台机器上主人的钥匙。

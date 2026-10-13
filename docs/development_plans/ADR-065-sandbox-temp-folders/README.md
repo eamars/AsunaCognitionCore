@@ -101,9 +101,17 @@ Decisions for the build:
   from a working copy made by `working-copy.js`: `git push --dry-run origin HEAD:refs/heads/probe/askpass-dry-run`
   succeeds (GitHub asks for a login even for a dry run), and without the askpass it fails with "could not read
   Username"; nothing was pushed.
-- **Getting her work into what runs:** nothing syncs the checkout from `origin` today (the launcher installs what the
-  checkout holds). Her pushed work reaches the checkout when the owner or a coding agent fast-forwards it, and runs from
-  the next start. An automatic fast-forward at her restart is proposed, not built.
+- **Getting her work into what runs** (owner: only on restarts she asks for): nothing synced the checkout from
+  `origin` (the launcher installs what the checkout holds). Now the first start of a restart she asked for runs
+  `fastForwardCheckout` (`tools/asuna-launch.mjs`, in the fresh `--prepare 0 --fast-forward` process, before it
+  installs): fetch `origin main`, then `git merge --ff-only` only when the checkout is on `main`, its tracked files are
+  unchanged (untracked ones do not count) and `main` is an ancestor of `origin/main`. It never merges, rebases or
+  resets. The supervisor asks for it only on the first start after her request, never on the owner's starts, a crash's
+  or a later rung. The outcome goes into the restart record's own `checkout` field ({state, detail}), never the fallback
+  notes, so a checkout left as it was does not mark the restart `fell_back`; `restarts.py` words it in one line for her
+  (`CHECKOUT_WORDS`). A failed fetch is one of those lines and the start goes on with what is on disk. Cost: one line in
+  `restart_from_program` for a day after such a restart; no tool. The resident launcher (the supervisor) takes the change
+  at the owner's next full start; the preparation process takes its part at once.
 - **Found on the way:** the packer shipped only the worker's top-level modules and `resources/`, so the installed
   package had no `sandbox_site/`: a live Host's confined Pythons ran without the sitecustomize above (its temporary
   folder fix reached only a checkout's own runs and core candidates). `pack_plugins.py` ships `sandbox_site/` now,

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { packageManagerEnv, prepareFresh, retireSummarySessions } from '../../../tools/asuna-launch.mjs';
+import { execFileSync } from 'node:child_process';
+import { fastForwardCheckout, packageManagerEnv, prepareFresh, retireSummarySessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -132,8 +134,10 @@ test('ADR-034: each start is prepared by a fresh process from the code on disk; 
     const quiet = { out: text => shown.push(text), err: text => shown.push(text) };
     const notes = await prepareFresh(0, ['ui', '--profile', 'asuna-native'], { logFile, ...quiet,
       spawnChild: fakeChild([['stdout', 'Asuna: installing the checkout (@asuna/cognition-core)\n'],
+        ['stdout', 'ASUNA_PREPARE_CHECKOUT {"state":"up_to_date","detail":"abc1234"}\n'],
         ['stdout', 'ASUNA_PREPARE_NOTES ["core: returned to the previous running selection"]\n']], 0, seen) });
-    assert.deepEqual(notes, ['core: returned to the previous running selection']);
+    assert.deepEqual(notes, { notes: ['core: returned to the previous running selection'],
+      checkout: { state: 'up_to_date', detail: 'abc1234' } });
     assert.match(seen[0][0], /asuna-launch\.mjs$/);
     assert.deepEqual(seen[0].slice(1), ['ui', '--profile', 'asuna-native', '--prepare', '0'], 'its own arguments, then the rung');
     assert.match(await fs.readFile(logFile, 'utf8'), /rung 0\n.*installing the checkout/s);
@@ -166,4 +170,61 @@ test('finished summary sessions leave the session store before a start, and the 
     assert.deepEqual(await fs.readdir(path.join(archive, 'p')), ['asuna-summary-old']);
     assert.deepEqual(await retireSummarySessions(path.join(dir, 'none'), path.join(dir, 'none-archive'), now), { moved: 0, dropped: 0 });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('ADR-065: her restart fast-forwards the checkout to origin/main only when it can, and says why when not', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-ff-'));
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
+  const commit = (cwd, file, text) => { fsSync.writeFileSync(path.join(cwd, file), text);
+    git(cwd, 'add', file); git(cwd, '-c', 'user.name=T', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', file); };
+  try {
+    const origin = path.join(dir, 'origin.git'), checkout = path.join(dir, 'checkout'), other = path.join(dir, 'other');
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
+    execFileSync('git', ['clone', '-q', origin, other]);
+    git(other, 'checkout', '-q', '-b', 'main'); commit(other, 'a.txt', 'a'); git(other, 'push', '-q', 'origin', 'main');
+    execFileSync('git', ['clone', '-q', origin, checkout]);
+    assert.equal((await fastForwardCheckout(checkout)).state, 'up_to_date');
+    commit(other, 'b.txt', 'b'); git(other, 'push', '-q', 'origin', 'main');
+    const before = git(checkout, 'rev-parse', '--short', 'HEAD');
+    // Not on main, and changed tracked files: nothing moves.
+    git(checkout, 'checkout', '-q', '-b', 'feature');
+    assert.deepEqual(await fastForwardCheckout(checkout), { state: 'not_main', detail: 'feature' });
+    git(checkout, 'checkout', '-q', 'main');
+    fsSync.writeFileSync(path.join(checkout, 'a.txt'), 'changed');
+    assert.deepEqual(await fastForwardCheckout(checkout), { state: 'changed_files', detail: '1 file(s), first a.txt' });
+    git(checkout, 'checkout', '-q', '--', 'a.txt');
+    fsSync.writeFileSync(path.join(checkout, 'untracked.txt'), 'not in git');      // untracked files do not stop it
+    assert.equal(git(checkout, 'rev-parse', '--short', 'HEAD'), before);
+    const moved = await fastForwardCheckout(checkout);
+    assert.equal(moved.state, 'fast_forwarded');
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), git(other, 'rev-parse', 'HEAD'));
+    assert.equal(moved.detail, before + '..' + git(checkout, 'rev-parse', '--short', 'HEAD'));
+    // A commit of its own that origin does not have: never merged, rebased or reset.
+    commit(other, 'c.txt', 'c'); git(other, 'push', '-q', 'origin', 'main');
+    commit(checkout, 'mine.txt', 'mine');
+    const mine = git(checkout, 'rev-parse', 'HEAD');
+    assert.equal((await fastForwardCheckout(checkout)).state, 'diverged');
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), mine);
+    // No origin to fetch from: the start goes on with what is on disk.
+    git(checkout, 'remote', 'set-url', 'origin', path.join(dir, 'missing.git'));
+    const failed = await fastForwardCheckout(checkout);
+    assert.equal(failed.state, 'fetch_failed'); assert.ok(failed.detail.length > 0);
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), mine);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR-065: a fast-forward git itself refuses leaves the checkout as it was and says so', async () => {
+  const answers = { fetch: '', 'symbolic-ref': 'main', status: '', 'rev-parse': 'abc1234', 'merge-base': '' };
+  const seen = [];
+  const git = async args => {
+    seen.push(args[0]);
+    if (args[0] === 'merge') return { code: 128, stdout: '', stderr: 'error: x\nfatal: Not possible to fast-forward' };
+    if (args[0] === 'rev-parse') return { code: 0, stdout: args.at(-1) === 'HEAD' ? 'abc1234' : 'def5678', stderr: '' };
+    return { code: 0, stdout: answers[args[0]] ?? '', stderr: '' };
+  };
+  assert.deepEqual(await fastForwardCheckout('unused', git),
+    { state: 'fast_forward_failed', detail: 'fatal: Not possible to fast-forward' });
+  assert.ok(!seen.some(command => ['rebase', 'reset', 'pull'].includes(command)), 'never rebases, resets or pulls');
 });

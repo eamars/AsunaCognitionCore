@@ -11,9 +11,9 @@ import { readySince, revertSelections, supervise, RUNGS } from '../../../tools/a
  * 'prepare' (the prepare step throws). After the scripted starts are used up, every start is 'ready'.
  * `events` scripts what happens to a running Host: {request}, {crash}, or {stop}; when they run out, it stops.
  */
-function world({ starts = [], events = [], reverts = {} } = {}) {
+function world({ starts = [], events = [], reverts = {}, checkout = null } = {}) {
   let stopped = false, readyAt = null, current = null;
-  const stops = [], records = [], notes = [], prepared = [], slept = [];
+  const stops = [], records = [], notes = [], prepared = [], slept = [], forwarded = [];
   let pendingRequest = null;
   const next = () => {
     const event = events.shift() ?? { stop: true };
@@ -25,10 +25,10 @@ function world({ starts = [], events = [], reverts = {} } = {}) {
   };
   const d = {
     pollMs: 2, readySeconds: 0.05,
-    prepare: async rung => {
-      prepared.push(rung);
+    prepare: async (rung, { fastForward = false } = {}) => {
+      prepared.push(rung); forwarded.push(fastForward);
       if (starts[0] === 'prepare') { starts.shift(); throw new Error('packing failed'); }
-      return reverts[rung] ?? [];
+      return fastForward && checkout ? { notes: reverts[rung] ?? [], checkout } : reverts[rung] ?? [];
     },
     spawnHost: () => {
       const child = new EventEmitter();
@@ -52,7 +52,7 @@ function world({ starts = [], events = [], reverts = {} } = {}) {
   // the clock is real time, so "not ready within" can elapse
   const started = Date.now();
   d.now = () => Date.now() - started + 1;
-  return { d, records, notes, prepared, slept };
+  return { d, records, notes, prepared, slept, forwarded };
 }
 
 test('her restart comes back on the same packages and the record says what loaded', async () => {
@@ -65,6 +65,20 @@ test('her restart comes back on the same packages and the record says what loade
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, true]]);
   assert.equal(record.loaded.commit, 'abc1234');
   assert.ok(record.down_at && record.back_at);
+});
+
+test('ADR-065: only the first start of a restart she asked for brings origin/main in; its result is its own field', async () => {
+  const reason = { state: 'changed_files', detail: '1 file(s), first README.md' };
+  const w = world({ starts: ['ready', 'ready', 'exit'], checkout: reason,
+                    events: [{ request: { asked: 'home', why: 'her change is on origin' } }, { crash: true }, { stop: true }] });
+  await supervise(w.d);
+  // The owner's start, her restart, then a crash's start, which fails once and goes a rung down.
+  assert.deepEqual(w.forwarded, [false, true, false, false]);
+  const [hers, crash] = w.records;
+  assert.deepEqual(hers.checkout, reason);
+  assert.equal(hers.result, 'running', 'a checkout left as it was is not a fallback');
+  assert.equal(hers.reverted, undefined);
+  assert.equal(crash.asked, 'nobody'); assert.equal(crash.checkout, undefined);
 });
 
 test('a start that fails goes one rung down and the record says she fell back and why', async () => {

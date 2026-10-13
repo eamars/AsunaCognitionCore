@@ -78,7 +78,7 @@ export function killTree(child, platform = process.platform) {
  */
 export async function supervise(d) {
   const poll = d.pollMs ?? POLL_MS, readyMs = (d.readySeconds ?? READY_SECONDS) * 1000;
-  let record = null, rung = 0, failures = 0, reverted = [];
+  let record = null, rung = 0, failures = 0, reverted = [], asked = false;
   const begin = fields => ({ id: 'restart-' + new Date(d.now()).toISOString().replace(/[-:.TZ]/g, '').slice(0, 14),
                              down_at: new Date(d.now()).toISOString(), attempts: [], ...fields });
   while (!d.stopped()) {
@@ -91,7 +91,11 @@ export async function supervise(d) {
     }
     let child = null, outcome;
     try {
-      reverted.push(...((await d.prepare(rung)) ?? []));
+      // Only the first start of a restart she asked for brings origin/main in; the owner's starts never do.
+      const prepared = await d.prepare(rung, { fastForward: asked && rung === 0 });
+      asked = false;
+      reverted.push(...((Array.isArray(prepared) ? prepared : prepared?.notes) ?? []));
+      if (prepared?.checkout && record) record.checkout = prepared.checkout;
       child = d.spawnHost();
       outcome = await new Promise(resolve => {
         let done = false;
@@ -145,6 +149,7 @@ export async function supervise(d) {
     if (event.kind === 'stop') { child.kill(); break; }
     if (event.kind === 'request') {
       record = begin(event.request);
+      asked = true;
       d.note('Asuna supervisor: restarting because she asked: ' + (event.request.why ?? ''));
       killTree(child);
       continue;

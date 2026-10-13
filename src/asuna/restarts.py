@@ -22,6 +22,16 @@ DESK = None                   # the running Host's desk (one Host per worker); r
 
 NOTE = ('这是监工（启动器）记下的重启结果，不是你自己报的。没有「退回」就是你要的版本在跑；'
         '要核对版本就看 loaded。不用回复。')
+# What her restart did with the checkout before it installed (the launcher's fastForwardCheckout, ADR-065).
+CHECKOUT_WORDS = {
+    'fast_forwarded': '重启前本机检出快进到了 origin/main（%s），这次装的就是它',
+    'up_to_date': '本机检出本来就和 origin/main 一样（%s），不用快进',
+    'fetch_failed': '没取到 origin（%s），这次装的是磁盘上原来的检出',
+    'not_main': '本机检出不在 main 分支上（%s），没有快进，装的是磁盘上原来的检出',
+    'changed_files': '本机检出里有没提交的改动（%s），没有快进，装的是磁盘上原来的检出',
+    'diverged': '本机检出有 origin/main 没有的提交（%s），快进不了，装的是磁盘上原来的检出',
+    'fast_forward_failed': '快进没做成（%s），装的是磁盘上原来的检出',
+}
 RESULT_WORDS = {'running': '起来了，跑的是这次该跑的版本',
                 'fell_back': '起来了，但退回了上一个能跑的版本（新版本没起来，原因见 attempts）'}
 
@@ -243,6 +253,10 @@ def block(store, zone, moment=None, root=None, integration_state=None):
              'note': NOTE}
     if pending:
         value['waiting'] = waiting_words(pending, zone)
+    if record.get('checkout'):
+        checkout = record['checkout']
+        words = CHECKOUT_WORDS.get(checkout.get('state'), str(checkout.get('state')) + '（%s）')
+        value['checkout'] = words % str(checkout.get('detail') or '')[:160]
     if record.get('reverted'):
         value['reverted'] = record['reverted']
     if record.get('interrupted'):

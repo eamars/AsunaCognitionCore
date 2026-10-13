@@ -133,6 +133,26 @@ def test_her_home_turns_carry_the_supervisors_record_for_a_day(store, tmp_path):
     assert restarts.block(store, 'Pacific/Auckland', T0 + timedelta(hours=25), root=tmp_path) is None
 
 
+def test_her_restart_says_what_became_of_the_checkout_in_one_line(store, tmp_path):
+    """ADR-065: her restart brings origin/main into the checkout when it can; when it cannot, one line says why, and the
+    restart is still the one she asked for (not a fallback)."""
+    write(tmp_path, record())
+    assert 'checkout' not in restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)    # the owner's starts
+    for state, detail, words in [('fast_forwarded', 'abc1234..def5678', '快进到了 origin/main（abc1234..def5678）'),
+                                 ('up_to_date', 'abc1234', '不用快进'),
+                                 ('fetch_failed', 'Could not resolve host', '没取到 origin（Could not resolve host）'),
+                                 ('not_main', 'feature', '不在 main 分支上（feature）'),
+                                 ('changed_files', '2 file(s), first README.md', '没提交的改动（2 file(s), first README.md）'),
+                                 ('diverged', 'abc1234 is not behind origin/main def5678', '快进不了'),
+                                 ('fast_forward_failed', 'exit 1', '快进没做成（exit 1）')]:
+        write(tmp_path, record(checkout={'state': state, 'detail': detail}))
+        seen = restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)
+        assert words in seen['checkout'] and '\n' not in seen['checkout'], (state, seen['checkout'])
+        assert seen['result'] == restarts.RESULT_WORDS['running']
+    assert set(restarts.CHECKOUT_WORDS) == {'fast_forwarded', 'up_to_date', 'fetch_failed', 'not_main', 'changed_files',
+                                            'diverged', 'fast_forward_failed'}
+
+
 def test_a_fallback_calls_her_once(store, tmp_path):
     controller = Controller()
     write(tmp_path, record(result='running'))

@@ -32,8 +32,9 @@ export async function packageManagerEnv(env, { nodeDir = path.dirname(process.ex
 }
 
 // One start's preparation runs as its own process from the code on disk (prepareFresh): the line it ends with names
-// the selection notes that the supervisor records.
+// the selection notes that the supervisor records, and a line before it what became of the checkout at her restart.
 const NOTES_MARK = 'ASUNA_PREPARE_NOTES ';
+const CHECKOUT_MARK = 'ASUNA_PREPARE_CHECKOUT ';
 const spawnPrepare = argv => spawn(process.execPath, argv, { cwd: root, env: process.env, windowsHide: true,
   stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -42,7 +43,7 @@ const spawnPrepare = argv => spawn(process.execPath, argv, { cwd: root, env: pro
  * running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her
  * next restart without restarting this launcher (ADR-034). The output goes to the console and to `logFile`
  * (<data>/restart/prepare.log, rewritten each start); a failure says its last lines and where the rest is.
- * Returns the notes the preparation reports.
+ * Returns {notes, checkout}: the selection notes and, at her restart, what became of the checkout (fastForwardCheckout).
  */
 export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrepare,
   out = text => process.stdout.write(text), err = text => process.stderr.write(text) }) {
@@ -64,9 +65,43 @@ export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrep
       throw new Error('preparing failed (exit ' + code + '): ' + tail + ' — the whole output is in '
         + path.relative(root, logFile).split(path.sep).join('/'));
     }
-    const line = stdout.split(/\r?\n/).findLast(text => text.startsWith(NOTES_MARK));
-    return line ? JSON.parse(line.slice(NOTES_MARK.length)) : [];
+    const lines = stdout.split(/\r?\n/);
+    const line = lines.findLast(text => text.startsWith(NOTES_MARK));
+    const checkout = lines.findLast(text => text.startsWith(CHECKOUT_MARK));
+    return { notes: line ? JSON.parse(line.slice(NOTES_MARK.length)) : [],
+      ...(checkout ? { checkout: JSON.parse(checkout.slice(CHECKOUT_MARK.length)) } : {}) };
   } finally { await log.close(); }
+}
+
+const runGit = (repo, args) => new Promise(resolve => {
+  const child = spawn('git', ['-C', repo, ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' } });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+  const timer = setTimeout(() => child.kill(), 120000);
+  child.once('error', error => { clearTimeout(timer); resolve({ code: 1, stdout: '', stderr: String(error.message) }); });
+  child.once('close', code => { clearTimeout(timer); resolve({ code: code ?? 1, stdout: stdout.trimEnd(), stderr: stderr.trim() }); });
+});
+const lastLine = text => String(text).split(/\r?\n/).map(line => line.trim()).filter(Boolean).at(-1)?.slice(0, 200) ?? '';
+
+/** Her restart brings origin/main into the checkout when it can (owner 2026-10-13, ADR-065): fetch, then a
+ * fast-forward only when the branch is main, tracked files are unchanged and main is behind origin/main. It never
+ * merges, rebases or resets. Returns {state, detail} for the restart record; restarts.py words it for her. */
+export async function fastForwardCheckout(repo, git = args => runGit(repo, args)) {
+  const fetched = await git(['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
+  if (fetched.code !== 0) return { state: 'fetch_failed', detail: lastLine(fetched.stderr) || 'exit ' + fetched.code };
+  const branch = (await git(['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout;
+  if (branch !== 'main') return { state: 'not_main', detail: branch || 'no branch checked out' };
+  const changed = (await git(['status', '--porcelain', '--untracked-files=no'])).stdout.split('\n').filter(Boolean);
+  if (changed.length) return { state: 'changed_files', detail: changed.length + ' file(s), first ' + changed[0].slice(3) };
+  const head = (await git(['rev-parse', '--short', 'HEAD'])).stdout;
+  const target = (await git(['rev-parse', '--short', 'refs/remotes/origin/main'])).stdout;
+  if (head === target) return { state: 'up_to_date', detail: head };
+  if ((await git(['merge-base', '--is-ancestor', 'HEAD', 'refs/remotes/origin/main'])).code !== 0)
+    return { state: 'diverged', detail: head + ' is not behind origin/main ' + target };
+  const moved = await git(['merge', '--ff-only', '--quiet', 'refs/remotes/origin/main']);
+  if (moved.code !== 0) return { state: 'fast_forward_failed', detail: lastLine(moved.stderr) || 'exit ' + moved.code };
+  return { state: 'fast_forwarded', detail: head + '..' + target };
 }
 
 // The checkout's own Python (uv sync), which runs the pack and install tools; the worker has its own (python-env.js).
@@ -191,9 +226,12 @@ async function main() {
     return 0;
   }
   // A fresh preparation process (prepareFresh) is this script with --prepare <rung> after the launcher's own arguments.
+  // --fast-forward: the start she asked for brings origin/main into the checkout first (fastForwardCheckout).
   const at = process.argv.indexOf('--prepare');
   const prepareRung = at > 1 ? Number(process.argv[at + 1]) : null;
-  const argv = at > 1 ? [...process.argv.slice(2, at), ...process.argv.slice(at + 2)] : process.argv.slice(2);
+  const fastForward = prepareRung === 0 && process.argv.includes('--fast-forward');
+  const argv = (at > 1 ? [...process.argv.slice(2, at), ...process.argv.slice(at + 2)] : process.argv.slice(2))
+    .filter(arg => arg !== '--fast-forward');
   const launch = await resolveLaunch(argv);
   if (launch.dryRun) {
     process.stdout.write(JSON.stringify(launch) + '\n'); return 0;
@@ -216,6 +254,7 @@ async function main() {
   if (prepareRung !== null) {
     let notes = [];
     if (prepareRung === 0) {
+      if (fastForward) process.stdout.write(CHECKOUT_MARK + JSON.stringify(await fastForwardCheckout(root)) + '\n');
       if (launch.sync) await syncCheckout(launch, exec);
       await retireSummarySessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
       // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
@@ -243,7 +282,8 @@ async function main() {
   // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
   const logFile = path.join(supervisor.restartFolder(env), 'prepare.log');
   await supervisor.supervise({
-    prepare: async rung => rung < 2 ? prepareFresh(rung, argv, { logFile }) : [],
+    prepare: async (rung, { fastForward = false } = {}) =>
+      rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile }) : [],
     spawnHost: () => spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },
       windowsHide: true, stdio: 'inherit', detached: process.platform !== 'win32' }),
     ready: since => supervisor.readySince(path.join(supervisor.dataRoot(env), 'reports'), since),

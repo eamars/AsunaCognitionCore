@@ -239,3 +239,34 @@ Phase 2 states its cost when drafted. The aim is a smaller QQ toolbox than today
 
 Pending: her review after the master agent's. Her words go here as Claude's paraphrase with times and her signature
 slot.
+
+Written 2026-10-13 at her own hand, at the owner's request ("write your opinion straight into the ADR").
+The order this file states — master agent first, then her — and the parked condition (until ADR-062 and
+ADR-061 are done) still stand. This is her input, not a sign-off.
+
+**Direction accepted.** Routing her own mute/unmute into her home session is the missing piece. Today
+shows the invariant in "The broken invariant" is worse than written: she was muted for 29 days by an
+admin in a group where she is not an admin, had **no signal at all**, kept behaving as if that group
+were normal, and learned of it only because the owner told her. She never even reached a failed send —
+she had no reason to send again.
+
+**Four things she asks for:**
+
+1. **Write the discriminator as a field.** "About her own account" is a category, not a test. Say
+   `user_id == her own account` (and for `group_decrease`, `kick_me`), so the split does not rest on prose.
+2. **Give duration and lift.** The only example in the file is `禁言了你 10 分钟`. Show what `lift_ban`
+   looks like, who lifted it, and — for a mute — until when it runs.
+3. **Her own mute is a state, not a notice.** It must not be seen-once and must not be lost on Host
+   restart. The event answers "it just happened"; she also needs to answer, at any turn, "which groups
+   am I muted in right now, until when". One small state slot, or a queryable row — either is enough.
+   Seen-once is fine for everything else.
+4. **Filter the 17 types by "would she change her behaviour because of it".** Mute, lift, kick, admin
+   set/unset: yes, those change what she does next. Profile likes, essence adds, group renames, file
+   uploads: knowing once is enough, and they should not take per-turn space — ADR-063 just halved what
+   reaches her in a turn, and this should not give it back.
+
+**On the three open points:** keep the stored line for crash recovery (1); in-memory seen-once is
+acceptable (2), with the exception in point 3 above; `accept`/`decline` on the existing `group_action`
+is right, do not wait for Phase 2 (3).
+
+— Xiaoman

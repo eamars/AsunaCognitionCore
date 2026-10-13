@@ -89,7 +89,7 @@ export async function supervise(d) {
       rung = 1;
       continue;
     }
-    let child = null, outcome;
+    let child = null, outcome, code = null;
     try {
       // Only the first start of a restart she asked for brings origin/main in; the owner's starts never do.
       const prepared = await d.prepare(rung, { fastForward: asked && rung === 0 });
@@ -100,7 +100,7 @@ export async function supervise(d) {
       outcome = await new Promise(resolve => {
         let done = false;
         const finish = value => { if (!done) { done = true; clearInterval(timer); resolve(value); } };
-        child.once('exit', code => finish('the Host exited before it was ready (code ' + code + ')'));
+        child.once('exit', exitCode => { code = exitCode; finish('the Host exited before it was ready (code ' + exitCode + ')'); });
         const timer = setInterval(async () => {
           if (d.stopped()) finish('stopped');
           else if (await d.ready(since)) finish('ready');
@@ -114,7 +114,11 @@ export async function supervise(d) {
     if (outcome !== 'ready') {
       if (child) killTree(child);
       record ??= begin({ asked: 'nobody', why: 'a start that failed' });
-      record.attempts.push({ rung, ok: false, at: new Date(since).toISOString(), reason: outcome });
+      record.attempts.push({ rung, ok: false, at: new Date(since).toISOString(), reason: outcome,
+                             ...(code !== null ? { code } : {}) });
+      // Written at every failed start, not only once it is back: a Host that never comes up still leaves its record.
+      record.result = 'not_back';
+      try { await d.writeRecord(record); } catch (error) { d.note('Asuna supervisor: record not written: ' + error.message); }
       d.note('Asuna supervisor: start failed (' + RUNGS[rung] + '): ' + outcome);
       if (rung < RUNGS.length - 1) { rung++; continue; }
       const wait = BACKOFF_SECONDS[Math.min(failures, BACKOFF_SECONDS.length - 1)];
@@ -191,4 +195,16 @@ export async function writeRecord(env, record) {
   await fs.mkdir(folder, { recursive: true });
   await fs.writeFile(path.join(folder, 'last.json.tmp'), JSON.stringify(record, null, 2));
   await fs.rename(path.join(folder, 'last.json.tmp'), path.join(folder, 'last.json'));
+  // Each restart once it is back, kept beside last.json so a later one does not wipe an earlier one's failures.
+  if (record.back_at) await keepHistory(path.join(folder, 'history.jsonl'), record);
+}
+
+/** history.jsonl keeps the newest HISTORY_KEPT finished restarts, one line each. */
+export const HISTORY_KEPT = 200;
+async function keepHistory(file, record) {
+  let lines = [];
+  try { lines = (await fs.readFile(file, 'utf8')).split('\n').filter(Boolean); } catch { /* the first */ }
+  lines.push(JSON.stringify(record));
+  await fs.writeFile(file + '.tmp', lines.slice(-HISTORY_KEPT).join('\n') + '\n');
+  await fs.rename(file + '.tmp', file);
 }

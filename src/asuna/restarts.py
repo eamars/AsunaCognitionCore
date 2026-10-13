@@ -33,7 +33,8 @@ CHECKOUT_WORDS = {
     'fast_forward_failed': '快进没做成（%s），装的是磁盘上原来的检出',
 }
 RESULT_WORDS = {'running': '起来了，跑的是这次该跑的版本',
-                'fell_back': '起来了，但退回了上一个能跑的版本（新版本没起来，原因见 attempts）'}
+                'fell_back': '起来了，但退回了上一个能跑的版本（新版本没起来，原因见 attempts）',
+                'not_back': '还没起来（每次没起来的原因和退出码见 attempts）'}
 
 
 def supervised():

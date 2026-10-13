@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readySince, revertSelections, supervise, RUNGS } from '../../../tools/asuna-supervisor.mjs';
+import { readySince, revertSelections, supervise, writeRecord, RUNGS } from '../../../tools/asuna-supervisor.mjs';
 
 /**
  * A fake DSH world. `starts` scripts each start: 'ready', 'exit' (dies before ready), 'never' (no ready), or
@@ -13,7 +13,7 @@ import { readySince, revertSelections, supervise, RUNGS } from '../../../tools/a
  */
 function world({ starts = [], events = [], reverts = {}, checkout = null } = {}) {
   let stopped = false, readyAt = null, current = null;
-  const stops = [], records = [], notes = [], prepared = [], slept = [], forwarded = [];
+  const stops = [], records = [], interim = [], notes = [], prepared = [], slept = [], forwarded = [];
   let pendingRequest = null;
   const next = () => {
     const event = events.shift() ?? { stop: true };
@@ -43,7 +43,8 @@ function world({ starts = [], events = [], reverts = {}, checkout = null } = {})
     ready: async since => readyAt !== null && readyAt >= since,
     takeRequest: async () => { const r = pendingRequest; pendingRequest = null; return r; },
     loaded: async () => ({ commit: 'abc1234', packages: {} }),
-    writeRecord: async record => { records.push(structuredClone(record)); },
+    // Finished restarts only (back_at); a failed start's interim write goes to `interim`.
+    writeRecord: async record => { (record.back_at ? records : interim).push(structuredClone(record)); },
     note: text => notes.push(text),
     sleep: async ms => { slept.push(ms); },
     stopped: () => stopped,
@@ -52,7 +53,7 @@ function world({ starts = [], events = [], reverts = {}, checkout = null } = {})
   // the clock is real time, so "not ready within" can elapse
   const started = Date.now();
   d.now = () => Date.now() - started + 1;
-  return { d, records, notes, prepared, slept, forwarded };
+  return { d, records, interim, notes, prepared, slept, forwarded };
 }
 
 test('her restart comes back on the same packages and the record says what loaded', async () => {
@@ -90,6 +91,9 @@ test('a start that fails goes one rung down and the record says she fell back an
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, true]]);
   assert.match(record.attempts[0].reason, /exited before it was ready/);
   assert.deepEqual(record.reverted, ['core: returned to the previous running version']);
+  // The failed start was on disk before it came back, with its exit code as a field.
+  assert.equal(w.interim.length, 1);
+  assert.equal(w.interim[0].result, 'not_back'); assert.equal(w.interim[0].attempts[0].code, 3);
 });
 
 test('the ladder ends on what is installed and keeps trying with a backoff; it never gives up', async () => {
@@ -147,4 +151,17 @@ test('rung 1 returns a selection being applied to the one that ran before', () =
   assert.equal(selection.projects.core.state, 'HOST_RESTART_REQUIRED');
   assert.equal(selection.projects.core.reverted_from.candidate, 'new');
   assert.equal(selection.projects.persona.candidate, 'p');
+});
+
+test('a finished restart is also kept in history.jsonl, so a later one does not wipe its failures', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-history-'));
+  try {
+    const env = { ASUNA_DATA_ROOT: dir };
+    await writeRecord(env, { why: 'one', result: 'not_back', attempts: [{ ok: false, code: 3 }] });
+    await writeRecord(env, { why: 'one', result: 'fell_back', back_at: 't1', attempts: [{ ok: false, code: 3 }, { ok: true }] });
+    await writeRecord(env, { why: 'two', result: 'running', back_at: 't2', attempts: [{ ok: true }] });
+    const history = (await fs.readFile(path.join(dir, 'restart', 'history.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.deepEqual(history.map(r => [r.why, r.result]), [['one', 'fell_back'], ['two', 'running']]);
+    assert.equal(JSON.parse(await fs.readFile(path.join(dir, 'restart', 'last.json'), 'utf8')).why, 'two');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

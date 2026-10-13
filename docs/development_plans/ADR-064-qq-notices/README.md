@@ -180,8 +180,9 @@ after a few days and the 10-per-conversation cap can be checked against it.
 
 ## Phase 2: a reply tool (proposed 2026-10-13; needs her agreement and the owner's)
 
-Status: **proposed, not decided.** Every choice below that changes how she speaks waits for her agreement and the
-owner's. Drafted by Claude (the master agent's worktree) after ADR-064 phase 1 and ADR-061 step 1 were built, as the
+Status: **the owner chose A2 with the failure modes below (2026-10-13: "only through reply, with failure modes"),
+and the split marker goes everywhere.** Waits for her agreement (the questions for her, last section) before it is
+built; it changes her prompt, so it is installed only after ADR-061 step 1's observation day. Drafted by Claude (the master agent's worktree) after ADR-064 phase 1 and ADR-061 step 1 were built, as the
 owner's order of work says.
 
 ### Today (checked against the code, 2026-10-13)
@@ -345,7 +346,11 @@ splitting), `src/asuna/context.py` (`speak_from_program.messages`), `src/asuna/p
 and the demo fixture (`tests/fixtures/personas/demo`), her own persona package if it sets it, `RUNTIME_API.md`
 ("Claim public output"), and the tests that split (`tests/test_adr009_p5_speak.py`, `tests/test_outbound_image.py`).
 
-### Now, without phase 2 (proposed, not built)
+### Now, without phase 2 (not built)
+
+Not built: with A2 chosen, phase 2 removes both classes by construction, and a stopgap here would leave her history
+showing words after `stay_silent` as said when they never left (Claude's recommendation, 2026-10-13). Kept as the
+record of what was weighed.
 
 Two of the audit's classes are visible in groups today, are deterministic to fix, and need nothing from phase 2:
 

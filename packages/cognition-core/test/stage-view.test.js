@@ -1,7 +1,7 @@
 // A stage's speech is every text she wrote in it; a platform line belongs to the first stage that had it in view.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stageView } from '../src/index.js';
+import { stageView, writtenSoFar } from '../src/index.js';
 
 let seq = 0;
 const ev = (type, data) => ({ type, seq: seq++, data });
@@ -34,4 +34,14 @@ test('a program note in the same turn is its own stage: only its own text, only 
     line('in-late'), ev('asuna/stage', { operation: 'ep:TURN:fix-1' }), said(1, '好的，我换个说法。'),
   ];
   assert.deepEqual(stageView(events, 'ep:TURN:fix-1', 1), { said: ['好的，我换个说法。'], seen_inputs: ['in-late'] });
+});
+
+test('silence says what the turn has written so far, the message holding the stay_silent call included', () => {
+  seq = 0;
+  const session = events => ({ snapshotEvents: () => events });
+  const start = [ev('turn/start', { turn: 2 }), ev('asuna/stage', { operation: 'ep:TURN' }), said(2, '', 'think')];
+  assert.equal(writtenSoFar(session([...start, said(2, '', 'stay_silent')]), 'ep:TURN'),
+    '这一回合正文里一个字都没写，什么都不会发出去。');
+  assert.equal(writtenSoFar(session([...start, said(2, '加油哦', 'plan'), said(2, '晚点再来', 'stay_silent')]), 'ep:TURN'),
+    '这一回合正文里写了 2 段话，回合结束时照常发出。');
 });

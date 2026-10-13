@@ -29,10 +29,7 @@ from . import visibility
 from .vision import inline_summary as picture_receipt
 from .context_budget import SINGLE_BODY_CHARS
 
-THOUGHT_CHARS = 300
-# What she is told is THOUGHT_CHARS; refused only past this. Most refusals were a few characters over a count a
-# model cannot keep exactly (owner 2026-10-06), and each cost her a full retry.
-THOUGHT_HARD_CHARS = 360
+THOUGHT_CHARS = 300                  # what she is asked for; a longer thought is kept, and only its own result says by how much
 # How a length limit counts, said with every over-length refusal so one cut is enough.
 COUNTED = '标点、空格、换行和字母也各算一个字'
 RECALLS_PER_TURN = 3
@@ -89,8 +86,8 @@ AFFECT_FIELDS = {
 TOOLS = {
     'think': {
         'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句心里话，'
-                        '%d 字以内，不是完整的推理过程。每回合第一步必须先调用它；心里话会存档，下一回合你能看到最近几段。'
-                        % THOUGHT_CHARS),
+                        '%d 字以内，不是完整的推理过程。每回合第一步必须先调用它。心里话会存档：这个对话里最近三段，下一回合一定看得到'
+                        '（还在屏上的就在原处，不再另给）；更早的用 recall 找。' % THOUGHT_CHARS),
         'parameters': {'thought': _s('心里话', required=True)},
     },
     'recall': {
@@ -1071,9 +1068,6 @@ class RoleTools:
     # ── mind ────────────────────────────────────────────────────────
     def tool_think(self, ep, call_id, args):
         thought = self._text(args, 'thought', 100000)
-        if len(thought) > THOUGHT_HARD_CHARS:
-            raise Refused('心里话 %d 字，超过 %d 字，多了 %d 字（%s）：精简到 %d 字以内，只留要点；详细的推演留在思考里。'
-                          % (len(thought), THOUGHT_CHARS, len(thought) - THOUGHT_CHARS, COUNTED, THOUGHT_CHARS))
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         if not self.store.db.memory_units.find_one({'_id': memory_id}):
@@ -1085,7 +1079,9 @@ class RoleTools:
         ep = self._fresh(ep)
         self.coordinator._update(ep, turn_thought=True,
                                  monologue_refs=[*dict.fromkeys([*(ep.get('monologue_refs') or []), memory_id])])
-        return {'saved': True, 'note': '已存档。'}, False
+        over = len(thought) - THOUGHT_CHARS
+        # Kept whatever its length (her decision, 2026-10-14): a refusal cost a whole retry. Only this result says it.
+        return {'saved': True, 'note': '已存档。' + ('超了 %d 字（%s）。' % (over, COUNTED) if over > 0 else '')}, False
 
     def tool_recall(self, ep, call_id, args):
         query = self._text(args, 'query', 500)
@@ -1163,7 +1159,8 @@ class RoleTools:
     def tool_stay_silent(self, ep, call_id, args):
         reason = self._text(args, 'reason', 1000)
         self.coordinator._update(self._fresh(ep), silent={'reason': reason})
-        return {'silent': True, 'note': '这回合到此结束：已经写在正文里的话照常发出，没写就什么都不发。'}, True
+        # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
+        return {'silent': True, 'note': '这回合到此结束。'}, True
 
     def tool_quote(self, ep, call_id, args):
         how = args.get('how')

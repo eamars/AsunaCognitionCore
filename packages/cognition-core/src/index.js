@@ -125,6 +125,16 @@ export function stageView(events, token, turn) {
   return { said, seen_inputs: [...new Set(seen)] };
 }
 
+/** What a turn that ends in silence has written, in words for her: the texts so far in this operation's stages,
+ * the message holding the stay_silent call included (DSH records it before running its tools). They leave when
+ * the turn ends. */
+export function writtenSoFar(session, operation) {
+  const events = session.snapshotEvents();
+  const turn = events.findLast(event => event.type === 'assistant/message')?.data.turn;
+  const pieces = stageView(events, operation, turn).said.length;
+  return pieces ? '这一回合正文里写了 ' + pieces + ' 段话，回合结束时照常发出。' : '这一回合正文里一个字都没写，什么都不会发出去。';
+}
+
 export class CognitionCore {
   constructor(ctx, config) {
     this.ctx = ctx;
@@ -1005,6 +1015,8 @@ export class CognitionCore {
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
+          // Silence says what this turn has written so far: deciding to say something is not saying it.
+          if (spec.name === 'stay_silent') return { ...reply.value, written: writtenSoFar(agent.session, operation) };
           // An answer she reads that the conversation still shows is named, not sent again (ADR-061).
           if (spec.name === 'ask') return withoutVisibleAnswers(reply.value, visibleCarried(agent.session));
           // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.

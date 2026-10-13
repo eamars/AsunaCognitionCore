@@ -8,14 +8,16 @@ from test_adr009_p2 import owner, THINK
 from test_engineering_m1 import event
 
 
-def test_the_turn_instruction_and_the_block_guide_are_in_her_system_prompt_not_in_each_turn(store):
+def test_the_turn_instruction_and_the_block_guide_are_in_her_system_prompt_and_only_its_first_step_ends_each_turn(store):
+    from asuna.coordinator import THINK_FIRST
     owner(store)
     lane = FakeLane(store, [FakeTurn([THINK], '在呢。')])
     Coordinator(store, lane).ingest(event('e-guide'))
     system, notice = lane.calls[0]['messages'][0]['content'], lane.calls[0]['messages'][-1]['content']
     assert '# 这一回合' in system and '# 每回合的资料' in system and '# 记忆的来源' in system
-    assert '# 这一回合' not in notice and '第一步先调用 think' not in notice
-    assert notice.rstrip().endswith('}'), 'a turn with nothing of its own is its context alone'
+    # Rule 1 taken back for one line (2026-10-14): the first step stays next to where she writes, last in the notice.
+    assert '# 这一回合' not in notice and notice.count('第一步先调用 think') == 1
+    assert notice.rstrip().endswith('}\n' + THINK_FIRST), 'a turn with nothing of its own is its context and that line'
 
 
 def test_a_block_saying_what_the_guide_says_arrives_without_it_and_another_note_stays():

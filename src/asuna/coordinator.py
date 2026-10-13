@@ -49,6 +49,9 @@ RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
 TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_development': 'internal',
             'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit', 'note': 'note'}
+# The one line of the turn instruction kept at the end of every notice, next to where she writes (ADR-056, 2026-10-14):
+# said only in her system prompt, a missing first think was refused 1.75 times as often.
+THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
 
 
 class Coordinator:
@@ -166,8 +169,9 @@ class Coordinator:
 
     # ── one turn ────────────────────────────────────────────────────
     def _notice(self, ep):
-        """What follows the prepared context in the turn's first message: only what this turn has of its own (a
-        consult, a resumed turn). The turn instruction is in her system prompt (block_guide.py, ADR-056)."""
+        """What follows the prepared context in the turn's first message: what this turn has of its own (a consult, a
+        resumed turn), then THINK_FIRST, always last. The rest of the turn instruction is in her system prompt
+        (block_guide.py, ADR-056)."""
         kind=role_tools.turn_kind(ep)
         extra=prompt_path(self.store.config,'turn_consult.md').read_text(encoding='utf-8') if kind=='consult' else ''
         if ep.get('resume_diagnostic'):
@@ -184,7 +188,7 @@ class Coordinator:
             if tasks:
                 extra+='\n这一回合中断前已经交给行动脑的事（不要再交一遍）：'+'、'.join(
                     '「%s」（%s）'%(row.get('title') or row.get('goal'),row['_id']) for row in tasks)
-        return extra.strip('\n')
+        return (extra.strip('\n') + '\n' + THINK_FIRST).lstrip('\n')
 
     @staticmethod
     def _operation(ep_id, generation):

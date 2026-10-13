@@ -12,10 +12,10 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (32, 21453)       # ADR-061 step 1: ask (827) replaces message_developer (429), +398 characters
+CHARACTER = (32, 21490)       # think says where her last thoughts come back (ADR-056, 2026-10-14): +37 characters
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 21359)
+CHARACTER_TIERED = (31, 21396)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

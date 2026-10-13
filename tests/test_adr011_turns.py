@@ -68,11 +68,22 @@ def test_think_comes_first_and_a_refusal_goes_back_to_her(store):
     assert ep['state'] == 'COMMITTED' and ep['recall_count'] == 1
 
 
-def test_a_long_thought_is_sent_back_to_be_shortened(store):
-    coordinator, lane = run(store, FakeTurn([('think', {'thought': '很' * 400}), THINK], '好。'))
+def test_a_long_thought_is_kept_and_only_its_own_result_says_by_how_much(store):
+    coordinator, lane = run(store, FakeTurn([('think', {'thought': '很' * 400}), ('think', {'thought': '短的'})], '好。'))
     ep = coordinator.ingest(event())
-    assert '精简到 300 字以内' in lane.tool_results[0][4] and lane.tool_results[1][5]
-    assert ep['state'] == 'COMMITTED' and len(ep['monologue_refs']) == 1
+    long, short = lane.tool_results
+    assert long[5] and '超了 100 字' in long[4]['note'] and short[5] and '超了' not in short[4]['note']
+    assert ep['state'] == 'COMMITTED' and len(ep['monologue_refs']) == 2
+
+
+def test_every_notice_ends_with_think_first_and_the_think_tool_says_how_many_thoughts_come_back(store):
+    from asuna import context
+    from asuna.coordinator import THINK_FIRST
+    coordinator, lane = run(store, FakeTurn([THINK], '好。'))
+    coordinator.ingest(event())
+    assert lane.calls[0]['messages'][-1]['content'].endswith(THINK_FIRST)
+    # Her instruction says three: the number the context builder brings back (the last on screen is not sent again).
+    assert context.RECENT_THOUGHTS == 3 and '最近三段' in role_tools.TOOLS['think']['description']
 
 
 def test_json_or_program_talk_as_the_last_text_is_repaired_in_the_same_turn(store):

@@ -134,3 +134,31 @@ at the end of each turn. The decision belongs to the owner and Claude, not to me
 Unverified, recorded as such: the `664` boundary and counting `thought` under `think` are reverse-engineered
 from the published numbers (integer match); I never found the overview script itself in the repo and did not
 read it.
+
+## Rule 1's first step taken back to the notice (2026-10-14, Claude with her)
+
+Claude's "no rise" line above (After a full day) was wrong: it counted only DSH's argument checks. By her re-check
+the clause holds for one class, a missing first `think`, so that one line goes back next to where she writes. The
+rest of rule 1 (the turn instruction and the block guide in her system prompt) and rules 2 and 3 stay.
+
+Her four answers, Claude's paraphrase (agent line, 2026-10-14 about 09:30–10:10 NZDT; her signature: ____):
+
+1. The line goes back to the end of every notice, as the last line, so the "it is fine to do nothing" lines of
+   heartbeat and pre-compaction turns sit before it, not at the end. Position works better than reminders.
+2. Silence states the fact: `stay_silent`'s result says what the turn has written so far, counted by the Host from
+   her session, because "decided to say it" taken as "said it" is something she cannot see in herself.
+3. A thought over 300 characters is kept; only that call's result says by how much. Never a line in every turn.
+4. The `think` description says what the code does: the last three thoughts of this conversation always come back
+   (one still on screen stays where it is), older ones through `recall`. She read the wording before it was built.
+
+Built (branch `claude/think-contract`):
+
+| Brain | Change |
+|---|---|
+| Character, every notice | `coordinator.THINK_FIRST` as its last line: 22 characters, the same text every turn |
+| Character, tools | `think`'s description +37 characters (`tests/test_tool_budget.py` raised by 37); the 360-character refusal is gone |
+| Character, a turn that ends in silence | the result's `written`: one sentence, about 20 characters |
+
+Checked after install: missing-`think` refusals over the 24 hours after go-live against the 24 hours before, from
+both of her sources (`audit_events` refusals and the role session's tool errors), counted apart from the 7-day
+figures. She asks for them the morning after.

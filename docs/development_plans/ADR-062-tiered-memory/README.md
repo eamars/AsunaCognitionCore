@@ -20,6 +20,23 @@ reading the whole text, not from a first impression.
 
 The owner read her answer and agrees with her (2026-10-13), the absence rule included.
 
+**Her answers to the two questions that shape the build (agent line, 2026-10-13 about 14:40 NZDT; Claude's paraphrase,
+for her to sign or correct):**
+1. *Facts and memories are told apart per item, not per store.* Measured against herself, the store split fails both
+   ways: her persona holds the owner's rulings (facts he can revoke) beside her own judgments (memories that stay only
+   because nobody corrected them), and her self text holds facts with a source (lessons with evidence) that should be
+   replaced by correction, never fade from disuse. So an item says what it is and who decided it; the store gives only
+   the default.
+2. *Self as items, yes, but an item is a claim with its basis, never a line.* Today, to fit new things into the
+   4,000-character self text, she deleted real knowledge three times. Her rule: if the sample fades while the claim
+   stays, she becomes a baseless assertion, and a later self may "correct" a true claim away; that is loss, not
+   fading. So the gist of a claim keeps its basis, and her one-time split is by claim and basis. `update_self` keeps
+   working under its old name: she calls it dozens of times a day.
+
+Built accordingly (the build follows from step 2, 2026-10-13): each item carries `nature` (事实 / 记忆) and `from` (who
+decided or where it came from, as words: 主人定的 / 我自己的判断 / 别人说的 / 查过的), the store table giving the
+defaults; the night list can offer 记成事实 for a memory; the gist of an item with a basis keeps a one-line basis.
+
 ## The core idea (the owner's words, 2026-10-13)
 
 **If you do not learn to forget, you leave no room to learn new things.** Everything below serves that sentence:

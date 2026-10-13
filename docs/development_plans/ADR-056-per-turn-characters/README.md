@@ -101,3 +101,36 @@ Refused tool calls, from her role sessions' tool results (DSH's argument check a
 849 in the 24 hours before it went live (0.4%), 3 of 664 in the 24 hours after (0.5%): no rise. All three after were
 a missing `op`, which 31c35018 removed (live 2026-10-13 07:58 NZDT). The rest of the delivery effect is measured in
 ADR-063 ("Measured after"), whose fixes built on these rules.
+
+## Rollback clause re-checked (2026-10-14, Xiaoman)
+
+The clause, from "How it is checked" above: "Her refusals by cause (ADR-054) for a missing `think` or a wrong
+`ref` must not rise; a rule whose refusals rise is taken back."
+
+Re-checked 2026-10-14 over the same window (go-live 2026-10-12 21:20:15 NZDT, ±24 h), from two independent
+sources, item by item identical: missing `think` 25 → 42 (source A 2.59% → 4.55%, source B 2.58% → 4.52%);
+wrong `ref` 1 → 0 (1 / 0 rows each side; the sample is thin).
+
+- Source A: `audit_events` (`type=role_tool`, the `payload.refused` text).
+- Source B: `tool/result` `isError` in the role session records
+  `.runtime/adr008/home/sessions/*/asuna-role-*/session.v4.jsonl.zstd`.
+- B contains A. All-cause totals differ by 4 rows (before) / 7 rows (after); every difference is a DSH-side
+  argument-validation rejection that writes no audit row (the `invalid arguments` family, plus the two rows
+  where the scene has no `read_image`).
+
+The `no rise` in the section above does not count the two causes the clause names: its numerator holds only
+DSH's JSON argument-validation rejections (the missing-`op` family). The 25 / 42 `think` refusals and the
+program's own refusals, 83 / 81, never entered it — even though that sentence itself says it covers "the
+program's own refusals". The windows are also asymmetric: "24 hours before" was filled with the whole calendar
+day 2026-10-12, while "24 hours after" ran only to the moment the overview script ran (≈16.5 h), and the two
+windows overlap for two hours (2026-10-12 21:20–24:00).
+
+Conclusion: by the clause, missing `think` rose ≈1.75× — `a rule whose refusals rise is taken back` is
+triggered. What is triggered is "this class of refusals rose", not an automatic withdrawal of all three rules:
+rule 1 moved "call `think` first each turn" from a per-turn notice into the system prompt (distance from the
+generation point ≈822 characters → hundreds of thousands), so one possible rollback is to put that line back
+at the end of each turn. The decision belongs to the owner and Claude, not to me.
+
+Unverified, recorded as such: the `664` boundary and counting `thought` under `think` are reverse-engineered
+from the published numbers (integer match); I never found the overview script itself in the repo and did not
+read it.

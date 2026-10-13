@@ -267,5 +267,31 @@
         ]
       }
     ]
+  },
+  "policy_keys": {
+    "speak.max_messages": {
+      "type": "integer",
+      "min": 1,
+      "max": 5,
+      "what": "一回合 reply 最多发几条单独的消息（text part）；一条里分段、换行不算"
+    },
+    "memory.forgetting.half_life_days": {
+      "type": "number",
+      "min": 1,
+      "max": 365,
+      "what": "记忆淡忘的半衰期（天）"
+    },
+    "memory.coverage_floor": {
+      "type": "number",
+      "min": 0,
+      "max": 1,
+      "what": "低于这个分判为证据不足"
+    },
+    "affect.kinds.calm.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "平静的半衰期（小时）"
+    }
   }
 }

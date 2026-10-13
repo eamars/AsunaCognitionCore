@@ -331,7 +331,10 @@ lapses its least recently memorable one (one written in a turn where she recorde
 result names it under `moved`. Each item is a fact (事实) or a memory (记忆): by default
 facts in persona, voice, ledgers, group notes and `core`, memories in `self` and running records; `write_document`
 takes `nature` (事实 or 记忆) or `from` (主人定的 and 查过的 make a fact, 别人说的 and 我自己的判断 a memory) for the item
-it writes, and a `set_tags` carrying only these changes nothing in the document. Memories cool to 收着 by disuse (a
+it writes, and a `set_tags` carrying only these changes nothing in the document. Her own judgment is not made a fact
+by her alone: `nature: 事实` on an item from 我自己的判断, or relabelling one 查过的 without rewriting it with a basis,
+is refused, with how it becomes one (confirmed by the same said in another conversation, or rewritten by
+`replace_section` with a basis and `from: 查过的`). Memories cool to 收着 by disuse (a
 running record's row after 30 days unused, any other when the persona model's forgetting formula falls below
 `step_back_below`); facts never do. A `correction` moves the item it corrects to 收着 with the
 date it was superseded. `write_document` takes `op: let_go` with a `sid`, also in a group's notes from that group:
@@ -354,9 +357,28 @@ well and counts as their use, as does a section she reads by `sections`. Its ans
 most eight, each with its ref, store and place), and when nothing at all came back says so for all three places
 (`found`). A `sections` entry with a `doc` and no `sid` lists that document's headings, each with its place.
 
+With the switch on, her nightly settlement turn carries `night_list_from_program` instead of `notes_review_from_program`:
+at most five items (`memory_tiers.night_list`), each with its ref, heading, store, nature, text, why it is there and what
+she can do with it, none of them a keep or drop choice. 写一句意思: an item that lapsed from 随身 and is long (over 240
+characters) or carries dates waits for her gist: a `replace_section` of 160 characters or fewer is taken as the gist; it
+stays 手边 and the text it replaced stays behind it (`detail_of`; reading the section by `recall` returns it as
+`detail`). When the text it replaced had a basis (a marker word such as 依据 or 来源, or a source she declared) and the
+gist keeps neither a basis nor a second line, the write's result says so (`gist`) and the item is listed again. An
+item listed on two nights and not rewritten goes 收着 as it is. 几处都提到: a memory brought up or recalled in two
+different conversations, or carried through three stays, at most once a week; what it means is hers (into `core`,
+to that person, to that group's notes, to a ledger, or still changing; 记成事实 is offered only for one that someone
+else decided or said, or that she checked, or a judgment of hers the same said elsewhere confirmed). 合并: two items of one document the
+item index scores 0.95 or more alike (a pair of facts is to be merged); items met again from another conversation are
+memorable, and that confirms a judgment of hers. 回头看: once a week, one put-away item with past uses. `promote_memory`'s candidates are then the memories
+she recalled in two different conversations, and its `about` (self, person, place, world) lands the promoted fact,
+written as the fact and a line of its basis, in the fact store of its subject: `core` for herself, the ledger `world`
+for the world, the group's notes when every source is from one group and the memory is public; a person's facts are
+written with `understand_person`, and those and other places stay in the memory index as before.
+
 ## Shadow pilot of her own items
 
-`memory_pilot.py` measures which of her own items a turn would surface, and delivers nothing. Her persona sections, the list lines of `current_self` (30 characters or longer), the rows of each running record and each group's notes sections are embedded on the memory embedding route into the collection `memory_shadow` (rows `item`), apart from `memory_units`; an owner-private item is readable only in owner-private turns, a public one everywhere, a group's notes only in that group. The items are read again at most every ten minutes, and only new or changed ones are embedded. After each character turn's context is prepared, the turn is queued; a background thread scores the items against the turn's query the way retrieval scores memories (vector and lexical ranks fused; the vector score is the index's (1 + cosine) / 2, reusing the vector the turn's retrieval computed), takes at most two above the floor of 0.83 (`FLOOR`, `OWN_SLOTS`), and writes one row (`turn`, or `recall` for a `recall` query): item ids, stores and scores, the best six candidates above 0.75, the turn's kind, the conversation and its kind, the query's hash, the time the job took. An item a turn would surface records the conversation in `surfaced_in`. Pairs of items in one store scoring 0.93 or more are written as `pair` rows. No text, heading or query is written, and nothing of it reaches a prompt. `tools/memory_pilot_report.py` prints the daily reading in counts; `--drop` removes the collection. The switch is `memory_pilot.SHADOW_PILOT`: off, the Host starts no pilot.
+`memory_pilot.py` measures which of her own items a turn would surface, and delivers nothing. Her persona sections, the list lines of `current_self` (30 characters or longer), the rows of each running record and each group's notes sections are embedded on the memory embedding route into the collection `memory_shadow` (rows `item`), apart from `memory_units`; an owner-private item is readable only in owner-private turns, a public one everywhere, a group's notes only in that group. The items are read again at most every ten minutes, and only new or changed ones are embedded. After each character turn's context is prepared, the turn is queued; a background thread scores the items against the turn's query the way retrieval scores memories (vector and lexical ranks fused; the vector score is the index's (1 + cosine) / 2, reusing the vector the turn's retrieval computed), takes at most two above the floor of 0.83 (`FLOOR`, `OWN_SLOTS`), and writes one row (`turn`, or `recall` for a `recall` query): item ids, stores and scores, the best six candidates above 0.75, the turn's kind, the conversation and its kind, the query's hash, the time the job took. An item a turn would surface records the conversation in `surfaced_in`. Pairs of items in one store scoring 0.93 or more are written as `pair` rows. No text, heading or query is written, and nothing of it reaches a prompt. `tools/memory_pilot_report.py` prints the daily reading in counts; `--drop` removes the collection. The switch is `memory_pilot.SHADOW_PILOT`: off, nothing is logged, and the Host runs the item index only for tiered
+memory when that is on (its items come up from these vectors whatever the pilot switch says).
 
 ## Media and image reading
 

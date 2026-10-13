@@ -1288,6 +1288,11 @@ class RoleTools:
                     raise Refused('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)))
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
             return self._let_go(ep, slug, item.get('sid'), before), False
+        if memory_tiers.ENABLED and (item.get('nature') or item.get('from')):
+            unsigned = memory_tiers.signing(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item.get('sid'))
+                                            if item.get('sid') else None, item, args.get('body'))
+            if unsigned:
+                raise Refused(unsigned)
         if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
                 and not any(field in item for field in ('visibility', 'inject', 'tags'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
@@ -1317,8 +1322,10 @@ class RoleTools:
         sections = (after or {}).get('sections', [])
         if memory_tiers.ENABLED:
             felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
-            moves = memory_tiers.Tiers(self.store, ep['persona']).written(slug, item, before, after,
-                                                                          scene_id=ep['scene_id'], felt=felt)
+            tiers = memory_tiers.Tiers(self.store, ep['persona'])
+            moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base)
+            if tiers.notes:
+                result['gist'] = tiers.notes[-1]
             if moves:
                 result['moved'] = [memory_tiers.told(move) for move in moves]
             placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None
@@ -1904,7 +1911,11 @@ class RoleTools:
         return {'idea': idea_id, 'state': state, 'note': note}, False
 
     def tool_promote_memory(self, ep, call_id, args):
-        item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'why', 'source_ids', 'visibility') if args.get(k) is not None}
+        item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'why', 'source_ids', 'visibility', 'about')
+                if args.get(k) is not None}
+        from . import memory_tiers
+        if item.get('about') is not None and (not memory_tiers.ENABLED or item['about'] not in memory_tiers.ABOUT):
+            raise Refused('about 写 %s 之一%s。' % ('、'.join(memory_tiers.ABOUT), _given(item, 'about')))
         for field in ('fact', 'appraisal', 'signal', 'why'):
             self._text(item, field, 2000)
         if not isinstance(item.get('source_ids'), list) or not item['source_ids'] or not all(
@@ -1992,6 +2003,13 @@ def read_sections(store, ep, items, cls):
         else:
             out.append({'doc': item['doc'], 'sid': section['sid'], 'heading': section['heading'],
                         'body': section['body'], 'visibility': section['visibility']})
+            from . import memory_tiers
+            if memory_tiers.ENABLED:
+                # A gist reads with the verbatim it stands for.
+                verbatim = memory_tiers.detail(store, ep['persona'], memory_tiers.Tiers(store, ep['persona']).item(
+                    item['doc'], section['sid']))
+                if verbatim:
+                    out[-1]['detail'] = verbatim
     return out, missing
 
 
@@ -2027,7 +2045,10 @@ def promote(store, ep, item, *, key):
     if len(promoted) >= quota:
         raise Denied('PROMOTION_QUOTA: ' + ('已经提升了 %d 条，配额 %d 条；剩下的留到下次沉淀' % (len(promoted), quota) if quota
                                            else '配额是 0（没开记忆提升）；重试也一样'))
-    picked = selections(store, effective(model, 'memory.promotion.window_days', policy) or 7)
+    from . import memory_tiers
+    window = effective(model, 'memory.promotion.window_days', policy) or 7
+    # With tiered memory on, its candidates are what she recalled in different conversations (her acts).
+    picked = memory_tiers.recalled(store, window) if memory_tiers.ENABLED else selections(store, window)
     episodes = set()
     for source in item['source_ids']:
         unit = store.db.memory_units.find_one({'_id': source}, {'episode_id': 1})
@@ -2049,6 +2070,14 @@ def promote(store, ep, item, *, key):
         # A public memory shows in every conversation; one built on anything said at home stays at home (ADR-050).
         raise Denied('PROMOTION_NOT_PUBLIC: 这条的来源里有家里的对话，置公开会把家里的话带到每个群和私聊里；'
                      '要提升就把 visibility 写成 private，留在家里')
+    landed_note = None
+    if memory_tiers.ENABLED and item.get('about'):
+        landed, landed_note = memory_tiers.land(store, ep, item, episodes)
+        if landed:
+            store.audit(ep['_id'], 'memory.promoted', {'landed': landed, 'about': item['about'], 'why': item['why'],
+                                                       'source_ids': item['source_ids']},
+                        'global-safe' if item.get('visibility') == 'public' else visibility.owner_private_scope(ep['persona']))
+            return {'landed': landed, 'note': landed_note}
     scope = 'global-safe' if item.get('visibility') == 'public' else visibility.owner_private_scope(ep['persona'])
     body = f"事实：{item['fact']}\n评价：{item['appraisal']}\n信号：{item['signal']}"
     doc = {'_id': 'mu-' + sha(canonical([ep['_id'], 'promote', key])), 'kind': 'memory_unit', 'scope_key': scope,
@@ -2062,4 +2091,4 @@ def promote(store, ep, item, *, key):
         # ADR-017: what she brought home from other conversations, and why, in her own audited record.
         store.audit(ep['_id'], 'memory.promoted', {'memory_id': doc['_id'], 'scope_key': scope, 'why': item['why'],
                                                    'source_ids': item['source_ids']}, scope)
-    return {'memory_id': doc['_id'], 'scope_key': scope}
+    return {'memory_id': doc['_id'], 'scope_key': scope, **({'note': landed_note} if landed_note else {})}

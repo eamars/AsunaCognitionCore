@@ -33,7 +33,7 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
 
 - def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
-- def `attach` — Start the pilot for a context builder that retrieves, when the switch is on: the Pilot, else None.
+- def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
 - def `admitted` — Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor.
 - class `Pilot` — One background thread: turns are queued by `submit` and scored off the reply path.
@@ -68,8 +68,15 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
+- def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
+- def `has_basis`
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `told` — A move as her result or the moved line says it, in words.
+- def `night_list` — The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different conversations (几处
+- def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
+- def `candidates` — promotion_candidates with tiered memory on: what she recalled in different conversations.
+- def `land` — promote_memory with `about`: the fact store of its subject.
+- def `detail` — The verbatim a gist stands for (its revision before the gist), or None.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
 - def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.
 - def `headings` — recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns.

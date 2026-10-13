@@ -1077,14 +1077,21 @@ class ContextBuilder:
                          for e in ledger.events() if e.get('open')
                          and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
             context['settlement_from_program']={'open_affect_events':open_events,
-                'promotion_candidates':promotion_candidates(self.store,model,policy),
+                'promotion_candidates':(memory_tiers.candidates(self.store,effective(model,'memory.promotion.window_days',policy) or 7)
+                                        if memory_tiers.ENABLED else promotion_candidates(self.store,model,policy)),
                 'promotion_quota':effective(model,'memory.promotion.daily_quota',policy) or 0,
                 'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
             # Her notes that show every turn and are due for tidying (owner 2026-10-06, context_budget.py).
-            from .context_budget import review_block
-            review=review_block(self.store,persona,moment)
-            if review:
-                context['notes_review_from_program']=review
+            if memory_tiers.ENABLED:
+                # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
+                listed=memory_tiers.night_list(self.store,persona,moment)
+                if listed:
+                    context['night_list_from_program']=listed
+            else:
+                from .context_budget import review_block
+                review=review_block(self.store,persona,moment)
+                if review:
+                    context['notes_review_from_program']=review
             # ADR-016: once a week, the stickers she kept and has not been sending; dropping is hers.
             from .stickers import review_block as _sticker_review
             shelf_review=_sticker_review(self.store,persona,moment)

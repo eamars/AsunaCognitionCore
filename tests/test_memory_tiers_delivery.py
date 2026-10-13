@@ -79,6 +79,26 @@ def test_an_item_at_hand_comes_up_in_two_of_six_slots_and_a_carried_one_never(se
     assert not [m for m in away['memories'] if m.get('kind') == 'own_item'], 'put away comes back by recall only'
 
 
+def test_with_the_pilot_switched_off_her_items_still_come_up_and_nothing_is_logged(setup, monkeypatch):
+    """A measurement switch never turns off a live feature: tiered memory keeps its item index."""
+    store, builder, sids, tiers = setup
+    monkeypatch.setattr(memory_pilot, 'SHADOW_PILOT', False)
+    fresh = ContextBuilder(store, builder.retrieval)
+    index = memory_pilot.attach(fresh, store, 'P1', Route)
+    try:
+        assert index is not None and not index.logging
+        index.run_job({'query': '松饼', 'vector': None, 'scope': 'scene:dm-a', 'private_scope': None, 'scene_id': 'dm-a',
+                       'scene_kind': 'dm', 'session_class': 'owner_private', 'turn_kind': 'external', 'event_id': 'e',
+                       'recall': False, 'at': '2026-10-14T01:00:00+00:00', 'previous_submit_ms': None})
+        _, context, _ = fresh.prepare(event('e-off', text='松饼'), 'P1')
+    finally:
+        index.close()
+    assert [m['_id'] for m in context['memories'] if m.get('kind') == 'own_item'] == ['doc:persona#' + sids['baking']]
+    assert not store.db[memory_pilot.COLLECTION].find_one({'row': {'$in': ['turn', 'recall']}}), 'no shadow logging'
+    monkeypatch.setattr(memory_tiers, 'ENABLED', False)
+    assert memory_pilot.attach(ContextBuilder(store, builder.retrieval), store, 'P1', Route) is None
+
+
 def test_an_item_brought_up_in_a_second_conversation_is_memorable(setup):
     store, builder, sids, tiers = setup
     builder.prepare(event('e-1', text='松饼'), 'P1')

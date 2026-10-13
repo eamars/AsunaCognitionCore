@@ -42,6 +42,12 @@ FACT, MEMORY = '事实', '记忆'
 NATURES = (FACT, MEMORY)
 FROM_NATURE = {'主人定的': FACT, '查过的': FACT, '别人说的': MEMORY, '我自己的判断': MEMORY}
 SOURCES = tuple(FROM_NATURE)
+# Her rule (2026-10-13): a fact needs an author who can correct it. Her own judgment becomes a fact only when someone
+# else confirms it (met again from another conversation) or when she has checked it (rewritten with 查过的 and a basis).
+OWN_JUDGMENT, CHECKED = '我自己的判断', '查过的'
+FACT_AUTHORS = ('别人说的', '主人定的', CHECKED)
+JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实：要有人确认（另一处又碰到同样的说法），或者你查过了：'
+                     '用 replace_section 把它改写成带依据的一条（依据：谁、何时、从哪来），from 写 查过的。')
 CAPS = {'self': 12, 'persona': 16, 'ledger': 10, 'group_notes': 6, 'core': 12, 'voice': 6}
 FIRST_STAY_DAYS = {'group_notes': 28, 'core': 56, 'voice': 56}
 STAY_DAYS, STAY_CAP_DAYS = 14, 56
@@ -54,6 +60,30 @@ REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '
 MOVED_SHOWN = 5
 FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
 HEADINGS_SHOWN = 8
+# The night list (settlement): at most a few items, chosen by rule, told why; no keep or drop choice among them.
+NIGHT_ITEMS = 5
+GIST_CHARS, GIST_LIST_ABOVE, GIST_NIGHTS = 160, 240, 2
+DATED = re.compile(r'\d{1,4}[年/.-]\d{1,2}|\d{1,2}月\d{1,2}|\d{1,2}:\d{2}')
+# What a basis looks like (her answer 2026-10-13: an item is a claim with its basis; a gist keeps the basis line).
+BASIS = ('依据', '来源', '据', '样本', '证据', '查过', '测过', '主人说', '主人定', '因为', '出处')
+DUPLICATE_SCORE = 0.95
+REPEATED_PLACES, REPEATED_STAYS = 2, 3
+LOOK_BACK_DAYS = 7
+WORLD_LEDGER = 'world'
+NIGHT_WHAT = {'gist': '写一句意思', 'repeated': '几处都提到', 'merge': '合并', 'look_back': '回头看'}
+NIGHT_HOW = {
+    'gist': ('用 replace_section 把它写成一两句意思（%d 字以内）；有依据的，意思后面留一行依据（谁、何时、从哪来）。'
+             '原文留在后面，recall 读得到；两晚都没写，原文就自己收着。' % GIST_CHARS),
+    'repeated': ('它是什么由你定：进 core（append_section 到 doc=core）、记到那个人（understand_person）、'
+                 '记到那个群（那个群的笔记）、记进账（append_section 到一份活账）%s，或者还在变（不用做什么）。'),
+    'merge': '两条说的是一件事：改写成一条（replace_section 其中一条），另一条 let_go。',
+    'merge_fact': '两条说的是一件事，都是事实，要合并：改写成一条（replace_section 其中一条），另一条 let_go。',
+    'look_back': '一条收着、以前用过的旧东西，碰巧翻到：看看就好；想带回来就改写它。',
+}
+NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段', 'gist_basis': '上回写的意思没带依据，再写一次',
+             'repeated': '不同的对话里都碰到它', 'merge': '两条很像', 'look_back': '一周翻一条'}
+GIST_NO_BASIS = ('这句意思没带依据：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来）再写一次；'
+                 '原文还在，今晚的清单还会列它。')
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
@@ -118,6 +148,7 @@ class Tiers:
     def __init__(self, store, persona):
         self.store, self.persona = store, persona
         self.rows = store.db[COLLECTION]
+        self.notes = []                       # words for her result from the last write (a gist without its basis)
 
     # ── items ──────────────────────────────────────────────────────
     def items(self, **query):
@@ -237,7 +268,7 @@ class Tiers:
                 if move]
 
     # ── her writes ─────────────────────────────────────────────────
-    def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None):
+    def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
         """After one of her document writes: a new item starts carried (a running record's at hand), a rewrite
         that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
         Returns the moves a reader should be told of (an overflow names what it lapsed)."""
@@ -273,6 +304,27 @@ class Tiers:
             sid = intent['sid']
             row = self.item(slug, sid)
             changed = old[sid].get('body_sha256') != new[sid].get('body_sha256')
+            if row and changed and (row.get('gist') or {}).get('listed') and not (row.get('gist') or {}).get('done'):
+                # The gist step: a short rewrite of an item listed for it keeps the verbatim behind it and stays
+                # at hand. One that drops the basis its verbatim had is told so and stays listed.
+                body = new[sid].get('body') or ''
+                gist = row.get('gist') or {}
+                # The verbatim is what stood before the first try at its gist, and so is whether it had a basis.
+                verbatim = row.get('detail_of') or {'revision_id': before_revision,
+                                                    'body_sha256': old[sid].get('body_sha256')}
+                had = gist['basis'] if 'basis' in gist else bool(has_basis(old[sid].get('body') or '')
+                                                                  or row.get('from'))
+                if len(body) <= GIST_CHARS and (not had or has_basis(body) or len(body.splitlines()) > 1):
+                    self.rows.update_one({'_id': row['_id']}, {'$set': {
+                        'gist.done': _iso(moment), 'detail_of': verbatim,
+                        'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
+                    return [move for move in moves if move]
+                if len(body) <= GIST_CHARS:
+                    self.rows.update_one({'_id': row['_id']}, {'$set': {
+                        'gist.no_basis': True, 'gist.basis': had, 'detail_of': verbatim,
+                        'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
+                    self.notes.append(GIST_NO_BASIS % (row.get('from') or '原文里写着'))
+                    return [move for move in moves if move]
             if row:
                 self.rows.update_one({'_id': row['_id']}, {'$set': {
                     'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
@@ -353,6 +405,23 @@ class Tiers:
         return block
 
 
+def signing(row, intent, body=None):
+    """Why this write may not make the item a fact (her own judgment signed by herself), or None."""
+    recorded = (row or {}).get('from')
+    source = intent.get('from') or recorded
+    if intent.get('nature') == FACT and source == OWN_JUDGMENT and not (row or {}).get('confirmed'):
+        return JUDGMENT_NOT_FACT
+    if recorded == OWN_JUDGMENT and intent.get('from') == CHECKED and not (row or {}).get('confirmed'):
+        # Checked means rewritten with its basis, not relabelled.
+        if intent.get('op') != 'replace_section' or not has_basis(body or ''):
+            return JUDGMENT_NOT_FACT
+    return None
+
+
+def has_basis(text):
+    return any(word in text for word in BASIS)
+
+
 def declared_nature(intent):
     """The nature and source she gave a write ({} when neither): her word for the nature wins over the source's."""
     source = intent.get('from') if intent.get('from') in FROM_NATURE else None
@@ -366,6 +435,192 @@ def told(move):
     """A move as her result or the moved line says it, in words."""
     return '「%s」%s→%s（%s）' % (move.get('heading') or move['sid'], move['from'], move['to'],
                                REASONS.get(move['reason'], move['reason']))
+
+
+def night_list(store, persona, moment=None, *, excerpt_chars=600):
+    """The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of
+    them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different
+    conversations (几处都提到: what it is is hers to say), near-duplicate pairs in one store (合并, mandatory for facts),
+    and once a week one put-away item with past uses (回头看). An item listed for its gist twice and not rewritten goes
+    put away as it is. Returns None when nothing is due."""
+    from .config import excerpt
+    from .documents import DocumentStore
+    moment = moment or _now()
+    tiers = Tiers(store, persona)
+    docs = DocumentStore(store, persona)
+    night = moment.date().isoformat()
+    bodies = {}
+
+    def body(row):
+        key = (row['doc'], row['sid'])
+        if key not in bodies:
+            content = docs.read(row['doc'])[1] or {}
+            for section in content.get('sections') or []:
+                bodies[(row['doc'], section['sid'])] = section.get('body') or ''
+        return bodies.get(key, '')
+
+    def entry(kind, row, why):
+        text = body(row)
+        return {'what': NIGHT_WHAT[kind], 'ref': ref(row['doc'], row['sid']), 'heading': row.get('heading'),
+                'store': STORE_WORDS[row['store']], 'nature': row.get('nature') or (FACT if row.get('fact') else MEMORY),
+                'why': why, 'body': excerpt(text, excerpt_chars)}
+    items, offered = [], []
+    # 写一句意思: lapsed down from carried, long or dated, no gist yet.
+    for row in tiers.items(place=AT_HAND):
+        gist = row.get('gist') or {}
+        if gist.get('done'):
+            continue
+        lapsed = tiers.rows.find_one({'row': 'move', 'item': row['_id'], 'from': CARRIED, 'to': AT_HAND,
+                                      'reason': {'$in': ['stay', 'overflow']}})
+        text = body(row) if lapsed else ''
+        if not lapsed or not (len(text) > GIST_LIST_ABOVE or DATED.search(text) or gist.get('no_basis')):
+            continue
+        if len(gist.get('nights') or []) >= GIST_NIGHTS and night not in gist['nights']:
+            tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
+            continue
+        items.append(('gist', entry('gist', row, NIGHT_WHY['gist_basis' if gist.get('no_basis') else 'gist']), [row]))
+    # 合并: near-duplicate pairs in one store (the item index's pairs), facts first.
+    rows = {(row['doc'], row['sid']): row for row in tiers.items(place={'$in': [CARRIED, AT_HAND]})}
+    shadow = {row['_id']: (row.get('doc'), row.get('sid')) for row in store.db['memory_shadow'].find(
+        {'row': 'item', 'status': 'active'}, {'doc': 1, 'sid': 1})}
+    pairs = []
+    for pair in store.db['memory_shadow'].find({'row': 'pair', 'score': {'$gte': DUPLICATE_SCORE}}):
+        a, b = (rows.get(shadow.get(key)) for key in pair['items'])
+        if a and b and a['store'] == b['store'] and a['doc'] == b['doc']:
+            pairs.append((not a.get('fact'), a, b))
+            if a.get('scene_id') and b.get('scene_id') and a['scene_id'] != b['scene_id']:
+                # Met again from another conversation: memorable, once a night.
+                for row in (a, b):
+                    if (row.get('last_moment') != 'duplicate_elsewhere'
+                            or (row.get('memorable_at') or '')[:10] != night):
+                        tiers.memorable(row, 'duplicate_elsewhere', moment)
+                    # The same said elsewhere confirms a judgment of hers: it may now be made a fact.
+                    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'confirmed': _iso(moment)}})
+    for _, a, b in sorted(pairs, key=lambda p: (p[0], p[1]['_id'])):
+        merged = entry('merge', a, NIGHT_WHY['merge'])
+        merged['what'] = NIGHT_WHAT['merge']
+        merged['with'] = {k: v for k, v in entry('merge', b, '').items() if k in ('ref', 'heading', 'body')}
+        items.append(('merge_fact' if a.get('fact') else 'merge', merged, [a, b]))
+    # 几处都提到: a memory met in different conversations, or carried unchanged through several stays.
+    week = (moment - timedelta(days=LOOK_BACK_DAYS)).isoformat()
+    for row in tiers.items():
+        if row.get('fact') or row['store'] == 'core' or row.get('superseded_at'):
+            continue
+        places = set(row.get('surfaced_in') or []) | set(row.get('recalled_in') or [])
+        if len(places) < REPEATED_PLACES and int(row.get('stays') or 0) < REPEATED_STAYS:
+            continue
+        if tiers.rows.find_one({'row': 'offer', 'item': row['_id'], 'what': 'repeated', 'at': {'$gte': week}}):
+            continue
+        items.append(('repeated', entry('repeated', row, NIGHT_WHY['repeated']), [row]))
+    # 回头看: once a week, one put-away item with past uses.
+    if not tiers.rows.find_one({'row': 'offer', 'persona': persona, 'what': 'look_back', 'at': {'$gte': week}}):
+        away = sorted((row for row in tiers.items(place=PUT_AWAY) if int(row.get('uses') or 0) > 0),
+                      key=lambda row: sha(canonical([night, row['_id']])))
+        if away:
+            items.append(('look_back', entry('look_back', away[0], NIGHT_WHY['look_back']), [away[0]]))
+    order = {'gist': 0, 'merge_fact': 1, 'merge': 2, 'repeated': 3, 'look_back': 4}
+    items = sorted(items, key=lambda item: order[item[0]])[:NIGHT_ITEMS]
+    if not items:
+        return None
+    for kind, _, rows_ in items:
+        for row in rows_:
+            what = 'gist' if kind == 'gist' else 'merge' if kind.startswith('merge') else kind
+            tiers.rows.update_one({'_id': 'offer:' + sha(canonical([row['_id'], what, night]))[:32]}, {'$setOnInsert': {
+                'row': 'offer', 'persona': persona, 'item': row['_id'], 'what': what, 'night': night,
+                'at': _iso(moment)}}, upsert=True)
+            if kind == 'gist':
+                tiers.rows.update_one({'_id': row['_id']}, {'$set': {'gist.listed': True},
+                                                            '$addToSet': {'gist.nights': night}})
+    def how(kind, rows_):
+        if kind != 'repeated':
+            return NIGHT_HOW[kind]
+        # 记成事实 only for what someone else decided or she checked, or a judgment someone confirmed.
+        row = rows_[0]
+        signed = row.get('from') in FACT_AUTHORS or (row.get('from') == OWN_JUDGMENT and row.get('confirmed'))
+        return NIGHT_HOW['repeated'] % ('、记成事实（set_tags nature=事实）' if signed else '')
+    return {'items': [dict(value, how=how(kind, rows_)) for kind, value, rows_ in items]}
+
+
+ABOUT = ('self', 'person', 'place', 'world')
+
+
+def recalled(store, window_days, moment=None):
+    """{memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different
+    conversations within the window: promotion's candidates come from her acts, not from what she was shown."""
+    moment = moment or _now()
+    since = (moment - timedelta(days=float(window_days or 7))).isoformat()
+    seen = {}
+    for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': since}},
+                                          {'stream_id': 1, 'scope_key': 1, 'payload.memories': 1}):
+        for memory_id in (row.get('payload') or {}).get('memories') or []:
+            if isinstance(memory_id, str) and not memory_id.startswith('doc:'):
+                entry = seen.setdefault(memory_id, ({}, set()))
+                entry[0][row['stream_id']] = True
+                entry[1].add(row.get('scope_key'))
+    return {key: list(episodes) for key, (episodes, scopes) in seen.items() if len(scopes) >= 2}
+
+
+def candidates(store, window_days, limit=20):
+    """promotion_candidates with tiered memory on: what she recalled in different conversations."""
+    picked = recalled(store, window_days)
+    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': list(picked)}, 'status': 'active'},
+                                                                 {'body_markdown': 1, 'kind': 1})}
+    return [{'memory_id': key, 'kind': rows[key].get('kind'), 'excerpt': rows[key].get('body_markdown', '')[:300],
+             'episodes': episodes} for key, episodes in sorted(picked.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            if key in rows][:limit]
+
+
+def land(store, ep, item, episodes):
+    """promote_memory with `about`: the fact store of its subject. self → `core`; world → the ledger WORLD_LEDGER;
+    place → that group's notes when every source is from one group (and none from home); person → the index as
+    before (a person's facts are written with understand_person). Returns (ref, words) or (None, words)."""
+    from .documents import DocumentStore
+    from .group_admin import notes_slug
+    about = item.get('about')
+    body = '%s\n依据：%s' % (item['fact'], item['why'])
+    heading = item['fact'].splitlines()[0][:30]
+    slug, intent = None, {'op': 'append_section', 'heading': heading, 'reason': 'promote_memory: ' + item['why'][:200]}
+    if about == 'self':
+        slug = CORE_DOC
+    elif about == 'world':
+        slug, intent = WORLD_LEDGER, {**intent, 'kind': 'ledger', 'visibility': item.get('visibility') or 'owner_private'}
+    elif about == 'place':
+        scenes = {row.get('scene_id') for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'scene_id': 1})}
+        groups = [scene for scene in store.db.scenes.find({'_id': {'$in': list(scenes)}}, {'kind': 1})
+                  if scene.get('kind') == 'group']
+        if len(scenes) == 1 and len(groups) == 1 and item.get('visibility') == 'public':
+            slug, intent = notes_slug(groups[0]['_id']), {**intent, 'visibility': 'public'}
+    if not slug:
+        return None, ('关于一个人的事实用 understand_person 写到那个人那里；这条先照旧记进长期记忆。' if about == 'person'
+                      else '来源不全是同一个群（或有家里的话），记不进群笔记；这条先照旧记进长期记忆。' if about == 'place'
+                      else None)
+    docs = DocumentStore(store, ep['persona'])
+    before = docs.read(slug)
+    docs.apply(slug, intent, body, base_revision_id=before[0], author='character',
+               mutation_id='%s:promote:%s' % (ep['_id'], sha(canonical(item))[:16]))
+    after = docs.read(slug)[1]
+    sid = after['sections'][-1]['sid']
+    Tiers(store, ep['persona']).written(slug, {**intent, 'nature': FACT}, before[1], after, scene_id=ep.get('scene_id'),
+                                        before_revision=before[0])
+    return ref(slug, sid), '记进了 %s' % ref(slug, sid)
+
+
+def detail(store, persona, row):
+    """The verbatim a gist stands for (its revision before the gist), or None."""
+    behind = (row or {}).get('detail_of') or {}
+    revision = store.db.state_revisions.find_one({'_id': behind.get('revision_id')}) if behind.get('revision_id') else None
+    for section in ((revision or {}).get('content') or {}).get('sections') or []:
+        if section.get('sid') == row['sid']:
+            return section.get('body')
+    old = store.db.journal_revisions.find_one({'persona': persona, 'slug': row['doc'], 'sid': row['sid'],
+                                               'body_sha256': behind.get('body_sha256')}) if behind else None
+    if old:
+        return old.get('body')
+    for change in store.db.journal_revisions.find({'persona': persona, 'slug': row['doc'], 'sid': row['sid']}).sort(
+            'created_at', -1):
+        if sha((change.get('body') or '').encode()) == behind.get('body_sha256'):
+            return change.get('body')
+    return None
 
 
 def placed(store, persona, slug, content):

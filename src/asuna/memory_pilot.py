@@ -93,11 +93,13 @@ def _score(a, b):
 
 
 def attach(context, store, persona, retrieval):
-    """Start the pilot for a context builder that retrieves, when the switch is on: the Pilot, else None.
-    `retrieval` makes the pilot's own embedding client."""
-    if not SHADOW_PILOT or not persona or getattr(context, 'retrieval', None) is None:
+    """Start the item index for a context builder that retrieves: the Pilot, else None. It runs when the pilot's
+    switch is on (it then also writes its rows) or when tiered memory is on (memory_tiers.ENABLED: its items come up
+    in her turns from these vectors, whatever the pilot's switch says). `retrieval` makes its own embedding client."""
+    from . import memory_tiers
+    if not (SHADOW_PILOT or memory_tiers.ENABLED) or not persona or getattr(context, 'retrieval', None) is None:
         return None
-    context.pilot = Pilot(store, persona, retrieval()).start()
+    context.pilot = Pilot(store, persona, retrieval(), logging=SHADOW_PILOT).start()
     return context.pilot
 
 
@@ -128,8 +130,8 @@ def admitted(ranked, floor=FLOOR, slots=OWN_SLOTS):
 class Pilot:
     """One background thread: turns are queued by `submit` and scored off the reply path."""
 
-    def __init__(self, store, persona, retrieval):
-        self.store, self.persona, self.retrieval = store, persona, retrieval
+    def __init__(self, store, persona, retrieval, *, logging=True):
+        self.store, self.persona, self.retrieval, self.logging = store, persona, retrieval, logging
         self.items, self.synced_at, self.dropped, self.submit_ms = [], 0.0, 0, None
         self.jobs = queue.Queue(QUEUE_SIZE)
         self.stopping = threading.Event()
@@ -182,6 +184,8 @@ class Pilot:
         started = time.perf_counter()
         if time.monotonic() - self.synced_at > SYNC_SECONDS or not self.items:
             self.sync()
+        if not self.logging:
+            return None                      # the index only: tiered memory reads its items, nothing is logged
         vector = job['vector']
         reused = vector is not None
         if vector is None:

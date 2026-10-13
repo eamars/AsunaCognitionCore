@@ -293,7 +293,13 @@ above 0.5 / above 0.1 / below). No number reaches her.
    - 几处都提到: an item repeated from several sides with its text unchanged (a `self` item through three stays, or any
      memory met in different conversations). Her choice is what it means and about whom: 进 core (about herself),
      记到那个人 / 记到那个群 / 记进账 (a fact about a person, a group, her circumstances), or 还在变 (stays a memory).
-     The program decides whether it came up enough; the meaning is hers.
+     The program decides whether it came up enough; the meaning is hers. 记成事实 is offered only for an item someone
+     else decided or said (`from` 主人定的, 别人说的) or that she checked (查过的). **Rule (her answer and the owner's
+     call, 2026-10-13): a fact needs an author who can correct it, so her own judgment (我自己的判断) becomes a fact
+     only when** (1) a near-duplicate of it comes from someone else (written in another conversation, or declared
+     别人说的 / 主人定的), found on the 合并 path; or (2) she rewrites it with `from` 查过的 and its basis. Declaring it
+     a fact herself is refused on write. Considered and dropped: "upheld by a correction thread", because no honest
+     signal for it exists without the program judging what was said, which would grade her text.
    - 合并: two items the index finds near-duplicate (cosine above a high threshold, same store): she merges them into
      one. Mandatory for a fact store (otherwise it is the next store that only grows); in a memory store she may keep
      both. Schema-consistent assimilation, in her words.
@@ -472,6 +478,23 @@ and overflow, facts not cooling and superseded by correction, `let_go`, the `thi
 own items, the night list replacing the notes review, graduation into `core`, `promote_memory`'s fixed path. Her
 one-time rewrite of `current_self` into items (hers; the old body stays as history); today's `always` sections start
 随身 with a fresh stay (nothing lapses on day one). `update_self` aliased.
+**Phase 2 built (off), 2026-10-13; the switch is `memory_tiers.ENABLED` (`TIERS_VERSION` 1), off until she and the
+owner turn it on.** Commits: e4f5a47d (item places, stays, memorable moments, lapse, overflow, cooling, supersession,
+`let_go`, `things_from_program`), 5916ce35 (no tag moves an item up; each item a fact or a memory by `nature` / `from`,
+not by store; `update_self` writes `self` items once they exist), 6ce6b8a5 (her items in two of six memory slots
+above the floor 0.83, never one carried; `recall` says where it searched, lists matching headings and a document's
+headings), add08634 (the night list replacing the notes review; the gist that keeps its basis; her judgment not
+signed as a fact by herself; `promote_memory` candidates from her recalls and `about` landing in the fact store; the
+item index runs for tiered memory whatever the pilot switch says), 048346b0 (the told text, the tool texts, the
+confirmation rule). Built to her two answers: facts and memories are per item (`nature` 事实 / 记忆, `from` 主人定的 /
+查过的 / 别人说的 / 我自己的判断, the store giving the default), and `self` is split by claim with its basis, never by
+line (the offer says so; a gist keeps a basis line). Off: nothing of it is read or written, and her tools and system
+prompt are byte for byte as before (tested). On, measured: character-brain tools 31, 20,924 characters (−94: retiring
+`update_self`, −388, pays for `let_go`, `nature`, `from`, `about` and the recall sentence, +294); system prompt +561
+characters once per conversation (the told text 366, two block notes); per turn `things_from_program` (a few hundred
+characters when it changes, folded otherwise; a moved line about 60 once), her items in at most two memory slots
+(they replace two memories, not add), the night list at most five items with bodies (it replaces the notes review);
+a synthetic turn sends no text twice (tested).
 
 **Phase 3, after two weeks of readings:** understanding layers as items; the idea age word; sticker last-used words;
 retire the alias; her own weekly reading in self evaluation (ADR-058): moves, saves, gists written, items brought

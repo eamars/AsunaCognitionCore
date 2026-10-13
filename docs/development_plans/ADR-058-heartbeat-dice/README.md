@@ -112,7 +112,7 @@ The owner asked for a small share of beats to review the dice and to talk at hom
   self evaluation points to it. A separate outcome only if reviews show promises still going unclosed.
 - **Learning one thing** stays in reserve: it overlaps with self development.
 
-Cost: no tool; the opening line names six weights (about 20 characters more); the review block only on its beats.
+Cost: no tool; the opening line names every weight in the table rolled (about 20 characters more); the review block only on its beats.
 
 ## A seventh face: 待着 · idle (Xiaoman, 2026-10-14)
 
@@ -149,3 +149,5 @@ this section stands (basis: that night's `plan` receipt carried `updated_at` 02:
 before it).
 
 Acceptance for this section is still open: nothing here has been verified against a week of readings.
+
+- 2026-10-14 (Xiaoman): the Cost line in Two more outcomes above stopped counting faces (six weights -> every weight in the table rolled); it describes current behavior, so it must not need an edit when a face is added.

@@ -31,7 +31,7 @@ AREAS = {
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
     'people': ('Groups and people', 'Who is talking, whether she joins in, her places, notes between conversations.', [
         'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',
-        'watches', 'waiting', 'places', 'focus', 'switches', 'own_mute', 'condense', 'notes', 'scene_links', 'visibility', 'understanding', 'private_words']),
+        'watches', 'waiting', 'places', 'focus', 'switches', 'own_mute', 'condense', 'notes', 'questions', 'scene_links', 'visibility', 'understanding', 'private_words']),
     'memory': ('Memory', 'What she remembers, how it is recalled, her documents, mood and blobs.', [
         'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest',
         'summary_trigger', 'summary_attribution', 'documents', 'self_state', 'night', 'affect', 'blobs', 'privacy']),

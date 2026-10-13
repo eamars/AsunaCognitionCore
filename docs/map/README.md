@@ -25,8 +25,8 @@ Every turn has a **class**, decided by the program from the conversation and the
     class (`scene_links`).
   - Documents and persona sections are filtered the same way (`visibility.readable`, `render.readable_sections`), and
     a section tagged with places renders only there.
-  - `context.ContextBuilder` adds the home-only blocks only in owner_private turns: her mood's reasons, the developer
-    inbox, her places, errands and credentials.
+  - `context.ContextBuilder` adds the home-only blocks only in owner_private turns: her mood's reasons, her questions,
+    her places, errands and credentials.
 - **What she can do follows the place.** Each conversation lists its tools by place (`role_tools.toolbox`): her
   settings, `restart` and her idea notebook only at home; `errand` only in the owner's own conversations; `visit`,
   `promote_memory` and `credential` only in the local chat.
@@ -233,6 +233,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`own_mute`](../../src/asuna/own_mute.py) — Her own mute in a group: one state slot per group conversation, so she knows where her words cannot go out.
 - [`condense`](../../src/asuna/condense.py) — Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its conversation.
 - [`notes`](../../src/asuna/notes.py) — Notes between her own conversations (ADR-018, owner 2026-10-07).
+- [`questions`](../../src/asuna/questions.py) — Her questions (ADR-061): one question, or a problem report, to one or more of her home places or the action brain, each place with a patience; what came back is kept with the question, never judged.
 - [`scene_links`](../../src/asuna/scene_links.py) — 跨场景只读联动（A2）：一条有向边 + 一个 canonical person，配置是唯一真相。
 - [`visibility`](../../src/asuna/visibility.py) — Session class and data visibility (ADR-009 §2).
 - [`understanding`](../../src/asuna/understanding.py) — Her understanding of a person, in two layers (owner 2026-10-08, with her wording).
@@ -304,7 +305,7 @@ The action brain's tasks, grants, schedules, sandbox, development and integratio
 - [`integration_fetch`](../../src/asuna/integration_fetch.py) — Trusted one-shot artifact fetcher, run by the managed integration (integration.py) for one configured endpoint.
 - [`integration_image`](../../src/asuna/integration_image.py) — Trusted one-shot image generation, run only inside the managed integration namespace.
 - [`integration_import`](../../src/asuna/integration_import.py) — Owner-local import of one artifact from an already configured integration endpoint.
-- [`developer_inbox`](../../src/asuna/developer_inbox.py) — Her messages to the developer agent (owner 2026-10-08): the agent that changes her program, not the owner.
+- [`developer_inbox`](../../src/asuna/developer_inbox.py) — Notes for the developer agent (the agent that changes her program, not the owner) that the program leaves itself: when a task's result could not be handed back to her (handover.py), one row in `developer_inbox`, marked `source.by: program`.
 
 ### [The Web page's data](page.md)
 

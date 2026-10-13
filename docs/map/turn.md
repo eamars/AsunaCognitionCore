@@ -123,6 +123,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `group_note_ops` — What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
 - def `tools` — The tool specs her brain is shown: tiered memory's when its switch is on, else as they are.
+- def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
 - def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
 - def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').
 - def `named` — An option as she reads it: 'task 的 message'.
@@ -173,7 +174,9 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_group_focus`
   - `tool_place_timezone`
   - `tool_find_member`
-  - `tool_message_developer`
+  - `tool_ask_ask`
+  - `tool_ask_read`
+  - `tool_ask_close`
   - `tool_ideas_read`
   - `tool_task_page`
   - `tool_ideas_review`

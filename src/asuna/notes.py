@@ -14,6 +14,9 @@ nothing: the turn it opens has only what its own scene and kind give, and one op
 tool with consequences (role_tools.exposed). Delivery never interrupts: a `wake` note is an input at the tail of
 the receiving scene's queue (Chat.offer_internal), behind whatever runs there; a `next_time` note opens no turn
 and is shown in that conversation's next one. Words come from the versioned tables below.
+
+A note may carry one of her questions (`ask`, questions.py): it is never a reply, it does not count against the
+turn's notes, and the lists of notes received and sent leave it out (the questions block says what came of it).
 """
 from __future__ import annotations
 
@@ -181,8 +184,10 @@ def _resolve(store, persona, found, wanted, cls):
     return named[0] if len(named) == 1 else None
 
 
-def prepare(store, ep, cls, args, call_id, moment=None):
-    """Validate one note from this turn: (draft, None), or (None, the row already sent by this call)."""
+def prepare(store, ep, cls, args, call_id, moment=None, question=None):
+    """Validate one note from this turn: (draft, None), or (None, the row already sent by this call). A note that
+    carries one of her questions (`question`, questions.py) is never a reply and does not count against the turn's
+    notes."""
     from .people import People
     moment = moment or datetime.now(timezone.utc)
     note_id = 'note-' + sha(canonical([ep['_id'], call_id]))[:20]
@@ -222,8 +227,8 @@ def prepare(store, ep, cls, args, call_id, moment=None):
         if who:
             raise NoteRefused('NOTE_NOT_OWN_WORDS', '便条里有一长段和这里别人刚说的话一样。用你自己的话写；'
                                                     '要是别人托你的，写清是谁的意思。')
-    sent_here = store.db.notes.count_documents({'from_episode': ep['_id']})
-    if sent_here >= PER_TURN:
+    sent_here = store.db.notes.count_documents({'from_episode': ep['_id'], 'question': {'$exists': False}})
+    if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
                           % (sent_here, PER_TURN))
     # No cap over all directions: a note is read in real time, so nothing piles up; only what comes from public
@@ -241,7 +246,7 @@ def prepare(store, ep, cls, args, call_id, moment=None):
                         {'from_scene': to_scene, 'to_scene': ep['scene_id']}]}
         if store.db.notes.count_documents({**outside, **pair}) >= PUBLIC_PAIR:
             raise NoteRefused('NOTE_PAIR_LIMIT', '今天这两个群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_PAIR)
-    reply = first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
+    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
         {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
     hop = (reply.get('hop', 1) + 1) if reply else 1
     if hop > MAX_HOP:
@@ -249,7 +254,8 @@ def prepare(store, ep, cls, args, call_id, moment=None):
     return {'_id': note_id, 'persona': persona, 'from_scene': ep['scene_id'], 'from_class': cls,
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,
             'trust': trust, 'mode': mode, 'hop': hop, 'reply_to': (reply or {}).get('_id'),
-            'tables_version': TABLES_VERSION, 'created_at': now(), 'seen_in': []}, None
+            'tables_version': TABLES_VERSION, 'created_at': now(), 'seen_in': [],
+            **({'question': question} if question else {})}, None
 
 
 def record(store, draft, event_id=None):
@@ -311,7 +317,7 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
     2026-10-08); that turn reads a summary."""
     from .people import People
     since = (moment - timedelta(hours=KEEP_HOURS)).isoformat()
-    rows = list(store.db.notes.find({'to_scene': scene_id, 'created_at': {'$gte': since},
+    rows = list(store.db.notes.find({'to_scene': scene_id, 'created_at': {'$gte': since}, 'question': {'$exists': False},
                                      '_id': {'$ne': (skip or {}).get('_id')}}).sort('created_at', -1).limit(SHOWN))
     if not rows:
         return None
@@ -341,7 +347,7 @@ def sent_block(store, persona, scene_id, moment):
     """notes_sent_from_program: what came of the notes she wrote here, in program words only."""
     from .people import People
     since = (moment - timedelta(hours=KEEP_HOURS + 24)).isoformat()
-    rows = list(store.db.notes.find({'from_scene': scene_id, 'created_at': {'$gte': since}})
+    rows = list(store.db.notes.find({'from_scene': scene_id, 'created_at': {'$gte': since}, 'question': {'$exists': False}})
                 .sort('created_at', -1).limit(SHOWN))
     if not rows:
         return None

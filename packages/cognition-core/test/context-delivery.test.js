@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeContext, restoreContext, trimTurn, visibleCarried } from '../src/context-delivery.js';
+import { composeContext, restoreContext, trimTurn, visibleCarried, withoutVisibleAnswers } from '../src/context-delivery.js';
 
 // A minimal session surface: what the model currently sees, newest last.
 function surface(events) {
@@ -272,4 +272,36 @@ test('a line is sent once in a notice, in the conversation itself', () => {
   assert.deepEqual(here, { kind: 'task_result', original_input_id: 'in-4' }, 'named by its id, not sent again');
   assert.deepEqual(gone, { kind: 'task_result', original_input: '很久以前的请求' }, 'not in front of her: its text');
   assert.equal(composed.omitted.history_rows, 3);
+});
+
+
+test('her questions block folds: unchanged it is named, one changed question is the only one sent again (ADR-061)', () => {
+  const question = (id, state) => ({ id, question: '问题' + id, asked_at: '2026-10-13T01:00:00Z', state,
+    to: [{ to: '本机私聊', state: state === '有回答' ? '答了' : '等着', until: '2026-10-13T02:00:00Z' }] });
+  const block = states => ({ questions_from_program: { items: states.map(([id, state]) => question(id, state)) } });
+  const first = composeContext(context([], block([['q1', '等着'], ['q2', '等着']])), visibleCarried(surface([])));
+  assert.equal(first.context.questions_from_program.items.length, 2);
+  const seen = [notice(first, 'ep-1')];
+  const same = composeContext(context([], block([['q1', '等着'], ['q2', '等着']])), visibleCarried(surface(seen)));
+  assert.equal(same.context.questions_from_program, undefined);
+  assert.ok(same.context.unchanged_from_program.includes('questions_from_program'));
+  const answered = composeContext(context([], block([['q1', '有回答'], ['q2', '等着']])), visibleCarried(surface(seen)));
+  assert.deepEqual(answered.context.questions_from_program.items.map(item => item.id), ['q1']);
+  assert.equal(answered.context.questions_from_program.same_as_before, '其余 1 条同前（等着 1）');
+});
+
+test('an answer she reads that the conversation still shows is named, not sent again (ADR-061)', () => {
+  const line = { type: 'user/message', data: { id: 'web-1', content: [{ type: 'text', text: '吃面吧' }],
+    source: { kind: 'user' } } };
+  const projected = { type: 'user/message', data: { content: [{ type: 'text', text: '改这一行' }],
+    source: { kind: 'user', channel: 'agent', receipt: 'in-7' } } };
+  const session = { ...surface([line, projected]), deriveEventMessage: event => event.data };
+  const read = { id: 'q-1', to: [{ to: '本机私聊', answers: [
+    { by: '主人', line: 'in-ep-1', event_id: 'web-1', text: '吃面吧' },
+    { by: 'Claude', line: 'in-7', event_id: 'agent-1', text: '改这一行' },
+    { by: 'Claude', line: 'in-9', event_id: 'agent-2', text: '早就不在眼前的话' }] }] };
+  const shown = withoutVisibleAnswers(read, visibleCarried(session));
+  assert.deepEqual(shown.to[0].answers.map(answer => answer.text),
+    ['这句就在这个对话里，往上看', '这句就在这个对话里，往上看', '早就不在眼前的话']);
+  assert.equal(withoutVisibleAnswers({ id: 'q-1', to: [] }, visibleCarried(session)).to.length, 0);
 });

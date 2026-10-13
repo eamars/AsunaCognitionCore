@@ -134,6 +134,7 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only what her session does not still show is sent.
 
 - def `visibleCarried` — What the surface already carries.
+- def `withoutVisibleAnswers` — An `ask` read result (ADR-061) without the text of an answer whose line the conversation still shows, by its message id or, for a line written in the Web composer, its platform event id: the answer is named, not sent again.
 - def `restoreContext` — After a compaction, what of a notice's context is no longer visible: the blocks, rows, memories and items to send again (the turn's own orientation and trigger only when the notice itself is gone), with `restored_from_program` naming the bl
 - def `composeContext` — The context this notice sends, what it carries, and what it left out (for the audit).
 - def `trimTurn` — The turn's ceiling on what this notice sends (the worker's table, context_budget.ceiling): over it, the oldest rows of the listed lists go first, then the longest text left is halved, again and again, saying how much went.

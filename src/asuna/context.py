@@ -797,9 +797,12 @@ class ContextBuilder:
         sent=_notes.sent_block(self.store,persona,scene['_id'],moment)
         if sent:context['notes_sent_from_program']=sent
         if session_class==visibility.OWNER_PRIVATE:
-            from . import developer_inbox as _developer_inbox
-            asked=_developer_inbox.block(self.store,persona,moment)
-            if asked:context['developer_inbox_from_program']=asked
+            # ADR-061: her questions still open, and once each one the program closed; a question whose note opened
+            # this turn is named by its id only (the note carries its text).
+            from . import questions as _questions
+            _questions.migrate(self.store,persona)
+            asked=_questions.block(self.store,persona,scene['_id'],moment,(first_note or {}).get('question'))
+            if asked:context['questions_from_program']=asked
             from . import host_stops as _host_stops
             away=_host_stops.block(self.store,schedule_zone,moment)
             if away:context['host_from_program']=away

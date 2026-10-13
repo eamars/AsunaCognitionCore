@@ -313,6 +313,25 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `sent_block` — notes_sent_from_program: what came of the notes she wrote here, in program words only.
 - def `receiver` — Who a note's turn enters the conversation as: only so it is authorized there; never shown as a sender.
 
+## `questions`
+
+[src/asuna/questions.py](../../src/asuna/questions.py)
+
+Her questions (ADR-061): one question, or a problem report, to one or more of her home places or the action brain, each place with a patience; what came back is kept with the question, never judged.
+
+- def `question_id`
+- def `until`
+- def `developer_place` — The home line of the agent that changes her program: a home route marked `developer`, else the route named `claude-code` (the route for Claude Code).
+- def `record` — The question as asked (idempotent by its id).
+- def `refresh` — Bring one question up to date with what came back; closes it when it has run past its end.
+- def `state_of`
+- def `place_words` — One place of a question as she reads it.
+- def `migrate` — Her developer-inbox messages become closed questions to the developer's line, once each (by the row's id); the program's own notes there stay where they are.
+- def `block` — questions_from_program at home: her open questions, and once in this conversation each one the program closed; None when there are none.
+- def `read` — One question with its answers' text (a task's report: its first page).
+- def `history` — Her last asks to one place (or the action brain) in READ_DAYS: when, answered or not, how long, her took.
+- def `close` — She closes a question with what she took from it.
+
 ## `scene_links`
 
 [src/asuna/scene_links.py](../../src/asuna/scene_links.py)

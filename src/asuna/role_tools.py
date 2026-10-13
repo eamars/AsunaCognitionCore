@@ -360,13 +360,19 @@ TOOLS = {
                        'place': _s('哪个群：照抄 place（set、clear 要写）'),
                        'timezone': _s('IANA 时区名（set 要写），比如 Asia/Shanghai')},
     },
-    'message_developer': {
-        'description': ('给开发代理留话：改你程序的那位（不是主人）。level=wake 是要他尽快来看：卡住了、出了得他动手的问题'
-                        '（他开着的时候大约一小时内会看到，不开着就等他下次来）；level=note 是不急的，等他下次来看。'
-                        '他在他的 agent 线上回你。要拍板的事（权限、花钱、开不开哪条道）找主人，不找他。'
-                        '800 字以内；24 小时内 wake 最多 3 条、note 最多 20 条。'),
-        'parameters': {'level': _s('wake（要他尽快来）或 note（等他下次来看）', required=True, enum=['wake', 'note']),
-                       'text': _s('留言：什么事、卡在哪、要他做什么，800 字以内', required=True)},
+    'ask': {
+        'description': ('问人或报问题，程序记着问了谁、谁答了、多久。op：ask 提问，可同时问几处，过了耐心就不等；'
+                        'read 读一个问题的回答，或只写 to 看以前问那处怎样；close 结束一个问题。'
+                        '问家里别的对话（本机、主人的私聊、开发代理的线）：程序在那边开一轮，带着 question，你到了再决定怎么问。'
+                        '拍板的事（权限、花钱、开哪条道）问主人，不问开发代理。'),
+        'parameters': {'op': _s('做哪一样（不写时：有 question 是 ask，有 took 是 close，否则 read）',
+                                enum=['ask', 'read', 'close']),
+                       'question': _s(limit=800, description='问什么，或报什么问题（ask）'),
+                       'to': {'type': 'array', 'items': {'type': 'string'},
+                              'description': '问谁：note_places_from_program 里家里的 place、这里，或 行动脑（ask；read 写一处）'},
+                       'patience': _s('等多久，不写就是一小时（ask）', enum=['一会儿', '一小时', '半天', '一天', '回了为止']),
+                       'id': _s('问题 id，照抄 questions_from_program（read、close）'),
+                       'took': _s(limit=500, description='得到了什么、做了什么，这次问各处怎样（close）')},
     },
     'ideas': {
         'description': ('你的「改进想法」本，op 选一样：note 记下一个改进自己的想法——能力、技能、做事方式上可以更好的地方，'
@@ -400,6 +406,11 @@ TOOLS = {
                        'visibility': _s('谁能读到', enum=['public', 'owner_private'])},
     },
 }
+
+# message_developer runs as ask to the developer's line (ADR-061): registered with its own parameters, never listed.
+MESSAGE_DEVELOPER = {'name': 'message_developer', 'description': '已并入 ask（问开发代理的线）；旧名照常可用。',
+                     'parameters': {'level': _s('wake 或 note', enum=['wake', 'note']), 'text': _s('要说的话')}}
+
 
 # Looking at a picture is one tool shared by both brains (ADR-011 §5.3 as amended): the action brain's own
 # read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
@@ -437,20 +448,33 @@ def tools():
     return TIERED if memory_tiers.ENABLED else TOOLS
 # ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
 # and a turn may use is kept by option ('task.message'); the model is shown the tools.
-OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review')}
+OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review'),
+       'ask': ('ask', 'read', 'close')}
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
 RENAMED = {'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
            'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review'}
 RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
 # A field only one option takes says which option a call without op is (as plan's create, ADR-054).
 OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page'},
-             'ideas': {'idea': 'note', 'id': 'review', 'decision': 'review', 'search': 'read', 'page': 'read'}}
+             'ideas': {'idea': 'note', 'id': 'review', 'decision': 'review', 'search': 'read', 'page': 'read'},
+             'ask': {'question': 'ask', 'patience': 'ask', 'took': 'close'}}
+# The option a call without op and without any field above is (ask: reading).
+OP_DEFAULT = {'ask': 'read'}
+
+
+def developer_ask(store, args):
+    """message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a
+    note as until it is answered (ADR-061)."""
+    from . import places, questions
+    scene_id, _ = questions.developer_place(store.config)
+    return {'op': 'ask', 'question': args.get('text'), 'to': [places.place_id(scene_id) if scene_id else '开发代理'],
+            'patience': '一小时' if args.get('level') == 'wake' else '回了为止'}
 
 
 def infer_op(name, args):
     """The option a call without op plainly is, by its fields; None when they say none or several."""
     ops = {OP_FIELDS[name][key] for key in args if key in OP_FIELDS[name]}
-    return ops.pop() if len(ops) == 1 else None
+    return ops.pop() if len(ops) == 1 else None if ops else OP_DEFAULT.get(name)
 
 
 def ability(tool, args=None):
@@ -496,15 +520,15 @@ def all_specs():
                    'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
                                   for key, spec in TOOLS['update_self']['parameters'].items()}}
         return specs([name for name in TOOL_NAMES if name != 'update_self']) + [
-            unlisted(old, can) for old, can in RENAMED.items()] + [retired]
-    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()]
+            unlisted(old, can) for old, can in RENAMED.items()] + [retired, MESSAGE_DEVELOPER]
+    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [MESSAGE_DEVELOPER]
 
 
 def aliases():
     """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
     from . import memory_tiers
     retired = {'update_self': 'write_document'} if memory_tiers.ENABLED else {}
-    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, **retired}
+    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, **retired, MESSAGE_DEVELOPER['name']: 'ask'}
 
 
 def turn_kind(ep):
@@ -579,7 +603,8 @@ def _turn_rules(store, ep):
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
-        names += ['update_self', 'set_policy', 'message_developer', 'place_timezone', 'restart', 'group_focus']
+        names += ['update_self', 'set_policy', 'ask.ask', 'ask.read', 'ask.close', 'place_timezone', 'restart',
+                  'group_focus']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
@@ -611,7 +636,7 @@ WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answe
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'ideas.read', 'ideas.review',
-           'message_developer', 'restart', 'place_timezone', 'group_focus')
+           'ask.ask', 'ask.read', 'ask.close', 'restart', 'place_timezone', 'group_focus')
 IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
@@ -943,6 +968,8 @@ class RoleTools:
         called_as = None
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
+        elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
+            called_as, name, args = name, 'ask', developer_ask(self.store, args)       # ADR-061
         inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
         if inferred:
             args = {**args, 'op': inferred}
@@ -981,7 +1008,7 @@ class RoleTools:
             self._record(ep_id, call_id, name, args, refused=message, called_as=called_as)
             raise Refused(message) from None
         if called_as and isinstance(result, dict):
-            result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED[called_as].split('.')))}
+            result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED.get(called_as, 'ask.ask').split('.')))}
         if inferred and isinstance(result, dict):
             result = {**result, 'op': '没写 op：按你写的字段当作 %s 办了。' % inferred}
         from . import memory_tiers
@@ -1883,16 +1910,105 @@ class RoleTools:
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
         return group_members.find(self.store, scene, ep['persona'], self._text(args, 'name', 20)), False
 
-    def tool_message_developer(self, ep, call_id, args):
-        from . import developer_inbox
-        level = args.get('level')
-        if level not in developer_inbox.LIMITS:
-            raise Refused('level 是 wake 或 note%s。' % _given(args, 'level'))
-        text = self._text(args, 'text', developer_inbox.TEXT_CHARS)
-        row = developer_inbox.leave(self.store, ep['persona'], level, text, key=[ep['_id'], call_id],
-                                    source={'scene_id': ep['scene_id'], 'episode_id': ep['_id'], 'turn': turn_kind(ep)})
-        return {'left': row['_id'], 'note': ('留好了。他开着的时候大约一小时内会看到，回话在他的 agent 线上；不开着就等他下次来。'
-                                            if level == developer_inbox.WAKE else '留好了，他下次来会看到。')}, False
+    # ── her questions (ADR-061) ─────────────────────────────────────
+    def _ask_place(self, ep, wanted, homes_only=True):
+        """One `to` entry as a source: this conversation, another home place a note reaches, or the action brain."""
+        from . import notes, places, questions
+        from .people import People
+        people = People(self.store, ep['persona'])
+        wanted = ' '.join(str(wanted or '').split())
+        if wanted in questions.HERE or wanted == places.place_id(ep['scene_id']):
+            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+            return {'to': places.place_id(ep['scene_id']), 'scene_id': ep['scene_id'], 'kind': 'here',
+                    'name': people.scene_title(scene)}
+        if wanted == questions.ACTION:
+            return {'to': questions.ACTION, 'kind': 'action', 'name': questions.ACTION}
+        found = notes.allowed(self.store, ep['scene_id'], visibility.OWNER_PRIVATE, notes.opening(self.store, ep))
+        place = notes._resolve(self.store, ep['persona'], found, wanted, visibility.OWNER_PRIVATE)
+        homes = {p: sid for p, (sid, kind) in found.items() if kind == 'home'}
+        if place and (place in homes or not homes_only):
+            scene = self.store.db.scenes.find_one({'_id': found[place][0]})
+            return {'to': place, 'scene_id': found[place][0], 'kind': 'home', 'name': people.scene_title(scene)}
+        names = '、'.join('%s（%s）' % (people.scene_title(self.store.db.scenes.find_one({'_id': sid})), p)
+                         for p, sid in homes.items())
+        if place:
+            raise Refused('ASK_PLACE_NOT_HOME: 「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
+                          '在群里或别人的私聊里问，用 pass_note 送过去，到那边自己问。' % (wanted, names or '没有别处'))
+        raise Refused('ASK_PLACE_UNKNOWN: 问不到「%s」：to 写 %s这里，或 行动脑。' % (wanted, names + '、' if names else ''))
+
+    def tool_ask_ask(self, ep, call_id, args):
+        from . import credentials, ingress, notes, questions
+        from .questions import QUESTION_CHARS
+        text = credentials.scrub(self._text(args, 'question', QUESTION_CHARS))
+        patience = args.get('patience') or questions.DEFAULT_PATIENCE
+        if patience not in questions.PATIENCE:
+            raise Refused('ASK_PATIENCE_UNKNOWN: patience 是 %s 之一%s；不写就是 %s。'
+                          % ('、'.join(questions.PATIENCE), _given(args, 'patience'), questions.DEFAULT_PATIENCE))
+        wanted = args.get('to')
+        wanted = [wanted] if isinstance(wanted, str) else wanted
+        if not isinstance(wanted, list) or not wanted or not all(isinstance(w, str) and w.strip() for w in wanted):
+            raise Refused('ASK_TO_REQUIRED: to 写问谁（一到 %d 处）：note_places_from_program 里家里的 place、这里，或 行动脑。'
+                          % questions.PLACES_MAX)
+        wanted = list(dict.fromkeys(' '.join(w.split()) for w in wanted))
+        if len(wanted) > questions.PLACES_MAX:
+            raise Refused('ASK_TOO_MANY: 一个问题最多问 %d 处，写了 %d 处：挑最想问的。' % (questions.PLACES_MAX, len(wanted)))
+        sources = [self._ask_place(ep, w) for w in wanted]
+        if any(source['kind'] == 'action' for source in sources) and 'delegate' not in (ep.get('turn_tools') or ()):
+            raise Refused('ASK_NO_ACTION_BRAIN: 这一回合不能交给行动脑，问不了它；问别处，或者等能交事的回合。')
+        qid = questions.question_id([ep['_id'], call_id])
+        row = self.store.db.questions.find_one({'_id': qid})
+        if not row:
+            for source in sources:
+                if source['kind'] == 'here':
+                    source['episode'] = ep['_id']
+                elif source['kind'] == 'home':
+                    if not self.coordinator.scheduler:
+                        raise Refused('ASK_NOT_SENT: 现在没有定时服务，问不过去（不是你的错）；重试也一样，先问这里。')
+                    try:
+                        sent = self.coordinator.scheduler.note(
+                            ep, visibility.OWNER_PRIVATE, {'to': source['to'], 'mode': 'wake',
+                                                           'text': questions.NOTE_TEXT % (qid, text)},
+                            '%s:ask:%s' % (call_id, source['to']), question=qid)
+                    except notes.NoteRefused as exc:
+                        raise Refused('ASK_NOT_SENT: 问不到「%s」：%s' % (source['name'], exc)) from None
+                    note = self.store.db.notes.find_one({'_id': sent['note']})
+                    source['note'] = note['_id']
+                    source['episode'] = ingress.episode_id({'scene_id': note['to_scene'], 'event_id': note.get('event_id'),
+                                                            'episode_kind': 'note'})
+                else:
+                    self._depth(ep)
+                    task = self.coordinator.delegate(ep, '%s:ask' % call_id, ' '.join(text.split())[:80],
+                                                     questions.BRIEF % text)
+                    source['task'] = task['_id']
+            row = questions.record(self.store, ep, qid, text, patience, sources)
+        return {'id': qid, 'to': [questions.place_words(source) for source in row['sources']],
+                'note': questions.ASKED}, False
+
+    def tool_ask_read(self, ep, call_id, args):
+        from . import questions
+        qid = self._text(args, 'id', 40, required=False)
+        if qid:
+            found = questions.read(self.store, ep['persona'], qid)
+            if not found:
+                raise Refused('ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。' % qid)
+            return found, False
+        wanted = args.get('to')
+        wanted = wanted[0] if isinstance(wanted, list) and len(wanted) == 1 else wanted
+        if not isinstance(wanted, str) or not wanted.strip():
+            raise Refused('ASK_READ_WHAT: read 写 id（读一个问题的回答），或只写一处 to（看以前问那处怎样）。')
+        source = self._ask_place(ep, wanted, homes_only=False)
+        return questions.history(self.store, ep['persona'], None if source['kind'] == 'action' else source['scene_id'],
+                                 source['name']), False
+
+    def tool_ask_close(self, ep, call_id, args):
+        from . import questions
+        from .questions import TOOK_CHARS
+        qid = self._text(args, 'id', 40)
+        took = self._text(args, 'took', TOOK_CHARS)
+        row, words = questions.close(self.store, ep['persona'], qid, took)
+        if not row:
+            raise Refused('ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。' % qid)
+        return {'id': qid, 'closed': words}, False
 
     def tool_ideas_read(self, ep, call_id, args):
         from . import schedule_rules

@@ -12,10 +12,10 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (32, 21055)       # ADR-064 phase 1: group_action accept/decline at home, +37 characters (description tightened)
+CHARACTER = (32, 21453)       # ADR-061 step 1: ask (827) replaces message_developer (429), +398 characters
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 20961)
+CHARACTER_TIERED = (31, 21359)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -62,7 +62,7 @@ def test_the_action_brain_stays_within_its_tool_budget():
 COPIED = {('think', 'thought'), ('attach_image', 'artifact_id'), ('set_policy', 'key'), ('feel', 'event_id'),
           ('feel', 'proposal_id'), ('feel', 'why'), ('plan', 'line'), ('plan', 'plan_id'), ('visit', 'place'),
           ('errand', 'place'), ('peer_line', 'line'), ('place_timezone', 'place'), ('place_timezone', 'timezone'),
-          ('task', 'task'), ('ideas', 'id')}
+          ('task', 'task'), ('ideas', 'id'), ('ask', 'id')}
 SAFETY_CAP = 20000          # limits this large are a guard, never a length she writes toward
 
 

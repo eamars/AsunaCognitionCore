@@ -1,6 +1,6 @@
 """ADR-056: fixed text once, in her system prompt; times in blocks are fields on the local clock; the ids she may
 cite include the memories and tasks shown in their own blocks."""
-from asuna import block_guide, developer_inbox
+from asuna import block_guide, questions
 from asuna.context import refs
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
@@ -27,9 +27,12 @@ def test_a_block_saying_what_the_guide_says_arrives_without_it_and_another_note_
 
 
 def test_a_block_carries_its_times_as_fields_so_it_changes_only_with_its_content(store):
-    developer_inbox.leave(store, 'P1', developer_inbox.NOTE, '写给开发者', key=['k'], source={'scene_id': 's'})
-    [item] = developer_inbox.block(store, 'P1')['items']
-    assert 'at' in item and 'when' not in item
+    store.put('scenes', {'_id': 's', 'kind': 'dm', 'scope_key': 'scene:s', 'policy_epoch': 1, 'members': ['A']})
+    ep = {'_id': 'ep-1', 'scene_id': 's', 'persona': 'P1'}
+    questions.record(store, ep, 'q-a1b2c3d4', '问一下', '一小时',
+                     [{'to': 'g1', 'scene_id': 's', 'kind': 'here', 'name': '这里', 'episode': 'ep-1'}])
+    [item] = questions.block(store, 'P1', 's')['items']
+    assert 'asked_at' in item and 'until' in item['to'][0] and 'when' not in item
 
 
 def test_a_memory_or_task_id_shown_in_its_block_counts_as_a_ref():

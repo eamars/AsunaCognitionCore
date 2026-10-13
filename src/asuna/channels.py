@@ -76,6 +76,12 @@ def kept_raw(event, raw, mentioned=None):
     notice = notices.kept(raw)
     if notice:
         kept[notices.KEY] = notice                            # a platform notice projected to words (notices.py)
+    from . import channel_kinds
+    from .questions import ANSWER_KEY, ID
+    answer = raw.get(ANSWER_KEY)
+    if channel_kinds.home(event.get('scene_id')) and isinstance(answer, dict) and isinstance(answer.get('question'), str) \
+            and ID.fullmatch(answer['question']):
+        kept[ANSWER_KEY] = {'question': answer['question']}     # a trusted line answering one of her questions (ADR-061)
     own = raw.get('asuna_self')
     if (event.get('channel') or {}).get('target', {}).get('type') == 'group' and isinstance(own, dict) \
             and own.get('role') in ('owner', 'admin', 'member'):

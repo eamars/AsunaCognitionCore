@@ -14,7 +14,7 @@ import SkillService from '@deepseek-ai/dsh-skill';
 import { attachImage, asunaRender } from './tool-output.js';
 import { imageRefusalListener } from './image-refusal.js';
 import { holdSteeredInput } from './steer.js';
-import { composeContext, restoreContext, trimTurn, visibleCarried } from './context-delivery.js';
+import { composeContext, restoreContext, trimTurn, visibleCarried, withoutVisibleAnswers } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
@@ -1001,6 +1001,8 @@ export class CognitionCore {
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
+          // An answer she reads that the conversation still shows is named, not sent again (ADR-061).
+          if (spec.name === 'ask') return withoutVisibleAnswers(reply.value, visibleCarried(agent.session));
           // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.
           return attachImage({ attachments: scope.reflect.get('attachments') }, reply.value);
         },

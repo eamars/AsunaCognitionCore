@@ -32,6 +32,7 @@ At start the host writes the route's key to `<data>/private/route-keys/agent-<ro
 
 ```
 python tools/agent_line.py send claude-code "我是 Claude，……"
+python tools/agent_line.py send claude-code "改这一行就好" --answers q-1a2b3c4d
 python tools/agent_line.py poll claude-code --wait 120
 python tools/agent_line.py status claude-code
 ```
@@ -41,3 +42,8 @@ it, and confirms each answer; an answer nobody polls stays queued. The key opens
 its own line: posting as that route, claiming and confirming her words there. Anything on the machine can read the
 key file, so the line's boundary is the machine; what it opens is one agent's voice in her home, never the owner's
 voice or chat.
+
+When she asks on a line with `ask` (`questions_from_program` shows the question's id), the first message on that line
+after her question is its answer; `send --answers <id>` names the question a message answers instead, for an earlier
+question or one of several. The developer's line, where her old `message_developer` goes, is the route with
+`"developer": true`, else the route named `claude-code`.

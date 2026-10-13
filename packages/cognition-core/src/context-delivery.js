@@ -47,7 +47,7 @@ function shapeDigest(value) {
  * navigation.js, and notices claimed with them) count too. */
 export function visibleCarried(session, pending = []) {
   const visible = { blocks: new Set(), items: new Set(), lists: new Set(), rows: new Set(), memories: new Set(),
-    episodes: new Set(), thoughts: new Set() };
+    episodes: new Set(), thoughts: new Set(), native: new Set() };
   const take = (content, source) => {
     // Her own thought, as she wrote it with `think` (its call id ends the stored thought's id).
     if (Array.isArray(content)) for (const block of content)
@@ -68,10 +68,30 @@ export function visibleCarried(session, pending = []) {
   for (const seq of session.surface.nodes) {
     const event = session.eventAt(seq);
     if (!event) continue;
-    take(session.deriveEventMessage(event)?.content ?? '', event.type === 'user/message' ? event.data?.source : undefined);
+    const message = session.deriveEventMessage(event);
+    // A line written in the Web composer is on the surface as itself: its id is the line's platform event id.
+    if (event.type === 'user/message' && !event.data?.source?.channel && message?.id) visible.native.add(message.id);
+    take(message?.content ?? '', event.type === 'user/message' ? event.data?.source : undefined);
   }
   return visible;
 }
+
+/** An `ask` read result (ADR-061) without the text of an answer whose line the conversation still shows, by its
+ * message id or, for a line written in the Web composer, its platform event id: the answer is named, not sent again. */
+export function withoutVisibleAnswers(value, visible) {
+  if (!value || typeof value !== 'object' || !Array.isArray(value.to)) return value;
+  const shown = answer => answer && typeof answer.text === 'string'
+    && (visible.rows.has(answer.line) || (visible.native ?? new Set()).has(answer.event_id));
+  return { ...value, to: value.to.map(place => !Array.isArray(place?.answers) || !place.answers.some(shown) ? place
+    : { ...place, answers: place.answers.map(answer => {
+      if (!shown(answer)) return answer;
+      const { text: _text, ...rest } = answer;
+      return { ...rest, text: ANSWER_IN_VIEW };
+    }) }) };
+}
+
+/** What an answer still in view reads instead of its text. */
+const ANSWER_IN_VIEW = '这句就在这个对话里，往上看';
 
 /** After a compaction, what of a notice's context is no longer visible: the blocks, rows, memories and items to send
  * again (the turn's own orientation and trigger only when the notice itself is gone), with `restored_from_program`

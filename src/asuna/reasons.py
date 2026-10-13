@@ -51,6 +51,10 @@ def _action(tool, args):
     if tool == 'plan' and (op in ('create', 'update', 'cancel') or (not op and not args.get('plan_id') and args.get('intent'))):
         return {'create': '定了个计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + (
             '：%s' % _short(args['intent']) if args.get('intent') else '')
+    if can == 'ask.ask':
+        return '问了：%s' % _short(args.get('question'))
+    if can == 'ask.close':
+        return '结束了一个问题：%s' % _short(args.get('took'))
     if tool in ('pass_note', 'leave_note'):
         return '写了张便条：%s' % _short(args.get('text'))
     if tool == 'visit':

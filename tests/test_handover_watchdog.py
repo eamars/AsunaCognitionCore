@@ -133,7 +133,8 @@ def test_when_the_short_version_fails_too_the_developer_is_told_and_the_watchdog
         assert handbacks(entries)[-1] == ('missed', 'report', False, True)
         note = store.db.developer_inbox.find_one({})
         assert note['source'] == {'by': 'program', 'task_id': task['_id']} and note['level'] == developer_inbox.NOTE
-        assert developer_inbox.block(store, store.config['chat']['persona']) is None, 'not shown to her as hers'
+        from asuna import questions
+        assert questions.migrate(store, store.config['chat']['persona']) == 0, 'not moved into her questions as hers'
         count = len(entries)
         settle(chat)
         assert len(entries) == count and store.db.developer_inbox.count_documents({}) == 1, 'nothing more is tried'

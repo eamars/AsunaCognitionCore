@@ -620,13 +620,13 @@ class ScheduleService:
         return {'going_to': people.scene_title(scene),
                 'note': '程序会在那边开一轮，那一轮只看得到那边和这句话；办没办成，下次在家会看到。'}
 
-    def note(self, ep, cls, args, call_id):
+    def note(self, ep, cls, args, call_id, question=None):
         """A note of hers to another of her conversations (ADR-018). A `wake` note is an input at the tail of that
         scene's queue: at home its own `note` turn, in a group a visit with intent `note` (from home it counts as a
         visit, under the same limits). Nothing is sent into a running turn."""
         from . import notes, places
         moment = schedule_rules._aware(now())
-        draft, existing = notes.prepare(self.store, ep, cls, args, call_id, moment)
+        draft, existing = notes.prepare(self.store, ep, cls, args, call_id, moment, question=question)
         if existing:
             return notes.result(self.store, existing)
         scene = self.store.db.scenes.find_one({'_id': draft['to_scene']})

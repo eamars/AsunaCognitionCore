@@ -303,9 +303,8 @@ Owner-local import of one artifact from an already configured integration endpoi
 
 [src/asuna/developer_inbox.py](../../src/asuna/developer_inbox.py)
 
-Her messages to the developer agent (owner 2026-10-08): the agent that changes her program, not the owner.
+Notes for the developer agent (the agent that changes her program, not the owner) that the program leaves itself: when a task's result could not be handed back to her (handover.py), one row in `developer_inbox`, marked `source.by: program`. The developer reads unseen rows (`unread`) and marks them `seen` or `answered` (`mark`); the audit records each without its text. Her own questions and reports to the developer are `ask` (questions.py); rows she left before that are moved into closed questions (questions.migrate).
 
-- def `leave` — One message (idempotent by key).
-- def `block` — developer_inbox_from_program: what came of her recent messages, in words, or None.
+- def `leave` — One note from the program (idempotent by key).
 - def `unread` — For the developer: messages not yet seen, oldest first.
 - def `mark` — The developer saw or answered a message.

@@ -29,7 +29,7 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                'watches',
                # Notes between her own conversations (ADR-018, owner 2026-10-07).
                'notes',
-               # Her messages to the developer agent (developer_inbox.py, owner 2026-10-08).
+               # The program's notes to the developer agent (developer_inbox.py).
                'developer_inbox',
                # Who is in each group, as the channel adapter last fetched it (group_members.py, owner 2026-10-08).
                'group_members',
@@ -40,7 +40,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # Her own mute in each group, as the platform last said it (own_mute.py).
                'own_mutes',
                # Her running records, one row per entry, each change kept beside its entry (documents.JOURNALS).
-               'journal_entries','journal_revisions')
+               'journal_entries','journal_revisions',
+               # Her questions, each to one or more places, with what came back (questions.py, ADR-061).
+               'questions')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 

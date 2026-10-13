@@ -94,3 +94,10 @@ should fall to near zero, and characters per turn by kind should fall by about a
   states; `waiting_on_you` marks a note waiting for her answer and every waiting-list entry. `ref_index` keeps this
   turn's ids and the `doc:` sections; `context.refs` adds the memory and task ids for `feel` and the appraiser.
 - Installed in its own restart, after the one carrying ADR-055.
+
+## After a full day (2026-10-13)
+
+Refused tool calls, from her role sessions' tool results (DSH's argument check and the program's own refusals): 3 of
+849 in the 24 hours before it went live (0.4%), 3 of 664 in the 24 hours after (0.5%): no rise. All three after were
+a missing `op`, which 31c35018 removed (live 2026-10-13 07:58 NZDT). The rest of the delivery effect is measured in
+ADR-063 ("Measured after"), whose fixes built on these rules.

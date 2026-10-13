@@ -308,6 +308,34 @@ Her `work_log` is a running record (`documents.JOURNALS`): she reads and writes 
 
 The `append_section` that creates a document may say its `kind`: `ledger` (its `inject: always` sections reach every turn where they are readable, as `ledgers_from_program`; new sections default to `always`, and `correction` applies), `journal` (a running record stored as rows, like `work_log`) or `working` (the default; read by `recall`). The kind is chosen once: a `kind` on a later write that differs from the document's is refused (`DOC_KIND_FIXED`), and one outside the three is refused (`DOC_KIND_INVALID`). In a group's notes `kind` is ignored.
 
+## Tiered memory
+
+`memory_tiers.py` keeps where each of her items lives, behind the switch `memory_tiers.ENABLED`, which is off: off,
+nothing below is read or written, and her prompts, tools and turns are as described elsewhere in this document.
+
+On, every section of her persona, voice, ledgers, group notes, running records and the documents `self` and `core` is
+an item with a row in the collection `memory_tiers`: its place (随身, carried in every turn where it is readable; 手边,
+at hand; 收着, put away), when it was last memorable and its stay; the program never changes its text. An item the
+program has not seen takes its place from its `inject` (`always`, `on_demand`, `never`) with a fresh stay; from then
+on the place decides what is carried: the persona and voice render, a ledger and a group's notes show their 随身
+sections, and `self_state_from_program` shows the 随身 items of `self` and `core` once she has written them (until
+then, `current_self` and `character_core` as before). A section she writes starts 随身 (a running record's row 手边);
+`set_tags` with `inject` moves it to the matching place. A 随身 item lapses to 手边 when its stay runs out: 14 days
+from its last memorable moment (group notes 28, `core` and voice 56); a memorable moment (`recall` returned it, a
+rewrite changed its body, its `doc:` ref cited in a tool call, a second conversation it came up in) starts the stay
+again and, once per stay, doubles the next, up to 56 days. A rewrite that changes an item brings it back to 随身. A
+store over its count of 随身 items (`self` 12, persona 16, each ledger 10, each group's notes 6, `core` 12, voice 6)
+lapses its least recently memorable one (one written in a turn where she recorded a feeling last), and the write's
+result names it under `moved`. Memories (`self`, running records) cool to 收着 by disuse (a running record's row after
+30 days unused, a `self` item when the persona model's forgetting formula falls below `step_back_below`); facts
+(persona, voice, ledgers, group notes, `core`) never do. A `correction` moves the item it corrects to 收着 with the
+date it was superseded. `write_document` takes `op: let_go` with a `sid`, also in a group's notes from that group:
+the item moves one place down now. Every move is a row `move` and one audit line `memory.moved` (item, from, to,
+reason). `things_from_program` says, per store, how many items are in each place in words, and lists the moves not
+yet told in this conversation, each once, with its clock time and reason; a home turn is offered the split of
+`current_self` into `self` items until `self` exists (the program never splits her text). The documents `self` and
+`core` are of kind `self`: their sections are `always` and `public` unless she says otherwise.
+
 ## Shadow pilot of her own items
 
 `memory_pilot.py` measures which of her own items a turn would surface, and delivers nothing. Her persona sections, the list lines of `current_self` (30 characters or longer), the rows of each running record and each group's notes sections are embedded on the memory embedding route into the collection `memory_shadow` (rows `item`), apart from `memory_units`; an owner-private item is readable only in owner-private turns, a public one everywhere, a group's notes only in that group. The items are read again at most every ten minutes, and only new or changed ones are embedded. After each character turn's context is prepared, the turn is queued; a background thread scores the items against the turn's query the way retrieval scores memories (vector and lexical ranks fused; the vector score is the index's (1 + cosine) / 2, reusing the vector the turn's retrieval computed), takes at most two above the floor of 0.83 (`FLOOR`, `OWN_SLOTS`), and writes one row (`turn`, or `recall` for a `recall` query): item ids, stores and scores, the best six candidates above 0.75, the turn's kind, the conversation and its kind, the query's hash, the time the job took. An item a turn would surface records the conversation in `surfaced_in`. Pairs of items in one store scoring 0.93 or more are written as `pair` rows. No text, heading or query is written, and nothing of it reaches a prompt. `tools/memory_pilot_report.py` prints the daily reading in counts; `--drop` removes the collection. The switch is `memory_pilot.SHADOW_PILOT`: off, the Host starts no pilot.

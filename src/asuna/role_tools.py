@@ -41,6 +41,12 @@ IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
 IDEAS_PAGE = 20                 # one page of her notebook (ideas op read pages and searches the rest)
 GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
+
+
+def group_note_ops():
+    """What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too."""
+    from . import memory_tiers
+    return GROUP_NOTE_OPS + (('let_go',) if memory_tiers.ENABLED else ())
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
 # nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
@@ -931,6 +937,12 @@ class RoleTools:
             result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED[called_as].split('.')))}
         if inferred and isinstance(result, dict):
             result = {**result, 'op': '没写 op：按你写的字段当作 %s 办了。' % inferred}
+        from . import memory_tiers
+        if memory_tiers.ENABLED and name != 'recall':
+            # ADR-062: an item she cites by its doc: ref in a call is used, a memorable moment.
+            cited = memory_tiers.refs_in(args)
+            if cited:
+                memory_tiers.Tiers(self.store, ep['persona']).used(cited, 'cited', ep['scene_id'])
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
         self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as,
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
@@ -1225,7 +1237,7 @@ class RoleTools:
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
             scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
-            if (scene or {}).get('kind') != 'group' or item.get('op') not in GROUP_NOTE_OPS:
+            if (scene or {}).get('kind') != 'group' or item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
                                                                   else 'op「%s」不行' % item.get('op')))
             item = {**item, 'doc': notes_slug(ep['scene_id'])}
@@ -1234,7 +1246,7 @@ class RoleTools:
         if item['doc'].startswith('group:'):
             # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
             # tidy them by name from her nightly settlement (context_budget.review_block).
-            if item.get('op') not in GROUP_NOTE_OPS:
+            if item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: op「%s」不行' % item.get('op'))
             item = {k: v for k, v in item.items() if k != 'kind'}    # a group's notes are notes, whatever kind says
             item = {**item, 'visibility': 'public'}
@@ -1242,8 +1254,11 @@ class RoleTools:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
         docs = DocumentStore(self.store, ep['persona'])
         slug = item['doc']
-        base = docs.read(slug)[0]
+        base, before = docs.read(slug)
         mutation_id = f"{ep['_id']}:write:{call_id}"
+        from . import memory_tiers
+        if item.get('op') == 'let_go' and memory_tiers.ENABLED:
+            return self._let_go(ep, slug, item.get('sid'), before), False
         if item.get('op') == 'adopt_seed':
             kind, text = _seed_text(self.store, slug)
             if text is None:
@@ -1258,7 +1273,14 @@ class RoleTools:
                               budget=budget_gate(self.store, ep['persona']))
         result = {'doc': slug, 'op': item['op'], 'revision_id': revision['_id'], 'sid': item.get('sid'),
                   'heading': item.get('heading'), 'note': '已写下。'}
-        sections = (docs.read(slug)[1] or {}).get('sections', [])
+        after = docs.read(slug)[1]
+        sections = (after or {}).get('sections', [])
+        if memory_tiers.ENABLED:
+            felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
+            moves = memory_tiers.Tiers(self.store, ep['persona']).written(slug, item, before, after,
+                                                                          scene_id=ep['scene_id'], felt=felt)
+            if moves:
+                result['moved'] = [memory_tiers.told(move) for move in moves]
         if item['op'] in ('append_section', 'correction') and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
@@ -1267,6 +1289,18 @@ class RoleTools:
             result['now'] = {'visibility': written['visibility'], 'inject': written['inject'], 'tags': written.get('tags') or [],
                              'places': visibility.section_places(written) or '到处都带'}
         return result, False
+
+    def _let_go(self, ep, slug, sid, content):
+        """ADR-062: her let_go of one item: one place down now; nothing of its text changes."""
+        from . import memory_tiers
+        sections = {s['sid']: s for s in (content or {}).get('sections') or []}
+        if not isinstance(sid, str) or sid not in sections:
+            raise DocumentError('DOC_SECTION_NOT_FOUND', '「%s」里没有 sid「%s」；照抄一个' % (slug, sid))
+        tiers = memory_tiers.Tiers(self.store, ep['persona'])
+        tiers.sync()
+        move = tiers.let_go(slug, sid, scene_id=ep['scene_id'])
+        return {'doc': slug, 'op': 'let_go', 'sid': sid,
+                'note': memory_tiers.told(move) if move else '它已经收着了，再放就没有更下面的地方了；什么都没改。'}
 
     def tool_update_self(self, ep, call_id, args):
         from .self_state import SelfState

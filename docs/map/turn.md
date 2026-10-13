@@ -120,6 +120,7 @@ Role system prompt rendering (ADR-009 §8.1).
 
 Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 
+- def `group_note_ops` — What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
 - def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
 - def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').

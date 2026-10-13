@@ -43,6 +43,34 @@ The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a tu
   - `sync` — Embed new and changed items, mark the ones gone, and write the near-duplicate pairs the changes made.
 - def `report` — ADR-062 §7 phase 1, in counts: would-be surfacings per day by turn kind, the floor that keeps her own items at or under one a turn on average and none in heartbeats, near-duplicate pairs, recall hits, and what it cost.
 
+## `memory_tiers`
+
+[src/asuna/memory_tiers.py](../../src/asuna/memory_tiers.py)
+
+Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
+
+- def `words`
+- def `age_word`
+- def `store_of` — Which store a document is, or None when it is not tiered (her working documents).
+- def `item_id`
+- def `ref`
+- class `Tiers`
+  - `items`
+  - `item`
+  - `sync` — Every item has a row.
+  - `placed` — A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched).
+  - `move` — One item to another place: the row, a `move` row told once per conversation, one audit line.
+  - `tick` — Lapses whose stay ran out and memories cooled by disuse; facts never cool.
+  - `memorable` — A memorable moment: the stay starts again from now and, once per stay, the next one doubles.
+  - `written` — After one of her document writes: a new item starts carried (a running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
+  - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
+  - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
+  - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
+  - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
+- def `told` — A move as her result or the moved line says it, in words.
+- def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
+- def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.
+
 ## `retrieval`
 
 [src/asuna/retrieval.py](../../src/asuna/retrieval.py)

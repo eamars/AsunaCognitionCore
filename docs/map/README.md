@@ -245,6 +245,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
 - [`memory_pilot`](../../src/asuna/memory_pilot.py) — The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
+- [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 - [`retrieval`](../../src/asuna/retrieval.py) — Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).

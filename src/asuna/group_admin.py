@@ -160,7 +160,9 @@ def notes_block(docs, scene):
     """Her own notes about this group (who is who, its customs, how she acts here), as a context block, within
     its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading."""
     from .context_budget import NOTE_CHARS, note_view
+    from .memory_tiers import placed
     revision, content = docs.read(notes_slug(scene['_id']))
+    content = placed(docs.store, docs.persona, notes_slug(scene['_id']), content)
     kept, about = note_view((content or {}).get('sections', []), NOTE_CHARS['group_notes'])
     sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'

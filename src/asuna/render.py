@@ -139,7 +139,9 @@ def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, plac
         raise ValueError('REQUIRED_PERSONA_MISSING')
     voice_rev, voice_doc = docs.read('voice')
     common = common_text(store.config)
-    text = role_text(store.config, compose(common, persona_doc, voice_doc, cls, place))
+    from .memory_tiers import placed                 # ADR-062: what is carried follows its place when tiers are on
+    text = role_text(store.config, compose(common, placed(store, persona, 'persona', persona_doc),
+                                           placed(store, persona, 'voice', voice_doc), cls, place))
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
            'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
     report_budget(store, persona, persona_doc, voice_doc, common)

@@ -61,7 +61,8 @@ RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scen
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
-    'self_state': ('self_state_from_program', 'recent_thoughts_from_program', 'night_from_program'),
+    'self_state': ('self_state_from_program', 'things_from_program', 'recent_thoughts_from_program',
+                   'night_from_program'),
     'affect': ('affect_from_program', 'how_to_record_from_program'),
     'affect_proposals': ('affect_proposals_from_program',),
     'relationship': ('relationship', 'relationship_shared_from_program'),
@@ -171,12 +172,13 @@ def _section_view(section):
 def ledger_block(docs, cls):
     """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
     from .context_budget import NOTE_CHARS, note_view
+    from .memory_tiers import placed
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
         if not content or content.get('kind') != 'ledger':
             continue
-        sections = readable_sections(content, cls)
+        sections = readable_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
@@ -304,6 +306,16 @@ class ContextBuilder:
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
         """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only."""
         scene=self.store.authorize(event['scene_id'],event['person_id'])
+        from . import memory_tiers
+        if memory_tiers.ENABLED and not recall:
+            # ADR-062: rows for new items, then the lapses and cooling due, before anything is read for the turn.
+            from .persona_model import effective as _tier_effective
+            from .render import model_and_policy as _tier_model
+            _tm,_tp=_tier_model(self.store,persona)
+            _tiers=memory_tiers.Tiers(self.store,persona)
+            _tiers.sync()
+            _tiers.tick(half_life_days=float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
+                        step_back_below=float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1))
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
         session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
@@ -329,6 +341,13 @@ class ContextBuilder:
         person_head=self.store.head(person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
+        if memory_tiers.ENABLED:
+            # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
+            for name,slug in (('current_self',memory_tiers.SELF_DOC),('character_core',memory_tiers.CORE_DOC)):
+                own=memory_tiers.placed(self.store,persona,slug,docs.read(slug)[1])
+                if own and own.get('sections'):
+                    self_state[name]={'items':[{'heading':s['heading'],'body':s['body'],'ref':'doc:%s#%s'%(slug,s['sid'])}
+                                               for s in readable_sections(own,session_class)]}
         from .ingress import episode_id
         source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
         history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
@@ -861,6 +880,13 @@ class ContextBuilder:
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
         ledgers=ledger_block(docs,session_class)
+        if memory_tiers.ENABLED and not recall:
+            # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
+            from .group_admin import notes_slug as _notes_slug
+            context['things_from_program']=memory_tiers.Tiers(self.store,persona).things(
+                session_class,scene,schedule_rules.scene_timezone(self.store.config,scene),moment,
+                home=session_class==visibility.OWNER_PRIVATE,
+                readable_docs={_notes_slug(scene['_id'])} if scene['kind']=='group' else set())
         if ledgers:
             context['ledgers_from_program']=ledgers
             documents.update({item['doc']:item['revision'] for item in ledgers})
@@ -884,7 +910,8 @@ class ContextBuilder:
         context['ref_index']=['in-'+_episode_id(event)]
         doc_refs=list(dict.fromkeys([
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
-            *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))
+            *['doc:persona#'+section['sid'] for section in readable_sections(
+                memory_tiers.placed(self.store,persona,'persona',persona_doc),session_class)]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         # Available with or without a record: her first understanding of someone creates it.

@@ -22,7 +22,7 @@ from .state import Conflict, Denied, now
 SCOPE = 'global-safe'
 VISIBILITIES = ('public', 'owner_private')
 INJECTS = ('always', 'on_demand', 'never')
-ALWAYS_KINDS = ('persona', 'voice', 'ledger')
+ALWAYS_KINDS = ('persona', 'voice', 'ledger', 'self')
 PREAMBLE = '_preamble'
 MAX_REVISION_BYTES = 1024 * 1024
 FRONT_MATTER = re.compile(r'\A\s*<!--\s*asuna-seed\s+(\{.*?\})\s*-->\s*\n?', re.S)
@@ -376,6 +376,9 @@ class DocumentStore:
             if slug.startswith('dossier:'):
                 # Person files are retired: what she knows about someone lives with that person (understand_person).
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写')
+            from . import memory_tiers
+            if memory_tiers.ENABLED and slug in memory_tiers.SELF_DOCS:
+                kind = 'self'                    # ADR-062: her self descriptions as documents of items
             content = {'kind': kind or 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
         elif kind is not None and kind != content['kind']:
             raise DocumentError('DOC_KIND_FIXED', '「%s」已经是 %s；kind 只在新建文档时选，建好就不改'
@@ -418,7 +421,8 @@ class DocumentStore:
             tags = _checked_tags(intent.get('tags') or [])
             if op == 'correction':
                 tags = [*dict.fromkeys([*tags, 'correction'])]
-            visibility = intent.get('visibility') or 'owner_private'
+            # Her self descriptions are read wherever she is, as current_self was.
+            visibility = intent.get('visibility') or ('public' if kind == 'self' else 'owner_private')
             inject = intent.get('inject') or ('always' if kind in ALWAYS_KINDS else 'on_demand')
             if visibility not in VISIBILITIES:
                 raise DocumentError('DOC_TAGS_INVALID', _bad_tag('visibility', visibility, VISIBILITIES))

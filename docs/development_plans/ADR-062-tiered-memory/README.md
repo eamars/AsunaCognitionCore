@@ -16,14 +16,49 @@ forgetting is part of learning, not a loss to be prevented. It is how this ADR i
 Put to her as: forgetting here means putting down, not throwing away; what you stop using moves to a shelf, its words
 kept, and something can always bring it back.
 
-**What stays is what is memorable, not what is chosen** (the owner, 2026-10-13: a person has no choice over what to
-remember and what fades; only the most memorable stays). Revision owed before this ADR is built: her explicit keep
-acts (pin, 带着 / 放手 / 改写 at night, confirmation doubling a stay) go; what fades is decided by memorability, which
-for a person is rehearsal (use: surfaced or recalled, already here), feeling at the time (her affect when the item was
-written, not yet used here), repetition from several sides (the same idea in different conversations or from
-different people) and surprise (an item that corrected or contradicted what she held). Her influence stays indirect,
-as a person's is: what she keeps using, what moved her, what she writes in her diary. The gist step and recall
-bringing an item back stay.
+## The revision: memorable, declared, corrected (owner, 2026-10-13)
+
+Decided by the owner after a review by the research agent (three answers, reconciled by Claude). It supersedes the
+sections below wherever they differ; those sections are rewritten to match as the first step of building.
+
+1. **Memories stay by memorability, not by her choice.** The owner: a person has no choice over what to remember;
+   only the most memorable stays. What keeps a memory (journal rows, chunks, summaries, thoughts, dated self items):
+   - **use across conversations**: recall returned it, she rewrote it with a changed body, she cited its `doc:` ref,
+     or it was surfaced to her in two or more different conversations (one conversation echoing itself counts
+     nothing: no loop where what is shown stays);
+   - **surprise**: a `correction`, a `replace_section` that changes its meaning, or a summary's correction pointing at
+     its subject; surprise can bring a 收着 item back to 手边;
+   - **repetition from several sides**: the same idea from different conversations or different people;
+   - **feeling at the time**, a tie-breaker only: a `feel` she recorded in the same turn. Measured: 5% of her turns
+     record a feeling (111 of 2,337 since 10-06), 34 of 434 write turns; and she records one only when moved, so as
+     a main weight it would be a keep button through a side door.
+2. **Facts are declared, and replaced only by correction.** The owner: facts are different from memory. The split is
+   by the store she writes to, a choice she already makes, not a program classifier: the persona document, the person
+   layer (`understand_person`), ledgers and `core` hold what is; the stores in 1 hold what happened. A fact leaves 随身
+   when unused but never cools to 收着 by disuse; a newer item on the same subject supersedes it, the old revision kept
+   and dated. Near-duplicates in a fact store merge into one item per subject (mandatory: otherwise a fact store is
+   the next store that only grows), and fact items count in the 随身 cap. A promise to someone and a person's stated
+   boundary are facts: rare and seldom used, exactly what memorability would drop. Facts about a person stay with
+   that person; facts about her circumstances and the world go to a ledger; nothing goes into tracked package files.
+   Her backstory (for example her sisters) is already in her persona package; the rule earns its keep on learned
+   facts, which should be few. `promote_memory` is that path today but fires rarely (6 times): its candidates are
+   what she was shown, it lands only in the index, and it runs only at settlement; it is fixed to take candidates
+   from her acts and repetition across conversations, and to land in the fact stores above, or `write_document`
+   takes it over.
+3. **Her acts: let go, and a rewrite that changes something.** Pin, 带着 (keep) and confirmation doubling a stay go,
+   and so does the nightly keep chore. 放手 (let go) stays, offered but never asked for: it is the one act that is not
+   hoarding, and the habit she has not learned. A rewrite counts as rehearsal only when its body changed, once per
+   stay, and extends only the item it rewrote (no copy beside it). Watched: writes refused for length go to zero within
+   a week of this going live (if not, the cap is still doing the forgetting); rewrites per item per week in 随身 (a
+   jump right after a lapse notice is hoarding, and the notice then stops naming that item).
+4. **Why, on her data rather than on the premise.** People do have some deliberate control (rehearsal, notes,
+   directed forgetting). The keep choice goes because it does not work for her: no removal in 8 tidy turns, 3 shrinks
+   in 46 self revisions, a model asked keep-or-drop keeps; and choosing what to keep invites self-curation (what fits
+   her self-image stays, contradictions go), which makes her more polished and fixed, not grown. A model that would
+   use a keep act well is a reason to revisit this, not to keep it now.
+
+The night list loses the keep choices and keeps gists due, graduation offers and merges. No new tool; about 60
+characters more in `write_document`'s description (which stores hold facts); no per-turn line.
 
 ## 1. Context: every store of hers only grows
 

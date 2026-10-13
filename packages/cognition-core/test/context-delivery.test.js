@@ -237,3 +237,39 @@ test('after a compaction, what a notice relied on and the surface no longer show
   const all = restoreContext(context(rows), visibleCarried(surface([checkpoint])), 'ep-2');
   assert.ok(all.context.event && all.context.scene);
 });
+
+test('a block whose list only changed order is named unchanged, not sent again', () => {
+  const mood = order => ({ label: '平静', reasons: order.map(n => ({ feeling: '开心', why: '理由 ' + n, event_id: 'e' + n })) });
+  const first = composeContext(context([], { affect_from_program: mood([1, 2, 3]) }), visibleCarried(surface([])));
+  assert.deepEqual(first.context.affect_from_program, mood([1, 2, 3]));
+  const second = composeContext(context([], { affect_from_program: mood([1, 3, 2]) }),
+    visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.equal(second.context.affect_from_program, undefined, 'the same reasons re-ranked are before her already');
+  assert.ok(second.context.unchanged_from_program.includes('affect_from_program'));
+  // Folded once, re-ranked again: still unchanged (the live case, 2026-10-13).
+  const third = composeContext(context([], { affect_from_program: mood([2, 1, 3]) }),
+    visibleCarried(surface([notice(first, 'ep-1'), notice(second, 'ep-2')])));
+  assert.ok(third.context.unchanged_from_program.includes('affect_from_program'));
+  const changed = composeContext(context([], { affect_from_program: { ...mood([2, 1, 3]), label: '开心' } }),
+    visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.equal(changed.context.affect_from_program.label, '开心', 'a changed field is sent');
+});
+
+test('a line is sent once in a notice, in the conversation itself', () => {
+  const rows = [{ _id: 'in-4', direction: 'inbound', text: '帮我查一下明天的天气' }, { _id: 'in-5', direction: 'inbound', text: '谢谢' }];
+  const composed = composeContext(context(rows, {
+    group_continuity_from_program: { related_messages: [{ _id: 'in-4', text: '帮我查一下明天的天气' }, { _id: 'in-3', text: '更早的一句' }],
+      current_speaker_tail: [{ _id: 'in-5', text: '谢谢' }] },
+    recent_experience_from_program: { messages: [{ _id: 'in-4', text: '帮我查一下明天的天气' }, { _id: 'in-9', text: '别处的话' }] },
+    event: { text: '任务有了结果', trusted_context_events: [
+      { kind: 'task_result', original_input: '帮我查一下明天的天气', original_input_id: 'in-4' },
+      { kind: 'task_result', original_input: '很久以前的请求', original_input_id: 'in-1' }] } }), visibleCarried(surface([])));
+  assert.deepEqual(composed.context.delivered_history.map(row => row._id), ['in-4', 'in-5']);
+  assert.deepEqual(composed.context.group_continuity_from_program.related_messages.map(row => row._id), ['in-3']);
+  assert.deepEqual(composed.context.group_continuity_from_program.current_speaker_tail, []);
+  assert.deepEqual(composed.context.recent_experience_from_program.messages.map(row => row._id), ['in-9']);
+  const [here, gone] = composed.context.event.trusted_context_events;
+  assert.deepEqual(here, { kind: 'task_result', original_input_id: 'in-4' }, 'named by its id, not sent again');
+  assert.deepEqual(gone, { kind: 'task_result', original_input: '很久以前的请求' }, 'not in front of her: its text');
+  assert.equal(composed.omitted.history_rows, 3);
+});

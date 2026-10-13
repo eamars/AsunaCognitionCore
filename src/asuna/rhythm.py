@@ -149,13 +149,14 @@ def _grams(text: str):
 
 
 def recent_phrasing(texts, *, minimum=3, limit=5):
-    """4-grams that appear ≥ ``minimum`` times across the given own messages; ≤ ``limit`` items."""
+    """4-grams that appear ≥ ``minimum`` times across the given own messages; the ``limit`` most frequent, in a fixed
+    order (a block that reorders without changing is sent again)."""
     counts = Counter()
     for text in texts:
         counts.update(set(_grams(text or '')))
     repeated = [(gram, n) for gram, n in counts.items() if n >= minimum]
     repeated.sort(key=lambda item: (-item[1], item[0]))
-    return [gram for gram, _ in repeated[:limit]]
+    return sorted(gram for gram, _ in repeated[:limit])      # the same phrases read the same, whatever their counts
 
 
 # ── ADR-021: night self-development stages ──

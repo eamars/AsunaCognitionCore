@@ -286,7 +286,8 @@ def pace(store, scene, moment, zone):
     times = [at for at in (_at(row.get('received_at') or row.get('receipt_at')) for row in rows) if at]
     if not times:
         return {'last_line': '还没见过有人说话'}
-    value = {'last_line': '上一句是%s（%s）' % (_ago(moment, times[0]), line_stamp(zone, times[0].isoformat()))}
+    # A clock stamp, not "how long ago": the block changes only when someone speaks.
+    value = {'last_line': '上一句在 %s' % line_stamp(zone, times[0].isoformat())}
     stretch = 1
     while stretch < len(times) and times[stretch - 1] - times[stretch] < PACE_GAP:
         stretch += 1

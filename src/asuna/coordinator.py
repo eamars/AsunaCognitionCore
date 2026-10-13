@@ -144,7 +144,8 @@ class Coordinator:
                 event={'event_id':call_key,'scene_id':task['scene_id'],'person_id':task['requester_id'],
                     'text':question,'episode_kind':'consult','task_id':task['_id'],
                     'trusted_context_events':[{'kind':'action_question','task':task['_id'],'title':task.get('title') or task['goal'],
-                        'brief':task.get('brief') or task['goal'],'original_input':source['text'],'question':question,
+                        'brief':task.get('brief') or task['goal'],'original_input':source['text'],
+                        'original_input_id':source['_id'],'question':question,
                         'action_context':args.get('context','')}]}
                 if source.get('event',{}).get('group_context'):event['group_context']=source['event']['group_context']
                 _,context,manifest=self.context.prepare(event,original['persona'])

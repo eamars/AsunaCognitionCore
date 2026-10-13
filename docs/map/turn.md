@@ -50,12 +50,12 @@ One character turn per episode (ADR-011 §3).
 Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 
 - def `landing_lost` — The parts of her delivered line the platform did not store, in words; None when it stored what was sent.
-- def `refs` — Every id she may cite in this turn: ref_index, the document sections, and the memories and tasks shown in their own blocks.
+- def `refs` — Every id she may cite in this turn: the turn's own event, ref_index, the document sections, and the memories and tasks shown in their own blocks.
 - def `catch_up` — A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines.
 - def `order_context` — Fixed head, ordered blocks (persona order, then the core default for the rest), fixed tail.
 - def `ledger_block` — Every ledger she can read here, each within its per-turn limit (context_budget.note_view).
 - class `ContextBuilder`
-  - `recent_thoughts`
+  - `recent_thoughts` — Her last thoughts here, each with when she had it on her clock face: a stamp, not "how long ago", which would change the block every turn with nothing new in it.
   - `own_thoughts_elsewhere` — At home, what she herself thought in her groups about this (her monologue there, never their talk): each with the group's name and the time she thought it.
   - `said_at` — When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line.
   - `when` — A recalled record's time as her history lines show it, and how long ago: '10/11 19:16（3 小时前）'.

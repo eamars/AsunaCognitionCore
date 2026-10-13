@@ -33,7 +33,7 @@ def test_a_block_carries_its_times_as_fields_so_it_changes_only_with_its_content
 
 
 def test_a_memory_or_task_id_shown_in_its_block_counts_as_a_ref():
-    context = {'ref_index': ['e1', 'in-e1'], 'doc_refs_from_program': ['doc:persona#a1'], 'memories': [{'_id': 'chunk-9'}],
+    context = {'event': {'event_id': 'e1'}, 'ref_index': ['in-e1'], 'doc_refs_from_program': ['doc:persona#a1'], 'memories': [{'_id': 'chunk-9'}],
                'task_state_from_program': [{'_id': 'task-3'}]}
     assert set(refs(context)) == {'e1', 'in-e1', 'doc:persona#a1', 'chunk-9', 'task-3'}
 
@@ -44,7 +44,8 @@ def test_ref_index_holds_this_turns_ids_and_the_document_sections_have_a_block_o
     lane = FakeLane(store, [FakeTurn([THINK], '在呢。')])
     ep = Coordinator(store, lane).ingest(event('e-refs'))
     context = ep['context']
-    assert context['ref_index'] == ['e-refs', 'in-' + ep['_id']]
+    assert context['ref_index'] == ['in-' + ep['_id']], 'the event id is in the event block already'
+    assert {'e-refs', 'in-' + ep['_id']} <= set(refs(context)), 'both still citable'
     assert context['doc_refs_from_program'] and all(ref.startswith('doc:') for ref in context['doc_refs_from_program'])
     assert set(context['doc_refs_from_program']) <= set(refs(context)), 'still citable'
     assert 'doc_refs_from_program' in block_guide.guide(store.config)

@@ -4,7 +4,10 @@
  * A block, history row (of `delivered_history`, or a line in `group_continuity_from_program`) or memory is left out,
  * and so is one of her own thoughts (a recalled one, or one of her recent thoughts) whose `think` call the session
  * still shows, while an identical copy is anywhere on the session surface (everything after the last compaction
- * checkpoint). A recalled memory (not one of her thoughts) whose every source line is visible is left out too. Each
+ * checkpoint). A recalled memory (not one of her thoughts) whose every source line is visible is left out too. Within
+ * one notice a line (by its message id) is sent once, in its primary block: `delivered_history` (the conversation)
+ * first, then the group's thread lines, then her recent experience; a task's original input that is such a line is
+ * named by its id (`original_input_id`) instead of its text. Each
  * notice records what it carries in its own `source.carried`, so the session log is the only state; nothing is cached
  * in the worker or Mongo.
  *
@@ -27,6 +30,18 @@ const HEAD = ['scene', 'speaker', 'session_class'];
 const NOTES = new Set(['unchanged_from_program', 'repeated_from_program']);
 
 const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);
+
+/** A block's digest with each of its object lists taken as a set of items: the same items in another order (a mood's
+ * reasons re-ranked as they fade) are the same block, which every visible item already shows. */
+function shapeDigest(value) {
+  const shape = node => {
+    const list = listOf(node);
+    if (list) return { items: list.items.map(digest).sort(), rest: shape(list.rest) };
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
+    return Object.fromEntries(Object.entries(node).map(([key, inner]) => [key, shape(inner)]));
+  };
+  return digest(shape(value));
+}
 
 /** What the surface already carries. Messages about to join it in the same step (lines waiting in the inbox,
  * navigation.js, and notices claimed with them) count too. */
@@ -118,6 +133,13 @@ export function composeContext(context, visible) {
   let rows = 0, memories = 0, thoughts = 0, items = 0;
   const shownThought = id => typeof id === 'string' && id.startsWith('mono-')
     && (visible.thoughts ?? new Set()).has(id.slice(id.lastIndexOf(':') + 1));
+  // Her own reply is visible while the turn that produced it is.
+  const unseen = row => !visible.rows.has(row._id)
+    && !(row.direction === 'outbound' && row.episode_id && visible.episodes.has(row.episode_id));
+  // The lines this notice places in the conversation itself; another block does not send them again.
+  const placed = new Set((Array.isArray(context.delivered_history) ? context.delivered_history : [])
+    .filter(unseen).map(row => row?._id).filter(Boolean));
+  const inView = id => placed.has(id) || visible.rows.has(id);
   for (let [key, value] of Object.entries(context)) {
     if (key === 'recent_thoughts_from_program' && Array.isArray(value?.items)) {
       // Her recent thoughts she can still read where she wrote them are not listed again.
@@ -126,19 +148,32 @@ export function composeContext(context, visible) {
       if (!items.length) continue;
       value = { ...value, items };
     }
-    // Her own reply is visible while the turn that produced it is.
-    const unseen = row => !visible.rows.has(row._id)
-      && !(row.direction === 'outbound' && row.episode_id && visible.episodes.has(row.episode_id));
     if (key === 'group_continuity_from_program' && value && typeof value === 'object') {
-      // The thread's lines and the speaker's last lines that the conversation still shows are not listed again.
+      // The thread's lines and the speaker's last lines that the conversation still shows, or this notice's history
+      // carries, are not listed again.
       const lines = {};
       for (const field of ['related_messages', 'current_speaker_tail']) if (Array.isArray(value[field])) {
-        const kept = value[field].filter(unseen);
+        const kept = value[field].filter(row => unseen(row) && !placed.has(row._id));
         rows += value[field].length - kept.length;
+        for (const row of kept) if (row._id) placed.add(row._id);
         carried.rows.push(...kept.map(row => row._id).filter(Boolean));
         lines[field] = kept.map(({ episode_id: _episode, ...row }) => row);
       }
       value = { ...value, ...lines };
+    }
+    if (key === 'recent_experience_from_program' && Array.isArray(value?.messages)) {
+      // Lines of the conversation in front of her are not listed again among her recent experience.
+      const kept = value.messages.filter(row => !inView(row?._id));
+      rows += value.messages.length - kept.length;
+      value = { ...value, messages: kept };
+    }
+    if (key === 'event' && Array.isArray(value?.trusted_context_events)) {
+      // A task's original input that is a line in front of her is named by its id, not sent again.
+      value = { ...value, trusted_context_events: value.trusted_context_events.map(item => {
+        if (!item || typeof item !== 'object' || !('original_input_id' in item)) return item;
+        const { original_input: text, original_input_id: id, ...rest } = item;
+        return inView(id) ? { ...rest, original_input_id: id } : { ...rest, original_input: text };
+      }) };
     }
     if (key === 'delivered_history' && Array.isArray(value)) {
       const kept = value.filter(unseen);
@@ -162,12 +197,18 @@ export function composeContext(context, visible) {
       if (visible.blocks.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
       const folding = fold(key, value, visible.items ?? new Set());
       Object.assign(carried.items, folding.sent);
-      if (!folding.folded) { carried.blocks[key] = value_digest; entries.push([key, value]); continue; }
+      const shape_digest = shapeDigest(value);
+      if (!folding.folded) {
+        carried.blocks[key] = value_digest;
+        if (folding.kept) carried.lists[key] = shape_digest;
+        entries.push([key, value]); continue;
+      }
       // Only a block sent whole may later count as unchanged: the folded items rest on older notices. The same block
-      // again with every item still visible, though, is wholly before her: it is named unchanged, with no wrapper.
+      // again (its lists' items in any order) with every item still visible, though, is wholly before her: it is
+      // named unchanged, with no wrapper.
       items += folding.folded;
-      if (!folding.kept && visible.lists?.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
-      carried.lists[key] = value_digest;
+      if (!folding.kept && visible.lists?.has(key + ':' + shape_digest)) { unchanged.push(key); continue; }
+      carried.lists[key] = shape_digest;
       if (!folding.kept) empty.add(key);
       entries.push([key, folding.value]);
     }

@@ -23,7 +23,8 @@ def test_an_old_question_reads_as_old_and_buried(store):
     scene = group(store, [290, 285, 282, 20, 18, 15, 12, 9, 6, 4, 2])
     zone = scene_timezone(store.config, scene)
     value = places.pace(store, scene, NOW, zone)
-    assert value['last_line'].startswith('上一句是刚才')
+    assert value['last_line'] == '上一句在 %s' % line_stamp(zone, (NOW - timedelta(minutes=2)).isoformat())
+    assert places.pace(store, scene, NOW + timedelta(minutes=30), zone) == value, 'nothing said, nothing changes'
     assert value['this_stretch'] == '眼下这一段从 %s 开始，到现在说了一二十句' % line_stamp(zone, (NOW - timedelta(minutes=20)).isoformat())
     before = line_stamp(zone, (NOW - timedelta(minutes=282)).isoformat())
     assert value['before'].startswith('再往前停过 4 小时（%s 到' % before)

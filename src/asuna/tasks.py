@@ -423,7 +423,8 @@ class TaskService:
                     observations.append({'source':item['_id'],'tool':item['tool'],
                                          'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
                 from . import local_time         # when it ran: a result handed back late describes that time
-                event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),brief=task.get('brief') or task['goal'],
+                event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),
+                    original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
                     observations=observations[-OBSERVATIONS:],observations_total=len(observations),
                     **local_time.for_model({'finished_at':current.get('finished_at')},local_time.zone_of(self.store,task['scene_id'])))
             self.handback(task,'handing',short=short)

@@ -111,9 +111,11 @@ THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），
 MEMORY_SOURCE_RULES = 'reported_speech 是来源人物说过的话，并非已核实的外部事实；同一人物的原话按 scene_seq 从旧到新排列。对于他自己的物品、偏好和更正，以他较新的明确陈述为准。public_statement 只证明角色说过这句话，承诺不等于完成；character_interpretation 只是角色当时的理解或猜测。角色后来重复旧说法，不会推翻人物已给出的更正。保留旧记录作为历史，不将再次召回当作新经历。derived_summary 是程序后台从一段原文整理出来的有界摘要：source_window 是它覆盖的 scene_seq 区间，source_event_ids 可回读原文；它只证明那段交流里说过什么，不是新的经历，也不等于任何人确认过的事实，与同一人物较新的明确陈述冲突时以陈述为准，需要细节就回读来源。摘要的 who 是这段里说话的人，about_current_speaker 说明它算不算当前说话人的证据：只有别人的话的那段是背景，不能当成当前说话人说过什么；corrections 与 corrected_by 是程序按真实 reply 链算出的更正，非空就说明这段转述之后有人更正过，以更正后的原话为准。人按标签区分（如 [名字 #4]）：名字会重复、会改，标签不会。'
 
 def refs(context):
-    """Every id she may cite in this turn: ref_index, the document sections, and the memories and tasks shown in their
-    own blocks."""
-    return list(dict.fromkeys([*(context.get('ref_index') or []), *(context.get('doc_refs_from_program') or []),
+    """Every id she may cite in this turn: the turn's own event, ref_index, the document sections, and the memories and
+    tasks shown in their own blocks."""
+    event_id=context['event'].get('event_id') if isinstance(context.get('event'),dict) else None
+    return list(dict.fromkeys([*([event_id] if event_id else []),*(context.get('ref_index') or []),
+                               *(context.get('doc_refs_from_program') or []),
                                *[m.get('_id') for m in context.get('memories') or [] if isinstance(m, dict) and m.get('_id')],
                                *[t.get('_id') for t in context.get('task_state_from_program') or []
                                  if isinstance(t, dict) and t.get('_id')]]))
@@ -234,22 +236,19 @@ class ContextBuilder:
                     reverse=True)
         return merged[:12]
 
-    def recent_thoughts(self, scope, moment):
-        from datetime import datetime
-        from .config import ago
+    def recent_thoughts(self, scope, zone):
+        """Her last thoughts here, each with when she had it on her clock face: a stamp, not "how long ago", which would
+        change the block every turn with nothing new in it."""
         from . import reasons
         rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
             {'body_markdown':1,'formed_at':1,'episode_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
         out=[]
         for row in reversed(rows):
-            try:
-                hours=(moment-datetime.fromisoformat(row['formed_at'])).total_seconds()/3600
-            except (KeyError,TypeError,ValueError):
-                hours=None
+            when=schedule_rules.line_stamp(zone,row.get('formed_at'))
             # _id lets the Host leave out a thought her session still shows where she wrote it (context-delivery.js).
             then=reasons.then(self.store,row)
             out.append({'_id':row['_id'],'thought':excerpt(row.get('body_markdown'),MEMORY_CHARS),
-                        **({'when':ago(hours)} if hours is not None else {}),**({'then':then} if then else {})})
+                        **({'when':when} if when else {}),**({'then':then} if then else {})})
         return out
 
     def own_thoughts_elsewhere(self, scene, query):
@@ -541,7 +540,7 @@ class ContextBuilder:
             context['coverage_from_program']=coverage_block
         if held_back:
             context['held_back_from_program']=held_back
-        thoughts=self.recent_thoughts(scope,moment)
+        thoughts=self.recent_thoughts(scope,schedule_rules.scene_timezone(self.store.config,scene))
         if thoughts:
             context['recent_thoughts_from_program']={'items':thoughts,
                 'note':THOUGHTS_NOTE}
@@ -878,10 +877,11 @@ class ContextBuilder:
             members=group_members.block(self.store,scene,persona)
             if members:context['members_from_program']=members
         from .ingress import episode_id as _episode_id
-        # What she may cite that is not shown elsewhere: this turn's own ids, and the document sections in a block of
-        # their own (her ask: she copies the doc refs), which stays the same from turn to turn and so folds; a memory's
-        # or a task's id is in its own block and counts as well (refs, ADR-056).
-        context['ref_index']=[event['event_id'],'in-'+_episode_id(event)]
+        # What she may cite that is not shown elsewhere: this turn's input id (its event id is in the event block), and
+        # the document sections in a block of their own (her ask: she copies the doc refs), which stays the same from
+        # turn to turn and so folds; the event's, a memory's or a task's id is in its own block and counts as well
+        # (refs, ADR-056).
+        context['ref_index']=['in-'+_episode_id(event)]
         doc_refs=list(dict.fromkeys([
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in readable_sections(persona_doc,session_class)]]))

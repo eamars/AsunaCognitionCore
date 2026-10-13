@@ -1257,8 +1257,23 @@ class RoleTools:
         base, before = docs.read(slug)
         mutation_id = f"{ep['_id']}:write:{call_id}"
         from . import memory_tiers
+        if memory_tiers.ENABLED:
+            for field, allowed in (('nature', memory_tiers.NATURES), ('from', memory_tiers.SOURCES)):
+                if item.get(field) is not None and item[field] not in allowed:
+                    raise Refused('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)))
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
             return self._let_go(ep, slug, item.get('sid'), before), False
+        if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
+                and not any(field in item for field in ('visibility', 'inject', 'tags'))):
+            # Only what an item is, or where it came from: kept beside it; the document is not written.
+            sections = {s['sid'] for s in (before or {}).get('sections') or []}
+            if item.get('sid') not in sections:
+                raise DocumentError('DOC_SECTION_NOT_FOUND', '「%s」里没有 sid「%s」；照抄一个' % (slug, item.get('sid')))
+            tiers = memory_tiers.Tiers(self.store, ep['persona'])
+            tiers.sync()
+            tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
+            return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': '记下了：%s。'
+                    % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from'))))}, False
         if item.get('op') == 'adopt_seed':
             kind, text = _seed_text(self.store, slug)
             if text is None:
@@ -1281,6 +1296,9 @@ class RoleTools:
                                                                           scene_id=ep['scene_id'], felt=felt)
             if moves:
                 result['moved'] = [memory_tiers.told(move) for move in moves]
+            placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None
+            if item.get('inject') == 'always' and placed and placed['place'] != memory_tiers.CARRIED:
+                result['place'] = memory_tiers.NOT_BACK % placed['place']
         if item['op'] in ('append_section', 'correction') and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
@@ -1304,7 +1322,22 @@ class RoleTools:
 
     def tool_update_self(self, ep, call_id, args):
         from .self_state import SelfState
+        from . import memory_tiers
         target = args.get('target')
+        doc = {'current_self': memory_tiers.SELF_DOC, 'character_core': memory_tiers.CORE_DOC}.get(target)
+        if memory_tiers.ENABLED and doc and DocumentStore(self.store, ep['persona']).read(doc)[1]:
+            # ADR-062: once she has written herself as items, the old name writes an item: the one its sid names,
+            # or a new one headed by what she gives (else her first line). The program never splits her text.
+            body = self._text(args, 'body', SINGLE_BODY_CHARS)
+            reason = self._text(args, 'reason', 2000)
+            sid = args.get('sid')
+            if sid:
+                return self.tool_write_document(ep, call_id, {'doc': doc, 'op': 'replace_section', 'sid': sid,
+                                                              'body': body, 'reason': reason})
+            first = body.splitlines()[0].lstrip('-*·• ').strip()
+            heading = (args.get('heading') or first)[:40]
+            return self.tool_write_document(ep, call_id, {'doc': doc, 'op': 'append_section', 'heading': heading,
+                                                          'body': body, 'reason': reason})
         body = self._text(args, 'body', SINGLE_BODY_CHARS)
         self._text(args, 'reason', 2000)
         committed = SelfState(self.store).commit(self._fresh(ep), target, body, mutation=f"self-state:{ep['_id']}:{call_id}")

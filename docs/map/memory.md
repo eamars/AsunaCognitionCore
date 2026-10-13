@@ -67,6 +67,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
+- def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `told` — A move as her result or the moved line says it, in words.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
 - def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.

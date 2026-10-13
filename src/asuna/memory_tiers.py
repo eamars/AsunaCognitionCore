@@ -26,14 +26,22 @@ COLLECTION = 'memory_tiers'
 
 CARRIED, AT_HAND, PUT_AWAY = '随身', '手边', '收着'
 DOWN = {CARRIED: AT_HAND, AT_HAND: PUT_AWAY}
+DEPTH = {CARRIED: 0, AT_HAND: 1, PUT_AWAY: 2}
 FROM_INJECT = {'always': CARRIED, 'on_demand': AT_HAND, 'never': PUT_AWAY}
 TO_INJECT = {CARRIED: 'always', AT_HAND: 'on_demand', PUT_AWAY: 'never'}
 SELF_DOC, CORE_DOC = 'self', 'core'
 SELF_DOCS = (SELF_DOC, CORE_DOC)
 STORE_WORDS = {'persona': '人设', 'voice': '口吻', 'ledger': '活账', 'group_notes': '群笔记', 'core': 'core',
                'self': '自我', 'journal': '流水'}
-FACTS = ('persona', 'voice', 'ledger', 'group_notes', 'core')       # what is: never cools by disuse
-MEMORIES = ('self', 'journal')                                      # what happened
+# Each item is a fact (what is: never cools by disuse, replaced only by correction) or a memory (what happened, or
+# her own judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
+# she may say it, or say where the item came from, when she writes it.
+FACTS = ('persona', 'voice', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
+MEMORIES = ('self', 'journal')
+FACT, MEMORY = '事实', '记忆'
+NATURES = (FACT, MEMORY)
+FROM_NATURE = {'主人定的': FACT, '查过的': FACT, '别人说的': MEMORY, '我自己的判断': MEMORY}
+SOURCES = tuple(FROM_NATURE)
 CAPS = {'self': 12, 'persona': 16, 'ledger': 10, 'group_notes': 6, 'core': 12, 'voice': 6}
 FIRST_STAY_DAYS = {'group_notes': 28, 'core': 56, 'voice': 56}
 STAY_DAYS, STAY_CAP_DAYS = 14, 56
@@ -44,8 +52,11 @@ REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '
            'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它',
            'surprise': '被更正碰到了'}
 MOVED_SHOWN = 5
-SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section，'
-              '一件事一节）；原来那段留作历史，程序不替你拆。')
+# A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
+NOT_BACK = ('inject 改成 always 不会把它带回随身：它再被用到、被你改写出变化、或被更正碰到，才会回来；'
+            '现在它在%s。')
+SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
+              '一条是一个说法连同它的依据（样本、来源、证据），不按行拆；原来那段留作历史，程序不替你拆。')
 
 
 def _now():
@@ -114,6 +125,7 @@ class Tiers:
     def _new(self, doc, sid, kind, section, place, moment, *, scene_id=None, felt=False):
         row = {'_id': item_id(self.persona, doc, sid), 'row': 'item', 'tiers_version': TIERS_VERSION,
                'persona': self.persona, 'doc': doc, 'sid': sid, 'store': kind, 'fact': kind in FACTS,
+               'nature': FACT if kind in FACTS else MEMORY,
                'heading': section.get('heading') or sid, 'visibility': section.get('visibility') or 'public',
                'place': place, 'added': _iso(moment), 'memorable_at': _iso(moment), 'stay_from': _iso(moment),
                'stay_days': FIRST_STAY_DAYS.get(kind, STAY_DAYS), 'doubled': False, 'stays': 0, 'uses': 0,
@@ -235,17 +247,24 @@ class Tiers:
         op, moves = intent.get('op'), []
         start = AT_HAND if kind == 'journal' else CARRIED
         for sid in [sid for sid in new if sid not in old]:
-            # Encoding: what she just wrote is fresh in mind (the sync made its row from its tag; the place is this).
+            # Encoding: what she just wrote is fresh in mind, unless she wrote it tucked away herself.
             row = self.item(slug, sid) or self._new(slug, sid, kind, new[sid], start, moment)
+            told = FROM_INJECT.get(intent.get('inject'))
             self.rows.update_one({'_id': row['_id']}, {'$set': {
-                'place': start, 'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
+                'place': told if told and DEPTH[told] > DEPTH[start] else start, 'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
                 **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}})
-            if start == CARRIED:
+            if self.item(slug, sid)['place'] == CARRIED:
                 moves += self._overflow(slug, kind, row['_id'], moment)
             if op == 'correction' and new[sid].get('corrects') in old:
                 corrected = self.item(slug, new[sid]['corrects'])
                 if corrected:
                     moves.append(self.move(corrected, PUT_AWAY, 'superseded', moment, scene_id=scene_id))
+        declared = declared_nature(intent)
+        if declared:
+            # What she says an item is, or where it came from, when she writes or tags it.
+            for sid in ([sid for sid in new if sid not in old] if op in ('append_section', 'correction')
+                        else [intent.get('sid')] if intent.get('sid') in new else []):
+                self.rows.update_one({'_id': item_id(self.persona, slug, sid)}, {'$set': declared})
         if op == 'replace_section' and intent.get('sid') in old and intent['sid'] in new:
             sid = intent['sid']
             row = self.item(slug, sid)
@@ -259,11 +278,12 @@ class Tiers:
                 if start == CARRIED and row['place'] != CARRIED:
                     moves.append(self.move(self.item(slug, sid), CARRIED, 'rewritten', moment, scene_id=scene_id))
                     moves += self._overflow(slug, kind, row['_id'], moment)
-        if op == 'set_tags' and intent.get('inject') in FROM_INJECT and intent.get('sid') in new:
-            # Tucking a section away is a move she makes herself, as letting go is.
+        if intent.get('inject') in FROM_INJECT and intent.get('sid') in new and op in ('set_tags', 'replace_section'):
+            # Tucking a section away is letting it go, a move down she makes herself. A tag never moves one up.
             row = self.item(slug, intent['sid'])
-            if row:
-                moves.append(self.move(row, FROM_INJECT[intent['inject']], 'let_go', moment, scene_id=scene_id))
+            to = FROM_INJECT[intent['inject']]
+            if row and DEPTH[to] > DEPTH[row['place']]:
+                moves.append(self.move(row, to, 'let_go', moment, scene_id=scene_id))
         return [move for move in moves if move]
 
     def let_go(self, slug, sid, *, scene_id=None, moment=None):
@@ -327,6 +347,15 @@ class Tiers:
         if home and not self.rows.find_one({'row': 'item', 'persona': self.persona, 'doc': SELF_DOC}):
             block['self_items'] = SELF_OFFER
         return block
+
+
+def declared_nature(intent):
+    """The nature and source she gave a write ({} when neither): her word for the nature wins over the source's."""
+    source = intent.get('from') if intent.get('from') in FROM_NATURE else None
+    nature = intent.get('nature') if intent.get('nature') in NATURES else FROM_NATURE.get(source)
+    if not nature:
+        return {}
+    return {'nature': nature, 'fact': nature == FACT, **({'from': source} if source else {})}
 
 
 def told(move):

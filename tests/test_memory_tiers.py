@@ -171,6 +171,67 @@ def test_let_go_in_her_turn_and_where_things_are_told_once_per_conversation(stor
     assert third['self_items'] == memory_tiers.SELF_OFFER, 'offered until she writes herself as items'
 
 
+def test_a_tag_lets_an_item_go_down_but_never_carries_it_back_up(store, tiers_on):
+    """No pin (owner 2026-10-13): inject always on an item at hand changes nothing of its place, and says how one
+    comes back; on_demand on a carried one is letting it go."""
+    owner(store)
+    tiers = Tiers(store, 'P1')
+    tiers.sync()
+    up = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['visibility'] == 'public')
+    down = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['_id'] != up['_id'])
+    tiers.rows.update_one({'_id': up['_id']}, {'$set': {'place': AT_HAND}})
+    pin = {'doc': 'persona', 'op': 'set_tags', 'sid': up['sid'], 'inject': 'always', 'reason': '想一直带着'}
+    tuck = {'doc': 'persona', 'op': 'set_tags', 'sid': down['sid'], 'inject': 'on_demand', 'reason': '收起来'}
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', pin), ('write_document', tuck)], '好。')])
+    ep = Coordinator(store, lane).ingest(event('e-pin'))
+    assert tiers.item('persona', up['sid'])['place'] == AT_HAND, 'a tag is not a way up'
+    assert tiers.item('persona', down['sid'])['place'] == AT_HAND, 'a tag down is letting go'
+    pinned = next(call for call in ep['tool_calls'].values() if call['tool'] == 'write_document')
+    assert pinned['result']['place'] == memory_tiers.NOT_BACK % AT_HAND
+
+
+def test_an_item_is_a_fact_or_a_memory_by_what_she_says_not_by_its_store(store, tiers_on):
+    """Her answer (2026-10-13): her persona holds her own judgments (memories), her self holds checked facts."""
+    owner(store)
+    docs, tiers = DocumentStore(store, 'P1'), Tiers(store, 'P1')
+    judgment = {'op': 'append_section', 'heading': '先不放开', 'from': '我自己的judgment'.replace('judgment', '判断')}
+    before, after = write(docs, 'persona', judgment, '这个群先不放开')
+    tiers.written('persona', judgment, before, after)
+    checked = {'op': 'append_section', 'heading': '沙箱里', 'from': '查过的'}
+    before, after = write(docs, 'self', checked, '沙箱里不用 tempfile：查过，建出来的目录自己读不了')
+    tiers.written('self', checked, before, after)
+    mine = tiers.item('persona', after and docs.read('persona')[1]['sections'][-1]['sid'])
+    fact = tiers.items(doc='self')[0]
+    assert (mine['nature'], mine['from'], mine['fact']) == ('记忆', '我自己的判断', False)
+    assert (fact['nature'], fact['from'], fact['fact']) == ('事实', '查过的', True)
+    for row in (mine, fact):
+        tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(400), 'place': AT_HAND}})
+    tiers.tick()
+    assert tiers.item('persona', mine['sid'])['place'] == PUT_AWAY, 'her judgment follows the cycle'
+    assert tiers.item('self', fact['sid'])['place'] == AT_HAND, 'a checked fact does not fade'
+
+
+def test_saying_what_an_item_is_writes_no_new_revision_and_update_self_writes_items(store, tiers_on):
+    owner(store)
+    first = {'doc': 'self', 'op': 'append_section', 'heading': '做饭', 'reason': '拆', 'body': '最近在学做饭'}
+    sid = '做饭'
+    tag = {'doc': 'self', 'op': 'set_tags', 'sid': sid, 'nature': '事实', 'reason': '这是事实'}
+    old_name = {'target': 'current_self', 'body': '- 早上跑步\n跑了一周了', 'reason': '新的'}
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', first)], '好。'),
+                            FakeTurn([THINK, ('write_document', tag)], '嗯。'),
+                            FakeTurn([THINK, ('update_self', old_name)], '嗯。')])
+    coordinator = Coordinator(store, lane)
+    coordinator.ingest(event('e-1'))
+    docs = DocumentStore(store, 'P1')
+    revision = docs.read('self')[0]
+    coordinator.ingest(event('e-2'))
+    assert docs.read('self')[0] == revision and Tiers(store, 'P1').item('self', sid)['nature'] == '事实'
+    ep = coordinator.ingest(event('e-3'))
+    sections = docs.read('self')[1]['sections']
+    assert [s['heading'] for s in sections] == ['做饭', '早上跑步'], ep['tool_calls']
+    assert Tiers(store, 'P1').item('self', sections[-1]['sid'])['place'] == CARRIED
+
+
 def test_her_self_as_items_is_what_she_reads_of_herself(store, tiers_on):
     owner(store)
     entry = {'doc': 'self', 'op': 'append_section', 'heading': '最近', 'reason': '拆成一条一条', 'body': '最近在学做饭'}

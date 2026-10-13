@@ -319,22 +319,29 @@ at hand; 收着, put away), when it was last memorable and its stay; the program
 program has not seen takes its place from its `inject` (`always`, `on_demand`, `never`) with a fresh stay; from then
 on the place decides what is carried: the persona and voice render, a ledger and a group's notes show their 随身
 sections, and `self_state_from_program` shows the 随身 items of `self` and `core` once she has written them (until
-then, `current_self` and `character_core` as before). A section she writes starts 随身 (a running record's row 手边);
-`set_tags` with `inject` moves it to the matching place. A 随身 item lapses to 手边 when its stay runs out: 14 days
+then, `current_self` and `character_core` as before). A section she writes starts 随身 (a running record's row 手边; one she writes
+`on_demand` or `never`, at that place). `inject` `on_demand` or `never` on an item lets it go to that place; `inject:
+always` never moves an item up, and its result says how one comes back (used again, rewritten with a change, or
+corrected). A 随身 item lapses to 手边 when its stay runs out: 14 days
 from its last memorable moment (group notes 28, `core` and voice 56); a memorable moment (`recall` returned it, a
 rewrite changed its body, its `doc:` ref cited in a tool call, a second conversation it came up in) starts the stay
 again and, once per stay, doubles the next, up to 56 days. A rewrite that changes an item brings it back to 随身. A
 store over its count of 随身 items (`self` 12, persona 16, each ledger 10, each group's notes 6, `core` 12, voice 6)
 lapses its least recently memorable one (one written in a turn where she recorded a feeling last), and the write's
-result names it under `moved`. Memories (`self`, running records) cool to 收着 by disuse (a running record's row after
-30 days unused, a `self` item when the persona model's forgetting formula falls below `step_back_below`); facts
-(persona, voice, ledgers, group notes, `core`) never do. A `correction` moves the item it corrects to 收着 with the
+result names it under `moved`. Each item is a fact (事实) or a memory (记忆): by default
+facts in persona, voice, ledgers, group notes and `core`, memories in `self` and running records; `write_document`
+takes `nature` (事实 or 记忆) or `from` (主人定的 and 查过的 make a fact, 别人说的 and 我自己的判断 a memory) for the item
+it writes, and a `set_tags` carrying only these changes nothing in the document. Memories cool to 收着 by disuse (a
+running record's row after 30 days unused, any other when the persona model's forgetting formula falls below
+`step_back_below`); facts never do. A `correction` moves the item it corrects to 收着 with the
 date it was superseded. `write_document` takes `op: let_go` with a `sid`, also in a group's notes from that group:
 the item moves one place down now. Every move is a row `move` and one audit line `memory.moved` (item, from, to,
 reason). `things_from_program` says, per store, how many items are in each place in words, and lists the moves not
 yet told in this conversation, each once, with its clock time and reason; a home turn is offered the split of
 `current_self` into `self` items until `self` exists (the program never splits her text). The documents `self` and
-`core` are of kind `self`: their sections are `always` and `public` unless she says otherwise.
+`core` are of kind `self`: their sections are `always` and `public` unless she says otherwise. Once `self` (or `core`)
+exists, `update_self` for `current_self` (or `character_core`) writes an item there: it rewrites the one its `sid`
+names, or adds one headed by its `heading` (else the body's first line).
 
 ## Shadow pilot of her own items
 

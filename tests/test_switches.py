@@ -8,7 +8,8 @@ from test_group_focus import world
 from test_toolbox import GROUP, conversations, turn
 
 HOME = {'_id': 'ep-home', 'persona': 'P1', 'scope_key': 'owner-private:P1'}
-NOW = datetime(2026, 10, 12, 9, tzinfo=timezone.utc)
+# focus.active reads the wall clock, so the switches start from now: a fixed date made the mute end in the past.
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 def test_a_muted_group_rests_she_does_not_visit_and_it_ends_by_itself(store):

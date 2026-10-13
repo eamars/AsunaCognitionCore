@@ -224,3 +224,29 @@ Every rewrite goes to her as before/after with its characters per brain before i
 (her condition for this ADR); `tests/test_tool_budget.py` moves by exactly the measured change. One restart with the
 renames. Afterwards: refusals per day by cause and the argument-validation refusals, apart from the missing-`think`
 count of 2026-10-14.
+
+## As built (2026-10-14, branch `claude/adr060`)
+
+Where the build differs from the audit above, and why:
+
+- **The gate's relative time stays** ("since_you_spoke"): it is a one-off question, so the relative wording is
+  not churn in a cached conversation.
+- **The clock's format is unchanged.** Rewording `now_local` broke the rule that stored context keeps UTC and is
+  converted only at the edge (`local_time.py`); not worth it for wording.
+- **`occurred_at` and `generated_at` stay on memories**: the stored context needs them in UTC. Status, empty
+  `historical_sources` and one-of-one segment fields are dropped as planned.
+- **`attach_image` keeps one "don't"** (「不写文件名、路径或「见图」」): that mistake was observed, so the line holds a
+  rule the program does not enforce.
+- **The action brain keeps DSH's English coding-agent texts** (owner: models read any language; the one-language rule
+  is for human-facing text).
+- **Sixteen sentences the audit cut came back** after her review: each held a rule the program does not enforce
+  (stop is not a topic change, write only what happened, a plan firing is not done, a visit cannot see the platform, an
+  errand's reply does not come back, when find_member is used, no one's personal data in ideas, change the self only
+  when it changed, a delegated job is not done until it returns, an errand may not be sent, a note is no authority,
+  decisions go to the owner not the development agent, recall does not invent, a rollback calls her, body narration
+  is no delivery proof, an unfamiliar person's job need not be taken).
+- **Parameter descriptions** that still named old fields (`reason`, `sid`, `body`, `line`) were fixed in a second pass.
+- **The harness prompt files have a budget** (`tests/test_tool_budget.py` `PROMPTS`), her ask.
+
+**Cost as built:** character brain 32 tools, 21,490 → 19,717 characters (main's 21,490 already held ADR-056's +37);
+with tiered memory on 31 tools, 19,619.

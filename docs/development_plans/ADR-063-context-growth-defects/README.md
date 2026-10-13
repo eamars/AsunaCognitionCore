@@ -59,6 +59,20 @@ Claude's scratchpad `growth/`.
 | D11 | aea4e43c | `rhythm_from_program.local_time` is left out when it equals `clock_from_program.now_local`; the second system prompt on one group surface is left for that conversation's next compaction | none to measure |
 | D1 (2) | b34c122b | a line arriving while its conversation has a `compaction/start` without its `compaction/end` is held (`pairing.js` `compactionOpen`) and joins as the compaction ends, committed or failed (`releaseAfterCompaction`); a start older than the log's last `session/end-seed` (opened again after the process stopped mid-compaction) holds nothing, as in DSH's compaction lock. A held line lives in memory only and is acknowledged to the worker when held: a stop before its release leaves it out of the conversation (Mongo keeps it) | after her restart: aborted compactions in the day audit |
 
+### Found by the ADR-062 profile
+
+Her notices since 2026-10-13 11:38 NZDT, block paths and sizes only (Claude's `profile062.py`). All in 44899310;
+the per-turn figures are estimates from that window's medians.
+
+| # | Defect | Cause | Fix | Per turn |
+|---|---|---|---|---|
+| P1 | the turn's event id is sent twice in every notice | `ref_index` repeated `event.event_id` | `ref_index` holds the input id only; `context.refs` takes the event id from the event block, so citations and a feeling's `ref` still validate | about 20–30 characters, every notice |
+| P2 | the same line in two blocks of one notice (`delivered_history` and a group's `related_messages`, her recent experience, a task's `original_input`) | `composeContext` dropped only lines already on the surface | a line goes once per notice, in `delivered_history` first; a group's thread lines and her recent experience leave it out; a task's original input that is such a line is sent as `original_input_id` (the block guide says so once) | up to 258 characters a time in a group; one line in a home turn that carries her recent experience or a task result |
+| P3 | `recent_phrasing_from_program` reordered without changing, so it never folded | sorted by count, which moves | the phrases in a fixed order (`rhythm.recent_phrasing`) | 70–98 characters on each reordering turn |
+| P4 | `recent_thoughts_from_program` and a group's `pace_from_program` changed every turn with nothing new (D6's class) | `when` was "how long ago"; `last_line` said "上一句是…（HH:MM）" | the clock stamp (`line_stamp`) instead; `elsewhere_from_program` (`you` is a count word, `last_at` a stamp) checked: not this class | thoughts now fold item by item (330–1,400 characters a group turn, all but the new thought); pace 155 characters on a turn with no new line |
+| P5 | `plans_from_program` on the agent line changed in 4 of 5 sends | not the program: her own recurring plan (rule unchanged) took 6 wording-only `plan` updates from her turns between 11:16 and 13:47 NZDT, each a new intent of about 1,000 characters, so `intent`, `plan_version` and `updated_at` moved with it | none; her habit (a plan's intent kept as a running note), worth raising with her | — |
+| P6 | `affect_from_program` sent again while on the surface (local chat) | the same reasons re-ranked as they faded (two swapped places); the block's digest is order-sensitive, so with every item visible the empty wrapper went again | a block's lists are compared as sets for "unchanged" (`shapeDigest`), also when it was sent whole | 241 characters a time folded, about 1.4k when it had been whole |
+
 Not a defect: her sister's host answers `session/page` without authentication on the LAN. That is by design (owner
 2026-10-13: a local server, no login wanted).
 

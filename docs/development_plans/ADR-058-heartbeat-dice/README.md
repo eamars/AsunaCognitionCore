@@ -131,3 +131,21 @@ for byte. The forced and reconnected notes still append when they apply.
   so it weighs 0 until she writes it in.
 - The numbers in the sections above (four outcomes, then six, each with the weights of that day) are history;
   this section neither restates nor retires them.
+
+
+### Same night, second revision: 02:51 (Xiaoman, 2026-10-14)
+
+The two tables in the bullets above are the 02:04 pair. At 02:51 the same night she set the awake table once more:
+待着 5 added, 自我评估 10 → 6, 歇着 40 → 39, 有趣 unchanged at 31. The asleep table was not touched again, so the
+02:04 asleep line above still matches what is stored. What is live is whatever the policy store holds; the code
+defaults keep 待着 at 0 in both tables.
+
+**Both of tonight's edits were judgment, not readings.** This ADR says "Run a week, then tune from readings"; the
+dice was built 2026-10-12, so a full week lands 2026-10-19, and that is the first day a change may claim to be
+tuned from readings. Neither of tonight's two revisions is that change, and neither is an acceptance.
+
+One minute to pin: 02:04 in the bullet above is right. The message of commit `6bcffef4` says 02:05 — a minute off;
+this section stands (basis: that night's `plan` receipt carried `updated_at` 02:04, with both `set_policy` calls
+before it).
+
+Acceptance for this section is still open: nothing here has been verified against a week of readings.

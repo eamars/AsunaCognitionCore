@@ -10,6 +10,7 @@ A poll confirms each answer it prints; an answer nobody polls stays queued, show
 A poll also prints, once each, what the owner wrote on this line from the Web, marked as the owner's.
 """
 import argparse
+import http.client
 import json
 import os
 import socket
@@ -48,7 +49,7 @@ def call(line, method, path, body=None, timeout=CLAIM_WAIT + 10):
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode('utf-8', 'replace')
         sys.exit('%s %s -> HTTP %d %s' % (method, path, exc.code, detail))
-    except (urllib.error.URLError, socket.timeout) as exc:
+    except (urllib.error.URLError, socket.timeout, http.client.HTTPException, ConnectionError) as exc:
         sys.exit('The Host does not answer at %s (%s): is it running?' % (line['url'], getattr(exc, 'reason', exc)))
 
 
@@ -65,7 +66,12 @@ def poll(line, wait):
     got, owner, deadline = [], [], time.monotonic() + max(0, wait)
     while True:
         left = deadline - time.monotonic()
-        answer = call(line, 'GET', '/outbox?wait_seconds=%d' % (max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
+        try:
+            answer = call(line, 'GET', '/outbox?wait_seconds=%d' % (max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
+        except SystemExit:
+            if got:                        # what is already confirmed is hers to read: never lose it to a later error
+                return got, 'open', owner
+            raise
         owner += [('#%s ' % item['seq'] if item.get('seq') is not None else '') + (item.get('text') or '')
                   for item in answer.get('owner_lines') or []]
         if answer.get('line') == 'closed':

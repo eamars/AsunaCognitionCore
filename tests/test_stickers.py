@@ -174,7 +174,7 @@ def test_what_she_says_is_checked_for_stickers_and_faces(store, monkeypatch):
     assert '不是 QQ 的小黄脸' in stickers.speech_problem(store, ep, '[表情:乱编的]')
     store.put('stickers', {'_id': 'stk-a', 'persona': 'P1', 'name': 'a', 'identity': 'x:a'})
     store.put('stickers', {'_id': 'stk-b', 'persona': 'P1', 'name': 'b', 'identity': 'x:b'})
-    assert '最多发一个' in stickers.speech_problem(store, ep, '[表情包:a][表情包:b]')
+    assert stickers.speech_problem(store, ep, '[表情包:a][表情包:b]') is None     # two can be what she means
     assert '发不出' in stickers.speech_problem(store, {'scene_id': 'dm-a', 'persona': 'P1'}, '[表情包:a]')
     assert stickers.split(['哈[表情包:a]哈', '嗯']) == ['哈', '[表情包:a]', '哈', '嗯']
 

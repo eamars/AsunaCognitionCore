@@ -86,16 +86,6 @@ def test_every_notice_ends_with_think_first_and_the_think_tool_says_how_many_tho
     assert context.RECENT_THOUGHTS == 3 and '最近三段' in role_tools.TOOLS['think']['description']
 
 
-def test_json_or_program_talk_as_the_last_text_is_repaired_in_the_same_turn(store):
-    coordinator, lane = run(store, FakeTurn([THINK], json.dumps({'next': 'speak'})),
-                            FakeTurn([], '我调用 stay_silent 了'), FakeTurn([], '回来了就好。'))
-    ep = coordinator.ingest(event())
-    assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR', 'REPAIR']
-    assert 'JSON 对象' in lane.calls[1]['messages'][-1]['content']
-    assert 'stay_silent' in lane.calls[2]['messages'][-1]['content']
-    assert ep['state'] == 'COMMITTED' and published(store, ep) == ['回来了就好。']
-
-
 def test_text_without_any_thought_fails_closed_after_repairs(store):
     coordinator, _ = run(store, *[FakeTurn([], '直接说') for _ in range(3)])
     ep = coordinator.ingest(event())

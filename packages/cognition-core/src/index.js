@@ -71,6 +71,10 @@ const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会
 async function toolReply(call) {
   try { return await call(); } catch (error) { throw error?.reply ? error : new Error(WORKER_DOWN); }
 }
+// DSH's system-prompt sections for a developer using DSH itself (section name, order key): dsh-app-boot,
+// dsh-client-ui-deliverables, dsh-web-app.
+export const DSH_DEVELOPER_SECTIONS = [['harness:source', 'HARNESS_SOURCE'],
+  ['ui:deliverable-file-references', 'DELIVERABLE_FILE_REFERENCES'], ['app:web-surface', 'WEB_SURFACE']];
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
@@ -863,6 +867,11 @@ export class CognitionCore {
     scope.systemPrompt.suppressRuntimeContext();
     scope.systemPrompt.section({ name: 'harness:identity',
       order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY'), text: '' });
+    // DSH's text for a developer using it (its checkout, its Web GUI, its `present` file cards) suits the action
+    // brain, a coding agent, which keeps it; her gate and her summaries have no use for it. DSH registers these
+    // outside the runtime context, so each is blanked by name there.
+    if (lane !== 'executor') for (const [name, order] of DSH_DEVELOPER_SECTIONS)
+      scope.systemPrompt.section({ name, order: scope.systemPrompt.getSectionOrder(order), text: '' });
     // Steer into her running turn waits as the next turn instead of failing it (steer.js).
     if (lane === 'character') scope.on('agent/inbox/inserted', ({ agent, message }) => {
       if (agent) queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));

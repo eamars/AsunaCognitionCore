@@ -138,20 +138,18 @@ def test_a_mistyped_task_id_is_told_with_the_real_one(store):
     assert ep['state'] == 'WAITING_TASK'
 
 
-def test_a_line_opened_with_a_label_and_no_at_is_handed_back(store):
-    # A bare label leaves as the plain name: one that opens her line reads like a tag, so she is told how to @.
-    lane = FakeLane(store, [FakeTurn([THINK], '[阿杰 #3] 你说得对。'), FakeTurn([], '@[阿杰 #3] 你说得对。')])
+def test_what_could_be_a_correct_answer_goes_out_as_written(store):
+    # Owner 2026-10-14: only output that cannot be right is handed back. A label opening a line, a tool's name, a
+    # "#4", or JSON someone asked for can all be what she means; they leave as she wrote them, in one turn.
+    for said in ('[阿杰 #3] 你说得对。', 'read_image 拿掉没关系', '{"a": 1}', 'issue #3 和 _from_program 那段'):
+        assert answers.speech_problem(LaneResult(said), thought=True) is None, said
+    lane = FakeLane(store, [FakeTurn([THINK], '{"a": 1}')])
     ep = Coordinator(store, lane).ingest(event())
-    assert ep['state'] == 'COMMITTED' and ep['speech'] == '@[阿杰 #3] 你说得对。'
-    assert [call['phase'] for call in lane.calls] == ['TURN', 'REPAIR']
-    assert '开头的「[阿杰 #3]」不会 @ 到人' in lane.calls[1]['messages'][-1]['content']
+    assert ep['state'] == 'COMMITTED' and ep['speech'] == '{"a": 1}' and [c['phase'] for c in lane.calls] == ['TURN']
 
 
-def test_her_tools_are_a_topic_at_home_and_program_talk_elsewhere():
-    # 2026-10-11: on a developer's line she named read_image; the check took it for program talk, and her one-sentence
-    # repair went out in place of her whole answer. At home (the owner and his agents) tools are what they talk about.
-    said = LaneResult('旧居那条线上读图那两次，是看我自己画的图，read_image 拿掉没关系。')
-    assert answers.speech_problem(said, thought=True, home=True) is None
-    assert '提到了程序的事（「read_image」）' in answers.speech_problem(said, thought=True)
-    assert answers.speech_problem(LaneResult('{"a": 1}'), thought=True, home=True).startswith('你最后写的是一个 JSON 对象')
+def test_only_what_cannot_be_right_is_handed_back():
+    assert answers.speech_problem(LaneResult(''), thought=True).startswith('这回合没有写要说的话')
+    assert answers.speech_problem(LaneResult('好'), thought=False).startswith('这回合还没写心里话')
+    assert answers.speech_problem(LaneResult('好', finish_reason='length'), thought=True).startswith('上一段到了长度上限')
     assert '整段重新写一遍' in answers.turn_note('x。')

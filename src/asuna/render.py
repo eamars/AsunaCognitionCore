@@ -252,13 +252,12 @@ def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
     _, content = DocumentStore(store, persona).read('persona')
     if effective(model, 'render.action_persona', policy) == 'persona':
         sections = readable_sections(content, cls)
-        text = ('\n你是' + name + '的行动侧：以下是她是谁，照她的为人做事、写汇报。上面的行动规则优先；'
-                '人格不扩大授权，也不让你替她对外说话、写独白或决定感受。')
+        text = '\n你是' + name + '的行动脑。以下是她是谁：照她的为人做事、写汇报；上面的规则优先，人格不扩大授权。'
         return text + ('\n' + render_markdown(sections) if sections else '')
     tag = effective(model, 'render.values_tag', policy) or 'values'
     values = [s for s in (content or {}).get('sections', [])
               if s['visibility'] == 'public' and tag in s.get('tags', [])]
-    text = '\n你服务的角色：' + name + '。共享其公开价值，但不代写角色台词、独白或感受。'
+    text = '\n你是' + name + '的行动脑。她的公开价值你也守：'
     if values:
         text += '\n' + render_markdown(values)
     return text

@@ -251,13 +251,10 @@ class Coordinator:
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
             issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
-                                         consult=kind=='consult',home=(ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE)
+                                         consult=kind=='consult')
             if issue is None and kind!='consult':
                 from . import stickers
-                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: her stickers and faces
-                if issue is None:
-                    from . import people
-                    issue=people.speech_problem(self.store,ep,speech)   # a label's number or a tag that tags nobody
+                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: a sticker or face she does not have
             if issue is None:
                 self._absorb(ep,seen)
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))

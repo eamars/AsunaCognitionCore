@@ -45,7 +45,7 @@ USE_WORDS = ((1, '还没发过'), (3, '发过一两次'), (8, '发过几次'), (
 ORIGIN_WORDS = {'own': '你自己画的', 'collected': '群里收来的'}
 
 STICKERS_NOTE = ('这是你收着的表情包（只有名字和你写的用法）。在这里想发哪个，就在要说的话里单独写一行'
-                 '「[表情包:名字]」，它会作为单独一条发出去，一回合最多一个；不想发就不用。'
+                 '「[表情包:名字]」，每个会作为单独一条发出去。'
                  '群里别人发的表情包下面会标「（表情包 ref：att-…）」，喜欢的可以用 sticker 的 keep 收下，'
                  '起个你记得住的名字、写一句什么时候用；只有表情包能收，照片不行。架子有上限，满了先 drop 一个。'
                  '你认得的表情包（收过的、看过记下的）下面会直接标你给它起的名字。')
@@ -229,8 +229,6 @@ def speech_problem(store, ep, speech):
     scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'_id': 1, 'channel_id': 1})
     if not sends(scene):
         return '这里发不出表情包或小黄脸：把「[表情包:…]」「[表情:…]」去掉，用话说。'
-    if len(stickers) > 1:
-        return '一回合最多发一个表情包，你写了 %d 个：留一个。' % len(stickers)
     for name in stickers:
         if not find(store, ep['persona'], name):
             return '架子上没有叫「%s」的表情包：照抄 stickers_from_program 里的名字，或者不发。' % name

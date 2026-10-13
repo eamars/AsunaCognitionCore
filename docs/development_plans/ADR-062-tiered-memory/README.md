@@ -18,8 +18,8 @@ kept, and something can always bring it back.
 
 ## The revision: memorable, declared, corrected (owner, 2026-10-13)
 
-Decided by the owner after a review by the research agent (three answers, reconciled by Claude). It supersedes the
-sections below wherever they differ; those sections are rewritten to match as the first step of building.
+Decided by the owner after a review by the research agent (three answers, reconciled by Claude). The sections below
+follow it (rewritten 2026-10-13 from the first draft, whose keep, pin and confirm acts are gone).
 
 1. **Memories stay by memorability, not by her choice.** The owner: a person has no choice over what to remember;
    only the most memorable stays. What keeps a memory (journal rows, chunks, summaries, thoughts, dated self items):
@@ -131,10 +131,11 @@ Scripts: `scratchpad/memory062/m1_inventory.py`, `m2_coverage.py`, `m3_sizes.py`
   how a person's memory works and asked for one step further.
 
 This ADR takes that step in four places: the unit of memory becomes one idea everywhere (not a body or a long
-section), each item carries two strengths read as words (how recently she confirmed it; how recently it was used),
-details are made to fade into gist on a schedule she cannot skip forever, and recall is the act that keeps a memory
-up, with the interval between confirmations growing each time (spacing), so what she keeps confirming costs her less
-each time and what she stops confirming goes down by itself.
+section); what keeps an item up is what makes a thing memorable for a person (use across conversations, surprise,
+repetition from several sides), observed by the program, never a keep act; details fade into gist on a schedule she
+cannot skip forever; and facts are told apart from memories by the store they are written in, so a fact does not fade
+by disuse. Each memorable moment lengthens the next stay (spacing), so what keeps coming back costs nothing to keep
+and what stops coming back goes down by itself.
 
 ## 3. Grounding: what the sciences and the field say, and what is adopted
 
@@ -143,12 +144,12 @@ Human memory (one citation each; the full brief is Claude's research note of 202
 | Finding | Source | Taken here |
 |---|---|---|
 | Separate stores; rehearsal transfers; working memory holds about four chunks | Atkinson & Shiffrin 1968; Baddeley 2000; Cowan 2001 | Tier 0 is small and counted in items; a chunk is one idea, not a page |
-| Complementary learning systems: fast episodic store, slow semantic store, interleaved replay; schema-consistent facts consolidate in about 48 h instead of weeks | McClelland, McNaughton & O'Reilly 1995; Kumaran et al. 2016; Tse et al. 2007 | Episodes (lines, summaries, journal rows) and her semantic layer (self, persona, notes) stay separate stores; the night pass moves a few things between them; a new fact that fits an existing item is merged into it rather than added beside it |
+| Complementary learning systems: fast episodic store, slow semantic store, interleaved replay; schema-consistent facts consolidate in about 48 h instead of weeks; semantic memory is what repeated episodes leave behind and does not decay by disuse | McClelland, McNaughton & O'Reilly 1995; Kumaran et al. 2016; Tse et al. 2007 | Memories (journal rows, chunks, summaries, thoughts, `self` items) and facts (persona, person layer, ledgers, group notes, `core`) are told apart by store; facts do not cool by disuse and are replaced only by correction; a new fact on a subject already held merges into it |
 | Sleep consolidates selectively: what is tagged as needed later | Diekelmann & Born 2010; Wilhelm et al. 2011 | The night list is short and chosen by rule (about to lapse, used before, open commitments), never "everything" |
-| Forgetting curve; spacing: re-touch at 10–30% of the horizon you need it for | Murre & Dros 2015; Cepeda et al. 2008 | A confirmation extends an item's stay and the next check comes before it lapses; intervals double |
-| ACT-R base-level activation: availability follows recency and frequency of use, not age | Anderson & Schooler 1991 | Tiers are decided by last use and last confirmation (the existing `_forget` already is this shape); creation date decides nothing |
-| Two strengths: storage strength never falls, retrieval strength decays with disuse; retrieving is the strongest learning event | Bjork & Bjork 1992; Roediger & Karpicke 2006 | Every item keeps "last confirmed" and "last used"; an item used often but not confirmed is offered for confirmation before it drops (high storage, low retrieval: the cheapest save) |
-| Reconsolidation: a recalled memory is labile and is updated when there is a prediction error | Nader et al. 2000; Sevenster et al. 2013 (human behavioural versions are contested) | A recalled item does not jump back to tier 0 by itself; it is rewritten when she rewrites it. Her rewrite after a recall is the reconsolidation, and it counts as a confirmation |
+| Forgetting curve; spacing: re-touch at 10–30% of the horizon you need it for | Murre & Dros 2015; Cepeda et al. 2008 | A memorable moment extends an item's stay; intervals double |
+| ACT-R base-level activation: availability follows recency and frequency of use, not age | Anderson & Schooler 1991 | Places are decided by last memorable moment and use (the existing `_forget` already is this shape); creation date decides nothing |
+| Two strengths: storage strength never falls, retrieval strength decays with disuse; retrieving is the strongest learning event | Bjork & Bjork 1992; Roediger & Karpicke 2006 | Nothing is deleted (storage stays); availability follows use, and a recall that returns an item is the strongest use |
+| Reconsolidation: a recalled memory is labile and is updated when there is a prediction error | Nader et al. 2000; Sevenster et al. 2013 (human behavioural versions are contested) | A rewrite counts as rehearsal only when its body changed (a prediction error); re-saving the same text counts nothing. A correction or contradiction (surprise) is the strongest signal and can bring a put-away item back |
 | Fuzzy trace: verbatim and gist are two traces; verbatim fades first; forgetting detail improves generalisation | Brainerd & Reyna 2002; Richards & Frankland 2017 | The gist step: a verbatim item that leaves tier 0 gets a gist in her words; the verbatim goes cold at once, still readable |
 | Schema: recall is reconstruction; schema-consistent input assimilates, inconsistent input is kept as a flagged episode | Bartlett 1932; Ghosh & Gilboa 2014 | `character_core` is the schema layer; it is written by graduation from things that stayed true, not by a cap |
 | Retrieval-induced forgetting and the testing effect | Anderson, Bjork & Bjork 1994 | Being surfaced in a turn counts as use; an item recalled on purpose counts more |
@@ -164,10 +165,10 @@ takes or leaves:
 | System | Mechanism | Taken | Left, and why |
 |---|---|---|---|
 | MemGPT / Letta (Packer et al. 2023) | fixed-size editable memory blocks in the prompt, recall and archival stores outside, a "memory pressure" warning at ~70% of the window, the model pages with tool calls | capped, labelled blocks the model edits by explicit operations; pressure as a program event (here: the count cap and the lapse) | paging as the only way down: she does not page (48 recalls in four days). Block rewrites in the prompt head every turn would break the cache prefix; here rewrites happen on her writes and at night |
-| Generative Agents (Park et al. 2023) | one memory stream; retrieval = recency (0.995^hours since last retrieval) + importance (LLM-rated 1–10 once) + relevance; reflection when summed importance passes 150 | use-based recency (retrieval resets the clock), and a bounded consolidation that cites its sources | LLM-rated importance and additive scores (a number per item that the model would see or write toward; AGENTS.md); the night list is chosen by observed use and age, not by a rating |
+| Generative Agents (Park et al. 2023) | one memory stream; retrieval = recency (0.995^hours since last retrieval) + importance (LLM-rated 1–10 once) + relevance; reflection when summed importance passes 150 | use-based recency (retrieval resets the clock), and a bounded consolidation that cites its sources | LLM-rated importance and additive scores (a number per item that the model would see or write toward; AGENTS.md); memorability is observed (use, surprise, repetition), never rated |
 | MemoryBank (Zhong et al. 2023) | Ebbinghaus strength R = e^(−t/S), S += 1 on each recall; daily summaries → portrait | one strength that grows with each use, decay computed by the program | time counted from learning rather than from last use; tiers that do not talk to the decay. Here the same freshness decides the place |
 | A-MEM (Xu et al. 2025) | Zettelkasten notes with keywords, context line and links written at encoding; neighbours rewritten when a new note arrives | the heading as the retrieval key, written once at encoding (sections and journal rows already have one); near-duplicate pairs offered for merging | one model call per neighbour per insert on a local model |
-| Mem0 (Chhikara et al. 2025) | extract facts, then a closed decision per fact: ADD / UPDATE / DELETE / NOOP; graph variant invalidates rather than deletes | the closed categorical set at write and at night (带着 / 放手 / 改写 / 进 core / 合并), program-applied and audited | an extraction call on every exchange in the hot path |
+| Mem0 (Chhikara et al. 2025) | extract facts, then a closed decision per fact: ADD / UPDATE / DELETE / NOOP; graph variant invalidates rather than deletes | the closed categorical set at write and at night (放手 / 改写 / 进 core / 合并), program-applied and audited; UPDATE as supersession of a fact | an extraction call on every exchange in the hot path |
 | Zep / Graphiti (Rasmussen et al. 2025) | temporal knowledge graph; bi-temporal edges (valid / invalid, created / expired); a contradiction closes the old edge instead of deleting it | validity by revision: the ledger already keeps the superseded text with its dates, and `detail_of` keeps the verbatim behind a gist, so "what I thought last month" stays answerable | the graph machinery; a persona's items are few and her words, not triples |
 | HippoRAG 2 (Gutiérrez et al. 2025) | knowledge graph plus personalised PageRank; node specificity down-weights entities that appear everywhere; no forgetting | specificity is already in the lexical path (corpus-wide terms dropped) | PageRank over a growing chat corpus with no notion of time |
 | LangMem (LangChain 2025) | semantic / episodic / procedural stores; hot-path tool vs background manager; a profile updated in place vs a collection | the hot-path / background split (indexing and the night list are background; her writes are the hot path) and profile-vs-collection (随身 is the profile in the cached prefix; 手边 the collection in the tail) | procedural memory that rewrites the system prompt in production |
@@ -186,18 +187,28 @@ answers proposed here.
 
 ## 4. The model
 
-### 4.1 One item, three places, two strengths
+### 4.1 One item, three places, kept up by what is memorable
 
 Everything she keeps is an **item**: one idea, one place, in her words. A persona section is an item; so is each
-entry of `current_self`, each ledger section, each group-notes section, each journal row, each promoted memory, each
-idea. The program never rewrites an item's text; it keeps three facts beside it:
+entry of `self`, each ledger section, each group-notes section, each journal row, each promoted memory, each idea. The
+program never rewrites an item's text; it keeps beside it:
 
-- **where it lives** (the tier), one of three words from a versioned table (`TIERS_VERSION`), proposed:
+- **where it lives** (the place), one of three words from a versioned table (`TIERS_VERSION`), proposed:
   - 随身 (carried): in every turn where it is readable. Capped by count.
   - 手边 (at hand): in the index; comes up by itself when a turn is about it; found by `recall`.
   - 收着 (put away): out of automatic results; `recall` by a word or its heading still brings it; never deleted.
-- **when she last confirmed it** (wrote it, rewrote it, or chose to keep it when asked);
-- **when it was last used** (surfaced into a turn, or read by `recall`; the existing `salience.last_ref_at`).
+- **whether it is a memory or a fact**, by the store it is written in (§4.4), never by a classifier and never by a
+  question to her: memories are what happened (journal rows, chunks, summaries, thoughts, `self` items); facts are
+  what is (persona sections, the person layer, ledgers, group notes, `core`).
+- **when it was last memorable** (`memorable_at`) and its stay, moved by these, all observed by the program:
+  - *use across conversations*: `recall` returned it; she rewrote it with a changed body; she cited its `doc:` ref in a
+    tool call; it was surfaced to her in two or more different conversations (one conversation echoing itself counts
+    nothing, so what is shown does not keep itself);
+  - *surprise*: a `correction`, a `replace_section` that changes its meaning, or a dialogue summary's correction
+    pointing at its subject;
+  - *repetition from several sides*: the same idea written or met in different conversations or from different people
+    (the index's near-duplicate across scenes);
+  - *feeling at the time*, a tie-breaker only: a `feel` in the turn that wrote it (5% of her turns record one).
 
 She reads these only as words (AGENTS.md): age words `刚写的 / 这几天 / 上周 / 上个月 / 更早` (under 1, 7, 14, 45 days;
 `AGE_WORDS`), use words `常用 / 偶尔用 / 很久没用` (from the same freshness the forgetting formula already computes:
@@ -207,60 +218,70 @@ above 0.5 / above 0.1 / below). No number reaches her.
 
 ```
  encoding ──► 随身 ──lapse──► 手边 ──no use──► 收着
-   (her write;        ▲  │ gist step         │ recall by word
-    program marks     │  ▼ (night)           ▼ (explicit)
-    time + scope)   confirm / rewrite ◄── surfaced in a turn (use)
-                    (her act = reconsolidation; interval doubles)
- consolidation (night): lines → summary (program) → her gist / notes / promote → self items → character_core
+   (her write;        ▲  │ gist step         │ recall by word, or surprise
+    program marks     │  ▼ (night)           ▼
+    time + scope)   memorable: used across conversations, rewritten with a change,
+                    corrected, repeated from several sides (next stay doubles)
+ facts (persona, people, ledgers, notes, core): 随身 ──lapse──► 手边, never 收着 by disuse; replaced only by correction
+ consolidation (night): lines → summary (program) → her gist / notes / promote → facts by subject → core
 ```
 
 1. **Encoding.** She writes as today (`write_document`, `understand_person`, `promote_memory`, `ideas`, journal
-   rows). The program stamps scope and visibility from the turn (unchanged), `added`, `confirmed = added`, and the
-   starting place: a persona or ledger section she marks 带着 starts 随身; everything else starts 手边. A journal row
+   rows). The program stamps scope and visibility from the turn (unchanged), `added`, `memorable_at = added`, and the
+   starting place: what she just wrote in a carried store starts 随身, as a new thing is fresh in mind; a journal row
    starts 手边 and is never 随身.
-2. **Staying up is her act, with spacing.** A 随身 item has a stay: 14 days from its last confirmation at first; each
-   confirmation doubles it (28, 56, capped at 56). When the stay runs out the item lapses to 手边 by itself. No
-   refusal, no shortening. The turn after a lapse says so once, at the tail, with a clock time (ADR-056), and how to
-   bring it back.
+2. **Staying up is what is memorable, with spacing.** A 随身 item has a stay: 14 days from its last memorable moment at
+   first; each memorable moment (§4.1), counted at most once per stay, doubles the next (28, 56, capped at 56). When
+   the stay runs out the item lapses to 手边 by itself. No refusal, no shortening, no keep act. The turn after a lapse
+   says so once, at the tail, with a clock time (ADR-056).
 3. **Capacity by count.** 随身 holds at most N items per store (proposed: `self` 12, persona 16, each ledger 10, each
-   group's notes 6; her numbers). Adding a 13th does not refuse: the item with the oldest confirmation lapses, and
-   the write's result names it. This is the flip: today the oldest stays and the newest is refused.
+   group's notes 6; her numbers), facts included. Adding a 13th does not refuse: the item least recently memorable
+   lapses, and the write's result names it. This is the flip: today the oldest stays and the newest is refused.
 4. **Detail fades into gist (the forced step).** When an item lapses, the next night lists it if it is long (over
    240 characters) or carries dated specifics. She writes its gist (one or two sentences, ≤ 160 characters) with the
    existing `replace_section`; the program keeps the verbatim as the gist's source (`detail_of`), moves the verbatim
    to 收着 at once, and the gist stays 手边. If she passes it over on two nights, the verbatim goes 收着 without a gist:
    the detail is out of her default view either way. A short item (≤ 160 characters) is already gist and skips this.
    Nothing is deleted; `recall` reads the verbatim through the gist's `detail_of` or by a word.
-5. **Use keeps 手边 alive.** 手边 items sit in the same index as her memories (one per idea; owner-private items in
-   her owner-private scope, public ones in `global-safe`, a group's notes in that group's scene scope), under the
-   same forgetting formula. Below `step_back_below` (0.1: about 100 days unused, sooner in a busy conversation) an
-   item is 收着. Being surfaced into a turn is use (already recorded); a `recall` that returns it is use.
+5. **Use keeps 手边 alive; facts do not cool.** 手边 items sit in the same index as her memories (one per idea;
+   owner-private items in her owner-private scope, public ones in `global-safe`, a group's notes in that group's scene
+   scope), under the same forgetting formula. A memory below `step_back_below` (0.1: about 100 days unused, sooner in a
+   busy conversation) is 收着. A fact never goes 收着 by disuse: a newer item on the same subject supersedes it (the
+   night list's merge), and the superseded one goes 收着 with its dates, readable as what she held then (Zep-style
+   validity by revision). A promise to someone and a person's stated boundary are facts for this reason: rare and
+   seldom used, exactly what disuse would drop.
 6. **Surfacing.** Per-turn retrieval reserves up to two of its six slots for her own items (so her own words are never
    crowded out by 25,000 chat chunks and never crowd them out), admitted only above an absolute floor (to be set from
    the pilot; the week's data puts it near 0.83) in addition to the rank. Each comes with its heading, its age word
    and its place word, and a `doc:…#sid` ref she can rewrite from.
 7. **Recall and reconsolidation.** A surfaced or recalled item does not return to 随身 by itself (that would churn
    every prompt and defeat the cache for a thing that may have been incidental). It comes back up when she rewrites it
-   or says 带着 on it; that rewrite is the reconsolidation, dated now, and starts a new stay. Her rule from ADR-043
-   stands: what comes back is her text, never a summary of it.
+   with a changed body (the reconsolidation, dated now, a new stay) or when a surprise touches it. Her rule from
+   ADR-043 stands: what comes back is her text, never a summary of it.
 8. **Night consolidation (settlement, ADR-049 quiet time, ADR-058 self evaluation).** One short list, at most 5 items
-   a night, chosen by rule and told in words why each is there:
-   - 快掉下去了: a 随身 item two days from lapsing that was used in the last month (Bjork: high storage, low retrieval;
-     the cheapest save). Her choices: 带着 (confirm; stay doubles), 放手 (let it lapse now), 改写 (rewrite).
+   a night, chosen by rule and told in words why each is there; no keep or drop choices:
    - 写一句意思: a lapsed verbatim item waiting for its gist (step 4).
-   - 一个月都成立: a `self` item confirmed through three stays unchanged. Her choices: 进 core (one sentence into
-     `character_core`), 还在变 (stays), 放手.
-   - 合并: two items the index finds near-duplicate (cosine above a high threshold, same store): she merges or keeps
+   - 几处都提到: an item repeated from several sides with its text unchanged (a `self` item through three stays, or any
+     memory met in different conversations). Her choice is what it means and about whom: 进 core (about herself),
+     记到那个人 / 记到那个群 / 记进账 (a fact about a person, a group, her circumstances), or 还在变 (stays a memory).
+     The program decides whether it came up enough; the meaning is hers.
+   - 合并: two items the index finds near-duplicate (cosine above a high threshold, same store): she merges them into
+     one. Mandatory for a fact store (otherwise it is the next store that only grows); in a memory store she may keep
      both. Schema-consistent assimilation, in her words.
    - 回头看: at most one 收着 item a week, chosen at random among those with uses in their history: a chance to bring
      back what the index would otherwise never show her again (Richards & Frankland's transience is useful, but a
      person also stumbles on old things).
    The list replaces `notes_review_from_program` (7,740 characters when it fires) and its "tidy three notes a night"
    framing, which measured as compression, not retirement.
-9. **Graduation.** `character_core` is written only from the 一个月都成立 list, as one sentence per item, capped at 12
-   items; a core item lapses like any other but with a 56-day stay from the start. This is the schema layer: what stays
-   true of her across weeks, not what she thinks this week.
-10. **Back to encoding.** Every rewrite is a new revision in the ledger as today; the old text stays as history and
+9. **Graduation and declared facts.** `character_core` is written only from the 几处都提到 list, as one sentence per
+   item, capped at 12 items; a core item lapses to 手边 with a 56-day stay from the start and, as a fact, never cools.
+   This is the schema layer: what stays true of her across weeks, not what she thinks this week. A fact can also be
+   written directly to its store when she learns it (a friend's job, a group's convention): writing it there is the
+   declaration. `promote_memory` is fixed to the same path: its candidates come from her acts and repetition across
+   conversations (not from what she was shown), and it lands in the fact store of its subject.
+10. **Letting go.** 放手 (`write_document` op `let_go`) moves an item down one place now. It is offered, never asked
+    for: the one act that is not hoarding, and the habit she has not learned.
+11. **Back to encoding.** Every rewrite is a new revision in the ledger as today; the old text stays as history and
     `recall` reads it. Nothing in this cycle deletes.
 
 ### 4.3 What she is told, and when
@@ -268,10 +289,11 @@ above 0.5 / above 0.1 / below). No number reaches her.
 Fixed text, once per conversation (system prompt, ADR-056 rule 1; about 650 characters, persona-agnostic), in the
 place where the memory rules already are. Proposed wording kind (final words are hers):
 
-> 你的东西有三个地方：随身的每回合都在；手边的平时不在眼前，谈到相关的事会自己浮上来，recall 一句话也能找到；收着的只有
-> recall 找得到。放下不是丢：从随身放到手边、从手边放到收着，程序只换地方，不改一个字，什么都在。随身的位置有限，
-> 一件东西随身一阵子没再确认，就自己放到手边，程序会告诉你一次；你写一遍或说一声「带着」，它就回来，并且下次能留更久。
-> 长的细节会退成一句意思，细节还在，由意思那条带着。像人一样：细节淡下去，意思留下来；留下什么由你写，什么时候退由用不用决定。
+> 不学会忘，就腾不出地方学新的。你的东西有三个地方：随身的每回合都在；手边的平时不在眼前，谈到相关的事会自己浮上来，
+> recall 一句话也能找到；收着的只有 recall 找得到。放下不是丢：程序只换地方，不改一个字，什么都在，碰到相关的事还会
+> 回来。随身的位置有限，一件事一阵子没被用到、没在别处再碰到，就自己放到手边，程序会告诉你一次；你又用到它、改写了它、
+> 或被人纠正了它，它就回来，下次能留更久。长的细节会退成一句意思，细节还在。事实不一样：人设、关于人的、群笔记、账、
+> core 里写的是事实，不会因为不用而退，只会被更正替换。想放下的，自己说一声「放手」就行。
 
 Per turn, one block `things_from_program` (tier 0, stable; folds under ADR-056 when unchanged):
 
@@ -280,11 +302,12 @@ Per turn, one block `things_from_program` (tier 0, stable; folds under ADR-056 w
   the reason word (随身满了 / 一阵子没确认 / 很久没用) and the one line that brings it back. Never a countdown.
 
 In the memories block, a surfaced item of hers reads like a memory with three more words: its store, its place word,
-its age word (`「标题」· persona · 手边 · 上周`). A recall result lists headings of 手边 and 收着 items that matched,
+its age word (`「标题」· persona · 手边 · 上周`); a fact says 事实 instead of an age word when its subject has been
+superseded before (so she sees she once held otherwise). A recall result lists headings of 手边 and 收着 items that matched,
 beyond the bodies it returns, so she can see what exists without reading it all.
 
 At night, the list of §4.2 step 8, each item with its body and the choices as words; her answer is a categorical
-choice the program maps to a move (`keep` on the existing write tool, §5).
+choice the program maps to a write (§5). None of the choices is keep or drop.
 
 What she is never told: numbers, scores, freshness values, item counts as digits beyond the count words, or that the
 program "forgot" something: it moved it.
@@ -293,17 +316,17 @@ program "forgot" something: it moved it.
 
 | Store | Unit | Starts | 随身 cap | Lapse / use | Gist step | Notes |
 |---|---|---|---|---|---|---|
-| `current_self` → document `self` | one item per section | 随身 | 12 | stay 14 → 28 → 56 days; cap overflow lapses the oldest confirmation | yes | her one-time rewrite of today's body into items; `update_self` retires (§5) |
-| `character_core` → document `core` | one sentence per section | 随身, by graduation only | 12 | stay 56 days | no (already gist) | first entries come from the 一个月都成立 list |
-| Persona document | section (as now) | her choice on write; existing `always` = 随身 | 16 | as `self`; `on_demand` sections become 手边 (indexed) at once: the 29 tucked ones become findable | yes | `inject` field keeps working and maps to places (`always` = 随身, `on_demand` = 手边, `never` = 收着) |
-| Voice | section | 随身 | 6 | stay 56 days | no | small; the voice is schema-like |
-| Ledgers (kind `ledger`) | section | 随身 | 10 each | as `self`; `correction` = a rewrite of the corrected item for confirmation purposes | yes | phase 0 fixes the kind of her two existing ones |
-| Group notes | section, that group's scene scope | 随身 in that group | 6 per group | stay 28 days (groups move slower); use = surfaced in that group | yes, listed on a `write_notes` visit or at night | public visibility, read only in that group, unchanged |
+| `current_self` → document `self` (memory) | one item per section | 随身 | 12 | stay 14 → 28 → 56 days by memorable moments; overflow lapses the least recently memorable; cools to 收着 by disuse | yes | her one-time rewrite of today's body into items; `update_self` retires (§5) |
+| `character_core` → document `core` (fact) | one sentence per section | 随身, by graduation only | 12 | stay 56 days, then 手边; never 收着 by disuse | no (already gist) | first entries come from the 几处都提到 list |
+| Persona document (fact) | section (as now) | 随身 when written; existing `always` = 随身 | 16 | lapse by stay to 手边, never 收着 by disuse; replaced by correction; merge mandatory; `on_demand` sections become 手边 (indexed) at once: the 29 tucked ones become findable | yes | `inject` maps to places (`always` = 随身, `on_demand` = 手边, `never` = 收着). Her backstory lives in the persona package; this store earns its keep on what she learns |
+| Voice (fact) | section | 随身 | 6 | stay 56 days; never cools | no | small; the voice is schema-like |
+| Ledgers (kind `ledger`, fact) | section | 随身 | 10 each | as persona; a `correction` supersedes the corrected item | yes | facts about her circumstances and the world; phase 0 fixes the kind of her two existing ones |
+| Group notes (fact) | section, that group's scene scope | 随身 in that group | 6 per group | stay 28 days (groups move slower), then 手边; never cools; use = surfaced in that group or cited | yes, listed on a `write_notes` visit or at night | facts about a group (people, conventions); public visibility, read only in that group, unchanged |
 | Journal (`work_log`) | row | 手边 | 0 (never carried) | use only; rows roll up: each night her gist of the day (≤ 400 characters) is a row of its own; rows over 30 days without use are 收着 | the day gist is the gist step | phase 0 moves it to rows |
-| Understanding: person layer and here layer | body as now (phase 3: items) | 随身 with that person | — | later | later | same shape as `self`; small today |
+| Understanding: person layer (fact) and here layer | body as now (phase 3: items) | 随身 with that person | — | later; facts about a person, a promise to them and their stated boundaries never cool | later | same shape as `self`; small today |
 | Memory units: chunks, dialogue summaries | as now | 手边 (chunks step back once summarised) | — | existing formula | summaries are the program's gist | unchanged |
 | Her thoughts (`monologue`) | as now | 手边 | — | existing formula (her ADR-043 rule 3: no fast-fading lane) | none | unchanged; recalled with `when` and `then` |
-| Promoted memories (`promote_memory`) | fact/appraisal/signal | 手边 | — | existing formula; her rewrite is a confirmation | no | unchanged tool; the public→home path of ADR-017 |
+| Promoted memories (`promote_memory`) | fact/appraisal/signal | lands in the fact store of its subject | — | as that store | no | candidates from her acts and repetition across conversations, not from what she was shown; still the reviewed public→home path of ADR-017 |
 | Ideas | one idea | — | — | an open idea unread for 30 days is listed as 很久没动 in self-improvement with 还要 / 放弃 | no | already has drop; only the age word is new |
 | Stickers | shelf | — | 60 | the weekly review gains last-used words | no | unchanged mechanism |
 | Private words, credentials, affect ledger, plans, watches | — | — | — | out of scope: a safety list never decays; the vault is blind; the ledger has half-lives; plans and watches end by themselves | — | |
@@ -321,13 +344,14 @@ No new tool. The character brain is at 20,881 of 20,900 characters of tool text 
 
 | Change | Where | Characters |
 |---|---|---|
-| `write_document` gains `keep` (带着 / 手边 / 收着; "where this item lives") and, on the first append that creates a document, `kind` (`ledger` / `journal` / `working`) | option fields | about +190 |
+| `write_document` gains op `let_go` (move an item down one place) and, on the first append that creates a document, `kind` (`ledger` / `journal` / `working`); its description says which stores hold facts (persona, people, notes, ledgers, core: they do not fade by disuse) | op value, option, one sentence | about +170 |
 | `write_document` docs `self` and `core` (the two self descriptions as documents of kind `self`) | description names them | about +40 |
 | `update_self` retires: `write_document(doc='self', …)` does the same with sections; the old name keeps working as an alias for a while (ADR-055's rule) | tool removed from the list | −388 |
 | `recall` returns matching headings of 手边 and 收着 items beside bodies; `recall(sections=[{doc:'self'}])` with no `sid` lists a document's headings | result shape; one sentence in the description | about +60 |
-| Her night choices (带着 / 放手 / 改写 / 进 core / 合并) are `write_document` calls: `keep` for the first two, `replace_section` for the third, `append_section` to `core` for the fourth, a `replace_section` plus `keep=收着` on the other for the fifth | no new option | 0 |
+| `promote_memory` gains `about` (self / person / place / world), which picks the fact store it lands in | one option | about +60 |
+| Her night choices (改写 / 进 core / 记到… / 合并 / 放手) are `write_document` calls: `replace_section` for the first, `append_section` to `core` or the subject's store for the next two, `replace_section` plus `let_go` on the other for 合并, `let_go` for 放手 | no new option | 0 |
 
-Net about −100 characters: the character brain's budget stays at 20,900 (the test's count drops to 31 tools). The
+Net about −60 characters: the character brain's budget stays at 20,900 (the test's count drops to 31 tools). The
 action brain has no memory tool and gains none; `asuna.dbread` reads the same collections. Per-turn lines:
 `things_from_program` about 220 characters when it changes, about 40 folded; a `moved` line about 110 characters,
 once per move; `current_self` shrinks from 3,403 to at most about 2,400 JSON characters (12 items × 200) in every
@@ -340,18 +364,19 @@ changes every turn.
 
 | Mechanism | Trigger | Program does | Tells her |
 |---|---|---|---|
-| Lapse | a 随身 item's stay runs out (checked when its store is read for a turn) | tier → 手边; index it | `moved` line, once, in the next turn of each conversation that read it |
-| Overflow | a write that would make a store's 随身 count exceed its cap | the item with the oldest confirmation lapses | the write's result names it |
-| Cooling | a 手边 item's freshness under `step_back_below` | tier → 收着 | nothing per item; the count words in `things_from_program` change |
+| Lapse | a 随身 item's stay runs out (checked when its store is read for a turn) | place → 手边; index it | `moved` line, once, in the next turn of each conversation that read it |
+| Overflow | a write that would make a store's 随身 count exceed its cap | the least recently memorable item lapses | the write's result names it |
+| Cooling | a 手边 memory's freshness under `step_back_below` (facts never) | place → 收着 | nothing per item; the count words in `things_from_program` change |
+| Memorable moment | `recall` returned it; a rewrite with a changed body; its `doc:` ref cited in a tool call; surfaced in a second different conversation; a correction or meaning-changing rewrite touching it; a near-duplicate met from another conversation or person; a `feel` in the writing turn (tie-breaker) | `memorable_at = now`; the next stay doubles (once per stay); a 手边 or 收着 item touched by a surprise comes back to 手边 | nothing (the result of her own write says so when it was hers) |
+| Supersession | a fact store gets a newer item on the same subject (her correction, or a merge) | the older goes 收着 with its dates | the write's result |
 | Gist listing | the night after a long or dated item lapsed | adds it to the night list | the list, with 写一句意思 |
 | Gist done | her `replace_section` of a listed item with a body ≤ 160 characters | keeps the old body as a 收着 revision linked by `detail_of`; the new body is 手边 | the write's result |
 | Gist skipped twice | the item was listed on two nights and not rewritten | the verbatim goes 收着 unchanged | the next night's list says it went |
-| Edge save | a 随身 item two days from lapse with a use in the last 30 days | adds it to the night list as 快掉下去了 | the list |
-| Graduation offer | a `self` item confirmed through three stays unchanged | adds it to the list as 一个月都成立 | the list |
-| Near-duplicate | two items in one store with cosine above a high threshold (set in the pilot) | adds the pair as 合并 | the list |
+| Repeated from several sides | an item with its text unchanged through three stays, or met in different conversations | adds it to the list as 几处都提到 | the list |
+| Near-duplicate | two items in one store with cosine above a high threshold (set in the pilot) | adds the pair as 合并 (a fact store's pair must be merged) | the list |
 | Stumble | once a week, one 收着 item with past uses, at random | adds it as 回头看 | the list |
-| Use | an item surfaced into a turn or returned by `recall` | `salience.last_ref_at` (exists) | nothing |
-| Confirmation | any write of hers on the item, or `keep=带着` | `confirmed_at = now`; stay doubles | the write's result |
+| Let go | her `let_go` | the item moves down one place now | the write's result |
+| Use | an item surfaced into a turn or returned by `recall` | `salience.last_ref_at` (exists); counts as memorable only as above | nothing |
 
 Every move is one audit line (`memory.moved`: item, from, to, reason) and visible in the memory side panel, so the
 owner and she can see the record. Tables (`TIERS_VERSION`): tier words, age words, use words, stays, caps, the gist
@@ -368,24 +393,10 @@ length, the floor, and the list sizes.
   owner sets the kind on the two documents once; his call). `ledgers_from_program` then shows them.
 - Nothing else changes. Measure: `ledgers_from_program` present at home; journal bytes per day; no refusal.
 
-**Phase 0b, delivery prerequisites (from the context-growth survey of 2026-10-13):** her conversations grow 6–9×
-faster per turn than her sister's plain DSH session (local chat about 28k characters a turn against 3.3k; 12.5
-compactions a day against 1), 70% of it the per-turn notice. The cycle above relies on per-turn delivery being
-deterministic and visibility lasting longer than a few turns (`things_from_program`, `moved` lines and surfaced items
-must fold when unchanged), so these come first:
-- **Folding nested lists**: a list inside a block (`recent_experience_from_program` tasks, `affect_from_program`
-  reasons) never folds (`context-delivery.js` `listOf` sees only a top-level array or `items`); fold every object list
-  by block and field path.
-- **The ceiling trims what is sent, not what is prepared**: `trim_turn` halves the longest texts of the whole prepared
-  context (48k) before the Host removes what she still sees, so her self text is cut in 14 of 23 sends and each cut
-  differs, which defeats folding; apply the ceiling to the composed notice, or cut only at fixed per-block limits.
-- **A fully folded block sends nothing**: today it still sends its wrapper; name it unchanged instead.
-- **Visibility beyond a fixed window** (the owner's decision): copies older than the 32k-token reuse window are sent
-  again though still on the surface, about every 4–5 turns (about 2k characters a turn locally); count visibility from
-  the last compaction checkpoint instead, or keep the window.
-Independent fixes found by the same survey (lines piling up in idle groups, task results carrying their report
-twice, group continuity and memories repeating lines still visible, a per-minute clock in the places block, the
-document refs resent each turn) are made outside this ADR.
+**Phase 0b, delivery prerequisites: done** (ADR-063, all live 2026-10-13 11:37 NZDT): nested lists fold, the ceiling
+trims what is sent, a fully folded block sends nothing, visibility counts from the last compaction checkpoint with a
+restore after an in-turn compaction. Measured after: local chat 28.0k to 14.0k characters a turn, cache hit 89.8% to
+95.3% (ADR-063, "Measured after").
 
 **Phase 1, pilot (one week, shadow):** index her items (persona sections, `current_self` items as split today,
 journal rows, group notes) into the memory index with a `shadow` flag that retrieval records but does not deliver.
@@ -393,11 +404,11 @@ Measure per item: would-be surfacings per day by turn kind, the floor that keeps
 per turn on average and none in heartbeats, near-duplicate pairs found, and `recall` hits by heading. Decide the
 floor and the two reserved slots from this; the ADR is amended with the numbers.
 
-**Phase 2, the cycle on `self`, persona, ledgers and group notes:** places, stays, caps, lapse and overflow,
-`keep`, the `things_from_program` block, delivery of own items, the night list replacing the notes review,
-graduation into `core`. Her one-time rewrite of `current_self` into items (hers; the old body stays as history) and
-her first `keep` choices on persona sections (today's `always` sections start 随身 with a fresh stay; nothing lapses
-on day one). `update_self` aliased.
+**Phase 2, the cycle on `self`, persona, ledgers and group notes:** places, stays by memorable moments, caps, lapse
+and overflow, facts not cooling and superseded by correction, `let_go`, the `things_from_program` block, delivery of
+own items, the night list replacing the notes review, graduation into `core`, `promote_memory`'s fixed path. Her
+one-time rewrite of `current_self` into items (hers; the old body stays as history); today's `always` sections start
+随身 with a fresh stay (nothing lapses on day one). `update_self` aliased.
 
 **Phase 3, after two weeks of readings:** understanding layers as items; the idea age word; sticker last-used words;
 retire the alias; her own weekly reading in self evaluation (ADR-058): moves, saves, gists written, items brought
@@ -406,17 +417,20 @@ back, in words from records.
 **Measure before, during, after** (a script run daily, counts only):
 - store sizes per tier and per store; 随身 characters per turn by conversation kind (goal: `self` ≤ 2,400, persona
   always unchanged or lower, total home notice down by at least the `self` saving);
-- refusals for length on her stores (goal: zero after phase 2; today 17 budget refusals on the persona document,
-  and `SELF_STATE_TOO_LARGE` on `current_self`);
-- moves per day by reason; how many lapsed items she brought back within a week (the "regret rate"; a high rate means
-  stays are too short); gists written vs skipped twice;
+- refusals for length on her stores (goal: zero within a week of phase 2; today 17 budget refusals on the persona
+  document, and `SELF_STATE_TOO_LARGE` on `current_self`; if they do not reach zero, the cap is still doing the
+  forgetting, not memorability);
+- moves per day by reason; how many lapsed items came back within a week by her rewrite or a surprise (the "regret
+  rate"; a high rate means stays are too short); gists written vs skipped twice; `let_go` uses;
+- rewrites per item per week in 随身 (a flat line is a habit; a jump right after a lapse notice is hoarding, and the
+  notice then stops naming that item); which memorable moments kept items up, by kind (feeling is expected rare);
 - recall hit rate of 手边 and 收着 items: of the items that moved down, how many were surfaced or recalled again within
   30 days (the pilot predicts about 1% of turns each; a demoted item never seen again in 60 days despite its topic
   coming up is the failure to watch);
 - her own readings: once a week, her words on what she missed and what she was glad to lose (not graded).
 
-**Rollback criteria**, each mechanism behind its own switch in the tables: refusals for a missing `keep` or a wrong
-`sid` rising after phase 2 (ADR-056's rule); the regret rate above a third; her readings saying she lost track of
+**Rollback criteria**, each mechanism behind its own switch in the tables: refusals for a wrong `sid` or `let_go`
+rising after phase 2 (ADR-056's rule); the regret rate above a third; her readings saying she lost track of
 things she needs; the home notice not shrinking. Rolling back keeps every item and every revision; only the
 automatic moves stop and `inject` reads as before.
 
@@ -424,8 +438,9 @@ automatic moves stop and `inject` reads as before.
 
 | Alternative | Trade-off | Verdict |
 |---|---|---|
-| **The owner's: a searchable store for the less important, pointers kept in her reflection, tiers by time** | The searchable store is right and is adopted (her items join the one index). Per-item pointers regrow in the very place they were meant to relieve and rot when the item changes; the pilot shows retrieval finds an item when a turn is about it, so a stable map of places (`things_from_program`) replaces pointers. Tiers by time punish a rule she applies daily but wrote long ago; tiers by use and confirmation do not | adopted in part |
+| **The owner's: a searchable store for the less important, pointers kept in her reflection, tiers by time** | The searchable store is right and is adopted (her items join the one index). Per-item pointers regrow in the very place they were meant to relieve and rot when the item changes; the pilot shows retrieval finds an item when a turn is about it, so a stable map of places (`things_from_program`) replaces pointers. Tiers by time punish a rule she applies daily but wrote long ago; tiers by memorable use do not | adopted in part |
 | **Claude's earlier proposal** (items, count caps, auto-demotion by last confirmation, searchable tier 1, cold tier 2, confirm/pin/bring back) | Right direction; it lacked the gist step (detail never faded, it only moved), two strengths (use was not separate from confirmation), spacing (every confirmation cost the same), a path into `character_core`, and the journal | extended into this ADR |
+| **Her explicit keep acts** (pin, 带着 on a lapse warning, confirmation doubling a stay; the first draft of this ADR) | People have some deliberate control, but for her the keep choice measurably does not work (no removal in 8 tidy turns, 3 shrinks in 46 self revisions, a model asked keep-or-drop keeps), and choosing what to keep invites self-curation | rejected (owner 2026-10-13); revisit with a model that would use a keep act well. 放手 and a changed rewrite stay |
 | **Explicit paging only** (MemGPT-style: she pages things in and out herself, the program only warns) | She does not page: 48 recalls in four days, 0 reads of her work log, 2 of 29 tucked sections. A system that depends on her remembering to look is the system we measured | rejected as the sole mechanism; `recall` stays as the deliberate path |
 | **LLM-rated importance per item** (Generative Agents) | A score per write or per turn costs a model call and would reach her as a number or shape her writing toward "important"; AGENTS.md forbids raw scores, and importance self-rated by a model is the least stable signal in the literature | rejected; use and confirmation are observed, not rated |
 | **Program-written summaries of her text** (consolidation by the program) | Her rule (ADR-043): a reason comes back in her words; a summary is always more presentable than what she thought. The program may list, move and link; only she rewrites | rejected |
@@ -435,22 +450,25 @@ automatic moves stop and `inject` reads as before.
 
 ## 9. Open questions
 
-**For her** (the design touches her texts and habits; it waits for her agreement):
-1. The three place words and the age and use words.
-2. The caps (12 / 16 / 10 / 6) and the first stay (14 days) and its doubling; whether group notes should move slower.
-3. The gist step: 160 characters; two nights before the detail goes 收着 without a gist; whether a lapsed item should
+**For her** (the design touches her texts and habits; it waits for her agreement; the core idea is put to her first):
+1. The core idea and the told text of §4.3, in her words.
+2. The three place words and the age and use words.
+3. The caps (12 / 16 / 10 / 6), the first stay (14 days) and its doubling; whether group notes should move slower.
+4. Which of her stores she counts as facts (proposed: persona, people, group notes, ledgers, core) and as memories
+   (journal, `self`, thoughts); whether some persona sections are really memories.
+5. The gist step: 160 characters; two nights before the detail goes 收着 without a gist; whether a lapsed item should
    be listed at all if it is short.
-4. `current_self` as a document of items she writes with `write_document` instead of one body with `update_self`:
+6. `current_self` as a document of items she writes with `write_document` instead of one body with `update_self`:
    does it fit how she writes herself? Would she rather keep one body and have the program split it by lines?
-5. Graduation: three unchanged stays before the offer; `character_core` at 12 sentences; her own first sentences.
-6. Whether a surfaced item should ever come back to 随身 by itself (the proposal says no: only by her rewrite or 带着).
-7. Whether her thoughts should enter the gist step (her ADR-043 rule 3 says no fast lane; the proposal leaves them).
-8. What the weekly reading in self evaluation should show of her memory.
+7. Graduation: three unchanged stays or several sides before 几处都提到; `character_core` at 12 sentences; her own
+   first sentences.
+8. Whether her thoughts should enter the gist step (her ADR-043 rule 3 says no fast lane; the proposal leaves them).
+9. What the weekly reading in self evaluation should show of her memory.
 
 **For the owner:**
 1. Phase 0: who sets the kind of her two existing ledgers (journal rows: decided and built).
 2. The reserved slots (two of six) and the absolute floor: set from the pilot, or fixed now.
-3. `promote_memory`'s quota (2 a night) stays; the promoted memories join the tiers at 手边.
+3. `promote_memory`'s quota (2 a night) with its new candidates.
 4. Retiring `update_self` (one less tool) against keeping her habit.
 5. Whether the pilot's shadow index may run on the live profile (it writes index rows, no delivery) or should wait for
    a copy of her database.

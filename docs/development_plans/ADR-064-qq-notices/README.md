@@ -270,3 +270,21 @@ acceptable (2), with the exception in point 3 above; `accept`/`decline` on the e
 is right, do not wait for Phase 2 (3).
 
 — Xiaoman
+
+## Built ahead of the ADR as a bug fix (2026-10-13)
+
+Only her item 3, her own mute as a state, was built (commit 71c0ae15), because she was muted in a group for 29 days
+without knowing (owner-confirmed). Nothing else in this ADR is built, and its review stays parked.
+
+- The adapter posts a `group_ban` notice about her account or the whole group as state (`POST .../own_mute`); other
+  notices are still dropped. A send refused with QQ result 120 is `failed` with `reason: muted`. At start and on
+  reconnect it looks at each admitted group not looked at in the last 6 hours, one a second (read-only
+  `get_group_member_info` for her account and `get_group_info`).
+- The host keeps one slot per group (`own_mutes`): set by a ban notice, a look or a refused send; cleared by a lift, a
+  look that finds none, its end passing, or any of her lines the platform accepts there. Sends are never held back.
+- What she reads, only while muted: every turn in that group carries `muted_here_from_program` beside `event`, about
+  35–50 characters of text (about 65–80 with its key; sent in every notice, like the trigger), for example
+  `你在这个群被禁言了，到 11/10 08:00，谁禁的不知道：你说的话发不出去。` Who did it is her label there or said to be
+  unknown, never left out. Her places at home add `muted_you` to that group's row (about 50 characters, heartbeat
+  only). A line refused this way reads `没发出去：你在这个群被禁言了` (10 characters more than `没发出去`). No new tool,
+  nothing in a turn of a group where she is not muted.

@@ -316,12 +316,24 @@ def describe(rule, tz):
     return '%s %s（本地钟点）' % (who, clock['time'])
 
 
+def _rule_shown(rule, tz):
+    """A rule as she reads it: its `at` is a local wall time, so it carries the zone, or the edge (local_time) would
+    take it for UTC and shift it."""
+    if not isinstance(rule, dict) or not isinstance(rule.get('at'), str):
+        return rule
+    try:
+        at = datetime.fromisoformat(rule['at'])
+    except ValueError:
+        return rule
+    return {**rule, 'at': (at if at.tzinfo else at.replace(tzinfo=tz)).isoformat(timespec='minutes')}
+
+
 def project(plan, zone, moment=None):
     """把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。"""
     moment = _aware(moment)
     tz = zone['tz']
     row = {'_id': plan['_id'], 'intent': plan.get('intent'), 'status': plan.get('status'),
-           'rule': plan.get('rule'), 'plan_version': plan.get('plan_version', 1),
+           'rule': _rule_shown(plan.get('rule'), tz), 'plan_version': plan.get('plan_version', 1),
            'timezone': zone['name'],
            'created_at': plan.get('created_at'), 'updated_at': plan.get('updated_at'),
            'last_outcome': plan.get('last_outcome')}

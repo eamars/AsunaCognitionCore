@@ -20,3 +20,14 @@ def test_an_after_plan_keeps_the_time_it_was_armed_for():
         == due.isoformat(timespec='seconds')
     # without a stored time (an old record) it is still computed
     assert schedule_rules.project({**plan, 'next_fire_at': None}, ZONE, ARMED)['next_fire_at'] == due.isoformat(timespec='seconds')
+
+
+def test_a_rules_local_time_reads_the_same_as_its_next_firing():
+    """A rule's `at` is her local wall time: shown with its zone, the edge reads it as that time, not as UTC."""
+    from zoneinfo import ZoneInfo
+    from asuna import local_time
+    zone = {'tz': ZoneInfo('Pacific/Auckland'), 'name': 'Pacific/Auckland', 'zone_unavailable': None}
+    plan = {'_id': 'p', 'intent': 'x', 'status': 'ACTIVE', 'rule': {'at': '2026-10-14T21:30'},
+            'next_fire_at': '2026-10-14T08:30:00+00:00'}
+    shown = local_time.for_model(schedule_rules.project(plan, zone, datetime(2026, 10, 14, 1, tzinfo=timezone.utc)), zone)
+    assert shown['rule']['at'] == shown['next_fire_at'] == '2026-10-14 21:30'

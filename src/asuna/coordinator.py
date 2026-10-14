@@ -252,13 +252,14 @@ class Coordinator:
                 return self._update(ep,state='COMMITTED')
             speech=self._speech(ep,value)
             if replying:
-                # ADR-064 phase 2: here only reply speaks. Words in the body never leave: written without reply or
-                # stay_silent they come back once in this turn, then her next turn here says they were not sent.
+                # ADR-064 phase 2: here only reply speaks. Words in the body never leave: written without reply they
+                # come back once in this turn, stay_silent or not (elsewhere words written beside stay_silent leave),
+                # then her next turn here says they were not sent.
                 issue=None
                 if not ep.get('turn_thought') and not ep.get('reply'):
                     issue,note='no_thought',REPLY_THINK_NOTE
-                elif speech and not ep.get('reply') and not ep.get('silent') and not attempt:
-                    issue,note='unsent',UNSENT_NOTE%excerpt(' '.join(speech.split()),UNSENT_CHARS)
+                elif speech and not ep.get('reply') and not attempt:
+                    issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is
                 if issue is None or attempt==answers.REPAIRS:
                     if speech:
                         self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'unsent':{

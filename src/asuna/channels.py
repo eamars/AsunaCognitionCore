@@ -439,7 +439,9 @@ class Channels:
                 or message['target'] != route['target']
                 or message['channel_account_id'] != self.store.config['channels'][channel_id]['account_id']):
             raise Denied('PUBLICATION_CONTEXT_STALE')
-        if not episode or episode['state'] not in ('SPEAK_ACCEPTED', 'WAITING_TASK', 'COMMITTED'):
+        # A part of her reply leaves while her turn still runs (ADR-064 phase 2), as in publish._publish.
+        speaking = ('SPEAK_ACCEPTED', 'WAITING_TASK', 'COMMITTED') + (('TURN',) if message.get('reply_part') else ())
+        if not episode or episode['state'] not in speaking:
             raise Denied('PUBLICATION_EPISODE_STALE')
         if episode.get('task_id'):
             task = self.store.db.tasks.find_one({'_id': episode['task_id']})

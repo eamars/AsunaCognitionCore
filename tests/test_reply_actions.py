@@ -59,6 +59,20 @@ def test_the_adapter_does_only_what_it_declared_and_a_done_action_needs_no_messa
     assert row['delivery_state'] == 'FAILED' and row['failure'] == 'CHANNEL_DOES_NOT_DECLARE_POKE'
 
 
+def test_a_part_leaves_while_her_turn_still_runs(store):
+    world(store)
+    ep, _, ok, [row] = turn(store, 'act-mid', [{'kind': 'text', 'text': '在呢'}])
+    assert ok
+    store.db.episodes.update_one({'_id': ep['_id']}, {'$set': {'state': 'TURN'}})   # she is still thinking after reply
+    store.db.messages.update_one({'_id': row['_id']}, {'$unset': {'not_before': ''}})
+    channels = bridge(store)
+    [item] = channels.claim('qq', supports=['image', 'sticker'])['items']
+    assert item['publication_id'] == row['_id'] and item['text'] == '在呢'
+    done = channels.receipt('qq', item['publication_id'], {'attempt_id': item['attempt_id'], 'status': 'platform_accepted',
+                                                           'platform_message_id': '7', 'response': {'retcode': 0}})
+    assert done == {'status': 'DELIVERED'}
+
+
 def test_a_wrong_person_or_face_sends_nothing_and_says_why(store):
     world(store)
     _, result, ok, rows = turn(store, 'act-3', [{'kind': 'text', 'text': '嗯'}, {'kind': 'poke', 'who': '#99'},

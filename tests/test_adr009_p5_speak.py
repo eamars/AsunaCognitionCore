@@ -173,6 +173,20 @@ def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(s
     assert 'unsent_from_program' not in again['context'], 'said once'
 
 
+def test_words_beside_stay_silent_come_back_too_and_a_reply_then_sends_them(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    words = '我觉得挺好\n\n就是贵了点，' + '真的' * 60
+    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '说完了'})], said=[words]),
+                            FakeTurn([said('我觉得挺好'), ('stay_silent', {'reason': '说完了'})])])
+    event = {'event_id': 'body-s', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你看呢',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-body-s'}}
+    persist_input(store, event, managed=True)
+    ep = Coordinator(store, lane).ingest(event)
+    assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % words, 'whole, as written; stay_silent drops nothing'
+    assert ep['state'] == 'COMMITTED' and [r['text'] for r in outbound(store, ep['_id'])] == ['我觉得挺好']
+
+
 def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeypatch):
     """Owner 2026-10-14: in online chat a line break is another message, so her limit counts lines."""
     store.config['persona_model'] = model(3)

@@ -176,6 +176,10 @@ export class CognitionCore {
     // which the reopened agent's turn already carries.
     this.retired = new WeakSet();
     this.channelWrites = new Map();
+    // One opener per conversation at a time: a line written into an unloaded conversation opens its file for writing,
+    // and DSH refuses to load the same conversation while that handle is open (SessionAlreadyOwnedError), so each
+    // waits for the writes and loads of it that began before it (`ensureAgent`, `onEvent`).
+    this.opening = new Map();
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
     this.collab = new Collab(this);
@@ -585,9 +589,9 @@ export class CognitionCore {
   async onEvent(event) {
     if (event.kind === 'channel_input' || event.channel_input) {
       const receipt = event.channel_input ?? event, id = receipt.session_id;
-      const previous = this.channelWrites.get(id) ?? Promise.resolve();
+      const previous = Promise.allSettled([this.channelWrites.get(id), this.opening.get(id)]);
       const worker = this.worker;
-      const writing = previous.catch(() => {}).then(async () => {
+      const writing = previous.then(async () => {
         // A held line is acknowledged when it is written (pairing.js release → written).
         if (await recordChannelInput(this, receipt) === 'held') return;
         await worker.call('channel_input.ack', { input_id: receipt.input.id, session_id: id });
@@ -690,7 +694,16 @@ export class CognitionCore {
       && ![...this.handles.values()].some(handle => handle.agent?.session?.header?.parentSession === id);
   }
 
+  /** The conversation's agent, loaded after any write or load of it that began before (one opener at a time). */
   async ensureAgent(stage, parentAgent, descriptor) {
+    const id = stage.session_id;
+    const opening = Promise.allSettled([this.channelWrites.get(id), this.opening.get(id)])
+      .then(() => this.openAgent(stage, parentAgent, descriptor));
+    this.opening.set(id, opening);
+    try { return await opening; } finally { if (this.opening.get(id) === opening) this.opening.delete(id); }
+  }
+
+  async openAgent(stage, parentAgent, descriptor) {
     // Native Archive hides a monitored conversation until its next activity.
     // It does not disable the channel. Reopen before DSH's archive gate.
     if (stage.lane === 'character' && this.channelOf(stage.binding.scene_id))

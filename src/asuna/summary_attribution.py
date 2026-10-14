@@ -82,6 +82,10 @@ def corrections(store, scene, rows):
             how = how + '_unresolved'
         elif target is not None and target.get('_id') == row.get('_id'):
             target, how = None, 'self_reference_to_self'
+        if target is None:
+            # A cue word alone is a guess, and this list is stated to the summary as fact (owner 2026-10-14): only a
+            # line whose target is known (a quoted line, or its author's own line it points back to) is a correction.
+            continue
         out.append({'message_id': row.get('_id'), 'actor': row.get('author'), 'cue': cue,
                     'scene_seq': row.get('scene_seq'), 'snippet': _clip(text),
                     'corrects': (target or {}).get('_id'), 'target_author': (target or {}).get('author'),

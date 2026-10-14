@@ -100,12 +100,28 @@ class Coordinator:
                 return self.advance(ep_id)
             _,context,manifest=self.context.prepare(event,persona)
             self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
+            from . import errands
+            errand=errands.carried(self.store,event)       # ADR-066: home's authority, for this turn only
+            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
             if event.get('native_session_id') or self.native_session_resolver:
                 ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
+                if errand:
+                    ep=self._errand_lines(ep,scene)
             return self.advance(ep_id)
+
+    def _errand_lines(self, ep, scene):
+        """ADR-066: an errand whose session could not copy its conversation starts empty; it reads that conversation's
+        recent lines instead (the relevance gate's view of them)."""
+        row=self.store.db.sessions.find_one({'_id':ep['native_session_id']},{'errand':1}) or {}
+        if (row.get('errand') or {}).get('forked') is not False:
+            return ep
+        from . import attend
+        source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']},{'scene_seq':1})
+        lines,since=attend.recent(self.store,scene,source['scene_seq'])
+        return self._update(ep,context={**ep['context'],'recent_lines_from_program':{
+            'lines':lines,'since':since,'note':'这回合是在一个新开的对话里办的（原来那段太长或正忙）：这里最近的话列在这儿。'}})
 
     def _binding(self, ep):
         binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"
@@ -390,7 +406,7 @@ class Coordinator:
                  'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':part['text'],'direction':'outbound',
                  'author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,
                  'monologue_refs':ep.get('monologue_refs') or [],'delivery_state':'READY','segment_index':index,'reply_part':True,
-                 **(part.get('fields') or {})}
+                 **({'errand':True} if ep.get('errand') else {}),**(part.get('fields') or {})}
             if (scene or {}).get('channel_id') and (index or offset):
                 row['not_before']=times[offset].isoformat()
             self.store.put('messages',row,stream=ep_id)
@@ -415,7 +431,7 @@ class Coordinator:
         key=ep_id+':speak:0'
         if not self.store.db.messages.find_one({'_id':key}):
             sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
-            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY'}
+            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY',**({'errand':True} if ep.get('errand') else {})}
             # 这一回合被程序接受的那张图（没有就 None）：字节仍在 BlobStore，行上只写元数据。
             attach_meta=outbound_media.attachment_for_speak(ep)
             if attach_meta:

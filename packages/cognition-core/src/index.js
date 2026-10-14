@@ -4,6 +4,7 @@
  * `apply` provides it as the `asuna` service that the preset plugins (role.js, action.js, ...) and channel packages
  * use, and adds the `asunaApi` service, web search and fetch, and the /heartbeat command. */
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { buildForkSeed } from '@deepseek-ai/dsh-session/fork';
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import * as todoTool from '@deepseek-ai/dsh-tool-todo';
@@ -39,6 +40,23 @@ import { ensurePythonEnvironment } from './python-env.js';
 import z from '@deepseek-ai/schemastery';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** Room an errand's notice and turn take on top of the conversation it copies (ADR-066), in DSH's token measure. */
+export const ERRAND_ROOM = 16384;
+
+/** The end of a session's last completed turn, with the standalone events after it (DSH's own default fork cut), or
+ * undefined when no turn has completed. */
+export function completedPrefix(events) {
+  const end = events.findLast(event => event.type === 'turn/end');
+  if (end === undefined) return undefined;
+  let boundary = end.seq;
+  for (const next of events.slice(boundary + 1)) {
+    if (next.type === 'turn/start' || next.type === 'user/message' && next.surfaceOp === 'append'
+      || next.type === 'agent/inbox/spliced') break;
+    boundary = next.seq;
+  }
+  return boundary;
+}
 
 export const name = 'asuna-cognition-core';
 export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions',
@@ -595,6 +613,7 @@ export class CognitionCore {
           : event.method === 'retitle' ? await retitleSession(this, event.args)
           : event.method === 'compact_session' ? await this.compactSession(event.args)
           : event.method === 'conversation_size' ? await this.conversationSize(event.args)
+          : event.method === 'errand_session' ? await this.errandSession(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
           // A persona or channel publication that needs no restart: new action scopes discover its
@@ -622,6 +641,7 @@ export class CognitionCore {
       return;
     }
     const state = this.state(event.session_id);
+    if (event.kind === 'turn_done' && event.retire) this.retireErrand(event.session_id);
     if (state.waiter) {
       const waiter = state.waiter; state.waiter = null; waiter.resolve(event); return;
     }
@@ -695,10 +715,14 @@ export class CognitionCore {
     };
     const options = nativeRoute(this.routeFor(routeOf(stage.lane)));
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
+    // An errand's copy (errandSession): the conversation's events up to its last completed turn, as DSH's fork seeds.
+    const copy = !persisted && stage.copy;
     const handle = persisted
       ? await this.ctx.agents.resume({ resumeSessionId: stage.session_id, parentAgent, agentOptions: options, setup })
       : await this.ctx.agents.create({ sessionId: stage.session_id,
+        ...(copy ? { seed: buildForkSeed(copy.events, copy.boundary), inheritedEventCount: copy.boundary + 1 } : {}),
         parentAgent, meta: { cwd: stage.binding.cwd, agentPreset: preset,
+          ...(copy ? { parentSession: copy.from, isSeeded: true } : {}),
           ...(parentAgent ? { parentSession: parentAgent.id, origin: 'subagent',
             delegationDepth: (parentAgent.session.header.delegationDepth ?? 0) + 1 } : {}) },
         agentOptions: options, setup });
@@ -709,6 +733,14 @@ export class CognitionCore {
       const workspace = await this.ctx.workspaceRegistry.create(stage.binding.cwd,
         this.channelOf(stage.binding.scene_id)?.title ?? 'Local');
       await workspace.attachSession(stage.session_id);
+    }
+    if (copy) {
+      // Named apart from the conversation it copies, in the language of the Web UI.
+      const title = copy.events.findLast(event => event.type === 'session/title')?.data?.title;
+      const errand = this.uiTitles?.errand ?? 'Errand';
+      handle.agent.session.append('session/title', { title: title ? title + ' · ' + errand : errand,
+        source: { kind: 'user' }, messageSeqs: [] });
+      await this.ctx.sessions.flush(handle.agent.session);
     }
     if (!persisted && stage.lane === 'executor') {
       // Child Agents are owned by native subagent routing; the top-level
@@ -751,6 +783,45 @@ export class CognitionCore {
     } catch (error) {
       return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };
     }
+  }
+
+  /** ADR-066: an errand's own session, a copy of the destination's conversation at its last completed turn, so the
+   * model server resumes from that conversation's cached prefix (same system prompt, same tools). Not when that
+   * conversation has no completed turn, is in a turn, or is so near its compaction threshold that the errand would
+   * compact a copy that is thrown away: the errand then starts empty and the worker gives it the recent lines. */
+  async errandSession({ session_id: id, source_session_id: from, scene_id: scene, cwd }) {
+    if (this.ctx.agents.get(id) || await this.ctx.sessionPersistence.stat(id)) return { forked: true };
+    if (this.states.get(from)?.current) return { forked: false, reason: 'busy' };
+    if (!this.ctx.agents.get(from) && !await this.ctx.sessionPersistence.stat(from))
+      return { forked: false, reason: 'no_conversation' };
+    const source = this.ctx.agents.get(from)
+      ?? await this.ensureAgent({ lane: 'character', session_id: from, binding: { scene_id: scene, cwd } });
+    const events = source.session.snapshotEvents();
+    const boundary = completedPrefix(events);
+    if (boundary === undefined) return { forked: false, reason: 'no_completed_turn' };
+    const meter = this.ctx.get('tokenMeter');
+    const engine = this.ctx.get('agentPresets')?.serviceFor(source, 'compaction');
+    const spec = typeof engine?.pressure === 'function' ? await engine.pressure(source) : undefined;
+    if (meter && spec && meter.measure(source.session).totalTokens + ERRAND_ROOM > spec.threshold)
+      return { forked: false, reason: 'near_compaction' };
+    await this.ensureAgent({ lane: 'character', session_id: id, binding: { scene_id: scene, cwd },
+      copy: { from, events, boundary } });
+    return { forked: true };
+  }
+
+  /** An errand's turn ended: its copy leaves the session list (archived) and memory once it is idle. */
+  retireErrand(id) {
+    (async () => {
+      const handle = this.handles.get(id);
+      await handle?.agent?.whenIdle();
+      await this.ctx.workspaceRegistry.archiveSession(id);
+      if (handle && this.handles.get(id) === handle && this.idle(id)) {
+        this.handles.delete(id);
+        this.retired.add(handle.agent);
+        this.states.delete(id);
+        await handle.dispose();
+      }
+    })().catch(error => this.ctx.logger.warn('Asuna: the errand session ' + id + ' stays in the list: ' + String(error)));
   }
 
   /** ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction

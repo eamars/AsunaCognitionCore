@@ -93,6 +93,7 @@ ERRANDS_SHOWN = 5
 ERRAND_STATES = {'answered': '发出去了，那边有人接', 'unanswered': '发出去了', 'sending': '正在发',
                  'not_sent': '没发出去', 'silent': '那边的你没发', 'notes': '那边的你没发', 'failed': '没办成（出错了）',
                  'pending': '还在路上'}
+ERRAND_ENDS = {'ERRAND_LATE': 'late', 'ERRAND_INTERRUPTED': 'interrupted'}       # ADR-066 (chat.py)
 
 
 def errand_targets(config):
@@ -138,12 +139,14 @@ def errand_text(exactly, by=None):
     who = by or '主人'
     return ('这是%s在家里托你来这里办的一件事，不是这里有人叫你。原话在 visit_from_program.request。' % who
             + (('原样转达：照原话发，前面带一句「%s让我转告」。' % who) if exactly else '用适合这里的话把事办了。')
-            + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。家里的事这一回合看不到，也别提。')
+            + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。这一回合带着家里的权限（回想得到家里的事），'
+            '但这里的人看得到你说的每一句：家里的事别带出来，除非托你的就是这件。')
 
 
 def errands_block(store, persona, moment):
     """errands_from_program at home: what came of her last errands, as program words only -- never what anyone
     there said back (ADR-017: public words reach home only through her own review)."""
+    from . import errands
     from .people import People
     people = People(store, persona)
     rows = list(store.db.messages.find({'event.visit.intent': 'errand'},
@@ -153,8 +156,10 @@ def errands_block(store, persona, moment):
     for row in rows:
         scene = store.db.scenes.find_one({'_id': row['scene_id']}) or {'_id': row['scene_id']}
         state = outcome(store, {'scene_id': row['scene_id'], 'event_id': row['event']['event_id']})
+        words = (errands.interrupted_words(store, row['_id'][len('in-'):]) if state == 'interrupted'
+                 else errands.STATES['late'] if state == 'late' else ERRAND_STATES.get(state, state))
         items.append({'to': people.scene_title(scene), 'asked': excerpt(row['event']['visit'].get('request'), 60),
-                      'state': ERRAND_STATES.get(state, state), 'at': _stamp(_at(row.get('received_at')))})
+                      'state': words, 'at': _stamp(_at(row.get('received_at')))})
     return {'items': items, 'note': ERRANDS_NOTE}         if items else None
 
 
@@ -313,9 +318,11 @@ def outcome(store, visit):
     """What happened on one visit, read from its turn and the room afterwards."""
     ep_id = episode_key(visit)
     ep = store.db.episodes.find_one({'_id': ep_id}, {'state': 1, 'tool_calls': 1})
+    source = store.db.messages.find_one({'_id': 'in-' + ep_id}, {'ingress_state': 1, 'result_state': 1}) or {}
+    if source.get('result_state') in ERRAND_ENDS:
+        return ERRAND_ENDS[source['result_state']]
     if not ep:
-        source = store.db.messages.find_one({'_id': 'in-' + ep_id}, {'ingress_state': 1})
-        return 'failed' if (source or {}).get('ingress_state') == 'FAILED' else 'pending'
+        return 'failed' if source.get('ingress_state') == 'FAILED' else 'pending'
     if ep.get('state') not in FINISHED + FAILED:
         return 'pending'
     if ep['state'] in FAILED:
@@ -485,8 +492,10 @@ def visit_block(store, scene, visit, moment):
                       '沉默也是正常结果。看到值得记的（谁是谁、聊什么、什么话题和图合适），可以写进群笔记。')}
     if visit.get('intent') == 'errand':
         who = visit.get('by') or '主人'
+        from .errands import OPENING
         block.update(basis='%s托你办的：不是这里有人叫你' % who, request=visit.get('request') or '',
                      how=('原样转达，前面带「%s让我转告」' % who) if visit.get('exactly') else '用适合这里的话说',
+                     carries=OPENING,
                      note='这是%s托你来办的事。先读懂这里在聊什么，再用合适的方式把话带到；不合适就不发。' % who)
     if visit.get('intent') == 'note':
         # ADR-018: what the note says is in note_from_program, with where she wrote it.
@@ -534,8 +543,10 @@ def elsewhere(store, persona, moment, home, private=()):
     places = {}
     for row in store.db.messages.find({'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
                                        'receipt_at': {'$gte': since}, 'scene_id': {'$nin': list(home)}},
-                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1}):
-        place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'tasks': [], 'last': None})
+                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1, 'errand': 1}):
+        place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'tasks': [], 'last': None,
+                                                    'errand': 0})
+        place['errand'] += 1 if row.get('errand') else 0
         if isinstance(row.get('sticker'), dict):
             place['stickers'] += 1
         elif row.get('attachment'):
@@ -563,6 +574,8 @@ def elsewhere(store, persona, moment, home, private=()):
             did.append('发了%d张你自己画的图' % place['pictures'])
         if place['stickers']:
             did.append('发了%d个表情包' % place['stickers'])
+        if place['errand']:
+            did.append('其中%d条是家里托你去说的（差事）' % place['errand'])
         item = {'where': people.scene_title(scene) + ('（家里）' if scene_id in private else ''), 'you': '，'.join(did) or '没说话',
                 **({'last_at': _stamp(place['last'])} if place['last'] else {})}
         if place['tasks']:

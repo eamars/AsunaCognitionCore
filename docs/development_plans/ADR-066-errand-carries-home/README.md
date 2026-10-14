@@ -1,7 +1,8 @@
 # ADR-066: An errand carries home
 
-Status: **Proposed 2026-10-15** by the owner, designed with Claude the same day; **reviewed by Xiaoman the same day**
-(her points folded in below); waits for the owner's go to build.
+Status: **Accepted 2026-10-15** (the owner's go), built the same day on `claude/errand-carries-home`; proposed by the
+owner, designed with Claude, **reviewed by Xiaoman** (her points folded in below). Two changes from the proposal in the
+build, below under "Built".
 
 ## What happened
 
@@ -73,8 +74,41 @@ from anywhere. Every link of the chain worked; two gates judged by place, not by
 
 ## What it adds to each brain
 
-Character brain: no tool, no parameter; one block once in the destination's next turn and the errand turn's own
-notice. Action brain: none (home grants already exist). To be measured in characters in the build.
+Character brain: no tool, no parameter. The `errand` description says the turn carries home (−6 characters, 21,224 →
+21,218). Per turn: `errand_from_program` once in the destination's next turn (who sent her, her lines there); the errand
+turn's `visit_from_program.carries` (one sentence) and `turn` on each tool result (10 characters); `owner_said` in a
+note that carries the owner's line; `recent_lines_from_program` only when the copy could not be made. Action brain:
+none.
+
+## Built (2026-10-15)
+
+- `errands.py`: the episode's `errand` (the home turn's scene, scope and requester, recorded at ingest), the session id
+  `asuna-errand-<hash>`, the patience (20 minutes), the marks and `errand_from_program`.
+- The copy: the worker asks the Host (`errand_session`); the plugin copies the destination's events up to its last
+  completed turn with DSH's own fork seed (`@deepseek-ai/dsh-session/fork`) in `ensureAgent`, on her character route,
+  titled "<conversation> · 差事". It declines when the conversation has no completed turn, is in a turn, or would come
+  within 16,384 tokens of its compaction threshold (rows 2, 11); the turn then starts empty with the recent lines. The
+  copy is archived when its turn ends; the launcher retires `asuna-errand-*` like the other one-shot sessions.
+  Navigation never takes a copy for the conversation, and a plan or task begun on an errand resolves to the
+  conversation itself, never to the copy (row 1).
+- Home's blocks are not appended to the errand turn's notice: home is reached through `recall`, so the turn costs no
+  more than an ordinary turn there unless she looks.
+- Authority: `RoleTools._cls` is home's on an errand; `_place` stays the conversation's for what goes out and who is
+  there (pictures, `watch`, `leave_note`, blocking). Thoughts go to the home turn's scope (row 4); `recall` reads home
+  alongside the conversation.
+- Who may send one (direction 6): a home turn someone spoke in, her plan due at home, a note of hers from home, and a
+  note from outside that carries the owner's own line (`notes.owner_line`, checked against his account mapping).
+- The queue: a late errand completes `ERRAND_LATE` without a turn; one found already started after a restart completes
+  `ERRAND_INTERRUPTED` and home reads what it had sent (row 5).
+
+**Two changes from the proposal (Claude, for the owner's review):**
+1. **`delegate` does not carry home.** A task outlives the turn and reports back in the destination's own
+   conversation, so home's authority would leak past "that turn only"; in an errand turn `delegate`, `task message`
+   and `task stop` are refused, saying why (home work goes from home). The Decision's "delegate with home grants" and
+   "a task delegated in the errand turn keeps home's authority" are withdrawn.
+2. **Pictures follow the conversation's rules,** not home's: a group or another person's chat already takes her own
+   pictures from anywhere, and the owner's chat now does too (direction 8, folded in). Home's other pictures (the
+   owner's) do not go out into a public place on an errand.
 
 ## Her review (2026-10-15, Claude's paraphrase; she signed it)
 

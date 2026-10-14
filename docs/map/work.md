@@ -86,7 +86,7 @@ Business ownership for native DSH reminders; no host time wheel.
   - `next_beat` — When DSH will next deliver her heartbeat (its own record), or None.
   - `beat_now` — The owner's /heartbeat (ADR-012 §8): one beat now through the same path, without the gates.
   - `visit` — Her visit (ADR-012 §4.2): checked against the same rules her places view shows, then a public turn in that group.
-  - `errand` — An errand someone at home gave her (ADR-017): a turn in that chat sees only that chat and the words she was given, named as whose they are.
+  - `errand` — An errand someone at home gave her: a turn in that chat with home's authority (errands.py), in its own copy of that conversation, the request named as whose it is.
   - `note` — A note of hers to another of her conversations (ADR-018).
   - `create` — where: {scene_id, person_id} of a peer line when she plans from home into that line (role_tools checks the turn is home); the plan then lives, fires and is changed in that line.
   - `update` — 改期/改内容：在**同一条 plans** 下换掉底层原生提醒，只有当前版本会产生行动。

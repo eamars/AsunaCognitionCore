@@ -197,6 +197,8 @@ A model that refuses a picture must not end her turn, nor leave the conversation
 
 The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 
+- def `ERRAND_ROOM` — Room an errand's notice and turn take on top of the conversation it copies (ADR-066), in DSH's token measure.
+- def `completedPrefix` — The end of a session's last completed turn, with the standalone events after it (DSH's own default fork cut), or undefined when no turn has completed.
 - def `name`
 - def `inject`
 - def `Config`
@@ -239,6 +241,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `ensureAgent`
   - `written` — Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once the conversation is durable.
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
+  - `errandSession` — ADR-066: an errand's own session, a copy of the destination's conversation at its last completed turn, so the model server resumes from that conversation's cached prefix (same system prompt, same tools).
+  - `retireErrand` — An errand's turn ended: its copy leaves the session list (archived) and memory once it is idle.
   - `conversationSize` — ADR-049's size floor: how long one of her conversations is now, in DSH's own measure (the one its compaction threshold uses), and the floor its character preset's compaction engine sets (compaction.js `floorTokens`).
   - `result`
   - `workerFailed`

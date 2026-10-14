@@ -64,7 +64,7 @@ def recent(store, scene, until_seq, now_ts=None):
         {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'], 'scene_seq': {'$lte': until_seq},
          '$or': [{'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]},
         {'_id': 1, 'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'received_at': 1, 'receipt_at': 1,
-         'occurred_at': 1, 'scene_id': 1, 'event': 1}).sort('scene_seq', -1).limit(MAX_LINES))
+         'occurred_at': 1, 'scene_id': 1, 'event': 1, 'errand': 1}).sort('scene_seq', -1).limit(MAX_LINES))
     floor = now_ts - WINDOW_MAX_MINUTES * 60
     always = now_ts - WINDOW_MIN_MINUTES * 60
     since = (mine or {}).get('scene_seq') or 0
@@ -74,7 +74,7 @@ def recent(store, scene, until_seq, now_ts=None):
         if at is None or at < floor or (row['scene_seq'] <= since and at < always):
             break
         if row['direction'] == 'outbound':
-            text = '你：' + ' '.join(str(row.get('text') or '').split())
+            text = ('你（差事）：' if row.get('errand') else '你：') + ' '.join(str(row.get('text') or '').split())
         else:
             text = people.transcript(scene, row)
         used += len(text)

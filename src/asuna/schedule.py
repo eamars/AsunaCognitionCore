@@ -579,10 +579,10 @@ class ScheduleService:
                 'note': '程序会在那个群里给你开一个回合；你在那儿看了现场再决定说不说、说什么。结果下次心跳带回来。'}
 
     def errand(self, ep, call_id, place, request, exactly, artifact_id=None):
-        """An errand someone at home gave her (ADR-017): a turn in that chat sees only that chat and the words she
-        was given, named as whose they are. No visit limits (she was asked), a daily cap; what comes home is the
-        program's status only."""
-        from . import places
+        """An errand someone at home gave her: a turn in that chat with home's authority (errands.py), in its own copy of
+        that conversation, the request named as whose it is. No visit limits (she was asked), a daily cap; what comes
+        home is the program's status only."""
+        from . import errands, places
         found = places.find_errand(self.app.config, place)
         scene = found and self.store.db.scenes.find_one({'_id': found[0]})
         if not scene or not scene.get('channel_id'):
@@ -618,7 +618,8 @@ class ScheduleService:
                                                        'author': author},
                          scene['scope_key'])
         return {'going_to': people.scene_title(scene),
-                'note': '程序会在那边开一回合，那一回合只看得到那边和这句话；办没办成，下次在家会看到。'}
+                'note': ('程序会在那边开一回合，带着家里的权限，排在那边手上的事后面；%d 分钟内轮不到就不发了（话题过去了）。'
+                         '办没办成，下次在家会看到。' % errands.PATIENCE_MINUTES)}
 
     def note(self, ep, cls, args, call_id, question=None):
         """A note of hers to another of her conversations (ADR-018). A `wake` note is an input at the tail of that

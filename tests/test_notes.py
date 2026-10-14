@@ -108,7 +108,9 @@ def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '家里·私聊' in block['from']
     assert not {'relationship', 'sender_identity', 'understanding_update_from_program'} & set(there['context'])
     assert 'development' in there['context']['action_capabilities_from_program']
-    assert not {'credential', 'errand', 'visit', 'understand_person'} & set(there['turn_tools'])
+    assert not {'credential', 'visit', 'understand_person'} & set(there['turn_tools'])
+    # A note of hers from home is home's own instruction: its turn may send an errand (ADR-066).
+    assert 'errand' in there['turn_tools'] and there['context']['errand_places_from_program']
     # Back where she wrote it: the program's status word.
     back, _ = turn(store, service, {'event_id': 'ask-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '嗯'}, [], '嗯')
     [sent] = back['context']['notes_sent_from_program']['items']

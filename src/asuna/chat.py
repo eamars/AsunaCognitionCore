@@ -425,6 +425,13 @@ class Chat:
                         input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
                         continue
                     previous = self.app.store.db.episodes.find_one({'_id': episode})
+                    from . import errands
+                    why = errands.skipped(event, source, previous)
+                    if why:
+                        input_state(self.app.store, episode, 'COMPLETE', result_state=why)
+                        self.app.store.audit(episode, 'errand.' + why.split('_')[1].lower(), {'scene_id': event['scene_id']},
+                                             'scene:' + event['scene_id'])
+                        continue
                     from .coordinator import RESUMABLE
                     if previous and previous['state'] in RESUMABLE:
                         # Native lane receipts govern recovery; never invent a new operation ID.

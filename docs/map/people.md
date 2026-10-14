@@ -224,6 +224,22 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `record` — The plan's ledger after one visit (newest last, bounded); today's count is read from it.
 - def `elsewhere` — elsewhere_from_program: per other conversation in the last hours (groups, others' chats and her other home lines alike; `home` is the one she is in), what she said, sent and handed over.
 
+## `errands`
+
+[src/asuna/errands.py](../../src/asuna/errands.py)
+
+An errand carries home (ADR-066).
+
+- def `of` — The errand this turn runs on, or None: {from, scene_id, scope_key, policy_epoch, person_id, by}.
+- def `carried` — At ingest: the home turn an errand visit came from, whose authority its turn carries; None otherwise.
+- def `session_id` — The errand's own session: named, so the launcher retires it like the other one-shot sessions.
+- def `is_errand_visit`
+- def `late` — Whether an errand waited past its patience before its turn came (row: its input message).
+- def `skipped` — An errand's turn come up in the queue that does not run: 'ERRAND_INTERRUPTED' when a restart cut it (what it sent stands, and home hears what that was: redoing it would send twice), 'ERRAND_LATE' when it waited past its patience (the talk t
+- def `sent_lines` — What she said on the errand, as sent: delivered lines and whether a picture went with one.
+- def `interrupted_words` — What an errand cut by a restart had already done: interrupted is not undone (her review).
+- def `told_block` — errand_from_program, once, in the destination's next turn of its own: that home sent her, and what she said.
+
 ## `focus`
 
 [src/asuna/focus.py](../../src/asuna/focus.py)
@@ -306,6 +322,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.
 - def `borrowed` — Whose recent line here the note shares a run of OWN_WORDS_RUN characters with, or None.
 - def `prepare` — Validate one note from this turn: (draft, None), or (None, the row already sent by this call).
+- def `owner_line` — The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or None.
 - def `record`
 - def `result` — What the sending turn reads back.
 - def `state`

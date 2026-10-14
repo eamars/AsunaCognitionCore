@@ -1243,6 +1243,11 @@ def import_bytes(store, scope_key, body, *, target='artifacts/pic.png', register
 
     hook = (outbound_media.import_register(store, {'scope_key': scope_key})
             if register == 'auto' else register)
+    if register == 'foreign':
+        # A picture that is not hers (someone sent it): the owner's chat takes it only from its own scopes; hers
+        # go anywhere a picture may go.
+        def hook(data, meta=None):
+            return outbound_media.register_imported_image(store, scope_key, data, source='upload:pic')
     result = integration_import.import_artifact(
         {'endpoint': 'gen', 'artifact_path': '/view/pic.png', 'target_relative_path': target},
         endpoints=GEN_ENDPOINTS, workspace=workspace, fetch=fetch, register=hook)
@@ -1338,7 +1343,7 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
     assert scopes(two_scene_world(links=linked), scene=scene_row('group')) == [GROUP_SCOPE]
     # 没联动时 QQ 清单里没有那张图；就算清单里冒出它，attach_image 也按 scope 退回
     store = two_scene_world()
-    art = import_bytes(store, LOCAL_SCOPE, PNG)[0]['artifact']
+    art = import_bytes(store, LOCAL_SCOPE, PNG, register='foreign')[0]['artifact']
     assert qq_offer(store) is None, '没联动的场景之间也列出图了'
     ep = turn_ep(store, context={'image_artifacts_from_program': {
         'items': [{'artifact_id': art['artifact_id']}], 'note': ''}})
@@ -1350,7 +1355,7 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
 @case
 def byte_endpoint_fence_follows_the_configuration_at_read_time():
     store = two_scene_world(links={'sc-owner-dm': [LOCAL_SCENE]})
-    art = import_bytes(store, LOCAL_SCOPE, PNG)[0]['artifact']
+    art = import_bytes(store, LOCAL_SCOPE, PNG, register='foreign')[0]['artifact']
     meta = {'artifact_id': art['artifact_id'], 'media_type': 'image/png', 'sha256': art['sha256'],
             'size': len(PNG)}
     store.db.messages.insert_one(publication_row(delivery_state='SENDING', attempt_id='attempt-1',

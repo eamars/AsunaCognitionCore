@@ -20,7 +20,7 @@ import threading
 import time
 import uuid
 
-from . import sandbox_backend, channel_kinds
+from . import sandbox_backend, channel_kinds, errands
 from .application import Application
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text
@@ -251,8 +251,15 @@ class NativeLane:
     def turn_done(self, ep):
         """Her turn has no further stage (coordinator._turn): the plugin ends the native turn."""
         if self.lane == 'character' and ep.get('native_session_id'):
-            self.worker.emit({'kind': 'turn_done', 'session_id': self.worker.continued_session(ep['native_session_id']),
-                              'episode_id': ep['_id']})
+            session_id = self.worker.continued_session(ep['native_session_id'])
+            # An errand's copy is retired once its turn ends (ADR-066): archived, out of the session list.
+            done = bool(ep.get('errand')) and self.worker.errand_copy(session_id)
+            self.worker.emit({'kind': 'turn_done', 'session_id': session_id, 'episode_id': ep['_id'],
+                              **({'retire': True} if done else {})})
+            if done:
+                row = self.store.db.sessions.find_one({'_id': session_id})
+                self.store.put('sessions', {**row, 'retired': True}, expected=row['revision'],
+                               stream='native-binding:' + session_id)
 
     @staticmethod
     def wait(future, timeout):
@@ -434,7 +441,7 @@ class BusinessWorker:
         entries, retire = [], set()
         for scene_id, person, workspace, title in scenes:
             scene = store.authorize(scene_id, person)
-            scene_bindings = [row for row in bindings if row.get('lane') == 'character'
+            scene_bindings = [row for row in bindings if row.get('lane') == 'character' and not row.get('errand')
                               and row['scene_id'] == scene_id and row['persona'] == local['persona']]
             candidates = [row for row in scene_bindings
                           if row.get('character_context', scene.get('character_context')) == scene.get('character_context')
@@ -603,21 +610,57 @@ class BusinessWorker:
         if ep.get('task_id'):
             task = store.db.tasks.find_one({'_id': ep['task_id']})
             original = store.db.episodes.find_one({'_id': task['episode_id']}) if task else None
-            if original and original.get('native_session_id'):
+            if original and original.get('native_session_id') and not self.errand_copy(original['native_session_id']):
                 return self.continued_session(original['native_session_id'])
         source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
         plan = store.db.plans.find_one({'_id': plan_id}) if plan_id else None
         original = store.db.episodes.find_one({'_id': plan.get('source_episode_id')}) if plan else None
-        if original and original.get('native_session_id'):
+        # A plan or a task begun on an errand comes back to the conversation itself, never to the errand's copy.
+        if original and original.get('native_session_id') and not self.errand_copy(original['native_session_id']):
             return self.continued_session(original['native_session_id'])
         primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True,
             'scene_id': ep['scene_id'], 'persona': ep['persona'], 'policy_epoch': ep['policy_epoch'],
             'character_context': ep.get('character_context')})
         session_id = primary['_id'] if primary else self.role_session_id(ep)
+        if errands.is_errand_visit(source.get('event')):
+            return self.errand_session(ep, session_id)
         store.audit(ep['_id'], 'native.context.bound', {
             'native_session_id': session_id, 'legacy_history': 'read-only',
             'context': 'new native conversation; no tool or message replay'}, ep['scope_key'])
+        return session_id
+
+    def errand_copy(self, session_id):
+        """Whether this session is an errand's copy of a conversation (ADR-066)."""
+        return bool((self.app.store.db.sessions.find_one({'_id': session_id}, {'errand': 1}) or {}).get('errand'))
+
+    def errand_session(self, ep, source_id):
+        """The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed
+        turn, so the turn resumes from its cached prefix. Where it cannot (no completed turn, too near compaction, or
+        the copy fails) the session starts empty and the turn reads that conversation's recent lines instead
+        (`forked` false; coordinator)."""
+        store = self.app.store
+        session_id = errands.session_id(ep['_id'])
+        if store.db.sessions.find_one({'_id': session_id}):
+            return session_id
+        scene = store.authorize(ep['scene_id'], ep['person_id'])
+        source = store.db.sessions.find_one({'_id': source_id}) or {}
+        platform = channel_kinds.of(scene['_id'])
+        cwd = source.get('cwd') or (self.channel_workspace(platform) if platform
+                                    else str(Path(workspace_grant(self.app.config, scene['_id'], ep['person_id'])['workspace']).resolve()))
+        try:
+            made = self.host_call('errand_session', {'session_id': session_id, 'source_session_id': source_id,
+                                                     'scene_id': scene['_id'], 'cwd': cwd}) or {}
+        except Exception as exc:                        # the errand still runs, in an empty session
+            made = {'forked': False, 'reason': str(exc)[:200]}
+        carried = {'episode_id': ep['_id'], 'source_session_id': source_id, 'forked': bool(made.get('forked')),
+                   **({'reason': str(made['reason'])[:200]} if made.get('reason') else {})}
+        self.bind_session(session_id, {
+            'lane': 'character', 'scene_id': scene['_id'], 'person_id': ep['person_id'],
+            'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
+            'character_context': ep.get('character_context'), 'persona': ep['persona'], 'cwd': cwd,
+            'role_session_id': session_id, 'main_conversation': False, 'retired': False, 'errand': carried})
+        store.audit(ep['_id'], 'errand.session', {'session_id': session_id, **carried}, scene['scope_key'])
         return session_id
 
     def status(self):

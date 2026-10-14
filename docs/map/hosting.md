@@ -32,6 +32,8 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `action_session_id` — One native context per authorized execution binding, including old logs.
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
+  - `errand_copy` — Whether this session is an errand's copy of a conversation (ADR-066).
+  - `errand_session` — The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed turn, so the turn resumes from its cached prefix.
   - `status`
   - `refusals_for` — For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given.
   - `joined_line` — The scene of a home line the owner joins (ADR-051) whose live character session this is, else None.

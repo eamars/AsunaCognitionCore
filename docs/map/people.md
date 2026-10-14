@@ -327,7 +327,7 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 - def `record` — The question as asked (idempotent by its id).
 - def `ask_in_group` — Her reply's question in this group, opened like any other (idempotent per turn).
 - def `wants_look` — Whether this person's unaddressed line gets her a look: a question of hers here waits, within LOOK_MINUTES of being asked, and this person has not had a look for it yet.
-- def `group_block` — questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered.
+- def `group_block` — questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered; and once each one the program closed here, with how it ended.
 - def `answer_tail` — The program's last line on a note that brings a group's answer home: who answered and when, and where the original lines are (never their text).
 - def `refresh` — Bring one question up to date with what came back; closes it when it has run past its end.
 - def `state_of`

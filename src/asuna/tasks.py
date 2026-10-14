@@ -422,11 +422,11 @@ class TaskService:
                 for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
                     observations.append({'source':item['_id'],'tool':item['tool'],
                                          'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
-                from . import local_time         # when it ran: a result handed back late describes that time
+                # When it ran (a result handed back late describes that time); stored UTC, her turn shows it local.
                 event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),
                     original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
                     observations=observations[-OBSERVATIONS:],observations_total=len(observations),
-                    **local_time.for_model({'finished_at':current.get('finished_at')},local_time.zone_of(self.store,task['scene_id'])))
+                    finished_at=current.get('finished_at'))
             self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
@@ -446,7 +446,6 @@ class TaskService:
     def _short_event(self,task,current):
         """The short hand-back (ADR-030 D4): her brief, the report's words (a cut says so) and when the run finished,
         without the tool records."""
-        from . import local_time
         result=current.get('result') or {}
         text=result.get('text') or ''
         report=report_pages(text,SHORT_REPORT_CHARS)[0]
@@ -458,7 +457,6 @@ class TaskService:
                **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
                **({'report_pages':len(report_pages(text))} if len(report)<len(text) else {}),
                'finished_at':current.get('finished_at'),'uncertainties':result.get('uncertainties') or []}
-        value=local_time.for_model(value,local_time.zone_of(self.store,task['scene_id']))
         return {'event_id':handover.result_event_id(task,True),
                 'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
                        '只有你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'

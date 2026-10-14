@@ -1383,7 +1383,8 @@ class RoleTools:
         changes = {}
         if quote:
             changes['quote'] = quote
-        if wait == 'no':
+        if wait in ('no', 'question'):
+            # a question's line is waited on by the question (its looks and answers), not listed again as a wait
             changes['await_answer'] = {'off': True}
         queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned)
         asked = None

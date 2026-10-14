@@ -98,3 +98,18 @@ def test_leave_note_takes_only_a_question_asked_here(store):
     with pytest.raises(Refused, match='不是你在这里问的问题'):
         tools.tool_leave_note(ep, 'c1', {'to': '家里', 'text': '他们说吃面', 'question': 'q-00000000'})
     assert qid.startswith('q-')
+
+
+def test_a_question_line_is_waited_on_by_the_question_not_listed_again(store):
+    from asuna import waiting
+    from test_reply_actions import mention
+    world(store)
+    now = datetime.now(timezone.utc)
+    for key, options in (('q-at', {'wait': 'question'}), ('plain-at', {})):
+        lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '@[阿杰 #2] 你来吗？'}],
+                                                             **options})])])
+        ep = Coordinator(store, lane).ingest(mention(key), persona='P1')
+        store.db.messages.update_many({'episode_id': ep['_id'], 'phase': 'SPEAK'},
+                                      {'$set': {'delivery_state': 'DELIVERED', 'receipt_at': now.isoformat()}})
+        listed = waiting.pending(store, [SCENE], now + timedelta(minutes=1), 'P1')
+        assert (listed == []) if key == 'q-at' else (len(listed) == 1), (key, listed)

@@ -82,6 +82,10 @@ def import_bytes(store, scope_key, body=PNG, *, target='artifacts/pic.png', work
 
     hook = (outbound_media.import_register(store, {'scope_key': scope_key})
             if register == 'auto' else register)
+    if register == 'foreign':
+        # A picture that is not hers (someone sent it): the owner's chat takes it only from its own scopes.
+        def hook(data, meta=None):
+            return outbound_media.register_imported_image(store, scope_key, data, source='upload:pic')
     return import_artifact({'endpoint': 'gen', 'artifact_path': '/view/pic.png',
                             'target_relative_path': target},
                            endpoints=ENDPOINTS, workspace=workspace, fetch=fetch, register=hook)
@@ -217,6 +221,9 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     channel_scene(store, QQ)
     art = import_bytes(store, LOCAL_SCOPE, workspace=tmp_path)['artifact']
     attach = {'artifact_id': art['artifact_id'], 'why': '给你看看'}
+    foreign = import_bytes(store, LOCAL_SCOPE, JPEG, target='artifacts/sent.png', workspace=tmp_path,
+                           register='foreign')['artifact']
+    assert not outbound_media.produced(store.db.artifacts.find_one({'_id': foreign['artifact_id']}) or foreign)
 
     def refused_turn(**where):
         """The turn has no attach_image (nothing listed or the direction is not allowed): her words still go
@@ -234,9 +241,13 @@ def test_T_B7_3_group_other_person_and_unlinked_scenes_are_refused(store, tmp_pa
     # 没有那条边：清单里就没有这张图，这一回合根本没有 attach_image（真实流水线的第一道闸），
     # 行上也不写元数据；工具自己再按「本轮没列出」退回。scope 围栏本身（列出了但 scope 不在可引用集合里）
     # 在离线套件里逐条覆盖：python3 tools/outbound_image_offline_check.py
-    assert outbound_media.offer(store, store.config, store.db.scenes.find_one({'_id': QQ}),
-                                'owner_private', 'A') is None
-    assert refused_turn(key='nolink')[0] == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT'
+    offered = outbound_media.offer(store, store.config, store.db.scenes.find_one({'_id': QQ}), 'owner_private', 'A')
+    assert [item['artifact_id'] for item in offered['items']] == [art['artifact_id']]     # hers, from anywhere
+    coordinator, ep = turn(store, attach={'artifact_id': foreign['artifact_id'], 'why': '给你看看'}, key='nolink')
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    [(said, ok)] = attach_calls(coordinator)
+    assert not ok and 'image_artifacts_from_program' in said, said          # not listed: refused in words
+    assert not any(row.get('attachment') for row in speak_rows(store, ep['_id']))
 
     # 群：她自己做出来的图（从她的生成端点导入的）可以随话发进她在的群，她自己挑（owner 2026-10-05）
     channel_scene(store, GROUP, person='A', target='group')
@@ -266,7 +277,7 @@ def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_pa
     owner(store)
     channel_scene(store, QQ)
     link(store, QQ, LOCAL)
-    art = import_bytes(store, LOCAL_SCOPE, workspace=tmp_path)['artifact']
+    art = import_bytes(store, LOCAL_SCOPE, workspace=tmp_path, register='foreign')['artifact']
     other = BlobStore(store).put(JPEG, LOCAL_SCOPE, 'image', media_type='image/jpeg')
     turn(store, key='b7a', attach={'artifact_id': art['artifact_id'], 'why': '给你看看'})
     turn(store, key='b7b', attach={'artifact_id': art['artifact_id'], 'why': '再给一次'})

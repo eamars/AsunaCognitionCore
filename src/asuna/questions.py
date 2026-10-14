@@ -127,7 +127,7 @@ def record(store, ep, qid, text, patience, sources):
 GROUP_PATIENCE = ('一会儿', '半天', '一天')
 LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
 GROUP_MORE = '更早的还有 %d 个没结'
-TOLD_MANY = '程序一次收了你在这里问的 %d 个问题：%s'
+TOLD_MANY = '程序一次收了你问的 %d 个问题：%s'
 GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
 GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
@@ -185,6 +185,14 @@ def _group_answers(store, source, line):
     return list(store.db.messages.find(query).sort('scene_seq', 1))
 
 
+def told_many(told):
+    """Many questions the program closed at once, in one line: how many, and how each lot ended."""
+    tally = {}
+    for row in told:
+        tally[row['closed']['took']] = tally.get(row['closed']['took'], 0) + 1
+    return TOLD_MANY % (len(told), '；'.join('%s %d 个' % (took, n) for took, n in tally.items()))
+
+
 def group_block(store, persona, scene, moment=None):
     """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered;
     and once each one the program closed here, with how it ended."""
@@ -200,10 +208,7 @@ def group_block(store, persona, scene, moment=None):
         return None
     zone = scene_timezone(store.config, scene)
     if len(told) > SHOWN:                     # many closed at once: one line with the counts, not a list (her ask)
-        tally = {}
-        for row in told:
-            tally[row['closed']['took']] = tally.get(row['closed']['took'], 0) + 1
-        items = [TOLD_MANY % (len(told), '；'.join('%s %d 个' % (took, n) for took, n in tally.items()))]
+        items = [told_many(told)]
     else:
         items = ['%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), row['closed']['took']) for row in told]
     if told:
@@ -416,11 +421,13 @@ def block(store, persona, scene_id, moment=None, opening=None):
     rows = [refresh(store, row, moment) for row in store.db.questions.find({'persona': persona, 'state': 'open'})]
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)[:SHOWN]
     told = list(store.db.questions.find({'persona': persona, 'state': 'closed', 'closed.by': 'program',
-                                         'told_in': {'$ne': scene_id}}).sort('asked_at', -1).limit(SHOWN))
-    rows += told
-    if not rows:
+                                         'told_in': {'$ne': scene_id}}).sort('asked_at', -1))
+    many = len(told) > SHOWN                  # many closed at once: one line with the counts, not a list (her ask)
+    if not many:
+        rows += told
+    if not rows and not told:
         return None
-    items = []
+    items = [told_many(told)] if many else []
     for row in rows:
         item = {'id': row['_id']}
         if row['_id'] != opening:

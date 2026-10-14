@@ -116,6 +116,22 @@ def test_unspoken_is_not_asked_unanswered_lapses_and_the_program_closes_it_once_
     assert questions.block(store, 'P1', 'dm-o', later), 'and once in each other home conversation'
 
 
+def test_many_closed_at_once_are_told_at_home_in_one_line_once(store):
+    """63 group questions closing together reach each home conversation as one line with counts, not 8 a turn."""
+    service = world(store)
+    _, lane = turn(store, service, HOME, [('ask', {'question': '要不要去？', 'to': ['这里']})], '要不要去？')
+    row = asked(store, lane)
+    copies = [{**row, '_id': 'q-%08x' % n, 'state': 'closed', 'told_in': [],
+               'closed': {'at': row['asked_at'], 'by': 'program', 'took': questions.CLOSED_TOOK['answered']}}
+              for n in range(questions.SHOWN + 3)]
+    store.db.questions.delete_many({})
+    store.db.questions.insert_many(copies)
+    shown = questions.block(store, 'P1', 'dm-a')
+    assert shown['items'] == [questions.TOLD_MANY % (len(copies), '程序收的：都有了结果，有回答 %d 个' % len(copies))]
+    assert questions.block(store, 'P1', 'dm-a') is None, 'all told at once'
+    assert questions.block(store, 'P1', 'dm-o'), 'and once in each other home conversation'
+
+
 def test_the_action_brain_answers_with_its_report(store):
     service = world(store)
     _, lane = turn(store, service, HOME, [('ask', {'question': '这个词是什么意思？', 'to': ['行动脑']})], '我问问。')

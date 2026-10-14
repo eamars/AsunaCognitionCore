@@ -43,11 +43,11 @@ def test_an_over_budget_write_says_by_how_much_and_the_largest_sections():
                 'voice': {'sections': [section('tone', '字' * 100)]}}
     said = render.over_budget_words(proposed, 400, 420, 410)
     assert '写完约 420 token，上限 410，超出 10' in said and said.index('persona#big') < said.index('voice#tone')
-    assert 'inject=on_demand' in said
+    assert 'when_shown=on_demand' in said
 
 
 def test_a_missing_section_lists_the_sids_there_are():
-    assert _missing_sid('voice', 'x', [{'sid': 'a'}, {'sid': 'b'}]) == '「voice」里没有 sid「x」；有的是：a、b，照抄一个'
+    assert _missing_sid('voice', 'x', [{'sid': 'a'}, {'sid': 'b'}]) == '「voice」里没有 section「x」；有的是：a、b，照抄一个'
 
 
 def test_a_feeling_without_intensity_is_a_refusal_naming_the_words():

@@ -126,6 +126,7 @@ def record(store, ep, qid, text, patience, sources):
 # ── a question in a group (ADR-061 step 2): a reply with wait=question ──
 GROUP_PATIENCE = ('一会儿', '半天', '一天')
 LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
+GROUP_MORE = '更早的还有 %d 个没结'
 GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
 GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
@@ -189,7 +190,9 @@ def group_block(store, persona, scene, moment=None):
     from .schedule_rules import line_stamp, scene_timezone
     moment = moment or _now()
     rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
-    rows = [row for row in rows if row.get('state') == 'open']
+    rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)
+    more = len(rows) - SHOWN                  # the newest only: a long list buries that something is still open (her ask)
+    rows = rows[:SHOWN]
     told = list(store.db.questions.find({'state': 'closed', 'closed.by': 'program', 'told_in': {'$ne': scene['_id']},
                                          'sources': {'$elemMatch': {'scene_id': scene['_id'], 'kind': 'group'}}}))
     if not rows and not told:
@@ -208,7 +211,7 @@ def group_block(store, persona, scene, moment=None):
         if answers:
             words += '；回了：' + '、'.join('%s %s' % (a['by'], line_stamp(zone, a.get('at'))) for a in answers)
         items.append(words)
-    return {'items': items, 'note': GROUP_NOTE}
+    return {'items': items, **({'more': GROUP_MORE % more} if more > 0 else {}), 'note': GROUP_NOTE}
 
 
 def answer_tail(store, persona, qid, zone):

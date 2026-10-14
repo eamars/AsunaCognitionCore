@@ -105,7 +105,7 @@ def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     there, other = turn(store, service, delivered(service), [('stay_silent', {'reason': '记下了'})])
     assert other.triggers == ['note'] and there['episode_kind'] == 'note'
     block = there['context']['note_from_program']
-    assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '本机私聊' in block['from']
+    assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '家里·私聊' in block['from']
     assert not {'relationship', 'sender_identity', 'understanding_update_from_program'} & set(there['context'])
     assert 'development' in there['context']['action_capabilities_from_program']
     assert not {'credential', 'errand', 'visit', 'understand_person'} & set(there['turn_tools'])
@@ -146,7 +146,7 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert '便条叫起来' in said
     assert lane.triggers == ['note']
     block = home['context']['note_from_program']
-    assert '这一轮不做这些' in block['note'] and block['written'] == '你在外面写的' and block['text'] == row['text']
+    assert '这一回合不做这些' in block['note'] and block['written'] == '你在外面写的' and block['text'] == row['text']
     assert [item['place'] for item in home['context']['note_places_from_program']['items']] == [G1]   # only back
     assert [ok for _, ok in results(lane, 'delegate')] == [False]
     (wrong, ok_wrong), (_, ok_reply) = results(lane, 'pass_note')

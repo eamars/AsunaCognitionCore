@@ -521,7 +521,7 @@ def resolve_image_file(ref, form, *, task_dir=None):
     """
     if form == 'task':
         if not task_dir:
-            raise Denied('IMAGE_TASK_DIR_UNAVAILABLE: %s 里的 /task/ 是行动任务自己的工作区，这一轮没有任务目录；'
+            raise Denied('IMAGE_TASK_DIR_UNAVAILABLE: %s 里的 /task/ 是行动任务自己的工作区，这一回合没有任务目录；'
                          '重试也一样：换成绝对路径，或把这件事交给行动任务' % ref)
         relative = ref[len(TASK_PATH):].strip('/\\')
         candidate = Path(task_dir) / relative if relative else Path(task_dir)
@@ -629,7 +629,7 @@ def path_image(blobs, task, config, ref, max_bytes=None, session_class=visibilit
     """
     if session_class != visibility.OWNER_PRIVATE:
         raise Denied('IMAGE_PATH_HOME_ONLY: %s 是一个文件路径，按路径读图只在家里（本机、主人私聊这类可信的对话）允许；'
-                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一轮看，'
+                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一回合看，'
                      '或交给家里交出去的行动任务' % ref)
     data, media_type, via, source = pull_bytes({'ref': ref, 'pull_via': 'local_file', 'file': ref}, config,
                                                max_bytes=max_bytes, session_class=session_class, task_dir=task_dir)
@@ -655,7 +655,7 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
                                      or artifact_id in (offered or ()))):
         raise ValueError('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
-                         '也不是这一轮可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id' % artifact_id)
+                         '也不是这一回合可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id' % artifact_id)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:
@@ -842,6 +842,6 @@ def inline_summary(result):
     out = {k: v for k, v in result.items() if k not in ('image', 'visual')}
     out['inline_image'] = {'media_type': image.get('media_type'), 'base64_chars': len(data),
                            'host_state': result.get('visual'),
-                           'note': ('base64 只交给调用方的 DSH 插件；是否真的成为这一轮的视觉输入，'
+                           'note': ('base64 只交给调用方的 DSH 插件；是否真的成为这一回合的视觉输入，'
                                     '看模型侧回执里的 visual 字段（attached / unavailable:原因）。')}
     return out

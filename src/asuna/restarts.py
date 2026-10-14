@@ -121,7 +121,7 @@ class Desk:
         if record and record.get('down_at') and record.get('back_at'):
             took = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
         return {'interrupts': items or ['现在没有在跑的任务、排队的消息或马上要响的计划'],
-                'also': 'QQ 适配器会跟着停，起来后自动恢复；网页和你在本机的对话这段时间都不在。',
+                'also': 'QQ 适配器会跟着停，起来后自动恢复；网页和家里·私聊这段时间都不在。',
                 **({'last_restart_took': took} if took else {}),
                 'supervised': '有监工：停了以后由它拉起来、起不来一级级往回退' if supervised()
                               else '这次宿主不是由监工起的：没人接重启请求，现在要不了'}
@@ -294,7 +294,7 @@ def call_after_fallback(store, controller, config, root=None, moment=None):
     if store.db.audit_events.find_one({'type': 'restart.called', 'payload.id': record['id']}, {'_id': 1}):
         return False
     chat = config['chat']
-    text = ('这是监工的通知，不是用户消息：刚才那次重启新版本没起来，现在跑的是上一个能跑的版本。'
+    text = ('这是监工的通知，不是有人跟你说话：刚才那次重启新版本没起来，现在跑的是上一个能跑的版本。'
             '原因和每一次尝试都在 restart_from_program 里；要不要再试、改什么，你定。')
     controller.offer_internal('presence', 'presence:restart-' + record['id'], chat['scene_id'], chat['person_id'], text)
     store.audit('restart', 'restart.called', {'id': record['id']}, 'operator')

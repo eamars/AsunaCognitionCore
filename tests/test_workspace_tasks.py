@@ -156,7 +156,7 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
         _, _, tool, _, outcome, ok = lane.tool_results[1]
         assert tool == 'task'
         if internal:
-            assert not ok and '只有本机主人明确要继续时才能接着做' in outcome
+            assert not ok and '只有主人明确要继续时才能接着做' in outcome
             assert result['state'] == 'COMMITTED' and not result.get('task_ids')
             assert store.db.tasks.count_documents({}) == 1
         else:
@@ -233,5 +233,5 @@ def test_a_refused_tool_says_who_is_given_it_and_where_this_task_came_from(store
     words = capability_refusal(store, task, 'development_publish')
     assert words.startswith('CAPABILITY_DENIED: 这个任务没有 development_publish：它只给家里的对话里')
     assert '这件是家里交的' in words and '重试也一样' in words
-    assert '只给家里的对话（本机聊天' in capability_refusal(store, task, 'sandbox_run')
+    assert '只给家里的对话（家里·私聊' in capability_refusal(store, task, 'sandbox_run')
     assert '这件任务交的时候没给它' in capability_refusal(store, task, 'web_fetch')

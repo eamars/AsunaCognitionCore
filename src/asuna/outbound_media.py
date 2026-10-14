@@ -50,16 +50,16 @@ ATTACHMENT_KEY = 'attachment'
 SKIPPED_KEY = 'attachment_skipped'
 NO_CAPABILITY = 'channel_does_not_declare_image'
 MAX_ITEMS_OFFERED = 6                 # 一轮最多给她看几张可引用的图
-IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要发图的那一轮从 '
+IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要发图的那一回合从 '
                  'image_artifacts_from_program 里引用；同一主人的另一个私聊入口也能引用它。')
 
-SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一轮可以发的图片：用 speak 的 picture（artifact_id 照抄下面列出的值，'
+SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一回合可以发的图片：用 speak 的 picture（artifact_id 照抄下面列出的值，'
                     '它不是文件路径也不是文件名）。没列出的图片不能发。')
-OFFER_NOTE = ('这些是程序已经存好、这一轮可以随你要说的那条消息一起发出去的图片。'
+OFFER_NOTE = ('这些是程序已经存好、这一回合可以随你要说的那条消息一起发出去的图片。'
               '想发就调用 attach_image（artifact_id、why；一回合至多一张，再调用就换成新的那张），'
               'artifact_id 只能照抄下面列出的值——它不是文件路径也不是文件名。'
               '正文里不要写文件路径、文件名或「见图」之类的话，图是随这条消息一起到的。'
-              '没列出的图片不能发；一轮最多带一张。')
+              '没列出的图片不能发；一回合最多带一张。')
 # A group may receive only pictures she produced (owner, 2026-10-05): bytes she imported from her own
 # generator (import_register), never a picture someone sent her. Any group she is in; she picks.
 PRODUCED_SOURCE = 'integration:'

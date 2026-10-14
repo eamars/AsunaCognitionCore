@@ -90,7 +90,7 @@ def status_words(task, continued_by=None):
     this one on, which is the one to go by."""
     state = task.get('state')
     if continued_by and state not in ('READY', 'RUNNING'):
-        return '后来接着做了一轮，以 %s 那条为准' % continued_by
+        return '后来接着做了一趟，以 %s 那条为准' % continued_by
     if state == 'READY':
         return '排着队，还没开始跑'
     if state == 'RUNNING':

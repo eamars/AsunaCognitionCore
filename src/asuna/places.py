@@ -26,7 +26,7 @@ INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头
 VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
-            'pending': '那边那一轮还没跑完，结果还没出来', 'failed': '没去成'}
+            'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Intents that open a conversation: these wait until the group has been quiet for heartbeat.quiet_min.
 STARTING = ('start_topic',)          # a picture fits into talk; a new topic waits (owner 2026-10-06)
@@ -138,7 +138,7 @@ def errand_text(exactly, by=None):
     who = by or '主人'
     return ('这是%s在家里托你来这里办的一件事，不是这里有人叫你。原话在 visit_from_program.request。' % who
             + (('原样转达：照原话发，前面带一句「%s让我转告」。' % who) if exactly else '用适合这里的话把事办了。')
-            + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。家里的事这一轮看不到，也别提。')
+            + '先看看最近的聊天；觉得这里不合适就不发，stay_silent。家里的事这一回合看不到，也别提。')
 
 
 def errands_block(store, persona, moment):
@@ -373,7 +373,7 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
         # Read from home as well as in the group: name the group, never "here"; a visit whose turn has not run yet
         # is not a look she took.
         if visit and max(recent) == _at(visit.get('at')) and outcome(store, visit) == 'pending':
-            return False, '你已经出门去那个群了，那边那一轮还没跑完；等它跑完、结果带回来再说'
+            return False, '你已经出门去那个群了，那边那一回合还没跑完；等它跑完、结果带回来再说'
         return False, '你不久前去过那个群（在那儿说过话或看过），过一阵再去'
     if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
         if intent in STARTING:
@@ -417,8 +417,8 @@ def places_block(store, persona, model, policy, plan, moment, date):
         from . import own_mute
         muted_you = own_mute.place_words(store, scene, {'tz': home}, moment)      # she can still go and look
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
-               'focus': ('静音（只有叫你的话会叫你，你不先开口、不去）' if muted else
-                         '常驻' if focus.active(store, scene, persona) else '歇着（只有叫你的话会叫你）'),
+               'focus': ('静音：只有叫到你才会醒，你不先开口、不去' if muted else
+                         '常驻' if focus.active(store, scene, persona) else '歇着：只有叫到你才会醒'),
                **({'muted_until_at': muted['until']} if muted else {}),
                **({'muted_you': muted_you} if muted_you else {}),
                'now': _tier(ACTIVITY, here['lines']) + ('' if here['last_line_at'] else '，还没见过有人说话'),

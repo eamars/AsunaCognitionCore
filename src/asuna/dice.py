@@ -41,7 +41,7 @@ ITEM = re.compile(r'(?P<name>[^\d\s]+?)\s*(?P<weight>\d{1,3})')
 SEPARATORS = re.compile(r'[、,，;；/\n]+')
 # Why a 'nothing' beat still reached her (dice review): what one more hour would have lost.
 LOST_WORDS = {'waiting_groups': '有 %d 个群里有人在等你回，再等一小时就掉出你的等待单', 'asides_full': '旁白单满了，再来一条最早的就看不见'}
-DEV_TEXT = '这是一次内部自我开发机会，不是用户消息或新授权；无需公开回复。'
+DEV_TEXT = '这是一次内部自我开发机会，不是有人跟你说话，也不带新授权；无需公开回复。'
 HINTS = {
     'nothing': '这一拍本来不叫你；叫你是因为有只在心跳里看得到、再等一小时就会丢的事（见下面的资料）。',
     'interesting': '想说一句、出门看看、写点什么，都算。',

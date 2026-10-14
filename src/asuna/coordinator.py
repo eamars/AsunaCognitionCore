@@ -646,7 +646,7 @@ class Coordinator:
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':
             raise role_tools.Refused('这件事已经叫停了，不能接着做；要再做就用 delegate 交一件新的。')
         if task['state']=='PAUSED' and not (ep.get('episode_kind')=='external' and local and not source.get('channel')):
-            raise role_tools.Refused('这件事在重启时暂停了：只有本机主人明确要继续时才能接着做。')
+            raise role_tools.Refused('这件事在重启时暂停了：只有主人明确要继续时才能接着做。')
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         continued=self.store.db.tasks.find_one({'_id':task_id})
         if not continued:
@@ -678,9 +678,9 @@ class Coordinator:
         self.collab(continued,'message',{'from':'character','text':message},entry_id='brief:'+task_id)
         from .tasks import queue_words
         fresh=continued.get('fresh_context')
-        context=(('新开一份上下文：这件事上一轮已经闲了约 %d 分钟（超过 %d 分钟就不接着用），之前查到的工具输出它看不到了；'
-                  '它手上只有原来的交代、上一轮的报告和你这句话。要它用的东西，就在这句话里写全，或者说清楚让它重新取。')
-                 % (fresh['after_minutes'],fresh['limit'])) if fresh else '接着上一轮的上下文做：之前查到的它都还看得到。'
+        context=(('新开一份上下文：这件事上一趟已经闲了约 %d 分钟（超过 %d 分钟就不接着用），之前查到的工具输出它看不到了；'
+                  '它手上只有原来的交代、上一趟的报告和你这句话。要它用的东西，就在这句话里写全，或者说清楚让它重新取。')
+                 % (fresh['after_minutes'],fresh['limit'])) if fresh else '接着上一趟的上下文做：之前查到的它都还看得到。'
         return {'task':task_id,'continues':task['_id'],'state':'已交给行动脑',
                 'action_brain':context,'queue':queue_words(self.store,task_id),
                 'note':'结果回来会再叫你。'}

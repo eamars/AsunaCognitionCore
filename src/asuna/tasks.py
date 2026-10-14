@@ -236,10 +236,10 @@ def opening_text(store, task):
         prev=store.db.tasks.find_one({'_id':fresh['report_of']},{'result.text':1}) or {}
         report=((prev.get('result') or {}).get('text') or '').strip()
         shown=report[:FRESH_REPORT_CHARS]
-        text=('这是一份新开的上下文：这件事上一轮已经闲了约 %d 分钟，之前的工具输出都不在这里了。下面是上一轮交回的报告'
-              '%s；要用到的东西重新取，不要凭报告的印象补。\n\n—— 上一轮的报告 ——\n%s\n\n你接着交代：\n'
+        text=('这是一份新开的上下文：这件事上一趟已经闲了约 %d 分钟，之前的工具输出都不在这里了。下面是上一趟交回的报告'
+              '%s；要用到的东西重新取，不要凭报告的印象补。\n\n—— 上一趟的报告 ——\n%s\n\n你接着交代：\n'
               % (fresh['after_minutes'], '' if len(report)<=len(shown) else '（共 %d 字，这里是前 %d 字）'%(len(report),len(shown)),
-                 shown or '（上一轮没有留下报告）'))+brief
+                 shown or '（上一趟没有留下报告）'))+brief
     return text
 
 def place_words(store, scene_id):
@@ -523,7 +523,7 @@ class TaskService:
 # Which tasks are given which tools (ADR-053): the one table both refusing layers (the plugin's guard and this
 # broker) read their words from, so neither brain gets two versions to guess a motive from.
 GIVEN_TO = (
-    (lambda tool: tool == 'sandbox_run', '只给家里的对话（本机聊天、主人私聊、agent 线、peer 线）交的任务'),
+    (lambda tool: tool == 'sandbox_run', '只给家里的对话（家里·私聊、主人私聊、agent 线、peer 线）交的任务'),
     (lambda tool: tool.startswith('development_') or tool.startswith('persona_job'),
      '只给家里的对话里这几种回合交的任务：有人说话叫起来的、你的自我改进、你自己的计划到点、家里另一条线的便条叫起来的'
      '（自我开发要开着）'),

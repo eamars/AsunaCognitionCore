@@ -655,7 +655,7 @@ def week(store, persona, zone, moment=None):
     left = []
     for move in tiers.rows.find({'row': 'move', 'persona': persona, 'from': CARRIED, 'at': {'$gte': since}}).sort('at', 1):
         row = tiers.rows.find_one({'_id': move['item']}) or {}
-        again = (row.get('recalled_at') or '') > move['at']
+        again = (row.get('recalled_at') or '') >= move['at']      # same instant counts: a coarse clock ties them
         left.append('%s「%s」放到了%s（%s）；之后你%s' % (line_stamp(zone, move['at']), move.get('heading') or move['sid'],
                                                     move['to'], REASONS.get(move['reason'], move['reason']),
                                                     'recall 过它' if again else '没再 recall 它'))

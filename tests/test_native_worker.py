@@ -239,6 +239,24 @@ def test_a_worker_start_keeps_only_the_newest_host_reports(tmp_path, monkeypatch
     assert kept == ['native-host-%02d' % i for i in range(3, KEPT_HOST_REPORTS + 3)] + ['other-run']
 
 
+def test_one_long_run_keeps_its_newest_records_and_their_chain(tmp_path):
+    """A Host run that never restarts must not grow without end: only the newest `keep` records stay."""
+    import json
+    from asuna.evidence import Evidence
+    evidence = Evidence(tmp_path / 'native-host-x', keep=3, pinned=('runtime.ready',))
+    ready = evidence.record('runtime.ready', {})
+    names = [evidence.record('lane.ready', {'n': n}) for n in range(7)]
+    kept = sorted(p.name for p in (tmp_path / 'native-host-x').iterdir())
+    assert kept == [ready] + names[-3:], "the start's proof of life stays"
+    kept = kept[1:]
+    rows = [json.loads((tmp_path / 'native-host-x' / name).read_text(encoding='utf-8')) for name in kept]
+    assert [row['prev_hash'] for row in rows[1:]] == [row['event_hash'] for row in rows[:-1]], 'the kept ones still chain'
+    unbounded = Evidence(tmp_path / 'attempt')
+    for n in range(5):
+        unbounded.record('x', {'n': n})
+    assert len(list((tmp_path / 'attempt').iterdir())) == 5, 'an attempt keeps everything'
+
+
 @pytest.mark.parametrize('member', [True, False])
 def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
     """ADR-051: the composer is open on an agent line whose members include the owner; his words go to that line."""

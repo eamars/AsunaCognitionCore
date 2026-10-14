@@ -34,6 +34,7 @@ from .queue import RuntimeLease
 
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
+KEPT_HOST_RECORDS = 3000  # within one start, the newest records only: a busy hour writes about a thousand
 
 
 def prune_host_reports():
@@ -379,7 +380,8 @@ class BusinessWorker:
         releases = [entry['integration_release'] for entry in channels or () if entry.get('integration_release')]
         if releases:
             config['_native_integration_release'] = releases[0]
-        evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]))
+        evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]), keep=KEPT_HOST_RECORDS,
+                            pinned=('runtime.ready',))   # the supervisor's proof that this start came up
         prune_host_reports()
         def configure(host):
             self.app, self.controller = host.app, host.controller

@@ -15,6 +15,7 @@ DST：每日／每周当日遇到不存在的钟点，顺延到该日之后第�
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, time as wall_time, timedelta, timezone
 
 try:
@@ -156,7 +157,29 @@ def _clock_shape(value):
     return rule
 
 
+# The clock face she reads (local_time.face): 10/19 21:05, or 2026/10/19 21:05. What she reads she may write back.
+FACE = re.compile(r'^(?:(\d{4})/)?(\d{1,2})/(\d{1,2})[ T](\d{1,2}):(\d{2})$')
+
+
+def _face_to_iso(value):
+    """A time written on her clock face as ISO; without a year, the next such date (this year, or next once it passed)."""
+    found = FACE.match(value.strip()) if isinstance(value, str) else None
+    if not found:
+        return value
+    year, month, day, hour, minute = found.groups()
+    today = datetime.now(timezone.utc)
+    if year is None:
+        year = today.year
+        try:
+            if datetime(year, int(month), int(day), tzinfo=timezone.utc) < today - timedelta(days=1):
+                year += 1
+        except ValueError:
+            return value
+    return '%04d-%02d-%02dT%02d:%s' % (int(year), int(month), int(day), int(hour), minute)
+
+
 def _wall_shape(value):
+    value = _face_to_iso(value)
     if not isinstance(value, str) or not 10 <= len(value.strip()) <= 40:
         raise ValueError('SCHEDULE_AT_INVALID: at 给的是 %s；要给 YYYY-MM-DDTHH:MM（可带偏移）'
                          % json.dumps(value, ensure_ascii=False)[:60])

@@ -82,7 +82,7 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
     try:
         done = Executor(service, ActionLane(), broker).run(ep['task_ids'][0], work)
         # ADR-011 §4: the action brain's first message is her brief; the program's facts follow, marked as such.
-        assert first_messages[0].startswith(BRIEF) and '—— 程序附注（不是她说的话）——' in first_messages[0]
+        assert first_messages[0].startswith(BRIEF) and '—— 程序附注（不是你交代的话）——' in first_messages[0]
         assert done['state'] == 'RETURNED' and done['result']['finish_reason'] == 'stop'
         assert 'declared_status' not in done['result']
         fact = done['result']['facts'][0]
@@ -203,9 +203,9 @@ def test_her_message_reaches_a_live_task_in_place_without_a_new_revision(store, 
         if running:
             # Words that arrived after the run's first message get one more round in the same session.
             assert len(seen) == 2 and seen[1][0] == seen[0][0] + ':more:1'
-            assert seen[1][1].startswith('她在你做事时补充了') and message in seen[1][1]
+            assert seen[1][1].startswith('你在对话里又补充了') and message in seen[1][1]
         else:
-            assert len(seen) == 1 and '她后来又补充：\n' + message in seen[0][1]
+            assert len(seen) == 1 and '你后来又补充：\n' + message in seen[0][1]
         # Same task, same revision, nothing fenced: the run finishes with her words in it.
         assert done['state'] == 'RETURNED' and done['result']['text'] == '按她补充的先核对了另一份。'
         assert done['intent_revision'] == 1 and store.db.tasks.count_documents({}) == 1 and notices == []

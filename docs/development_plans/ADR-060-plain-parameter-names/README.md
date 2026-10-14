@@ -250,3 +250,22 @@ Where the build differs from the audit above, and why:
 
 **Cost as built:** character brain 32 tools, 21,490 → 19,717 characters (main's 21,490 already held ADR-056's +37);
 with tiered memory on 31 tools, 19,619.
+
+## One person, two halves: perspective (owner and her, 2026-10-14)
+
+The owner: both brains are her, like two halves of one person; one consistent perspective everywhere. The rule
+(Claude's, her yes):
+
+1. The program addresses the model as 你; in her character brain, her action brain and her relevance gate 你 is her.
+2. She is never 她 inside her own brains; 她/他 is for other people.
+3. Her own writing (persona, core, notes, ledgers) keeps 我 and is introduced as her own (「你自己写的」).
+4. The halves have names: 说话的那一半 (her character brain) and 做事的那一半, short name 行动脑 (her wording: she
+   has always written 行动脑).
+5. Only the background summarizer, which is not her, writes about her in the third person.
+
+The character side already followed it. The action side did not: `executor.md` said 你替她… and 问她 eleven times,
+its notes said 她接着交代 and 不是她说的话, its English tools said "the character… her", and the persona came after
+「以下是她是谁」 in her 我. Now `executor.md` opens 你是做事的那一半, and the action brain reads who she is from her
+core sentences (`render.action_persona: core`, the new default, owner 2026-10-14: a person, not a software engineer,
+and none of her rules for talking), introduced as 「你是<name>。下面是你自己写的「我是谁」，里面的「我」就是你」.
+Cost: `executor.md` +24; the action brain's who-she-is text from about 11,500–25,000 characters to about 650.

@@ -118,13 +118,13 @@ def require_current_feedback(store, episode):
 # ADR-011 §4: the action brain's two ways to reach her. ask_character waits for her answer; report_progress
 # only leaves a note she reads on her next turn (and it shows in their thread).
 ASK_TOOL = {'name':'ask_character',
-    'description':'Ask the character who gave you this task for her judgment (what she meant, what she prefers, a decision that is hers), and wait for her answer. Not a public reply, new task or permission grant. Ordinary implementation details and errors are yours to handle; do not ask before every step.',
-    'parameters':{'question':{'type':'string','required':True}, 'context':{'type':'string','description':'Material she needs to judge, briefly'}}}
+    'description':'Ask your talking half, where this task was given, for its judgment (what the brief meant, what you prefer there, a decision that belongs to it), and wait for the answer. Not a public reply, new task or permission grant. Ordinary implementation details and errors are yours to handle; do not ask before every step.',
+    'parameters':{'question':{'type':'string','required':True}, 'context':{'type':'string','description':'Material it needs to judge, briefly'}}}
 NOTE_IDEA_TOOL = {'name':'note_idea',
-    'description':'Note an idea for improving her (a capability, a skill, a way of working) in her improvement notebook, in your own words, with why. Use it when something you see while working (including on the web) could be better: do not change it now. She reviews ideas in her self-improvement time. No one else\'s personal data.',
+    'description':'Note an idea for improving yourself (a capability, a skill, a way of working) in your improvement notebook, in your own words, with why. Use it when something you see while working (including on the web) could be better: do not change it now. You review ideas in your self-improvement time. No one else\'s personal data.',
     'parameters':{'idea':{'type':'string','required':True},'why':{'type':'string','required':True}}}
 PROGRESS_TOOL = {'name':'report_progress',
-    'description':'Leave her a short progress note on a long task, without waiting: she reads it on her next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
+    'description':'Leave your talking half a short progress note on a long task, without waiting: it reads it on its next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
     'parameters':{'note':{'type':'string','required':True}}}
 
 def workspace_file(root, protected, op, args):
@@ -230,14 +230,14 @@ def opening_text(store, task):
     """The action brain's first words for a task: her brief; a continuation's new words; after the idle limit
     (ADR-053) a fresh context told so, with the last report."""
     brief=task.get('brief') or task['goal']
-    text=('她接着交代：\n' if task.get('continues_task_id') else '')+brief
+    text=('你接着交代：\n' if task.get('continues_task_id') else '')+brief
     fresh=task.get('fresh_context')
     if task.get('continues_task_id') and fresh:
         prev=store.db.tasks.find_one({'_id':fresh['report_of']},{'result.text':1}) or {}
         report=((prev.get('result') or {}).get('text') or '').strip()
         shown=report[:FRESH_REPORT_CHARS]
         text=('这是一份新开的上下文：这件事上一轮已经闲了约 %d 分钟，之前的工具输出都不在这里了。下面是上一轮交回的报告'
-              '%s；要用到的东西重新取，不要凭报告的印象补。\n\n—— 上一轮的报告 ——\n%s\n\n她接着交代：\n'
+              '%s；要用到的东西重新取，不要凭报告的印象补。\n\n—— 上一轮的报告 ——\n%s\n\n你接着交代：\n'
               % (fresh['after_minutes'], '' if len(report)<=len(shown) else '（共 %d 字，这里是前 %d 字）'%(len(report),len(shown)),
                  shown or '（上一轮没有留下报告）'))+brief
     return text
@@ -290,7 +290,7 @@ def stale_reason(task,current,scene):
     if not current:return '这个任务已经不在了'
     if current['state']=='CANCELLED':return '这个任务已经被取消了'
     if current['state']=='PAUSED':return '这个任务因宿主重启暂停了'
-    if current['intent_revision']!=task['intent_revision']:return '她改了这个任务的交代（新的交代取代了这一版）'
+    if current['intent_revision']!=task['intent_revision']:return '这个任务的交代改了（新的交代取代了这一版）'
     if scene and scene['policy_epoch']!=task['policy_epoch']:return '这个对话的权限换了一版'
     if current['state']!='RUNNING':return '这个任务已经结束了（%s）'%current['state']
     return '这个任务已经由另一次执行接手'
@@ -527,7 +527,7 @@ class TaskService:
 GIVEN_TO = (
     (lambda tool: tool == 'sandbox_run', '只给家里的对话（本机聊天、主人私聊、agent 线、peer 线）交的任务'),
     (lambda tool: tool.startswith('development_') or tool.startswith('persona_job'),
-     '只给家里的对话里这几种回合交的任务：有人说话叫起来的、她的自我改进、她自己的计划到点、家里另一条线的便条叫起来的'
+     '只给家里的对话里这几种回合交的任务：有人说话叫起来的、你的自我改进、你自己的计划到点、家里另一条线的便条叫起来的'
      '（自我开发要开着）'),
     (lambda tool: tool.startswith('integration') or tool == 'import_integration_artifact',
      '只给主人在家里交的任务（集成要开着）；agent 线交的只有 integration_start 和 integration_status'),
@@ -539,7 +539,7 @@ def capability_refusal(store, task, tool):
     """The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help."""
     given = next((words for match, words in GIVEN_TO if match(str(tool))), '这件任务交的时候没给它')
     return ('CAPABILITY_DENIED: 这个任务没有 %s：它%s；这件是%s交的。不是参数的问题，重试也一样：'
-            '要用它就在报告里写明，让她在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
+            '要用它就在报告里写明，让说话的那一半在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
 
 
 DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'
@@ -643,8 +643,8 @@ class ToolBroker:
                 with self.service.lock:self.service.valid(task)
             elif tool=='ask_character':
                 if not getattr(self, 'consult_character', None):
-                    raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE: 这会儿问不了她（角色脑没接上）；不是参数的问题，重试也一样：'
-                                       '按你的判断做，把要她定的事写进报告')
+                    raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE: 这会儿问不了你说话的那一半（角色脑没接上）；不是参数的问题，重试也一样：'
+                                       '按你的判断做，把要那一半定的事写进报告')
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
                 with self.service.lock:self.service.valid(task)
@@ -656,7 +656,7 @@ class ToolBroker:
                                          % (field.upper(),field,IDEA_CHARS,given_text(args.get(field))))
                 row=note_idea(self.store,self.store.config['chat']['persona'],args['idea'].strip(),args['why'].strip(),
                     key=[task['_id'],key],source={'by':'action','task_id':task['_id'],'scene_id':task['scene_id']})
-                result={'noted':row['_id'],'note':'记下了；她会在自我改进时间里决定做不做。'}
+                result={'noted':row['_id'],'note':'记下了；自我改进时你再决定做不做。'}
             elif tool=='report_progress':
                 note=args.get('note')
                 if not isinstance(note,str) or not note.strip() or len(note)>4000:
@@ -666,7 +666,7 @@ class ToolBroker:
                         'thread':task.get('thread') or task['_id'],'from':'action','text':note.strip(),
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
-                result={'noted':True,'note':'她下一回合会看到；要不要转告别人由她决定。'}
+                result={'noted':True,'note':'说话的那一半下一回合会看到；要不要转告别人由那一半决定。'}
             elif tool==HISTORY_TOOL_NAME:
                 # Read-only scoped history: the scene comes from the task binding, never
                 # from arguments. The effects lock stays released during the query so a
@@ -808,7 +808,7 @@ class Executor:
             if vault:facts['credentials']={'items':vault,'how':'sandbox_run 写 credentials（名字照抄），这些环境变量只在那一条命令里有；脚本用 os.environ 读，值不要写进文件、脚本、报告。'}
         from . import local_time                     # the action brain reads times on the local clock
         facts=local_time.for_model(facts,local_time.zone_of(self.service.store,task['scene_id']))
-        text+='\n\n—— 程序附注（不是她说的话）——\n'+json.dumps(facts,ensure_ascii=False)
+        text+='\n\n—— 程序附注（不是你交代的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
         if task.get('integration_profile') == 'agent_home':
@@ -817,15 +817,15 @@ class Executor:
             text+='status 只读，回的是真实进程状态与日志。RUNNING 不等于平台连上或发送成功。'
             text+='没有 integration_test（试跑）、integration_stop（停止）和产物导入：那些要交回本机 owner 工作域的任务。'
         if 'render_svg' in task.get('allowed_capabilities',()):
-            text+='\n要把 SVG 变成图（截图、预览、发出去）：write_file 写好 .svg，再用 render_svg；PNG 落进 /task/images 并登记成她自己的图，用 read_image 传 artifact_id 亲眼看过再交。SVG 链接的外部图片不会加载，要用就内嵌成 data: URI。'
+            text+='\n要把 SVG 变成图（截图、预览、发出去）：write_file 写好 .svg，再用 render_svg；PNG 落进 /task/images 并登记成你自己的图，用 read_image 传 artifact_id 亲眼看过再交。SVG 链接的外部图片不会加载，要用就内嵌成 data: URI。'
         if 'generate_image' in task.get('allowed_capabilities',()):
-            text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成她自己的图，之后能随消息发出去（群里只发全年龄的图）。先用 list_routes=yes 看有哪些路线、各要什么样的提示词；画完用 read_image 传 artifact_id 亲眼看，不对就改了再画。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
+            text+='\n要画图先用 generate_image：本机的生图服务，图直接落进 /task 并登记成你自己的图，之后能随消息发出去（群里只发全年龄的图）。先用 list_routes=yes 看有哪些路线、各要什么样的提示词；画完用 read_image 传 artifact_id 亲眼看，不对就改了再画。外部公开的生图服务也可以用，但那样的图进不了工作区，只能给链接。'
         if task.get('development_grant'):
             text+='\n你可使用 development_* 工具直接编辑可发布的 Asuna 项目候选。development_files/read/write 返回真实文件；development_run 在候选目录里运行命令（宿主沙箱：只能写候选目录；命令是本机原生的，Windows 上没有 sh，用 python3 写脚本）并返回 stdout/stderr/退出码；development_database_read 只读同一个真实数据库中的原始记录（没有另一个测试库）。失败检查只提供诊断，可继续修复。development_publish 冻结候选、运行不消费消息的最低启动探针并应用通过的改动，实际宿主重启后结果再进入同一角色场景；无需 Codex 审查。普通 /task 仍是原持久工作区，不是这个候选。技能也在候选里（角色包 skills/<kebab-case-name>/SKILL.md），同样只用 development_* 修改、经 development_publish 生效；原生 skill 工具读取的是已发布的版本。修改认知核需显式 project="core"。发布与否由你判断。'
         # Her words that arrived before this run started belong to its first message.
         early=self.pending_messages(task)
         if early:
-            text+='\n\n她后来又补充：\n'+'\n'.join(row['text'] for row in early)
+            text+='\n\n你后来又补充：\n'+'\n'.join(row['text'] for row in early)
             self.delivered(early)
         operation=task['_id']+':execute:'+str(task['intent_revision'])
         self.service.collab(task,'status',{'state':'running'},'status:'+task['_id']+':running')
@@ -849,7 +849,7 @@ class Executor:
             late=self.pending_messages(task) if value.finish_reason=='stop' and not unusable else []
             if not late or round_no==MESSAGE_ROUNDS:
                 break
-            text='她在你做事时补充了（你可能还没看到）：\n'+'\n'.join(row['text'] for row in late)
+            text='你在对话里又补充了（做事这边可能还没看到）：\n'+'\n'.join(row['text'] for row in late)
             self.delivered(late)
         artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
         observations=artifacts

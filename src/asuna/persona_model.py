@@ -55,7 +55,7 @@ CORE_DEFAULTS = {
     # The persona and voice render every turn: a budget (estimated tokens, about 6k Chinese characters) bounds it
     # even when the window is large (context_budget.py, owner 2026-10-06). A package whose own seeds are longer
     # gets room for them (render.budget_limit, owner 2026-10-07).
-    'render': {'budget_tokens': 6144, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'values'},
+    'render': {'budget_tokens': 6144, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'core'},
     'recall_protocol': {'order': None},
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,

@@ -8,7 +8,7 @@ DEVELOPMENT_TOOLS = [
     {'name':'development_run','description':'Run a command in the candidate and return raw stdout, stderr and exit status, including failures. 35 s (timeout: up to 600); a stopped command returns its output so far.',
      'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},
                    'timeout':{'type':'integer','description':'seconds, up to 600'}}},
-    {'name':'development_database_read','description':'Read unredacted records from the existing real Asuna database, bound to this local owner development task. No public database endpoint. Up to 50 rows a call (more is served as the first 50; page with skip). Relationships, documents and her self descriptions are state_heads/state_revisions rows.',
+    {'name':'development_database_read','description':'Read unredacted records from the existing real Asuna database, bound to this local owner development task. No public database endpoint. Up to 50 rows a call (more is served as the first 50; page with skip). Relationships, documents and your self descriptions are state_heads/state_revisions rows.',
      'parameters':{'collection':{'type':'string','required':True},
                    'filter':{'type':'object','additionalProperties':True},
                    'projection':{'type':'object','additionalProperties':True},
@@ -24,7 +24,7 @@ DEVELOPMENT_NAMES = {tool['name'] for tool in DEVELOPMENT_TOOLS}
 PERSONA_JOB_TOOLS = [
     {'name': 'persona_job_run', 'description': 'Run one of the selected persona package\'s published jobs in the sandbox, '
      'read and analyse only: it is always a dry run, so documents, parameters, memories and mood are never written from here '
-     '(the character writes those herself). Returns status, exit code, counts and report artifact ids only; reports are read in the memory tab.',
+     '(your talking half writes those itself). Returns status, exit code, counts and report artifact ids only; reports are read in the memory tab.',
      'parameters': {'job': {'type': 'string', 'required': True},
                     'args': {'type': 'object', 'additionalProperties': True}}},
 ]

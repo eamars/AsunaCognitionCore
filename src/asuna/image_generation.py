@@ -34,7 +34,7 @@ GENERATE_IMAGE_TOOL = {
                     'is reported with its prompt_id: call again with job=<prompt_id> to collect it instead of '
                     'drawing again. Nobody has seen the picture until you look: read_image with '
                     'artifact.artifact_id, compare it with what was asked, and draw again (better prompt or another '
-                    'workflow) when it is wrong. The picture is registered as her own image, so a later turn can '
+                    'workflow) when it is wrong. The picture is registered as your own image, so a later turn can '
                     'send it with a message; show it in a report as a relative Markdown image. Returns the '
                     'workflow and its prompting guidance, seed, size, bytes and SHA-256 actually written, or the '
                     'service\'s real refusal.'),

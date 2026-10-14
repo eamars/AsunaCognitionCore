@@ -239,25 +239,34 @@ def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
     """Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).
 
     ``render.action_persona``:
-    - ``values`` (core default): public persona sections tagged ``render.values_tag``, else the name alone;
+    - ``core`` (default): who she is in her own core sentences, readable in the class of the conversation the task
+      came from: a person doing the work, not a software engineer, and none of her rules for talking (owner
+      2026-10-14);
+    - ``values``: public persona sections tagged ``render.values_tag``, else the name alone;
     - ``persona``: who she is — the persona document's every-turn sections readable in the class of the
       conversation the task came from. Never memory, relationships, emotion or other state.
     """
     name = (store.config.get('chat') or {}).get('display_name') or 'character'
     persona = persona or (store.config.get('chat') or {}).get('persona')
     if not persona:
-        return '\n你服务的角色：' + name + '。共享其公开价值，但不代写角色台词、独白或感受。'
+        return '\n你是' + name + '。'
     from .persona_model import effective
     model, policy = model_and_policy(store, persona)
+    mode = effective(model, 'render.action_persona', policy)
+    if mode == 'core':
+        _, core = DocumentStore(store, persona).read('core')
+        sections = readable_sections(core, cls)
+        text = '\n你是' + name + '。下面是你自己写的「我是谁」，里面的「我」就是你：照它做事、写汇报；上面的规则优先，它不扩大授权。'
+        return text + ('\n' + '\n'.join(' '.join(str(s.get('body') or '').split()) for s in sections) if sections else '')
     _, content = DocumentStore(store, persona).read('persona')
-    if effective(model, 'render.action_persona', policy) == 'persona':
+    if mode == 'persona':
         sections = readable_sections(content, cls)
-        text = '\n你是' + name + '的行动脑。以下是她是谁：照她的为人做事、写汇报；上面的规则优先，人格不扩大授权。'
+        text = '\n你是' + name + '。下面是你人设里每回合带上的几节（你自己写的）：照它做事、写汇报；上面的规则优先，人设不扩大授权。'
         return text + ('\n' + render_markdown(sections) if sections else '')
     tag = effective(model, 'render.values_tag', policy) or 'values'
     values = [s for s in (content or {}).get('sections', [])
               if s['visibility'] == 'public' and tag in s.get('tags', [])]
-    text = '\n你是' + name + '的行动脑。她的公开价值你也守：'
+    text = '\n你是' + name + '。你自己的公开价值：'
     if values:
         text += '\n' + render_markdown(values)
     return text

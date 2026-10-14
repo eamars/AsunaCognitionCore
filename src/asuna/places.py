@@ -91,7 +91,7 @@ ERRAND_CHARS = 500
 ERRANDS_PER_DAY = 20
 ERRANDS_SHOWN = 5
 ERRAND_STATES = {'answered': '发出去了，那边有人接', 'unanswered': '发出去了', 'sending': '正在发',
-                 'not_sent': '没发出去', 'silent': '她没发', 'notes': '她没发', 'failed': '没办成（出错了）',
+                 'not_sent': '没发出去', 'silent': '那边的你没发', 'notes': '那边的你没发', 'failed': '没办成（出错了）',
                  'pending': '还在路上'}
 
 

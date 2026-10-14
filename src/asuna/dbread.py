@@ -22,7 +22,7 @@ HIDDEN = ('embedding', 'event.raw')        # large, and never what a question is
 ENV = {'uri': 'ASUNA_MONGO_URI', 'database': 'ASUNA_DATABASE', 'zone': 'ASUNA_TIMEZONE'}
 # Names people reach for that are not collections, and where that thing is kept.
 ELSEWHERE = {
-    'documents': '她的文档在 state_heads（_id 形如 doc:<主人>:<名字>，revision_id 指向当前版本）和 state_revisions'
+    'documents': '你的文档在 state_heads（_id 形如 doc:<主人>:<名字>，revision_id 指向当前版本）和 state_revisions'
                  '（content.sections 是正文）',
     'monologues': '心里话在 memory_units，kind 是 monologue',
     'summaries': '交流摘要在 memory_units，kind 是 dialogue_summary',

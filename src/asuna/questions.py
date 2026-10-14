@@ -234,8 +234,12 @@ def _lines_after(store, qid, source, line):
     named = list(store.db.messages.find({**base, 'event.raw.%s.question' % ANSWER_KEY: qid}).sort('scene_seq', 1))
     if named:
         return named
-    first = store.db.messages.find_one({**base, 'scene_seq': {'$gt': line.get('scene_seq') or 0},
-                                        'event.raw.%s' % ANSWER_KEY: {'$exists': False}}, sort=[('scene_seq', 1)])
+    after = {**base, 'scene_seq': {'$gt': line.get('scene_seq') or 0}, 'event.raw.%s' % ANSWER_KEY: {'$exists': False}}
+    from . import channel_kinds
+    marks = channel_kinds.marks_answers(source['scene_id'])
+    if marks:
+        after['author'] = {'$ne': marks}        # who can mark an answer answers only by marking it; others by their line
+    first = store.db.messages.find_one(after, sort=[('scene_seq', 1)])
     return [first] if first else []
 
 
@@ -245,14 +249,16 @@ def _source_now(store, qid, source, persona, moment):
     if source.get('settled'):                    # never asked there, or the action brain's work ended without a report
         return source['state'], source.get('answers') or []
     if source['kind'] == 'action':
+        from .tasks import TERMINAL
         task = store.db.tasks.find_one({'_id': source.get('task')}, {'state': 1, 'finished_at': 1, 'result.text': 1})
         if not task:
             return 'not_done', []
-        if task['state'] == 'DONE' and (task.get('result') or {}).get('text'):
+        if task['state'] not in TERMINAL:
+            return 'working', []
+        # Its report is the answer, however the work ended (RETURNED is the usual end); none came back: not done.
+        if (task.get('result') or {}).get('text'):
             return 'answered', [{'task': task['_id'], 'at': task.get('finished_at'), 'by': ACTION}]
-        if task['state'] in ('CANCELLED', 'FAILED') or task['state'] == 'DONE':
-            return 'not_done', []
-        return 'working', []
+        return 'not_done', []
     line = _question_line(store, source)
     if not line:
         episode = store.db.episodes.find_one({'_id': source.get('episode')}, {'state': 1}) if source.get('episode') else None

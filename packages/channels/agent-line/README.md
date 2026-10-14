@@ -43,7 +43,7 @@ its own line: posting as that route, claiming and confirming her words there. An
 key file, so the line's boundary is the machine; what it opens is one agent's voice in her home, never the owner's
 voice or chat.
 
-When she asks on a line with `ask` (`questions_from_program` shows the question's id), the first message on that line
-after her question is its answer; `send --answers <id>` names the question a message answers instead, for an earlier
-question or one of several. The developer's line, where her old `message_developer` goes, is the route with
+When she asks on a line with `ask` (`questions_from_program` shows the question's id), a message answers it only with
+`send --answers <id>`; an agent's message without it answers nothing. A line the owner writes there from the Web
+(he cannot mark one) is still taken as the answer when it is the first after her question. The developer's line, where her old `message_developer` goes, is the route with
 `"developer": true`, else the route named `claude-code`.

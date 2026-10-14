@@ -78,6 +78,14 @@ def home(identifier):
     return bool(getattr(of(identifier), 'HOME', False))
 
 
+def marks_answers(identifier):
+    """Who on this line marks the lines that answer her questions (agent_line.py send --answers), so an unmarked
+    line of theirs answers none: their person id, or None where nobody marks."""
+    kind = of(identifier)
+    who = getattr(kind, 'answerer', None)
+    return who(identifier) if who and getattr(kind, 'MARKS_ANSWERS', False) else None
+
+
 def owner_joins(identifier):
     """A scene of a kind the owner joins from the Web (ADR-051): a home line only."""
     return home(identifier) and bool(getattr(of(identifier), 'OWNER_JOINS', False))

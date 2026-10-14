@@ -118,10 +118,12 @@ def test_the_action_brain_answers_with_its_report(store):
     row = asked(store, lane)
     task = store.db.tasks.find_one({'_id': row['sources'][0]['task']})
     assert '这个词是什么意思？' in task['brief']
-    store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'DONE', 'finished_at': task['created_at'],
+    store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'RETURNED', 'finished_at': task['created_at'],
                                                               'result': {'text': '意思是这样。'}}})
     found = questions.read(store, 'P1', row['_id'])
-    assert found['to'][0]['state'] == '答了' and found['to'][0]['answers'][0]['text'] == '意思是这样。'
+    assert found['to'][0]['state'] == '答了' and found['to'][0]['answers'][0]['text'] == '意思是这样。', 'its usual end'
+    store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'BLOCKED', 'result': {}}})
+    assert questions.read(store, 'P1', row['_id'])['to'][0]['state'] != '答了', 'ended without a report: not done'
 
 
 def test_a_place_outside_home_is_refused_in_words(store):
@@ -184,3 +186,30 @@ def test_a_line_naming_the_question_is_its_answer_over_the_next_line(store):
          'event': {'raw': {questions.ANSWER_KEY: {'question': 'q-e5f6a7b8'}}}}])
     answered = questions.refresh(store, row)
     assert [answer['line'] for answer in answered['sources'][0]['answers']] == ['in-3']
+
+
+def test_on_an_agent_line_only_a_marked_line_of_the_agents_answers_and_the_owners_line_still_does(store):
+    from asuna import channel_kinds
+    channel_kinds.load([{'python': channel_kinds.Path(__file__).resolve().parents[1] / 'packages' / 'channels' / 'agent-line'
+                         / 'python', 'module': 'agent_line'}])
+    line = 'agent:home:dm:helper'
+    store.put('scenes', {'_id': line, 'kind': 'dm', 'scope_key': 'scene:' + line, 'policy_epoch': 1, 'members': []})
+    base = {'schema_version': 1, 'scene_id': line, 'policy_epoch': 1, 'scope_key': 'scene:' + line, 'event': {}}
+
+    def ask(qid, seq):
+        ep = {'_id': 'ep-' + qid, 'scene_id': line, 'persona': 'P1'}
+        row = questions.record(store, ep, qid, '问一句', '一小时',
+                               [{'to': 'x', 'scene_id': line, 'kind': 'here', 'name': '线', 'episode': ep['_id']}])
+        store.db.messages.insert_one({**base, '_id': 'out-' + qid, 'direction': 'outbound', 'phase': 'SPEAK',
+                                      'episode_id': ep['_id'], 'scene_seq': seq, 'author': 'me', 'text': '问一句',
+                                      'delivery_state': 'DELIVERED'})
+        return row
+    first = ask('q-a1a1a1a1', 1)
+    store.db.messages.insert_one({**base, '_id': 'in-2', 'direction': 'inbound', 'scene_seq': 2, 'author': 'agent:helper',
+                                  'text': '说件别的事', 'received_at': '2026-10-14T00:01:00+00:00'})
+    unmarked = questions.refresh(store, store_row(store, first['_id']))
+    assert unmarked['sources'][0]['state'] != 'answered', "the agent's unmarked line answers nothing"
+    store.db.messages.insert_one({**base, '_id': 'in-3', 'direction': 'inbound', 'scene_seq': 3, 'author': 'local-user',
+                                  'text': '我来答：可以', 'received_at': '2026-10-14T00:02:00+00:00'})
+    answered = questions.refresh(store, store_row(store, first['_id']))
+    assert [answer['line'] for answer in answered['sources'][0]['answers']] == ['in-3'], "the owner's line, as before"

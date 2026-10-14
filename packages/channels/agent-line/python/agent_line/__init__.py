@@ -13,6 +13,7 @@ PEER_LINE = True                  # she can open/close each line herself (asuna/
 HOME = True                       # a trusted home conversation (owner_private), like the DSH peer line
 ROUTE_KEYS = True                 # each route has a key of its own that opens only that line (channels.route_key)
 OWNER_JOINS = True                # the owner writes in its conversations from the Web too, as the owner (ADR-051)
+MARKS_ANSWERS = True              # the agent marks a line that answers her question (send --answers); the owner cannot
 
 ACCOUNT = re.compile(r'[a-z][a-z0-9-]{0,39}')
 INBOUND_MENTION = re.compile(r'(?!)')        # a direct line has no @ mentions
@@ -27,6 +28,12 @@ def account_of(person):
     """The account inside an agent:<account> person id, else None."""
     head, _, account = str(person or '').partition(':')
     return account if head == KIND and ACCOUNT.fullmatch(account) else None
+
+
+def answerer(scene):
+    """The agent of a line: the one who marks its answers."""
+    parts = scene_parts(scene)
+    return person_id(parts[2]) if parts else None
 
 
 def scene_id(bot, kind, target):

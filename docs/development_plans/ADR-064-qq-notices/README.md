@@ -778,3 +778,19 @@ the old sentence); `unsent_from_program` once after unsent words; a group's `que
 question of hers there is open. System prompt: the sticker note's sending sentence changed length by a few
 characters. Action brain: nothing. The adapter needs her publish (a picture without words; `group_poke`,
 `friend_poke`, `set_msg_emoji_like`; `poke` declared only when NapCat's packet backend answers).
+
+## After install (2026-10-14)
+
+- **Every group reply failed for the first half hour.** The channel's claim still required a finished turn
+  (`PUBLICATION_EPISODE_STALE`) though the publisher let a reply part leave mid-turn; she always thinks or calls
+  `stay_silent` after `reply`. Fixed at the claim (03d27bc4); a reply part was delivered in a group after her restart.
+- **Words beside `stay_silent` were dropped unseen** (four turns in one group): the hand-back skipped turns with
+  `stay_silent`, though elsewhere such words leave. Now they come back once, whole as written, `stay_silent` or not
+  (her condition: as written, so she can send them as they are).
+- **Poke is always declared** (adapter 0.9.1): NapCat 4.18.0 does not know `get_packet_status` (retcode 1404, its
+  own words 「不支持的API get_packet_status」), yet pokes work (the owner tried). A refused poke comes back as a
+  failed part.
+- **Names, not numbers** (the owner saw 「#7 只接单跑腿」 in a group): of her last 1,048 delivered group lines, 7
+  showed someone's number to people (labels without @ already leave as names; these were `#7`, `name #26`,
+  `@name #12`). `reply`'s `text` now says, in her wording: 「提人写名字；要 @ 到人写 @[名字 #编号]；光一个 #7 别人看不懂」.
+  Cost: +37 characters on the character brain (21,121 → 21,158; tiered 21,023 → 21,060), QQ turns only.

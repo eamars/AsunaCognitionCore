@@ -12,11 +12,12 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (33, 21121)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
-                              # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88
+CHARACTER = (33, 21158)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+                              # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
+                              # reply text: name people, @ by the whole label, a bare #7 means nothing to them (+37, her wording 2026-10-14)
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (32, 21023)
+CHARACTER_TIERED = (32, 21060)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

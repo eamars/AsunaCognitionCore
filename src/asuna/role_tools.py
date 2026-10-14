@@ -133,7 +133,7 @@ TOOLS = {
                       'description': '这次要发的，按顺序；text 一回合加起来最多几行，speak_from_program 写着',
                       'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                           'kind': _s('哪一种', required=True, enum=list(REPLY_KINDS)),
-                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
+                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数。提人写名字；要 @ 到人写 @[名字 #编号]；光一个 #7 别人看不懂'),
                           'name': _s('sticker：你收着的表情包的名字'),
                           'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
                           'who': _s('poke 戳谁、react 给谁的话点：照抄标签；私聊里不写就是对方'),

@@ -8,6 +8,9 @@ A persona package for `@asuna/cognition-core` 0.2.x (persona contract v2) in DSH
 - `persona-model.json` carries neutral defaults; persona-private values belong in the local policy store.
 - `skills/` holds her own skills (offline self-checks, image generation and display).
 - `resources-provenance.json` records the source hashes of the distributed resources.
+- `xiaoman-official-ref-v2.png` is the official character reference image — the base image for drawing Xiaoman from
+  now on (owner-approved for the public repo, 2026-10-14). It is a repo asset only: not listed in `package.json`
+  `files`, so it stays out of the published npm package. The v1 alternative is kept out of the repo.
 
 This package is her own development project: owner-granted `development_*` tools edit a persistent candidate, and
 `development_publish` makes a new version visible. No private configuration, conversation log, inbox/outbox,

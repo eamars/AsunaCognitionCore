@@ -131,9 +131,8 @@ def describe(until, zone):
     if until == 'reopen':
         return '关着，等你自己打开'
     from zoneinfo import ZoneInfo
-    local = until.astimezone(ZoneInfo(zone))
-    return '关着，到 %d月%d日 %02d:%02d 自己打开' % (
-        local.month, local.day, local.hour, local.minute)
+    from .local_time import face
+    return '关着，到 %s 自己打开' % face(until, ZoneInfo(zone))
 
 
 def view(store, lines, zone, moment=None):

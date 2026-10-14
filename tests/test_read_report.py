@@ -54,6 +54,7 @@ def test_the_short_hand_back_points_to_the_pages_too(store):
 
 def test_the_hand_back_keeps_its_finish_time_utc_and_her_turn_shows_it_local_once(store):
     """The stored event keeps UTC; the turn localizes it once (localizing it here too showed it 13 hours late)."""
+    from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
     from asuna import local_time
     task = {**task_row(store, '短报告'), 'finished_at': '2026-10-14T01:28:00+00:00'}
@@ -61,8 +62,8 @@ def test_the_hand_back_keeps_its_finish_time_utc_and_her_turn_shows_it_local_onc
     service.store = store
     value = service._short_event(task, task)['trusted_context_events'][0]
     assert value['finished_at'] == '2026-10-14T01:28:00+00:00'
-    shown = local_time.for_model(value, {'tz': ZoneInfo('Pacific/Auckland')})
-    assert shown['finished_at'] == '2026-10-14 14:28'
+    shown = local_time.for_model(value, {'tz': ZoneInfo('Pacific/Auckland')}, now=datetime(2026, 10, 14, 2, tzinfo=timezone.utc))
+    assert shown['finished_at'] == '10/14 14:28'
 
 
 def test_she_turns_the_pages_of_a_report_in_this_conversation(store):

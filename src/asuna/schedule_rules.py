@@ -227,10 +227,10 @@ def next_fire(rule, tz, moment=None):
             fire, dst = wall_to_utc(datetime.fromisoformat(rule['at']), tz)
             if dst == 'gap':
                 raise ValueError('SCHEDULE_LOCAL_TIME_MISSING: %s 在这个时区不存在（拨快跳过），顺延的话是 %s'
-                                 % (rule['at'], fire.astimezone(tz).isoformat(timespec='minutes')))
+                                 % (rule['at'], _local_text(fire, tz)))
         if fire <= moment:
             raise ValueError('SCHEDULE_TIME_ALREADY_PAST: %s 已经过了（当时是 %s）；改成之后的时刻'
-                             % (rule['at'], moment.astimezone(tz).isoformat(timespec='minutes')))
+                             % (rule['at'], _local_text(moment, tz)))
         return fire
     clock = rule['clock']
     hour, minute = (int(part) for part in clock['time'].split(':'))
@@ -293,7 +293,17 @@ def native_payload(rule, fire_at, moment=None):
 
 # ── 给人看的说法 ───────────────────────────────────────────────
 def _local_text(moment, tz):
-    return _aware(moment).astimezone(tz).isoformat(timespec='minutes')
+    from .local_time import face
+    return face(_aware(moment), tz)
+
+
+def _wall_text(at, tz):
+    """A plan's `at` as written (a local wall time, or UTC when marked) on her clock face."""
+    try:
+        moment = datetime.fromisoformat(str(at).replace('Z', '+00:00'))
+    except ValueError:
+        return str(at)
+    return _local_text(moment if moment.tzinfo else moment.replace(tzinfo=tz), tz)
 
 
 def describe(rule, tz):
@@ -309,7 +319,7 @@ def describe(rule, tz):
             ('每 %d 小时' % (seconds // 3600)) if seconds % 3600 == 0 and seconds >= 3600 else '每 %d 分钟' % (seconds // 60))
         return '%s重复（原生自己重复）' % human
     if kind == 'at':
-        return '一次性：%s' % rule['at']
+        return '一次性：%s' % (_wall_text(rule['at'], timezone.utc if rule.get('at_utc') else tz))
     clock = rule['clock']
     days = clock.get('weekdays')
     who = '每天' if not days else '每' + '、'.join(WEEKDAY_NAMES[d] for d in days)
@@ -381,17 +391,18 @@ def local_clock(zone, moment=None):
     note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
             'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
-    return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
+    from .local_time import face
+    return {'now_local': face(local, tz, year=True), 'weekday': WEEKDAY_NAMES[local.weekday()],
             'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 
 def line_stamp(zone, value):
-    """When one stored line was said, on her clock face (month/day hour:minute); '' when unknown."""
+    """When one stored line was said, on her clock face (local_time.face); '' when unknown."""
     if not value:
         return ''
     try:
         moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     except ValueError:
         return ''
-    local = _aware(moment).astimezone(zone['tz'])
-    return '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
+    from .local_time import face
+    return face(_aware(moment), zone['tz'])

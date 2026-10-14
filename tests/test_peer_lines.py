@@ -27,7 +27,10 @@ def test_she_closes_for_an_hour_until_morning_or_until_she_reopens(store):
     lines.set_line(store, SCENE, closed=True, choice='until_morning', zone='Etc/GMT-9', moment=moment)
     until = lines.closed_until(store, SCENE, moment)
     assert until == datetime(2026, 10, 5, 23, 0, tzinfo=timezone.utc)      # 08:00 the next local morning
-    assert '10月6日 08:00' in lines.describe(until, 'Etc/GMT-9')
+    from zoneinfo import ZoneInfo
+    from asuna.local_time import face
+    assert lines.describe(until, 'Etc/GMT-9') == '关着，到 %s 自己打开' % face(until, ZoneInfo('Etc/GMT-9'))
+    assert face(until, ZoneInfo('Etc/GMT-9')).endswith('10/6 08:00')
     assert not lines.is_closed(store, SCENE, datetime(2026, 10, 5, 23, 1, tzinfo=timezone.utc))   # it reopens by itself
     lines.set_line(store, SCENE, closed=True, choice='until_reopened', zone='UTC', moment=moment)
     assert lines.closed_until(store, SCENE, moment) == 'reopen' and '等你自己打开' in lines.describe('reopen', 'UTC')

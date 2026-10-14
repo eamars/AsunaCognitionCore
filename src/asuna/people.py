@@ -37,6 +37,8 @@ LABEL = r'\[(?P<name>[^\[\]#\n]*)#\s*(?P<handle>\d{1,6})\s*\]'
 LABEL_MENTION = re.compile(r'@\s*(?P<open>\[\s*)?(?:[^\s@\[\]#]{1,12}\s*)?' + LABEL + r'(?(open)(?:\s*\])?)'
                            r'|@#(?P<bare>\d{1,6})')
 BARE_LABEL = re.compile(LABEL)
+# A number in what she writes that may be her label's number for someone: #7 alone, or after @name.
+NUMBER = re.compile(r'(?<![A-Za-z0-9_#&/])(?:@[^\s@#\[\]]{1,20}\s*)?#(?P<handle>\d{1,6})(?![0-9A-Za-z_])')
 # What someone types that looks like a label: shown as text, so only the program's labels have that form (ADR-057).
 TYPED_LABEL = re.compile(r'\[(?P<name>[^\[\]#\n]*)#(?P<handle>\s*\d{1,6}\s*)\]')
 TYPED_HANDLE = re.compile(r'@#(?=\d)')
@@ -387,6 +389,14 @@ class People:
             if row and platform.ACCOUNT.fullmatch(str(row.get('account_id') or '')):
                 return str(row['account_id'])
         return None
+
+    def numbers(self, scene, text):
+        """Numbers in her words that are someone's here, outside a label (a label leaves as a name or an @):
+        [(what she wrote, their label)]. The people here would read only the number."""
+        by_handle = {str(d.get('handle')): d for d in self.roster(scene['_id']).values() if d.get('person') != self.self_id}
+        plain = BARE_LABEL.sub(' ', LABEL_MENTION.sub(' ', text or ''))
+        return [(m.group(0), self.label(by_handle[m.group('handle')])) for m in NUMBER.finditer(plain)
+                if m.group('handle') in by_handle]
 
     def outbound(self, scene, text):
         """Labels never leave the program; the stored text keeps what she wrote.

@@ -791,6 +791,10 @@ characters. Action brain: nothing. The adapter needs her publish (a picture with
   own words 「不支持的API get_packet_status」), yet pokes work (the owner tried). A refused poke comes back as a
   failed part.
 - **Names, not numbers** (the owner saw 「#7 只接单跑腿」 in a group): of her last 1,048 delivered group lines, 7
-  showed someone's number to people (labels without @ already leave as names; these were `#7`, `name #26`,
-  `@name #12`). `reply`'s `text` now says, in her wording: 「提人写名字；要 @ 到人写 @[名字 #编号]；光一个 #7 别人看不懂」.
-  Cost: +37 characters on the character brain (21,121 → 21,158; tiered 21,023 → 21,060), QQ turns only.
+  showed someone's number to people (a whole label without @ already leaves as a name; these were `#7`, `name #26`,
+  `@name #12`), and none of her bare `#n` meant anything but a person. By design, not by reminder (owner): a text
+  part with a `#n` that is someone here, alone or after `@name`, is sent back with whose number it is
+  (「第 1 条里「#7」是 [名字 #7] 的编号，这里的人看不懂：写名字，或 @ 整个标签」); a number she means as itself goes
+  with `force=yes`. Not converted: the program does not say it for her (her words: being stopped is her saying it
+  again; force is in the open). Each stop is in her tool record. Cost: `reply` gains `force`, +90 characters on the
+  character brain (21,121 → 21,211; tiered 21,023 → 21,113), QQ only.

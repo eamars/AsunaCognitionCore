@@ -133,7 +133,7 @@ TOOLS = {
                       'description': '这次要发的，按顺序；text 一回合加起来最多几行，speak_from_program 写着',
                       'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                           'kind': _s('哪一种', required=True, enum=list(REPLY_KINDS)),
-                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数。提人写名字；要 @ 到人写 @[名字 #编号]；光一个 #7 别人看不懂'),
+                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
                           'name': _s('sticker：你收着的表情包的名字'),
                           'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
                           'who': _s('poke 戳谁、react 给谁的话点：照抄标签；私聊里不写就是对方'),
@@ -142,7 +142,8 @@ TOOLS = {
             'quote': _s('群里：source 引用叫你的那条，none 不引用；不写由程序定', enum=['source', 'none']),
             'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
                        enum=['no', 'question']),
-            'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天'])},
+            'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
+            'force': _s('yes：text 里的 #数字照原样发', enum=['yes', 'no'])},
     },
     'stay_silent': {
         'description': ('结束这回合，不再说话。回执会说这一回合发出了什么。只写在心里话里的话没有说过。'),
@@ -1294,6 +1295,10 @@ class RoleTools:
         texts = list(before.get('texts') or [])
         lines = int(before.get('lines') or 0)
         problems, planned, over = [], [], []
+        # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
+        # overrule with force, not a conversion).
+        from .people import People
+        people, numbered = None if args.get('force') else People(self.store, ep['persona']), False
         for index, part in enumerate(parts, 1):
             part = part if isinstance(part, dict) else {}
             kind = part.get('kind')
@@ -1315,6 +1320,10 @@ class RoleTools:
                     problems.append('第 %d 条：%s' % (index, face))
                 elif same in texts:
                     problems.append('第 %d 条这回合已经发过一样的' % index)
+                elif people and people.numbers(scene, text):
+                    numbered = True
+                    problems.append('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
+                        '「%s」是 %s 的编号' % found for found in people.numbers(scene, text))))
                 elif lines + chat_lines(text) > most:      # lines: this turn's, earlier calls and this one so far
                     over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
                 else:
@@ -1361,7 +1370,8 @@ class RoleTools:
             problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行）：%s'
                             % (most, '；'.join(over)))
         if problems:
-            raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems))
+            raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems)
+                          + ('真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else ''))
         changes = {}
         if quote:
             changes['quote'] = quote

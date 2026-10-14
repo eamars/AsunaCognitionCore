@@ -73,6 +73,25 @@ def test_a_part_leaves_while_her_turn_still_runs(store):
     assert done == {'status': 'DELIVERED'}
 
 
+def test_a_number_that_is_someone_here_is_sent_back_and_force_sends_it_as_written(store):
+    world(store)
+    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': [{'kind': 'text', 'text': '#2 只接单，@阿杰 #2 你说呢'}]}),
+                                      ('reply', {'parts': [{'kind': 'text', 'text': 'issue #2 修好了'}], 'force': 'yes'})])])
+    ep = Coordinator(store, lane).ingest(mention('num-1'), persona='P1')
+    (refused, no), (_, yes) = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    assert not no and '「#2」是 [阿杰 #2] 的编号' in refused and '「@阿杰 #2」是 [阿杰 #2] 的编号' in refused
+    assert refused.endswith('真是别的数（PR 号之类），原样加 force=yes 再调用一次。')
+    assert yes, 'force sends it as written'
+    assert [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'})] == ['issue #2 修好了']
+
+
+def test_a_whole_label_or_a_number_of_nobody_here_passes(store):
+    world(store)
+    _, result, ok, rows = turn(store, 'num-2', [{'kind': 'text', 'text': '[阿杰 #2] 说的对，#99 不是谁'}])
+    assert ok, result
+    assert [row['text'] for row in rows] == ['[阿杰 #2] 说的对，#99 不是谁']
+
+
 def test_a_wrong_person_or_face_sends_nothing_and_says_why(store):
     world(store)
     _, result, ok, rows = turn(store, 'act-3', [{'kind': 'text', 'text': '嗯'}, {'kind': 'poke', 'who': '#99'},

@@ -139,12 +139,18 @@ function fold(path, value, seen) {
   return { value: folded ? out : value, sent, folded, kept };
 }
 
-/** "其余 4 条同前（读过了 3、已送到 1）": how many items were folded, and their states when they have one. */
+/** The fields an item is acted on by (a plan's _id, a picture's artifact_id, a place): copied, never recalled. */
+const HANDLES = ['_id', 'id', 'plan_id', 'task_id', 'artifact_id', 'event_id', 'place'];
+
+/** "其余 4 条同前（读过了 3、已送到 1）：p1、p2、p3、p4": how many items were folded, their states when they have one,
+ * and the handle of each that has one. The copy shown earlier can be far back; the handle to act on it is here. */
 function sameAsBefore(folded) {
   const states = new Map();
   for (const item of folded) if (typeof item.state === 'string') states.set(item.state, (states.get(item.state) ?? 0) + 1);
   const tally = [...states].map(([state, count]) => state + ' ' + count).join('、');
-  return '其余 ' + folded.length + ' 条同前' + (tally ? '（' + tally + '）' : '');
+  const handles = folded.map(item => HANDLES.map(field => item[field]).find(value => typeof value === 'string' && value))
+    .filter(Boolean);
+  return '其余 ' + folded.length + ' 条同前' + (tally ? '（' + tally + '）' : '') + (handles.length ? '：' + handles.join('、') : '');
 }
 
 /** The context this notice sends, what it carries, and what it left out (for the audit). */

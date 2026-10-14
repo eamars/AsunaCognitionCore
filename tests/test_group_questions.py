@@ -119,3 +119,19 @@ def test_a_question_line_is_waited_on_by_the_question_not_listed_again(store):
                                       {'$set': {'delivery_state': 'DELIVERED', 'receipt_at': now.isoformat()}})
         listed = waiting.pending(store, [SCENE], now + timedelta(minutes=1), 'P1')
         assert (listed == []) if key == 'q-at' else (len(listed) == 1), (key, listed)
+
+
+def test_many_closed_at_once_are_told_in_one_line(store):
+    """Yesterday's 63 answered questions closing together are one line with counts, told once."""
+    world(store)
+    ask(store)
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    [row] = list(store.db.questions.find())
+    copies = [{**row, '_id': 'q-%08x' % n, 'state': 'closed', 'told_in': [],
+               'closed': {'at': row['asked_at'], 'by': 'program', 'took': questions.CLOSED_TOOK['answered']}}
+              for n in range(questions.SHOWN + 2)]
+    store.db.questions.delete_many({})
+    store.db.questions.insert_many(copies)
+    told = questions.group_block(store, 'P1', scene)
+    assert told['items'] == [questions.TOLD_MANY % (len(copies), '程序收的：都有了结果，有回答 %d 个' % len(copies))]
+    assert questions.group_block(store, 'P1', scene) is None, 'told once'

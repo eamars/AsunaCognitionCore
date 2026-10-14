@@ -637,6 +637,8 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         labeler = (parts or {}).get('archive_labeler')
         who = labeler(doc) if callable(labeler) else doc.get('historical_display_name') or author
         return dict(base, archived=True, who=who, speaker=who, person_id='', names=[])
+    if doc.get("errand"):
+        base["errand"] = "差事：家里托你来说的"          # ADR-066: her line sent on an errand from home
     if outbound_media is not None:
         # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
         slot = outbound_media.history_slot(doc)

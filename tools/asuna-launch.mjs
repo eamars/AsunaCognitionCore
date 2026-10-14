@@ -311,7 +311,7 @@ async function main() {
 // so finished ones made the list and the store grow by hundreds a day (6,070 rows, 12.6 MB, ~5 s per load on 10-13;
 // gate looks ~80 a day since each became a fresh session). Before DSH starts, such sessions left untouched for a day
 // leave the store for the profile's archive, and the archive keeps them for two weeks.
-const RETIRED_PREFIXES = ['asuna-summary-', 'asuna-attend-'];
+const RETIRED_PREFIXES = ['asuna-summary-', 'asuna-attend-', 'asuna-errand-'];
 const RETIRE_AFTER_MS = 24 * 3600 * 1000;
 const ARCHIVE_KEEP_MS = 14 * 24 * 3600 * 1000;
 

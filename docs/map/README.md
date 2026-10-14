@@ -33,8 +33,12 @@ Every turn has a **class**, decided by the program from the conversation and the
 - **What crosses is always hers and always visible.**
   - A note she writes from one conversation to another (`notes`) arrives marked trusted when it comes from home and
     untrusted from outside. An untrusted one opens a turn that can only read, answer and note ideas.
-  - An errand (the owner sends her elsewhere) and a visit (she goes to a group) carry only the words she takes there
-    (`places`).
+  - A visit (she goes to a group) carries only the words she takes there (`places`). An errand (home sends her
+    elsewhere) is a home turn speaking into another place (`errands`): it runs in its own copy of that conversation
+    with home's authority, and only what she says there goes out; the request and what she read stay home. The
+    conversation's next turn hears once that home sent her and what she said.
+  - An untrusted note can open an errand only when it carries the owner's own line, checked by his account
+    (`notes.owner_line`).
   - Public lines never reach home live. A home heartbeat sees, from outside, only her own delivered words and how
     the groups are going (`places.places_block`, `places.elsewhere`). What others said comes home only through her
     own review: her idea notebook and her night's promotion of a memory
@@ -229,6 +233,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`watches`](../../src/asuna/watches.py) — Her watchlist (owner 2026-10-06): people she wants to hear about when they speak, in any conversation.
 - [`waiting`](../../src/asuna/waiting.py) — Who she is still waiting for: her lines of the last hour in a group that called someone with an @, or asked for an answer with `await_answer` wait=yes, whose people have not spoken there since.
 - [`places`](../../src/asuna/places.py) — Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what a visit sees.
+- [`errands`](../../src/asuna/errands.py) — An errand carries home (ADR-066).
 - [`focus`](../../src/asuna/focus.py) — Her active and resting groups (ADR-039): she stays present in a few groups and lets the others rest.
 - [`switches`](../../src/asuna/switches.py) — Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
 - [`own_mute`](../../src/asuna/own_mute.py) — Her own mute in a group: one state slot per group conversation, so she knows where her words cannot go out.

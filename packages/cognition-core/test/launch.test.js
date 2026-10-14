@@ -164,11 +164,12 @@ test('finished one-shot sessions (summaries, gate looks) leave the session store
     await make(project, 'asuna-summary-old', 2 * day);
     await make(project, 'asuna-summary-fresh', 3600 * 1000);           // may still be asked again (a retry)
     await make(project, 'asuna-attend-old', 2 * day);                    // a gate look keeps nothing for later
+    await make(project, 'asuna-errand-old', 2 * day);                    // an errand's copy of a conversation (ADR-066)
     await make(project, 'asuna-role-old', 30 * day);                     // her conversations are never touched
     await make(path.join(archive, 'p'), 'asuna-summary-gone', 15 * day);
-    assert.deepEqual(await retireOneShotSessions(home, archive, now), { moved: 2, dropped: 1 });
+    assert.deepEqual(await retireOneShotSessions(home, archive, now), { moved: 3, dropped: 1 });
     assert.deepEqual((await fs.readdir(project)).sort(), ['asuna-role-old', 'asuna-summary-fresh']);
-    assert.deepEqual((await fs.readdir(path.join(archive, 'p'))).sort(), ['asuna-attend-old', 'asuna-summary-old']);
+    assert.deepEqual((await fs.readdir(path.join(archive, 'p'))).sort(), ['asuna-attend-old', 'asuna-errand-old', 'asuna-summary-old']);
     assert.deepEqual(await retireOneShotSessions(path.join(dir, 'none'), path.join(dir, 'none-archive'), now), { moved: 0, dropped: 0 });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

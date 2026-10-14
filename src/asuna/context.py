@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import traceback
 from .config import character_id, excerpt, redact_text
-from . import visibility
+from . import errands as _errands, visibility
 from . import handover as _handover
 from .render import render_system, readable_sections, model_and_policy
 from .documents import DocumentStore, render_markdown
@@ -205,6 +205,19 @@ INVENTED_MARK = '（自述编写，非共同经历）'
 # Where a recalled record comes from, in the words her own items use (memory_tiers.FROM_NATURE).
 MEMORY_FROM = {'reported_speech': '别人说的', 'public_statement': '我说出口的', 'derived_summary': '整理出来的摘要',
                'character_interpretation': '我自己的判断'}
+
+def _errand_from_here(store, event):
+    """Whether this home turn may send her on an errand (ADR-066; role_tools.ERRAND_FROM): someone speaking, her plan
+    due, a note of hers from home, or a note from outside that carries the owner's own line."""
+    kind = event.get('episode_kind') or 'external'
+    if kind in ('external', 'scheduled'):
+        return True
+    if kind != 'note':
+        return False
+    from . import notes
+    first = notes.opening_for(store, event) or {}
+    return first.get('trust') == notes.TRUSTED or bool(first.get('owner_line'))
+
 
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
@@ -750,7 +763,7 @@ class ContextBuilder:
             done_elsewhere=_places.elsewhere(self.store,persona,moment,{scene['_id']},visibility.owner_private_scenes(self.store.config))
             if done_elsewhere:
                 context['elsewhere_from_program']=done_elsewhere
-        if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external')=='external':
+        if session_class==visibility.OWNER_PRIVATE and _errand_from_here(self.store,event):
             from . import places as _places
             targets=_places.errand_places(self.store,persona)
             if targets:
@@ -1035,6 +1048,10 @@ class ContextBuilder:
                 context['visit_from_program']['upkeep']=upkeep
             for key in ('relationship','sender_identity','understanding_update_from_program'):
                 context.pop(key,None)
+        if not recall and scene.get('channel_id') and not _errands.is_errand_visit(event):
+            # ADR-066: once, that home sent her here and what she said (the request stays home).
+            told=_errands.told_block(self.store,scene['_id'])
+            if told:context['errand_from_program']=told
         if event.get('episode_kind')=='note':
             # ADR-018 §5.1: a note's own turn at home. Nobody here sent it; the person on the event only authorizes it.
             for key in ('relationship','relationship_shared_from_program','sender_identity','understanding_update_from_program'):

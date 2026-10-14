@@ -26,6 +26,7 @@ from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
 from .evidence import canonical, sha
 from .state import Conflict, Denied
 from . import visibility
+from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
 from .context_budget import SINGLE_BODY_CHARS
 
@@ -46,6 +47,11 @@ def group_note_ops():
     from . import memory_tiers
     return GROUP_NOTE_OPS + (('let_go',) if memory_tiers.ENABLED else ())
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
+# Home turns that may send her on an errand (ADR-066): someone speaking at home, her own plan due there, a note of hers
+# from home -- and a note from outside only when it carries the owner's own line (notes.owner_line).
+ERRAND_FROM = ('external', 'scheduled', 'note')
+# What a task needs, which an errand turn does not carry (errands.NO_DELEGATE).
+DELEGATING = ('delegate', 'task.message', 'task.stop')
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
 # nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
 CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')
@@ -298,9 +304,9 @@ TOOLS = {
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
     'errand': {
-        'description': ('替家里托你的人去别处说一句：去 errand_places_from_program 里的某个群或私聊，'
-                         '只在这回合跟你说话的人让你办时用。request 照抄要带过去的话或交代的事；exactly=yes 是要原样转达。'
-                         '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说，不合适就不发。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
+        'description': ('替家里托你的人去别处办一件事：去 errand_places_from_program 里的某个群或私聊。'
+                         'request 照抄要带过去的话或交代的事；exactly=yes 是要原样转达。'
+                         '程序在那边开一回合，带着家里的权限；那边的人只看得到你说出口的话，你到了再决定怎么说，不合适就不发。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
                        'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
                        'exactly': {'type': 'boolean', 'description': 'yes：原样转达'},
@@ -545,7 +551,8 @@ def exposed(store, ep):
     listed = abilities(store, ep)
     from . import switches
     off = switches.tools_off(store, ep['scene_id'])          # ADR-052: still listed (a stable list), not usable
-    return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed and name.split('.')[0] not in off]
+    return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed and name.split('.')[0] not in off
+            and not (ep.get('errand') and name in DELEGATING)]
 
 
 def _turn_rules(store, ep):
@@ -569,6 +576,8 @@ def _turn_rules(store, ep):
             names += note_tool
             if context.get('affect_from_program'):
                 names.append('feel')
+            if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
+                names.append('errand')
             return names + ['watch']
     names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
@@ -624,7 +633,7 @@ def _turn_rules(store, ep):
     if (context.get('lines_from_program') or {}).get('items'):
         names.append('peer_line')
     # ADR-017: in the owner's own conversations (toolbox), whoever is talking to her may send her on an errand.
-    if cls == visibility.OWNER_PRIVATE and kind == 'external' and context.get('errand_places_from_program'):
+    if cls == visibility.OWNER_PRIVATE and kind in ERRAND_FROM and context.get('errand_places_from_program'):
         names.append('errand')
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
@@ -739,13 +748,15 @@ NOT_NOW = {
     'group_action': '群里：你在这个群现在不是管理员，或者管理动作关着；家里：现在没有等你回的请求。',
     'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
     'peer_line': '这回合没有能开关的线。',
-    'errand': ('差事只在主人自己的对话里、有人跟你说话让你去办的那一回合接，去处列在 errand_places_from_program；'
-               '自己想去别处，用 visit。'),
+    'errand': ('差事在家里接：有人跟你说话让你去办、你自己的计划到点、或者你在家里写的便条叫醒你的那一回合，'
+               '去处列在 errand_places_from_program；自己想去别处串门，用 visit。'),
     'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
     'pass_note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
 }
 NOT_NOW['ideas.review'] = NOT_NOW['ideas.read']
 NOT_NOW['leave_note'] = NOT_NOW['pass_note']
+ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过他的账号）才能接差事；这张没有。'
+               '要去办，等主人在家里说，或者写进计划。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
 NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（ideas 的 note），不做有后果的事；'
              '想做的记进想法本，到自我改进时再定。')
@@ -761,6 +772,11 @@ def not_now(store, ep, name):
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY
+    if ep.get('errand') and name in DELEGATING:
+        from .errands import NO_DELEGATE
+        return NO_DELEGATE
+    if kind == 'note' and name == 'errand':
+        return ERRAND_NOTE
     if kind == 'note' and name not in ('pass_note', 'leave_note', 'feel', 'watch', 'read_image'):
         from . import notes
         if (notes.opening(store, ep) or {}).get('trust') != notes.TRUSTED:
@@ -1076,17 +1092,21 @@ class RoleTools:
             result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
         except Refused as exc:
             self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)
+            if ep.get('errand'):
+                raise Refused('%s（%s）' % (exc, ERRAND_MARK)) from None
             raise
         except (Denied, Conflict, DocumentError, ValueError) as exc:
             message = words(exc)
             self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc), olds=olds)
-            raise Refused(message) from None
+            raise Refused('%s（%s）' % (message, ERRAND_MARK) if ep.get('errand') else message) from None
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
         if old_names and isinstance(result, dict):
             result = {**result, 'old_names': ' '.join(old_names)}
         if inferred and isinstance(result, dict):
             result = {**result, 'do': '没写 do：按你写的字段当作 %s 办了。' % inferred}
+        if ep.get('errand') and isinstance(result, dict):
+            result = {**result, 'turn': ERRAND_MARK}         # ADR-066: which layer of her acted, on every result
         from . import memory_tiers
         if memory_tiers.ENABLED and name != 'recall':
             # ADR-062: an item she cites by its doc: ref in a call is used, a memorable moment.
@@ -1132,6 +1152,11 @@ class RoleTools:
         return self.store.db.episodes.find_one({'_id': ep['_id']})
 
     def _cls(self, ep):
+        """The authority this turn acts with: its conversation's class, or home's on an errand (ADR-066)."""
+        return visibility.OWNER_PRIVATE if ep.get('errand') else self._place(ep)
+
+    def _place(self, ep):
+        """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
 
     def _text(self, args, field, limit, *, required=True):
@@ -1154,9 +1179,10 @@ class RoleTools:
         thought = self._text(args, 'thought', 100000)
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
+        home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
         if not self.store.db.memory_units.find_one({'_id': memory_id}):
             self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
-                'kind': 'monologue', 'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
+                'kind': 'monologue', 'scope_key': home['scope_key'], 'policy_epoch': home['policy_epoch'],
                 'body_markdown': thought, 'epistemic_type': 'character_interpretation',
                 'source_event_ids': [ep['source_event_id']], 'depends_on': [ep['source_event_id']],
                 'episode_id': ep['_id'], 'status': 'active', 'embedding_status': 'PENDING'}, stream=ep['_id'])
@@ -1185,6 +1211,13 @@ class RoleTools:
         c = self.coordinator
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
         recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1] if query else {}
+        if ep.get('errand') and query:
+            # ADR-066: home's memories as well, as home would recall them.
+            home = c.context.prepare({**event, 'scene_id': ep['errand']['scene_id'], 'person_id': ep['errand']['person_id']},
+                                     ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
+            seen = {m.get('_id') for m in recalled.get('memories') or []}
+            recalled = {**recalled, 'memories': [*(recalled.get('memories') or []),
+                                                 *(m for m in home.get('memories') or [] if m.get('_id') not in seen)]}
         documents, missing = read_sections(self.store, ep, [s for s in sections if s not in listing], self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
@@ -1276,7 +1309,7 @@ class RoleTools:
         if op == 'on':
             if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
-            return watches.add(self.store, ep, ep['persona'], self._cls(ep), args), False
+            return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
         if op == 'off':
             return watches.stop(self.store, ep['persona'], args.get('id')), False
         raise Refused('do 是 on 或 off%s。' % _given(args, 'op'))
@@ -1451,7 +1484,7 @@ class RoleTools:
         """The attachment of a picture she may send here, or Refused in words."""
         from . import outbound_media
         from .blobs import BlobStore
-        cls = self._cls(ep)
+        cls = self._place(ep)                  # what may go out is the conversation's (ADR-066: her pictures go anywhere)
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
             raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason))
@@ -1547,7 +1580,7 @@ class RoleTools:
         from .blobs import BlobStore
         artifact = self._text(args, 'artifact_id', 200)
         self._text(args, 'why', 500)
-        cls = self._cls(ep)
+        cls = self._place(ep)
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']},
                                               {'_id': 1, 'channel_id': 1, 'kind': 1, 'scope_key': 1, 'members': 1})
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
@@ -1783,7 +1816,7 @@ class RoleTools:
         """ADR-052: block the account speaking to her, outside home only (nobody at home can be blocked)."""
         from . import switches
         from .people import People
-        if self._cls(ep) == visibility.OWNER_PRIVATE:
+        if self._place(ep) == visibility.OWNER_PRIVATE:
             raise Refused('家里的人屏蔽不了：block_hours 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         label = People(self.store, ep.get('persona')).speaker(scene, ep['person_id'])
@@ -1994,9 +2027,9 @@ class RoleTools:
 
     def tool_errand(self, ep, call_id, args):
         from .places import ERRAND_CHARS
-        if self._cls(ep) != visibility.OWNER_PRIVATE:
+        if self._place(ep) != visibility.OWNER_PRIVATE:
             raise Denied('ERRAND_ONLY_AT_HOME')
-        if turn_kind(ep) != 'external':
+        if turn_kind(ep) not in ERRAND_FROM:
             raise Denied('ERRAND_ONLY_WHEN_ASKED')
         place = self._text(args, 'place', 40)
         request = self._text(args, 'request', ERRAND_CHARS)
@@ -2019,12 +2052,12 @@ class RoleTools:
             raise Refused(str(exc)) from None
 
     def tool_pass_note(self, ep, call_id, args):
-        if self._cls(ep) != visibility.OWNER_PRIVATE:
+        if self._place(ep) != visibility.OWNER_PRIVATE:
             raise Refused('在外面用 leave_note。')
         return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
 
     def tool_leave_note(self, ep, call_id, args):
-        if self._cls(ep) == visibility.OWNER_PRIVATE:
+        if self._place(ep) == visibility.OWNER_PRIVATE:
             raise Refused('在家里用 pass_note。')
         qid = args.get('question')
         if qid is not None:

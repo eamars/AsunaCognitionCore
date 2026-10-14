@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from .config import character_id, excerpt
 from .evidence import canonical, sha
 from .state import now
-from . import visibility
+from . import scene_links, visibility
 
 TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
@@ -40,6 +40,8 @@ SHOWN = 5
 EXCERPT = 60
 OWN_WORDS_RUN = 20
 OWN_WORDS_HOURS = 2
+OWNER_LINE_CHARS = 300
+OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按他的账号核对过）：他托的事，这一回合可以用 errand 去办。'
 TRUSTED, UNTRUSTED = 'trusted', 'untrusted'
 WAKE, NEXT_TIME = 'wake', 'next_time'
 FINISHED = ('COMMITTED', 'WAITING_TASK')
@@ -250,12 +252,25 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     hop = (reply.get('hop', 1) + 1) if reply else 1
     if hop > MAX_HOP:
         raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一回合里说。')
+    said = owner_line(store, ep) if trust == UNTRUSTED and kind == 'home' else None
     return {'_id': note_id, 'persona': persona, 'from_scene': ep['scene_id'], 'from_class': cls,
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,
             'trust': trust, 'mode': mode, 'hop': hop, 'reply_to': (reply or {}).get('_id'),
             'tables_version': TABLES_VERSION, 'created_at': now(), 'seen_in': [],
+            **({'owner_line': said} if said else {}),
             **({'question': question} if question else {}),
             **({'answers': args['answers']} if args.get('answers') else {})}, None
+
+
+def owner_line(store, ep):
+    """The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or
+    None. A note home from such a turn carries them; its home turn may then send an errand (ADR-066)."""
+    if (ep.get('episode_kind') or 'external') != 'external'             or scene_links.canonical_person_id(store.config, store.db, ep.get('person_id')) != visibility.owner_id(store.config):
+        return None
+    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'text': 1, 'event.channel': 1}) or {}
+    if not (source.get('event') or {}).get('channel'):
+        return None
+    return excerpt(source.get('text'), OWNER_LINE_CHARS) or None
 
 
 def record(store, draft, event_id=None):
@@ -304,6 +319,8 @@ def opening_block(store, persona, row, cls, episode, moment):
         note = OUTSIDE_NOTE % where
     block = {'from': where, 'at': row['created_at'], 'written': TRUST_WORDS[row['trust']],
              'text': row['text'], 'note': note}
+    if row.get('owner_line'):
+        block['owner_said'] = {'text': row['owner_line'], 'note': OWNER_SAID}
     tail = answers_tail(store, persona, row)
     if tail:
         block['answers'] = tail

@@ -117,7 +117,7 @@ test('a list block goes item by item: what she still sees folds into one line wi
   const once = composeContext(context([], { plans_from_program: plans }), visibleCarried(surface([])));
   const twice = composeContext(context([], { plans_from_program: [plans[0], { _id: 'p2', intent: '看两个群' }] }),
     visibleCarried(surface([notice(once, 'ep-3')])));
-  assert.deepEqual(twice.context.plans_from_program, { items: [{ _id: 'p2', intent: '看两个群' }], same_as_before: '其余 1 条同前' });
+  assert.deepEqual(twice.context.plans_from_program, { items: [{ _id: 'p2', intent: '看两个群' }], same_as_before: '其余 1 条同前：p1' });
   assert.deepEqual(twice.context.unchanged_from_program, ['self_state_from_program', 'relationship']);
 
   // ADR-063 D9: that same block once more, every item still visible: named unchanged, no empty wrapper.
@@ -128,7 +128,7 @@ test('a list block goes item by item: what she still sees folds into one line wi
   // A block whose every item is visible but which differs as a whole (an item gone) still says what it holds.
   const fewer = composeContext(context([], { plans_from_program: [plans[0]] }),
     visibleCarried(surface([notice(once, 'ep-3'), notice(twice, 'ep-4')])));
-  assert.deepEqual(fewer.context.plans_from_program, { items: [], same_as_before: '其余 1 条同前' });
+  assert.deepEqual(fewer.context.plans_from_program, { items: [], same_as_before: '其余 1 条同前：p1' });
 });
 
 test('a group thread line or the speaker\'s last lines still on the surface are not listed again', () => {
@@ -175,13 +175,13 @@ test('object lists inside a block fold by their field path; an item waiting on h
   const second = composeContext(context([], experience([task('t3', '在做'), task('t1', '做完了'), task('t2', '做完了'), asks])),
     visibleCarried(surface(events)));
   assert.deepEqual(second.context.recent_experience_from_program, { window: '最近一天',
-    tasks: { items: [task('t3', '在做'), asks], same_as_before: '其余 2 条同前（做完了 2）' },
+    tasks: { items: [task('t3', '在做'), asks], same_as_before: '其余 2 条同前（做完了 2）：t1、t2' },
     nested: { reasons: { items: [], same_as_before: '其余 1 条同前' } } });
   assert.equal(second.omitted.items, 3);
   // The same block once more, everything still visible but the item waiting on her, which is sent again.
   const third = composeContext(context([], experience([task('t3', '在做'), task('t1', '做完了'), task('t2', '做完了'), asks])),
     visibleCarried(surface([...events, notice(second, 'ep-2')])));
-  assert.deepEqual(third.context.recent_experience_from_program.tasks, { items: [asks], same_as_before: '其余 3 条同前（在做 1、做完了 2）' });
+  assert.deepEqual(third.context.recent_experience_from_program.tasks, { items: [asks], same_as_before: '其余 3 条同前（在做 1、做完了 2）：t3、t1、t2' });
 });
 
 // ADR-063 D7: the ceiling holds for what a notice sends, not for what the worker prepared.
@@ -287,7 +287,7 @@ test('her questions block folds: unchanged it is named, one changed question is 
   assert.ok(same.context.unchanged_from_program.includes('questions_from_program'));
   const answered = composeContext(context([], block([['q1', '有回答'], ['q2', '等着']])), visibleCarried(surface(seen)));
   assert.deepEqual(answered.context.questions_from_program.items.map(item => item.id), ['q1']);
-  assert.equal(answered.context.questions_from_program.same_as_before, '其余 1 条同前（等着 1）');
+  assert.equal(answered.context.questions_from_program.same_as_before, '其余 1 条同前（等着 1）：q2');
 });
 
 test('an answer she reads that the conversation still shows is named, not sent again (ADR-061)', () => {

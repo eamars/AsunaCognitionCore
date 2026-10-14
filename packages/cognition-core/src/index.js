@@ -559,7 +559,7 @@ export class CognitionCore {
 
   /** Her words for a running action session (collab.js), marked so its claim can be acknowledged. */
   relay(message) {
-    return createUserMessage({ content: [{ type: 'text', text: '她补充：\n' + message.text }],
+    return createUserMessage({ content: [{ type: 'text', text: '你补充：\n' + message.text }],
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:executor:message', lane: 'executor',
         phase: 'message', trigger: 'follow-up', message_id: message.id } });
   }
@@ -838,7 +838,7 @@ export class CognitionCore {
       // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
         : this.state(exec.agent.session.id).refusals?.[exec.name]
-          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让她在给它的地方另交一件。`;
+          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让说话的那一半在给它的地方另交一件。`;
     });
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();

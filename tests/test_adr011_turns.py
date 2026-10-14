@@ -237,4 +237,4 @@ def test_a_continuation_after_the_idle_limit_starts_a_fresh_context_with_the_las
     said = next(r[4] for r in coordinator.character.tool_results if r[2] == 'task')
     assert '新开一份上下文' in said['action_brain'] and '写全' in said['action_brain'] and 'queue' in said
     text = opening_text(store, continued)
-    assert '新开的上下文' in text and '明天有雨' in text and text.endswith('她接着交代：\n再看看后天')
+    assert '新开的上下文' in text and '明天有雨' in text and text.endswith('你接着交代：\n再看看后天')

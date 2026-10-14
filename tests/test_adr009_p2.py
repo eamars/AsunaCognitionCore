@@ -126,7 +126,10 @@ def test_T2_9_seeds_fill_missing_heads_only_and_adopt_by_sid(store):
 
 
 def test_T2_10_action_brain_gets_public_values_only(store):
+    from asuna.persona_model import neutral
     owner(store)
+    model = neutral('P1', 'P1')
+    store.config['persona_model'] = {**model, 'render': {**model.get('render', {}), 'action_persona': 'values'}}
     docs = DocumentStore(store, 'P1')
     for i, (vis, tags) in enumerate([('public', ['values']), ('owner_private', ['values']), ('public', [])]):
         docs.apply('persona', {'op': 'append_section', 'heading': f'节{i}', 'visibility': vis, 'tags': tags,
@@ -134,3 +137,15 @@ def test_T2_10_action_brain_gets_public_values_only(store):
                    author='operator', mutation_id=f't210-{i}')
     text = action_values(store, 'P1')
     assert 'SECTION_BODY_0' in text and 'SECTION_BODY_1' not in text and 'SECTION_BODY_2' not in text
+
+
+def test_the_action_brain_is_a_person_from_her_core_sentences_not_her_rules_for_talking(store):
+    """Owner 2026-10-14: core is the default; her persona's rules for talking stay out."""
+    owner(store)
+    docs = DocumentStore(store, 'P1')
+    docs.apply('core', {'op': 'append_section', 'heading': '一', 'visibility': 'public', 'reason': '我是谁', 'kind': 'working'},
+               'CORE_SENTENCE', base_revision_id=None, author='character', mutation_id='core-a')
+    docs.apply('persona', {'op': 'append_section', 'heading': '说话', 'visibility': 'public', 'reason': '规矩'},
+               'TALKING_RULE', base_revision_id=docs.read('persona')[0], author='operator', mutation_id='persona-a')
+    text = action_values(store, 'P1')
+    assert 'CORE_SENTENCE' in text and 'TALKING_RULE' not in text and '下面是你自己写的「我是谁」' in text

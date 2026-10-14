@@ -238,7 +238,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `onEvent`
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
   - `idle` — Nothing of this conversation is running: no turn, none queued, no child of it open.
-  - `ensureAgent`
+  - `ensureAgent` — The conversation's agent, loaded after any write or load of it that began before (one opener at a time).
+  - `openAgent`
   - `written` — Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once the conversation is durable.
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
   - `errandSession` — ADR-066: an errand's own session, a copy of the destination's conversation at its last completed turn, so the model server resumes from that conversation's cached prefix (same system prompt, same tools).

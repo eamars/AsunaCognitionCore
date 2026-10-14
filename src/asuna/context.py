@@ -484,7 +484,7 @@ class ContextBuilder:
             unit=units.get(fact['_id']) or {}
             # When it was said, on the same clock face as her history lines, so today and yesterday read apart.
             when=self.when(unit,memory_zone,moment)
-            if when:fact['when']=when
+            if when:fact['when']=('盖到 '+when) if fact.get('epistemic_type')=='derived_summary' else when
             if fact.get('kind')=='monologue':
                 # One of her past thoughts: what she did then (reasons.py).
                 from . import reasons

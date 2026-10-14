@@ -1,4 +1,4 @@
-import copy,uuid,os,shutil,subprocess,sys
+import copy,uuid,os,re,shutil,subprocess,sys
 from pathlib import Path
 import sandbox_temp
 sandbox_temp.inherit()   # tmp_path folders a run inside DSH's Windows sandbox can use
@@ -131,7 +131,7 @@ _WORLD_SNAPSHOT=None
 def _world_snapshot(config):
     global _WORLD_SNAPSHOT
     if _WORLD_SNAPSHOT is None:
-        template=Store(config,'asuna_v2_test_TPL_'+uuid.uuid4().hex[:12])
+        template=Store(config,isolated_database('asuna_v2_test_TPL'))
         try:
             template.migrate();_ORIGINAL_SEED(template,WORLD)
             options={row['name']:row.get('options',{}) for row in template.db.list_collections()}
@@ -185,6 +185,44 @@ def pytest_sessionfinish(session,exitstatus):
         remove_workspace(WORK/name)
 
 
+# A run that is killed never reaches pytest_sessionfinish, so its databases stay. Each name carries the process that
+# made it (isolated_database); a session starts by dropping those whose process is gone, and the unmarked ones the
+# pool made before names carried it. A run going on in another checkout keeps its own.
+OWNER=re.compile(r'^asuna_v2_test_.+_p(\d+)_[0-9a-f]{12}$')
+UNMARKED=re.compile(r'^asuna_v2_test_(M1|TPL)_[0-9a-f]{12}$')
+
+
+def _alive(pid):
+    if os.name=='nt':                              # os.kill would end the process on Windows, not probe it
+        import ctypes
+        kernel=ctypes.windll.kernel32
+        handle=kernel.OpenProcess(0x1000,False,pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:return False
+        try:
+            code=ctypes.c_ulong()
+            return bool(kernel.GetExitCodeProcess(handle,ctypes.byref(code))) and code.value==259   # STILL_ACTIVE
+        finally:kernel.CloseHandle(handle)
+    try:os.kill(pid,0)
+    except ProcessLookupError:return False
+    except PermissionError:return True
+    return True
+
+
+def pytest_sessionstart(session):
+    config=load()
+    try:
+        client=MongoClient(config['mongo_uri'],serverSelectionTimeoutMS=2000)
+        try:names=client.list_database_names()
+        finally:client.close()
+    except Exception:
+        return                                     # no Mongo: the tests that need it skip
+    for name in names:
+        owner=OWNER.match(name)
+        if (owner and not _alive(int(owner.group(1)))) or UNMARKED.match(name):
+            drop_database(config,name)
+            remove_workspace(WORK/name)
+
+
 @pytest.fixture
 def runtime_work():
     """Make folders under the data folder's work/ (the sandbox only confines roots there); all are removed at teardown."""
@@ -196,8 +234,9 @@ def runtime_work():
 
 
 def isolated_database(prefix):
-    """A fresh test database name; every test drops what it created."""
-    return prefix+'_'+uuid.uuid4().hex[:12]
+    """A fresh test database name carrying this process (a killed run's are dropped by the next session); every test
+    drops what it created."""
+    return '%s_p%d_%s'%(prefix,os.getpid(),uuid.uuid4().hex[:12])
 
 
 def drop_database(config,name):

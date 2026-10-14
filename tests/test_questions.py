@@ -213,3 +213,15 @@ def test_on_an_agent_line_only_a_marked_line_of_the_agents_answers_and_the_owner
                                   'text': '我来答：可以', 'received_at': '2026-10-14T00:02:00+00:00'})
     answered = questions.refresh(store, store_row(store, first['_id']))
     assert [answer['line'] for answer in answered['sources'][0]['answers']] == ['in-3'], "the owner's line, as before"
+
+
+def test_a_closed_questions_take_can_be_rewritten_and_says_what_it_replaced(store):
+    store.put('scenes', {'_id': 'line', 'kind': 'dm', 'scope_key': 'scene:line', 'policy_epoch': 1, 'members': ['C']})
+    ep = {'_id': 'ep-r', 'scene_id': 'line', 'persona': 'P1'}
+    questions.record(store, ep, 'q-c0c0c0c0', '这个怎么修？', '一小时',
+                     [{'to': 'x', 'scene_id': 'line', 'kind': 'here', 'name': '线', 'episode': 'ep-r'}])
+    questions.close(store, 'P1', 'q-c0c0c0c0', '没看到答案')
+    row, words = questions.close(store, 'P1', 'q-c0c0c0c0', '后来答案到了：改那一行')
+    assert row['closed']['took'] == '后来答案到了：改那一行' and words == questions.RETAKEN % '没看到答案'
+    _, same = questions.close(store, 'P1', 'q-c0c0c0c0', '后来答案到了：改那一行')
+    assert same.startswith('这个问题已经结束了'), 'the same take again changes nothing'

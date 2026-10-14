@@ -60,6 +60,7 @@ ENDED_TOOK = '程序关的：过了耐心一天还没结束'
 MIGRATED_TOOK = '从开发者留言箱搬过来的'
 THANKS = '答你的有：%s。想谢谢他们、或告诉他们后来怎样，由你。'
 NOBODY = '这个问题没人答。'
+RETAKEN = '这个问题早就结束了；took 换成了你这次写的（原来是「%s」）。'
 KEEP_HINT = ('要记下学到的：别人告诉你的，写的时候 from 写 别人说的；你自己的判断被回答证实了，用 replace_section '
              '改写它，from 写 查过的，依据写问过谁、几点、问题 id。')
 
@@ -483,7 +484,15 @@ def close(store, persona, qid, took, moment=None):
         return None, None
     row = refresh(store, row, moment)
     if row.get('state') == 'closed':
-        return row, '这个问题已经结束了（%s）。' % (row.get('closed') or {}).get('took', '')
+        # What she took can change after it closed (an answer that came late, a first take that was wrong): the new
+        # take replaces it, the close keeps its time.
+        before = (row.get('closed') or {}).get('took', '')
+        if not took or took == before:
+            return row, '这个问题已经结束了（%s）。' % before
+        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or _now()).isoformat()}},
+                        expected=row['revision'], stream=row['_id'])
+        store.audit(row['_id'], 'question.retaken', {'question': row['_id'], 'chars': len(took)}, row['scope_key'])
+        return row, RETAKEN % before
     row = store.put('questions', {**row, 'state': 'closed',
                                   'closed': {'at': (moment or _now()).isoformat(), 'by': 'her', 'took': took}},
                     expected=row['revision'], stream=row['_id'])

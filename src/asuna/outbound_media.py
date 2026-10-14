@@ -432,6 +432,12 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
                             limit=limit, own_scope=own_scope)
+    # Hers from anywhere too: a picture she made goes wherever a picture may go, and here most of all.
+    listed = {item['artifact_id'] for item in items}
+    for item in produced_images(store, limit=50 if picked else limit):
+        if item['artifact_id'] not in listed and (len(items) < limit or item['artifact_id'] == picked):
+            item.pop('from_linked_scene', None); item.pop('scene_id', None)
+            items.append(item); listed.add(item['artifact_id'])
     if not items:
         return None
     note = _offer_note(scene) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
@@ -452,8 +458,8 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
     if produced_only:
         if not produced(item):
             raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group or someone else's chat gets only pictures she made
-    elif item.get('scope_key') not in scopes:
-        raise Denied('ATTACHMENT_SCOPE_DENIED')
+    elif item.get('scope_key') not in scopes and not produced(item):
+        raise Denied('ATTACHMENT_SCOPE_DENIED')             # the owner's chat: its private pictures, and hers from anywhere
     if item.get('kind') != ATTACHMENT_KIND:
         raise Denied('ATTACHMENT_NOT_AN_IMAGE')
     size = item.get('size')
@@ -503,7 +509,7 @@ def serve(store, blobs, row, declared):
     elif row_own_only(store, row):
         if not produced(item):
             raise Denied('ATTACHMENT_NOT_HER_OWN')
-    elif item.get('scope_key') not in row_image_scopes(store, row):
+    elif item.get('scope_key') not in row_image_scopes(store, row) and not produced(item):
         raise Denied('ATTACHMENT_SCOPE_DENIED')
     if str(item.get('sha256') or '').strip().lower() != declared['sha256']:
         raise Denied('ATTACHMENT_SHA_MISMATCH')

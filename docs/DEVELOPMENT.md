@@ -17,6 +17,7 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 | `config/` | Tracked templates (`*.example.*`). Real configuration (`local.json`, `*.local.json`) is ignored. |
 | `deploy/docker/` | The Docker stack; the only place that knows about Docker. |
 | `docs/development_plans/` | ADRs: decisions, designs and plans, with their dates. Not a reference for current behavior. |
+| `docs/articles/` | Design articles: why the system is shaped as it is and the rules that follow, for engineers and coding agents. |
 | root | `start-asuna.cmd` / `start-asuna.sh` (entry), `package.json` (npm workspaces), `pyproject.toml`, `package-lock.json`, `uv.lock`, the reference docs. |
 
 Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/local.json` and `config/*.local.json`.

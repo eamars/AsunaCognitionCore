@@ -196,4 +196,5 @@ def test_an_errand_that_cannot_copy_reads_the_recent_lines(store):
     finally:
         Coordinator.ingest = original
     assert store.db.sessions.find_one({'_id': ep['native_session_id']})['errand']['reason'] == 'near_compaction'
-    assert any('周末' in text for text in ep['context']['recent_lines_from_program']['lines'])
+    # Nothing is shown in the empty session, so the notice's own history brings the conversation's recent lines.
+    assert any('周末' in (row.get('text') or '') for row in ep['context']['delivered_history'])

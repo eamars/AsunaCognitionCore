@@ -66,8 +66,9 @@ def test_burst_watches_fire_again_only_after_a_silence_and_expire_into_one_line(
     fired = [bool(watches.seen(store, 'qq:20002', start + timedelta(minutes=m))) for m in (0, 1, 5, 16, 17)]
     assert fired == [True, False, False, True, False]                 # a burst is one look; 10 quiet minutes start a new one
     # A why written at home is read only at home.
-    home = watches.watching_block(store, persona, visibility.OWNER_PRIVATE, start)
-    public = watches.watching_block(store, persona, visibility.PUBLIC, start)
+    # Read a moment later: on a coarse clock `start` can equal the watch's own start, leaving exactly an hour.
+    home = watches.watching_block(store, persona, visibility.OWNER_PRIVATE, start + timedelta(seconds=1))
+    public = watches.watching_block(store, persona, visibility.PUBLIC, start + timedelta(seconds=1))
     assert home['items'][0]['why'] == '主人让我留意他' and 'why' not in public['items'][0]
     assert home['items'][0]['id'] == added['id'] and home['items'][0]['left'] == '不到一小时'
     # Expired: no turn of its own; her next turn has one line on how it went, once.

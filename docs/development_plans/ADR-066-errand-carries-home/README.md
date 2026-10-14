@@ -77,7 +77,8 @@ from anywhere. Every link of the chain worked; two gates judged by place, not by
 Character brain: no tool, no parameter. The `errand` description says the turn carries home (−6 characters, 21,224 →
 21,218). Per turn: `errand_from_program` once in the destination's next turn (who sent her, her lines there); the errand
 turn's `visit_from_program.carries` (one sentence) and `turn` on each tool result (10 characters); `owner_said` in a
-note that carries the owner's line; `recent_lines_from_program` only when the copy could not be made. Action brain:
+note that carries the owner's line. When the copy could not be made, nothing more: the turn's own history block
+brings the recent lines, since none is shown in the empty session. Action brain:
 none.
 
 ## Built (2026-10-15)

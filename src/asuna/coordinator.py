@@ -113,21 +113,7 @@ class Coordinator:
                 ep=self._update(ep,character_context=scene['character_context'])
             if event.get('native_session_id') or self.native_session_resolver:
                 ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
-                if errand:
-                    ep=self._errand_lines(ep,scene)
             return self.advance(ep_id)
-
-    def _errand_lines(self, ep, scene):
-        """ADR-066: an errand whose session could not copy its conversation starts empty; it reads that conversation's
-        recent lines instead (the relevance gate's view of them)."""
-        row=self.store.db.sessions.find_one({'_id':ep['native_session_id']},{'errand':1}) or {}
-        if (row.get('errand') or {}).get('forked') is not False:
-            return ep
-        from . import attend
-        source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']},{'scene_seq':1})
-        lines,since=attend.recent(self.store,scene,source['scene_seq'])
-        return self._update(ep,context={**ep['context'],'recent_lines_from_program':{
-            'lines':lines,'since':since,'note':'这回合是在一个新开的对话里办的（原来那段太长或正忙）：这里最近的话列在这儿。'}})
 
     def _binding(self, ep):
         binding=f"{character_id(self.store.config)}:{ep['scene_id']}:{ep['policy_epoch']}:{ep['persona']}"

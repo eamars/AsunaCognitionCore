@@ -34,6 +34,7 @@ One character turn per episode (ADR-011 §3).
 
 - class `ProtocolFailure`
 - class `SessionCarried` — Her conversation no longer fit the model's window and continues in a new session (ADR-028).
+- def `prepared_record` — context.prepared (ADR-067): the manifest (what was selected, the context's hash) and who the turn is with, as the memory view looks it up (native_cognition); the context itself is the episode's own.
 - class `Coordinator`
   - `ingest`
   - `consult` — One internal turn in her role session: she answers the action brain with task op answer.

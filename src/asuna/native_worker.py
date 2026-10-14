@@ -413,6 +413,7 @@ class BusinessWorker:
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
+        threading.Thread(target=self.audit_retention, name='audit-retention', daemon=True).start()
         from .grants import home_workspaces
         # The Host makes her working copy in each (working-copy.js, ADR-065).
         return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config)}
@@ -595,6 +596,19 @@ class BusinessWorker:
         identity = json.dumps([binding, role_id, ep['scene_id'], ep['scope_key'],
                                ep['policy_epoch'], ep['person_id'], ep['persona']], sort_keys=True)
         return 'asuna-action-' + sha(identity.encode())[:32]
+
+    def audit_retention(self):
+        """ADR-067: the audit's bulky diagnostic records past retention go, once at start and then daily."""
+        from .audit import prune
+        while True:
+            try:
+                deleted = prune(self.app.store)
+                if deleted:
+                    self.app.evidence.record('audit.pruned', {'deleted': deleted})
+            except Exception as exc:
+                self.app.evidence.record('audit.prune_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
+            if self.stopping.wait(24 * 3600):
+                return
 
     def watch_host(self):
         while not self.stopping.wait(.5):

@@ -10,7 +10,7 @@ import html
 import json
 from pathlib import Path
 from .evidence import canonical,sha
-from .state import Store,Denied,content_digest
+from .state import Store,Denied,content_digest,without_derived
 
 
 def reconcile_calls(observed_body_hashes,events):
@@ -23,15 +23,45 @@ def reconcile_calls(observed_body_hashes,events):
     return {'requests':len(requests),'responses_or_errors':len(response_ids),'matched':True}
 
 
+# Retention (ADR-067): past RETENTION_DAYS the bulky diagnostic records go; everything else stays whatever its age:
+# persona and relationship revisions, tasks, plans, episodes, artifacts, tool calls, restarts, errands.
+RETENTION_DAYS=30
+PRUNED_KINDS=('context.prepared','retrieval.selected','native.context.bound','state.intent')
+PRUNED_COMMITS=('messages','sink_receipts','identities','sessions','lane_receipts')
+
+
+def prune(store, moment=None):
+    """Delete the audit records past retention; one `audit.pruned` record says up to when and how many."""
+    from datetime import datetime,timedelta,timezone
+    cutoff=((moment or datetime.now(timezone.utc))-timedelta(days=RETENTION_DAYS)).isoformat()
+    old={'occurred_at':{'$lt':cutoff}}
+    deleted=store.db.audit_events.delete_many({**old,'type':{'$in':list(PRUNED_KINDS)}}).deleted_count
+    deleted+=store.db.audit_events.delete_many({**old,'type':'state.commit','$or':[
+        {'payload.collection':{'$in':list(PRUNED_COMMITS)}},
+        # a memory's later revisions (its embedding, its counters); the first, which dates it, stays
+        {'payload.collection':'memory_units','payload.document.revision':{'$gt':1}},
+        {'payload.collection':'memory_units','payload.revision':{'$gt':1}}]}).deleted_count
+    if deleted:
+        store.audit('audit-retention','audit.pruned',{'before':cutoff,'deleted':deleted,'kinds':list(PRUNED_KINDS),
+                                                     'commits':list(PRUNED_COMMITS)+['memory_units revision > 1']})
+    return deleted
+
+
 def verify(events: list[dict]):
+    """Each event's own hash, and each stream's chain. A gap in a chain is accepted only where retention removed
+    events older than its cutoff (the `audit.pruned` records among the events)."""
+    pruned=max((e['payload'].get('before') for e in events if e['type']=='audit.pruned'),default=None)
     heads={}
     for event in sorted(events,key=lambda e:(e['stream_id'],e['seq'])):
-        previous_seq,previous_hash=heads.get(event['stream_id'],(0,'0'*64))
+        previous_seq,previous_hash,previous_at=heads.get(event['stream_id'],(0,'0'*64,None))
         body={k:v for k,v in event.items() if k!='event_hash'}
-        if event['seq']!=previous_seq+1 or event['prev_hash']!=previous_hash or sha(canonical(body))!=event['event_hash']:
+        if sha(canonical(body))!=event['event_hash']:
             raise ValueError('AUDIT_HASH_CHAIN_INVALID')
-        heads[event['stream_id']]=(event['seq'],event['event_hash'])
-    return heads
+        if event['seq']!=previous_seq+1 or event['prev_hash']!=previous_hash:
+            if not (pruned and event['seq']>previous_seq+1 and (previous_at is None or previous_at<pruned)):
+                raise ValueError('AUDIT_HASH_CHAIN_INVALID')
+        heads[event['stream_id']]=(event['seq'],event['event_hash'],event['occurred_at'])
+    return {stream:head[:2] for stream,head in heads.items()}
 
 
 def _commit_key(payload):
@@ -51,6 +81,8 @@ def verify_documents(events: list[dict], store: Store):
     tampered=[]
     for (collection,key),payload in latest.items():
         doc=store.db[collection].find_one({'_id':key})
+        if doc is not None and payload.get('derived_left_out'):
+            doc=without_derived(collection,doc,payload['derived_left_out'])[0]
         expected=payload.get('document')
         revision=expected.get('revision') if expected is not None else payload.get('revision')
         if doc is None or (doc.get('revision') or 0)!=(revision or 0):
@@ -70,6 +102,8 @@ def trace_contents(events: list[dict], store: Store):
         payload=event['payload']
         if event['type']=='state.commit' and 'content_sha256' in payload:
             doc=store.db[payload['collection']].find_one({'_id':payload['id']})
+            if doc is not None and payload.get('derived_left_out'):
+                doc=without_derived(payload['collection'],doc,payload['derived_left_out'])[0]
             if doc is not None and content_digest(payload['collection'],doc)==payload['content_sha256']:
                 out[payload['content_sha256']]=doc
     return out

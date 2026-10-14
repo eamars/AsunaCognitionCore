@@ -203,6 +203,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
 
 - def `names` — {shown: handler's} for a tool.
+- def `old_used` — The old names this call was written with (each counted toward retiring it).
 - def `inbound` — (arguments under the handler's names, notes for each old name she used).
 - def `shown` — A tool's parameters as the model is shown them: new names, yes/no as words.
 

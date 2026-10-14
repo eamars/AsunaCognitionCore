@@ -33,8 +33,8 @@ def peer_lines(store):
 
 ASIDES_SHOWN = 6
 ASIDE_EXCERPT = 80
-VIEW_NOTE = ('这是你和另一个智能体之间的线。开关由你自己决定（peer_line）：关着时她的话会被跳过、不补发；'
-             '你自己的话照常发得出去。')
+VIEW_NOTE = ('这是你和另一个智能体之间的线。开关由你自己决定（peer_line）：开着时对方的话直接到你这里，叫醒你；'
+             '关着时对方的话会被跳过、不补发，你自己的话照常发得出去。')
 ASIDES_NOTE = ('另一头不是在回你的话（她自己那边的心跳、自言自语、主动找你），不叫醒你，先记在这里；'
                '你在那条线上开口之后，那之前的就不再列。要回就从家里 pass_note 到那条线。')
 
@@ -127,12 +127,12 @@ def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, b
 def describe(until, zone):
     """The state in words."""
     if until is None:
-        return '开着：对方的话会直接到你这里，叫醒你。'
+        return '开着'
     if until == 'reopen':
-        return '关着，等你自己打开：这期间对方的话不会到你这里，也不会以后补给你。'
+        return '关着，等你自己打开'
     from zoneinfo import ZoneInfo
     local = until.astimezone(ZoneInfo(zone))
-    return '关着，到 %d月%d日 %02d:%02d 自己打开：这期间对方的话不会到你这里，也不会以后补给你。' % (
+    return '关着，到 %d月%d日 %02d:%02d 自己打开' % (
         local.month, local.day, local.hour, local.minute)
 
 

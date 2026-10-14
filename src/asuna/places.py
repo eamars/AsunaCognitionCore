@@ -18,7 +18,7 @@ TABLES_VERSION = 1
 # Lines in the group over the last hour → how it reads.
 ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊'), (None, '很热闹'))
 # Different people who spoke over the last hour.
-VOICES = ((0, '没有人'), (1, '一个人'), (3, '两三个人'), (None, '好几个人'))
+VOICES = ((0, '没人说话'), (1, '有一个人说话'), (3, '有两三个人说话'), (None, '有好几个人说话'))
 INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
            'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记',
            'note': '你自己的一张便条叫你来的',
@@ -423,7 +423,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
                **({'muted_you': muted_you} if muted_you else {}),
                'now': _tier(ACTIVITY, here['lines']) + ('' if here['last_line_at'] else '，还没见过有人说话'),
                **({'last_line_at': _stamp(here['last_line_at'])} if here['last_line_at'] else {}),
-               'people': '最近一小时说话的有' + _tier(VOICES, here['voices']),
+               'people': '最近一小时' + _tier(VOICES, here['voices']),
                **({'you_spoke_at': _stamp(here['mine_at'])} if here['mine_at'] else {'you': '你还没在这里说过话'}),
                'your_notes': notes or '你还没写过这个群的笔记',
                'can_visit': why}
@@ -478,7 +478,7 @@ def visit_block(store, scene, visit, moment):
     block = {'why': INTENTS.get(visit.get('intent'), ''),
              'here_now': {'activity': _tier(ACTIVITY, here['lines']),
                           'last_line': ('上一句是%s' % _ago(moment, here['last_line_at'])) if here['last_line_at'] else '还没见过有人说话',
-                          'people': '最近一小时说话的有' + _tier(VOICES, here['voices']),
+                          'people': '最近一小时' + _tier(VOICES, here['voices']),
                           'you': ('你%s在这里说过话' % _ago(moment, here['mine_at'])) if here['mine_at'] else '你还没在这里说过话'},
              'basis': '你上次说话以后，有人叫过你' if here['called'] else '没人叫你：开口是你自己的主意',
              'note': ('这是你自己出门来的。先读懂这里在聊什么、是谁在说，再决定要不要开口；接不上就别硬接，'

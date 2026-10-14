@@ -99,6 +99,23 @@ async function files(root) {
 /** A repository project is the core's own paths: only these are copied into its candidate and only these publish. */
 const REPOSITORY_PATHS = /^(src\/|packages\/cognition-core\/|docs\/|tests\/|tools\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|AGENTS.md|INSTALL.md|RUN_ASUNA.md|NATIVE_PLUGIN.md|RUNTIME_API.md)$)/;
 const inProject = (project, relative) => project.format !== 'repository' || REPOSITORY_PATHS.test(relative);
+/** What a repository candidate's tests read beyond its own paths (the other packages, the example configs, the line
+ * ending rules): kept as the source has them, read-only, never published. */
+const REFERENCE_PATHS = /^(?:packages\/(?:channels|personas)\/|config\/[^/]+\.example\.\w+$|\.gitattributes$)/;
+const isReference = (project, relative) => project.format === 'repository' && REFERENCE_PATHS.test(relative);
+
+/** A repository candidate's reference packages, made the same as the source's: changed or new files copied, gone ones
+ * removed. */
+async function mirrorReferences(project, sourceFiles, candidate) {
+  for (const [relative, file] of sourceFiles) {
+    if (!isReference(project, relative)) continue;
+    const target = path.join(candidate, relative), wanted = await fs.readFile(file);
+    if (await exists(target) && wanted.equals(await fs.readFile(target))) continue;
+    await fs.mkdir(path.dirname(target), { recursive: true }); await fs.writeFile(target, wanted);
+  }
+  for (const relative of (await files(candidate)).keys())
+    if (isReference(project, relative) && !sourceFiles.has(relative)) await fs.unlink(path.join(candidate, relative));
+}
 const PYTHONS = new Set(['python3', 'python', 'python3.exe', 'python.exe']);
 /** What a sandboxed command inherits: enough for Windows and Python to start, no credentials (as sandbox_backend.py). */
 function commandEnvironment(candidate) {
@@ -255,6 +272,7 @@ export class PublicationFloor {
       baseline[relative] = hash(await fs.readFile(file));
     }
     await atomic(baselineFile, baseline);
+    await mirrorReferences(project, sourceFiles, candidate);
     return { ...project, source, candidate, baselineFile, baseline };
   }
 
@@ -274,6 +292,8 @@ export class PublicationFloor {
         if (!inside(project.candidate, result)) throw denied(`${given(relative)} 落在项目候选外面（或就是项目根）；写项目里的文件路径，不要用 ..`);
         if (privateName(normalized)) throw denied(`${given(relative)} 是私密文件（.env、local.json、*.local.json、credentials.json、`
           + 'secrets.json、*.key、*.pem、*.p12、*.pfx），development_* 不读也不写；重试也一样：不用它继续');
+        if (writing && isReference(project, normalized)) throw denied(`${normalized} 是别的包，在这里只给测试用，跟主干保持一样、不发布；`
+          + '要改它，换成它自己的项目（development_files 结果里的 projects）');
         if (writing && protectedPaths.has(normalized)) throw denied(`${normalized} 是发布底座的文件（启动器、打包和安装脚本、floor 和它导入的模块），`
           + 'development_write 不能改；重试也一样：不改它，需要改就写进报告，请 owner 改');
         let parent = result;
@@ -300,7 +320,9 @@ export class PublicationFloor {
           return (await exists(source) ? hash(await fs.readFile(source)) : undefined) !== project.baseline[name];
         };
         const listed = await Promise.all(rows.slice(offset, offset + limit).map(async ([name, file]) => {
-          const digest = hash(await fs.readFile(file)), changed = digest !== project.baseline[name];
+          const digest = hash(await fs.readFile(file));
+          if (isReference(project, name)) return { path: name, sha256: digest, reference: true };
+          const changed = digest !== project.baseline[name];
           return { path: name, sha256: digest, changed, ...(changed && await moved(name) ? { stale: true } : {}) };
         }));
         const deleted = Object.keys(project.baseline).filter(name => !current.has(name));

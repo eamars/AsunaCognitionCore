@@ -168,6 +168,39 @@ test('a repository candidate publishes only the project paths, not what a comman
   await assert.rejects(fs.stat(path.join(source, 'Python')), { code: 'ENOENT' });
 });
 
+test('a repository candidate keeps the other packages its tests import as the source has them, read-only', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-references-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'), channel = path.join(source, 'packages/channels/chat/python');
+  const core = path.join(source, 'packages/cognition-core');
+  await fs.mkdir(path.join(core, 'src'), { recursive: true }); await fs.mkdir(path.join(source, 'src'));
+  await fs.mkdir(channel, { recursive: true });
+  await fs.writeFile(path.join(core, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module', exports: './src/index.js' }));
+  await fs.writeFile(path.join(core, 'src/index.js'), 'export const name = "probe"; export function apply() {}');
+  await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  await fs.writeFile(path.join(channel, 'kind.py'), 'PARTS = 1\n');
+  await fs.writeFile(path.join(channel, 'old.py'), 'gone soon\n');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
+  const candidate = path.join(workspace, 'work/self-development/probe');
+  const listed = await floor.call('development_files', { prefix: 'packages/channels/' });
+  assert.deepEqual(listed.files.map(row => [row.path, row.reference]), [['packages/channels/chat/python/kind.py', true],
+    ['packages/channels/chat/python/old.py', true]]);
+  // The source moves on: the next call brings the candidate's copy along, and a file gone from the source goes.
+  await fs.writeFile(path.join(channel, 'kind.py'), 'PARTS = 2\n'); await fs.rm(path.join(channel, 'old.py'));
+  await floor.call('development_files', {});
+  assert.equal(await fs.readFile(path.join(candidate, 'packages/channels/chat/python/kind.py'), 'utf8'), 'PARTS = 2\n');
+  await assert.rejects(fs.stat(path.join(candidate, 'packages/channels/chat/python/old.py')), { code: 'ENOENT' });
+  await assert.rejects(floor.call('development_write', { path: 'packages/channels/chat/python/kind.py', text: 'PARTS = 3\n', overwrite: true }),
+    /DEVELOPMENT_PATH_DENIED: .*别的包/);
+  // A copy changed by a command is put back, and none of it publishes.
+  await fs.writeFile(path.join(candidate, 'packages/channels/chat/python/kind.py'), 'PARTS = 9\n');
+  await floor.call('development_write', { path: 'src/x.py', text: 'x = 2\n', overwrite: true });
+  assert.equal(await fs.readFile(path.join(candidate, 'packages/channels/chat/python/kind.py'), 'utf8'), 'PARTS = 2\n');
+  const published = await floor.call('development_publish', { reason: 'one Python change' });
+  assert.deepEqual(published.changed_files, ['src/x.py']);
+});
+
 test('ADR-021 D4: an unattended turn does not publish onto a change still waiting for a Host restart', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-wait-'));

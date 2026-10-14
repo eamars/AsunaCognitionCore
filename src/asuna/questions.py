@@ -127,6 +127,7 @@ def record(store, ep, qid, text, patience, sources):
 GROUP_PATIENCE = ('一会儿', '半天', '一天')
 LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
 GROUP_MORE = '更早的还有 %d 个没结'
+TOLD_MANY = '程序一次收了你在这里问的 %d 个问题：%s'
 GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
 GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
@@ -198,7 +199,13 @@ def group_block(store, persona, scene, moment=None):
     if not rows and not told:
         return None
     zone = scene_timezone(store.config, scene)
-    items = ['%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), row['closed']['took']) for row in told]
+    if len(told) > SHOWN:                     # many closed at once: one line with the counts, not a list (her ask)
+        tally = {}
+        for row in told:
+            tally[row['closed']['took']] = tally.get(row['closed']['took'], 0) + 1
+        items = [TOLD_MANY % (len(told), '；'.join('%s %d 个' % (took, n) for took, n in tally.items()))]
+    else:
+        items = ['%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), row['closed']['took']) for row in told]
     if told:
         store.db.questions.update_many({'_id': {'$in': [row['_id'] for row in told]}}, {'$addToSet': {'told_in': scene['_id']}})
     for row in rows:

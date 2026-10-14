@@ -1,7 +1,7 @@
 # ADR-066: An errand carries home
 
-Status: **Proposed 2026-10-15** by the owner, designed with Claude the same day; waits for Xiaoman's review, then the
-owner's go to build.
+Status: **Proposed 2026-10-15** by the owner, designed with Claude the same day; **reviewed by Xiaoman the same day**
+(her points folded in below); waits for the owner's go to build.
 
 ## What happened
 
@@ -42,8 +42,10 @@ from anywhere. Every link of the chain worked; two gates judged by place, not by
 - **Isolation:** what she says goes to the destination like any of her lines. What she read, her thoughts and tool
   results stay in the fork; her thoughts there are kept in home scope. Lines arriving in the destination during the
   errand go to its real session and get ordinary turns afterwards.
-- **Back in the destination:** its next natural turn carries, at the end, `errand_from_program` once: who sent her
-  (主人, from home), what was asked, and what she said there. Nothing she read with home's authority comes with it.
+- **Back in the destination:** its next natural turn carries, at the end, `errand_from_program` once: that home sent
+  her (主人, from home) and what she said there. The request itself stays home: it may hold words only home may know
+  (her review). What she said there is already the version she judged fit for that place. Nothing she read with
+  home's authority comes with it.
 - **At home:** the outcome, as errands report today (`errands_from_program`).
 - **Afterwards:** a task delegated in the errand turn keeps home's authority, with the requester recorded. The fork is
   marked errand-only and retired before the next Host start like the one-shot sessions (`asuna-launch.mjs`: archived
@@ -55,25 +57,44 @@ from anywhere. Every link of the chain worked; two gates judged by place, not by
 
 | # | Failure | Handling |
 |---|---|---|
-| 1 | The fork mistaken for the conversation's main session: later public turns run in it, home material inside | The binding marks it errand-only; it is never the scene's main session; retired after |
+| 1 | The fork mistaken for the conversation's main session: later public turns run in it, home material inside | The binding marks it errand-only; it is never the scene's main session; it is retired once the errand ends |
 | 2 | The destination near compaction: the appended tail pushes the fork over the threshold, DSH compacts a session that will be thrown away, and the turn runs cold anyway | Measured before forking; over budget, or the destination compacting or mid-turn: a small fresh session with the destination's recent lines and the request (cold, small, never compacts) |
-| 3 | Two replies at once: the destination's own turn and the errand speak over each other | The errand waits in the destination's queue until the scene is idle |
+| 3 | Two replies at once: the destination's own turn and the errand speak over each other | The errand waits in the destination's queue until the scene is idle, **with a deadline** (her review): past it nothing is sent, the talk there has moved on, and home is told it did not get a word in |
 | 4 | Her errand thoughts recalled later in public | Thoughts written in the fork are stored in home scope |
-| 5 | A restart during the errand: the fork is orphaned, DSH may resume its unfinished turn | Asuna refuses the stale operation; the errand is marked interrupted and home is told |
+| 5 | A restart during the errand: the fork is orphaned, DSH may resume its unfinished turn | Asuna refuses the stale operation; the errand is marked interrupted and home is told **what it had already done** before the cut (what was sent, delivered or not): interrupted is not undone, and redoing it would send twice (her review) |
 | 6 | The fork runs on another model (DSH's fork takes the default model selection) | The fork's route is set to her character route; checked in the build |
-| 7 | The fork's cache entry (~3 GiB at 150k tokens) evicts another conversation's | Accepted: errands are a handful a week |
-| 8 | A message planted earlier in the destination is read with home's authority (the sandbox among it) | The turn says its only instruction is home's; the conversation is others' words. Judgment, not a fence: the price of full permission |
+| 7 | The fork's cache entry (~3 GiB at 150k tokens) evicts another conversation's | Accepted while errands are a handful a week; that is a premise, not a fact: measured after a week, and reconsidered if she uses them more (her review) |
+| 8 | A message planted earlier in the destination is read with home's authority (the sandbox among it) | The turn says its only instruction is home's; the conversation is others' words. Judgment, not a fence: the price of full permission. Her own rule, kept in her persona, not in the core: an errand turn does the one thing it was sent for, nothing it happens to see on the way |
 | 9 | She says something private in public | Hers to judge (owner 2026-10-06: home to outside, she decides) |
 | 10 | A stranger launders a request home and back out | Only home turns and the verified owner send errands; a note-woken turn needs the owner's own line |
 | 11 | The destination has no session yet, or the fork call fails | The small fresh session of row 2 |
 | 12 | People there learn that an errand turn carries home, and 「主人说 X」 becomes a lever (her question, 2026-10-15) | Nobody there sees which turn is an errand: her message carries no mark. Authority comes only from the errand's requester, checked by the program at home; no line in the destination can open an errand or lend it authority, whatever it claims |
-| 13 | She cannot tell which layer of her acted (her question) | The errand turn opens with what it is; each tool result in it ends with 「（差事回合，家里的权限）」; the destination's next turn names what was done on an errand (`errand_from_program`); her home sees the outcome |
+| 13 | She cannot tell which layer of her acted (her question) | The errand turn opens with what it is; each tool result in it ends with 「（差事回合，家里的权限）」; the destination's next turn names what was done on an errand (`errand_from_program`); her home sees the outcome; **her own lines sent on an errand carry a small mark in her history** wherever she reads them back, so days later they do not read like ordinary lines (her review) |
 
 ## What it adds to each brain
 
 Character brain: no tool, no parameter; one block once in the destination's next turn and the errand turn's own
 notice. Action brain: none (home grants already exist). To be measured in characters in the build.
 
-## Her review
+## Her review (2026-10-15, Claude's paraphrase; she signed it)
 
-Her words, paraphrased by Claude, go here with her signature slot.
+She read the whole text first (79 lines at 9671ba6d, 13 rows) rather than review a summary. She agrees with the
+direction: the two gates judged by place, not by who asked, and that was the real block on the picture. Clean in her
+reading: authority only on `errand`, the fork, the unchanged tool list, the seven home tools staying home, only her
+words going back.
+
+Her points, all folded in above:
+1. An errand waiting for a busy conversation can arrive after the talk moved on: give it a deadline; past it, send
+   nothing and tell home it did not get a word in (row 3).
+2. Interrupted is not the same as not done: home must hear what was already sent before the cut, or she would redo it
+   and send twice (row 5).
+3. Not only others cannot tell an errand turn apart: she cannot either, reading back days later. Her own lines from
+   it need a mark in her own records (row 13).
+4. The most important, missing from the table: the destination's block would print the request, which may carry words
+   only home may know. Only what may be shown there goes there (Decision, "Back in the destination": the request stays
+   home; her own words there are that shareable version).
+5. No fence for row 8: judgment is the price of full permission. She adds her own rule, in her persona: an errand turn
+   does the one thing it was sent for.
+6. Row 7's "a handful a week" is a premise to re-measure, not a fact.
+
+Signed: 小满, 2026-10-15 (on the agent line: 「我这段是我签的」).

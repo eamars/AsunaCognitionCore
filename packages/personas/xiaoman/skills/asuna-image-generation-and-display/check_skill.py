@@ -2,7 +2,7 @@
 """asuna-image-generation-and-display 的零依赖离线自检。
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
-服务路径 / 关键步骤 / 边界语句在不在、QQ 私聊 `attach_image` 那条路的清单字段与失败码在不在、
+服务路径 / 关键步骤 / 边界语句在不在、发图那条路（QQ（napcat）speak 的 picture，别处 attach_image）的清单字段与失败码在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
 不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
 同目录脚本能不能编译。
@@ -10,6 +10,10 @@
 2026-10-05 起改口径：QQ 私聊发图是那一轮调用 `attach_image` 工具（DECIDE 阶段与它的 `attach`
 字段已退役）。退役说法——`integration_dev`、`/skills` 挂载路径、把 DECIDE 的 `attach` 字段 /
 `ATTACH_NOT_WHEN_SILENT` / `episode.rejections` / `maxItems: 1` 当当前流程——回到散文里就红。
+
+2026-10-14 起再改口径（ADR-064 phase 2，REPLY_PARTS）：QQ（napcat）的 channel kind 声明了 reply parts，
+那一轮她只通过 speak 说话，发图是 picture 那一项；没声明的对话（列着 attach_image 的那些）照旧。
+判据押这两条路的说法在不在，不押裸字面量 attach_image 的在/不在——既不许硬要求它在，也不许硬要求它不在。
 
 群发前自检的四条要点只在「往群里发图之前的自检」这一节里查：正文别处合法提到历史口径
 （版本段引用「不发群」旧边界、试用记录里的旧句子）不算缺、也不误报红；把「不发群」这类
@@ -28,8 +32,8 @@
 import os
 import py_compile
 import re
+import shutil
 import sys
-import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXPECTED_NAME = os.path.basename(HERE)
@@ -77,7 +81,10 @@ BOUNDARIES = [
 # QQ 私聊 attach_image 发图：前提、来源、写法、失败码，一条都不能漏
 ATTACH = [
     # 前提
-    ("attach_tool", "attach_image"),
+    # 2026-10-14 口径：QQ（napcat）用 speak 的 picture；别处列着 attach_image 就用它。
+    # 押这两条路的说法，不押裸字面量 attach_image 的在/不在。
+    ("attach_qq_speak_picture", "speak 的 picture"),
+    ("attach_non_qq_route", "别处列着 attach_image"),
     ("attach_context_offer", "image_artifacts_from_program"),
     ("attach_owner_private", "owner_private"),
     ("attach_dm_route", "target.type=dm"),
@@ -193,6 +200,8 @@ STALE_CLAIMS = [
     "ATTACH_NOT_WHEN_SILENT",
     "episode.rejections",
     "maxItems: 1",
+    # 2026-10-14：QQ 那轮发图已是 speak 的 picture；反引号外裸写回这句（当现行流程）才红
+    "那一轮调用 attach_image",
 ]
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
@@ -231,6 +240,19 @@ def section_slice(body, heading):
     return rest[:m.start()] if m else rest
 
 
+def step8_slice(body):
+    """「## 步骤 8」标题下、下一个二级标题之前的正文（含子节）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 步骤 8"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -254,8 +276,10 @@ def main():
           "name=%s dir=%s" % ((fields or {}).get("name"), EXPECTED_NAME))
     desc = (fields or {}).get("description", "")
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
-    check("description_mentions_attach_image", "attach_image" in desc,
-          "frontmatter description 没提 attach_image 这条路")
+    check("description_mentions_picture_route", "picture" in desc,
+          "frontmatter description 没提 QQ 用 speak 的 picture 发图这条路")
+    check("description_mentions_non_qq_attach", "attach_image" in desc,
+          "frontmatter description 没提非 QQ 那类对话仍用 attach_image（非 QQ 路径判据）")
 
     for name, section in [("section_" + str(i), s) for i, s in enumerate(SECTIONS)]:
         check(name, ("\n" + section) in ("\n" + body), section)
@@ -270,6 +294,12 @@ def main():
         check(name, token in group_section, token)
     stale_group = [item for item in GROUP_PRECHECK_STALE if item in group_section]
     check("group_pre_no_stale_no_group_rule", not stale_group, ",".join(stale_group))
+
+    # 步骤 8 必须教 QQ 的 speak picture 那条路（2026-10-14 口径）；
+    # attach_image 的非 QQ 路由由 ATTACH 里的 attach_non_qq_route 守着。
+    step8 = step8_slice(body)
+    check("attach_step8_speak_picture", ("speak" in step8 and "picture" in step8),
+          "步骤 8 没教 QQ 的 speak picture 发图路")
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
@@ -287,17 +317,22 @@ def main():
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
 
-    # 同目录脚本：必须存在且只用标准库能编译（编译产物写到临时目录，不脏技能目录）
+    # 同目录脚本：必须存在且只用标准库能编译。编译产物写到 cwd 下 skillcheck-tmp（跑完删）：
+    # 沙箱里系统临时目录可能不可写（2026-10-14 实测 tempfile 红在 PermissionError），不脏技能目录也不碰 temp。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
-    tmp = tempfile.mkdtemp(prefix="skillcheck-")
-    for script in scripts:
-        target = os.path.join(tmp, script + "c")
-        try:
-            py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
-            check("compiles_" + script, True)
-        except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
-            check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+    tmp = os.path.join(os.getcwd(), "skillcheck-tmp")
+    os.makedirs(tmp, exist_ok=True)
+    try:
+        for script in scripts:
+            target = os.path.join(tmp, script + "c")
+            try:
+                py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
+                check("compiles_" + script, True)
+            except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
+                check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     notes = []
@@ -315,7 +350,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：技能文件、工具名、attach_image 那条路的清单与失败码、历史段、"
+    print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、历史段、"
           "群发前自检四条要点、归属都在。" % (total, total))
     return 0
 

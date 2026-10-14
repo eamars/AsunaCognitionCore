@@ -66,6 +66,8 @@ from anywhere. Every link of the chain worked; two gates judged by place, not by
 | 9 | She says something private in public | Hers to judge (owner 2026-10-06: home to outside, she decides) |
 | 10 | A stranger launders a request home and back out | Only home turns and the verified owner send errands; a note-woken turn needs the owner's own line |
 | 11 | The destination has no session yet, or the fork call fails | The small fresh session of row 2 |
+| 12 | People there learn that an errand turn carries home, and 「主人说 X」 becomes a lever (her question, 2026-10-15) | Nobody there sees which turn is an errand: her message carries no mark. Authority comes only from the errand's requester, checked by the program at home; no line in the destination can open an errand or lend it authority, whatever it claims |
+| 13 | She cannot tell which layer of her acted (her question) | The errand turn opens with what it is; each tool result in it ends with 「（差事回合，家里的权限）」; the destination's next turn names what was done on an errand (`errand_from_program`); her home sees the outcome |
 
 ## What it adds to each brain
 

@@ -11,8 +11,11 @@ Answers join by the program (`refresh`): in a home place the first line there af
 an internal event or a program notice, or a line that names the question (`raw.asuna_answer`, kept for home kinds
 only: `tools/agent_line.py send --answers <id>`); for the action brain its task's report once the task is done.
 A place whose patience ran out unanswered lapses; the turn the note opened ending with no line of hers is 没问.
-A question still open a day after its patience (or its last answer), or a week after it was asked with no patience,
-is closed by the program, and each home conversation is told that once. She closes a question herself with `took`.
+The program closes a question once every place is settled: a home place or the action brain when it answered, a group
+when its patience is over (more of the group may still answer until then), any place when it lapsed or was never
+asked; a place without patience that never answers lets it close a week after it was asked. Its took says in words
+how it ended (CLOSED_TOOK), each conversation it was asked in or shown at home is told that once, and she replaces
+that took with her own by closing it herself (RETAKEN).
 
 She reads it all in words (`block`: questions_from_program at home; `read`), times as `_at` fields. Each move is one
 audit line without text (question.asked / answered / lapsed / closed). Words come from the versioned tables below.
@@ -37,7 +40,6 @@ TOOK_CHARS = 500
 PLACES_MAX = 3
 EXCERPT = 40
 ANSWER_CHARS = 2000
-ENDING = timedelta(hours=24)        # open this long after its patience or its last answer: closed by the program
 UNANSWERED = timedelta(days=7)      # a question without patience, never answered: closed by the program
 SHOWN = 8
 READ_DAYS, READ_SHOWN = 30, 10
@@ -50,13 +52,15 @@ DEVELOPER_ROUTE = 'claude-code'     # the developer's line when no home route is
 STATE_WORDS = {'pending': '还没问出来', 'waiting': '等着', 'answered': '答了', 'lapsed': '没答，不等了',
                'not_asked': '没问（那一回合你没说）', 'not_sent': '没问出去', 'working': '行动脑在做',
                'not_done': '行动脑没做完'}
-QUESTION_WORDS = {'open': '等着', 'answered': '有回答', 'unanswered': '都没答', 'ended': '程序关了'}
+QUESTION_WORDS = {'open': '等着', 'answered': '有回答', 'unanswered': '都没答', 'ended': '程序收了'}
 NOTE_TEXT = ('你用 ask 要在这里问的问题（%s）：\n%s\n在这里问出来，或者决定不问；这里的回话程序会记到这个问题上。')
-BLOCK_NOTE = ('你问出去的问题，还没结束的：每处问在哪、到几点不等、答了没有；回答本身用 ask 的 read 读，'
-              '结束用 ask 的 close。程序关掉的，在每个对话里说一次。')
+BLOCK_NOTE = ('你问出去的问题，还没结束的：每处问在哪、到几点不等、答了没有；回答本身用 ask 的 read 读。'
+              '每处都答了或过了耐心，程序就收掉，在每个对话里说一次收成了什么；要写你自己的结论，照常 close 写 took。')
 BRIEF = '这是一个问题：查清楚，在报告里回答。\n%s'
 ASKED = '问出去了：答了没有、到几点不等，看 questions_from_program；回答用 ask 的 read 读，问完用 close 结束。'
-ENDED_TOOK = '程序关的：过了耐心一天还没结束'
+# How the program closed it, by what came of its places (state_of before closing).
+CLOSED_TOOK = {'answered': '程序收的：都有了结果，有回答', 'unanswered': '程序收的：没有回答',
+               'open': '程序收的：问出去一周了还没回音'}
 MIGRATED_TOOK = '从开发者留言箱搬过来的'
 THANKS = '答你的有：%s。想谢谢他们、或告诉他们后来怎样，由你。'
 NOBODY = '这个问题没人答。'
@@ -124,7 +128,8 @@ GROUP_PATIENCE = ('一会儿', '半天', '一天')
 LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
 GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
-GROUP_NOTE = '你在这里问的问题：等到几点、谁回了（按标签和时间）；回答怎么带回家由你，用 leave_note 写 question。'
+GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
+              '回答怎么带回家由你，用 leave_note 写 question。')
 
 
 def ask_in_group(store, ep, scene, text, patience):
@@ -179,15 +184,20 @@ def _group_answers(store, source, line):
 
 
 def group_block(store, persona, scene, moment=None):
-    """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered."""
+    """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered;
+    and once each one the program closed here, with how it ended."""
     from .schedule_rules import line_stamp, scene_timezone
     moment = moment or _now()
     rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
     rows = [row for row in rows if row.get('state') == 'open']
-    if not rows:
+    told = list(store.db.questions.find({'state': 'closed', 'closed.by': 'program', 'told_in': {'$ne': scene['_id']},
+                                         'sources': {'$elemMatch': {'scene_id': scene['_id'], 'kind': 'group'}}}))
+    if not rows and not told:
         return None
     zone = scene_timezone(store.config, scene)
-    items = []
+    items = ['%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), row['closed']['took']) for row in told]
+    if told:
+        store.db.questions.update_many({'_id': {'$in': [row['_id'] for row in told]}}, {'$addToSet': {'told_in': scene['_id']}})
     for row in rows:
         source = next(s for s in row['sources'] if s.get('kind') == 'group')
         words = '%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), STATE_WORDS[source['state']])
@@ -303,7 +313,8 @@ def refresh(store, row, moment=None):
     ends = _ends(row, sources)
     if ends and moment >= ends:
         changed = True
-        update.update(state='closed', closed={'at': moment.isoformat(), 'by': 'program', 'took': ENDED_TOOK})
+        took = CLOSED_TOOK[state_of({**row, 'sources': sources})]
+        update.update(state='closed', closed={'at': moment.isoformat(), 'by': 'program', 'took': took})
         events.append(('question.closed', {'by': 'program'}))
     if not changed:
         return row
@@ -317,18 +328,23 @@ def refresh(store, row, moment=None):
 
 
 def _ends(row, sources):
-    """When the program closes it: a day after its last patience or answer once every place is settled or past
-    patience; a week after it was asked otherwise."""
+    """When the program closes it: once every place is settled — a home place or the action brain when it answered,
+    a group when its patience is over (more may still answer there until then), any place lapsed or never asked; a
+    week after it was asked while a place without patience still waits."""
     marks = []
     for source in sources:
         if source['state'] in ('pending', 'working') or source['state'] == 'waiting' and not source.get('until'):
             return _at(row['asked_at']) + UNANSWERED
-        if source['state'] == 'answered':
+        if source['state'] == 'waiting':
+            marks.append(_at(source['until']))
+        elif source['state'] == 'answered':
             marks += [_at(answer.get('at')) for answer in source['answers'] if answer.get('at')]
-        elif source.get('until'):
+            if source.get('kind') == 'group' and source.get('until'):
+                marks.append(_at(source['until']))
+        elif source.get('until') and source['state'] == 'lapsed':
             marks.append(_at(source['until']))
     marks = [mark for mark in marks if mark]
-    return (max(marks) if marks else _at(row['asked_at'])) + ENDING
+    return max(marks) if marks else _at(row['asked_at'])
 
 
 def state_of(row):
@@ -386,8 +402,9 @@ def block(store, persona, scene_id, moment=None, opening=None):
     None when there are none. `opening`: the question whose note opened this turn (its text is in that note)."""
     moment = moment or _now()
     from .config import excerpt
-    rows = [refresh(store, row, moment) for row in
-            store.db.questions.find({'persona': persona, 'state': 'open'}).sort('asked_at', -1).limit(SHOWN)]
+    # Every open one is brought up to date, shown or not: one past its end closes now, not when it reaches the top.
+    rows = [refresh(store, row, moment) for row in store.db.questions.find({'persona': persona, 'state': 'open'})]
+    rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)[:SHOWN]
     told = list(store.db.questions.find({'persona': persona, 'state': 'closed', 'closed.by': 'program',
                                          'told_in': {'$ne': scene_id}}).sort('asked_at', -1).limit(SHOWN))
     rows += told
@@ -400,6 +417,8 @@ def block(store, persona, scene_id, moment=None, opening=None):
             item['question'] = excerpt(' '.join(row['text'].split()), EXCERPT)
         item.update(asked_at=row['asked_at'], state=QUESTION_WORDS[state_of(row)],
                     to=[place_words(source) for source in row['sources']])
+        if row.get('state') == 'closed':
+            item['took'] = row['closed']['took']
         items.append(item)
     if told:
         store.db.questions.update_many({'_id': {'$in': [row['_id'] for row in told]}},

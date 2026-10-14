@@ -66,7 +66,13 @@ def test_who_speaks_while_it_waits_gets_her_a_look_once_and_their_line_is_an_ans
     assert row['sources'][0]['state'] == 'answered' and [a['line'] for a in answers] == ['in-ans-1', 'in-ans-2']
     assert all('text' not in a for a in answers), 'answers are kept by reference'
     block = questions.group_block(store, 'P1', scene)
-    assert '；回了：' in block['items'][0]
+    assert '；回了：' in block['items'][0] and row['state'] == 'open', 'answered, but more may answer within its patience'
+    # Past its patience the program closes it, and the group is told once what it closed as (her choice 2026-10-15).
+    after = datetime.now(timezone.utc) + timedelta(minutes=11)
+    told = questions.group_block(store, 'P1', scene, after)
+    [item] = told['items']
+    assert item.startswith(row['_id'] + ' 你 ') and item.endswith('问的：程序收的：都有了结果，有回答')
+    assert questions.group_block(store, 'P1', scene, after) is None, 'told once'
 
 
 def test_she_brings_the_answer_home_in_her_words_and_reads_the_original_there(store):

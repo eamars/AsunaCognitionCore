@@ -52,17 +52,21 @@ def test_a_question_here_is_her_reply_and_the_next_line_answers_it(store):
     assert [source['kind'] for source in row['sources']] == ['here'] and row['patience'] == '一会儿'
     assert store.db.audit_events.find_one({'type': 'question.asked', 'payload.question': row['_id']})
     back, _ = owner_says(store, service, 'ask-2', '吃面吧')
+    # Every place answered: the program closes it at once and says so here once, with what it closed as.
     item = item_of(back['context'], row['_id'])
-    assert item['state'] == '有回答' and item['to'][0]['state'] == '答了' and item['question'] == '晚饭吃什么好？'
+    assert item['state'] == '程序收了' and item['took'] == '程序收的：都有了结果，有回答' and item['to'][0]['state'] == '答了'
+    assert item['question'] == '晚饭吃什么好？'
     assert store.db.audit_events.find_one({'type': 'question.answered', 'payload.question': row['_id']})
     read_ep, read_lane = owner_says(store, service, 'ask-3', '嗯', calls=[('ask', {'op': 'read', 'id': row['_id']})])
+    assert 'questions_from_program' not in read_ep['context'], 'told once'
     [(found, ok)] = results(read_lane, 'ask')
     assert ok and found['to'][0]['answers'][0]['text'] == '吃面吧' and found['to'][0]['answers'][0]['line']
     _, close_lane = owner_says(store, service, 'ask-4', '嗯', calls=[('ask', {'id': row['_id'], 'took': '吃面'})])
     [(closed, ok)] = results(close_lane, 'ask')
-    assert ok and closed['closed'].startswith('答你的有：') and store_row(store, row['_id'])['state'] == 'closed'
+    assert ok and '程序收的：都有了结果，有回答' in str(closed) and store_row(store, row['_id'])['closed']['took'] == '吃面', \
+        'her own took replaces the program\'s'
     after, _ = owner_says(store, service, 'ask-5', '好')
-    assert 'questions_from_program' not in after['context'], 'a question she closed leaves the block'
+    assert 'questions_from_program' not in after['context']
     _, history_lane = owner_says(store, service, 'ask-6', '嗯', calls=[('ask', {'op': 'read', 'to': ['这里']})])
     [(history, ok)] = results(history_lane, 'ask')
     assert ok and history['items'][0]['took'] == '吃面' and history['items'][0]['state'] == '答了'
@@ -103,13 +107,13 @@ def test_unspoken_is_not_asked_unanswered_lapses_and_the_program_closes_it_once_
     waiting = asked(store, lane)
     later = datetime.now(timezone.utc) + timedelta(hours=2)
     lapsed = questions.refresh(store, store_row(store, waiting['_id']), later)
-    assert lapsed['sources'][0]['state'] == 'lapsed' and lapsed['state'] == 'open'
+    assert lapsed['sources'][0]['state'] == 'lapsed' and lapsed['state'] == 'closed', 'past its patience: closed'
+    assert lapsed['closed'] == {**lapsed['closed'], 'by': 'program', 'took': '程序收的：没有回答'}
     assert store.db.audit_events.count_documents({'type': 'question.lapsed', 'payload.question': waiting['_id']}) == 1
-    end = later + timedelta(days=2)
-    shown = questions.block(store, 'P1', 'dm-a', end)
-    assert {item['state'] for item in shown['items']} == {'程序关了'}
-    assert questions.block(store, 'P1', 'dm-a', end) is None, 'told once in this conversation'
-    assert questions.block(store, 'P1', 'dm-o', end), 'and once in each other home conversation'
+    shown = questions.block(store, 'P1', 'dm-a', later)
+    assert {item['state'] for item in shown['items']} == {'程序收了'}
+    assert questions.block(store, 'P1', 'dm-a', later) is None, 'told once in this conversation'
+    assert questions.block(store, 'P1', 'dm-o', later), 'and once in each other home conversation'
 
 
 def test_the_action_brain_answers_with_its_report(store):
@@ -118,12 +122,16 @@ def test_the_action_brain_answers_with_its_report(store):
     row = asked(store, lane)
     task = store.db.tasks.find_one({'_id': row['sources'][0]['task']})
     assert '这个词是什么意思？' in task['brief']
+    store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'BLOCKED', 'result': {}}})
+    assert questions.state_of(questions.refresh(store, store_row(store, row['_id']))) == 'unanswered' or \
+        questions.read(store, 'P1', row['_id'])['to'][0]['state'] != '答了', 'ended without a report: not done'
+    _, lane = owner_says(store, service, 'ask-9', '那个词呢', calls=[('ask', {'question': '那个词呢？', 'to': ['行动脑']})])
+    row = asked(store, lane)
+    task = store.db.tasks.find_one({'_id': row['sources'][0]['task']})
     store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'RETURNED', 'finished_at': task['created_at'],
                                                               'result': {'text': '意思是这样。'}}})
     found = questions.read(store, 'P1', row['_id'])
     assert found['to'][0]['state'] == '答了' and found['to'][0]['answers'][0]['text'] == '意思是这样。', 'its usual end'
-    store.db.tasks.update_one({'_id': task['_id']}, {'$set': {'state': 'BLOCKED', 'result': {}}})
-    assert questions.read(store, 'P1', row['_id'])['to'][0]['state'] != '答了', 'ended without a report: not done'
 
 
 def test_a_place_outside_home_is_refused_in_words(store):

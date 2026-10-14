@@ -58,6 +58,12 @@ UNSENT_CHARS = 40
 REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话，或者用 stay_silent 结束。'
 
 
+def prepared_record(manifest, person_id, policy_epoch):
+    """context.prepared (ADR-067): the manifest (what was selected, the context's hash) and who the turn is with, as
+    the memory view looks it up (native_cognition); the context itself is the episode's own."""
+    return {'manifest':manifest,'context':{'person_id':person_id,'policy_epoch':policy_epoch}}
+
+
 class Coordinator:
     def __init__(self, store: Store, character: Lane, *, context=None, publisher=None, crash=lambda point:None,
                  task_service=None, **_ignored):
@@ -99,7 +105,7 @@ class Coordinator:
                     ep=self._update(ep,native_session_id=self._role_session(event,ep_id,scene,persona))
                 return self.advance(ep_id)
             _,context,manifest=self.context.prepare(event,persona)
-            self.store.audit(ep_id,'context.prepared',{'manifest':manifest,'context':context},scene['scope_key'])
+            self.store.audit(ep_id,'context.prepared',prepared_record(manifest,event['person_id'],scene['policy_epoch']),scene['scope_key'])
             from . import errands
             errand=errands.carried(self.store,event)       # ADR-066: home's authority, for this turn only
             ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
@@ -497,7 +503,7 @@ class Coordinator:
                                 silent_reason=verdict['reason'] if verdict['choice']=='failed' else '不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])
         context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
-        self.store.audit(ep['_id'],'context.prepared',{'manifest':manifest,'context':context},ep['scope_key'])
+        self.store.audit(ep['_id'],'context.prepared',prepared_record(manifest,ep['person_id'],ep['policy_epoch']),ep['scope_key'])
         return self._update(ep,state='PREPARED',attend=verdict,context=context,manifest=manifest,
                             system_ref=manifest['system_ref'])
 

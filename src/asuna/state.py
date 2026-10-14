@@ -54,6 +54,17 @@ COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',),
                   'notes': ('seen_in',)}                       # every turn that shows a note adds itself
 
 
+# Fields computed from a document's own content (a memory's embedding vector): a commit leaves them out and names
+# them (`derived_left_out`); audit.verify_documents and the trace compare the stored document the same way.
+DERIVED_FIELDS = {'memory_units': ('embedding',)}
+
+
+def without_derived(collection, doc, fields=None):
+    """(the document without its derived fields, the names left out)."""
+    left = [k for k in (DERIVED_FIELDS.get(collection, ()) if fields is None else fields) if k in doc]
+    return ({k: v for k, v in doc.items() if k not in left} if left else doc), left
+
+
 def content_digest(collection, doc):
     skip = COUNTER_FIELDS.get(collection, ())
     return sha(canonical({k: v for k, v in doc.items() if k not in skip}))
@@ -65,6 +76,9 @@ def commit_payload(operation, collection, doc, **extra):
     The hash chain covers the reference; audit.verify_documents compares the stored
     document with content_sha256, so tampering stays detectable.
     """
+    doc, left = without_derived(collection, doc)
+    if left:
+        extra = {**extra, 'derived_left_out': left}
     body = canonical(doc)
     if len(body) <= AUDIT_INLINE_LIMIT:
         return {'operation': operation, 'collection': collection, 'document': doc, **extra}
@@ -183,7 +197,8 @@ class Store:
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
         self._size(doc)
-        self.audit(stream,'state.intent',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected},doc.get('scope_key','operator'))
+        # No intent record before the write (ADR-067): a single-document write is atomic, and a commit that never got
+        # its record is found by the document's own _last_op (recover_commits).
         try:
             if expected is None:
                 self.db[collection].insert_one(doc)

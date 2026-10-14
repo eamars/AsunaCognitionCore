@@ -219,7 +219,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:
-        raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：mode 写 %s，或不写。'
+        raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：deliver 写 %s，或不写。'
                           % (KIND_WORDS[kind], MODE_WORDS[choices[0]], choices[0]))
     if trust == UNTRUSTED:
         who = borrowed(store, ep['scene_id'], text, moment)

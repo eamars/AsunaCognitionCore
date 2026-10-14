@@ -191,4 +191,4 @@ def run(args, home=True):
         return remove(args.get('word'))
     if op == 'summary':
         return summary()
-    raise PrivateWordsError('op 是 add、remove 或 summary')
+    raise PrivateWordsError('do 是 add、remove 或 summary')

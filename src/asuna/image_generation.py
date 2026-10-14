@@ -25,7 +25,7 @@ OPTION_RULES = {'steps': ('int', 1, 100), 'cfg': ('number', 0, 30),
 GENERATE_IMAGE_TOOL = {
     'name': GENERATE_IMAGE_TOOL_NAME,
     'description': ('Draw one picture with the local image service and put it in this task workspace. '
-                    'workflows=true lists the ready text-to-image workflows (what each is for, not for, and how '
+                    'list_routes=yes lists the ready text-to-image workflows (what each is for, not for, and how '
                     'it wants to be prompted) without drawing; pick one and write the prompt in its style and '
                     'language (most want English). Then give the prompt and optionally that workflow id (otherwise '
                     'the service picks a generic anime one, optionally for a style), negative_prompt, width/height '
@@ -102,8 +102,8 @@ def validate(args):
     request['timeout'] = timeout
     if args.get('workflows') is not None:
         if args['workflows'] is not True:
-            return None, _error('INVALID_WORKFLOWS', note='workflows 只能写 true（列出能用的文生图路线，不画图），%s；'
-                                                          '要画图就不写 workflows。' % _given(args['workflows']))
+            return None, _error('INVALID_WORKFLOWS', note='list_routes 只能写 yes（列出能用的文生图路线，不画图），%s；'
+                                                          '要画图就不写 list_routes。' % _given(args['workflows']))
         request['list'] = True
         return request, None
     job = args.get('job')
@@ -116,7 +116,7 @@ def validate(args):
     prompt = args.get('prompt')
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > PROMPT_CHARS:
         return None, _error('PROMPT_REQUIRED', max_chars=PROMPT_CHARS,
-                            note='prompt 要写一段 1..%d 字的画面描述，%s；只想看路线就写 workflows=true，'
+                            note='prompt 要写一段 1..%d 字的画面描述，%s；只想看路线就写 list_routes=yes，'
                                  '取上次没画完的就写 job。' % (PROMPT_CHARS, _given(prompt)))
     request['prompt'] = prompt
     negative = args.get('negative_prompt')
@@ -130,7 +130,7 @@ def validate(args):
         if value is not None:
             if not isinstance(value, str) or not re.fullmatch(pattern, value):
                 return None, _error('INVALID_' + key.upper(), value=str(value)[:120],
-                                    note=('workflow 照抄 workflows=true 列出的 id' if key == 'workflow' else
+                                    note=('workflow 照抄 list_routes=yes 列出的 id' if key == 'workflow' else
                                           'style 是小写字母、数字、_ 或 -，40 字以内') + '；不写就用通用路线。')
             request[key] = value
     for key in ('width', 'height'):
@@ -158,7 +158,7 @@ def validate(args):
                   else isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high
                   if kind == 'number' else isinstance(value, str) and re.fullmatch(r'[a-z0-9_]{1,80}', value))
             if not ok:
-                return None, _error('INVALID_OPTION', option=key, note='%s，%s；照 workflows=true 里这条路线声明的取值写。'
+                return None, _error('INVALID_OPTION', option=key, note='%s，%s；照 list_routes=yes 里这条路线声明的取值写。'
                                                                      % (OPTION_WORDS[key], _given(value)))
         request['options'] = dict(options)
     return request, None

@@ -499,7 +499,7 @@ def visit_block(store, scene, visit, moment):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):
         block['picture'] = {'artifact_id': visit['artifact_id'],
-                            'note': ('这是托你一起带过去的那张图，用 attach_image 随话发；看了现场觉得不合适也可以不发。'
+                            'note': ('这是托你一起带过去的那张图，用 speak 的 picture 发；看了现场觉得不合适也可以不发。'
                                      if visit.get('intent') == 'errand' else
                                      '这是你出门时想分享的那张图；发不发、配什么话，看了现场再定。')}
     return block

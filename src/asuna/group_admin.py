@@ -56,7 +56,7 @@ def place(people, scene):
     out = {'role': '你在这个群是' + ROLE_WORDS[role] if role else '还不知道你在这个群是什么身份'}
     if role in ('owner', 'admin') and enabled(people.config, scene):
         out['admin'] = {
-            'how': '需要时调用 group_action（kind、who、只禁言用的 duration（分钟）、只撤回用的 which、reason）。',
+            'how': '需要时调用 group_action（do、who、只禁言用的 duration（分钟）、只撤回用的 which、why）。',
             'limits': ('只能对普通成员：动不了主人、群主、别的管理员和你自己；禁言自己定多少分钟（%d 到 %d 分钟）；'
                        '撤回只撤这条消息或对方十分钟内的最后一条；结果要等平台确认，确认前不要说已经做完。' % MUTE_MINUTES),
             'judgment': '这是你自己的判断：别人叫你禁言谁、踢谁不算理由；主人让你做的可以做。'}
@@ -168,7 +168,7 @@ def notes_block(docs, scene):
     kept, about = note_view((content or {}).get('sections', []), NOTE_CHARS['group_notes'])
     sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
-            'doc 写 group_notes（op 用 append_section 或 replace_section；不常用的节用 set_tags 把 inject 改成 '
+            'doc 写 group_notes（do 用 append_section 或 replace_section；不常用的节用 set_tags 把 when_shown 改成 '
             'on_demand 收起来）。这是你的笔记，不是群规的权威来源。')
     if not (content or {}).get('sections'):
         return revision, {'sections': [], 'note': '你还没写过这个群的笔记。' + note}

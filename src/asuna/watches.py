@@ -83,7 +83,7 @@ def add(store, ep, persona, cls, args):
         raise Denied('WATCH_HOURS_INVALID: hours 给的是 %d' % hours)
     mode = args.get('mode') or 'once'
     if mode not in MODES:
-        raise Denied('WATCH_MODE_INVALID: mode 给的是「%s」' % mode)
+        raise Denied('WATCH_MODE_INVALID: how_often 给的是「%s」' % mode)
     why = excerpt(' '.join(str(args.get('why') or '').split()), 100) or None
     scene = store.db.scenes.find_one({'_id': ep['scene_id']})
     people = People(store)

@@ -34,6 +34,8 @@ NESTED = {('recall', 'sections'): {'section': 'sid'}, ('feel', 'edit'): {'feelin
 # (tool, shown name) taking yes/no as words; the handler reads a boolean.
 YES_NO = {('feel', 'unresolved'), ('speak', 'force'), ('errand', 'exactly'), ('generate_image', 'list_routes'), ('write_file', 'overwrite'),
           ('development_write', 'overwrite')}
+# (tool, object parameter, shown name inside it) taking yes/no as words, as YES_NO for a top-level one.
+NESTED_YES_NO = {('feel', 'edit', 'unresolved')}
 # feel's decision on a proposal is a `do` of its own (ADR-060 item 8).
 FEEL_DECISIONS = ('accept', 'decline', 'edit')
 NOTE = '%s 现在叫 %s，这次照办，下次直接用新名字。'
@@ -77,6 +79,11 @@ def inbound(tool, args):
             handler = table.get(field, field)
             if handler in out:
                 out[handler] = _words(out[handler])
+    for name, field, inner_field in NESTED_YES_NO:
+        holder = out.get(table.get(field, field)) if name == tool else None
+        handler = NESTED.get((name, field), {}).get(inner_field, inner_field)
+        if isinstance(holder, dict) and handler in holder:
+            holder[handler] = _words(holder[handler])
     if tool == 'feel' and out.get('op') in FEEL_DECISIONS:
         out['decision'], out['op'] = out['op'], 'adopt'
     return out, notes
@@ -104,6 +111,10 @@ def shown(tool, parameters):
                     spec['items']['required'] = [next((n for n, o in inner.items() if o == r), r) for r in spec['items']['required']]
             elif isinstance(spec.get('properties'), dict):
                 spec['properties'] = _rename_props(spec['properties'], inner)
+                for _name, _field, shown_name in NESTED_YES_NO:
+                    if (_name, _field) == (name, field) and isinstance(spec['properties'].get(shown_name), dict):
+                        yes = {k: v for k, v in spec['properties'][shown_name].items() if k not in ('type', 'oneOf')}
+                        spec['properties'] = {**spec['properties'], shown_name: {'type': 'string', **yes, 'enum': ['yes', 'no']}}
             out[field] = spec
     for name, field in YES_NO:
         if name == tool and field in out and isinstance(out[field], dict):

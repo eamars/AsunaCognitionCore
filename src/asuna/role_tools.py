@@ -81,7 +81,7 @@ AFFECT_FIELDS = {
     'ref': _s('触动你的那件事：ref_index 里的 id，或 memories、task_state_from_program 里那条的 _id'),
     'why': _s('来由'),
     'cost': _s('代价，可省略'),
-    'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 true'},
+    'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 yes'},
 }
 
 # The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
@@ -100,11 +100,11 @@ TOOLS = {
         'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
                          '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
                          '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。' % RECALLS_PER_TURN),
-        'parameters': {'query': _s(limit=500, description='想找什么，用一句话说', required=True),
+        'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 时可省略'),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                                         'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
-                                        'sid': _s('节的 sid', required=True)}}}},
+                                        'sid': _s('节的 section', required=True)}}}},
     },
     'delegate': {
         'description': ('把一件要在外面做的事交给行动脑：查资料、查完整原话、跑代码、改文件、画图、改能力。title 是简短标题；'
@@ -175,7 +175,7 @@ TOOLS = {
         'description': ('盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）'
                          '。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。'
                          'hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）'
-                         '。刚 @ 过或回过的人程序本来就等三分钟（await_answer）。'),
+                         '。刚 @ 过或回过的人程序本来就等三分钟。'),
         'parameters': {'op': _s('做什么', required=True, enum=['on', 'off']),
                        'person': _s('on 用：这个对话里的人（标签、#编号或名字）'),
                        'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72'},
@@ -255,7 +255,7 @@ TOOLS = {
             'op': _s('做什么（不写时：有 feeling 就是 record）', enum=['record', 'close', 'void', 'accept', 'decline', 'edit']),
             **AFFECT_FIELDS,
             'event_id': _s('close/void 的那一笔'),
-            'proposal_id': _s('adopt 的那条提案'),
+            'proposal_id': _s('accept、decline 或 edit 的那条提案'),
             'edit': {'type': 'object', 'additionalProperties': False, 'description': 'do=edit 时改成的样子',
                      'properties': AFFECT_FIELDS},
         },
@@ -853,12 +853,12 @@ WORDS = {
     'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节。',
-    'DOC_BODY_REQUIRED': '这个操作要在 body 里写正文。',
+    'DOC_BODY_REQUIRED': '这个操作要在 content 里写正文。',
     'DOC_HEADING_REQUIRED': '新的一节要有标题。',
-    'DOC_REASON_REQUIRED': '要写 reason：为什么改，2000 字以内。',
+    'DOC_REASON_REQUIRED': '要写 why：为什么改，2000 字以内。',
     'DOC_OP_NOT_ALLOWED': '这份文档不能这样改。',
     'DOC_OP_UNKNOWN': '没有这种文档操作。',
-    'DOC_TAGS_INVALID': 'visibility 或 inject 的值不对。',
+    'DOC_TAGS_INVALID': 'visibility 或 when_shown 的值不对。',
     'DOC_REVISION_TOO_LARGE': '这份文档写完太大了。',
     'DOC_NOT_FOUND': '没有这份文档；新文档只能用 append_section 开始。',
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
@@ -900,7 +900,7 @@ WORDS = {
     'CREDENTIAL_NOT_FOUND': '保险箱里没有这个名字。',
     'CREDENTIALS_UNAVAILABLE': '这会儿保险箱用不了：跟对方说现在收不了，值不要写进别处。',
     'WATCH_HOURS_INVALID': 'hours 是 1 到 72 之间的整数。',
-    'WATCH_MODE_INVALID': 'mode 是 once 或 burst。',
+    'WATCH_MODE_INVALID': 'how_often 是 once 或 burst。',
     'WATCH_PERSON_NOT_HERE': '这个对话里找不到这个人：照抄他的标签或 #编号。',
     'WATCH_PERSON_UNCLEAR': '这个名字对得上不止一个人：用标签里的 #编号。',
     'WATCH_LIST_FULL': 'watch 名单满了：先 off 一个（id 照抄 watching_from_program）。',
@@ -1164,7 +1164,8 @@ class RoleTools:
         return {'saved': True, 'note': '已存档。' + ('超了 %d 字。' % over if over > 0 else '')}, False
 
     def tool_recall(self, ep, call_id, args):
-        query = self._text(args, 'query', 500)
+        # ADR-060: query is optional when sections name what to read.
+        query = self._text(args, 'query', 500, required=not args.get('sections'))
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
             raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN)
@@ -1179,7 +1180,7 @@ class RoleTools:
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
         event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
-        _, recalled, manifest = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))
+        recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1] if query else {}
         documents, missing = read_sections(self.store, ep, [s for s in sections if s not in listing], self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
@@ -1228,7 +1229,8 @@ class RoleTools:
             readable = {'global-safe', ep['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
                                                           if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
             shown = {m.get('_id') for m in result['memories']}
-            found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep), shown)
+            found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep),
+                                          shown) if query else []
             if found:
                 result['headings'] = found
             result['searched'] = memory_tiers.SEARCHED
@@ -1593,7 +1595,7 @@ class RoleTools:
             scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
             if (scene or {}).get('kind') != 'group' or item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
-                                                                  else 'op「%s」不行' % item.get('op')))
+                                                                  else 'do「%s」不行' % item.get('op')))
             item = {**item, 'doc': notes_slug(ep['scene_id'])}
         elif cls != visibility.OWNER_PRIVATE:
             raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % item['doc'])
@@ -1601,7 +1603,7 @@ class RoleTools:
             # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
             # tidy them by name from her nightly settlement (context_budget.review_block).
             if item.get('op') not in group_note_ops():
-                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: op「%s」不行' % item.get('op'))
+                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: do「%s」不行' % item.get('op'))
             item = {k: v for k, v in item.items() if k != 'kind'}    # a group's notes are notes, whatever kind says
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:

@@ -52,7 +52,7 @@ def stale(slug):
 def _missing_sid(slug, sid, sections):
     sids = [s['sid'] for s in sections]
     listed = '、'.join(sids[:30]) + ('…' if len(sids) > 30 else '')
-    return ('「%s」里没有 sid「%s」' % (slug, sid) if sid else '没写 sid') + (
+    return ('「%s」里没有 section「%s」' % (slug, sid) if sid else '没写 section') + (
         '；有的是：%s，照抄一个' % listed if sids else '；这份文档还没有节，用 append_section 开第一节')
 
 
@@ -245,7 +245,7 @@ class DocumentStore:
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是流水记录：补一节用 append_section，改一节用 replace_section'
                                     % slug)
             if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
-                raise DocumentError('DOC_BODY_REQUIRED', '%s 的 body 是空的' % op)
+                raise DocumentError('DOC_BODY_REQUIRED', '%s 的 content 是空的' % op)
             if body is not None and len(body.encode()) > MAX_REVISION_BYTES:
                 raise DocumentError('DOC_REVISION_TOO_LARGE', '这一节有 %d 字节，上限 %d 字节；拆成几节写'
                                     % (len(body.encode()), MAX_REVISION_BYTES))
@@ -351,11 +351,11 @@ class DocumentStore:
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
             raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
-                                + '；op 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
+                                + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
         reason = intent.get('reason')
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:
-            raise DocumentError('DOC_REASON_REQUIRED', 'reason %d 字，上限 2000 字' % len(reason)
-                                if isinstance(reason, str) and reason else 'reason 没写')
+            raise DocumentError('DOC_REASON_REQUIRED', 'why %d 字，上限 2000 字' % len(reason)
+                                if isinstance(reason, str) and reason else 'why 没写')
         kind = intent.get('kind')
         if kind is not None and kind not in NEW_KINDS:
             raise DocumentError('DOC_KIND_INVALID', _bad_tag('kind', kind, NEW_KINDS))
@@ -389,7 +389,7 @@ class DocumentStore:
             raise DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是只读的约定文档，哪种操作都改不了；重试也一样' % slug)
         by_sid = {s['sid']: s for s in sections}
         if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
-            raise DocumentError('DOC_BODY_REQUIRED', '%s 的 body 是空的' % op)
+            raise DocumentError('DOC_BODY_REQUIRED', '%s 的 content 是空的' % op)
         if op == 'replace_section':
             target = by_sid.get(intent.get('sid'))
             if not target:

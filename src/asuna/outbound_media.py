@@ -53,6 +53,8 @@ MAX_ITEMS_OFFERED = 6                 # 一轮最多给她看几张可引用的�
 IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要发图的那一轮从 '
                  'image_artifacts_from_program 里引用；同一主人的另一个私聊入口也能引用它。')
 
+SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一轮可以发的图片：用 speak 的 picture（artifact_id 照抄下面列出的值，'
+                    '它不是文件路径也不是文件名）。没列出的图片不能发。')
 OFFER_NOTE = ('这些是程序已经存好、这一轮可以随你要说的那条消息一起发出去的图片。'
               '想发就调用 attach_image（artifact_id、why；一回合至多一张，再调用就换成新的那张），'
               'artifact_id 只能照抄下面列出的值——它不是文件路径也不是文件名。'
@@ -408,6 +410,11 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     return out
 
 
+def _offer_note(scene):
+    from . import channel_kinds
+    return SPEAK_OFFER_NOTE if channel_kinds.reply_parts((scene or {}).get('_id')) else OFFER_NOTE
+
+
 def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None):
     """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
     picked：出门或差事带来的那张她自己做的图，不在最新几张里也列上。"""
@@ -421,13 +428,13 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
         for item in items:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
         note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
-        return {'items': items, 'note': OFFER_NOTE + note} if items else None
+        return {'items': items, 'note': _offer_note(scene) + note} if items else None
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
                             limit=limit, own_scope=own_scope)
     if not items:
         return None
-    note = OFFER_NOTE + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
+    note = _offer_note(scene) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
     return {'items': items, 'note': note}
 
 

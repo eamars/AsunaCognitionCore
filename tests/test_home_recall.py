@@ -59,3 +59,22 @@ def test_the_recall_tool_adds_them_at_home_only(store, retrieval):
         coordinator.ingest({'event_id': 'e-' + scene, 'scene_id': scene, 'person_id': person, 'text': '那个项目叫什么来着'})
         result = next(r[4] for r in lane.tool_results if r[2] == 'recall')
         assert ('own_thoughts_in_groups' in result) == expected, (scene, result.keys())
+
+
+def test_reading_sections_needs_no_query(store, retrieval):
+    """ADR-060: query is optional when sections name what to read; without it no memory search runs."""
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane, FakeTurn
+    owner(store)
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '翻一下。'}), ('recall', {'sections': [{'doc': 'persona'}]})], '嗯。')])
+    coordinator = Coordinator(store, lane)
+    coordinator.context.retrieval = retrieval
+    coordinator.ingest({'event_id': 'e-sections', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '翻翻你的人设'})
+    [(result, ok)] = [(r[4], r[5]) for r in lane.tool_results if r[2] == 'recall']
+    assert ok and result['memories'] == [] and result['query'] is None, result
+
+
+def test_where_speak_speaks_a_picture_is_offered_as_its_part():
+    from asuna import outbound_media
+    assert 'speak 的 picture' in outbound_media._offer_note({'_id': 'qq:1:group:2'})
+    assert 'attach_image' in outbound_media._offer_note({'_id': 'dm-a'})

@@ -97,7 +97,7 @@ def note_view(sections, limit):
                          '整理一下就能都放进来。' % len(folded))
     tucked = [s for s in sections if s.get('inject', 'always') != 'always']
     if tucked:
-        about['tucked_away'] = '另有 %d 节收起了（inject 不是 always），不自动带上。' % len(tucked)
+        about['tucked_away'] = '另有 %d 节收起了（when_shown 不是 always），不自动带上。' % len(tucked)
     return kept, about
 
 
@@ -267,6 +267,6 @@ def review_block(store, persona, moment):
     return {'items': items, **({'more': '还有 %d 份也该整理，下次再列' % (len(due) - len(items))}
                                 if len(due) > len(items) else {}),
             'note': ('这几份是你每回合都会自动带上的笔记，今晚该整理了。整理就是：过时的、重复的、已经不对的，'
-                     '用 replace_section 改写成现在成立的样子；不常用但想留着的节用 set_tags 把 inject 改成 '
+                     '用 replace_section 改写成现在成立的样子；不常用但想留着的节用 set_tags 把 when_shown 改成 '
                      'on_demand 收起来（还在，recall 能读）；细节多的可以挪进不自动带上的文档，这里留一句指路。'
                      'doc 照抄这里的 doc。笔记短了，你每回合要读的就少，留什么由你定，今晚不整理也可以。')}

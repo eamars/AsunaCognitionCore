@@ -26,12 +26,12 @@ class SelfState:
         if target not in ('character_core', 'current_self'):
             raise ValueError('INVALID_SELF_STATE_UPDATE: target「%s」不对，只能是 character_core 或 current_self' % target)
         if not isinstance(body, str) or not body.strip():
-            raise ValueError('INVALID_SELF_STATE_UPDATE: body 是空的；写完整的新正文')
+            raise ValueError('INVALID_SELF_STATE_UPDATE: content 是空的；写完整的新正文')
         if (episode.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE:
             raise Denied('SELF_STATE_REQUIRES_OWNER_PRIVATE: 自我描述只能在家里改；重试也一样')
         from .context_budget import SINGLE_BODY_CHARS
         if len(body) > SINGLE_BODY_CHARS:
-            raise ValueError('SELF_STATE_TOO_LARGE: body %d 字，上限 %d 字；精简到 %d 字以内'
+            raise ValueError('SELF_STATE_TOO_LARGE: content %d 字，上限 %d 字；精简到 %d 字以内'
                              % (len(body), SINGLE_BODY_CHARS, SINGLE_BODY_CHARS))
         scope = 'global-safe'
         entity = target + ':' + episode['persona']

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { execFileSync } from 'node:child_process';
-import { fastForwardCheckout, packageManagerEnv, prepareFresh, retireSummarySessions } from '../../../tools/asuna-launch.mjs';
+import { fastForwardCheckout, packageManagerEnv, prepareFresh, retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -151,7 +151,7 @@ test('ADR-034: each start is prepared by a fresh process from the code on disk; 
   }
 });
 
-test('finished summary sessions leave the session store before a start, and the archive keeps them two weeks', async () => {
+test('finished one-shot sessions (summaries, gate looks) leave the session store before a start, and the archive keeps them two weeks', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-retire-'));
   try {
     const home = path.join(dir, 'home'), archive = path.join(dir, 'archive'), project = path.join(home, 'sessions', 'p');
@@ -163,12 +163,13 @@ test('finished summary sessions leave the session store before a start, and the 
     };
     await make(project, 'asuna-summary-old', 2 * day);
     await make(project, 'asuna-summary-fresh', 3600 * 1000);           // may still be asked again (a retry)
+    await make(project, 'asuna-attend-old', 2 * day);                    // a gate look keeps nothing for later
     await make(project, 'asuna-role-old', 30 * day);                     // her conversations are never touched
     await make(path.join(archive, 'p'), 'asuna-summary-gone', 15 * day);
-    assert.deepEqual(await retireSummarySessions(home, archive, now), { moved: 1, dropped: 1 });
+    assert.deepEqual(await retireOneShotSessions(home, archive, now), { moved: 2, dropped: 1 });
     assert.deepEqual((await fs.readdir(project)).sort(), ['asuna-role-old', 'asuna-summary-fresh']);
-    assert.deepEqual(await fs.readdir(path.join(archive, 'p')), ['asuna-summary-old']);
-    assert.deepEqual(await retireSummarySessions(path.join(dir, 'none'), path.join(dir, 'none-archive'), now), { moved: 0, dropped: 0 });
+    assert.deepEqual((await fs.readdir(path.join(archive, 'p'))).sort(), ['asuna-attend-old', 'asuna-summary-old']);
+    assert.deepEqual(await retireOneShotSessions(path.join(dir, 'none'), path.join(dir, 'none-archive'), now), { moved: 0, dropped: 0 });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 

@@ -4,6 +4,7 @@
 `LocalHttp` is the HTTP client retrieval uses for the embedding endpoint; it records every request and response.
 """
 from __future__ import annotations
+import collections
 import hashlib
 import json
 import os
@@ -32,13 +33,18 @@ def write_json(path: Path, value) -> None:
 
 
 class Evidence:
-    """One immutable directory per attempt. Persistence failures propagate before I/O."""
-    def __init__(self, root: Path):
+    """One immutable directory per attempt. Persistence failures propagate before I/O. `keep`: only the newest this
+    many records stay (a long-running writer), besides the kinds in `pinned`, which are never removed; the chain still
+    links each kept record to the one before it."""
+    def __init__(self, root: Path, keep: int | None = None, pinned: tuple = ()):
         self.root = root
         self.root.mkdir(parents=True, exist_ok=False)
         self.lock = threading.Lock()
         self.seq = 0
         self.previous = '0' * 64
+        self.keep = keep
+        self.pinned = set(pinned)
+        self.names = collections.deque()
 
     def record(self, kind: str, payload: dict) -> str:
         with self.lock:
@@ -48,6 +54,10 @@ class Evidence:
             name = f'{self.seq:05d}-{kind}.json'
             write_json(self.root / name, event)
             self.previous = event['event_hash']
+            if self.keep and kind not in self.pinned:
+                self.names.append(name)
+                while len(self.names) > self.keep:
+                    (self.root / self.names.popleft()).unlink(missing_ok=True)
             return name
 
 

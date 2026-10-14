@@ -256,7 +256,7 @@ async function main() {
     if (prepareRung === 0) {
       if (fastForward) process.stdout.write(CHECKOUT_MARK + JSON.stringify(await fastForwardCheckout(root)) + '\n');
       if (launch.sync) await syncCheckout(launch, exec);
-      await retireSummarySessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
+      await retireOneShotSessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
       // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
       notes = (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
     } else if (prepareRung === 1) {
@@ -268,7 +268,7 @@ async function main() {
   }
   if (launch.once) {
     if (launch.sync) await syncCheckout(launch, exec);
-    await retireSummarySessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
+    await retireOneShotSessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
     await applySelection(launch, run, advanceSelection);
     return run(host);
   }
@@ -306,21 +306,22 @@ async function main() {
   return 0;
 }
 
-// A dialogue summary is one request in a session of its own (native_worker.py). DSH lists every stored session to
-// the page on each load, reading each one's header, and has no way to remove one, so finished summaries made the
-// list grow by hundreds a day (6,070 rows, 12.6 MB, ~5 s per load on 10-13). Before DSH starts, summaries left
-// untouched for a day leave the store for the profile's archive, and the archive keeps them for two weeks.
-const RETIRED_PREFIX = 'asuna-summary-';
+// A dialogue summary and a relevance-gate look are each one request in a session of their own (native_worker.py).
+// DSH lists every stored session to the page on each load, reading each one's header, and has no way to remove one,
+// so finished ones made the list and the store grow by hundreds a day (6,070 rows, 12.6 MB, ~5 s per load on 10-13;
+// gate looks ~80 a day since each became a fresh session). Before DSH starts, such sessions left untouched for a day
+// leave the store for the profile's archive, and the archive keeps them for two weeks.
+const RETIRED_PREFIXES = ['asuna-summary-', 'asuna-attend-'];
 const RETIRE_AFTER_MS = 24 * 3600 * 1000;
 const ARCHIVE_KEEP_MS = 14 * 24 * 3600 * 1000;
 
-/** Move finished summary sessions out of DSH's store (Host stopped); drop archived ones past their keep. */
-export async function retireSummarySessions(home, archive, now = Date.now()) {
+/** Move finished one-shot sessions out of DSH's store (Host stopped); drop archived ones past their keep. */
+export async function retireOneShotSessions(home, archive, now = Date.now()) {
   const sessions = path.join(home, 'sessions');
   let moved = 0, dropped = 0;
   for (const project of await fs.readdir(sessions).catch(() => [])) {
     for (const id of await fs.readdir(path.join(sessions, project)).catch(() => [])) {
-      if (!id.startsWith(RETIRED_PREFIX)) continue;
+      if (!RETIRED_PREFIXES.some(prefix => id.startsWith(prefix))) continue;
       const from = path.join(sessions, project, id);
       const { mtimeMs } = await fs.stat(from);
       if (now - mtimeMs < RETIRE_AFTER_MS) continue;

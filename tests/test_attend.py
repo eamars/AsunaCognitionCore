@@ -199,3 +199,28 @@ def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store)
                                   'author': 'qq:20002', 'event': {'group_context': {'wake_reason': 'awaited_answer'}}})
     assert not awaited_answer(store, scene, 'qq:20002', [], None)               # one look per line of hers
     assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
+
+
+def test_the_gate_reads_her_core_her_notes_here_and_what_she_wrote_of_the_speaker_cut_the_same_every_time(store):
+    """Owner and her, 2026-10-14: core sentences, not the persona's talking rules; this group's own context."""
+    from asuna.documents import DocumentStore
+    from asuna.group_admin import notes_slug
+    scene = setup(store)
+    docs = DocumentStore(store, 'P1')
+    docs.apply('core', {'op': 'append_section', 'heading': '一', 'reason': '我是谁', 'visibility': 'public',
+                        'inject': 'always', 'kind': 'working'}, '我愿意帮忙，也会说不想帮。',
+               base_revision_id=None, author='character', mutation_id='core-1')
+    docs.apply(notes_slug(SCENE), {'op': 'append_section', 'heading': '这群', 'reason': '记', 'visibility': 'public',
+                                   'inject': 'always'}, '聊游戏为主。' + '细' * 900, base_revision_id=None,
+               author='character', mutation_id='notes-1')
+    key = 'relationship:qq:20002|' + scene['scope_key']
+    store.db.state_heads.insert_one({'_id': key, 'schema_version': 1, 'revision_id': 'rev-u'})
+    store.db.state_revisions.insert_one({'_id': 'rev-u', 'schema_version': 1, 'content': {'body': '阿杰说话快，爱开玩笑。'}})
+    system = attend.system(store, 'P1')
+    assert '我愿意帮忙' in system
+    event = gated_event(20002, '今晚开黑吗')
+    item = {**row(20002, '今晚开黑吗', card='阿杰'), 'scene_seq': 1}
+    first = attend.material(store, scene, event, item, 'P1')
+    assert first['your_notes_here'].startswith('这群：聊游戏为主。') and len(first['your_notes_here']) == attend.NOTES_CHARS + 1
+    assert first['speaker_understanding'] == '阿杰说话快，爱开玩笑。'
+    assert attend.material(store, scene, event, item, 'P1')['your_notes_here'] == first['your_notes_here'], 'the same cut'

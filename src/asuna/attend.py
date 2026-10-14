@@ -109,6 +109,12 @@ def material(store, scene, event, row, persona):
     held = notices.take(store, scene, persona, keep=True)      # after the stored lines; hers once, here or in the turn
     if held:
         out['notices'] = held
+    notes = group_notes(store, persona, scene)
+    if notes:
+        out['your_notes_here'] = notes
+    about = speaker_understanding(store, scene, event['person_id'])
+    if about:
+        out['speaker_understanding'] = about
     from .affect import AffectLedger, interpret
     from .render import model_and_policy
     from . import visibility
@@ -121,14 +127,49 @@ def material(store, scene, event, row, persona):
 
 
 def system(store, persona):
-    """Shared rules, then who she is (public every-turn persona sections); small, so a cold read is cheap."""
+    """Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold
+    read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn)."""
     from .documents import DocumentStore, render_markdown
     from .render import common_text, readable_sections
     from . import visibility
     name = (store.config.get('chat') or {}).get('display_name') or persona
-    _, content = DocumentStore(store, persona).read('persona')
+    _, content = DocumentStore(store, persona).read('core')
     sections = readable_sections(content, visibility.PUBLIC)
     return common_text(store.config) + '\n你是' + name + '。' + ('\n' + render_markdown(sections) if sections else '')
+
+
+# What of this group's own context the gate reads, cut at the same place every time: the same line in the same group
+# is judged on the same text (her condition, 2026-10-14).
+NOTES_CHARS = 800
+UNDERSTANDING_CHARS = 400
+
+
+def _cut(text, limit):
+    text = str(text or '').strip()
+    return text if len(text) <= limit else text[:limit] + '…'
+
+
+def group_notes(store, persona, scene):
+    """Her notes about this group: the always-shown sections in their order, headings and bodies, the first
+    NOTES_CHARS characters."""
+    from .context_budget import shown
+    from .documents import DocumentStore
+    from .group_admin import notes_slug
+    _, content = DocumentStore(store, persona).read(notes_slug(scene['_id']))
+    sections = shown((content or {}).get('sections') or [])
+    text = '\n'.join('%s：%s' % (s.get('heading') or s['sid'], ' '.join(str(s.get('body') or '').split())) for s in sections)
+    return _cut(text, NOTES_CHARS) if text else None
+
+
+def speaker_understanding(store, scene, person_id):
+    """What she wrote about the speaker, the person layer then this group's, the first UNDERSTANDING_CHARS
+    characters; nothing from her other conversations."""
+    from . import understanding
+    person = store.head(understanding.person_entity(store.config, store.db, person_id), understanding.PERSON_SCOPE)
+    here = store.head('relationship:' + person_id, scene['scope_key'])
+    parts = [str(((head or [None, {}])[1].get('content') or {}).get('body') or '').strip() for head in (person, here)]
+    text = '\n'.join(part for part in parts if part)
+    return _cut(text, UNDERSTANDING_CHARS) if text else None
 
 
 def instruction(config):

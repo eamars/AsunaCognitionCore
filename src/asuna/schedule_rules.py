@@ -227,10 +227,10 @@ def next_fire(rule, tz, moment=None):
             fire, dst = wall_to_utc(datetime.fromisoformat(rule['at']), tz)
             if dst == 'gap':
                 raise ValueError('SCHEDULE_LOCAL_TIME_MISSING: %s 在这个时区不存在（拨快跳过），顺延的话是 %s'
-                                 % (rule['at'], fire.astimezone(tz).isoformat(timespec='minutes')))
+                                 % (rule['at'], _local_text(fire, tz)))
         if fire <= moment:
             raise ValueError('SCHEDULE_TIME_ALREADY_PAST: %s 已经过了（当时是 %s）；改成之后的时刻'
-                             % (rule['at'], moment.astimezone(tz).isoformat(timespec='minutes')))
+                             % (rule['at'], _local_text(moment, tz)))
         return fire
     clock = rule['clock']
     hour, minute = (int(part) for part in clock['time'].split(':'))
@@ -293,7 +293,17 @@ def native_payload(rule, fire_at, moment=None):
 
 # ── 给人看的说法 ───────────────────────────────────────────────
 def _local_text(moment, tz):
-    return _aware(moment).astimezone(tz).isoformat(timespec='minutes')
+    from .local_time import face
+    return face(_aware(moment), tz)
+
+
+def _wall_text(at, tz):
+    """A plan's `at` as written (a local wall time, or UTC when marked) on her clock face."""
+    try:
+        moment = datetime.fromisoformat(str(at).replace('Z', '+00:00'))
+    except ValueError:
+        return str(at)
+    return _local_text(moment if moment.tzinfo else moment.replace(tzinfo=tz), tz)
 
 
 def describe(rule, tz):
@@ -309,34 +319,20 @@ def describe(rule, tz):
             ('每 %d 小时' % (seconds // 3600)) if seconds % 3600 == 0 and seconds >= 3600 else '每 %d 分钟' % (seconds // 60))
         return '%s重复（原生自己重复）' % human
     if kind == 'at':
-        return '一次性：%s' % rule['at']
+        return '一次性：%s' % (_wall_text(rule['at'], timezone.utc if rule.get('at_utc') else tz))
     clock = rule['clock']
     days = clock.get('weekdays')
     who = '每天' if not days else '每' + '、'.join(WEEKDAY_NAMES[d] for d in days)
     return '%s %s（本地钟点）' % (who, clock['time'])
 
 
-def _rule_shown(rule, tz):
-    """A rule as she reads it: its `at` is a local wall time, so it carries the zone, or the edge (local_time) would
-    take it for UTC and shift it."""
-    if not isinstance(rule, dict) or not isinstance(rule.get('at'), str):
-        return rule
-    try:
-        at = datetime.fromisoformat(rule['at'])
-    except ValueError:
-        return rule
-    return {**rule, 'at': (at if at.tzinfo else at.replace(tzinfo=tz)).isoformat(timespec='minutes')}
-
-
 def project(plan, zone, moment=None):
     """把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。"""
     moment = _aware(moment)
     tz = zone['tz']
-    row = {'_id': plan['_id'], 'intent': plan.get('intent'), 'status': plan.get('status'),
-           'rule': _rule_shown(plan.get('rule'), tz), 'plan_version': plan.get('plan_version', 1),
-           'timezone': zone['name'],
-           'created_at': plan.get('created_at'), 'updated_at': plan.get('updated_at'),
-           'last_outcome': plan.get('last_outcome')}
+    # What she reads (her review 2026-10-14): the plan in words and the moment the program will fire it, to check one
+    # against the other; the rule's own fields, versions and bookkeeping stay the program's.
+    row = {'_id': plan['_id'], 'intent': plan.get('intent')}
     if zone['zone_unavailable']:
         row['timezone_note'] = '时区库读不到 %s，按固定偏移算（这一条没有 DST 规则）' % zone['zone_unavailable']
     try:
@@ -345,7 +341,6 @@ def project(plan, zone, moment=None):
         row['description'] = '规则认不出来：可能是旧版本留下的记录'
         return row
     if plan.get('status') in ('CANCELLED', 'FIRED', 'SUSPENDED'):
-        row['local'] = None
         row['next_fire_at'] = plan.get('scheduled_at')
         row['why_no_next'] = {'CANCELLED': '已取消', 'FIRED': '已经到期过（一次性安排）',
                               'SUSPENDED': plan.get('last_outcome') or '已暂停'}[plan['status']]
@@ -357,12 +352,10 @@ def project(plan, zone, moment=None):
         fire = (_aware(datetime.fromisoformat(str(stored).replace('Z', '+00:00'))) if stored
                 else next_fire(plan['rule'], tz, moment))
     except ValueError as exc:
-        row['local'] = None
         row['next_fire_at'] = plan.get('scheduled_at')
         row['why_no_next'] = str(exc)
         return row
     row['next_fire_at'] = fire.isoformat(timespec='seconds')
-    row['local'] = _local_text(fire, tz)
     shifted = _shift_note(plan['rule'], fire, tz)
     if shifted:
         row['dst_note'] = shifted
@@ -398,39 +391,18 @@ def local_clock(zone, moment=None):
     note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
             'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
             'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
-    return {'now_local': local.isoformat(timespec='minutes'), 'weekday': WEEKDAY_NAMES[local.weekday()],
+    from .local_time import face
+    return {'now_local': face(local, tz, year=True), 'weekday': WEEKDAY_NAMES[local.weekday()],
             'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
 
 
 def line_stamp(zone, value):
-    """When one stored line was said, on her clock face (month/day hour:minute); '' when unknown."""
+    """When one stored line was said, on her clock face (local_time.face); '' when unknown."""
     if not value:
         return ''
     try:
         moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     except ValueError:
         return ''
-    local = _aware(moment).astimezone(zone['tz'])
-    return '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
-
-
-def control_note(zone=None):
-    """给角色的"安排"控制面：plan 工具怎么写（现场钟面另成一块 clock_from_program，每回合都变）。
-    她负责把话换算成这些键，本模块负责换算成钟点；她不需要抄 schedule ID，也不需要知道原生怎么挂。"""
-    return {'plan_tool': {
-                'create': {'intent': '要做什么（给人看的短句）',
-                           '计时四选一': {'after_seconds': '整数秒：一次性，N 秒之后',
-                                        'every_seconds': '整数秒：固定间隔重复，最小 %d 秒（原生限制）' % MIN_INTERVAL_SECONDS,
-                                        'at': 'YYYY-MM-DDTHH:MM：一次性，按 clock_from_program 里 timezone 那个钟面读',
-                                        'clock': '{"time":"HH:MM","weekdays":[0,2]}：每日/每周本地钟点；'
-                                                 'weekdays 用 0=周一…6=周日，省略就是每天'}},
-                'update': {'plan_id': 'plans_from_program 里的 _id',
-                           'intent': '可选：只改内容就只给这个',
-                           '计时': '改时间：与 create 一样的四种计时之一'},
-                'cancel': {'plan_id': 'plans_from_program 里的 _id'}},
-            'rules': ['时间不完整或已经过了：plan 会被退回并说明原因，问一句就好，不用自己猜',
-                      '每日/每周按这个时区的本地钟点算；DST 空档顺延到那天第一个真实存在的钟点，'
-                      '重叠的钟点只取较早的一次',
-                      '到期只是把你叫醒：做不做、怎么做仍由你判断；没做不会让这条安排消失',
-                      '改期与取消只对 plans_from_program 里列出的当前有效版本生效；改期不会多出第二个同时有效的版本',
-                      '固定间隔（every_seconds）由 DSH 自己重复；每日/每周每次到期后由宿主再挂下一次']}
+    from .local_time import face
+    return face(_aware(moment), zone['tz'])

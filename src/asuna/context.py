@@ -74,7 +74,7 @@ BLOCKS = {
     'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
     'history': ('delivered_history', 'undelivered_outbound_not_public', 'linked_scenes_from_program'),
     'tasks_plans': ('task_state_from_program', 'plans_from_program', 'clock_from_program',
-                    'schedule_control_from_program', 'scheduled_plan_from_program', 'watching_from_program',
+                    'scheduled_plan_from_program', 'watching_from_program',
                     'credentials_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
     'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
@@ -200,6 +200,11 @@ def ledger_block(docs, cls):
 INVENTED_MARK = '（自述编写，非共同经历）'
 
 
+
+
+# Where a recalled record comes from, in the words her own items use (memory_tiers.FROM_NATURE).
+MEMORY_FROM = {'reported_speech': '别人说的', 'public_statement': '我说出口的', 'derived_summary': '整理出来的摘要',
+               'character_interpretation': '我自己的判断'}
 
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
@@ -377,13 +382,16 @@ class ContextBuilder:
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
         self._reply_context(history, scene, keep_event=True)
-        if not read['linked_scenes']:
-            zone=schedule_rules.scene_timezone(self.store.config,scene)
-            for row in history:                  # no raw times: when it was said, on her clock face
-                said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
-                for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
-                stamp=schedule_rules.line_stamp(zone,said)
-                if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
+        zone=schedule_rules.scene_timezone(self.store.config,scene)
+        for row in history:                      # no raw times: when it was said, on her clock face
+            said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
+            got=row.get('receipt_at') or row.get('received_at')
+            for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
+            stamp=schedule_rules.line_stamp(zone,said)
+            if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
+            # When it reached the other side, only when that is another minute: the gap is the delay (her ask).
+            arrived=schedule_rules.line_stamp(zone,got)
+            if stamp and arrived and arrived!=stamp:row['arrived']=arrived
         for row in history:
             if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
                 row['notice']=notices.HISTORY_WORD
@@ -489,11 +497,15 @@ class ContextBuilder:
         # 角色的看法也不是人物亲口陈述。摘要没有 scene_seq/segment_index，同层内不抢位。
         facts.sort(key=lambda m:({'character_interpretation':0,'public_statement':1,'derived_summary':1,'reported_speech':2}.get(m.get('epistemic_type'),1),m.get('scene_seq',0),m.get('segment_index',0)))
         for fact in facts:
-            # Only what she reads (ADR-060): no storage state, no empty source list, no 1-of-1 segment numbers.
-            fact.pop('status',None)
+            # Only what she reads (ADR-060, her review 2026-10-14): where it comes from as a word, when it was said,
+            # and the source ids she reads the original lines back by; storage state, ordering numbers and a second
+            # copy of the time stay the program's.
+            fact['from']=MEMORY_FROM.get(fact.pop('epistemic_type',None),'别处来的')
+            for key in ('status','kind','scene_seq','segment_index','segment_count'):
+                fact.pop(key,None)
             if not fact.get('historical_sources'):fact.pop('historical_sources',None)
-            if fact.get('segment_count')==1:
-                fact.pop('segment_index',None);fact.pop('segment_count',None)
+            if fact.get('when'):
+                fact.pop('occurred_at',None);fact.pop('generated_at',None)
         facts.extend(own)
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
@@ -579,7 +591,6 @@ class ContextBuilder:
                  # The clock changes every turn; how to write a plan does not, so it is its own block and a
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
-                 'schedule_control_from_program':schedule_rules.control_note(schedule_zone),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
         if coverage_block:
             context['coverage_from_program']=coverage_block
@@ -709,7 +720,7 @@ class ContextBuilder:
                 if _rows:
                     _scene=self.store.db.scenes.find_one({'_id':_line['scene_id']}) or {'_id':_line['scene_id']}
                     _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
-                        self.store.config,_scene,r),moment).items() if k in ('intent','description','local')} for r in _rows]
+                        self.store.config,_scene,r),moment).items() if k in ('intent','description','next_fire_at')} for r in _rows]
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.

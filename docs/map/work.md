@@ -117,8 +117,7 @@ ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——�
 - def `describe`
 - def `project` — 把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。
 - def `local_clock` — 给角色的现场钟面：她换算"明天下午三点"要用，不让她猜自己在哪个时区。
-- def `line_stamp` — When one stored line was said, on her clock face (month/day hour:minute); '' when unknown.
-- def `control_note` — 给角色的"安排"控制面：plan 工具怎么写（现场钟面另成一块 clock_from_program，每回合都变）。
+- def `line_stamp` — When one stored line was said, on her clock face (local_time.face); '' when unknown.
 
 ## `sandbox`
 

@@ -89,6 +89,6 @@ def test_her_last_thoughts_are_in_view_and_an_older_one_comes_back(store, retrie
                                           'body_markdown': '蓝莓松饼要不要再烤一次 %d' % n, 'formed_at': at(4 - n)})
     event = {'event_id': 'e-2', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '蓝莓松饼'}
     _, asked, _ = ContextBuilder(store, retrieval).prepare(event, 'P1', recall=True)
-    thoughts = [m['_id'] for m in asked['memories'] if m['kind'] == 'monologue']
+    thoughts = [m['_id'] for m in asked['memories'] if m['_id'].startswith('mono-')]
     assert thoughts == ['mono-0'], 'the last three reach every turn anyway; the fourth is only in recall'
     assert asked['held_back_from_program'].startswith('另有 3 条相关的没重复给')

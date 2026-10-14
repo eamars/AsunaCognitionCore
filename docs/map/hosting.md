@@ -260,6 +260,7 @@ One running Host per database, across machines (ADR-020 M1).
 Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
 
 - def `is_time_key`
-- def `stamp` — One time on the local clock, `YYYY-MM-DD HH:MM`; the value as it was when it is no time.
+- def `face` — An aware moment on the clock face she reads: `10/14 14:28`, or `2025/9/27 14:00` when `year` is asked, when it is another year, or when it is more than 90 days from now.
+- def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).

@@ -30,4 +30,5 @@ def test_a_rules_local_time_reads_the_same_as_its_next_firing():
     plan = {'_id': 'p', 'intent': 'x', 'status': 'ACTIVE', 'rule': {'at': '2026-10-14T21:30'},
             'next_fire_at': '2026-10-14T08:30:00+00:00'}
     shown = local_time.for_model(schedule_rules.project(plan, zone, datetime(2026, 10, 14, 1, tzinfo=timezone.utc)), zone)
-    assert shown['rule']['at'] == shown['next_fire_at'] == '2026-10-14 21:30'
+    fire = local_time.face(datetime(2026, 10, 14, 8, 30, tzinfo=timezone.utc), zone['tz'])
+    assert 'rule' not in shown and shown['next_fire_at'] == fire and shown['description'] == '一次性：' + fire

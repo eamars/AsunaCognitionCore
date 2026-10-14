@@ -463,10 +463,9 @@ def r1_summary_reaches_next_turn():
     _system, context, manifest = prepare(store)
     entry = next((m for m in context['memories'] if m['_id'] == SUMMARY), None)
     assert entry, context['memories']
-    assert entry['kind'] == 'dialogue_summary', entry
-    assert entry['epistemic_type'] == 'derived_summary', entry
+    assert entry['from'] == '整理出来的摘要' and 'kind' not in entry, entry
     assert entry['source_window'] == [7, 8], entry
-    assert entry['generated_at'] == '2026-09-24T06:05:00+00:00', entry
+    assert 'generated_at' not in entry and entry['when'], entry
     assert entry['source_event_ids'] == [INBOUND, OUTBOUND], entry
     assert SUMMARY in manifest['selected'], manifest
     return '下一轮能看到这条摘要是什么、盖了哪一段、什么时候生成、原文是谁'

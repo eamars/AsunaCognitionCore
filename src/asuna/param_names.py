@@ -52,6 +52,14 @@ def _words(value):
     return value
 
 
+def old_used(tool, args):
+    """The old names this call was written with (each counted toward retiring it)."""
+    if not isinstance(args, dict):
+        return []
+    old_to_new = {old: new for new, old in names(tool).items()}
+    return sorted(key for key in args if key in old_to_new and old_to_new[key] not in args)
+
+
 def inbound(tool, args):
     """(arguments under the handler's names, notes for each old name she used)."""
     if not isinstance(args, dict):

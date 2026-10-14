@@ -1042,6 +1042,7 @@ class RoleTools:
             called_as, (name, args) = name, renamed(name, args)
         elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
             called_as, name, args = name, 'ask', developer_ask(self.store, args)       # ADR-061
+        olds = _names.old_used(name, args)
         args, old_names = _names.inbound(name, args)
         inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
         if inferred:
@@ -1074,11 +1075,11 @@ class RoleTools:
                               % CALLS_PER_TURN)
             result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
         except Refused as exc:
-            self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as)
+            self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)
             raise
         except (Denied, Conflict, DocumentError, ValueError) as exc:
             message = words(exc)
-            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc))
+            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc), olds=olds)
             raise Refused(message) from None
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
@@ -1093,7 +1094,7 @@ class RoleTools:
             if cited:
                 memory_tiers.Tiers(self.store, ep['persona']).used(cited, 'cited', ep['scene_id'])
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
-        self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as,
+        self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as, olds=olds,
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
 
@@ -1102,7 +1103,8 @@ class RoleTools:
         from . import local_time
         return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
 
-    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None):
+    def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
+                olds=None):
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
         calls = dict(ep.get('tool_calls') or {})
@@ -1112,6 +1114,7 @@ class RoleTools:
         calls[call_id] = {'tool': name, 'args_sha256': sha(canonical(args)), 'seq': len(calls),
                           **({'op': args.get('op')} if name in OPS and isinstance(args, dict) else {}),
                           **({'called_as': called_as} if called_as else {}),
+                          **({'old_names': olds} if olds else {}),
                           **({'refused': refused} if refused else {'result': result}),
                           **({'code': code} if code else {}),
                           **({'reason_ref': reason} if reason else {}),
@@ -1119,6 +1122,7 @@ class RoleTools:
         c._update(ep, tool_calls=calls)
         self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': args,
                                               **({'called_as': called_as} if called_as else {}),
+                                              **({'old_names': olds} if olds else {}),
                                               **({'refused': refused} if refused else {'result': result}),
                                               **({'code': code} if code else {}),
                                               **({'reason_ref': reason} if reason else {})},

@@ -93,6 +93,17 @@ def test_the_old_name_reply_still_speaks_and_says_the_new_one(store):
     assert ok and result['renamed'] == 'reply 现在叫 speak，这次照办，下次直接用新名字。'
     assert [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'})] == ['在']
     assert role_tools.aliases()['reply'] == 'speak' and 'reply' not in role_tools.TOOL_NAMES
+    [call] = [c for c in store.db.episodes.find_one({'_id': ep['_id']})['tool_calls'].values() if c['tool'] == 'speak']
+    assert call['called_as'] == 'reply', 'counted toward retiring the old name'
+
+
+def test_a_call_with_an_old_parameter_name_is_counted_toward_retiring_it(store):
+    world(store)
+    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '不接'})])])
+    ep = Coordinator(store, lane).ingest(mention('old-param'), persona='P1')
+    [call] = [c for c in store.db.episodes.find_one({'_id': ep['_id']})['tool_calls'].values() if c['tool'] == 'stay_silent']
+    assert call['old_names'] == ['reason']
+    assert store.db.audit_events.find_one({'type': 'role_tool', 'payload.tool': 'stay_silent', 'payload.old_names': 'reason'})
 
 
 def test_a_whole_label_or_a_number_of_nobody_here_passes(store):

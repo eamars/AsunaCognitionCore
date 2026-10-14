@@ -32,7 +32,7 @@ RENAMED = {
 # Inside a list or object parameter: (tool, parameter) -> {shown: handler's}.
 NESTED = {('recall', 'sections'): {'section': 'sid'}, ('feel', 'edit'): {'feeling': 'kind', 'unresolved': 'open'}}
 # (tool, shown name) taking yes/no as words; the handler reads a boolean.
-YES_NO = {('feel', 'unresolved'), ('reply', 'force'), ('errand', 'exactly'), ('generate_image', 'list_routes'), ('write_file', 'overwrite'),
+YES_NO = {('feel', 'unresolved'), ('speak', 'force'), ('errand', 'exactly'), ('generate_image', 'list_routes'), ('write_file', 'overwrite'),
           ('development_write', 'overwrite')}
 # feel's decision on a proposal is a `do` of its own (ADR-060 item 8).
 FEEL_DECISIONS = ('accept', 'decline', 'edit')

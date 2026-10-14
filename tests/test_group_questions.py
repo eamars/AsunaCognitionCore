@@ -15,10 +15,10 @@ from test_reply_actions import turn, world
 
 def ask(store, patience=None):
     options = {'wait': 'question', **({'patience': patience} if patience else {})}
-    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': [{'kind': 'text', 'text': '大家晚饭吃什么？'}], **options})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '大家晚饭吃什么？'}], **options})])])
     from test_reply_actions import mention
     ep = Coordinator(store, lane).ingest(mention('q-1'), persona='P1')
-    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
     return ep, result, ok
 
 
@@ -42,10 +42,10 @@ def test_a_question_in_a_group_opens_like_any_other_and_says_so(store):
 
 def test_patience_goes_with_a_question_only(store):
     world(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': [{'kind': 'text', 'text': '嗯嗯'}], 'patience': '一天'})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '嗯嗯'}], 'patience': '一天'})])])
     from test_reply_actions import mention
     Coordinator(store, lane).ingest(mention('q-bad-2'), persona='P1')
-    [(said, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    [(said, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
     assert not ok and 'patience 只跟 wait=question 一起用' in said
 
 

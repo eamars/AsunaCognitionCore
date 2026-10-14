@@ -124,8 +124,8 @@ TOOLS = {
                        'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
                        'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'}},
     },
-    'reply': {
-        'description': ('在这里说话：只有 reply 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 text、'
+    'speak': {
+        'description': ('在这里说话：只有 speak 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 text、'
                          'sticker、picture、poke、react，各写它的字段。有一条不对，这次一条都不发，回执说哪条、为什么。'
                          '不想说话就不调用，或用 stay_silent。'),
         'parameters': {
@@ -194,7 +194,7 @@ TOOLS = {
                          '；只有表情包能收，架子满了先 drop。drop 按名字放下一个；rename 改 name 或 use_for；'
                          'pool 看候选池（群里有人发过、程序存着的）；remember 看过但不收的，记个名字和它在说什么（use_for）'
                          '，以后有人发它会标出你认得。候选（candidate）先 read_image 看过再 keep。名字和用法在群里也看得到。'
-                         '发的时候用 reply 的 sticker。'),
+                         '发的时候用 speak 的 sticker。'),
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内；pool 不用写'),
                        'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
@@ -447,7 +447,7 @@ def tools():
 OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review'),
        'ask': ('ask', 'read', 'close')}
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
-RENAMED = {'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
+RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
            'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review'}
 RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
 # A field only one option takes says which option a call without op is (as plan's create, ADR-054).
@@ -483,6 +483,12 @@ def ability(tool, args=None):
     return tool
 
 
+def rename_note(old):
+    """What a call by an old name is told: merged into an option, or simply renamed."""
+    can = RENAMED.get(old, 'ask.ask')
+    return RENAMED_NOTE % ((old,) + tuple(can.split('.'))) if '.' in can else _names.NOTE % (old, can)
+
+
 def named(can):
     """An option as she reads it: 'task 的 message'."""
     return ' 的 '.join(can.split('.', 1))
@@ -490,6 +496,8 @@ def named(can):
 
 def renamed(name, args):
     """An old name's call as its tool and arguments: the option added, review_idea's idea (an id) as id."""
+    if '.' not in RENAMED[name]:
+        return RENAMED[name], dict(args)            # a plain rename: the same call under the new name
     tool, op = RENAMED[name].split('.')
     args = dict(args)
     if name == 'review_idea' and 'idea' in args and 'id' not in args:
@@ -506,7 +514,7 @@ def all_specs():
     """Her tools, and each old name registered but never listed, so a call by it still reaches the worker."""
     def unlisted(old, can):
         tool = can.split('.')[0]
-        return {'name': old, 'description': RENAMED_NOTE % ((old,) + tuple(can.split('.'))),
+        return {'name': old, 'description': rename_note(old),
                 'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
                                for key, spec in TOOLS[tool]['parameters'].items() if key != 'op'}}
     from . import memory_tiers
@@ -626,7 +634,7 @@ def _turn_rules(store, ep):
     from . import channel_kinds
     if channel_kinds.reply_parts(ep['scene_id']):
         # ADR-064 phase 2: here she speaks only through reply, whose parts carry the quote, the wait and pictures.
-        names = [name for name in names if name not in REPLY_REPLACES] + ['reply']
+        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']
     return names
 
 
@@ -697,7 +705,7 @@ def abilities(store, ep):
         if channel_kinds.answers_requests(config):
             names.append('group_action')        # answering the friend and group requests listed at home
     if channel_kinds.reply_parts(ep['scene_id']):
-        names = [name for name in names if name not in REPLY_REPLACES] + ['reply']      # ADR-064 phase 2
+        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2
     from . import memory_tiers
     if memory_tiers.ENABLED:
         names = [name for name in names if name != 'update_self']     # retired into write_document (ADR-062)
@@ -1072,7 +1080,7 @@ class RoleTools:
             self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc))
             raise Refused(message) from None
         if called_as and isinstance(result, dict):
-            result = {**result, 'renamed': RENAMED_NOTE % ((called_as,) + tuple(RENAMED.get(called_as, 'ask.ask').split('.')))}
+            result = {**result, 'renamed': rename_note(called_as)}
         if old_names and isinstance(result, dict):
             result = {**result, 'old_names': ' '.join(old_names)}
         if inferred and isinstance(result, dict):
@@ -1235,7 +1243,7 @@ class RoleTools:
             # ADR-064 phase 2 (her condition): how many parts reply queued this turn, 0 included.
             parts = int((ep.get('reply') or {}).get('parts') or 0)
             return {'silent': True, 'note': '这回合到此结束。',
-                    'sent': 'reply 这回合发了 %d 条。' % parts if parts else '这回合 reply 一条都没发。'}, True
+                    'sent': 'speak 这回合发了 %d 条。' % parts if parts else '这回合 speak 一条都没发。'}, True
         # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
         return {'silent': True, 'note': '这回合到此结束。'}, True
 
@@ -1276,7 +1284,7 @@ class RoleTools:
         self.coordinator._update(self._fresh(ep), await_answer={'why': why})
         return {'note': '这句发出去后约三分钟里，你 @ 的人、你回的人（都没有时这里任何人）下一句没 @ 你也会叫你看一眼。'}, False
 
-    def tool_reply(self, ep, call_id, args):
+    def tool_speak(self, ep, call_id, args):
         """ADR-064 phase 2: her speech here, in parts. Every part is checked before any is queued: one wrong part
         means none of this call leaves, and the result says which and why."""
         from . import channel_kinds, stickers
@@ -1370,7 +1378,7 @@ class RoleTools:
             problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行）：%s'
                             % (most, '；'.join(over)))
         if problems:
-            raise Refused('这次一条都没发：%s。改好再调用一次 reply。' % '；'.join(problems)
+            raise Refused('这次一条都没发：%s。改好再调用一次 speak。' % '；'.join(problems)
                           + ('真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else ''))
         changes = {}
         if quote:

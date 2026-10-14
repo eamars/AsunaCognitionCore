@@ -22,9 +22,9 @@ def world(store):
 
 
 def turn(store, key, parts):
-    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': parts})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': parts})])])
     ep = Coordinator(store, lane).ingest(mention(key), persona='P1')
-    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
     rows = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}).sort('scene_seq', 1))
     return ep, result, ok, rows
 
@@ -75,14 +75,24 @@ def test_a_part_leaves_while_her_turn_still_runs(store):
 
 def test_a_number_that_is_someone_here_is_sent_back_and_force_sends_it_as_written(store):
     world(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': [{'kind': 'text', 'text': '#2 只接单，@阿杰 #2 你说呢'}]}),
-                                      ('reply', {'parts': [{'kind': 'text', 'text': 'issue #2 修好了'}], 'force': 'yes'})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '#2 只接单，@阿杰 #2 你说呢'}]}),
+                                      ('speak', {'parts': [{'kind': 'text', 'text': 'issue #2 修好了'}], 'force': 'yes'})])])
     ep = Coordinator(store, lane).ingest(mention('num-1'), persona='P1')
-    (refused, no), (_, yes) = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    (refused, no), (_, yes) = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
     assert not no and '「#2」是 [阿杰 #2] 的编号' in refused and '「@阿杰 #2」是 [阿杰 #2] 的编号' in refused
     assert refused.endswith('真是别的数（PR 号之类），原样加 force=yes 再调用一次。')
     assert yes, 'force sends it as written'
     assert [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'})] == ['issue #2 修好了']
+
+
+def test_the_old_name_reply_still_speaks_and_says_the_new_one(store):
+    world(store)
+    lane = FakeLane(store, [FakeTurn([THINK, ('reply', {'parts': [{'kind': 'text', 'text': '在'}]})])])
+    ep = Coordinator(store, lane).ingest(mention('old-name'), persona='P1')
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'reply']
+    assert ok and result['renamed'] == 'reply 现在叫 speak，这次照办，下次直接用新名字。'
+    assert [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'})] == ['在']
+    assert role_tools.aliases()['reply'] == 'speak' and 'reply' not in role_tools.TOOL_NAMES
 
 
 def test_a_whole_label_or_a_number_of_nobody_here_passes(store):
@@ -111,10 +121,10 @@ def test_a_private_chat_that_refuses_a_reaction_is_not_tried_again_until_restart
     event = {'event_id': 'dm-react', 'scene_id': dm, 'person_id': 'qq:20002', 'text': '在吗',
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'dm', 'id': '20002'}, 'sender_id': '20002',
                          'platform_event_id': 'pe-dm'}}
-    react = ('reply', {'parts': [{'kind': 'react', 'line': '这条', 'face': '赞'}]})       # who: the other person
+    react = ('speak', {'parts': [{'kind': 'react', 'line': '这条', 'face': '赞'}]})       # who: the other person
     lane = FakeLane(store, [FakeTurn([THINK, react])])
     ep = Coordinator(store, lane).ingest(event, persona='P1')
-    assert [r[5] for r in lane.tool_results if r[2] == 'reply'] == [True], (ep.get('failure'), lane.tool_results)
+    assert [r[5] for r in lane.tool_results if r[2] == 'speak'] == [True], (ep.get('failure'), lane.tool_results)
     [row] = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}))
     channels = bridge(store)
     store.db.messages.update_one({'_id': row['_id']}, {'$unset': {'not_before': ''}})
@@ -125,5 +135,5 @@ def test_a_private_chat_that_refuses_a_reaction_is_not_tried_again_until_restart
     lane = FakeLane(store, [FakeTurn([THINK, react])])
     Coordinator(store, lane).ingest({**event, 'event_id': 'dm-react-2',
                                      'channel': {**event['channel'], 'platform_event_id': 'pe-dm-2'}}, persona='P1')
-    [(result, ok)] = [(r[4], r[5]) for r in lane.tool_results if r[2] == 'reply']
+    [(result, ok)] = [(r[4], r[5]) for r in lane.tool_results if r[2] == 'speak']
     assert not ok and '私聊里点不了表情' in result and '到下次重启前' in result

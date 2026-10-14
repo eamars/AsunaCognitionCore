@@ -103,6 +103,7 @@ Who is who in a scene, as the character reads it.
   - `ensure_roster` — Label everyone who has written in this scene, so a lookup can name them all.
   - `resolve` — The people of this scene a lookup may mean.
   - `account_of` — The platform account behind a person in this scene, for the adapter's @ marker; None when unknown.
+  - `numbers` — Numbers in her words that are someone's here, outside a label (a label leaves as a name or an @): [(what she wrote, their label)].
   - `outbound` — Labels never leave the program; the stored text keeps what she wrote.
   - `authors_of` — Every stored author id in these scenes that is this person (aliases by configuration).
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.

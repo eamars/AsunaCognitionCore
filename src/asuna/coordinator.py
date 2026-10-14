@@ -53,9 +53,9 @@ TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_develop
 # said only in her system prompt, a missing first think was refused 1.75 times as often.
 THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
 # ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
-UNSENT_NOTE = '这段没发出去：「%s」。在这里说话用 reply。'
+UNSENT_NOTE = '这段没发出去：「%s」。在这里说话用 speak。'
 UNSENT_CHARS = 40
-REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 reply 说话，或者用 stay_silent 结束。'
+REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话，或者用 stay_silent 结束。'
 
 
 class Coordinator:
@@ -268,7 +268,7 @@ class Coordinator:
                     self._absorb(ep,seen)
                     said=(ep.get('reply') or {}).get('parts')
                     return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                        **({} if said else {'silent_reason':(ep.get('silent') or {}).get('reason') or '这回合没有 reply'}))
+                        **({} if said else {'silent_reason':(ep.get('silent') or {}).get('reason') or '这回合没有 speak'}))
                 self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                     'request_refs':value.request_refs},ep['scope_key'])
                 continue

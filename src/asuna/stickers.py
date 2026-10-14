@@ -44,7 +44,7 @@ SHELF_WORDS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (N
 USE_WORDS = ((1, '还没发过'), (3, '发过一两次'), (8, '发过几次'), (None, '常发'))
 ORIGIN_WORDS = {'own': '你自己画的', 'collected': '群里收来的'}
 
-STICKERS_NOTE = ('你收着的表情包（名字和你写的用法）。能发的地方：reply 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去。'
+STICKERS_NOTE = ('你收着的表情包（名字和你写的用法）。能发的地方：speak 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去。'
                  '群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
                  '你认得的表情包下面标着你给它起的名字。')
 HOME_NOTE = ('你收着的表情包。在家里发不出去，只是给你整理（sticker 的 drop、rename；你画的图也能 keep 上来）；'

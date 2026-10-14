@@ -798,3 +798,8 @@ characters. Action brain: nothing. The adapter needs her publish (a picture with
   with `force=yes`. Not converted: the program does not say it for her (her words: being stopped is her saying it
   again; force is in the open). Each stop is in her tool record. Cost: `reply` gains `force`, +90 characters on the
   character brain (21,121 → 21,211; tiered 21,023 → 21,113), QQ only.
+- **`reply` is now `speak`** (owner and her, 2026-10-14): the name was left from the first idea, answering a
+  notice; she speaks through it in every QQ turn, a visit and a plan's firing included, where nobody spoke to her.
+  `speak` is also the word of its block (`speak_from_program`) and its policy (`speak.max_messages`). The old name
+  runs as `speak`, unlisted, with 「reply 现在叫 speak，这次照办，下次直接用新名字。」 until she uses it fewer than 5
+  times in a week. Cost: none (same length).

@@ -46,7 +46,7 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
 # ADR-064 phase 2: where she speaks only through reply.
-REPLY_SENT=('这里只有 reply 发得出去：正文不发。一回合的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
+REPLY_SENT=('这里只有 speak 发得出去：正文不发。一回合的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
             '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。不想说出口的放进 think。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 

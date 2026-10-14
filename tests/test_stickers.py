@@ -128,7 +128,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     lane = FakeLane(store, [FakeTurn([THINK, keep(refs['custom'], '摸鱼'), keep(refs['market'], '臭'),
                                       keep(refs['old'], '老图'), keep(refs['photo'], '照片'),
                                       keep(refs['custom'], '又一个'),
-                                      ('reply', {'parts': [{'kind': 'text', 'text': '收了'},
+                                      ('speak', {'parts': [{'kind': 'text', 'text': '收了'},
                                                            {'kind': 'sticker', 'name': '摸鱼'}]})])])
     ep = Coordinator(store, lane).ingest(mention('keep-1'), persona='P1')
     assert ep['state'] in ('COMMITTED', 'WAITING_TASK'), ep.get('failure')
@@ -159,7 +159,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
 def test_an_adapter_that_cannot_send_stickers_sends_none(store, monkeypatch):
     refs = group_world(store, monkeypatch)
     lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'ref': refs['market'], 'name': '臭', 'when': '嫌弃'}),
-                                      ('reply', {'parts': [{'kind': 'sticker', 'name': '臭'}]})])])
+                                      ('speak', {'parts': [{'kind': 'sticker', 'name': '臭'}]})])])
     ep = Coordinator(store, lane).ingest(mention('keep-2'), persona='P1')
     [row] = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}))
     assert row['sticker']['kind'] == 'market' and row['sticker']['emoji_id'] == MARKET['emoji_id']

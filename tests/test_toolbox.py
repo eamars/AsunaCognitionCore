@@ -64,12 +64,12 @@ def test_each_kit_is_where_its_place_needs_it(store):
     # The owner's QQ chat: his errands and watching people there; no vault (a password does not travel through QQ).
     assert {'errand', 'watch', 'sticker', 'restart'} <= owner_qq and not {'credential', 'visit'} & owner_qq
     # Groups and other people's chats: nothing of home.
-    assert {'reply', 'find_member', 'leave_note', 'watch', 'write_document'} <= group
-    assert {'reply', 'leave_note', 'watch'} <= other_qq and not {'write_document', 'await_answer'} & other_qq
-    # On QQ she speaks only through reply: its parts carry the quote, the wait and pictures (ADR-064 phase 2).
+    assert {'speak', 'find_member', 'leave_note', 'watch', 'write_document'} <= group
+    assert {'speak', 'leave_note', 'watch'} <= other_qq and not {'write_document', 'await_answer'} & other_qq
+    # On QQ she speaks only through speak: its parts carry the quote, the wait and pictures (ADR-064 phase 2).
     for qq in (group, owner_qq, other_qq):
-        assert 'reply' in qq and not set(role_tools.REPLY_REPLACES) & qq
-    assert 'reply' not in local and 'reply' not in line
+        assert 'speak' in qq and not set(role_tools.REPLY_REPLACES) & qq
+    assert 'speak' not in local and 'speak' not in line
     for public in (group, other_qq):
         assert not set(role_tools.AT_HOME) - {'write_document', 'group_focus'} & public
         assert not {'errand', 'credential'} & public

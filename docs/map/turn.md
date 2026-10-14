@@ -128,6 +128,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
 - def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
 - def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').
+- def `rename_note` — What a call by an old name is told: merged into an option, or simply renamed.
 - def `named` — An option as she reads it: 'task 的 message'.
 - def `renamed` — An old name's call as its tool and arguments: the option added, review_idea's idea (an id) as id.
 - def `specs` — The worker-side tool specs the plugin registers (name, description, parameters).
@@ -155,7 +156,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_credential`
   - `tool_watch`
   - `tool_await_answer`
-  - `tool_reply` — ADR-064 phase 2: her speech here, in parts.
+  - `tool_speak` — ADR-064 phase 2: her speech here, in parts.
   - `tool_task_answer`
   - `tool_delegate`
   - `tool_task_message`

@@ -1025,7 +1025,7 @@ export class CognitionCore {
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
           // Silence says what this turn has written so far: deciding to say something is not saying it.
-          // Where only reply speaks, the worker says what reply queued instead (`sent`).
+          // Where only speak speaks, the worker says what speak queued instead (`sent`).
           if (spec.name === 'stay_silent' && !('sent' in (reply.value ?? {})))
             return { ...reply.value, written: writtenSoFar(agent.session, operation) };
           // An answer she reads that the conversation still shows is named, not sent again (ADR-061).

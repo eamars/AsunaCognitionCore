@@ -252,6 +252,11 @@ class Coordinator:
                 return self._update(ep,state='COMMITTED')
             speech=self._speech(ep,value)
             if replying:
+                # Words she also sent through speak this turn were said: only the rest is unsent.
+                spoken=set((ep.get('reply') or {}).get('texts') or [])
+                pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
+                        if isinstance(text,str) and text.strip()]
+                speech='\n\n'.join(piece for piece in pieces if ' '.join(piece.split()) not in spoken)
                 # ADR-064 phase 2: here only reply speaks. Words in the body never leave: written without reply they
                 # come back once in this turn, stay_silent or not (elsewhere words written beside stay_silent leave),
                 # then her next turn here says they were not sent.

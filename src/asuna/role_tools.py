@@ -147,7 +147,7 @@ TOOLS = {
     },
     'stay_silent': {
         'description': ('结束这回合，不再说话。回执会说这一回合发出了什么。只写在心里话里的话没有说过。'),
-        'parameters': {'reason': _s(limit=1000, description='为什么不说', required=True)},
+        'parameters': {'reason': _s(limit=1000, description='为什么不说；说过了就不用写')},
     },
     'quote': {
         'description': ('群里这回合说的第一句要不要引用叫你的那条。不调用时程序这样定：那条之后别人又说过话就引用，否则直接发。发 bot 命令（如 #napcat）'
@@ -951,6 +951,7 @@ def words(exc):
 _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words for her
 
 
+NO_REASON = '（没写为什么）'
 # Her pokes and reactions in her history: the program's words, marked as what she did (ADR-064 phase 2, her words).
 ACTION_MARK = '（你做的动作，不是你说的话）'
 REACT_MINUTES = 10
@@ -1236,7 +1237,8 @@ class RoleTools:
         return result, False
 
     def tool_stay_silent(self, ep, call_id, args):
-        reason = self._text(args, 'reason', 1000)
+        # After speak there is nothing to explain; a silence without words keeps a plain mark for the record.
+        reason = self._text(args, 'reason', 1000, required=False) or NO_REASON
         ep = self.coordinator._update(self._fresh(ep), silent={'reason': reason})
         from . import channel_kinds
         if channel_kinds.reply_parts(ep['scene_id']):

@@ -173,6 +173,20 @@ def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(s
     assert 'unsent_from_program' not in again['context'], 'said once'
 
 
+def test_words_also_sent_through_speak_are_not_unsent_and_stay_silent_needs_no_why_after_speaking(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    lane = FakeLane(store, [FakeTurn([THINK, said('就这样吧'), ('stay_silent', {})], said=['就这样吧'])])
+    event = {'event_id': 'dup-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '然后呢',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-dup-1'}}
+    persist_input(store, event, managed=True)
+    ep = Coordinator(store, lane).ingest(event)
+    assert len(lane.calls) == 1, 'nothing handed back'
+    assert [ok for _, _, name, _, _, ok in lane.tool_results if name == 'stay_silent'] == [True]
+    assert not (store.db.scenes.find_one({'_id': 'dm-a'}) or {}).get('unsent'), 'said through speak: not unsent'
+    assert [r['text'] for r in outbound(store, ep['_id'])] == ['就这样吧']
+
+
 def test_words_beside_stay_silent_come_back_too_and_a_reply_then_sends_them(store, monkeypatch):
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)

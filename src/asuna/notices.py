@@ -40,7 +40,7 @@ REQUEST_KIND = 'platform_request'
 MARK = '（平台通知）'                         # after the label line of a notice: the program's line, not typed text
 HISTORY_WORD = '平台通知，不是这个人打的字'
 HELD_NOTE = '平台转来的通知（谁撤回了消息之类），这里只给一次；每条是程序的话，不是谁打的字。'
-HOME_HEAD = '这是平台转来的通知，不是用户消息'
+HOME_HEAD = '这是平台转来的通知，不是有人跟你说话'
 ANSWER_HINT = '（%s：用 group_action 回，kind 写 accept 或 decline，who 写 %s）'
 OPEN_HEAD = '重启以后还开着、等你回的请求'
 # What became of her answer (group_admin.receipt): the platform took it, or refused it (the request is gone there).

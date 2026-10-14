@@ -536,14 +536,14 @@ class People:
         return cache[key]
 
     def scene_title(self, scene):
-        """A conversation as she reads it: 本机私聊, 群聊「name」 or 私聊 with the person's label; never an id."""
+        """A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id."""
         cache = self.__dict__.setdefault('_titles', {})
         if not scene:
             return '别处'
         if scene['_id'] not in cache:
             chat = self.config.get('chat') or {}
             if scene['_id'] == chat.get('scene_id'):
-                title = '本机私聊'
+                title = '家里·私聊'
             elif scene.get('kind') == 'group':
                 row = self.db.messages.find_one({'scene_id': scene['_id'], 'event.raw.group_name': {'$exists': True}},
                                                 {'event.raw.group_name': 1}, sort=[('received_at', -1)])

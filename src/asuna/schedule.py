@@ -618,7 +618,7 @@ class ScheduleService:
                                                        'author': author},
                          scene['scope_key'])
         return {'going_to': people.scene_title(scene),
-                'note': '程序会在那边开一轮，那一轮只看得到那边和这句话；办没办成，下次在家会看到。'}
+                'note': '程序会在那边开一回合，那一回合只看得到那边和这句话；办没办成，下次在家会看到。'}
 
     def note(self, ep, cls, args, call_id, question=None):
         """A note of hers to another of her conversations (ADR-018). A `wake` note is an input at the tail of that
@@ -766,7 +766,7 @@ class ScheduleService:
             self.store.audit(plan['_id'], 'settlement.skipped', {'reason': 'ALREADY_SETTLED', 'date': local_date}, plan['scope_key'])
             return 'SKIPPED:ALREADY_SETTLED'
         self.controller.offer_internal('settlement', 'settlement:' + local_date, plan['scene_id'], plan['person_id'],
-            '这是今天的夜间沉淀机会，不是用户消息。看看挂着的情绪、待决的提案、活账和晋升候选，'
+            '这是今天的夜间沉淀机会，不是有人跟你说话。看看挂着的情绪、待决的提案、活账和晋升候选，'
             '决定哪些了结（close）、哪些作废（void，要写理由）、哪些值得晋升成长期记忆（promote），也可以什么都不做。')
         current = self.store.db.plans.find_one({'_id': plan['_id']})
         self.store.put('plans', {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])

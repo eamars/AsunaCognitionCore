@@ -389,8 +389,8 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
     assert coordinator.ingest(home_beat(store))['state'] == 'COMMITTED'
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
     assert places.outcome(store, plan['visits'][-1]) == 'pending'
-    assert places.OUTCOMES['pending'] == '那边那一轮还没跑完，结果还没出来'
-    with pytest.raises(ValueError, match='已经出门去那个群了，那边那一轮还没跑完'):
+    assert places.OUTCOMES['pending'] == '那边那一回合还没跑完，结果还没出来'
+    with pytest.raises(ValueError, match='已经出门去那个群了，那边那一回合还没跑完'):
         service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
 
 

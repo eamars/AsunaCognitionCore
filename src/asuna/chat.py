@@ -200,7 +200,7 @@ class Chat:
             'person_id': self.settings['person_id'],
             'adapter_id': 'self-development',
             'episode_kind': 'self_development',
-            'text': text or ('这是一次内部自我开发机会，不是用户消息或新授权。你可以回顾近期经历，'
+            'text': text or ('这是一次内部自我开发机会，不是有人跟你说话，也不带新授权。你可以回顾近期经历，'
                              '自行决定是否值得反思、继续旧工作、委托改进，或者什么都不做。无需公开回复。'),
             'trusted_context_events': trusted_context_events or [],
         }

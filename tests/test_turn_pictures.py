@@ -40,7 +40,7 @@ def setup(store, monkeypatch, source_items):
 def test_the_trigger_line_first_then_recent_photos_never_stickers(store, monkeypatch):
     ep, pulled = setup(store, monkeypatch, [photo('trigger')])
     got, shown = role_tools.turn_pictures(store, ep)
-    assert [item['line'] for item in shown['items']] == ['触发这一轮的那条', '前面第 2 条']
+    assert [item['line'] for item in shown['items']] == ['触发这一回合的那条', '前面第 2 条']
     assert len(got) == 2 and len(pulled) == 2 and '不用再 read_image' in shown['note']
 
 

@@ -51,7 +51,7 @@ def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
 
 
 # What a heartbeat says to her (ADR-012 §4.1): her own moment, kept by the program, paced by her.
-HEARTBEAT_TEXT = ('这是一次内部在场机会（心跳），不是用户消息或新授权。看看此刻的节律、心情、活账和最近发生的事，'
+HEARTBEAT_TEXT = ('这是一次内部在场机会（心跳），不是有人跟你说话，也不带新授权。看看此刻的节律、心情、活账和最近发生的事，'
                   '自己决定是否想说一句、做点什么、写下点什么，或者安静待着。大多数时候什么都不做也完全正常。'
                   '心跳由程序替你守着，不用你续，也不会丢。节奏是你的：用 set_policy 调 heartbeat.every_min'
                   '（15–240 分钟一拍）、heartbeat.min_gap_min（没有找你的新事时，两次之间至少隔多久）；'
@@ -129,7 +129,7 @@ def recent_phrasing(texts, *, minimum=3, limit=5):
 
 
 # ── ADR-021: night self-development stages ──
-NIGHT_STAGE_TEXT = ('这是夜里分段自我开发的一段，不是用户消息或新授权。这一段只做一件事：改一处，或者验上一段改的那处；'
+NIGHT_STAGE_TEXT = ('这是夜里分段自我开发的一段，不是有人跟你说话，也不带新授权。这一段只做一件事：改一处，或者验上一段改的那处；'
                     '也可以什么都不做。无需公开回复。')
 NIGHT_STAGE_NOTE = ('夜里这个时段每隔一阵有一段自我开发，每段都能带开发工具委托行动脑。上一段的活还没交回来，'
                     '或者发布的改动还在生效中，程序就跳过这一段，所以一段一件事，不用自己挂提醒排活；'

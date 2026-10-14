@@ -12,10 +12,11 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (33, 21222)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (33, 21224)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
+                              # second wording audit (her yes 2026-10-14): 回合 for her turn, 家里·私聊 for the home chat, 叫到你才会醒 +2
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
 # nature, from, about and the recall sentence (+294).
 CHARACTER_TIERED = (32, 21124)
@@ -103,7 +104,7 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
 # The harness prompt files (src/asuna/resources/prompts), characters at most. Same rule as the tools: growing one
 # raises its number here in the same change, with the cost stated in its ADR; a new file gets a line.
 PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 586, 'stage_attend.md': 422,
-           'stage_appraise.md': 413}
+           'stage_appraise.md': 416}
 
 
 def test_the_harness_prompts_stay_within_their_budget():

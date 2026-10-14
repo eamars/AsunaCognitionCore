@@ -197,7 +197,7 @@ def test_her_task_list_says_where_each_task_stands_in_words():
 
 def test_a_task_carried_on_by_a_later_one_points_to_it():
     assert handover.status_words({'state': 'RETURNED', 'feedback_state': 'DELIVERED'}, 'task-later') == \
-        '后来接着做了一轮，以 task-later 那条为准'
+        '后来接着做了一趟，以 task-later 那条为准'
     assert handover.status_words({'state': 'RUNNING'}, 'task-later') == '在跑'
 
 

@@ -592,7 +592,7 @@ class ContextBuilder:
         if paused:
             context['task_continuation_from_program'] = (
                 '「做到一半宿主重启停了」的是重启后等待操作者决定的旧行动，历史与回执仍保留。'
-                '只有本地用户明确要求继续时才可以用 task 的 message 接着做；'
+                '只有主人明确要继续时才可以用 task 的 message 接着做；'
                 '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
                 '继续时先核实已有结果，未确认回执的操作不能盲目重做。')
         if read['linked_scenes']:
@@ -604,7 +604,7 @@ class ContextBuilder:
         if target['shared']:
             context['relationship_shared_from_program']={
                 'scope':target['scope'],
-                'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一轮的理解更新'
+                'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一回合的理解更新'
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
         if event.get('episode_kind') == 'self_development' and isinstance(event.get('night_stage'), dict):
             from .rhythm import night_stage_block
@@ -983,7 +983,7 @@ class ContextBuilder:
         from .vision import vision_capability
         if vision_capability(self.store.config)['supported']:
             context['action_capabilities_from_program']['read_image']=(
-                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一轮真实的视觉输入；'
+                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一回合真实的视觉输入；'
                 '行动脑也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
         context['action_capabilities_from_program']['group_discussion']=(
             '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'

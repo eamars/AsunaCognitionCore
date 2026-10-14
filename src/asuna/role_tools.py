@@ -50,8 +50,8 @@ VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send 
 # nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
 CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')
 CONDENSE_AT_HOME = ('scheduled',)
-CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一轮定，或在家里（本机、跟主人的私聊、家里的几条线）你自己的'
-                    '心跳、反思、沉淀、或你的计划到点的那一轮定。群里和别人的私聊里有人在等你说话，那儿不定。')
+CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一回合定，或在家里（家里·私聊、跟主人的私聊、家里的几条线）你自己的'
+                    '心跳、反思、沉淀、或你的计划到点的那一回合定。群里和别人的私聊里有人在等你说话，那儿不定。')
 # Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
@@ -113,7 +113,7 @@ TOOLS = {
         'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
     },
     'task': {
-        'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一轮）；answer 回答它刚问你的问题（只在它问你的那一回合，'
+        'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一趟）；answer 回答它刚问你的问题（只在它问你的那一回合，'
                          '回答只给它看，答完这回合结束）；stop 叫停一件还在做或暂停着的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
                          '；page 翻读它交回的长报告原文。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
@@ -341,7 +341,7 @@ TOOLS = {
         'description': ('你在哪些群常驻，do 选一样：list 列出常驻和歇着的群和它们今天说了多少句；active 让一个群常驻，'
                          'rest 让它歇着（歇着的群只有 @ 你、回你、你在等的回话和 watch 的人会叫你，话照存照能查）；'
                          'condense 等这个群安静后把对话压成摘要（出门看群那回合、或家里的心跳和反思里用），keep 收回；'
-                         'mute 在家里把一个群静音（hours 默认 24，最多 168：只有叫你的话会叫你，你不先开口、不去串门）'
+                         'mute 在家里把一个群静音（hours 默认 24，最多 168：只有叫到你才会醒，你不先开口、不去串门）'
                          '，unmute 提前结束。place 照抄 list 或 places_from_program 里的，'
                          '在群里不写就是这个群。你当管理员的群一直常驻。'),
         'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute']),
@@ -359,7 +359,7 @@ TOOLS = {
     },
     'ask': {
         'description': ('问人或报问题，程序记着问了谁、谁答了、多久。do=ask 提问，可同时问几处，过了耐心就不等；read 读一个问题的回答，'
-                         '或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（本机、主人的私聊、开发代理的线）'
+                         '或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（家里·私聊、主人的私聊、开发代理的线）'
                          '时，程序在那边开一回合，带着 question。拍板的事（权限、花钱、开哪条道）问主人，不问开发代理。'),
         'parameters': {'op': _s('做哪一样（不写时：有 question 是 ask，有 took 是 close，否则 read）',
                                 enum=['ask', 'read', 'close']),
@@ -722,7 +722,7 @@ NOT_NOW = {
     'read_image': '这个对话最近没有能看的图：图要在这个对话 7 天内的消息里，或者是列出来的你自己的图；在家里，你其他对话里 7 天内的图也能看。',
     'private_words': '这一回合不记名单。',
     'ideas.read': ('想法本在自我改进的回合里读和定，或者家里有人跟你说话问起时；心跳、计划到点、夜间沉淀和便条叫醒的回合不翻，'
-                   '先记着，等自我改进那一轮。'),
+                   '先记着，等自我改进那一回合。'),
     'delegate': '这回合说话的人在这里没有交给行动脑的授权，这件事交不了；能直接答的就直接答，答不了就照实说。',
     'task.message': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
     'task.stop': '现在没有在做或暂停着的任务可停。',
@@ -739,7 +739,7 @@ NOT_NOW = {
     'group_action': '群里：你在这个群现在不是管理员，或者管理动作关着；家里：现在没有等你回的请求。',
     'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
     'peer_line': '这回合没有能开关的线。',
-    'errand': ('差事只在主人自己的对话里、有人跟你说话让你去办的那一轮接，去处列在 errand_places_from_program；'
+    'errand': ('差事只在主人自己的对话里、有人跟你说话让你去办的那一回合接，去处列在 errand_places_from_program；'
                '自己想去别处，用 visit。'),
     'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
     'pass_note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
@@ -803,7 +803,7 @@ def her_pictures(store, ep):
 # to TURN_PICTURES are filled from photos (not stickers: she knows those by fingerprint) in the few lines before it.
 TURN_PICTURES = 2
 TURN_PICTURE_LINES = 6
-PICTURES_NOTE = ('这些图已经作为图片跟这一轮一起给你了，不用再 read_image；别的图照旧用 read_image（ref 照抄图旁标的）。'
+PICTURES_NOTE = ('这些图已经作为图片跟这一回合一起给你了，不用再 read_image；别的图照旧用 read_image（ref 照抄图旁标的）。'
                  '哪张没出现，就是没拉下来，用 read_image 再看一次也行。')
 
 
@@ -818,7 +818,7 @@ def turn_pictures(store, ep):
     source = store.db.messages.find_one({'_id': 'in-' + ep['_id'], 'scene_id': ep['scene_id']})
     if not source:
         return [], None
-    chosen = [(entry, '触发这一轮的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
+    chosen = [(entry, '触发这一回合的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
     if len(chosen) < TURN_PICTURES:
         earlier = store.db.messages.find({'scene_id': ep['scene_id'], 'direction': 'inbound',
                                           'policy_epoch': ep['policy_epoch'],
@@ -849,7 +849,7 @@ def turn_pictures(store, ep):
 # Words for the refusals she is most likely to meet: the gist. The detail after the code carries the values and the
 # fix; a code not listed here is passed on as it is (its own message says both).
 WORDS = {
-    'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（本机、主人私聊这类可信的对话）改。',
+    'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节。',
@@ -864,7 +864,7 @@ WORDS = {
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
     'PERSONA_RENDER_OVER_BUDGET': '这样写完，每回合自动带上的人格和口吻会超出上限。',
-    'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（本机、主人私聊这类可信的对话）改。',
+    'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
     'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同回合和日期。',
@@ -911,9 +911,9 @@ WORDS = {
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
     'ERRAND_PLACE_UNKNOWN': '这个地方去不了。',
     'ERRAND_LIMIT': '替人跑腿的次数用完了。',
-    'ERRAND_ONLY_AT_HOME': '只有在家里（本机、主人私聊这类可信的对话）才能接差事。',
+    'ERRAND_ONLY_AT_HOME': '只有在家里（家里·私聊、主人私聊这类可信的对话）才能接差事。',
     'ERRAND_PICTURE_NOT_HERS': '差事只能带你自己做的图。',
-    'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一轮接；自己想去，用 visit。',
+    'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一回合接；自己想去，用 visit。',
     'FEEDBACK_TASK_STALE': '这一步做不了。',
     'WORKSPACE_NOT_AUTHORIZED': '这个对话不能交给行动脑做事；能直接答的就直接答。',
     'SCENE_MEMBERSHIP_DENIED': '这一步做不了。',
@@ -928,7 +928,7 @@ WORDS = {
     'IMAGE_SIGNATURE_UNAVAILABLE': '这张图的链接过期了，眼下换不了新签名；过几分钟再试。',
     'IMAGE_TOO_LARGE': '这张图太大，看不了。',
     'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
-    'IMAGE_PATH_HOME_ONLY': '按路径读图只在家里（本机、主人私聊这类可信的对话）能做；这里看消息里的图，ref 照抄图旁标的那个。',
+    'IMAGE_PATH_HOME_ONLY': '按路径读图只在家里（家里·私聊、主人私聊这类可信的对话）能做；这里看消息里的图，ref 照抄图旁标的那个。',
     'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就交给行动脑，把 ref 一起交代。',
 }
 
@@ -1021,7 +1021,7 @@ ATTACH_REASONS = {'scene_has_no_channel_route': '这个对话没接到平台', '
 
 
 # A task of this conversation that another person asked for (RoleTools._own_task).
-OTHERS_TASK = ('「%s」是 %s 叫你做的那件事：只有在 ta 叫你的那一轮里才能给它补话或叫停。这一轮是别人叫你的，'
+OTHERS_TASK = ('「%s」是 %s 叫你做的那件事：只有在 ta 叫你的那一回合里才能给它补话或叫停。这一回合是别人叫你的，'
                '所以这次动不了它，不是你抄错了。要停，等 ta 再叫你时停，或者在这里跟大家说一声它还在做。')
 
 
@@ -1763,7 +1763,7 @@ class RoleTools:
         label = People(self.store, ep.get('persona')).scene_title(scene)
         if on:
             row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours)
-            result = {'done': '%s静音了：只有叫你的话会叫你，你不先开口、不去；到点自己结束' % label,
+            result = {'done': '%s静音了：只有叫到你才会醒，你不先开口、不去；到点自己结束' % label,
                       'until_at': row['until'], 'id': row['_id']}
         else:
             row = switches.muted(self.store, scene['_id'])

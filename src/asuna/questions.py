@@ -48,7 +48,7 @@ ID = re.compile(r'q-[0-9a-f]{8}')
 DEVELOPER_ROUTE = 'claude-code'     # the developer's line when no home route is marked `developer`
 
 STATE_WORDS = {'pending': '还没问出来', 'waiting': '等着', 'answered': '答了', 'lapsed': '没答，不等了',
-               'not_asked': '没问（那一轮你没说）', 'not_sent': '没问出去', 'working': '行动脑在做',
+               'not_asked': '没问（那一回合你没说）', 'not_sent': '没问出去', 'working': '行动脑在做',
                'not_done': '行动脑没做完'}
 QUESTION_WORDS = {'open': '等着', 'answered': '有回答', 'unanswered': '都没答', 'ended': '程序关了'}
 NOTE_TEXT = ('你用 ask 要在这里问的问题（%s）：\n%s\n在这里问出来，或者决定不问；这里的回话程序会记到这个问题上。')

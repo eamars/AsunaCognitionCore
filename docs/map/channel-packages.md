@@ -405,7 +405,6 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
   - `submit_pending`
   - `health_snapshot`
   - `maybe_status`
-  - `find_capabilities` — Pictures, stickers and reactions always; a poke only when NapCat's packet backend answers.
   - `verify_identity`
   - `run`
 

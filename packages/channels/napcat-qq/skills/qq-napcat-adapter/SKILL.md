@@ -138,6 +138,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.7.2（2026-10-13）：她自己的禁言（权限与边界里那条）。新增 `qqadapter/mutes.py`、`HostApi.post_own_mute`、`outbound.platform_muted`、`mutes_*` 计数；其余通知、入站、出站不变。
 - 0.8.0（2026-10-13，ADR-064 第一阶段）：通知（权限与边界里那条）。新增 `qqadapter/notices.py`、`HostApi.post_notice`、请求的回答；关于她自己禁言的通知仍走 `mutes.py`。
 - 0.9.0（2026-10-14，ADR-064 第二阶段）：她的 reply。出站一项带 `action` 时只做那个动作、不发消息：`poke` 群里 `group_poke`（`group_id`、`user_id`），私聊 `friend_poke`（`user_id`）；`react` 是 `set_msg_emoji_like`（`message_id`、`emoji_id`、`set: true`）。回执只看 `retcode`（0 才算做了），不带消息 id；流水记在 `actions.jsonl`。开机在身份核对之后问 NapCat 一次 `get_packet_status`（空参数）：`retcode` 是 0 才在领取时声明 `poke`，`react` 一直声明；日志一行 `CAPABILITIES image,sticker,react[,poke] packet_status_retcode=…`（不认这个动作的 NapCat 回非 0），那次调用出错记 `PACKET_STATUS_UNKNOWN`。带图的一项可以没有字（她 reply 里单发的图）。
+- 0.9.1（2026-10-14）：领取时一直声明 `poke` 和 `react`，开机不再探测 `get_packet_status`——这台 NapCat 4.18.0 不认那个动作（`retcode` 1404「不支持的API get_packet_status」），戳却是好的（主人实测）。NapCat 拒了的戳或回应照常走失败回执回到她那里。
 
 ## 试用记录
 

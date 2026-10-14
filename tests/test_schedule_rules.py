@@ -148,3 +148,20 @@ if __name__ == '__main__':
             print('FAIL', name, '->', type(exc).__name__, exc)
     print('schedule_rules: %d/%d passed' % (len(tests) - len(failed), len(tests)))
     raise SystemExit(1 if failed else 0)
+
+
+def test_at_takes_the_clock_face_she_reads():
+    """What she reads she may write back: 10/19 21:05 and 2026/10/19 21:05 are local wall times like the ISO form."""
+    from datetime import datetime, timezone
+    from asuna.schedule_rules import _wall_shape
+    year = datetime.now(timezone.utc).year
+    assert _wall_shape('2026/10/19 21:05') == {'at': '2026-10-19T21:05'}
+    assert _wall_shape('2026-10-19 21:05') == _wall_shape('2026-10-19T21:05') == {'at': '2026-10-19T21:05'}
+    shown = _wall_shape('12/31 23:59')['at']
+    assert shown in ('%d-12-31T23:59' % year, '%d-12-31T23:59' % (year + 1)), 'without a year: the next such date'
+    try:
+        _wall_shape('13/40 09:00')
+    except ValueError as exc:
+        assert 'SCHEDULE_AT_INVALID' in str(exc)
+    else:
+        raise AssertionError('an impossible date is refused')

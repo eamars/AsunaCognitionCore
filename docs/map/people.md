@@ -112,7 +112,7 @@ Who is who in a scene, as the character reads it.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.
-  - `scene_title` — A conversation as she reads it: 本机私聊, 群聊「name」 or 私聊 with the person's label; never an id.
+  - `scene_title` — A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id.
   - `relabel` — Turn the author ids in her context blocks into the labels her conversation uses.
   - `corrections` — Program-found corrections (summary_attribution) as sentences with labels.
 

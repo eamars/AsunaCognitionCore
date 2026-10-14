@@ -303,7 +303,7 @@ TOOLS = {
                          '程序在那边开一回合，那边只看得到那边和这句话，你到了再决定怎么说，不合适就不发。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
         'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
                        'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
-                       'exactly': {'type': 'boolean', 'description': '要原样转达时为 true'},
+                       'exactly': {'type': 'boolean', 'description': 'yes：原样转达'},
                        'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
     },
     'pass_note': {

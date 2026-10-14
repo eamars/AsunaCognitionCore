@@ -53,6 +53,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `person_ids` — Every platform person id a bare account number could be (qq:<account>, …).
 - def `faces_of` — The platform faces (name -> id) of the kind a scene id belongs to; empty when it has none.
 - def `home` — A scene or person of a kind whose conversations are trusted home ones (ADR-017).
+- def `marks_answers` — Who on this line marks the lines that answer her questions (agent_line.py send --answers), so an unmarked line of theirs answers none: their person id, or None where nobody marks.
 - def `owner_joins` — A scene of a kind the owner joins from the Web (ADR-051): a home line only.
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`

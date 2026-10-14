@@ -12,6 +12,7 @@ Coding agents on this machine as an Asuna channel kind (asuna/channel_kinds.py).
 
 - def `person_id`
 - def `account_of` — The account inside an agent:<account> person id, else None.
+- def `answerer` — The agent of a line: the one who marks its answers.
 - def `scene_id`
 - def `scene_parts` — (home account, 'dm', agent) of an agent scene id, else None.
 - def `outbound_mention`

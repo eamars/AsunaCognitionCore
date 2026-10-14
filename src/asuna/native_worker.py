@@ -651,8 +651,8 @@ class BusinessWorker:
     def errand_session(self, ep, source_id):
         """The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed
         turn, so the turn resumes from its cached prefix. Where it cannot (no completed turn, too near compaction, or
-        the copy fails) the session starts empty and the turn reads that conversation's recent lines instead
-        (`forked` false; coordinator)."""
+        the copy fails) the session starts empty (`forked` false), and the turn's notice carries the conversation's
+        recent lines, none of them shown there yet."""
         store = self.app.store
         session_id = errands.session_id(ep['_id'])
         if store.db.sessions.find_one({'_id': session_id}):

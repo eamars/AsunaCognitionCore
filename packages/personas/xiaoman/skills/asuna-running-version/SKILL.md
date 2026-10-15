@@ -92,6 +92,9 @@ v1（2026-10-15）：首次固化。判据全是我这几天撞出来的（10-15
 v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩，我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8 所以自检撞不到这一族。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR（文本模式读看不见 CR，那把尺是瞎的），覆盖 SKILL.md 与同目录全部 .py，并且要在冻结快照上跑——候选可能被别人抹平成 LF，只在候选里跑等于白跑。③ 锚点全部从「文件＋行号」改成「文件＋名字」，新增第十一节那条规矩；锚点守卫跟着改成「文件在＋那个名字在文件里找得到（字节级读）」，正文里再出现行号锚点直接判红。判据、读数一条没动。
 
 
+v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`，开发沙箱里只有这条找得到），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。八条判据、两条顺手、探针脚本、代码锚点一条没动。
+
+
 ## 试用记录
 
 - 2026-10-15 v1：`version_probe.py` 在候选里实跑——core selection `ACTIVE`、candidate `7480845c4ac1`、`published_at` 10-15 01:28；`src/asuna` 与在跑那份可比文件 116 个、内容不同 0 个；`cli.py`、`native_ui.py` 只在检出里有（不进包），`resources/RUNTIME_API.md` 只在跑的那份里有；检出 HEAD 落后 `origin/main` 1 笔、工作区 2 个未提交文件（所以下次重启的 `checkout` 仍会是 `changed_files`）。`restart/last.json` 那次（10-15 00:30）的 `checkout.state` 就是 `diverged`，正是我读错的那句。
@@ -101,4 +104,6 @@ v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／
   - 换行：今天 18:02 冻结出来的快照里这份 SKILL.md 是 CRLF（字节级 CR=90），同一份用文本模式读进来再问有没有 CR 答案是「没有」——那就是瞎；新加的 `line_endings_are_lf` 吃这份真样本 → 红，读数 SKILL.md（90 个 CR 字节）。
   - 锚点：11 条名字锚点（loaded、restart_from_program、block、SHOWN_HOURS、CHECKOUT_WORDS、syncCheckout、changedPackages、profileBase、fastForwardCheckout、effective、skillPaths）在检出 aa0494e2 逐个字节级核过都在。反证三连各红一次：假名字（SHOWN_HOURS 改成 SHOWN_HOURS_NOT_THERE → 里找不到这个名字）、把行号写法塞回去（restarts.py 加冒号 19 → 还写着行号锚点）、锚点指到不存在的文件（文件不在）。
   - 自检：56/56（改前 53/53；多的三条＝换行检查、第十一节存在、那条规矩的字面守卫）。
+
+- 2026-10-16 v1.2：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。
 

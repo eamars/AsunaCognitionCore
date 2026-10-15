@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（2026-10-16 实测 list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-image-generation-and-display
@@ -80,6 +80,9 @@ for x in (res.get("matches") or [])[:3]:
 发给没声明图输入的路由。**这台机器没有 photoreal 专用路由**：`style:"photoreal"` 不报错，`resolve` 会退回通用
 anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感就写进 prompt，并预期结果偏插画——
 不要把 resolve 的选择当成「这台机器认为这是照片」。
+
+2026-10-16 起这条路线面已经变了：`generate_image` 的 `list_routes` 共 11 条、含改图路线（必填／可选／不收原图三种标记都有）。
+上面那段只作 2026-10-04 当时 t2i 侧的读数保留；当前改图口径见「改图与 `generate_image`」一节。
 
 先按目标选路由（2026-10-10 补）：
 
@@ -272,8 +275,8 @@ QQ（napcat）那一轮——speak 的 picture 一项，`artifact_id` 照抄清�
 的拒绝是 **403 带 code、不带半个 body**：`PUBLICATION_NOT_FOUND`、`PUBLICATION_ATTEMPT_MISMATCH`、
 `ATTACHMENT_NOT_DECLARED`（行上记着 `attachment_skipped`：那次领取没声明能收图，图没跟着这条出去，字节也不给；
 下一次带 image 能力的领取会清掉这个标记）、`ATTACHMENT_ARTIFACT_DENIED`（只要这条自己声明的那张，
-传别的 id 只会更窄、不会替换）、`ATTACHMENT_SCOPE_DENIED`、`ATTACHMENT_SHA_MISMATCH`、
-`ATTACHMENT_HASH_MISMATCH`、`ATTACHMENT_NOT_AN_IMAGE`、`ATTACHMENT_OVER_LIMIT`、`ATTACHMENT_MEDIA_TYPE_MISMATCH`。
+传别的 id 只会更窄、不会替换）、`ATTACHMENT_SCOPE_DENIED`、`ATTACHMENT_SHA_MISMATCH`、`ATTACHMENT_HASH_MISMATCH`、
+`ATTACHMENT_NOT_AN_IMAGE`、`ATTACHMENT_OVER_LIMIT`、`ATTACHMENT_MEDIA_TYPE_MISMATCH`。
 
 适配器侧（napcat-qq 0.5.2）：私聊发 `[image, text]`，群里发 `[reply?, image, text/at…]`（图在话前面）。
 图有任何不对劲都是 **`failed` 回执、整条不发**，不降级成纯文字。
@@ -304,11 +307,62 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 against a real client」。第一次真发就是实测；在那之前别说「QQ 那边已经能看到图了」——
 现在（2026-10-04 深夜）也确实一张都还没发过。
 
+## 改图与 `generate_image`（2026-10-16 实测）
+
+这一节的事实来自 2026-10-16 09:16 那轮现场验收（改图通路四格：入口、配错即时拒绝、归属、排队成本；
+外加发出去的图剥文字块）；路线清单我在 09:18 用 `generate_image` 的 `list_routes=yes` 又对了一遍
+（只列路线、不画图）。画图／改图的主路是这个工具本身：回执把图登记成我自己的图，`artifact.artifact_id`
+喂 `read_image` 复核、也能随消息发出去。步骤 0–4 那条原生 HTTP 路留给端点探测和服务端小副本。
+
+**改图入口：`source_image`**
+
+- `generate_image` 有 `source_image` 参数：收图旁标的 ref，或一张已存好图的 `artifact_id`（`blob-…`）。
+  **能喂哪些图，和这一回合 `read_image` 能看哪些完全一样**——read_image 看得到的，这里就改得动（ref 口径见步骤 7）。
+- `list_routes=yes` 现在共 **11 条**路线（2026-10-16 实读）：`qwen-image-2.1-edit` 标 `source_image: required`；
+  **九条标 `optional`**（能纯文字画、也能改图）；剩下 `qwen-image-2.1-t2i` 不收原图。
+- **带 `source_image` 不写 workflow 时，服务自己挑一条改图路线**（2026-10-16 09:16 实测），不必点名 edit 那条。
+- edit 路线自述（`list_routes` 里读到的）：输出尺寸跟着原图走（按 32 的倍数取整）；提示词写成直接指令——
+  改什么、点名什么必须不动。
+
+**配错路线：瞬时返回，不排队、不白传图**
+
+- `IMAGE_WORKFLOW_TAKES_NO_SOURCE` —— 这条路线只从文字画，别带原图；
+- `IMAGE_WORKFLOW_NEEDS_SOURCE` —— 这条路线要原图；
+- `IMAGE_WORKFLOW_NEEDS_MORE_PICTURES` —— 这条路线还要别的图，回执带 `needs:["mask_image"]` 说明缺什么。
+- **inpaint 路线从 `generate_image` 永远进不去**：工具参数面根本没有 `mask_image`，所以它们不进 `list_routes` 清单
+  （edit 路线的 not_for 会把遮罩改动指到 inpaint 路线，那些名字在清单里找不到，别去工具里找它们）。
+
+**归属边界：改了谁的图，结果算谁的**
+
+- **改我自己画的图，结果还是我的**：能发到我自己的图能去的地方（口径见步骤 8）。
+- **改别人发的图，结果不算我的**：`read_image` 对这种图回 `produced: false`；**只能发回原图所在那个对话**
+  （主人的私聊按步骤 8 的联动场景那条另算），发到别的群／别人的私聊会被 `ATTACHMENT_NOT_HER_OWN` 挡。
+
+**修图里的错字：本地合成，不重画**
+
+- 家里派出去的任务里，行动脑能 `sandbox_run` 跑 Python＋**Pillow**；本机 Windows 字体目录（`C:\Windows\Fonts`）
+  **中文字体不缺**：`msyh`／`simhei`／`simsun`／`simkai`／`simfang`／Noto SC 都在（2026-10-16 09:16 实测）。
+- 做法：**纯色块盖住原文，按实测墨迹位置和字号逐字重写**；实测矩形外**逐像素 0 变化**——只动字那一块，其余画面不碰。
+- **硬边界：群里交出去的任务没有 `sandbox_run`，这类活得回家做**。
+
+**发出去的图不带提示词**
+
+- 登记成可发的那份会剥掉 PNG 的 `tEXt`／`iTXt`／`zTXt` 文字块（**像素和其余块一个字节不动**）；
+  任务目录那份原文件照旧带着 `prompt` 块，供复现。
+- 判据一句：**图也是会说话的东西，发出去前除了画面还得看它身上带了什么字**。
+
+**排队成本**
+
+- 一次改图实测：**排队约 85 秒、生成约 60～88 秒**，一张卡（2026-10-16 09:16 读数）。**别连烧**——
+  串行调度、切 workflow 卸模型（见已知坑），连排几张就是干等几轮。
+
 ## 边界（硬）
 
 - 生图、导入只在本机 owner 任务里做；本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
   **群里只发自己做的图**：由她在那个群回合里自己把图带上（QQ 是 speak 的 picture，别处是 attach_image），别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
   一律全年龄；行动脑不替她往群里发，也不 @ 别人。
+- **改图不换归属**：改别人发的图，结果不算她自己做的（`read_image` 回 `produced: false`），只能发回原图所在那个对话；
+  别拿改过的别人的图当「自己做的图」往别的群发。修图里的错字优先本地合成，不重画（见「改图与 `generate_image`」）。
 - **不自己声明 scope、不给 `attach_image` 传 scope、不把 `artifact_id` 当文件路径**；attach_image 一回合最多一张图，
   再调用就是换图，不是加图。
 - **不用 base64 分段搬运**：`b64slice.py` 那条路把 32 KB 图变 43 KB 文本还要切片对 sha，纯属烧上下文；
@@ -326,8 +380,9 @@ python3 -m compileall -q skills/asuna-image-generation-and-display  # 语法面�
 
 退出码 0 = 全绿；非 0 时最后一行是 `N/M 通过，失败：<检查名>`。
 它只查技能文件自己：frontmatter 能解析、`name` 与目录名一致、关键工具名 / 端点 / 服务路径 /
-关键步骤 / 边界语句在不在、发图那条路（QQ speak 的 picture、别处 attach_image）的清单字段与失败码在不在、退役说法
-（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程）有没有回到散文里、
+关键步骤 / 边界语句在不在、发图那条路（QQ speak 的 picture、别处 attach_image）的清单字段与失败码在不在、
+改图那条路（`source_image` 入口、11 条路线读数、三条 `IMAGE_WORKFLOW_*` 即时拒绝码、改图归属与剥文字块判据）在不在、
+退役说法（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程、`九条路线全是 t2i`）有没有回到散文里、
 示例图路径是不是相对的、「页面核验」的归属是不是 Claude、脚本能不能编译。
 判红只看散文：反引号里的字面量（错误码、示例、反证记录里引用的旧句子）按引用处理。
 **不碰网络、不调服务、不生成图、不发 QQ。**
@@ -343,9 +398,12 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 - manifest 328 KB，整份读进上下文会挤掉正事；按键取（`operations` / `prompt_contract` / `prompting` / `route_table` / `result_contract`）。
 - `resolve` 的 `style` 只是路由选择器，不是画面保证；`not_for` 与 `compatibility_notes` 是约束。
 - 串行调度：一次只有一个 named workflow 进原生 worker，切 workflow 会卸模型。别连着排三张图然后干等。
+- **改图也排队**：2026-10-16 实测一次改图排队约 85 秒、生成约 60～88 秒，一张卡；「提交成功」离出图还有一两分钟，别连烧。
 - 导入上限是硬围栏（默认 1 MiB / 最大 4 MiB）：超了就在服务端出小副本，不要退回 base64 搬运。
 - **两个大小上限不是一回事**：导入 1 MiB（可调到 4 MiB）是搬字节的围栏；出站 8 MiB 是发图的围栏。
   导入的图超过 8 MiB 时文件仍在工作区，但 `artifact.registered=false / reason=ATTACHMENT_OVER_LIMIT`，QQ 那边引用不到它。
+- **`list_routes` 标不标 `source_image` ≠ 图能发去哪**：路线收不收原图只管画图；能不能发、发到哪看归属——
+  改别人发的图结果 `produced: false`，只能发回原图所在那个对话（见「改图与 `generate_image`」）。
 - **清单缺席 ≠ 清单为空**：`image_artifacts_from_program` 不出现就是「这一轮不能发图」（列着它的会话里 `attach_image` 工具也不出现；
   QQ 上 speak 的 picture 也没有 id 可抄），别凭记忆报一个 id 上去。
 - **本机那一轮没有清单**：本机私聊没有通道路由，发图这条路只属于有通道路由的对话（QQ 私聊和她在的群）；本机仍用步骤 6 的 Markdown 图。
@@ -354,6 +412,13 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
   所以「图没发出去」有好几种形状，看红在哪一层。
 
 ## 版本
+
+v7（2026-10-16）：补上改图通路——`generate_image` 的 `source_image` 入口（能喂的图＝这一回合 `read_image` 能看的那些）、
+`list_routes` 11 条读数（`qwen-image-2.1-edit` 必填、九条可选、`qwen-image-2.1-t2i` 不收原图）、带原图不写 workflow 时服务自己挑改图路线、
+三条 `IMAGE_WORKFLOW_*` 即时拒绝码（不排队不白传图）与 inpaint 从工具面永远进不去、改图归属（改别人的图 `produced: false`、只能发回原图所在对话）、
+修图内错字走本地 Pillow 合成（家里才有 `sandbox_run`）、发出去的图剥掉 PNG 文字块（任务目录原件照旧带 `prompt` 块）、改图排队成本。
+步骤 1 的 2026-10-04 路由读数标注为当时口径。`check_skill.py` 同改：新增改图一节与字面量判据，`九条路线全是 t2i` 进过期说法守卫。
+事实来自 2026-10-16 09:16 现场验收与 09:18 `list_routes` 只读复核（没画图、没发 QQ）。
 
 v6（2026-10-14）：与 ADR-064 phase 2（REPLY_PARTS）对齐——QQ（napcat）的 channel kind 声明了 reply parts，那一轮她只通过 speak 说话，speak 取代 quote、await_answer、attach_image（认知核 `RUNTIME_API.md` §Claim public output 与 `role_tools.py` 的 `REPLY_KINDS`/`REPLY_REPLACES`）；QQ 私聊与群发图改成 speak 的 picture 那一项（artifact_id 照抄 image_artifacts_from_program、可以不带话、有一条 part 不对整批不排队）。没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）仍列 attach_image，它的参数、拒绝码与「一回合至多一张」都没变。`check_skill.py` 判据同改：押两条路的说法在不在，不再押裸字面量 attach_image 的在/不在。事实来自 2026-10-14 对 core 候选 `role_tools.py`（88-90、590-591、697-698）与 `RUNTIME_API.md:164` 的只读复核。
 
@@ -377,6 +442,19 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-16（v7 这一轮，**没生成图、没发 QQ、没改 core 与适配器**）：
+
+- 事实来源：09:16 那轮现场验收（改图通路四格：`source_image` 入口／配错路线即时拒绝／改图归属／排队成本；
+  外加发出去的图剥文字块与 icon sha）。我这一轮用 `list_routes=yes` 复核了路线清单：共 11 条，
+  `qwen-image-2.1-edit` 标 required、九条标 optional、`qwen-image-2.1-t2i` 无 `source_image` 标记；
+  inpaint 路线不在清单里（edit 的 not_for 把遮罩改动指过去的 `anima-turbo-inpaint`／`moody-anima-inpaint`
+  在清单里都找不到，与「工具面没有 `mask_image` 所以不进清单」相互印证）。
+- 本地 Pillow 修字（含字体清单、矩形外逐像素 0 变化）与剥文字块两项是 09:16 那轮的读数，我这一轮没有重跑；
+  写进技能时按来源标注，排队数字同此。
+- `check_skill.py` 同步：新增「改图与 `generate_image`」一节进 SECTIONS、该节切片必须带齐 `source_image`
+  与三条 `IMAGE_WORKFLOW_*` 码、一批改图字面量判据（`produced: false`、`tEXt`／`iTXt`／`zTXt`、`Pillow`、
+  `别连烧` 等），`九条路线全是 t2i` 进 STALE 守卫。实跑结果见行动报告。
 
 2026-10-14（v6 这一轮，只改本技能文件与 `check_skill.py`，**没生成图、没发 QQ、没改 core、没发布前的我不动适配器**）：
 

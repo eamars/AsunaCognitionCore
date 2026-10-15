@@ -3,6 +3,8 @@
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
 服务路径 / 关键步骤 / 边界语句在不在、发图那条路（QQ（napcat）speak 的 picture，别处 attach_image）的清单字段与失败码在不在、
+改图那条路（「改图与 generate_image」一节：source_image 入口、11 条路线读数、三条 IMAGE_WORKFLOW_*
+即时拒绝码、改图归属、本地 Pillow 修字、剥文字块判据、排队成本）在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
 不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
 同目录脚本能不能编译。
@@ -14,6 +16,10 @@
 2026-10-14 起再改口径（ADR-064 phase 2，REPLY_PARTS）：QQ（napcat）的 channel kind 声明了 reply parts，
 那一轮她只通过 speak 说话，发图是 picture 那一项；没声明的对话（列着 attach_image 的那些）照旧。
 判据押这两条路的说法在不在，不押裸字面量 attach_image 的在/不在——既不许硬要求它在，也不许硬要求它不在。
+
+2026-10-16 起再补口径（改图通路现场验收）：「改图与 generate_image」一节必须在，且该节切片里
+source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码必须齐（错误码在别处出现不算数——那一节才是教改图的地方）；
+`九条路线全是 t2i` 是 2026-10-16 前的旧读数，反引号外裸写回散文（当现行事实）才红。
 
 群发前自检的四条要点只在「往群里发图之前的自检」这一节里查：正文别处合法提到历史口径
 （版本段引用「不发群」旧边界、试用记录里的旧句子）不算缺、也不误报红；把「不发群」这类
@@ -153,6 +159,40 @@ ATTACH = [
     ("attach_history_decide_retired", "DECIDE 阶段后来整体退役"),
 ]
 
+# 改图那条路（2026-10-16 现场验收）：入口、路线读数、即时拒绝码、归属、本地修字、剥文字块、排队成本。
+# 押这些字面量在不在；「九条路线全是 t2i」反过来进 STALE_CLAIMS（旧读数写回散文才红）。
+EDIT = [
+    # 入口：source_image 收 ref / artifact_id，能喂的图 = read_image 这一回合能看的那些
+    ("edit_source_image_entry", "source_image"),
+    ("edit_route_count", "11 条"),
+    ("edit_route_required", "qwen-image-2.1-edit"),
+    ("edit_route_optional_nine", "九条标"),
+    ("edit_service_picks_edit_route", "服务自己挑一条改图路线"),
+    # 配错路线：瞬时返回，不排队、不白传图
+    ("edit_err_takes_no_source", "IMAGE_WORKFLOW_TAKES_NO_SOURCE"),
+    ("edit_err_needs_source", "IMAGE_WORKFLOW_NEEDS_SOURCE"),
+    ("edit_err_needs_more_pictures", "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES"),
+    ("edit_mask_absent", "mask_image"),
+    ("edit_inpaint_unreachable", "永远进不去"),
+    # 归属：改自己的还是我的；改别人的 produced: false、只能发回原图所在对话
+    ("edit_own_result_mine", "改我自己画的图，结果还是我的"),
+    ("edit_others_result_produced_false", "produced: false"),
+    ("edit_send_back_to_origin", "只能发回原图所在那个对话"),
+    # 修图内错字：本地 Pillow 合成，家里才有 sandbox_run
+    ("edit_local_fix_pillow", "Pillow"),
+    ("edit_fonts_present", "中文字体不缺"),
+    ("edit_group_no_sandbox_run", "群里交出去的任务没有"),
+    # 发出去的图剥掉 PNG 文字块；任务目录原件照旧带 prompt 块
+    ("edit_strip_text_chunk", "tEXt"),
+    ("edit_strip_itxt_chunk", "iTXt"),
+    ("edit_strip_ztxt_chunk", "zTXt"),
+    ("edit_pixels_untouched", "一个字节不动"),
+    ("edit_images_speak_criterion", "图也是会说话的东西"),
+    # 排队成本：一次改图排队约 85 秒、生成约 60～88 秒，别连烧
+    ("edit_queue_seconds", "85 秒"),
+    ("edit_no_burn_backtoback", "别连烧"),
+]
+
 # 往群里发图之前的自检：这一节必须在，四条要点必须都在这一节里（不是正文随便哪处）。
 # 只在这一节的范围内查——正文别处合法提到历史口径（版本段引用「不发群」旧边界、
 # 试用记录里的旧句子）不算缺，也不算多。
@@ -192,6 +232,7 @@ SECTIONS = [
     "## 试用记录",
     "## 步骤 8",          # 追加在末尾：老检查名（section_0..section_14）不跟着移位
     "### 往群里发图之前的自检",   # 步骤 8 下的子节；同样追加在末尾，老编号不动
+    "## 改图与 `generate_image`（2026-10-16 实测）",   # 2026-10-16 追加在末尾，老编号不动
 ]
 
 # 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
@@ -211,6 +252,8 @@ STALE_CLAIMS = [
     "maxItems: 1",
     # 2026-10-14：QQ 那轮发图已是 speak 的 picture；反引号外裸写回这句（当现行流程）才红
     "那一轮调用 attach_image",
+    # 2026-10-16：改图路线已上线（list_routes 11 条、含 edit）；反引号外裸写回这句（当现行事实）才红
+    "九条路线全是 t2i",
 ]
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
@@ -262,6 +305,19 @@ def step8_slice(body):
     return "\n".join(out)
 
 
+def edit_section_slice(body):
+    """「## 改图与 generate_image」标题下、下一个二级标题之前的正文（2026-10-16 起的改图一节）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 改图与"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
 def compile_tmp_dir():
     """编译临时目录：先试技能目录旁（development_run 只放行候选目录里的写），
     写不动退到当前工作目录（从 /task 那边跑、或跑冻结快照里那一份的情形）。
@@ -303,11 +359,13 @@ def main():
           "frontmatter description 没提 QQ 用 speak 的 picture 发图这条路")
     check("description_mentions_non_qq_attach", "attach_image" in desc,
           "frontmatter description 没提非 QQ 那类对话仍用 attach_image（非 QQ 路径判据）")
+    check("description_mentions_edit_route", "source_image" in desc,
+          "frontmatter description 没提 generate_image 的 source_image 改图入口（2026-10-16 判据）")
 
     for name, section in [("section_" + str(i), s) for i, s in enumerate(SECTIONS)]:
         check(name, ("\n" + section) in ("\n" + body), section)
 
-    for name, token in TOOLS + SERVICE + BOUNDARIES + ATTACH:
+    for name, token in TOOLS + SERVICE + BOUNDARIES + ATTACH + EDIT:
         check(name, token in body, token)
 
     # 群发前自检：四条要点只在这一节里查；「不发群」写回这一节才红，
@@ -324,6 +382,16 @@ def main():
     check("attach_step8_speak_picture", ("speak" in step8 and "picture" in step8),
           "步骤 8 没教 QQ 的 speak picture 发图路")
 
+    # 改图一节必须把入口与三条即时拒绝码教全（2026-10-16 口径）：
+    # 错误码在别处（失败表、版本段）出现不算数——那一节才是教改图的地方。
+    edit_slice = edit_section_slice(body)
+    check("edit_section_teaches_source_and_errors",
+          ("source_image" in edit_slice
+           and "IMAGE_WORKFLOW_TAKES_NO_SOURCE" in edit_slice
+           and "IMAGE_WORKFLOW_NEEDS_SOURCE" in edit_slice
+           and "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES" in edit_slice),
+          "改图一节没把 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码教全")
+
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
     check("selfcheck_documented", "check_skill.py" in body)
@@ -336,7 +404,7 @@ def main():
           "散文里缺 Claude 核过的说法，或还留着「主人核过 / 主人在页面核验」")
     check("attribution_owner_asleep", "主人还在睡" in body, "没写明这一轮主人还在睡、没有主人侧新核验")
 
-    # 过期说法：出站图片上线、DECIDE 退役后不能再这么写（反引号里的引用不算）
+    # 过期说法：出站图片上线、DECIDE 退役、改图路线上线后不能再这么写（反引号里的引用不算）
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
 
@@ -376,7 +444,8 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、历史段、"
+    print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、"
+          "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、历史段、"
           "群发前自检四条要点、归属都在。" % (total, total))
     return 0
 

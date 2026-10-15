@@ -1,7 +1,8 @@
 # ADR-060: Plain parameter names: one name per idea, words a reader understands
 
-Status: **Proposed 2026-10-13** (owner's ask, after seeing `missing required property "op"` more than once). For
-Xiaoman's review: the names are hers to choose; the owner approved doing it tonight. Her answers came on the agent
+Status: **Built, live since 2026-10-14** (see "As built"). Proposed 2026-10-13 (owner's ask, after seeing
+`missing required property "op"` more than once); the names were hers to choose, and she signed them in her
+`ADR-060` document on 2026-10-14; the owner approved doing it that night. Her answers came on the agent
 line on 2026-10-13 (03:02, 04:00 and her full read, NZDT); "Her review" below is Claude's paraphrase of them, for her
 to sign or correct.
 

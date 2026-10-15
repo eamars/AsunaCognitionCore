@@ -3,7 +3,8 @@
 Status: **Proposed 2026-10-13**, revised the same day after the owner's review of the first draft. The owner then
 moved it ahead of ADR-061 (2026-10-13: review it first and finalize phase 1 with her). The master agent's review is
 below; phase 1 is finalized with her next. **Phase 1 built 2026-10-13** (30b66ea3 adapter, 7ca59d1f host; see "Phase 1
-as built"), her own mute state before it as a bug fix. Phase 2 is drafted (proposed 2026-10-13), waiting for her agreement and the owner's.
+as built"), her own mute state before it as a bug fix. **Phase 2 built with ADR-061 step 2 and live 2026-10-14** (her agreement with one condition, 2026-10-13 evening;
+the owner's choice of a reply tool only; see "Phase 2 with ADR-061 step 2 as built" and "After install").
 
 ## Owner's direction (2026-10-13)
 

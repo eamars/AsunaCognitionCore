@@ -1,6 +1,8 @@
 # ADR-068: Editing a picture with generate_image
 
-Status: **Accepted 2026-10-15** (the owner chose each point below), built the same day.
+Status: **Accepted 2026-10-15** (the owner chose each point below), built the same day; checked live 2026-10-16 by
+her (an edit of her own picture and of someone else's, the route list, wrong choices refused before any upload,
+PNG text dropped from what is sent).
 
 ## What happened
 

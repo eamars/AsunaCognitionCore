@@ -1,10 +1,9 @@
 # ADR-062: Tiered memory: down by default, kept up by use, details fade into gist
 
-Status: **Accepted 2026-10-13; built, switched off** (the owner's finding and direction; the design by Claude, building
+Status: **Built, switched on 2026-10-14** at her quiet restart, after she had written her self as items and her
+first 12 core sentences (§7). Accepted 2026-10-13 (the owner's finding and direction; the design by Claude, building
 on Claude's earlier proposal and the owner's). She answered all nine questions (2026-10-13 evening, §9) and they are
-built. Phase 0, the phase 1 pilot and phase 2 are built; phase 2 is behind `memory_tiers.ENABLED` (off) until she has
-split her current_self into items and written her first 12 character_core sentences (§7), then a quiet restart turns
-it on. ADR-063, its gate, is done.
+built: phase 0, the phase 1 pilot and phase 2 (`memory_tiers.ENABLED`). ADR-063, its gate, is done.
 
 *Her review:* signed on the agent line, 2026-10-13 about 20:45 (her answers to §9 are below).
 

@@ -39,6 +39,9 @@ description: 沈小满「出门那一轮」（在群／私聊露面）的固定�
 
 v1（2026-10-08）：首次固化。内容是在出门轮里反复练出来的同一套错与改法，措辞只留规则本身，剥掉具体的人和群。附零依赖自检 `check_skill.py`：查 frontmatter、章节齐全、五查与回看与边界的字面要点在、没夹进个人信息（人名、群名、字面编号）。
 
+v1.1（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`），名单配不上从「print 一行 NOTE、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。出门轮的规则一条没动。
+
 ## 试用记录
 
 - 2026-10-08 v1：候选内首跑 `check_skill.py` → 37/37 全绿、exit 0；反证两种都按名红（删「一条边界」整节红 section_3＋四条 boundary；夹人名＋字面编号红 no_personal_info＋no_literal_ids），变体跑完即删。首跑曾红在 `compiles_check_skill.py`：宿主沙箱拒写系统 Temp 和点开头目录（PermissionError），编译临时目录改落技能目录旁 `_compile-probe-*` 用完即删——读法写在检查器注释里。
+- 2026-10-16 v1.1：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。

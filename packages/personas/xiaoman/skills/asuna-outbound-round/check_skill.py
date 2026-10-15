@@ -5,6 +5,8 @@
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译；
 2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
+   这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上记一条红
+   `leak_scan_ran`——2026-10-16 起不再「print 一行 NOTE、绿数照旧」，「没跑」不许长得像「过了」；
 4. 没有占位符残留。
 
 不联网、不碰数据库、不发 QQ。
@@ -87,16 +89,38 @@ PERSONAL_TOKENS = [
 def private_list():
     named = os.environ.get("ASUNA_PRIVATE_WORDS")
     data = os.environ.get("ASUNA_DATA_ROOT")
-    path = named or (os.path.join(data, "private", "personal-words.txt") if data else None)
-    if not path or not os.path.isfile(path):
-        return path, None
-    entries = []
-    with open(path, encoding="utf-8") as handle:
-        for number, line in enumerate(handle, 1):
-            parts = line.strip().split("|", 2)
-            if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
-                entries.append((number, parts[0].strip(), parts[1].strip()))
-    return path, entries
+    if not data:
+        try:
+            from asuna import config as asuna_config
+            data = str(asuna_config.DATA)
+        except Exception:                                   # noqa: BLE001 没装 asuna 也要能跑
+            data = None
+    candidates = []
+    if named:
+        candidates.append(named)
+    if data:
+        candidates.append(os.path.join(data, "private", "personal-words.txt"))
+    # 兜底（2026-10-16）：开发沙箱里两个环境变量都没设、asuna 也 import 不到（实测），
+    # 从脚本所在目录往上找部署的 .runtime/private/personal-words.txt——候选、冻结快照、检出都在它下面。
+    # 没有这条，本机跑这份自检永远报「名单没配上」。
+    here = HERE
+    for _ in range(12):
+        here = os.path.dirname(here)
+        if not here:
+            break
+        candidates.append(os.path.join(here, ".runtime", "private", "personal-words.txt"))
+    for path in candidates:
+        if not path or not os.path.isfile(path):
+            continue
+        entries = []
+        with open(path, encoding="utf-8") as handle:
+            for number, line in enumerate(handle, 1):
+                parts = line.strip().split("|", 2)
+                if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
+                    entries.append((number, parts[0].strip(), parts[1].strip()))
+        return path, entries
+    # 一个都没配上：返回最后试过的路径，让调用方把「没查过」写进红里
+    return (candidates[-1] if candidates else None), None
 
 
 def listed_hits(entries, text):
@@ -190,10 +214,15 @@ def main():
 
     listed_path, entries = private_list()
     if entries is None:
-        print("NOTE 私密名单未配置（%s），真人名／群名这一项没查" % (listed_path or "没有 ASUNA_PRIVATE_WORDS 也没有 ASUNA_DATA_ROOT"))
+        # 2026-10-16 改口径：以前这里 print 一行 NOTE、绿数照旧——「没跑」和「过了」长得一样。
+        check("leak_scan_ran", False,
+              "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
+              % (listed_path or "都没有"))
+        leak_note = ""
     else:
         found = listed_hits(entries, text)
         check("no_listed_words", not found, "、".join(found))
+        leak_note = "，泄露检查扫过（名单 %d 条，命中只报类别与行号）" % len(entries)
 
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 800, "body_chars=%d" % len(body))
@@ -236,7 +265,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：五查、回看、边界要点齐全，没夹个人信息。" % (total, total))
+    print("%d/%d 通过：五查、回看、边界要点齐全，没夹个人信息%s。" % (total, total, leak_note))
     return 0
 
 

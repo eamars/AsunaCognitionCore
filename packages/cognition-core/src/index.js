@@ -609,7 +609,8 @@ export class CognitionCore {
     if (event.kind === 'host_request') {
       try {
         let value = event.method === 'schedule' ? await this.schedules.request(event.args)
-          : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin)
+          : event.method === 'development' ? await this.ctx.asunaFloor.call(event.args.tool, event.args.args, event.args.origin,
+            event.args.author)
           : event.method === 'sandbox' ? await this.confine(event.args)
           : event.method === 'credentials' ? await this.credentialRecords(event.args)
           : event.method === 'render_svg' ? await renderSvg(event.args)

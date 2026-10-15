@@ -178,6 +178,7 @@ Minimal publication floor, deliberately independent of the business worker. Immu
   - `ensure` — A development project by id, refused in words when this Host has no such project.
   - `call` — One development_* tool call on a project's candidate copy.
   - `publish` — Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED.
+  - `commitPublished` — Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name), so the checkout holds no change of hers waiting for someone to commit it.
   - `prepare` — Check and pack a frozen candidate: its package.json, exports and composition against the running ones, and a boot probe that imports it.
 - def `apply`
 

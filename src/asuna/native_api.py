@@ -134,6 +134,10 @@ class NativeMemory:
         # The persona itself is a document now; legacy persona heads are not listed.
         self.heads = {f'{kind}:{persona}|global-safe': ('self', label('title.' + kind)) for kind in (
             'character_core', 'current_self')}
+        # Both layers of her understanding of this person (understanding.py): what holds anywhere, and how they are here.
+        from . import understanding
+        person = understanding.person_entity(self.store.config, self.store.db, self.binding['person_id'])
+        self.heads[person + '|' + understanding.PERSON_SCOPE] = ('relation', label('title.person'))
         relation = scene_links.relationship_target(self.store.config, self.store.db, self.scene, self.binding['person_id'])
         self.heads[relation['entity'] + '|' + relation['scope']] = ('relation', label('title.relation'))
         self.subject = relation.get('canonical') or self.binding['person_id']
@@ -166,8 +170,41 @@ class NativeMemory:
         except (TypeError, ValueError):
             return float('-inf')
 
+    def self_documents(self):
+        """Her self as her turns read it (ADR-062): {old head name: (document, its sections placed)} for each of
+        `self` and `core` she has written; an empty one leaves its old head in the list."""
+        from . import memory_tiers
+        from .documents import DocumentStore
+        if not memory_tiers.ENABLED:
+            return {}
+        if hasattr(self, '_self_documents'):
+            return self._self_documents
+        docs, found = DocumentStore(self.store, self.persona), {}
+        for name, slug in (('current_self', memory_tiers.SELF_DOC), ('character_core', memory_tiers.CORE_DOC)):
+            content = memory_tiers.placed(self.store, self.persona, slug, docs.read(slug)[1])
+            if content and content.get('sections'):
+                found[name] = (slug, content)
+        self._self_documents = found
+        return found
+
+    def self_item_rows(self, search=''):
+        """One row per item of her self, with the place it is in (carried every turn, at hand, put away)."""
+        rows = []
+        for name, (slug, content) in self.self_documents().items():
+            times = {row['sid']: row.get('memorable_at') or row.get('added') for row in self.store.db.memory_tiers.find(
+                {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'memorable_at': 1, 'added': 1})}
+            for section in content['sections']:
+                if search and search.casefold() not in (section['heading'] + section['body']).casefold():
+                    continue
+                rows.append({'id': f"item:{slug}#{section['sid']}", 'kind': 'self',
+                             'title': section['heading'] or plain(section['body'])[:48] or label('title.blank'),
+                             'excerpt': [label('title.' + name), ' · ', label('inject.' + section['inject'])],
+                             'scope_key': 'doc:' + slug, 'updated_at': times.get(section['sid'])})
+        return rows
+
     def head_rows(self, kind, search=''):
-        keys = [key for key, (category, _) in self.heads.items() if kind in ('all', category)]
+        replaced = {f'{name}:{self.persona}|global-safe' for name in self.self_documents()}
+        keys = [key for key, (category, _) in self.heads.items() if kind in ('all', category) and key not in replaced]
         heads = list(self.store.db.state_heads.find({'_id': {'$in': keys}}))
         revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
             {'_id': {'$in': [head['revision_id'] for head in heads]}},
@@ -288,6 +325,7 @@ class NativeMemory:
             self.idea_rows() if kind in ('all', 'ideas') else [])
         heads = [row for row in extra if not search or search.casefold() in searchable(row).casefold()]
         heads += self.head_rows(kind, search) if kind in ('all', 'self', 'relation') else []
+        heads += self.self_item_rows(search) if kind in ('all', 'self') else []
         heads += [row for row in self.cognition.supplements(kind) if not search or
                   search.casefold() in row['body'].casefold()]
         rows = list(heads)
@@ -309,15 +347,10 @@ class NativeMemory:
             # State and coverage rows are bounded. Merge into a time-ordered
             # window instead of loading every preceding page or pinning them first.
             skipped = max(0, offset - len(heads))
+            # Every memory carries its own time: a summary when it was made, a line when it was said, a thought
+            # when she formed it.
             timing = [] if messages else [
-                {'$lookup': {'from': 'audit_events', 'localField': 'episode_id', 'foreignField': 'stream_id',
-                    'let': {'unit_id': '$_id'}, 'pipeline': [
-                        {'$match': {'type': 'state.commit', 'payload.collection': 'memory_units',
-                                    '$expr': {'$eq': ['$payload.document._id', '$$unit_id']}}},
-                        {'$sort': {'seq': -1}}, {'$limit': 1}, {'$project': {'occurred_at': 1}}],
-                    'as': '_memory_commit'}},
-                {'$addFields': {'_memory_time': {'$ifNull': ['$generated_at', '$occurred_at',
-                    {'$arrayElemAt': ['$_memory_commit.occurred_at', 0]}]}}}]
+                {'$addFields': {'_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}}]
             result = collection.aggregate([{'$match': query}, *timing, {'$sort': {
                 'occurred_at' if messages else '_memory_time': -1, '_id': -1}},
                 {'$skip': skipped}, {'$limit': self.PAGE + 1 + len(heads)}, {'$project': projection}])
@@ -390,7 +423,9 @@ class NativeMemory:
             if pair and pair[1] is None:
                 raise Denied('MEMORY_REVISION_UNAVAILABLE')
             revision_id, content = (pair[0]['revision_id'], pair[1]['content']) if pair else (None, None)
-            row = content
+            from . import memory_tiers
+            # Each section as her turns read it: the place it is in now, not the label it was written with.
+            content = row = memory_tiers.placed(self.store, self.persona, key, content)
             if row:
                 lines = []
                 for section in content['sections']:
@@ -403,6 +438,17 @@ class NativeMemory:
                 result = {'id': identifier, 'body': paragraphs(*lines), 'interpretation': True, 'category': 'document',
                           'scope_key': 'global-safe', 'source_ids': [],
                           'usage': self.cognition.usage(identifier, revision=revision_id)}
+        elif kind == 'item':
+            slug, _, sid = key.partition('#')
+            found = next(((name, content) for name, (doc, content) in self.self_documents().items() if doc == slug),
+                         (None, None))
+            row = next((section for section in (found[1] or {}).get('sections', ()) if section['sid'] == sid), None)
+            if row:
+                result = {'id': identifier, 'category': 'self', 'interpretation': True, 'scope_key': 'doc:' + slug,
+                          'source_ids': [], 'usage': self.cognition.usage(identifier),
+                          'body': paragraphs(row['heading'] and '### ' + row['heading'],
+                                             label('doc.meta', visibility=label('visibility.' + row['visibility']),
+                                                   inject=label('inject.' + row['inject']), date=''), row['body'])}
         elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
             pair = self.store.head(entity, scope)
@@ -461,12 +507,8 @@ class NativeMemory:
             raise Denied('MEMORY_NOT_VISIBLE')
         if isinstance(result['body'], str):
             result['body'] = result['body'][:65536]
-        if kind == 'unit' and not result.get('generated_at') and row.get('episode_id'):
-            commit = self.store.db.audit_events.find_one({'stream_id': row['episode_id'],
-                'type': 'state.commit', 'payload.collection': 'memory_units',
-                'payload.document._id': row['_id']}, {'occurred_at': 1}, sort=[('seq', -1)])
-            if commit:
-                result['generated_at'] = commit['occurred_at']
+        if kind == 'unit' and not result.get('generated_at'):
+            result['generated_at'] = row.get('occurred_at') or row.get('formed_at')
         if result.get('usage') and self.cognition.snapshot:
             result['context_at'] = self.cognition.snapshot['at']
         if result.get('corrected_by'):

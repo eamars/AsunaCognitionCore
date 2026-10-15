@@ -26,6 +26,8 @@ Bounded, read-only projections for native DSH's Asuna memory tab.
 - class `NativeMemory`
   - `scene_title`
   - `timestamp`
+  - `self_documents` — Her self as her turns read it (ADR-062): {old head name: (document, its sections placed)} for each of `self` and `core` she has written; an empty one leaves its old head in the list.
+  - `self_item_rows` — One row per item of her self, with the place it is in (carried every turn, at hand, put away).
   - `head_rows`
   - `document_rows` — Operator view of the persona's documents: every section, each with its visibility label.
   - `affect_ledger`

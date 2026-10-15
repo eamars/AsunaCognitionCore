@@ -1,4 +1,6 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
+import json
+
 from . import channel_kinds
 from .peer_context import peer_from_message
 from .people import People, safe_name
@@ -65,6 +67,11 @@ class CognitionView:
             selected = manifest.get('persona_revision') if key == 'persona' else manifest.get('documents', {}).get(key)
             if selected:
                 return 'used' if selected == revision else 'older'
+        elif kind == 'item':
+            # An item of her self is cited by its doc ref wherever the turn showed it (carried, or brought up).
+            slug, _, sid = key.partition('#')
+            if f'doc:{slug}#{sid}' in json.dumps(context, ensure_ascii=False):
+                return 'used'
         elif kind == 'unit':
             if key in manifest.get('selected', []):
                 return 'used'

@@ -116,3 +116,35 @@ def test_her_idea_notebook_is_shown_only_in_an_owner_private_view(view):
     assert [(row['id'], row['title']) for row in rows] == [('idea:idea-1', '回复可以更短')]
     detail = NativeMemory(worker, 'role').detail('idea:idea-1')
     assert detail['status'] == 'idea.adopted' and {'key': 'memory.idea.decision.adopt', 'params': {'why': '值得做'}} in detail['body']
+
+
+def test_the_tab_shows_her_memory_as_her_turns_read_it(view):
+    # Regression: after the tiered-memory redesign the tab still listed the old self heads (one stale, one empty),
+    # only one of the two records about a person, each section's written label instead of its place, and timed
+    # her thoughts through the audit log (2.7 s for "all").
+    store, worker, binding = view
+    from asuna.documents import DocumentStore
+    docs = DocumentStore(store, 'p')
+    docs.seed('self', 'self', '## 说话直接\n不绕。\n\n## 先读再说\n猜完先去拿读数。', path='self.md')
+    sections = docs.read('self')[1]['sections']
+    store.db.memory_tiers.insert_one({'_id': 'tier-1', 'row': 'item', 'persona': 'p', 'doc': 'self',
+                                      'sid': sections[-1]['sid'], 'place': '收着', 'memorable_at': '2026-10-15T00:00:00+00:00'})
+    store.init_head('current_self:p', 'global-safe', {'body': '旧的一整段'}, [])
+    rows = NativeMemory(worker, 'role').page('self')['rows']
+    ids = [row['id'] for row in rows]
+    assert len([i for i in ids if i.startswith('item:self#')]) == len(sections)
+    assert 'head:current_self:p|global-safe' not in ids, 'the old head is gone once she has written her self as items'
+    assert 'head:character_core:p|global-safe' in ids, 'an empty core leaves its old head'
+    put_away = next(row for row in rows if row['id'].endswith(sections[-1]['sid']))
+    assert put_away['excerpt'][-1] == {'key': 'memory.inject.never', 'params': {}}
+    detail = NativeMemory(worker, 'role').detail('doc:self')
+    assert {'key': 'memory.inject.never', 'params': {}} in [part['params']['inject'] for part in detail['body']
+                                                          if isinstance(part, dict) and part['key'] == 'memory.doc.meta']
+    store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
+    titles = [row['title']['key'] for row in NativeMemory(worker, 'role').page('relation')['rows']]
+    assert sorted(titles) == ['memory.title.person', 'memory.title.relation']
+    for unit, formed in (('older', '2026-10-01T00:00:00+00:00'), ('newer', '2026-10-02T00:00:00+00:00')):
+        store.db.memory_units.insert_one({'_id': unit, 'character_id': 'character', 'scope_key': 'scene:one',
+            'policy_epoch': 1, 'status': 'active', 'kind': 'monologue', 'formed_at': formed,
+            'epistemic_type': 'character_interpretation', 'body_markdown': unit})
+    assert NativeMemory(worker, 'role').detail('unit:older')['generated_at'] == '2026-10-01T00:00:00+00:00'

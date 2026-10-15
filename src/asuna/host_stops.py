@@ -44,27 +44,47 @@ def _span(seconds):
 
 
 MISSED_KEPT_DAYS = 7
+# Why a look was not decided, in words (her ask, 2026-10-15): every one is the program's, never her choice.
+MISSED_CAUSES = {'clash': '撞车（同一段对话同时被两处打开）', 'timeout': '等太久', 'unanswered': '模型没按 接话／不理 答',
+                 'cut': '模型没答完', 'error': '程序出错'}
 
 
-def missed_look(store, ep):
+def missed_cause(error=None, finish_reason=None, unanswered=False):
+    """The cause code of a look the gate could not decide."""
+    text = str(error or '')
+    if 'already owned' in text or 'SessionAlreadyOwned' in text:
+        return 'clash'
+    if 'TIMEOUT' in text.upper() or isinstance(error, TimeoutError):
+        return 'timeout'
+    if unanswered:
+        return 'unanswered'
+    return 'cut' if finish_reason and not error else 'error'
+
+
+def missed_look(store, ep, cause='error'):
     """One look the gate could not decide, in its own small collection (the home turn counts them)."""
     from .state import now
-    store.db.missed_looks.update_one({'_id': ep['_id']}, {'$set': {'scene_id': ep['scene_id'], 'at': now()}},
-                                     upsert=True)
+    store.db.missed_looks.update_one({'_id': ep['_id']}, {'$set': {'scene_id': ep['scene_id'], 'at': now(),
+                                                                    'cause': cause}}, upsert=True)
 
 
 def missed_looks(store, persona, since):
     """'某群 3 次、某群 1 次' for the gate's failed looks since then, or None."""
     old = (datetime.fromisoformat(since) - timedelta(days=MISSED_KEPT_DAYS)).isoformat()
     store.db.missed_looks.delete_many({'at': {'$lt': old}})
-    counts = {}
-    for row in store.db.missed_looks.find({'at': {'$gte': since}}, {'scene_id': 1}):
+    counts, causes = {}, {}
+    for row in store.db.missed_looks.find({'at': {'$gte': since}}, {'scene_id': 1, 'cause': 1}):
         counts[row['scene_id']] = counts.get(row['scene_id'], 0) + 1
+        why = causes.setdefault(row['scene_id'], {})
+        cause = row.get('cause') or 'error'
+        why[cause] = why.get(cause, 0) + 1
     if not counts:
         return None
     from .people import People
     people = People(store, persona)
-    return '、'.join('%s %d 次' % (people.scene_title(store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}), n)
+    return '、'.join('%s %d 次（%s）' % (people.scene_title(store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}), n,
+                                       '，'.join('%s %d' % (MISSED_CAUSES.get(c, MISSED_CAUSES['error']), k)
+                                                for c, k in sorted(causes[scene_id].items(), key=lambda kv: -kv[1])))
                     for scene_id, n in sorted(counts.items(), key=lambda kv: -kv[1]))
 
 

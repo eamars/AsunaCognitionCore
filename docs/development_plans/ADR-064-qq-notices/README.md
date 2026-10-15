@@ -29,6 +29,21 @@ the owner's choice of a reply tool only; see "Phase 2 with ADR-061 step 2 as bui
 11. Phase two is a **reply tool** in place of plain speech: she picks what to reply with, or a combination (sticker
     only, text + sticker, a nudge), similar to ADR-061's `ask`. It needs more thought.
 
+## Three kinds of group line (owner, 2026-10-16)
+
+The owner's rule, written down after reactions to her lines were lost in resting groups (see "Phase 1 as built"): a
+group line is one of three kinds, and the group's state decides only what happens to the third.
+
+| Kind | Examples | Active group | Resting group |
+|---|---|---|---|
+| Direct address | an @ of her, a reply to her line | her turn, no gate | her turn, no gate |
+| Active interaction | a poke at her, a reaction to her line | relevance gate | relevance gate |
+| Passive message | everything else | relevance gate at a few moments (a thread that called her, her name, the proactive rules, a chain) | ignored |
+
+Lines that may be meant for her without addressing her (an awaited answer, an answer to her open question, a watched
+person, an @ caught up after a gap) go through the gate in both. The point of projecting a notice to text is that her
+gate judges it; nothing a person does at her is held back at the door.
+
 ## Context
 
 The NapCat adapter forwards only `post_type: message`. Every notice, request and meta event is counted as

@@ -18,6 +18,9 @@ from .native_cognition import CognitionView
 from .peer_context import speaker_name
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
+# The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
+EVERYWHERE = ('self', 'affect', 'ideas', 'people', 'documents')
+THIS_CONVERSATION = ('here_people', 'group_notes', 'summary', 'interpretation', 'source')
 # Her documents a reader knows by name (the rest are shown by the name she gave them).
 NAMED_DOCUMENTS = {'persona': 'persona', 'voice': 'voice', 'self': 'self', 'core': 'core', 'ledger': 'ledger',
                    'work_log': 'journal'}
@@ -137,13 +140,6 @@ class NativeMemory:
         # The persona itself is a document now; legacy persona heads are not listed.
         self.heads = {f'{kind}:{persona}|global-safe': ('self', label('title.' + kind)) for kind in (
             'character_core', 'current_self')}
-        # Both layers of her understanding of this person (understanding.py): what holds anywhere, and how they are here.
-        from . import understanding
-        person = understanding.person_entity(self.store.config, self.store.db, self.binding['person_id'])
-        self.heads[person + '|' + understanding.PERSON_SCOPE] = ('relation', label('title.person'))
-        relation = scene_links.relationship_target(self.store.config, self.store.db, self.scene, self.binding['person_id'])
-        self.heads[relation['entity'] + '|' + relation['scope']] = ('relation', label('title.relation'))
-        self.subject = relation.get('canonical') or self.binding['person_id']
         # Operator view: owner-private imported entries are listed too, each with its scope label.
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
                            '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
@@ -190,20 +186,109 @@ class NativeMemory:
         self._self_documents = found
         return found
 
+    def item_rows(self, slug, content, kind, tag, search=''):
+        """One row per section of a document, with the place it is in (carried every turn, at hand, put away)."""
+        times = {row['sid']: row.get('memorable_at') or row.get('added') for row in self.store.db.memory_tiers.find(
+            {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'memorable_at': 1, 'added': 1})}
+        return [{'id': f"item:{slug}#{section['sid']}", 'kind': kind,
+                 'title': section['heading'] or plain(section['body'])[:48] or label('title.blank'),
+                 'excerpt': [*([tag, ' · '] if tag else []), label('inject.' + section['inject'])],
+                 'scope_key': 'doc:' + slug, 'updated_at': times.get(section['sid'])}
+                for section in content['sections']
+                if not search or search.casefold() in (section['heading'] + section['body']).casefold()]
+
     def self_item_rows(self, search=''):
-        """One row per item of her self, with the place it is in (carried every turn, at hand, put away)."""
+        """Her self, item by item: the `self` and `core` documents."""
+        return [row for name, (slug, content) in self.self_documents().items()
+                for row in self.item_rows(slug, content, 'self', label('title.' + name), search)]
+
+    def group_note_rows(self, search=''):
+        """This group's notes, item by item (only in a group's own conversation)."""
+        from . import memory_tiers
+        from .documents import DocumentStore
+        from .group_admin import notes_slug
+        if self.scene.get('kind') != 'group':
+            return []
+        slug = notes_slug(self.scene['_id'])
+        content = memory_tiers.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
+        return self.item_rows(slug, content, 'group_notes', None, search) if content and content.get('sections') else []
+
+    # -- people: her written understanding of each person (understanding.py) --
+    def person_name(self, person):
+        """A person as the owner reads them: the name this machine keeps, else the card or nickname they last had."""
+        from .people import safe_name
+        row = self.store.db.identities.find_one({'_id': person}, {'display_name': 1})
+        kept = safe_name((row or {}).get('display_name'))
+        if kept:
+            return kept
+        seen = self.store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+        return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
+                or speaker_name(self.store.config, person, None, self.store.db))
+
+    def relation_records(self, person=None):
+        """{person: [(scope, body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
+        conversation (scope `scene:...`)."""
+        pattern = '^relationship:' + (re.escape(person) + '[|]' if person else '')
+        heads = list(self.store.db.state_heads.find({'_id': {'$regex': pattern}}))
+        revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
+            {'_id': {'$in': [head['revision_id'] for head in heads]}}, {'content': 1, 'created_at': 1, 'generated_at': 1})}
+        found = {}
+        for head in heads:
+            entity, scope = head['_id'].rsplit('|', 1)
+            revision = revisions.get(head['revision_id']) or {}
+            found.setdefault(entity.removeprefix('relationship:'), []).append(
+                (scope, (revision.get('content') or {}).get('body', ''),
+                 head.get('updated_at') or revision.get('generated_at') or revision.get('created_at')))
+        return found
+
+    def people_rows(self, search=''):
+        """Everyone she has written about, newest first; search matches a name or what she wrote."""
         rows = []
-        for name, (slug, content) in self.self_documents().items():
-            times = {row['sid']: row.get('memorable_at') or row.get('added') for row in self.store.db.memory_tiers.find(
-                {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'memorable_at': 1, 'added': 1})}
-            for section in content['sections']:
-                if search and search.casefold() not in (section['heading'] + section['body']).casefold():
-                    continue
-                rows.append({'id': f"item:{slug}#{section['sid']}", 'kind': 'self',
-                             'title': section['heading'] or plain(section['body'])[:48] or label('title.blank'),
-                             'excerpt': [label('title.' + name), ' · ', label('inject.' + section['inject'])],
-                             'scope_key': 'doc:' + slug, 'updated_at': times.get(section['sid'])})
+        for person, records in self.relation_records().items():
+            name = self.person_name(person)
+            records.sort(key=lambda record: (record[0] != 'person', str(record[2] or '')))
+            if search and not any(search.casefold() in text.casefold() for text in [name] + [r[1] for r in records]):
+                continue
+            rows.append({'id': 'person:' + person, 'kind': 'relation', 'title': name,
+                         'excerpt': plain(records[0][1])[:200],
+                         'updated_at': max(str(record[2] or '') for record in records) or None})
         return rows
+
+    def here_people_rows(self, search=''):
+        """The last ten people who spoke in this conversation, each with how she sees them here (or nothing yet)."""
+        from . import understanding
+        latest = {}
+        for message in self.store.db.messages.find({'scene_id': self.scene['_id'], 'direction': 'inbound'},
+                                                   {'author': 1, 'occurred_at': 1}).sort('occurred_at', -1).limit(2000):
+            if message.get('author') and message['author'] not in latest:
+                latest[message['author']] = message.get('occurred_at')
+            if len(latest) == 10:
+                break
+        rows = []
+        for author, at in latest.items():
+            target = scene_links.relationship_target(self.store.config, self.store.db, self.scene, author)
+            person = target['entity'].removeprefix('relationship:')
+            records = {scope: body for scope, body, _ in self.relation_records(person).get(person, [])}
+            name = self.person_name(author)
+            text = records.get(target['scope']) or records.get(understanding.PERSON_SCOPE)
+            if search and search.casefold() not in (name + (text or '')).casefold():
+                continue
+            rows.append({'id': 'person:' + person, 'kind': 'relation', 'title': name,
+                         'excerpt': plain(text)[:200] if text else label('status.empty'), 'updated_at': at})
+        return rows
+
+    def person_detail(self, person):
+        """What she wrote about one person: what holds anywhere first, then how they are in each conversation."""
+        records = sorted(self.relation_records(person).get(person, []),
+                         key=lambda record: (record[0] != 'person', str(record[2] or '')))
+        parts = []
+        for scope, body, _ in records:
+            where = label('title.person') if scope == 'person' else self.scene_title(scope.removeprefix('scene:'))
+            parts += [where, body]
+        return {'id': 'person:' + person, 'category': 'relation', 'interpretation': True, 'source_ids': [],
+                'body': paragraphs(*[part for pair in zip(parts[0::2], parts[1::2])
+                                     for part in ([{'key': 'memory.heading', 'params': {'text': pair[0]}}, pair[1]])])
+                if parts else label('hint.relation')}
 
     def head_rows(self, kind, search=''):
         replaced = {f'{name}:{self.persona}|global-safe' for name in self.self_documents()}
@@ -252,6 +337,8 @@ class NativeMemory:
         groups = {notes_slug(row['_id']): row['_id'] for row in self.store.db.scenes.find({'kind': 'group'}, {'_id': 1})}
         rows = []
         for slug in docs.slugs():
+            if slug in groups:
+                continue                      # a group's notes are listed in that group's own conversation
             head, stored = docs.head(slug)
             revision = head['revision_id']
             content = memory_tiers.placed(self.store, self.persona, slug, stored['content'])
@@ -330,7 +417,7 @@ class NativeMemory:
         return rows
 
     def page(self, kind='summary', offset=0, search=''):
-        if kind not in ('documents', 'affect', 'ideas', 'self', 'relation', 'interpretation', 'summary', 'source'):
+        if kind not in EVERYWHERE + THIS_CONVERSATION:
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
@@ -342,10 +429,10 @@ class NativeMemory:
             self.affect_rows() if kind == 'affect' else []) + (
             self.idea_rows() if kind == 'ideas' else [])
         heads = [row for row in extra if not search or search.casefold() in searchable(row).casefold()]
-        heads += self.head_rows(kind, search) if kind in ('self', 'relation') else []
-        heads += self.self_item_rows(search) if kind == 'self' else []
-        heads += [row for row in self.cognition.supplements(kind) if not search or
-                  search.casefold() in row['body'].casefold()]
+        heads += (self.head_rows(kind, search) + self.self_item_rows(search)) if kind == 'self' else []
+        heads += self.people_rows(search) if kind == 'people' else []
+        heads += self.here_people_rows(search) if kind == 'here_people' else []
+        heads += self.group_note_rows(search) if kind == 'group_notes' else []
         rows = list(heads)
         skipped = 0
         if kind in ('summary', 'source', 'interpretation'):
@@ -388,11 +475,11 @@ class NativeMemory:
             row.pop('source_ids', None)
             # Documents and their items, job reports, and what holds of a person anywhere belong to no one
             # conversation.
-            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report', 'affect') or row.get(
-                'scope_key', '').startswith('doc:') or row.get('scope_key') == 'person' else self.scene_title(
+            row['scene_title'] = None if kind in EVERYWHERE or row['kind'] in ('relation', 'group_notes') else self.scene_title(
                 row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:'))
-        return {'scene_id': self.scene['_id'], 'scene_title': self.scene_title(self.scene['_id']),
-                'persona': self.binding['persona'], 'subject_name': self.cognition.subject_name(),
+        return {'scene_id': self.scene['_id'], 'scene_kind': self.scene.get('kind'),
+                'scene_title': self.scene_title(self.scene['_id']),
+                'persona': self.binding['persona'],
                 'persona_name': self.store.config.get('chat', {}).get('display_name'),
                 'linked_scenes': self.read['linked_scenes'], 'rows': rows[:self.PAGE],
                 'linked_scene_titles': [self.scene_title(scene) for scene in self.read['linked_scenes']],
@@ -459,16 +546,24 @@ class NativeMemory:
                           'scope_key': 'global-safe', 'source_ids': [],
                           'usage': self.cognition.usage(identifier, revision=revision_id)}
         elif kind == 'item':
+            from . import memory_tiers
+            from .documents import DocumentStore
+            from .group_admin import notes_slug
             slug, _, sid = key.partition('#')
-            found = next(((name, content) for name, (doc, content) in self.self_documents().items() if doc == slug),
-                         (None, None))
-            row = next((section for section in (found[1] or {}).get('sections', ()) if section['sid'] == sid), None)
+            content = memory_tiers.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
+            row = next((section for section in (content or {}).get('sections', ()) if section['sid'] == sid), None)
             if row:
-                result = {'id': identifier, 'category': 'self', 'interpretation': True, 'scope_key': 'doc:' + slug,
-                          'source_ids': [], 'usage': self.cognition.usage(identifier),
+                result = {'id': identifier, 'interpretation': True, 'scope_key': 'doc:' + slug, 'source_ids': [],
+                          'category': 'self' if slug in ('self', 'core') else 'group_notes'
+                              if slug == notes_slug(self.scene['_id']) else 'document',
+                          'usage': self.cognition.usage(identifier),
                           'body': paragraphs(row['heading'] and '### ' + row['heading'],
                                              label('doc.meta', visibility=label('visibility.' + row['visibility']),
                                                    inject=label('inject.' + row['inject']), date=''), row['body'])}
+        elif kind == 'person':
+            row = self.relation_records(key).get(key)
+            if row:
+                result = self.person_detail(key)
         elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
             pair = self.store.head(entity, scope)
@@ -487,10 +582,6 @@ class NativeMemory:
                 title = self.heads[key][1]
                 result = {'id': identifier, 'body': label('hint.' + self.heads[key][0]),
                           'category': self.heads[key][0], 'status': 'empty', 'source_ids': []}
-        elif kind == 'cognition':
-            row = next((item for item in self.cognition.supplements('relation') if item['id'] == identifier), None)
-            if row:
-                result = dict(row)
         elif kind == 'unit':
             row = self.store.db.memory_units.find_one({**self.unit_query, '_id': key}, {'embedding': 0})
             if row:

@@ -1,10 +1,6 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
 import json
 
-from . import channel_kinds
-from .peer_context import peer_from_message
-from .people import People, safe_name
-
 
 class CognitionView:
     def __init__(self, memory):
@@ -86,47 +82,3 @@ class CognitionView:
             if key == 'in-' + self.snapshot['_id']:
                 return 'input'
         return 'unused'
-
-    def peer(self):
-        query = {'$and': [self.memory.message_query, {
-            'direction': 'inbound', 'scene_id': self.binding['scene_id'],
-            'author': self.binding['person_id'], 'event.raw.asuna_peer': {'$exists': True}}]}
-        # A rejected newest block must not make an older identity look current.
-        message = self.store.db.messages.find_one(query, sort=[('scene_seq', -1)])
-        scene = self.store.db.scenes.find_one({'_id': self.binding['scene_id']}) if message else None
-        # The same line her turn reads (people.py), so "用到了这一版" compares like with like.
-        text = People(self.store).identity_line(scene, message) if scene else None
-        if not text:
-            return None
-        peer = peer_from_message(message)
-        profile_at = peer.get('profile_at')
-        body = text
-        display = safe_name(peer.get('card')) or safe_name(peer.get('nickname'))
-        return {'id': 'cognition:peer', 'kind': 'relation', 'title': {'key': 'memory.title.peer', 'params': {}},
-                'body': body, 'excerpt': body, 'category': 'relation', 'subject_name': display,
-                'scene_id': self.binding['scene_id'], 'updated_at': profile_at or message.get('occurred_at'),
-                'occurred_at': profile_at or message.get('occurred_at'),
-                'status': 'recorded', 'source_ids': [message['_id']],
-                'usage': ('used' if self.snapshot and self.snapshot['context'].get('sender_identity') == text else
-                          'unused' if self.snapshot else 'none')}
-
-    def supplements(self, kind):
-        """The platform identity saved with this person's latest message, when there is one."""
-        peer = self.peer() if kind == 'relation' else None
-        if peer:
-            peer['scene_id'] = self.binding['scene_id']
-        return [peer] if peer else []
-
-    def subject_name(self):
-        peer = self.peer()
-        if peer and peer.get('subject_name'):
-            return peer['subject_name'] + '（' + self.account_title() + '）'
-        row = self.store.db.identities.find_one({'person_id': self.binding['person_id']},
-                                               {'display_name': 1})
-        return (row or {}).get('display_name') or self.account_title()
-
-    def account_title(self):
-        """qq:<account> reads as `QQ · <account>` on the owner's page; a local id reads as itself."""
-        person = self.binding['person_id']
-        platform = channel_kinds.of(person)
-        return platform.TITLE + ' · ' + person.partition(':')[2] if platform else person

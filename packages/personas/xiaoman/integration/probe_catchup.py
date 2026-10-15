@@ -26,6 +26,14 @@ import json
 import sys
 import time
 
+# 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩，整段输出丢掉
+# （2026-10-15 实测：--selfcheck 的字面量、带中文显示名的配置、带中文 wording 的回包，三种数据都崩在
+# Lib/encodings/cp1252.py 第 19 行）。我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8，撞不到这一族。
+# 输出字节固定成 UTF-8：那种控制台顶多显示成乱码，不再崩；stderr 同理，报错才看得见。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, "/app")
 
 from qqadapter import config as cfgmod                    # noqa: E402

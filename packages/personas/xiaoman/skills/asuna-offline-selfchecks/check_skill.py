@@ -17,7 +17,10 @@
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
 
 编译临时目录先试技能目录旁、再退到当前工作目录（系统 Temp 在 development_run 的沙箱里建得出目录、
-py_compile 落 .pyc 会 PermissionError，2026-10-15 在候选里实跑撞过），用完即删。
+py_compile 落 .pyc 会 PermissionError，2026-10-15 在候选里实跑撞过），用完即删。两处都写不动记
+compile_probe_writable 一条红（detail 写清「编译这一项没真查——不是跑过了」）；真编译不过照旧逐条
+compiles_<脚本> 红并带 PyCompileError。名字与措辞跟另外几份 check_skill.py 对齐——2026-10-15 之前
+这一格叫 compiles_check_skill.py，红起来像编译坏了，其实是目录不可写。
 
 用法：
     python3 check_skill.py [SKILL.md 路径]        # 默认取脚本旁边的 SKILL.md
@@ -229,7 +232,8 @@ def main():
 
     # 同目录脚本：必须存在且只用标准库能编译。编译产物落临时目录、用完即删：
     # 系统 Temp 在 development_run 沙箱里建得出目录、写不进 .pyc（2026-10-15 撞过），
-    # 所以先试技能目录旁、再退当前目录。
+    # 所以先试技能目录旁、再退当前目录。两处都写不动时记 compile_probe_writable 一条红
+    # （写清没真查）：不崩，也不绿着放过；真编译不过照旧逐条 compiles_<脚本> 红并带 PyCompileError。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
 
@@ -239,13 +243,10 @@ def main():
     check("line_endings_are_lf", not cr_files,
           "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
     tmp = compile_tmp_dir()
-    if tmp is None:
-        notes.append("NOTE 技能目录旁和当前目录都写不动（沙箱限制），编译检查记失败——不是产品坏")
+    check("compile_probe_writable", tmp is not None,
+          "技能目录旁和当前目录都写不动：临时目录不可写（沙箱限制），编译这一项没真查——不是跑过了")
     try:
-        for script in scripts:
-            if tmp is None:
-                check("compiles_" + script, False, "临时目录不可写（沙箱限制，不是坏）")
-                continue
+        for script in (scripts if tmp else []):
             target = os.path.join(tmp, script + "c")
             try:
                 py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)

@@ -63,9 +63,16 @@ rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
 
 ### 自检脚本的临时目录要带兜底
 
-编译临时目录先试技能目录旁、写不动退当前工作目录（`compile_tmp_dir()`），两处都不行就记一条红写清「没真查」——
-**「跑不起来」和「跑过了」不是一回事**，不许被兜底吞成绿（2026-10-15 从冻结快照跑，`os.makedirs` 一句
-PermissionError 把整份自检带崩，而它前面刚打印完一条 NOTE，看着像跑到了）。
+编译临时目录先试技能目录旁、写不动退当前工作目录（`compile_tmp_dir()`），两处都不行就记
+`compile_probe_writable` 一条红，detail 写清「编译这一项没真查——不是跑过了」；真编译不过照旧逐条
+`compiles_<脚本>` 红并带 PyCompileError，不被兜底吞。**「跑不起来」和「跑过了」不是一回事**，
+不许被兜底吞成绿（2026-10-15 从冻结快照跑，`os.makedirs` 一句 PermissionError 把整份自检带崩，
+而它前面刚打印完一条 NOTE，看着像跑到了）。
+这一格另外四份 `check_skill.py`（asuna-outbound-round、asuna-image-generation-and-display、
+asuna-render-budget-per-place、asuna-running-version）都叫 `compile_probe_writable`；本技能那份原来红的是
+老名字 `compiles_check_skill.py` ＋detail「临时目录不可写（沙箱限制，不是坏）」——名字不统一是个真陷阱：
+看见 `compiles_…` 红会以为是编译坏了，其实是目录不可写，而 detail 那句「不是坏」又容易被读成「那就当过了」。
+（asuna-bot-or-person 这一格用的是另一套名字 `compile_probe_dir_found`，本轮只报不动。）
 
 ## 版本
 
@@ -103,6 +110,15 @@ v2.5（2026-10-15）：增量再加一句判词「自检脚本的临时目录要
 compile_tmp_dir()（先技能目录旁 → 退 cwd → 两处都不行记 compile_probe_writable 一条红，detail 写清没真查），
 编译真失败照旧逐条 FAIL 不被吞。这一格不是 cp1252 那趟改出来的：上一版快照 135b38e6 里 outbound-round 从快照跑就崩。
 两份各多一条 compile_probe_writable（37→38、123→124），其余四份条数不变。
+
+v2.6（2026-10-15）：两格合成一发（owner 交代）。① 统一编译探针那一格的名字与措辞：本技能 `check_skill.py`
+在「技能目录旁和当前目录都写不动」时红的是老名字 `compiles_check_skill.py`，与另外四份的
+`compile_probe_writable` 不一致，detail 也只写「临时目录不可写（沙箱限制，不是坏）」。现在两条判据分开写清：
+不可写 → 红 `compile_probe_writable`，detail 写「编译这一项没真查——不是跑过了」；真编译不过 → 逐条
+`compiles_<脚本>` 红并带 PyCompileError。本技能条数 28→29（多的就是那一条），原来那条 NOTE 删掉
+（红里已经写清，不再重复）。② `integration/` 三份（envoy_meters_read.py、probe_catchup.py、probe_cfg.py）
+开头补 stdout／stderr UTF-8 守卫——owner 放开边界，采纳想法本 idea-42605f061b49e3af397e99ee6b78de6b；
+这三份确实在发布快照里，改前 cp1252 实测会崩（读数见当趟试用记录）。正文其余口径、守卫判据未动。
 
 ## 试用记录
 
@@ -204,4 +220,23 @@ compile_tmp_dir()（先技能目录旁 → 退 cwd → 两处都不行记 compil
 - 反证二（真编译不过）：往两份技能目录副本里塞一份语法就错的 broken_probe_case.py → outbound-round 38/39、
   image-generation 124/125，各红在 compiles_broken_probe_case.py（PyCompileError），兜底没把它吞成绿；
 - 候选内沙箱正常 env 与 cp1252 env 各跑一遍：129/129、124/124、28/28、38/38、48/48、56/56，全 rc=0、stderr 0 字节；
+- 发布结果以本次行动报告为准。
+
+
+2026-10-15（v2.6，统一编译探针名字＋integration/ 三份补 UTF-8 守卫，xiaoman 候选）：
+
+- 改前反证（老名字）：脚本跑在冻结快照 e46ffde6 里、cwd 指只读检出根（两处都写不动）→
+  `FAIL compiles_check_skill.py  <- 临时目录不可写（沙箱限制，不是坏）`、27/28、rc=1；
+- 改后同一跑法：rc=1、红在 `compile_probe_writable`，detail「技能目录旁和当前目录都写不动：临时目录不可写
+  （沙箱限制），编译这一项没真查——不是跑过了」，28/29；
+- 反证二（真编译不过）：技能目录副本里塞一份语法就错的 broken_probe_case.py → 28/29，红在
+  `compiles_broken_probe_case.py`（PyCompileError），兜底没把它吞成绿；
+- integration/ 三份 cp1252 实测（子进程 env 去 PYTHONUTF8、置 PYTHONIOENCODING=cp1252）。改前：
+  envoy_meters_read.py --selfcheck rc=1、stdout 只剩 8 字节、`UnicodeEncodeError: 'charmap' codec can't encode
+  character '\u6309'`（Lib/encodings/cp1252.py 第 19 行）；probe_cfg.py 指带中文显示名的夹具配置 rc=1
+  （position 124-125）；probe_catchup.py 走桩 qqadapter、未知 action 的 wording 带中文 rc=1（position 0-1）。
+  本机 955 份配置快照全 ASCII，那一格改前改后都 rc=0——这一族的崩是数据相关的，不是必崩。
+  改后五格全 rc=0、stderr 0 字节（envoy --selfcheck 13 ok/0 fail）；
+- 没跑的：probe_catchup 走活体 NapCat 那条路今晚没跑（不占正向 WS），它的中文回包是夹具假设；
+  envoy 只跑了 --selfcheck，没连光伏网关；
 - 发布结果以本次行动报告为准。

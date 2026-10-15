@@ -539,7 +539,7 @@ class IntegrationRunner:
                 'content_type': report.get('content_type'), 'location': report.get('location'),
                 'transport_error': report.get('transport_error')}
 
-    def generate_image(self, request):
+    def generate_image(self, request, source=None):
         """One picture from the image endpoint (image_generation); only that relay is reachable.
 
         The runner lock covers the launch only: a generation can take minutes, and the integration tools,
@@ -548,8 +548,10 @@ class IntegrationRunner:
         from .image_generation import IMAGE_ENDPOINT
         if not any(e['name'] == IMAGE_ENDPOINT for e in self.endpoints):
             return {'transport_error': 'IMAGE_ENDPOINT_NOT_CONFIGURED: 集成配置里没有 image 端点，本机生图用不了；重试也一样'}
+        # A source picture travels beside the script in its frozen copy, never in the command line.
         report, body, failure = self._trusted_run('integration_image.py', {**request, 'endpoint': IMAGE_ENDPOINT},
-                                                  request['timeout'] + 30, 'IMAGE', only=IMAGE_ENDPOINT)
+                                                  request['timeout'] + 30, 'IMAGE', only=IMAGE_ENDPOINT,
+                                                  files={request['source']['file']: source} if source else None)
         if failure:
             return {'transport_error': failure}
         if report.get('generated'):
@@ -558,8 +560,9 @@ class IntegrationRunner:
                         % (report.get('bytes'), len(body))}
         return {'report': report, 'body': body if report.get('generated') else b''}
 
-    def _trusted_run(self, script, request, wait, label, only=None):
-        """Run one of the platform's own scripts in a test-mode namespace: (report, artifact bytes, failure)."""
+    def _trusted_run(self, script, request, wait, label, only=None, files=None):
+        """Run one of the platform's own scripts in a test-mode namespace: (report, artifact bytes, failure).
+        `files` are written beside the script ({name: bytes}); nothing of the run is kept after it."""
         source = self.root/'fetch'/uuid.uuid4().hex
         process = snapshot = None
         try:
@@ -567,6 +570,8 @@ class IntegrationRunner:
                 if self.lease is None: raise RuntimeError('INTEGRATION_RUNNER_CLOSED')
                 source.mkdir(parents=True)
                 shutil.copyfile(Path(__file__).with_name(script), source/script)
+                for name, data in (files or {}).items():
+                    (source/Path(name).name).write_bytes(data)
                 snapshot = self._snapshot(source)
                 self.busy.add(snapshot.name)
                 process = self._launch(snapshot, ['python3', script, json.dumps(request)], 'test', only=only)
@@ -604,10 +609,8 @@ class IntegrationRunner:
                 self.busy.discard(snapshot.name)
                 shutil.rmtree(snapshot, ignore_errors=True)
             if process is not None:
-                try:
-                    (process.directory/'data'/'artifact.bin').unlink(missing_ok=True)
-                except OSError:
-                    pass
+                # The run's folder (its settings copy, data and logs) is read above and not kept.
+                shutil.rmtree(process.directory, ignore_errors=True)
 
     def status(self):
         value = self.active.snapshot() if self.active else {'state': 'STOPPED', 'logs': []}

@@ -23,6 +23,10 @@ BODY_PATH = os.path.join(os.environ.get('ASUNA_INTEGRATION_DATA', '/data'), 'art
 CHUNK = 65536
 POLL_SECONDS = 2.0
 TEXT_TO_IMAGE = 'text-to-image'
+EDIT_MODE = 'image-edit'                 # the service's input mode for an instruction edit of one picture
+SOURCE_PARAMETER = 'input_image'         # a workflow that works from an uploaded picture declares it
+SOURCE_PREFIX = 'asuna-edit-'            # the name of every source this client uploads (content-addressed)
+SOURCE_KEPT_SECONDS = 3600               # a source older than this has outlived any job that used it
 
 
 class Failure(Exception):
@@ -36,8 +40,9 @@ class Service:
         self.host, self.port, self.timeout = host, port, timeout
         self.connect = connect
 
-    def request(self, method, path, body=None, *, limit=4 * 1024 * 1024):
-        """One request; returns (status, headers, bytes). Never follows a redirect."""
+    def request(self, method, path, body=None, *, limit=4 * 1024 * 1024, content_type=None):
+        """One request; returns (status, headers, bytes). Never follows a redirect. A body is JSON unless it is
+        bytes with its own content type (the source picture's upload)."""
         import http.client
         connection = None
         try:
@@ -45,7 +50,10 @@ class Service:
             headers = {'Host': '%s:%d' % (self.host, self.port), 'Accept': '*/*', 'Connection': 'close',
                        'User-Agent': 'asuna-generate-image/1'}
             data = None
-            if body is not None:
+            if isinstance(body, bytes):
+                data = body
+                headers['Content-Type'] = content_type
+            elif body is not None:
                 data = json.dumps(body).encode('utf-8')
                 headers['Content-Type'] = 'application/json'
             connection.request(method, path, body=data, headers=headers)
@@ -111,8 +119,10 @@ def list_workflows(service):
     listing = service.json('GET', '/project/workflows')
     out = []
     for workflow in listing.get('workflows') or ():
-        if isinstance(workflow, dict) and workflow.get('ready') and text_to_image(workflow):
+        if isinstance(workflow, dict) and workflow.get('ready') and (text_to_image(workflow) or takes_source(workflow)):
             out.append({'workflow': workflow.get('id'), 'description': clip(workflow.get('description') or '', 200),
+                        **({'source_image': 'required' if needs_source(workflow) else 'optional'}
+                           if takes_source(workflow) else {}),
                         **guidance(workflow)})
     return out
 
@@ -122,34 +132,82 @@ def text_to_image(workflow):
     return TEXT_TO_IMAGE in modes
 
 
+def takes_source(workflow):
+    """The workflow declares the uploaded picture it works from (parameter_schema input_image)."""
+    return SOURCE_PARAMETER in ((workflow.get('parameter_schema') or {}).get('properties') or {})
+
+
+def needs_source(workflow):
+    return SOURCE_PARAMETER in ((workflow.get('parameter_schema') or {}).get('required') or ())
+
+
 def choose_workflow(service, request):
-    """The named workflow when it is ready and draws from text; otherwise the service's own choice."""
-    name = request.get('workflow')
+    """The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's
+    own choice: an edit route for a source picture, a text-to-image one without."""
+    name, source = request.get('workflow'), bool(request.get('source'))
     if not name:
-        query = {'domain': 'general', 'content_mode': 'sfw', 'input_type': 'text', 'input_mode': 'text_to_image',
-                 'prompt_granularity': 'detailed'}
+        query = ({'input_type': 'image', 'input_mode': EDIT_MODE} if source else
+                 {'domain': 'general', 'content_mode': 'sfw', 'input_type': 'text', 'input_mode': 'text_to_image',
+                  'prompt_granularity': 'detailed'})
         if request.get('style'):
             query['style'] = request['style']
         resolved = service.json('POST', '/project/resolve', query)
         ready = [m.get('workflow_id') for m in resolved.get('matches') or () if isinstance(m, dict) and m.get('ready')]
         name = resolved.get('selected_workflow') if resolved.get('selected_workflow') in ready else (ready or [None])[0]
         if not name:
-            raise Failure('IMAGE_NO_READY_WORKFLOW', note='服务没有给出可用（ready）的文生图路线。')
+            raise Failure('IMAGE_NO_READY_WORKFLOW', note='服务没有给出可用（ready）的%s路线。' % ('改图' if source else '文生图'))
     from urllib.parse import quote
     detail = service.json('GET', '/project/workflows/' + quote(name, safe=''))
     # The detail is {"workflow": <description>, "prompt": <graph>}; the description is what is checked.
     workflow = detail['workflow'] if isinstance(detail.get('workflow'), dict) else detail
     if not workflow.get('ready'):
         raise Failure('IMAGE_WORKFLOW_NOT_READY', workflow=name)
-    if not text_to_image(workflow):
+    if source and not takes_source(workflow):
+        raise Failure('IMAGE_WORKFLOW_TAKES_NO_SOURCE', workflow=name,
+                      note='这条路线只从文字画，不收原图；改图换一条 list_routes=yes 里标着 source_image 的路线，'
+                           '或不写 workflow 让服务挑。')
+    if not source and needs_source(workflow):
+        raise Failure('IMAGE_WORKFLOW_NEEDS_SOURCE', workflow=name,
+                      note='这条路线要一张原图：写 source_image（图旁标的 ref 或一张图的 artifact_id）；只想从文字画就换一条路线。')
+    if not source and not text_to_image(workflow):
         raise Failure('IMAGE_WORKFLOW_NOT_TEXT_TO_IMAGE', workflow=name,
                       input_modes=(workflow.get('capabilities') or {}).get('input_modes'))
     return name, workflow
 
 
-def parameters(request, workflow):
+def upload(service, source):
+    """The source picture uploaded under its content name; returns the name the workflow takes as input_image."""
+    data = Path(__file__).with_name(source['file']).read_bytes()
+    boundary = 'asuna' + hashlib.sha256(data).hexdigest()[:24]
+    head = ('--%s\r\nContent-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n'
+            '--%s\r\nContent-Disposition: form-data; name="image"; filename="%s"\r\n'
+            'Content-Type: application/octet-stream\r\n\r\n' % (boundary, boundary, source['name'])).encode('utf-8')
+    body = head + data + ('\r\n--%s--\r\n' % boundary).encode('utf-8')
+    status, _headers, answer = service.request('POST', '/upload/image', body,
+                                               content_type='multipart/form-data; boundary=' + boundary)
+    try:
+        value = json.loads(answer.decode('utf-8'))
+    except ValueError:
+        value = None
+    if status != 200 or not isinstance(value, dict) or not value.get('name'):
+        raise Failure('IMAGE_SOURCE_UPLOAD_REFUSED', http_status=status,
+                      service_error=answer.decode('utf-8', 'replace')[:400])
+    return (value['subfolder'] + '/' if value.get('subfolder') else '') + value['name']
+
+
+def forget(service, name):
+    """The uploaded source removed from the service again; a failure is said, never raised."""
+    from urllib.parse import quote
+    try:
+        status, _headers, _body = service.request('DELETE', '/project/inputs/' + quote(name, safe=''))
+        return status == 200
+    except Failure:
+        return False
+
+
+def parameters(request, workflow, source_name=None):
     """Only the fields the workflow declares; anything else is refused here, as the service would."""
-    wanted = {'prompt': request['prompt'], 'batch_size': 1}
+    wanted = {'prompt': request['prompt'], 'batch_size': 1, **({SOURCE_PARAMETER: source_name} if source_name else {})}
     for key in ('negative_prompt', 'width', 'height', 'seed'):
         if key in request:
             wanted[key] = request[key]
@@ -162,6 +220,16 @@ def parameters(request, workflow):
     if 'batch_size' not in allowed:
         wanted.pop('batch_size')
     return wanted
+
+
+def warning(item):
+    """A service warning in its own words: its code and message, and the sizes when it changed the source
+    (input_downscaled, input_first_frame, over_pixel_budget…)."""
+    if not isinstance(item, dict):
+        return clip(str(item))
+    sizes = ' (%s → %s)' % ('x'.join(map(str, item['original_size'])), 'x'.join(map(str, item['used_size']))) \
+        if isinstance(item.get('original_size'), list) and isinstance(item.get('used_size'), list) else ''
+    return clip(('%s: ' % item['code'] if item.get('code') else '') + str(item.get('message') or '') + sizes)
 
 
 def first_view(job):
@@ -177,21 +245,52 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
     report = {}
     if request.get('list'):
         return {'workflows': list_workflows(service)}
+    sweep(service)
     if request.get('job'):
         report['prompt_id'] = request['job']
-    else:
-        name, workflow = choose_workflow(service, request)
-        queued = service.json('POST', '/project/generate',
-                              {'workflow': name, 'parameters': parameters(request, workflow), 'client_id': 'asuna'})
+        return collect(service, request, report, deadline, clock, sleep)
+    name, workflow = choose_workflow(service, request)
+    uploaded = upload(service, request['source']) if request.get('source') else None
+    waiting = False
+    try:
+        queued = service.json('POST', '/project/generate', {'workflow': name, 'client_id': 'asuna',
+                                                            'parameters': parameters(request, workflow, uploaded)})
         effective = queued.get('effective_parameters') or queued.get('applied_parameters') or {}
         report.update({'workflow': name, 'prompt_id': queued.get('prompt_id'),
                        'seed': effective.get('seed'), 'width': effective.get('width'),
                        'height': effective.get('height'),
-                       'warnings': [w.get('message', w) if isinstance(w, dict) else w
-                                    for w in queued.get('warnings') or ()][:5],
+                       'warnings': [warning(w) for w in queued.get('warnings') or ()][:5],
                        'guidance': guidance(workflow)})
         if not report['prompt_id']:
             raise Failure('IMAGE_SERVICE_BAD_RESPONSE', step='POST /project/generate')
+        return collect(service, request, report, deadline, clock, sleep)
+    except Failure as failure:
+        waiting = failure.report.get('error') == 'IMAGE_JOB_STILL_RUNNING'
+        raise
+    finally:
+        # The source can be a photo of someone: it does not stay on the service once its job is over. A job still
+        # queued needs it; a later call clears it (sweep).
+        if uploaded and not waiting:
+            forget(service, uploaded)
+
+
+def sweep(service, now=None):
+    """Sources this client uploaded that outlived their job (one left for a queued job, or a run cut short)."""
+    try:
+        listing = service.json('GET', '/project/inputs')
+    except Failure:
+        return
+    moment = time.time() if now is None else now
+    for item in listing.get('files') or ():
+        name = item.get('name') if isinstance(item, dict) else None
+        stamp = item.get('modified_time') if isinstance(item, dict) else None
+        if (isinstance(name, str) and name.startswith(SOURCE_PREFIX) and isinstance(stamp, (int, float))
+                and moment - stamp > SOURCE_KEPT_SECONDS):
+            forget(service, name)
+
+
+def collect(service, request, report, deadline, clock, sleep):
+    """Wait for the job and fetch its picture into /data/artifact.bin."""
     from urllib.parse import quote
     while True:
         job = service.json('GET', '/project/jobs/' + quote(report['prompt_id'], safe=''))

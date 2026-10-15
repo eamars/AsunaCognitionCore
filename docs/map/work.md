@@ -280,10 +280,17 @@ Trusted one-shot image generation, run only inside the managed integration names
 - def `guidance` — How this workflow wants to be prompted and what it is for, in the service's own words.
 - def `list_workflows`
 - def `text_to_image`
-- def `choose_workflow` — The named workflow when it is ready and draws from text; otherwise the service's own choice.
+- def `takes_source` — The workflow declares the uploaded picture it works from (parameter_schema input_image).
+- def `needs_source`
+- def `choose_workflow` — The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's own choice: an edit route for a source picture, a text-to-image one without.
+- def `upload` — The source picture uploaded under its content name; returns the name the workflow takes as input_image.
+- def `forget` — The uploaded source removed from the service again; a failure is said, never raised.
 - def `parameters` — Only the fields the workflow declares; anything else is refused here, as the service would.
+- def `warning` — A service warning in its own words: its code and message, and the sizes when it changed the source (input_downscaled, input_first_frame, over_pixel_budget…).
 - def `first_view`
 - def `run`
+- def `sweep` — Sources this client uploaded that outlived their job (one left for a queued job, or a run cut short).
+- def `collect` — Wait for the job and fetch its picture into /data/artifact.bin.
 - def `main`
 
 ## `integration_import`

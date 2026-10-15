@@ -10,8 +10,10 @@ message. Stdlib only apart from the injected runner and registration hook, so it
 from __future__ import annotations
 import hashlib
 import re
+import secrets
 from datetime import datetime, timezone
 
+from .integration_image import SOURCE_PREFIX
 from .integration_import import resolve_target, validate_target_path
 
 IMAGE_ENDPOINT = 'image'
@@ -19,13 +21,14 @@ GENERATE_IMAGE_TOOL_NAME = 'generate_image'
 MAX_IMAGE_BYTES = 8 * 1024 * 1024        # the namespace's file-size cap and the outbound picture cap
 DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT = 180, 30, 300
 PROMPT_CHARS = 8000
+SOURCE_REF_CHARS = 512
 OPTION_RULES = {'steps': ('int', 1, 100), 'cfg': ('number', 0, 30),
                 'sampler_name': ('name', None, None), 'scheduler': ('name', None, None)}
 
 GENERATE_IMAGE_TOOL = {
     'name': GENERATE_IMAGE_TOOL_NAME,
     'description': ('Draw one picture with the local image service and put it in this task workspace. '
-                    'list_routes=yes lists the ready text-to-image workflows (what each is for, not for, and how '
+                    'list_routes=yes lists the ready workflows (what each is for, not for, and how '
                     'it wants to be prompted) without drawing; pick one and write the prompt in its style and '
                     'language (most want English). Then give the prompt and optionally that workflow id (otherwise '
                     'the service picks a generic anime one, optionally for a style), negative_prompt, width/height '
@@ -34,7 +37,9 @@ GENERATE_IMAGE_TOOL = {
                     'is reported with its prompt_id: call again with job=<prompt_id> to collect it instead of '
                     'drawing again. Nobody has seen the picture until you look: read_image with '
                     'artifact.artifact_id, compare it with what was asked, and draw again (better prompt or another '
-                    'workflow) when it is wrong. The picture is registered as your own image, so a later turn can '
+                    'workflow) when it is wrong. To edit a picture, give source_image (its ref or artifact_id, as '
+                    'read_image takes it) and say the change in the prompt; list_routes marks the routes that take '
+                    'one. The picture is registered as your own image, so a later turn can '
                     'send it with a message; show it in a report as a relative Markdown image. Returns the '
                     'workflow and its prompting guidance, seed, size, bytes and SHA-256 actually written, or the '
                     'service\'s real refusal.'),
@@ -50,6 +55,7 @@ GENERATE_IMAGE_TOOL = {
                                               'sampler_name': {'type': 'string'},
                                               'scheduler': {'type': 'string'}}},
                    'job': {'type': 'string'},
+                   'source_image': {'type': 'string'},
                    'workflows': {'type': 'boolean'},
                    'target_relative_path': {'type': 'string'},
                    'timeout': {'type': 'integer'}}}
@@ -102,7 +108,7 @@ def validate(args):
     request['timeout'] = timeout
     if args.get('workflows') is not None:
         if args['workflows'] is not True:
-            return None, _error('INVALID_WORKFLOWS', note='list_routes 只能写 yes（列出能用的文生图路线，不画图），%s；'
+            return None, _error('INVALID_WORKFLOWS', note='list_routes 只能写 yes（列出能用的路线，不画图），%s；'
                                                           '要画图就不写 list_routes。' % _given(args['workflows']))
         request['list'] = True
         return request, None
@@ -161,6 +167,10 @@ def validate(args):
                 return None, _error('INVALID_OPTION', option=key, note='%s，%s；照 list_routes=yes 里这条路线声明的取值写。'
                                                                      % (OPTION_WORDS[key], _given(value)))
         request['options'] = dict(options)
+    source = args.get('source_image')
+    if source is not None and (not isinstance(source, str) or not 4 <= len(source) <= SOURCE_REF_CHARS):
+        return None, _error('INVALID_SOURCE_IMAGE', note='source_image 是一张图的 ref（图旁标的 att-…）或 artifact_id'
+                                                         '（blob-…），和 read_image 收的一样，%s。' % _given(source))
     return request, None
 
 
@@ -173,8 +183,11 @@ def extension(data):
     return None
 
 
-def generate(args, *, runner, workspace, protected=(), register=None, now=None):
-    """One picture into the workspace; failures are the service's or the transport's own words."""
+def generate(args, *, runner, workspace, protected=(), register=None, now=None, source=None):
+    """One picture into the workspace; failures are the service's or the transport's own words.
+
+    `source(ref)` reads the picture to edit with read_image's own fence and returns {data, register}: `register`
+    files the result where an edit of that picture may go (outbound_media.edit_register)."""
     request, failure = validate(args)
     if failure:
         return failure
@@ -188,7 +201,21 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None):
             return {'generated': False, **failure}
         if target.exists():
             return _error('TARGET_EXISTS', target_relative_path=relative, note='换一个文件名；生成的图不覆盖已有文件。')
-    result = runner.generate_image(request)
+    picture = None
+    if args.get('source_image') is not None and not request.get('list') and not request.get('job'):
+        if source is None:
+            return _error('SOURCE_IMAGE_UNAVAILABLE', note='这里读不到原图，改图做不了；只从文字画就去掉 source_image。')
+        try:
+            picture = source(args['source_image'])
+        except (ValueError, PermissionError) as exc:
+            return _error('SOURCE_IMAGE_NOT_READABLE', detail=str(exc)[:400])
+        kind = extension(picture['data'])
+        if kind is None:
+            return _error('SOURCE_IMAGE_NOT_A_PICTURE', note='source_image 读到的不是 png/jpeg/gif/webp 图片；换一张。')
+        token = hashlib.sha256(picture['data']).hexdigest()[:12] + '-' + secrets.token_hex(3)
+        request['source'] = {'file': 'source.' + kind, 'name': '%s%s.%s' % (SOURCE_PREFIX, token, kind)}
+        register = picture.get('register') or register
+    result = runner.generate_image(request, **({'source': picture['data']} if picture else {}))
     report = result.get('report') or {}
     if result.get('transport_error'):
         return _error('IMAGE_TRANSPORT_FAILED', detail=str(result['transport_error'])[:400],
@@ -198,7 +225,7 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None):
             return {k: v for k, v in report.items() if v is not None} or _error(
             'IMAGE_LIST_FAILED', note='生图服务没列出路线，也没给原因；' + AGAIN + '。')
         return {'workflows': report.get('workflows') or [],
-                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上。'}
+                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上；标着 source_image 的路线是改一张图的，写上 source_image。'}
     if not report.get('generated'):
         return {k: v for k, v in report.items() if v is not None} or _error(
             'IMAGE_GENERATION_FAILED', note='生图服务没画出来，也没给原因；' + AGAIN + '。')

@@ -541,7 +541,7 @@ ARTIFACT_REF = re.compile(r'blob-[0-9a-f]{16,64}')
 
 
 def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=(),
-                        session_class=visibility.PUBLIC, task_dir=None):
+                        session_class=visibility.PUBLIC, task_dir=None, look=True):
     """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 
     两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
@@ -565,7 +565,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     # call that still sends one is read with the program's cap.
     max_bytes = None
     capability = vision_capability(config, route)
-    if not capability['supported']:
+    if look and not capability['supported']:      # `look=False`: the bytes are for a tool, not the model's eyes
         raise ValueError('VISION_ROUTE_UNSUPPORTED: 这条模型路由收不了图（%s）；重试也一样%s'
                          % ('；'.join(capability['unsupported_because']),
                             '' if route == 'character' else '：不看图能做的先做，看不了的写进结果'))
@@ -806,6 +806,29 @@ READ_IMAGE_TOOL = {
     'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 
+def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility.PUBLIC, task_dir=None):
+    """A picture to edit (generate_image's source_image): read with read_image's own fence, so a turn edits only a
+    picture it may look at, and said with where an edit of it may go. Her own drawing stays hers (`own`); any other
+    picture's edit goes back to the conversation the picture came from (`back_to`, a scope key)."""
+    from .outbound_media import produced, returns_to
+    seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, session_class=session_class,
+                               task_dir=task_dir, look=False)
+    artifact_id = seen.get('artifact_id') or seen.get('blob_artifact')
+    row = store.db.artifacts.find_one({'_id': artifact_id}) if artifact_id else None
+    if not row:
+        raise ValueError('SOURCE_IMAGE_NOT_STORED: 这张图读到了但没存下来，改不了；%s' % GIVE_UP)
+    data = blobs.get(artifact_id, row['scope_key'], operator=True)
+    if seen.get('pulled_via') == 'artifact':
+        own = produced(row)
+        back = None if own else returns_to(row) or row['scope_key']
+    elif seen.get('path'):
+        own, back = False, task['scope_key']         # a file from this machine: it stays where the task is
+    else:
+        scene = store.db.scenes.find_one({'_id': seen.get('image_scene_id') or task['scene_id']}, {'scope_key': 1})
+        own, back = False, (scene or {}).get('scope_key') or task['scope_key']
+    return {'data': data, 'own': own, 'back_to': back}
+
+
 class VisionService:
     """broker 侧入口：每次调用绑到调用任务自己的场景与纪元，字节复用既有 GridFS BlobStore。
 
@@ -822,6 +845,10 @@ class VisionService:
         # 会话类别由任务那一侧算好传进来：按路径读盘只在家里放行，这里不另判一次。
         return read_image_for_task(self.store, self.blobs, task, self.store.config, args,
                                    session_class=session_class, task_dir=task_dir)
+
+    def picture_to_edit(self, task, ref, *, session_class=visibility.PUBLIC, task_dir=None):
+        return picture_to_edit(self.store, self.blobs, task, self.store.config, ref,
+                               session_class=session_class, task_dir=task_dir)
 
 
 def route_filtered_tool_names(tools, config):

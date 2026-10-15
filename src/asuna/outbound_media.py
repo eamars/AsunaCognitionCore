@@ -63,11 +63,16 @@ OFFER_NOTE = ('这些是程序已经存好、这一回合可以随你要说的�
 # A group may receive only pictures she produced (owner, 2026-10-05): bytes she imported from her own
 # generator (import_register), never a picture someone sent her. Any group she is in; she picks.
 PRODUCED_SOURCE = 'integration:'
+EDIT_SOURCE = 'edit:'          # an edit of someone else's picture: `edit:<scope it goes back to>|<where it was drawn>`
 GROUP_NOTE = ('这是群聊：这里只列你自己做出来的图（不是别人发给你的）。发不发、发哪张由你决定，'
               '但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
 DM_NOTE = ('这是别人的私聊：这里只列你自己做出来的图。发不发、发哪张由你决定，看对方和聊的事合不合适。')
 PEER_NOTE = ('其中标了 from_linked_scene 的那几张不是这个场景里生成的，是你另一个只属于'
              '你自己的私聊入口里存的图，程序确认过那一边也是你本人的私人空间，可以照发。')
+EDITS_OFFERED = 3                       # edits of pictures from here, listed before her own
+EDITS_NOTE = ('标了 edited_from_here 的是你改过的图，原图是这里的人发的：它只能发回这里，不算你自己画的。')
+EDITED_NOTE = ('这是改别人的图改出来的：它不算你自己画的，只能发回原图所在的那个对话（家里的私聊另算）。'
+               '先用 read_image 看一遍对不对。')
 
 
 def sha256_of(data: bytes) -> str:
@@ -170,6 +175,60 @@ def group_scene(config, scene):
 def produced(item):
     """她自己做出来的图：从她自己的生成端点导入时登记的（import_register）。"""
     return any(str(source).startswith(PRODUCED_SOURCE) for source in (item or {}).get('source_ids') or ())
+
+
+def returns_to(item):
+    """Where an edit of someone else's picture may go (owner 2026-10-15): back to the conversation the picture came
+    from, the scope key its source id names (edit_register). None for anything else."""
+    for source in (item or {}).get('source_ids') or ():
+        if str(source).startswith(EDIT_SOURCE):
+            return str(source)[len(EDIT_SOURCE):].split('|', 1)[0] or None
+    return None
+
+
+def _row_scope(store, row):
+    """The scope key of the conversation an outbound row is in."""
+    row = row or {}
+    if row.get('scope_key'):
+        return row['scope_key']
+    scene = store.db.scenes.find_one({'_id': row.get('scene_id')}, {'scope_key': 1}) if row.get('scene_id') else None
+    return (scene or {}).get('scope_key')
+
+
+def edit_register(store, task, back_to):
+    """generate_image's registration for an edit of someone else's picture: kept in this task's scope (so the task
+    reads it back), marked to go back to the conversation the picture came from, and not counted as hers."""
+    scope_key = (task or {}).get('scope_key')
+    if store is None or not isinstance(scope_key, str) or not scope_key or not back_to:
+        return None
+
+    def register(data, meta=None):
+        meta = meta or {}
+        outcome = register_imported_image(store, scope_key, data, source='%s%s|integration:%s:%s' % (
+            EDIT_SOURCE, back_to, meta.get('endpoint'), meta.get('artifact_path')))
+        if isinstance(outcome, dict) and outcome.get('registered'):
+            outcome['note'] = EDITED_NOTE
+        return outcome
+
+    return register
+
+
+def edits_back_to(store, scope_key, *, limit=MAX_ITEMS_OFFERED):
+    """Edits of other people's pictures that go back to this conversation, newest first (as produced_images)."""
+    count = max(1, int(limit or 1))
+    try:
+        cursor = store.db.artifacts.find({'kind': ATTACHMENT_KIND, 'state': 'DONE', 'storage': 'gridfs'})
+        if hasattr(cursor, 'sort'):
+            cursor = cursor.sort('created_at', -1)
+        if hasattr(cursor, 'limit'):
+            cursor = cursor.limit(200)
+        rows = [row for row in cursor if scope_key and returns_to(row) == scope_key]
+    except Exception:
+        return []
+    wanted = {row['_id'] for row in rows}
+    scopes = list(dict.fromkeys(row['scope_key'] for row in rows if row.get('scope_key')))
+    items = image_artifacts(store, scopes, limit=count * 10, own_scope='')
+    return [{**item, 'edited_from_here': True} for item in items if item['artifact_id'] in wanted][:count]
 
 
 def target_allowed(config, scene, session_class):
@@ -421,30 +480,37 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     allowed, _reason = target_allowed(config, scene, session_class)
     if not allowed:
         return None
+    # Edits of other people's pictures that came from here go back here, wherever they were drawn.
+    edits = edits_back_to(store, (scene or {}).get('scope_key'), limit=EDITS_OFFERED)
     if own_only(config, scene, session_class):
         items = produced_images(store, limit=limit)
         if picked and picked not in {item['artifact_id'] for item in items}:
             items = [item for item in produced_images(store, limit=50) if item['artifact_id'] == picked] + items
         for item in items:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
+        items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
         note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
-        return {'items': items, 'note': _offer_note(scene) + note} if items else None
+        return ({'items': items, 'note': _offer_note(scene) + note + (EDITS_NOTE if edits else '')}
+                if items else None)
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
                             limit=limit, own_scope=own_scope)
     # Hers from anywhere too: a picture she made goes wherever a picture may go, and here most of all.
     listed = {item['artifact_id'] for item in items}
+    items = [edit for edit in edits if edit['artifact_id'] not in listed] + items
+    listed |= {edit['artifact_id'] for edit in edits}
     for item in produced_images(store, limit=50 if picked else limit):
         if item['artifact_id'] not in listed and (len(items) < limit or item['artifact_id'] == picked):
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
             items.append(item); listed.add(item['artifact_id'])
     if not items:
         return None
-    note = _offer_note(scene) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
+    note = (_offer_note(scene) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
+            + (EDITS_NOTE if edits else ''))
     return {'items': items, 'note': note}
 
 
-def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False):
+def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False, here=None):
     """程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 
     ``scope_keys`` 是程序算好的可引用 scope 列表（本场景 + 同一主人的另一个 owner_private
@@ -455,10 +521,11 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
     item = store.db.artifacts.find_one({'_id': artifact_id})
     if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
+    back_here = here is not None and returns_to(item) == here        # an edit of a picture that came from here
     if produced_only:
-        if not produced(item):
+        if not produced(item) and not back_here:
             raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group or someone else's chat gets only pictures she made
-    elif item.get('scope_key') not in scopes and not produced(item):
+    elif item.get('scope_key') not in scopes and not produced(item) and not back_here:
         raise Denied('ATTACHMENT_SCOPE_DENIED')             # the owner's chat: its private pictures, and hers from anywhere
     if item.get('kind') != ATTACHMENT_KIND:
         raise Denied('ATTACHMENT_NOT_AN_IMAGE')
@@ -506,6 +573,8 @@ def serve(store, blobs, row, declared):
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     if kept_sticker(store, row, item):
         pass                # a sticker on her shelf, sent as a sticker (ADR-016): any conversation that takes one
+    elif returns_to(item) and returns_to(item) == _row_scope(store, row):
+        pass                # an edit of someone else's picture, going back to the conversation it came from
     elif row_own_only(store, row):
         if not produced(item):
             raise Denied('ATTACHMENT_NOT_HER_OWN')

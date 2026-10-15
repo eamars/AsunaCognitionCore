@@ -692,7 +692,16 @@ class ToolBroker:
                 # 图登记到任务绑定的 scope，来源是 integration:image:…，算她自己做的图。
                 if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE: 本机生图服务这会儿没接上（集成运行器没启动）；'+UNAVAILABLE)
                 from .image_generation import generate
-                result=generate(args,runner=self.integration,workspace=sandbox.task_dir,
+                def source(ref):
+                    # The picture to edit: only one this task may look at (read_image's fence, this task's class).
+                    if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
+                    scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                    picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,
+                        session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
+                    # Her own drawing edited stays hers; anyone else's goes back where it came from.
+                    return {'data':picture['data'],'register':None if picture['own'] else
+                            outbound_media.edit_register(self.store,task,picture['back_to'])}
+                result=generate(args,runner=self.integration,workspace=sandbox.task_dir,source=source,
                                 protected=sandbox.protected_paths,register=outbound_media.import_register(self.store,task))
                 with self.service.lock:self.service.valid(task)
             elif tool=='private_words':

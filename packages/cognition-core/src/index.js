@@ -627,7 +627,11 @@ export class CognitionCore {
           const channels = await this.channelPlugins(this.config.deployment);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
             skill_directories: await this.skillDirectories(persona, channels), channels });
+          // The activation record was written before her publication was committed: the receipt keeps what the
+          // commit said.
+          const { commit, commit_error: commitError } = value;
           [value] = await this.ctx.asunaFloor.workerReady(value.project);
+          value = { ...value, ...(commit && { commit }), ...(commitError && { commit_error: commitError }) };
         }
         await this.worker.call('host_result', { request_id: event.request_id, value });
       } catch (error) {

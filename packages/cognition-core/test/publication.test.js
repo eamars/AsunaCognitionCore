@@ -219,3 +219,21 @@ test('ADR-021 D4: an unattended turn does not publish onto a change still waitin
   const attended = await floor.call('development_publish', { reason: 'the owner is here' }, {});
   assert.equal(attended.state, 'HOST_RESTART_REQUIRED');                    // with someone present it may replace it
 });
+
+test('a text file she changed is published with LF line endings; a binary one keeps its bytes', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/line-endings-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['skills'], type: 'module' }));
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await floor.call('development_write', { path: 'skills/probe/SKILL.md', text: 'line one\r\nline two\r\n' });
+  await floor.call('development_write', { path: 'skills/probe/data.bin', text: 'a\u0000b\r\n' });
+  const result = await floor.call('development_publish', { reason: 'line endings probe' });
+  assert.equal(result.state, 'APPLIED', JSON.stringify(result));
+  assert.equal(await fs.readFile(path.join(source, 'skills/probe/SKILL.md'), 'utf8'), 'line one\nline two\n');
+  assert.equal(await fs.readFile(path.join(source, 'skills/probe/data.bin'), 'utf8'), 'a\u0000b\r\n');
+  assert.equal(await fs.readFile(path.join(result.packageRoot, 'skills/probe/SKILL.md'), 'utf8'), 'line one\nline two\n');
+  // Nothing more to publish: the candidate holds what was published.
+  assert.equal((await floor.call('development_publish', { reason: 'again' })).state, 'NO_CHANGES');
+});

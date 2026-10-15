@@ -339,6 +339,6 @@ def export_documents(store, persona, target, root):
             label = f"<!-- section {json.dumps({'sid': section['sid'], 'visibility': section['visibility'], 'inject': section['inject'], 'tags': section.get('tags', []), 'revision_id': revision_id}, ensure_ascii=False)} -->"
             lines += [label, section['body'] if section['sid'] == PREAMBLE else f"## {section['heading']}\n{section['body']}"]
         path = target / (slug.replace(':', '__') + '.md')
-        path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
         written.append(path.name)
     return {'exported': written, 'directory': str(target)}

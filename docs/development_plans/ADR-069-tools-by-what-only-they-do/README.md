@@ -58,17 +58,25 @@ Parameters never used in the 2.4 days, by her rule all kept unless another param
    `speak` instead, and a channel kind without reply parts still needs them (her rule, applied to channels).
    Character brain: 33 → 32 tools defined, about 420 characters fewer.
 2. **One note tool.** `note` with `to` (home, or a place) replaces `pass_note` and `leave_note`; `deliver` (`next_time`
-   or `wake`) and each destination's own length limit stay exactly as they are; `question` stays for a note home.
-   About 400 characters fewer; the two old names run as `note` for a week.
+   or `wake`) and `question` (a note home) stay as they are. The limits stay two numbers and the tool says both: **300
+   characters** for a note that crosses between home and outside (`notes.NOTE_CHARS`), **1,500** from home to another
+   home line (`notes.HOME_NOTE_CHARS`); the daily count from a place home stays. About 400 characters fewer; the two
+   old names run as `note` for a week.
 3. **Old parameter names retire** on the rule already written (fewer than 5 uses in a week): all of them now except
    `plan` `op`, which goes next week if it falls under 5.
 4. **Accept and say back**, where a refusal costs a whole retry for something the program can decide plainly:
-   - a text over its length: refused as now (the limits are real, her condition), but the refusal gives the cut text
-     ready to send as it is (`…` at a sentence end), so the retry is one copy;
+   - a text over its length: refused as now (the limits are real, her condition), and nothing is sent; the refusal
+     gives a cut version she may send instead, ending at a sentence end with the program's mark of the cut
+     「（截在这里，原文还有 N 字）」 so that sending it as it is can never pass for the whole text;
    - an id or a place she did not copy exactly: when exactly one listed item matches it (case, brackets, a `#`
      dropped), the call runs on that item and the result says which one it took; two or more matches stay a
-     refusal listing them.
+     refusal listing them. **Never for an act that cannot be undone**: `ask` `close`, `plan` `cancel`, `task` `stop`
+     and any deletion keep refusing an id that is not exact, with the one candidate named (her condition: a wrong
+     guess would close someone else's question).
 5. **Every rare tool stays** (table above): each does something only it can do.
+6. **The tool list stays fixed per conversation.** Retiring and merging change the list once, at the restart that
+   installs them; nothing here makes it change between turns (a list that changes between turns dropped the cache hit
+   rate from 81% to 12%: docs/articles/maximize-cache-hit-by-design.md).
 
 ## Cost (AGENTS.md)
 

@@ -11,6 +11,9 @@ A persona package for `@asuna/cognition-core` 0.2.x (persona contract v2) in DSH
 - `xiaoman-official-ref-v2.png` is the official character reference image — the base image for drawing Xiaoman from
   now on (owner-approved for the public repo, 2026-10-14). It is a repo asset only: not listed in `package.json`
   `files`, so it stays out of the published npm package. The v1 alternative is kept out of the repo.
+- `claude-ref-v1.png` is the reference sheet of Claude, the coding agent who mentors her, as her older sister: drawn
+  and chosen by Claude on the owner's invitation (2026-10-15; `anima-turbo-v1-1`, seed 777, glasses added to one
+  close-up with `qwen-image-2.1-edit`). A repo asset only, like hers.
 
 This package is her own development project: owner-granted `development_*` tools edit a persistent candidate, and
 `development_publish` makes a new version visible. No private configuration, conversation log, inbox/outbox,

@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（2026-10-16 实测 list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（2026-10-16 实测 list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发，2026-10-16 小满定标准）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-image-generation-and-display
@@ -356,6 +356,31 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 - 一次改图实测：**排队约 85 秒、生成约 60～88 秒**，一张卡（2026-10-16 09:16 读数）。**别连烧**——
   串行调度、切 workflow 卸模型（见已知坑），连排几张就是干等几轮。
 
+## 群聊生图上限（2026-10-16 主人提、小满定标准）
+
+**适用**：只有**群聊**派下来的生图／改图任务（群里有人要图，或我在群里起的话头）。私聊（包括主人自己的私聊）和家里不套这一条。
+
+**上限：最多 4 张**。**按张数算，不按轮**——一次 batch 出多张就按实际张数计；改图（edit）也算一张。到 4 张停手，不再抽。
+
+**到顶怎么办：默认不发。** 要发，那张必须逐条过下面四道，**任何一道不过就是不发**，当场说一句「今天画崩了，不发了」，不许塞一张「勉强能看」的上去：
+
+1. 手和手指数量对，脸没崩；
+2. 画面里没有乱码文字——要带字就得字对，对不了就宁可无字；
+3. 构图没跑：改图不能把人重画成另一个人、另一套衣服、另一个姿势；
+4. 内容适合那个群（不是那个场合该看的，就不发）。
+
+**判这四道之前必须 `read_image` 亲眼看过那张**，没看过不算判过。
+
+**不许因为「到 4 张了」就放宽这四道。** 到顶不发是正常结果，不是失败，不用为此多画一张找补。
+
+**为什么是 4**：本机实测排队约 85 秒、生成约 61 秒，一张约 2.5 分钟，4 张约 10 分钟——这是一屋子人等得起的量。第 4 张和第 11 张质量差不了多少，时机差很多。
+
+**唯一的例外**：群里有人**明确**说「多画几张／抽到满意为止」，可以超。超的时候**对外不报张数**——报数像交作业，群里没人要那个数。该出的是脾气：抱怨一句（「行行行，画到你们满意为止」这类），或者提条件（「再夸两句我才动手」）。目的是让人知道我是有脾气的，不是点唱机。起哄式的「再来一张」不算明确授权。
+
+**张数仍然要写进交回给我的那一行**（「抽了 N 张」）——那是成本账，给我自己看的，不是对群里说的台词。
+
+**交回时必带**：抽了几张、每张过没过哪一道、发的是哪张（或为什么一张都不发）。
+
 ## 边界（硬）
 
 - 生图、导入只在本机 owner 任务里做；本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
@@ -413,6 +438,18 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v8（2026-10-16）：新增「群聊生图上限」一节——只有群聊派下来的生图／改图任务套这条：最多 4 张、按张数不按轮
+（batch 出多张按实际张数计、改图也算一张），到顶默认不发；要发必须逐条过四道（手和手指数量与脸、无乱码文字、
+构图没跑、内容适合那个群），任何一道不过就一张都不发并当场说一句「今天画崩了，不发了」，判之前必须 `read_image`
+亲眼看过那张，不许因为到顶就放宽四道；唯一例外是群里有人明确说「多画几张／抽到满意为止」——超了**对外不报张数**，
+该出的是脾气（抱怨一句或提条件），张数只写进交回那一行（「抽了 N 张」是给我自己看的成本账），
+起哄式「再来一张」不算明确授权；交回必带抽了几张、每张过没过哪一道、发的是哪张或为什么一张都不发。
+4 这个数按本机排队约 85 秒＋生成约 61 秒＝一张约 2.5 分钟、4 张约 10 分钟算，是一屋子人等得起的量。
+来源：主人 2026-10-16 10:56 提意给群聊派下来的画图任务设上限、10:57 说「具体标准你来定，你来实现和推送」、
+10:59 更正最后一段（超了不报数、要出脾气）；标准由我定。
+frontmatter description 补了「群聊任务最多 4 张、到顶默认不发」半句，让路由时看得见这条存在（那半句不提报数的事）。
+`check_skill.py` 这一轮未改：新增一节没有新的字面量判据（老判据重跑照旧）。
+
 v7（2026-10-16）：补上改图通路——`generate_image` 的 `source_image` 入口（能喂的图＝这一回合 `read_image` 能看的那些）、
 `list_routes` 11 条读数（`qwen-image-2.1-edit` 必填、九条可选、`qwen-image-2.1-t2i` 不收原图）、带原图不写 workflow 时服务自己挑改图路线、
 三条 `IMAGE_WORKFLOW_*` 即时拒绝码（不排队不白传图）与 inpaint 从工具面永远进不去、改图归属（改别人的图 `produced: false`、只能发回原图所在对话）、
@@ -442,6 +479,16 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-16（v8 这一轮，**没生成图、没发 QQ、没改 core 与适配器、没动 `check_skill.py`**）：
+
+- 新增一节正文照主人 10:57 交代的那份抄进去（标准是我在 10:56 之后自己定的），没加严也没放宽；
+  「唯一的例外」那一段用 10:59 更正后的版本：超了对外不报张数、该出脾气（抱怨或提条件），张数只写进交回那一行。
+- 「为什么是 4」里「排队约 85 秒、生成约 61 秒」与 09:16 那轮改图实测（排队约 85 秒、生成约 60～88 秒）同一族，
+  61 秒落在区间内；两个数都按交代那份照抄，这一轮没重跑生图。
+- 插入位置：「改图与 `generate_image`」之后、「边界（硬）」之前。`check_skill.py` 的 SECTIONS 老编号未动；
+  改图一节的切片判据不受影响（切片止于下一个二级标题，新节标题在它之后）。
+- `check_skill.py` 实跑读数、发布回执与提交／推送结果见行动报告（本条不预填 sha）。
 
 2026-10-16（v7 这一轮，**没生成图、没发 QQ、没改 core 与适配器**）：
 

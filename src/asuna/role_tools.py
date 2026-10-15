@@ -1959,7 +1959,8 @@ class RoleTools:
                 # A plan made earlier in this turn is hers to change too, though the turn's list predates it.
                 made = {(call.get('result') or {}).get('plan_id') for call in (ep.get('tool_calls') or {}).values()
                         if call.get('tool') == 'plan'}
-                row = planned.get(plan_id) or (plan_id in made and self.store.db.plans.find_one({'_id': plan_id}))
+                # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
+                row = (plan_id in planned or plan_id in made) and self.store.db.plans.find_one({'_id': plan_id})
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
                     kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})

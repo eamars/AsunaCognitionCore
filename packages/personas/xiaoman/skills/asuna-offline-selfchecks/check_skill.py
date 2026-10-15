@@ -2,7 +2,8 @@
 """asuna-offline-selfchecks 的零依赖离线自检。
 
 本技能是核心技能 asuna-self-improvement 之上的**增量笔记**，所以这里查四件事：
-1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译；
+1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、
+   换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 指向：正文指向核心技能，并写明两份不一致时按核心技能办；
 3. 增量与「不回潮」：几条增量（挂错项目的红、单个用例文件与 p3 现行跑法、pytest 不收
    *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处）都还在；通用离线套件
@@ -93,6 +94,23 @@ def compile_tmp_dir():
         except OSError:
             continue
     return None
+
+
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
 
 
 def find_repo_root():
@@ -206,6 +224,12 @@ def main():
     # 所以先试技能目录旁、再退当前目录。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
+
+    # 换行：字节级数 CR（文本模式那把尺是瞎的，见 cr_bytes）。覆盖发出去的每一份文本：
+    # SKILL.md 加同目录全部 .py。跑的时候要看的是冻结快照，不是候选——候选可能被别人抹平成 LF。
+    cr_files = cr_bytes([path] + [os.path.join(HERE, name) for name in scripts])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
     tmp = compile_tmp_dir()
     if tmp is None:
         notes.append("NOTE 技能目录旁和当前目录都写不动（沙箱限制），编译检查记失败——不是产品坏")

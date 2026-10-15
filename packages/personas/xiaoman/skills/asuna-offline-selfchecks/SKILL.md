@@ -51,6 +51,10 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
 napcat-qq 适配器的自检（`--selftest --offline`，跑内置占位夹具）在通道包里、用 `napcat-qq` 项目跑，
 口径与已知坑看 `qq-napcat-adapter` 技能——别在认知核这套里找它。
 
+### 查换行必须读字节
+
+文本模式（universal newlines）读文件看不见 CR，查换行必须读字节数 `\r`——`open(p, encoding="utf-8")` 读进来再问 `text` 里有没有 CR 永远是「没有」，CRLF 照样绿（2026-10-15 撞的：真 CRLF 样本 CR=59）。
+
 ## 版本
 
 v1（2026-09-24）：首次记录，命令与结论都来自本次实跑。
@@ -76,6 +80,9 @@ pytest 默认不收 `*_cases.py`，同结构的用例还有五套待修。「没
 新增反引号仓库路径存在性检查（防这一族复发）。
 
 v2.2（2026-10-15）：`check_skill.py` 的编译临时目录改成「先试技能目录旁，写不动退到当前工作目录」，用完即删。原因：`development_run` 的沙箱只放行候选目录里的写，系统 Temp 里 `mkdtemp` 建得出目录、`py_compile` 落 `.pyc` 却 `PermissionError`——本技能自查在候选里因此长期红在 `compiles_check_skill.py` 一格（10-12 那条试用记录里「临时目录不可写是沙箱限制，不是坏」说的就是它）。改法抄自 `asuna-running-version` 的 `probe_dir()`。正文口径、增量、守卫判据未动。
+
+v2.3（2026-10-15）：增量加一句「查换行必须读字节」（今天撞的：文本模式读文件看不见 CR，查换行的那把尺一直是瞎的）。`check_skill.py` 新增 `line_endings_are_lf`——读字节数 CR，覆盖 SKILL.md 与同目录全部 .py，27→28 条。其余口径、增量、指向未动。
+
 
 ## 试用记录
 
@@ -150,3 +157,11 @@ v2.2（2026-10-15）：`check_skill.py` 的编译临时目录改成「先试技�
 - 改后同一处实跑：`27/27 通过`、exit 0；临时目录落技能目录旁，跑完技能目录里只剩 `SKILL.md` 与 `check_skill.py`（不留 `_compile-probe-*`）；
 - 退到当前目录那一档单独测过：把 HERE 指到只读的检出根（建目录 `PermissionError`），`compile_tmp_dir()` 落在 cwd，`.pyc` 写得进去；
 - 发布结果以本次行动报告为准。
+
+2026-10-15（v2.3，只改本技能文件与 `check_skill.py`，xiaoman 候选）：
+
+- 本技能自查 28/28（改前 27/27，多的那条就是换行）；
+- 同一把字节级尺子做了前后对照（拿 `asuna-bot-or-person` 那份，同一内容只差换行 CR=102）：改前那条用文本模式查 CR，129/129 照样绿；改后 128/129，红在 `line_endings_are_lf`，读数 102 个 CR 字节——尺子能红才算能用；
+- 真样本另有一处：今天 18:02 冻结的 xiaoman 快照里 asuna-running-version／asuna-render-budget-per-place 的 SKILL.md 与 `check_skill.py` 是 CRLF（CR=90／279、59／264），候选里现在却是 LF——**换行这类字节面检查要跑在冻结快照上，只在候选里跑等于白跑**；
+- 发布结果以本次行动报告为准。
+

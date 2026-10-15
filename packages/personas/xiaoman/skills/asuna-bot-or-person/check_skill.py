@@ -228,6 +228,23 @@ def listed_hits(entries, text):
     return hits
 
 
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
+
+
 def pick_probe_dir():
     """编译产物的落点：不能是技能目录本身。先试系统临时目录（本机跑没问题），
     宿主沙箱只放行候选目录里的写，就退到候选根目录，再退到 skills/ 那一层。"""
@@ -305,7 +322,13 @@ def main():
           "出现像账号的长数字串：" + ",".join(LONG_DIGITS.findall(body)[:3]))
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 800, "body_chars=%d" % len(body))
-    check("line_endings_are_lf", "\r" not in text, "有 CR：仓库守卫 test_line_endings 会红")
+    # 换行：必须读字节。原来这条是 `check(..., "\r" not in text, ...)`，而 text 用文本模式读
+    # （universal newlines），CR 早被吃掉——真 CRLF 样本（CR=59）照样绿。2026-10-15 实测。
+    # 覆盖发出去的每一份文本：SKILL.md 加同目录全部 .py。要看的是冻结快照，不是候选。
+    cr_files = cr_bytes([path] + [os.path.join(HERE, name)
+                         for name in sorted(os.listdir(HERE)) if name.endswith(".py")])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR：仓库守卫 test_line_endings 会红；" + "、".join(cr_files))
 
     listed_path, entries = private_list()
     notes = []

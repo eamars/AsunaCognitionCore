@@ -2,12 +2,14 @@
 """asuna-running-version 的零依赖离线自检。
 
 这份技能是「现在跑的是哪版」的判据集，所以这里查四件事：
-1. 文件本身：frontmatter 能解析、name 与目录名一致、章节齐全、脚本能编译；
+1. 文件本身：frontmatter 能解析、name 与目录名一致、章节齐全、脚本能编译、
+   换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 判据齐全：八条判据（先看 loaded、缺 loaded ≠ 没装、比内容不比包 sha、主仓合了 ≠ 在跑、
    activation.json、diverged 的读法、脏工作区跳过快进、看工具表）加两条顺手（git 只读命令、
    import 到的是检出那份）的字面要点都在；
-3. 引用的代码位置不烂：正文反引号里形如 `src/asuna/restarts.py:254`、`tools/asuna-launch.mjs:91-106`
-   的锚点逐个查——文件在不在、有没有那么多行。技能里的行号是最容易过期的东西，守卫立在这儿；
+3. 引用的代码位置不烂：正文反引号里形如 `src/asuna/restarts.py:SHOWN_HOURS`、`tools/asuna-launch.mjs:fastForwardCheckout`
+   的锚点逐个查——文件在、且那个名字在文件里找得到（字节级读）。行号每次有人改那个文件就漂，
+   名字不会，所以正文里再出现行号锚点（`文件:19`、`:244-245`）也直接判红；
 4. 不带别人的个人信息：私密名单（真人名／群名／站点／主机）命中只报类别和名单第几行，
    不打印词本身；另查字面编号（#数字）和占位符残留。
 
@@ -39,6 +41,7 @@ SECTIONS = [
     "## 八、新参数进没进，看这一回合的工具表",
     "## 九、顺手：git 事实怎么读",
     "## 十、怎么算查清楚了",
+    "## 十一、技能里引用代码只写「文件＋名字」，不写行号",
     "## 版本",
     "## 试用记录",
 ]
@@ -69,10 +72,14 @@ CRITERIA = [
     ("criterion_import_is_checkout", "不是 worker 正在跑的那份"),
     ("criterion_git_read_commands", "rev-list --count"),
     ("criterion_git_write_denied", "index.lock"),
+    ("criterion_anchor_rule", "行号每次有人改那个文件就漂，名字不会"),
 ]
 
 # 代码锚点：反引号里的 path:line 或 path:line-line。仓库根找到才真查。
-CODE_ANCHOR = re.compile(r"^[\w./-]+\.(?:py|mjs|js|json|md|yml):(\d+)(?:-(\d+))?$")
+# 代码锚点：`文件:名字`。行号每次有人改那个文件就漂，名字不会——所以锚点只准写文件里真有的标识符。
+CODE_ANCHOR = re.compile(r"^([\w./-]+\.(?:py|mjs|js|json|md|yml)):([A-Za-z_][A-Za-z0-9_.]*)$")
+# 行号锚点（`文件:19`、`文件:91-106`、光一个 `:244-245`）：写法本身判红。
+LINE_ANCHOR = re.compile(r"^(?:[\w./-]+\.(?:py|mjs|js|json|md|yml)|):\d+(?:-\d+)?$")
 
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
 LITERAL_ID = re.compile(r"#\d")
@@ -92,6 +99,23 @@ def probe_dir():
         except OSError:
             continue
     return None
+
+
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
 
 
 def find_repo_root():
@@ -148,13 +172,19 @@ def listed_hits(entries, text):
 
 
 def anchors(body):
-    """正文反引号里的代码锚点：[(相对路径, 最大行号)]。"""
+    """正文反引号里的代码锚点：[(token, 相对路径, 名字)]。名字必须是文件里真有的标识符。"""
     found = []
     for span in re.findall(r"`([^`\n]+)`", body):
         match = CODE_ANCHOR.match(span.strip())
         if match:
-            found.append((span.strip(), int(match.group(1)), int(match.group(2) or match.group(1))))
+            found.append((span.strip(), match.group(1), match.group(2)))
     return sorted(set(found))
+
+
+def line_anchors(body):
+    """正文反引号里还带着行号的锚点（`文件:19`、`文件:91-106`、光一个 `:244-245`）：写法本身就该判红。"""
+    return sorted({span.strip() for span in re.findall(r"`([^`\n]+)`", body)
+                   if LINE_ANCHOR.match(span.strip())})
 
 
 def read_frontmatter(text):
@@ -202,22 +232,25 @@ def main():
     for name, token in CRITERIA:
         check(name, token in body, token)
 
-    # 代码锚点：文件在不在、有没有那么多行
+    # 代码锚点：文件在、且那个名字在文件里找得到（字节级读）；行号锚点直接判红
     root = find_repo_root()
     anchor_note = ""
     if root:
         broken, checked = [], 0
-        for token, first, last in anchors(body):
+        for token, rel, name in anchors(body):
             checked += 1
-            target = os.path.join(root, *token.split(":")[0].split("/"))
+            target = os.path.join(root, *rel.split("/"))
             if not os.path.isfile(target):
                 broken.append("%s（文件不在）" % token)
                 continue
-            with open(target, encoding="utf-8", errors="replace") as handle:
-                lines = sum(1 for _ in handle)
-            if last > lines:
-                broken.append("%s（只有 %d 行）" % (token, lines))
-        check("code_anchors_exist", not broken, "、".join(broken))
+            with open(target, "rb") as handle:          # 字节级读：查名字不看换行，也不怕编码
+                raw = handle.read()
+            if name.encode() not in raw:
+                broken.append("%s（%s 里找不到这个名字）" % (token, rel))
+        stale = line_anchors(body)
+        if stale:
+            broken.append("还写着行号锚点（行号会漂，改成文件＋名字）：" + "、".join(stale))
+        check("code_anchors_named", not broken, "、".join(broken))
         anchor_note = "，代码锚点核过 %d 条" % checked
     else:
         notes.append("NOTE 没找到仓库根（src/asuna 与 pyproject.toml 同层），代码锚点检查跳过——"
@@ -241,6 +274,12 @@ def main():
 
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
+
+    # 换行：字节级数 CR（文本模式那把尺是瞎的，见 cr_bytes）。覆盖发出去的每一份文本：
+    # SKILL.md 加同目录全部 .py。跑的时候要看的是冻结快照，不是候选——候选可能被别人抹平成 LF。
+    cr_files = cr_bytes([path] + [os.path.join(HERE, name) for name in scripts])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
     # 编译临时产物落技能目录旁，用完即删：宿主沙箱只放行候选目录里的写（撞过）。
     tmp = probe_dir()
     check("compile_probe_writable", tmp is not None,

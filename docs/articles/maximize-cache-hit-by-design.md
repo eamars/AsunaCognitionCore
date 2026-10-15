@@ -1,5 +1,9 @@
 # Maximize Cache Hit By Design
 
+> **Slug:** `maximize-cache-hit-by-design` — this file's own name, written here so it is greppable.
+> **Status:** a living description of how the system is built today. Decisions and open questions live in the ADRs cited in §13, not here.
+> **Added:** 2026-10-15, written by Claude at the owner's direction from the owner's design intent, with field evidence from the character's own runs (see ADR-038, ADR-049, ADR-056).
+
 This article is for engineers and coding agents who extend Asuna: the character "cognition core" that runs as a
 plugin on the DSH agent runtime, with a character brain (who speaks) and an action brain (who does the work). It
 explains why the system is shaped around the model provider's prefix cache, how each mechanism works in the code, and

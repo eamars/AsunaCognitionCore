@@ -1494,7 +1494,7 @@ class RoleTools:
         mine_only = outbound_media.own_only(self.store.config, scene, cls)
         return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
             [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
-            produced_only=mine_only)
+            produced_only=mine_only, here=(scene or {}).get('scope_key'))
 
     def tool_task_answer(self, ep, call_id, args):
         answer = self._text(args, 'answer', 20000)
@@ -1593,7 +1593,7 @@ class RoleTools:
         mine_only = outbound_media.own_only(self.store.config, scene, cls)
         meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
             [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
-            produced_only=mine_only)
+            produced_only=mine_only, here=(scene or {}).get('scope_key'))
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
         return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
 

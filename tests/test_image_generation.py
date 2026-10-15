@@ -13,8 +13,8 @@ T2I = {'id': 'demo-t2i', 'ready': True, 'capabilities': {'input_modes': ['text-t
        'selection': {'best_for': ['still life'], 'not_for': ['portraits']},
        'parameter_schema': {'properties': {k: {} for k in ('prompt', 'negative_prompt', 'width', 'height', 'seed',
                                                             'steps', 'cfg', 'batch_size')}}}
-EDIT = {'id': 'demo-edit', 'ready': True, 'capabilities': {'input_modes': ['image-to-image']},
-        'parameter_schema': {'properties': {'prompt': {}, 'input_image': {}}}}
+EDIT = {'id': 'demo-edit', 'ready': True, 'capabilities': {'input_modes': ['image-edit']},
+        'parameter_schema': {'properties': {'prompt': {}, 'input_image': {}}, 'required': ['input_image']}}
 
 
 class FakeService:
@@ -23,11 +23,16 @@ class FakeService:
         self.states = list(states)
         self.workflows = {w['id']: w for w in workflows}
         self.calls = []
+        self.inputs = []                      # the service's uploaded inputs: {name, modified_time}
+        self.deleted = []
 
     def json(self, method, path, body=None):
         self.calls.append((method, path.split('?')[0], body))
+        if path == '/project/inputs':
+            return {'files': list(self.inputs)}
         if path == '/project/resolve':
-            return {'selected_workflow': 'demo-t2i', 'matches': [{'workflow_id': 'demo-t2i', 'ready': True}]}
+            name = 'demo-edit' if body.get('input_mode') == script.EDIT_MODE else 'demo-t2i'
+            return {'selected_workflow': name, 'matches': [{'workflow_id': name, 'ready': True}]}
         if path == '/project/workflows':
             return {'workflows': list(self.workflows.values())}
         if path.startswith('/project/workflows/'):
@@ -44,8 +49,15 @@ class FakeService:
             return {'state': state, 'outputs': outputs, 'queued_ms': 1, 'elapsed_ms': 2}
         raise AssertionError(path)
 
-    def request(self, method, path, body=None, *, limit=0):
+    def request(self, method, path, body=None, *, limit=0, content_type=None):
         self.calls.append((method, path.split('?')[0], body))
+        if path == '/upload/image':
+            name = body.split(b'filename="', 1)[1].split(b'"', 1)[0].decode()
+            self.inputs.append({'name': name, 'modified_time': 1e12})
+            return 200, {}, json.dumps({'name': name, 'subfolder': '', 'type': 'input'}).encode()
+        if method == 'DELETE':
+            self.deleted.append(path.rsplit('/', 1)[1])
+            return 200, {}, b'{"deleted": true}'
         return 200, {'content-type': 'image/png'}, PNG
 
 
@@ -74,10 +86,57 @@ def test_the_service_picks_the_workflow_and_the_picture_is_written(monkeypatch, 
     assert resolve['content_mode'] == 'sfw' and resolve['input_mode'] == 'text_to_image'
 
 
-def test_a_named_workflow_must_draw_from_text(monkeypatch, tmp_path):
+def test_a_named_workflow_must_fit_the_request(monkeypatch, tmp_path):
     with pytest.raises(script.Failure) as failure:
         run(FakeService(), request(workflow='demo-edit'), monkeypatch, tmp_path)
+    assert failure.value.report['error'] == 'IMAGE_WORKFLOW_NEEDS_SOURCE' and 'source_image' in failure.value.report['note']
+    with pytest.raises(script.Failure) as failure:
+        run(FakeService(), {**request(workflow='demo-t2i'), 'source': SOURCE}, monkeypatch, tmp_path)
+    assert failure.value.report['error'] == 'IMAGE_WORKFLOW_TAKES_NO_SOURCE'
+    other = {**T2I, 'id': 'demo-vary', 'capabilities': {'input_modes': ['image-to-image']}}
+    with pytest.raises(script.Failure) as failure:
+        run(FakeService(workflows=(T2I, other)), request(workflow='demo-vary'), monkeypatch, tmp_path)
     assert failure.value.report['error'] == 'IMAGE_WORKFLOW_NOT_TEXT_TO_IMAGE'
+
+
+SOURCE = {'file': 'source.png', 'name': 'asuna-edit-0123456789ab-a1b2c3.png'}
+
+
+def edit(monkeypatch, tmp_path, service, **extra):
+    monkeypatch.setattr(script, '__file__', str(tmp_path / 'integration_image.py'))
+    (tmp_path / 'source.png').write_bytes(PNG)
+    return run(service, {**request(**extra), 'source': SOURCE}, monkeypatch, tmp_path)
+
+
+def test_a_source_picture_is_uploaded_edited_by_an_edit_route_and_removed_again(monkeypatch, tmp_path):
+    service = FakeService()
+    report = edit(monkeypatch, tmp_path, service)
+    assert report['workflow'] == 'demo-edit' and report['bytes'] == len(PNG)
+    resolve = next(body for method, path, body in service.calls if path == '/project/resolve')
+    assert resolve == {'input_type': 'image', 'input_mode': 'image-edit'}
+    upload = next(body for method, path, body in service.calls if path == '/upload/image')
+    assert PNG in upload and b'asuna-edit-0123456789ab-a1b2c3.png' in upload
+    queued = next(body for method, path, body in service.calls if path == '/project/generate')
+    assert queued['parameters']['input_image'] == SOURCE['name']
+    assert service.deleted == [SOURCE['name']], 'the source does not stay on the service'
+
+
+def test_a_source_stays_while_its_job_is_queued_and_a_later_call_clears_it(monkeypatch, tmp_path):
+    slow = FakeService(states=('running',))
+    with pytest.raises(script.Failure) as failure:
+        edit(monkeypatch, tmp_path, slow, timeout=30)
+    assert failure.value.report['error'] == 'IMAGE_JOB_STILL_RUNNING' and slow.deleted == []
+    later = FakeService(states=('succeeded',))
+    later.inputs = [{'name': SOURCE['name'], 'modified_time': 0}, {'name': 'someone-elses.png', 'modified_time': 0}]
+    run(later, gen.validate({'job': 'job-0001-abcd'})[0], monkeypatch, tmp_path)
+    assert later.deleted == [SOURCE['name']], "only this client's old uploads are cleared"
+
+
+def test_a_failed_edit_removes_its_source_too(monkeypatch, tmp_path):
+    failed = FakeService(states=('failed',))
+    with pytest.raises(script.Failure) as failure:
+        edit(monkeypatch, tmp_path, failed)
+    assert failure.value.report['error'] == 'IMAGE_JOB_FAILED' and failed.deleted == [SOURCE['name']]
 
 
 def test_an_option_the_workflow_does_not_declare_is_refused_before_queueing(monkeypatch, tmp_path):
@@ -118,10 +177,11 @@ def test_what_the_namespace_may_be_asked_is_decided_on_the_host(args, error):
 
 class FakeRunner:
     def __init__(self, result):
-        self.result, self.requests = result, []
+        self.result, self.requests, self.sources = result, [], []
 
-    def generate_image(self, value):
+    def generate_image(self, value, source=None):
         self.requests.append(value)
+        self.sources.append(source)
         return self.result
 
 
@@ -208,7 +268,8 @@ def test_the_workflows_are_listed_with_their_guidance_and_nothing_is_drawn(monke
     value, error = gen.validate({'workflows': True})
     assert error is None and value['list']
     report = run(service, value, monkeypatch, tmp_path)
-    assert [w['workflow'] for w in report['workflows']] == ['demo-t2i'], 'only ready text-to-image ones'
+    assert [(w['workflow'], w.get('source_image')) for w in report['workflows']] == [
+        ('demo-t2i', None), ('demo-edit', 'required')], 'ready ones, an edit route marked'
     listed = report['workflows'][0]
     assert listed['style'] == 'natural-language English' and listed['best_for'] == ['still life']
     assert listed['example'] == 'a lamp on a windowsill'
@@ -230,3 +291,33 @@ def test_the_host_returns_the_listing_and_says_how_to_use_it(tmp_path):
 def test_the_result_says_to_look_before_reporting(tmp_path):
     value = gen.generate({'prompt': 'x'}, runner=FakeRunner(GOOD), workspace=tmp_path)
     assert 'read_image' in value['note'] and 'read_image' in gen.GENERATE_IMAGE_TOOL['description']
+
+
+def test_a_source_is_read_with_the_tasks_own_fence_and_its_edit_registered_where_it_may_go(tmp_path):
+    asked, kept = [], []
+    def source(ref):
+        asked.append(ref)
+        return {'data': PNG, 'register': lambda data, meta: kept.append(meta) or {'registered': True}}
+    runner = FakeRunner(GOOD)
+    value = gen.generate({'prompt': 'make the sky orange', 'source_image': 'att-abc'}, runner=runner,
+                         workspace=tmp_path, source=source, register=lambda data, meta: 1 / 0)
+    assert value['generated'] and asked == ['att-abc'] and runner.sources == [PNG] and kept
+    sent = runner.requests[0]['source']
+    assert sent['file'] == 'source.png' and sent['name'].startswith(script.SOURCE_PREFIX) and sent['name'].endswith('.png')
+
+
+def test_a_source_the_task_may_not_see_is_refused_in_its_own_words(tmp_path):
+    def source(ref):
+        raise PermissionError('IMAGE_ATTACHMENT_NOT_IN_SCENE: att-x 不在这个对话最近 7 天的图里')
+    runner = FakeRunner(GOOD)
+    value = gen.generate({'prompt': 'x', 'source_image': 'att-x'}, runner=runner, workspace=tmp_path, source=source)
+    assert value['error'] == 'SOURCE_IMAGE_NOT_READABLE' and 'NOT_IN_SCENE' in value['detail'] and not runner.requests
+    value = gen.generate({'prompt': 'x', 'source_image': 'att-x'}, runner=runner, workspace=tmp_path)
+    assert value['error'] == 'SOURCE_IMAGE_UNAVAILABLE' and not runner.requests
+
+
+def test_a_service_warning_keeps_its_code_and_the_sizes_it_used():
+    said = script.warning({'code': 'input_downscaled', 'parameter': 'input_image', 'original_size': [2232, 4000],
+                           'used_size': [1120, 2048], 'message': 'input image downscaled to fit the route'})
+    assert said == 'input_downscaled: input image downscaled to fit the route (2232x4000 → 1120x2048)'
+    assert script.warning('plain words') == 'plain words'

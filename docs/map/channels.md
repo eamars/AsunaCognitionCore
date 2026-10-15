@@ -182,8 +182,10 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `task_attachment_context` — 行动任务输入里的附件段：让她知道有什么可拉、ref 是什么、没拉过就是没看过。
 - def `line_refs` — The refs of a platform line's readable pictures, as a short note under the line in her conversation: the placeholder says a picture was there, the ref is what read_image takes.
 - def `media_note` — 给角色现场的附件元数据：不把图片字节放进上下文。
+- def `picture_to_edit` — A picture to edit (generate_image's source_image): read with read_image's own fence, so a turn edits only a picture it may look at, and said with where an edit of it may go.
 - class `VisionService` — broker 侧入口：每次调用绑到调用任务自己的场景与纪元，字节复用既有 GridFS BlobStore。
   - `read_image`
+  - `picture_to_edit`
 - def `route_filtered_tool_names` — 任务能力清单按行动路由的真实能力裁剪：路由不收图时 read_image 不进清单。
 - def `inline_summary` — 写进 artifacts 回执的有界副本：字节已在 GridFS，回执里不留 base64（普通 BSON 行 1 MiB 上限）。
 
@@ -215,6 +217,9 @@ Current signatures for a platform's media links (ADR-035).
 - def `route_target` — 这个场景的路由目标类型（dm / group），没有渠道路由就是 None。
 - def `group_scene` — 一个真正的群：场景是群，路由目标也是群（配置把私聊路由成群的不算）。
 - def `produced` — 她自己做出来的图：从她自己的生成端点导入时登记的（import_register）。
+- def `returns_to` — Where an edit of someone else's picture may go (owner 2026-10-15): back to the conversation the picture came from, the scope key its source id names (edit_register).
+- def `edit_register` — generate_image's registration for an edit of someone else's picture: kept in this task's scope (so the task reads it back), marked to go back to the conversation the picture came from, and not counted as hers.
+- def `edits_back_to` — Edits of other people's pictures that go back to this conversation, newest first (as produced_images).
 - def `target_allowed` — 收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的 私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。
 - def `own_only` — Only pictures she made go here: a group, or anyone's chat that is not the owner's.
 - def `row_own_only` — own_only for a stored outbound row, recomputed from the row's own scene and route.

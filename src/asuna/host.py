@@ -95,8 +95,9 @@ def prepare_channels(store, *, dry_run=False):
                     identities_by_id[person] = created
                 elif (identity['platform'], identity['account_id']) != (channel_id, sender):
                     raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
-                # A line's own name for whoever speaks there (an agent line names the agent, ADR-033 D3).
-                display = route.get('display_name')
+                # A line's own name for whoever speaks there (an agent line names the agent, ADR-033 D3). Only a
+                # one-person line names its speaker: a group's name is the group's, and an id is no name.
+                display = route.get('display_name') if kind == 'dm' and route.get('display_name') != route['target']['id'] else None
                 if display is not None and (not isinstance(display, str) or not 1 <= len(display) <= 40):
                     raise ValueError('CHANNEL_DISPLAY_NAME_INVALID')
                 if display and identities_by_id[person].get('display_name') != display:

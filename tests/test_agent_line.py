@@ -74,6 +74,23 @@ def test_setup_names_the_agent_and_writes_one_key_per_line(store, tmp_path, monk
     assert not (tmp_path / 'private' / 'route-keys' / 'agent-other.json').exists()
 
 
+def test_a_group_route_name_never_renames_its_members(store, tmp_path, monkeypatch):
+    # Regression: setup gave every member of a group route the route's name (the group's number, from automatic
+    # admission), rewriting each member once per group at every start; her turns then showed 647 people as
+    # "[<group number> #n]".
+    with_lines(store, tmp_path)
+    store.config['channels']['qq'] = {'account_id': '10001', 'token': 'q' * 32, 'routes': {
+        'g': {'scene_id': 'qq:10001:group:30003', 'target': {'type': 'group', 'id': '30003'}, 'display_name': '30003',
+              'members': {'20002': {'person_id': 'qq:20002', 'workspace': str(tmp_path / 'channels' / 'qq-g')}}},
+        'dm': {'scene_id': 'qq:10001:dm:20004', 'target': {'type': 'dm', 'id': '20004'}, 'sender_id': '20004',
+               'display_name': '20004', 'person_id': 'qq:20004', 'workspace': str(tmp_path / 'channels' / 'qq-dm')}}}
+    monkeypatch.setattr(host, 'DATA', tmp_path)
+    host.prepare_channels(store)
+    assert 'display_name' not in store.db.identities.find_one({'_id': 'qq:20002'}), "a group's name is the group's"
+    assert 'display_name' not in store.db.identities.find_one({'_id': 'qq:20004'}), 'an id is no name'
+    assert store.db.identities.find_one({'_id': 'agent:claude-code'})['display_name'] == 'Claude-Code（开发助手）'
+
+
 @pytest.fixture
 def served(store, tmp_path):
     """The real channel server, with her turns run by the coordinator as a line arrives."""

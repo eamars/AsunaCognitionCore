@@ -112,7 +112,7 @@ class CognitionView:
 
     def supplements(self, kind):
         """The platform identity saved with this person's latest message, when there is one."""
-        peer = self.peer() if kind in ('all', 'relation') else None
+        peer = self.peer() if kind == 'relation' else None
         if peer:
             peer['scene_id'] = self.binding['scene_id']
         return [peer] if peer else []

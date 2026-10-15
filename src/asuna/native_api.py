@@ -18,6 +18,9 @@ from .native_cognition import CognitionView
 from .peer_context import speaker_name
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
+# Her documents a reader knows by name (the rest are shown by the name she gave them).
+NAMED_DOCUMENTS = {'persona': 'persona', 'voice': 'voice', 'self': 'self', 'core': 'core', 'ledger': 'ledger',
+                   'work_log': 'journal'}
 
 
 def label(key, **params):
@@ -204,7 +207,7 @@ class NativeMemory:
 
     def head_rows(self, kind, search=''):
         replaced = {f'{name}:{self.persona}|global-safe' for name in self.self_documents()}
-        keys = [key for key, (category, _) in self.heads.items() if kind in ('all', category) and key not in replaced]
+        keys = [key for key, (category, _) in self.heads.items() if kind == category and key not in replaced]
         heads = list(self.store.db.state_heads.find({'_id': {'$in': keys}}))
         revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
             {'_id': {'$in': [head['revision_id'] for head in heads]}},
@@ -236,28 +239,44 @@ class NativeMemory:
         return rows
 
     def document_rows(self):
-        """Operator view of the persona's documents: every section, each with its visibility label."""
+        """Operator view of the persona's documents, each by its name, with how many of its sections are in each
+        place (every turn, when relevant, put away)."""
+        from . import memory_tiers
         from .documents import DocumentStore
+        from .group_admin import notes_slug
         from .render import render_status
         docs = DocumentStore(self.store, self.persona)
         if any(pair and pair[1] is None for pair in map(docs.head, docs.slugs())):
             raise Denied('MEMORY_REVISION_UNAVAILABLE')      # a broken head is never shown as an empty document
         status = render_status(self.store, self.persona) if docs.head('persona') else None
+        groups = {notes_slug(row['_id']): row['_id'] for row in self.store.db.scenes.find({'kind': 'group'}, {'_id': 1})}
         rows = []
         for slug in docs.slugs():
             head, stored = docs.head(slug)
-            revision, content = head['revision_id'], stored['content']
+            revision = head['revision_id']
+            content = memory_tiers.placed(self.store, self.persona, slug, stored['content'])
             counts = {}
-            for section in content['sections']:
-                counts[section['visibility']] = counts.get(section['visibility'], 0) + 1
+            for inject in ('always', 'on_demand', 'never'):
+                n = sum(1 for section in content['sections'] if section.get('inject') == inject)
+                if n:
+                    counts[inject] = n
             red = status and status['over_budget'] and slug in ('persona', 'voice')
-            rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': document_title(content, slug),
-                         'excerpt': [part for index, (visibility, count) in enumerate(counts.items())
-                                     for part in ([' · '] if index else []) + [label('doc.sections', label=label('visibility.' + visibility), n=count)]]
+            rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': self.document_name(slug, groups),
+                         'excerpt': [part for index, (inject, count) in enumerate(counts.items())
+                                     for part in ([' · '] if index else []) + [label('doc.sections', label=label('inject.' + inject), n=count)]]
                                     + ([' · ', label('doc.overBudget')] if red else []),
                          'scope_key': 'doc:' + slug, 'revision': revision,
                          'updated_at': stored.get('created_at')})
-        return rows
+        return rows + self.job_rows()
+
+    def document_name(self, slug, groups):
+        """A document as a reader knows it: her persona, voice, self, core, ledger, work log, a group's notes by the
+        group's name, or her own name for it."""
+        if slug in NAMED_DOCUMENTS:
+            return label('doc.' + NAMED_DOCUMENTS[slug])
+        if slug in groups:
+            return label('doc.groupNotes', name=self.scene_title(groups[slug]))
+        return label('title.documentNamed', kind=label('doc.other'), name=slug)
 
     def affect_ledger(self):
         from .affect import AffectLedger
@@ -311,26 +330,25 @@ class NativeMemory:
         return rows
 
     def page(self, kind='summary', offset=0, search=''):
-        if kind not in ('all', 'documents', 'affect', 'jobs', 'ideas', 'self', 'relation', 'interpretation', 'summary', 'source'):
+        if kind not in ('documents', 'affect', 'ideas', 'self', 'relation', 'interpretation', 'summary', 'source'):
             raise ValueError('INVALID_MEMORY_CATEGORY')
         if type(offset) is not int or not 0 <= offset <= 10000:
             raise ValueError('INVALID_MEMORY_PAGE')
         if not isinstance(search, str) or len(search) > 160:
             raise ValueError('INVALID_MEMORY_SEARCH')
         search = search.strip()
-        # ADR-009 operator rows (documents, affect, job reports) come first; search applies to their titles.
-        extra = (self.document_rows() if kind in ('all', 'documents') else []) + (
-            self.affect_rows() if kind in ('all', 'affect') else []) + (
-            self.job_rows() if kind in ('all', 'jobs') else []) + (
-            self.idea_rows() if kind in ('all', 'ideas') else [])
+        # ADR-009 operator rows (documents and job reports, feelings, ideas) come first; search applies to their titles.
+        extra = (self.document_rows() if kind == 'documents' else []) + (
+            self.affect_rows() if kind == 'affect' else []) + (
+            self.idea_rows() if kind == 'ideas' else [])
         heads = [row for row in extra if not search or search.casefold() in searchable(row).casefold()]
-        heads += self.head_rows(kind, search) if kind in ('all', 'self', 'relation') else []
-        heads += self.self_item_rows(search) if kind in ('all', 'self') else []
+        heads += self.head_rows(kind, search) if kind in ('self', 'relation') else []
+        heads += self.self_item_rows(search) if kind == 'self' else []
         heads += [row for row in self.cognition.supplements(kind) if not search or
                   search.casefold() in row['body'].casefold()]
         rows = list(heads)
         skipped = 0
-        if kind in ('all', 'summary', 'source', 'interpretation'):
+        if kind in ('summary', 'source', 'interpretation'):
             messages = kind == 'source'
             query = self.message_query if messages else dict(self.unit_query)
             if kind == 'summary':
@@ -470,7 +488,7 @@ class NativeMemory:
                 result = {'id': identifier, 'body': label('hint.' + self.heads[key][0]),
                           'category': self.heads[key][0], 'status': 'empty', 'source_ids': []}
         elif kind == 'cognition':
-            row = next((item for item in self.cognition.supplements('all') if item['id'] == identifier), None)
+            row = next((item for item in self.cognition.supplements('relation') if item['id'] == identifier), None)
             if row:
                 result = dict(row)
         elif kind == 'unit':

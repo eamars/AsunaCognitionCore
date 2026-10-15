@@ -29,7 +29,8 @@ Bounded, read-only projections for native DSH's Asuna memory tab.
   - `self_documents` — Her self as her turns read it (ADR-062): {old head name: (document, its sections placed)} for each of `self` and `core` she has written; an empty one leaves its old head in the list.
   - `self_item_rows` — One row per item of her self, with the place it is in (carried every turn, at hand, put away).
   - `head_rows`
-  - `document_rows` — Operator view of the persona's documents: every section, each with its visibility label.
+  - `document_rows` — Operator view of the persona's documents, each by its name, with how many of its sections are in each place (every turn, when relevant, put away).
+  - `document_name` — A document as a reader knows it: her persona, voice, self, core, ledger, work log, a group's notes by the group's name, or her own name for it.
   - `affect_ledger`
   - `affect_rows` — Owner view: her mood now, then the most recent things that moved her, each from its conversation.
   - `owner_view`

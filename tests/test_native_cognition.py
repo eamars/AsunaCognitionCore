@@ -152,3 +152,17 @@ def test_the_tab_shows_her_memory_as_her_turns_read_it(view):
             'policy_epoch': 1, 'status': 'active', 'kind': 'monologue', 'formed_at': formed,
             'epistemic_type': 'character_interpretation', 'body_markdown': unit})
     assert NativeMemory(worker, 'role').detail('unit:older')['generated_at'] == '2026-10-01T00:00:00+00:00'
+
+
+def test_documents_are_named_and_counted_by_place(view):
+    # Owner 2026-10-16: a reader tells her documents apart by name and sees how much of each she carries.
+    store, worker, _ = view
+    from asuna.documents import DocumentStore
+    DocumentStore(store, 'p').seed('self', 'self', '## 一\n甲\n\n## 二\n乙', path='self.md')
+    rows = {row['id']: row for row in NativeMemory(worker, 'role').page('documents')['rows']}
+    assert rows['doc:persona']['title'] == {'key': 'memory.doc.persona', 'params': {}}
+    assert rows['doc:self']['title'] == {'key': 'memory.doc.self', 'params': {}}
+    places = [part['params']['label']['key'] for part in rows['doc:self']['excerpt'] if isinstance(part, dict)]
+    assert places and all(key.startswith('memory.inject.') for key in places)
+    with pytest.raises(ValueError, match='INVALID_MEMORY_CATEGORY'):
+        NativeMemory(worker, 'role').page('all')

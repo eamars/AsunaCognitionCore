@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { Context } from '@deepseek-ai/cordis';
 import LocalSpillStore from '@deepseek-ai/dsh-spill-local';
 import { PublicationFloor } from '../src/floor.js';
@@ -236,4 +237,28 @@ test('a text file she changed is published with LF line endings; a binary one ke
   assert.equal(await fs.readFile(path.join(result.packageRoot, 'skills/probe/SKILL.md'), 'utf8'), 'line one\nline two\n');
   // Nothing more to publish: the candidate holds what was published.
   assert.equal((await floor.call('development_publish', { reason: 'again' })).state, 'NO_CHANGES');
+});
+
+test('her publication is committed where it lands, under her name, and only its own paths', async t => {
+  // A git repository of its own: the floor's probes under .runtime/ are ignored by the checkout and never committed.
+  const workspace = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'asuna-commit-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const repo = path.join(workspace, 'repo'), source = path.join(repo, 'packages/persona');
+  await fs.mkdir(source, { recursive: true });
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=Owner', '-c', 'user.email=owner@example.com', ...args], { cwd: repo, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['skills'], type: 'module' }));
+  await fs.writeFile(path.join(repo, 'other.txt'), 'before');
+  git('add', '-A'); git('commit', '-q', '-m', 'start');
+  const floor = new PublicationFloor({ dataRoot: path.join(workspace, 'data'), defaultProject: 'persona',
+    projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await fs.writeFile(path.join(repo, 'other.txt'), 'staged by someone else'); git('add', 'other.txt');
+  await floor.call('development_write', { path: 'skills/probe/SKILL.md', text: 'mine\n' });
+  const result = await floor.call('development_publish', { reason: '加一份技能' }, {}, { name: 'Character', email: 'character@example.com' });
+  assert.equal(result.state, 'APPLIED', JSON.stringify(result));
+  assert.ok(result.commit, JSON.stringify(result));
+  assert.equal(git('log', '-1', '--format=%an <%ae>|%s').trim(),'Character <character@example.com>|加一份技能');
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'packages/persona/skills/probe/SKILL.md');
+  assert.equal(git('diff', '--cached', '--name-only').trim(), 'other.txt');        // someone else's staged work, untouched
+  assert.equal(git('status', '--porcelain', '--', 'packages').trim(), '');
 });

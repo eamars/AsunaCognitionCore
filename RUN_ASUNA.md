@@ -91,7 +91,7 @@ Deploy `deploy/docker/` as a stack (see [its README](deploy/docker/README.md)): 
 
 1. The launcher packs the packages recorded in `launch.json` and compares their digests with the installed ones.
 2. Only when one differs does it run the installer again, with the same arguments. Packing is deterministic, so an unchanged checkout costs a few seconds and installs nothing.
-3. Whatever is on disk is installed: uncommitted edits and her published changes alike.
+3. Whatever is on disk is installed, uncommitted edits included. Her publications are on disk and already committed.
 4. The installer records the previous running package, so a start that never comes up returns to it (two tries).
 
 `--no-sync` starts what is installed without looking at the checkout. A profile with no `setup` in `launch.json` (installed before the launcher synced) needs the installer once by hand.

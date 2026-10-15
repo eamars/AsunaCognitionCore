@@ -277,7 +277,7 @@ export class PublicationFloor {
   }
 
   /** One development_* tool call on a project's candidate copy. */
-  async call(tool, args = {}, origin = {}) {
+  async call(tool, args = {}, origin = {}, author = undefined) {
     const execute = async () => {
       const project = await this.ensure(args.project);
       const safePath = async (relative, writing = false) => {
@@ -384,7 +384,7 @@ export class PublicationFloor {
         return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only', ...(result.timed_out ? { stopped:
           `命令跑满 ${seconds} 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 600 秒），或把活拆小` } : {}) };
       }
-      if (tool === 'development_publish') return this.publish(project, args.reason ?? '', origin);
+      if (tool === 'development_publish') return this.publish(project, args.reason ?? '', origin, author);
       throw new Error(`UNKNOWN_DEVELOPMENT_TOOL: 发布底座不认识 ${given(tool)}——程序两边对不上，不是参数的问题；`
         + '重试也一样：不用它能做的先做，没做成的写进报告');
     };
@@ -392,7 +392,7 @@ export class PublicationFloor {
   }
 
   /** Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED. */
-  async publish(project, reason, origin = {}) {
+  async publish(project, reason, origin = {}, author = undefined) {
     // An unattended self-improvement turn never stacks a change on one that has not run yet (ADR-021 D4).
     if (origin.unattended && (await this.selected()).projects?.[project.id]?.state === 'HOST_RESTART_REQUIRED')
       throw new Error(`DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 ${project.id} 上一次发布的改动还在等宿主重启，`
@@ -458,7 +458,30 @@ export class PublicationFloor {
     for (const name of changed) { const target = path.join(project.source, name);
       await fs.mkdir(path.dirname(target), { recursive: true }); await fs.copyFile(current.get(name), target); }
     await atomic(project.baselineFile, hashes);
-    return { ...value, activated: false };
+    return { ...value, activated: false, ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
+  }
+
+  /** Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name),
+   * so the checkout holds no change of hers waiting for someone to commit it. Only the published paths are committed
+   * (others' staged work stays as it was); a source git does not track is left alone. A commit that fails is reported
+   * in the receipt and never fails the publication, which is already selected. */
+  async commitPublished(project, names, reason, identity, author) {
+    try {
+      const top = await run('git', ['rev-parse', '--show-toplevel'], { cwd: project.source });
+      if (top.exit_code !== 0) return {};
+      const root = top.stdout.trim(), git = (args, env = {}) => run('git', args, { cwd: root, env: { ...process.env, ...env } });
+      const inside = path.relative(root, path.resolve(project.source)).split(path.sep).join('/');
+      if (inside && (await git(['check-ignore', '-q', '--', inside])).exit_code === 0) return {};
+      const paths = names.map(name => (inside ? inside + '/' : '') + name);
+      const who = author?.name && author?.email ? { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email,
+        GIT_COMMITTER_NAME: author.name, GIT_COMMITTER_EMAIL: author.email } : {};
+      const message = (reason.trim() || 'Self-development publication')
+        + `\n\nPublished from her candidate (${project.id} ${identity.slice(0, 12)}).`;
+      const added = await git(['add', '-A', '--', ...paths]);
+      const made = added.exit_code === 0 ? await git(['commit', '-q', '--only', '-m', message, '--', ...paths], who) : added;
+      if (made.exit_code !== 0) return { commit_error: (made.stderr || made.stdout).trim().slice(0, 300) };
+      return { commit: (await git(['rev-parse', '--short', 'HEAD'])).stdout.trim() };
+    } catch (error) { return { commit_error: String(error.message ?? error).slice(0, 300) }; }
   }
 
   /** Check and pack a frozen candidate: its package.json, exports and composition against the running ones, and a boot probe that imports it. */

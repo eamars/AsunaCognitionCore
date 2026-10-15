@@ -537,6 +537,7 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
         data = blobs.get(artifact_id, item['scope_key'], operator=True)   # 内部按行内 sha 复核
     except ValueError as exc:
         raise Denied('ATTACHMENT_HASH_MISMATCH') from exc
+    data = without_text(data)                  # what leaves carries no request text, whenever it was stored
     media_type = sniff_media_type(data)
     if media_type is None:
         raise Denied('ATTACHMENT_NOT_AN_IMAGE')
@@ -580,12 +581,14 @@ def serve(store, blobs, row, declared):
             raise Denied('ATTACHMENT_NOT_HER_OWN')
     elif item.get('scope_key') not in row_image_scopes(store, row) and not produced(item):
         raise Denied('ATTACHMENT_SCOPE_DENIED')
-    if str(item.get('sha256') or '').strip().lower() != declared['sha256']:
-        raise Denied('ATTACHMENT_SHA_MISMATCH')
     try:
-        data = blobs.get(declared['artifact_id'], item['scope_key'], operator=True)
+        data = blobs.get(declared['artifact_id'], item['scope_key'], operator=True)   # checks the stored sha itself
     except ValueError as exc:
         raise Denied('ATTACHMENT_HASH_MISMATCH') from exc
+    # The bytes that leave are the stored ones without their text (accept_artifact declared their sha).
+    data = without_text(data)
+    if sha256_of(data) != declared['sha256']:
+        raise Denied('ATTACHMENT_SHA_MISMATCH')
     if len(data) > MAX_ATTACHMENT_BYTES:
         raise Denied('ATTACHMENT_OVER_LIMIT')
     media_type = sniff_media_type(data)
@@ -594,6 +597,27 @@ def serve(store, blobs, row, declared):
     if media_type != declared['media_type']:
         raise Denied('ATTACHMENT_MEDIA_TYPE_MISMATCH')
     return data, media_type
+
+
+PNG_TEXT_CHUNKS = (b'tEXt', b'iTXt', b'zTXt')
+
+
+def without_text(data):
+    """A PNG without its text chunks: a generator writes its whole request there (the prompt, its settings), which
+    must not leave with the picture. Pixels and every other chunk are kept byte for byte; anything that does not
+    parse as a PNG is returned as it is."""
+    if not data.startswith(b'\x89PNG\r\n\x1a\n'):
+        return data
+    out, at = [data[:8]], 8
+    while at + 12 <= len(data):
+        length = int.from_bytes(data[at:at + 4], 'big')
+        end = at + 12 + length
+        if end > len(data):
+            return data
+        if data[at + 4:at + 8] not in PNG_TEXT_CHUNKS:
+            out.append(data[at:end])
+        at = end
+    return b''.join(out) if at == len(data) else data
 
 
 def register_imported_image(store, scope_key, data, *, source=None):
@@ -607,6 +631,7 @@ def register_imported_image(store, scope_key, data, *, source=None):
     media_type = sniff_media_type(data)
     if media_type is None:
         return None
+    data = without_text(bytes(data))        # what may leave carries no request text; the workspace file keeps it
     size = len(data)
     if not 0 < size <= MAX_ATTACHMENT_BYTES:
         return {'registered': False, 'reason': 'ATTACHMENT_OVER_LIMIT', 'media_type': media_type,

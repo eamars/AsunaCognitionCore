@@ -40,7 +40,7 @@ AREAS = {
     'channels': ('Channels and pictures', 'The channel API, platform kinds, stickers, seeing and sending pictures.', [
         'channels', 'channel_kinds', 'channel_admission', 'notices', 'caught_up', 'forwards', 'stickers', 'vision', 'media_keys', 'outbound_media', 'animated']),
     'work': ('Work and tools', 'The action brain\'s tasks, grants, schedules, sandbox, development and integrations.', [
-        'tasks', 'grants', 'schedule', 'schedule_rules', 'sandbox', 'sandbox_backend', 'development', 'credentials', 'dbread',
+        'tasks', 'machine_words', 'grants', 'schedule', 'schedule_rules', 'sandbox', 'sandbox_backend', 'development', 'credentials', 'dbread',
         'image_generation', 'svg_render', 'integration', 'integration_fetch', 'integration_image',
         'integration_import', 'developer_inbox']),
     'page': ('The Web page\'s data', 'What the Web page reads and changes through the worker.', [

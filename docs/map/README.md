@@ -303,6 +303,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 The action brain's tasks, grants, schedules, sandbox, development and integrations.
 
 - [`tasks`](../../src/asuna/tasks.py) — The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker` checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
+- [`machine_words`](../../src/asuna/machine_words.py) — What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050).
 - [`grants`](../../src/asuna/grants.py) — Host-owned resource grants, never inferred from a message or model role.
 - [`schedule`](../../src/asuna/schedule.py) — Business ownership for native DSH reminders; no host time wheel.
 - [`schedule_rules`](../../src/asuna/schedule_rules.py) — ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——纯换算，不碰网络也不碰 Mongo。

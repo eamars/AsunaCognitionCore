@@ -50,6 +50,15 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `pending_messages`
   - `delivered`
 
+## `machine_words`
+
+[src/asuna/machine_words.py](../../src/asuna/machine_words.py)
+
+What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050).
+
+- def `text`
+- def `clean` — The same value with every string in it rewritten (dicts and lists walked; keys kept).
+
 ## `grants`
 
 [src/asuna/grants.py](../../src/asuna/grants.py)

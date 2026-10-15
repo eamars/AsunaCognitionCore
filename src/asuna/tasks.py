@@ -155,7 +155,7 @@ def workspace_file(root, protected, op, args):
             raise PermissionError('PROTECTED_PATH: %s 是只读的原始资料，不能写；写到别的路径，例如 out/%s'
                                   % (target.relative_to(root).as_posix(), target.name))
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open('w' if args.get('overwrite', False) else 'x', encoding='utf-8') as handle:
+        with target.open('w' if args.get('overwrite', False) else 'x', encoding='utf-8', newline='') as handle:   # her text as given
             handle.write(args['text'])
         return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8'), 'written': True}
     except Exception as exc:

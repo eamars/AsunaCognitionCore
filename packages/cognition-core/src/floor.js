@@ -400,8 +400,16 @@ export class PublicationFloor {
         + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
     // Anything else in the candidate (logs, scratch folders, a tool's own install) is work, not the project.
     const current = new Map([...await files(project.candidate)].filter(([name]) => inProject(project, name))), hashes = {};
-    for (const [name, file] of current) hashes[name] = hash(await fs.readFile(file));
-    const changed = Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
+    for (const [name, file] of current) {
+      let bytes = await fs.readFile(file);
+      // The project keeps text with LF line endings (.gitattributes); a script run on Windows writes CRLF. A text file
+      // she changed (no NUL byte, as git tells text) is stored with LF before it is hashed, frozen and copied out.
+      if (hash(bytes) !== project.baseline[name] && !bytes.subarray(0, 8000).includes(0) && bytes.includes('\r\n')) {
+        bytes = Buffer.from(bytes.toString('latin1').replaceAll('\r\n', '\n'), 'latin1'); await fs.writeFile(file, bytes);
+      }
+      hashes[name] = hash(bytes);
+    }
+    const changed =Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
     const deleted = Object.keys(project.baseline).filter(name => !(name in hashes));
     if (!changed.length && !deleted.length) return { state: 'NO_CHANGES', project: project.id };
     for (const name of [...changed, ...deleted]) {

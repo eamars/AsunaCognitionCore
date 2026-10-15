@@ -226,6 +226,13 @@ def test_a_failed_file_operation_says_why_and_what_to_do(tmp_path):
     assert '相对路径' in workspace_file(tmp_path, [], 'read_file', {'path': '../outside.txt'})['error']
 
 
+def test_a_written_file_holds_the_text_as_given(tmp_path):
+    """No line-ending translation on any platform: LF stays LF."""
+    from asuna.tasks import workspace_file
+    assert workspace_file(tmp_path, [], 'write_file', {'path': 'notes.md', 'text': '一\n二\n'})['written']
+    assert (tmp_path / 'notes.md').read_bytes() == '一\n二\n'.encode('utf-8')
+
+
 def test_a_refused_tool_says_who_is_given_it_and_where_this_task_came_from(store):
     """ADR-053: one sentence from one table, for the broker and the plugin's guard alike."""
     from asuna.tasks import capability_refusal

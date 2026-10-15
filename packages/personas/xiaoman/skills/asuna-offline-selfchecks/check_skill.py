@@ -15,6 +15,9 @@
 
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
 
+编译临时目录先试技能目录旁、再退到当前工作目录（系统 Temp 在 development_run 的沙箱里建得出目录、
+py_compile 落 .pyc 会 PermissionError，2026-10-15 在候选里实跑撞过），用完即删。
+
 用法：
     python3 check_skill.py [SKILL.md 路径]        # 默认取脚本旁边的 SKILL.md
     python3 skills/asuna-offline-selfchecks/check_skill.py   # 候选根目录
@@ -23,8 +26,9 @@
 import os
 import py_compile
 import re
+import shutil
 import sys
-import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXPECTED_NAME = os.path.basename(HERE)
@@ -75,6 +79,20 @@ REPO_PATH = re.compile(r"(?<![\w/])(?:tests|tools|docs)/[^\s、，。；：（�
 # 反引号里的字面量是引用（命令原话、错误原文、旧记录里的实跑输出），只在散文里判红。
 PROSE = re.compile(r'`[^`]*`', re.S)
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
+
+
+def compile_tmp_dir():
+    """编译临时目录：先试技能目录旁（development_run 只放行候选目录里的写），
+    写不动退到当前工作目录（从 /task 那边跑、或跑装在 node_modules 里那份冻结版的情形）。
+    两处都不行返回 None。抄自 asuna-running-version 的 probe_dir()。"""
+    for base in (HERE, os.getcwd()):
+        candidate = os.path.join(base, "_compile-probe-%d" % int(time.time() * 1000))
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return None
 
 
 def find_repo_root():
@@ -183,25 +201,28 @@ def main():
     check("no_placeholder_markers", not PLACEHOLDER.search(prose))
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
 
-    # 同目录脚本：必须存在且只用标准库能编译（编译产物写到临时目录，不脏技能目录）
+    # 同目录脚本：必须存在且只用标准库能编译。编译产物落临时目录、用完即删：
+    # 系统 Temp 在 development_run 沙箱里建得出目录、写不进 .pyc（2026-10-15 撞过），
+    # 所以先试技能目录旁、再退当前目录。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
+    tmp = compile_tmp_dir()
+    if tmp is None:
+        notes.append("NOTE 技能目录旁和当前目录都写不动（沙箱限制），编译检查记失败——不是产品坏")
     try:
-        tmp = tempfile.mkdtemp(prefix="skillcheck-")
-    except OSError as exc:
-        tmp = None
-        notes.append("NOTE 临时目录不可写（%s），编译检查按沙箱限制记失败——不是产品坏"
-                     % type(exc).__name__)
-    for script in scripts:
-        if tmp is None:
-            check("compiles_" + script, False, "临时目录不可写（沙箱限制，不是坏）")
-            continue
-        target = os.path.join(tmp, script + "c")
-        try:
-            py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
-            check("compiles_" + script, True)
-        except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
-            check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+        for script in scripts:
+            if tmp is None:
+                check("compiles_" + script, False, "临时目录不可写（沙箱限制，不是坏）")
+                continue
+            target = os.path.join(tmp, script + "c")
+            try:
+                py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
+                check("compiles_" + script, True)
+            except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
+                check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     if stray:

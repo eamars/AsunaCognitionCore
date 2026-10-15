@@ -75,6 +75,8 @@ pytest 默认不收 `*_cases.py`，同结构的用例还有五套待修。「没
 `check_skill.py`：p3 守卫改指 `test_schedule_rules`，「反证基线跳过」守卫换成 pytest 盲区守卫，
 新增反引号仓库路径存在性检查（防这一族复发）。
 
+v2.2（2026-10-15）：`check_skill.py` 的编译临时目录改成「先试技能目录旁，写不动退到当前工作目录」，用完即删。原因：`development_run` 的沙箱只放行候选目录里的写，系统 Temp 里 `mkdtemp` 建得出目录、`py_compile` 落 `.pyc` 却 `PermissionError`——本技能自查在候选里因此长期红在 `compiles_check_skill.py` 一格（10-12 那条试用记录里「临时目录不可写是沙箱限制，不是坏」说的就是它）。改法抄自 `asuna-running-version` 的 `probe_dir()`。正文口径、增量、守卫判据未动。
+
 ## 试用记录
 
 2026-09-24，在可发布候选（Asuna 认知核）里实跑：
@@ -141,3 +143,10 @@ pytest 默认不收 `*_cases.py`，同结构的用例还有五套待修。「没
   全 113 份 `tests/test_*.py` 没有一处调 `run_all()`——p2、p5、讨论整理的 `test_*.py` 只 import cases 里的夹具函数；
 - `check_skill.py` 在 xiaoman 候选内实跑；`compiles_check_skill.py` 若报「临时目录不可写」是沙箱限制，不是坏，
   具体结果以本次行动报告为准。
+
+2026-10-15（v2.2，只改 `check_skill.py` 与版本／试用记录两节，xiaoman 候选）：
+
+- 改前在候选里实跑：`26/27 通过，失败：compiles_check_skill.py`，红点是 `PermissionError: [Errno 13] Permission denied: <系统 Temp>\skillcheck-…\check_skill.pyc.…`；
+- 改后同一处实跑：`27/27 通过`、exit 0；临时目录落技能目录旁，跑完技能目录里只剩 `SKILL.md` 与 `check_skill.py`（不留 `_compile-probe-*`）；
+- 退到当前目录那一档单独测过：把 HERE 指到只读的检出根（建目录 `PermissionError`），`compile_tmp_dir()` 落在 cwd，`.pyc` 写得进去；
+- 发布结果以本次行动报告为准。

@@ -810,8 +810,10 @@ class BusinessWorker:
         # A configured name; earlier automatic admissions stored the number itself here, which is no name.
         name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
         if not name:
+            # The newest message that carries the name: a notice (a join, a recall) carries none.
+            field = 'event.raw.group_name' if group else 'event.raw.asuna_peer.display'
             last = self.app.store.db.messages.find_one(
-                {'scene_id': route['scene_id'], 'direction': 'inbound', 'event.raw': {'$exists': True}},
+                {'scene_id': route['scene_id'], 'direction': 'inbound', field: {'$exists': True}},
                 {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')

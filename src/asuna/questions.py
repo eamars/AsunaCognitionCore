@@ -443,9 +443,11 @@ def block(store, persona, scene_id, moment=None, opening=None):
     return {'items': items, 'note': BLOCK_NOTE}
 
 
-def read(store, persona, qid, moment=None):
-    """One question with its answers' text (a task's report: its first page)."""
+def read(store, persona, qid, moment=None, outside=False):
+    """One question with its answers' text (a task's report: its first page; `outside` home, without the machine's
+    paths and tracebacks: machine_words)."""
     from .tasks import report_pages
+    from . import machine_words
     row = store.db.questions.find_one({'_id': qid, 'persona': persona})
     if not row:
         return None
@@ -458,8 +460,9 @@ def read(store, persona, qid, moment=None):
             if answer.get('task'):
                 task = store.db.tasks.find_one({'_id': answer['task']}, {'result.text': 1})
                 pages = report_pages(((task or {}).get('result') or {}).get('text') or '')
+                first = pages[0] if pages else ''
                 answers.append({'by': ACTION, 'at': answer.get('at'), 'task': answer['task'],
-                                'text': pages[0] if pages else '',
+                                'text': machine_words.text(first) if outside else first,
                                 **({'more': '共 %d 页：task 的 page 接着读' % len(pages)} if len(pages) > 1 else {})})
             elif answer.get('line'):
                 line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1})

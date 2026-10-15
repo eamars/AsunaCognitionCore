@@ -16,7 +16,7 @@ from contextlib import contextmanager,nullcontext
 import jsonschema
 from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
-from . import answers, handover, sandbox_backend, visibility
+from . import answers, handover, machine_words, sandbox_backend, visibility
 from .evidence import canonical,sha
 from .sandbox import Sandbox, run_seconds
 from .state import Store,Denied,Conflict,now
@@ -393,6 +393,10 @@ class TaskService:
                     self.store.put('tasks',{**latest,'feedback_state':'SUPPRESSED'},expected=latest['revision'],stream=latest['_id'])
             return None
         original=self.store.db.episodes.find_one({'_id':task['episode_id']})
+        # Outside home what she reads of the result holds nothing of the machine (ADR-050, machine_words); home and
+        # the stored result keep it as it is.
+        outside=visibility.session_class(self.store.config,self.store.db,scene,task['requester_id'])!=visibility.OWNER_PRIVATE
+        shown=machine_words.clean if outside else (lambda value:value)
         ep=None
         if not short and current.get('feedback_episode'):
             ep=self.store.db.episodes.find_one({'_id':current['feedback_episode']})
@@ -407,7 +411,7 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':bounded_result(task.get('result')) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             if original.get('native_session_id'):
                 event['native_session_id']=original['native_session_id']
@@ -416,12 +420,12 @@ class TaskService:
             # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 task 的 message 会被判成授权不一致。
             if task.get('integration_profile'): event['integration_profile'] = task['integration_profile']
             if short:
-                event.update(self._short_event(task,current))
+                event.update(self._short_event(task,current,shown))
             else:
                 observations=[]
                 for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
                     observations.append({'source':item['_id'],'tool':item['tool'],
-                                         'result_excerpt':excerpt(json.dumps(item['result'],ensure_ascii=False),OBSERVATION_CHARS)})
+                                         'result_excerpt':excerpt(json.dumps(shown(item['result']),ensure_ascii=False),OBSERVATION_CHARS)})
                 # When it ran (a result handed back late describes that time); stored UTC, her turn shows it local.
                 event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),
                     original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
@@ -443,12 +447,12 @@ class TaskService:
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
-    def _short_event(self,task,current):
+    def _short_event(self,task,current,shown=lambda value:value):
         """The short hand-back (ADR-030 D4): her brief, the report's words (a cut says so) and when the run finished,
         without the tool records."""
         result=current.get('result') or {}
         text=result.get('text') or ''
-        report=report_pages(text,SHORT_REPORT_CHARS)[0]
+        report=shown(report_pages(text,SHORT_REPORT_CHARS)[0])
         if len(report)<len(text):
             pages=len(report_pages(text))
             report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 task 的 page：task 写 %s，从 page=1 读起）'
@@ -456,7 +460,7 @@ class TaskService:
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
                **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
                **({'report_pages':len(report_pages(text))} if len(report)<len(text) else {}),
-               'finished_at':current.get('finished_at'),'uncertainties':result.get('uncertainties') or []}
+               'finished_at':current.get('finished_at'),'uncertainties':shown(result.get('uncertainties') or [])}
         return {'event_id':handover.result_event_id(task,True),
                 'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
                        '只有你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'

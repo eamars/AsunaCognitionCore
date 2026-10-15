@@ -2295,7 +2295,8 @@ class RoleTools:
         from . import questions
         qid = self._text(args, 'id', 40, required=False)
         if qid:
-            found = questions.read(self.store, ep['persona'], qid)
+            found = questions.read(self.store, ep['persona'], qid,
+                                   outside=self._cls(ep) != visibility.OWNER_PRIVATE)
             if not found:
                 raise Refused('ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。' % qid)
             return found, False
@@ -2363,8 +2364,11 @@ class RoleTools:
         pages = report_pages(text)
         if not 1 <= page <= len(pages):
             raise Refused('这份报告共 %d 页：page 写 1–%d。' % (len(pages), len(pages)))
+        from . import machine_words
+        # Outside home a report holds nothing of the machine (ADR-050): the hand-back's rule, page by page.
         return {'task': task_id, 'title': task.get('title') or task.get('goal'),
-                'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)), 'text': pages[page - 1],
+                'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)),
+                'text': pages[page - 1] if home else machine_words.text(pages[page - 1]),
                 'more': 'page=%d 接着读' % (page + 1) if page < len(pages) else '报告到这里完了'}, False
 
     def tool_ideas_review(self, ep, call_id, args):

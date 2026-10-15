@@ -12,7 +12,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 |---|---|---|---|
 | 1 | ADR-066 an errand carries home | Built 2026-10-15 | a real errand checked: the forked session, the copy's title, a warm cache, the archive after |
 | 2 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
-| 3 | ADR-050 hand-back clean-up | Drafted 2026-10-16 (deterministic, in the program) | her answers on the two words and on `/task` paths; then build. Gate asks merged per group and a fair task queue: measured first |
+| 3 | ADR-050 hand-back clean-up | Built 2026-10-16 (`machine_words.py`) | her restart; then the same count a week later, expecting zero. Gate asks merged per group and a fair task queue: measured first |
 | 4 | A tooling ADR with her | Not written (owner's go 2026-10-16) | measured, then drafted with her: free text accepted and said back, ids and prefixes that round-trip, `pass_note` and `leave_note` merged (keeping `deliver=wake` and each one's limits), a parameter kept by whether it does something nothing else can (not by how often it is used: her condition), old aliases retired |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her

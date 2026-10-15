@@ -352,7 +352,7 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 - def `place_words` — One place of a question as she reads it.
 - def `migrate` — Her developer-inbox messages become closed questions to the developer's line, once each (by the row's id); the program's own notes there stay where they are.
 - def `block` — questions_from_program at home: her open questions, and once in this conversation each one the program closed; None when there are none.
-- def `read` — One question with its answers' text (a task's report: its first page).
+- def `read` — One question with its answers' text (a task's report: its first page; `outside` home, without the machine's paths and tracebacks: machine_words).
 - def `history` — Her last asks to one place (or the action brain) in READ_DAYS: when, answered or not, how long, her took.
 - def `close` — She closes a question with what she took from it.
 

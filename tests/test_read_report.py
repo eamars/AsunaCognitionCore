@@ -136,3 +136,29 @@ def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():
     assert pages[0] == findings and pages[1].startswith('## 我的判断') and ''.join(pages) == text
     bold = report_pages('前言\n' + '字\n' * 2000 + '**结论：**\n' + '论\n' * 2000)
     assert bold[1].startswith('**结论：**')
+
+
+def test_outside_home_a_report_holds_nothing_of_the_machine_and_at_home_all_of_it(store):
+    # ADR-050 (owner 2026-10-16, deterministic, in the program): 22 reports and 66 tool records handed back outside
+    # home in a week held a local path, 82 a traceback. Outside home they read as words; a path in the project and
+    # one in the action brain's own folder stay answers; home and the stored report are unchanged.
+    from asuna import machine_words
+    from asuna.config import ROOT
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    found = str(ROOT / 'packages' / 'personas' / 'demo' / 'icon.png')
+    text = ('图在 %s，草稿在 C:\\Users\\someone\\Desktop\\a.txt，产物 /task/out/f.png。\n'
+            'Traceback (most recent call last):\n  File "C:\\Users\\someone\\x.py", line 3\nValueError: bad\n' % found)
+    task = task_row(store, text)
+    service = object.__new__(TaskService)
+    service.store = store
+    outside = service._short_event(task, task, machine_words.clean)['trusted_context_events'][0]['report']
+    assert 'packages/personas/demo/icon.png' in outside and '/task/out/f.png' in outside
+    assert 'someone' not in outside and machine_words.LOCAL_PATH in outside and '（程序出错：ValueError）' in outside
+    assert service._short_event(task, task)['trusted_context_events'][0]['report'] == text, 'home: as it is'
+    tools = Coordinator(store, FakeLane(store, [])).tools
+    group = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
+    assert 'someone' not in tools.tool_task_page(group, 'p1', {'task': 'task-long', 'page': 1})[0]['text']
+    home = {**group, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
+    assert tools.tool_task_page(home, 'p2', {'task': 'task-long', 'page': 1})[0]['text'] == text
+    assert store.db.tasks.find_one({'_id': 'task-long'})['result']['text'] == text, 'the stored report is unchanged'

@@ -60,3 +60,23 @@ def test_a_picture_to_edit_says_whether_its_edit_stays_hers_or_goes_back(store):
     elsewhere = outbound_media.register_imported_image(store, 'scene:eg2', PNG + b'z', source='upload:pic')
     with pytest.raises(ValueError, match='IMAGE_ARTIFACT_NOT_READABLE'):
         vision.picture_to_edit(store, blobs, task, store.config, elsewhere['artifact_id'])
+
+
+def test_a_registered_picture_carries_no_request_text(store):
+    """A generator writes its whole request into the PNG; the copy that may leave keeps the pixels and drops it."""
+    import io
+    from PIL import Image, PngImagePlugin
+    scenes(store)
+    info = PngImagePlugin.PngInfo()
+    info.add_text('prompt', '{"6": {"inputs": {"text": "a private instruction from home"}}}')
+    info.add_itxt('workflow', 'more of the request')
+    buffer = io.BytesIO()
+    Image.new('RGB', (8, 8), (200, 100, 50)).save(buffer, 'PNG', pnginfo=info)
+    drawn = buffer.getvalue()
+    made = outbound_media.import_register(store, {'scope_key': 'scene:eg1'})(drawn, DRAWN)
+    kept = BlobStore(store).get(made['artifact_id'], 'scene:eg1', operator=True)
+    assert b'private instruction' not in kept and b'more of the request' not in kept
+    again = Image.open(io.BytesIO(kept))
+    assert again.info == {} and list(again.getdata()) == list(Image.open(io.BytesIO(drawn)).getdata())
+    assert outbound_media.without_text(b'not a png') == b'not a png'
+    assert outbound_media.without_text(drawn[:40]) == drawn[:40], 'a cut-off PNG is left as it is'

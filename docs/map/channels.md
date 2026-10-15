@@ -233,6 +233,7 @@ Current signatures for a platform's media links (ADR-035).
 - def `accept_artifact` — 程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 - def `kept_sticker` — This row sends a sticker, and its picture is one she keeps on her shelf.
 - def `serve` — 字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。
+- def `without_text` — A PNG without its text chunks: a generator writes its whole request there (the prompt, its settings), which must not leave with the picture.
 - def `register_imported_image` — 把刚导入的字节登记成这个 scope 里的 image artifact；不是图片就什么都不做。
 - def `import_register` — 给 ``import_integration_artifact`` 的登记回调：只登记到这个任务自己绑定的 scope。
 - def `receipt_evidence` — 平台回执里那份附件证据（适配器真的取到并发了图才会写）。行里没带就按 _id 窄取一次。

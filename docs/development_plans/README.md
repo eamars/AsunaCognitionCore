@@ -10,11 +10,10 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 
 | # | Plan | Where it stands | Waits on |
 |---|---|---|---|
-| 1 | ADR-061 asking for help | Both steps live since 2026-10-14 | one day with a real question of hers in a group observed; then it closes |
-| 2 | ADR-066 an errand carries home | Built 2026-10-15 | a real errand checked: the forked session, the copy's title, a warm cache, the archive after |
-| 3 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
-| 4 | ADR-050 later items | First batch built | measured, then her review: a hand-back outside home loses absolute paths and tracebacks (2 of 56 leaked one); gate asks merged per group, a fair queue for delegated tasks |
-| 5 | A tooling ADR with her | Not written | drafted with her: free text accepted and said back, ids and prefixes that round-trip, `pass_note` and `leave_note` merged, parameters unused for 30 days dropped, old aliases retired |
+| 1 | ADR-066 an errand carries home | Built 2026-10-15 | a real errand checked: the forked session, the copy's title, a warm cache, the archive after |
+| 2 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
+| 3 | ADR-050 hand-back clean-up | Drafted 2026-10-16 (deterministic, in the program) | her answers on the two words and on `/task` paths; then build. Gate asks merged per group and a fair task queue: measured first |
+| 4 | A tooling ADR with her | Not written (owner's go 2026-10-16) | measured, then drafted with her: free text accepted and said back, ids and prefixes that round-trip, `pass_note` and `leave_note` merged (keeping `deliver=wake` and each one's limits), a parameter kept by whether it does something nothing else can (not by how often it is used: her condition), old aliases retired |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
 memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is
@@ -67,7 +66,7 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 040 | Merged forwards | Built | Forwards read and previewed; the full text pulled by ref | [folder](ADR-040-merged-forwards/README.md) |
 | 041 | Who she waits for | Built | Lines of the last hour still awaiting someone, shown at home and in that group | [folder](ADR-041-who-she-waits-for/README.md) |
 | 042 | What the night changed | Built | The first home heartbeat after night turns lists what they changed, with her reasons | [folder](ADR-042-what-the-night-changed/README.md) |
-| 043 | Reasons behind actions | Open | Each action keeps its thought and the reason comes back; batches 1 and 2 built, later batches planned | [folder](ADR-043-reasons-behind-actions/README.md) |
+| 043 | Reasons behind actions | Built | Each action keeps its thought and the reason comes back; batches 1 and 2 built, later batches planned | [folder](ADR-043-reasons-behind-actions/README.md) |
 | 044 | Persona embodiment | Built | Identity and biography from the persona; history, perception and actions from evidence | [folder](ADR-044-persona-embodiment/README.md) |
 | 045 | Sister heartbeat wakes | Built | Her sister's asides wait in her home heartbeat until she answers | [folder](ADR-045-sister-heartbeat-wakes/README.md) |
 | 046 | QQ Bot channel | Open | Official QQ Bot platform beside NapCat (kind `qqbot`); first step built | [folder](ADR-046-qq-bot-channel/README.md) |
@@ -85,7 +84,7 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 058 | Heartbeat dice | Built | The heartbeat rolls a die (rest, interesting, self development, self evaluation, review, reach out) with tables she sets | [folder](ADR-058-heartbeat-dice/README.md) |
 | 059 | Reading the database, git and ssh from her home tasks | Built | Owner's keys and logins, her own name on commits; no read-only database user; `asuna.dbread` reads only and repeats its query, 零行 when empty; skill asuna-database | [folder](ADR-059-home-reach/README.md) |
 | 060 | Plain parameter names | Built | One name per idea, words a reader understands (`op`, place/line/to, why/reason, yes/no as words); old names keep working a while; her review | [folder](ADR-060-plain-parameter-names/README.md) |
-| 061 | Asking for help | Open (both steps built; closes after a day with a group question) | One question to many sources (Claude, a group, the owner, the action brain), each with a patience; answers labelled by source, never judged; per-turn cost kept to counts and arrivals; she remembers how each ask went | [folder](ADR-061-asking-for-help/README.md) |
+| 061 | Asking for help | Built (closed 2026-10-16: 88 group questions, 85 answered) | One question to many sources (Claude, a group, the owner, the action brain), each with a patience; answers labelled by source, never judged; per-turn cost kept to counts and arrivals; she remembers how each ask went | [folder](ADR-061-asking-for-help/README.md) |
 | 062 | Tiered memory | Built, on since 2026-10-14 | One item per idea in three places (随身 / 手边 / 收着) by confirmation and use, not refusal; details fade into her gist with the verbatim kept; night consolidation and graduation into character_core; phase 0 (work_log as rows) built | [folder](ADR-062-tiered-memory/README.md) |
 | 063 | Context growth defects | Built (D1–D12) | Her conversations grew 6–9× faster than her sister's: D1 group lines and failing compaction, D2–D11 duplicates and non-folding blocks; fixed in order before ADR-062 | [folder](ADR-063-context-growth-defects/README.md) |
 | 064 | QQ notices | Built (phase 1, and phase 2 with ADR-061, live since 2026-10-14) | Phase 1: NapCat notices projected to one-off text lines, never stored; through the relevance gate like text (poke at her, reaction to her line); recall shown as a quoted line, no DB work; requests answered by her home session; cards kept for the action brain, not read by default; voice/video parked. Phase 2: a reply tool (text, sticker, poke, reaction in any combination), like ADR-061 | [folder](ADR-064-qq-notices/README.md) |

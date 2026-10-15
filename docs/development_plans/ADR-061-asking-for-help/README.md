@@ -3,8 +3,7 @@
 Status: **Step 1 built 2026-10-13** (576b5eb0, 8d442267; see "Step 1 as built"), live since. **Step 2 built with
 ADR-064 phase 2 and live 2026-10-14**: a question in a group is `speak` with `wait=question` (not `ask` with a group
 as `to`; see ADR-064's as-built section); her answer to question 2 was (a), her words via `leave_note`'s `question`.
-A question's line is left out of `waiting_from_program` (its own looks and answers wait on it). Closes after a day
-with a real group question observed (none yet on 2026-10-14).
+A question's line is left out of `waiting_from_program` (its own looks and answers wait on it). **Closed 2026-10-16** (owner): from 2026-10-14 she asked 88 questions in groups and 85 were answered.
 Proposed 2026-10-13 (owner's idea, written by Claude; the owner's three calls are in), brought up to date with the code
 of 2026-10-13 evening (ADR-062 phase 2 built off, ADR-063 fixed, ADR-064 phase 1 built): see "Fit with today's code".
 For Xiaoman's review.

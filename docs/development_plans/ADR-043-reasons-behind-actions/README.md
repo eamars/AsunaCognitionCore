@@ -1,6 +1,7 @@
 # ADR-043: The reason behind each action, kept and given back
 
-Status: **Accepted 2026-10-11; batches 1 and 2 built.** The owner's goal and direction; Xiaoman set four rules.
+Status: **Built** (batches 1 and 2; closed 2026-10-16 by the owner; "Later, only if measurement asks" stays as
+written). Accepted 2026-10-11. The owner's goal and direction; Xiaoman set four rules.
 
 ## Context
 

@@ -50,15 +50,16 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'markdown.copy': '复制', 'markdown.copied': '已复制', 'markdown.footnotes': '来源',
       'memory.tab': '记忆', 'memory.guide': '当前角色、场景与授权来源', 'memory.aria': 'Asuna 记忆',
       'memory.category': '记忆类型', 'memory.search': '搜索记忆', 'memory.searchPlaceholder': '搜索当前类型的全部记录',
-      'memory.refresh': '刷新记忆', 'memory.subject': '当前交谈对象：{name}',
+      'memory.refresh': '刷新记忆',
       'memory.notBound': '当前会话尚无 Asuna 场景绑定。完成角色交互后可查看。', 'memory.loading': '读取当前场景…',
       'memory.detailLoading': '读取详情…', 'memory.compiled': '整理于 {time}',
       'memory.sourcesTruncated': '以下显示前 12 条来源。', 'memory.noMatch': '未找到匹配的记录。', 'memory.then': '然后',
       'memory.empty': '当前范围暂无记录。', 'memory.previous': '上一页', 'memory.next': '下一页',
       'memory.corrected': '这条记录之后出现了更正；请结合后续原话查看。', 'memory.separator': '、',
       'memory.kind.documents': '文档', 'memory.kind.affect': '情感',
-      'memory.group.her': '她自己', 'memory.group.people': '她认识的人', 'memory.group.documents': '她的文档',
-      'memory.group.conversations': '来自对话', 'memory.readable': '本对话可读：{titles}', 'memory.from': '来自：{title}',
+      'memory.group.everywhere': '所有对话共用', 'memory.group.here': '这个对话', 'memory.readable': '本对话可读：{titles}',
+      'memory.from': '来自：{title}', 'memory.heading': '### {text}', 'memory.kind.people': '她认识的人',
+      'memory.kind.here_people': '这里的人', 'memory.kind.group_notes': '这个群的笔记', 'memory.category.group_notes': '群笔记',
       'memory.kind.ideas': '改进想法', 'memory.category.idea': '改进想法',
       'memory.idea.state.open': '待处理', 'memory.idea.state.adopted': '已采纳', 'memory.idea.state.deferred': '暂缓',
       'memory.idea.state.dropped': '已放弃', 'memory.idea.why': '为什么：{text}', 'memory.idea.from.character': '她自己记下的 · {where}',
@@ -66,7 +67,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.idea.decision.defer': '暂缓：{why}', 'memory.idea.decision.drop': '放弃：{why}',
       'memory.status.idea.open': '待处理', 'memory.status.idea.adopted': '已采纳', 'memory.status.idea.deferred': '暂缓',
       'memory.status.idea.dropped': '已放弃',
-      'memory.kind.self': '自我', 'memory.kind.relation': '对人的认识', 'memory.kind.summary': '交流摘要',
+      'memory.kind.self': '自我', 'memory.kind.summary': '交流摘要',
       'memory.kind.interpretation': '当时的理解', 'memory.kind.source': '原始消息',
       'memory.category.self': '自我', 'memory.category.relation': '对人的认识', 'memory.category.derived_summary': '交流摘要',
       'memory.category.character_interpretation': '当时的理解', 'memory.category.public_statement': '角色的发言',
@@ -76,8 +77,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.status.empty': '还没有写过', 'memory.status.recorded': '已记录',
       'memory.hint.self': '她只在每天一次的内部自省时间里决定要不要写下或改写。',
       'memory.hint.relation': '她在对话中觉得对这个人的理解有了变化时才会写下。',
-      'memory.title.character_core': '核心自我', 'memory.title.current_self': '当前自我', 'memory.title.relation': '关系与偏好 · 在这里', 'memory.title.person': '关系与偏好 · 哪儿都成立',
-      'memory.title.peer': '对方身份资料', 'memory.title.mood': '此刻的心情', 'memory.title.moved': '触动 · {feeling}',
+      'memory.title.character_core': '核心自我', 'memory.title.current_self': '当前自我', 'memory.title.person': '关系与偏好 · 哪儿都成立',
+      'memory.title.mood': '此刻的心情', 'memory.title.moved': '触动 · {feeling}',
       'memory.title.job': '作业报告', 'memory.title.said': '原话 · {speaker}', 'memory.title.blank': '无正文的记忆',
       'memory.title.document': '{kind}', 'memory.title.documentNamed': '{kind} · {name}',
       'memory.doc.persona': '人格设定', 'memory.doc.voice': '说话方式', 'memory.doc.ledger': '承诺与挂账',
@@ -201,15 +202,16 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'markdown.copy': 'Copy', 'markdown.copied': 'Copied', 'markdown.footnotes': 'Sources',
       'memory.tab': 'Memory', 'memory.guide': 'The character, this scene and its authorized sources', 'memory.aria': 'Asuna memory',
       'memory.category': 'Kind of memory', 'memory.search': 'Search memory', 'memory.searchPlaceholder': 'Search every record of this kind',
-      'memory.refresh': 'Refresh', 'memory.subject': 'Talking with: {name}',
+      'memory.refresh': 'Refresh',
       'memory.notBound': 'This conversation has no Asuna scene yet. It appears after she has taken part.',
       'memory.loading': 'Loading this scene…', 'memory.detailLoading': 'Loading…',
       'memory.compiled': 'Compiled {time}', 'memory.sourcesTruncated': 'Showing the first 12 sources.', 'memory.then': 'Then',
       'memory.noMatch': 'No matching records.', 'memory.empty': 'Nothing here yet.', 'memory.previous': 'Previous', 'memory.next': 'Next',
       'memory.corrected': 'This record was corrected later; read it with the later messages.', 'memory.separator': ', ',
       'memory.kind.documents': 'Documents', 'memory.kind.affect': 'Feelings',
-      'memory.group.her': 'Her', 'memory.group.people': 'People she knows', 'memory.group.documents': 'Her documents',
-      'memory.group.conversations': 'From conversations', 'memory.readable': 'Readable here: {titles}', 'memory.from': 'From: {title}',
+      'memory.group.everywhere': 'Every conversation', 'memory.group.here': 'This conversation', 'memory.readable': 'Readable here: {titles}',
+      'memory.from': 'From: {title}', 'memory.heading': '### {text}', 'memory.kind.people': 'People she knows',
+      'memory.kind.here_people': 'People here', 'memory.kind.group_notes': "This group's notes", 'memory.category.group_notes': 'Group notes',
       'memory.kind.ideas': 'Improvement ideas', 'memory.category.idea': 'Improvement idea',
       'memory.idea.state.open': 'Open', 'memory.idea.state.adopted': 'Adopted', 'memory.idea.state.deferred': 'Deferred',
       'memory.idea.state.dropped': 'Dropped', 'memory.idea.why': 'Why: {text}', 'memory.idea.from.character': 'Noted by her · {where}',
@@ -217,7 +219,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.idea.decision.defer': 'Deferred: {why}', 'memory.idea.decision.drop': 'Dropped: {why}',
       'memory.status.idea.open': 'Open', 'memory.status.idea.adopted': 'Adopted', 'memory.status.idea.deferred': 'Deferred',
       'memory.status.idea.dropped': 'Dropped',
-      'memory.kind.self': 'Self', 'memory.kind.relation': 'People', 'memory.kind.summary': 'Summaries',
+      'memory.kind.self': 'Self', 'memory.kind.summary': 'Summaries',
       'memory.kind.interpretation': 'Her readings', 'memory.kind.source': 'Messages',
       'memory.category.self': 'Self', 'memory.category.relation': 'People', 'memory.category.derived_summary': 'Summary',
       'memory.category.character_interpretation': 'Her reading', 'memory.category.public_statement': 'What she said',
@@ -227,8 +229,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'memory.status.empty': 'Not written yet', 'memory.status.recorded': 'Recorded',
       'memory.hint.self': 'She decides whether to write or rewrite this only in her daily time for reflection.',
       'memory.hint.relation': 'She writes this when, in a conversation, her understanding of the person changes.',
-      'memory.title.character_core': 'Core self', 'memory.title.current_self': 'Current self', 'memory.title.relation': 'Relationship and preferences · here', 'memory.title.person': 'Relationship and preferences · everywhere',
-      'memory.title.peer': 'Their profile', 'memory.title.mood': 'Her mood now', 'memory.title.moved': 'Moved · {feeling}',
+      'memory.title.character_core': 'Core self', 'memory.title.current_self': 'Current self', 'memory.title.person': 'Relationship and preferences · everywhere',
+      'memory.title.mood': 'Her mood now', 'memory.title.moved': 'Moved · {feeling}',
       'memory.title.job': 'Job report', 'memory.title.said': 'Said · {speaker}', 'memory.title.blank': 'A memory without text',
       'memory.title.document': '{kind}', 'memory.title.documentNamed': '{kind} · {name}',
       'memory.doc.persona': 'Persona', 'memory.doc.voice': 'Voice', 'memory.doc.ledger': 'Promises and open items',
@@ -712,6 +714,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
 
     // ── memory ────────────────────────────────────────────────────────
+    const EVERYWHERE = ['self', 'affect', 'ideas', 'people', 'documents'];
     const categoryLabel = (t, category) => t('memory.category.' + (DICTIONARY.en['memory.category.' + category] ? category : 'other'));
     function Memory(props) {
       const t = props.t;
@@ -749,9 +752,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       return h('section', { style: { ...stack, height: '100%', minHeight: 0, overflow: 'hidden' }, 'aria-label': t('memory.aria') },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 } },
         h(Select, { t, label: t('memory.category'), value: category,
-          // Her, the people she knows, her documents, what comes from conversations: headings from DSH's own menu.
-          options: [['her', ['self', 'affect', 'ideas']], ['people', ['relation']], ['documents', ['documents']],
-            ['conversations', ['summary', 'interpretation', 'source']]].flatMap(([group, kinds]) => [
+          // Two scopes under DSH's own menu headings: what is the same in every conversation, and what this
+          // conversation reads. A group's notes are offered only in that group.
+          options: [['everywhere', EVERYWHERE], ['here', ['here_people',
+            ...(page?.scene_kind === 'group' ? ['group_notes'] : []), 'summary', 'interpretation', 'source']]].flatMap(([group, kinds]) => [
             { type: 'label', id: 'group-' + group, text: t('memory.group.' + group) },
             ...kinds.map(kind => [kind, t('memory.kind.' + kind)])]),
           onChange: value => { setCategory(value); setOffset(0); } }),
@@ -759,9 +763,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           onChange: event => setSearch(event.target.value),
           onCompositionStart: () => setComposing(true), onCompositionEnd: () => setComposing(false) }),
         h(Button, { size: 'sm', onClick: () => setRefresh(x => x + 1) }, t('memory.refresh')),
-        page && h('p', { style: { ...small, margin: 0 } },
-          t('memory.readable', { titles: [page.scene_title, ...(page.linked_scene_titles ?? [])].map(title => say(t, title)).join(t('memory.separator')) }),
-          category === 'relation' ? ' · ' + t('memory.subject', { name: page.subject_name }) : '')),
+        page && h('p', { style: { ...small, margin: 0 } }, EVERYWHERE.includes(category) ? t('memory.scene.shared')
+          : t('memory.readable', { titles: [page.scene_title, ...(page.linked_scene_titles ?? [])].map(title => say(t, title)).join(t('memory.separator')) }))),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, overflowY: 'auto' } },
         error && h('p', { role: 'alert' }, error.includes('NOT_BOUND') ? t('memory.notBound') : error),
         !page && !error && h('p', null, t('memory.loading')),

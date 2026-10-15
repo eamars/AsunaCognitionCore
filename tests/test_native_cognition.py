@@ -59,28 +59,10 @@ def test_usage_never_borrows_another_context(view, changes):
     assert memory.detail('doc:persona')['usage'] == 'none'
 
 
-def test_peer_projection_reuses_authenticated_sender_and_scene_checks(view):
-    store, worker, binding = view
-    row = {'_id': 'message', 'direction': 'inbound', 'scene_id': binding['scene_id'],
-           'policy_epoch': 1, 'author': 'qq:11', 'scene_seq': 1, 'text': '原话',
-           'event': {'channel': {'id': 'qq', 'sender_id': '11', 'target': {'type': 'group', 'id': 'one'}},
-                     'raw': {'asuna_peer': {'person_id': 'qq:11', 'account_id': '11',
-                         'group_id': 'one', 'scene': 'group:one', 'display': '同学',
-                         'role': 'member', 'verified': True}}}}
-    store.db.messages.insert_one(row)
-    memory = NativeMemory(worker, 'role')
-    detail = memory.detail('cognition:peer')
-    assert detail['body'].startswith('当前说话人：[同学 #') and 'qq:11' not in detail['body']
-    assert detail['sources'][0]['text'] == '原话'
-    store.db.messages.update_one({'_id': 'message'}, {'$set': {'event.raw.asuna_peer.person_id': 'qq:22'}})
-    with pytest.raises(Denied, match='MEMORY_NOT_VISIBLE'):      # a mismatched identity block is never shown
-        NativeMemory(worker, 'role').detail('cognition:peer')
-
-
 def test_private_heads_and_undelivered_messages_cannot_be_read(view):
     store, worker, binding = view
     memory = NativeMemory(worker, 'role')
-    for identifier in ('head:relationship:qq:22|scene:one', 'cognition:invented'):
+    for identifier in ('head:relationship:qq:22|scene:one', 'person:qq:22'):
         with pytest.raises(Denied, match='MEMORY_NOT_VISIBLE'):
             memory.detail(identifier)
     store.db.messages.insert_one({'_id': 'unsent', 'scene_id': binding['scene_id'], 'policy_epoch': 1,
@@ -92,17 +74,26 @@ def test_private_heads_and_undelivered_messages_cannot_be_read(view):
         NativeMemory(worker, 'role')
 
 
-def test_revision_sources_keep_interpretations_distinct_and_private_sources_hidden(view):
-    store, worker, _ = view
-    for identifier, scope in (('visible', 'scene:one'), ('private', 'scene:private')):
-        store.db.memory_units.insert_one({'_id': identifier, 'character_id': 'character',
-            'scope_key': scope, 'policy_epoch': 1, 'status': 'active',
-            'epistemic_type': 'character_interpretation', 'body_markdown': identifier + '的理解'})
-    revision = store.head('relationship:qq:11', 'scene:one')[1]
-    store.db.state_revisions.update_one({'_id': revision['_id']},
-        {'$set': {'source_ids': ['visible', 'private']}})
-    detail = NativeMemory(worker, 'role').detail('head:relationship:qq:11|scene:one')
-    assert [(s['_id'], s['category']) for s in detail['sources']] == [('visible', 'character_interpretation')]
+def test_people_she_knows_and_people_here(view):
+    # Owner 2026-10-16: People was only the person this conversation is bound to. Now every person she has written
+    # about is listed everywhere (searchable), and a conversation lists the last people who spoke in it.
+    store, worker, binding = view
+    store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
+    store.db.scene_people.insert_one({'_id': 'sp', 'person': 'qq:11', 'scene_id': binding['scene_id'], 'card': '同学',
+                                      'seen_at': '2026-10-16T00:00:00+00:00'})
+    people = NativeMemory(worker, 'role').page('people')
+    assert [(row['id'], row['title'], row['scene_title']) for row in people['rows']] == [('person:qq:11', '同学', None)]
+    assert NativeMemory(worker, 'role').page('people', search='没有的人')['rows'] == []
+    detail = NativeMemory(worker, 'role').detail('person:qq:11')
+    texts = [part for part in detail['body'] if isinstance(part, str) and part.strip()]
+    assert texts == ['哪儿都成立的那层', '这个人偏好简洁表达'], 'what holds anywhere first, then each conversation'
+    for n, author in enumerate(['qq:11', 'qq:22', 'qq:11']):
+        store.db.messages.insert_one({'_id': f'm{n}', 'scene_id': binding['scene_id'], 'direction': 'inbound',
+                                      'author': author, 'occurred_at': f'2026-10-16T00:0{n}:00+00:00'})
+    here = {row['id']: row for row in NativeMemory(worker, 'role').page('here_people')['rows']}
+    assert set(here) == {'person:qq:11', 'person:qq:22'}
+    assert here['person:qq:11']['excerpt'] == '这个人偏好简洁表达'
+    assert here['person:qq:22']['excerpt'] == {'key': 'memory.status.empty', 'params': {}}
 
 
 def test_her_idea_notebook_is_shown_only_in_an_owner_private_view(view):
@@ -140,11 +131,6 @@ def test_the_tab_shows_her_memory_as_her_turns_read_it(view):
     detail = NativeMemory(worker, 'role').detail('doc:self')
     assert {'key': 'memory.inject.never', 'params': {}} in [part['params']['inject'] for part in detail['body']
                                                           if isinstance(part, dict) and part['key'] == 'memory.doc.meta']
-    store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
-    titles = [row['title']['key'] for row in NativeMemory(worker, 'role').page('relation')['rows']]
-    assert sorted(titles) == ['memory.title.person', 'memory.title.relation']
-    where = {row['title']['key']: row['scene_title'] for row in NativeMemory(worker, 'role').page('relation')['rows']}
-    assert where['memory.title.person'] is None, 'what holds anywhere is from no one conversation'
     assert all(row['scene_title'] is None for row in NativeMemory(worker, 'role').page('self')['rows']
                if row['id'].startswith('item:'))
     for unit, formed in (('older', '2026-10-01T00:00:00+00:00'), ('newer', '2026-10-02T00:00:00+00:00')):
@@ -166,3 +152,19 @@ def test_documents_are_named_and_counted_by_place(view):
     assert places and all(key.startswith('memory.inject.') for key in places)
     with pytest.raises(ValueError, match='INVALID_MEMORY_CATEGORY'):
         NativeMemory(worker, 'role').page('all')
+
+
+def test_a_groups_notes_are_this_groups_not_every_documents(view):
+    # Owner 2026-10-16: Documents showed every group's notes in any conversation. A group's notes are listed in
+    # that group's own conversation only.
+    store, worker, binding = view
+    from asuna.documents import DocumentStore
+    from asuna.group_admin import notes_slug
+    store.db.scenes.update_one({'_id': binding['scene_id']}, {'$set': {'kind': 'group'}})
+    slug = notes_slug(binding['scene_id'])
+    DocumentStore(store, 'p').seed(slug, 'working', '## 群规\n别刷屏', path='notes.md')
+    assert 'doc:' + slug not in {row['id'] for row in NativeMemory(worker, 'role').page('documents')['rows']}
+    notes = NativeMemory(worker, 'role').page('group_notes')['rows']
+    assert [row['title'] for row in notes] == ['群规'] and notes[0]['scene_title'] is None
+    assert NativeMemory(worker, 'role').detail(notes[0]['id'])['category'] == 'group_notes'
+    assert NativeMemory(worker, 'role').page('documents')['scene_kind'] == 'group'

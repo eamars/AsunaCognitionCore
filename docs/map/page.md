@@ -27,7 +27,14 @@ Bounded, read-only projections for native DSH's Asuna memory tab.
   - `scene_title`
   - `timestamp`
   - `self_documents` — Her self as her turns read it (ADR-062): {old head name: (document, its sections placed)} for each of `self` and `core` she has written; an empty one leaves its old head in the list.
-  - `self_item_rows` — One row per item of her self, with the place it is in (carried every turn, at hand, put away).
+  - `item_rows` — One row per section of a document, with the place it is in (carried every turn, at hand, put away).
+  - `self_item_rows` — Her self, item by item: the `self` and `core` documents.
+  - `group_note_rows` — This group's notes, item by item (only in a group's own conversation).
+  - `person_name` — A person as the owner reads them: the name this machine keeps, else the card or nickname they last had.
+  - `relation_records` — {person: [(scope, body, time)]}: what holds of them anywhere (scope `person`) and how they are in each conversation (scope `scene:...`).
+  - `people_rows` — Everyone she has written about, newest first; search matches a name or what she wrote.
+  - `here_people_rows` — The last ten people who spoke in this conversation, each with how she sees them here (or nothing yet).
+  - `person_detail` — What she wrote about one person: what holds anywhere first, then how they are in each conversation.
   - `head_rows`
   - `document_rows` — Operator view of the persona's documents, each by its name, with how many of its sections are in each place (every turn, when relevant, put away).
   - `document_name` — A document as a reader knows it: her persona, voice, self, core, ledger, work log, a group's notes by the group's name, or her own name for it.
@@ -47,10 +54,6 @@ Read-only cognitive state coverage for the existing native Memory view.
 
 - class `CognitionView`
   - `usage` — A key of the client's memory.usage words: whether the latest turn used this record.
-  - `peer`
-  - `supplements` — The platform identity saved with this person's latest message, when there is one.
-  - `subject_name`
-  - `account_title` — qq:<account> reads as `QQ · <account>` on the owner's page; a local id reads as itself.
 
 ## `native_ui`
 

@@ -93,7 +93,7 @@ Business ownership for native DSH reminders; no host time wheel.
   - `cancel`
   - `reconcile`
   - `retitle` — Her rhythm tasks renamed after the Host gave new words (set_titles); her own plans keep their wording.
-  - `deliver`
+  - `deliver` — The scheduler session's new dispatches, in log order: the native log is read once for the whole batch.
 
 ## `schedule_rules`
 

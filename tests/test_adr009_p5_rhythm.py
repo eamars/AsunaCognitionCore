@@ -92,7 +92,7 @@ def scheduler(store, rhythm=None):
 
 def fire(service, plan):
     seq = service.lane.fire(plan['schedule_id'])
-    service.deliver({'session': 's-p5', 'seq': seq, 'id': plan['schedule_id']})
+    service.deliver({'session': 's-p5', 'dispatches': [{'seq': seq, 'id': plan['schedule_id']}]})
     return service.store.db.plans.find_one({'_id': plan['_id']})
 
 

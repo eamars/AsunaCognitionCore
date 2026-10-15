@@ -88,12 +88,32 @@ test('reminders queued in the scheduler session are removed once read; one arriv
   h.agent.inbox = { get nextTurn() { return queue; }, remove: id => { queue = queue.filter(m => m.id !== id); return true; } };
   const delivered = [];
   h.schedules.core = { ready: async () => {}, worker: { call: async (method, args) => {
-    delivered.push(args.id);
-    if (delivered.length === 1) queue = [...queue, reminder('arrived-meanwhile')];
+    delivered.push(...args.dispatches.map(d => d.id));
+    if (delivered.length) queue = [...queue, reminder('arrived-meanwhile')];
   } } };
   await h.schedules.delivered(h.agent);
   assert.deepEqual(queue.map(m => m.id), ['arrived-meanwhile']);
   assert.ok(delivered.length >= 2, 'both queued reminders were delivered from the log');
+});
+
+test('each reading sends only the dispatches the worker has not had, in one call', async () => {
+  // Regression: every reminder re-sent the whole dispatch history one call at a time, and the worker re-read the
+  // native log for each; with 2,127 dispatches a reminder reached her ~100 s late, one arriving meanwhile later still.
+  const h = harness();
+  const reminder = (id, at) => ({ id, source: { kind: 'schedule' }, content: [{ type: 'text',
+    text: '[SCHEDULE REMINDER BATCH]\nreminders_json: ' + JSON.stringify([{ schedule_id: 'n1', occurrence_at: at }]) }] });
+  const arrive = (id, at) => h.events.push({ type: 'agent/inbox/spliced', seq: h.events.length + 1,
+    data: { target: 'next-turn', start: 0, inserted: [reminder(id, at)] } });
+  h.agent.inbox = { nextTurn: [], remove: () => true };
+  const calls = [];
+  h.schedules.core = { ready: async () => {}, worker: { call: async (method, args) => calls.push(args.dispatches) } };
+  arrive('m1', '09:00'); arrive('m2', '09:05');
+  await h.schedules.delivered(h.agent);
+  arrive('m3', '09:10');
+  await h.schedules.delivered(h.agent);
+  await h.schedules.delivered(h.agent);
+  assert.deepEqual(calls.map(batch => batch.length), [2, 1]);
+  assert.ok(calls[1][0].seq > calls[0][1].seq);
 });
 
 test('the schedule session is read-only: it only delivers her plans and alarms', async () => {

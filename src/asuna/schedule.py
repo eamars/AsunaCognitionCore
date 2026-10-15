@@ -1017,17 +1017,20 @@ class ScheduleService:
                 self.store.audit(plan['_id'], 'schedule.rename_refused', {'error': str(exc)[:300]}, plan['scope_key'])
 
     def deliver(self, payload):
-        if not isinstance(payload, dict) or set(payload) != {'session', 'seq', 'id'}:
+        """The scheduler session's new dispatches, in log order: the native log is read once for the whole batch."""
+        if not isinstance(payload, dict) or set(payload) != {'session', 'dispatches'} \
+                or not isinstance(payload['dispatches'], list):
             raise ValueError('INVALID_SCHEDULE_CALLBACK')
-        if payload['session'] != self.lane.scheduler_session or type(payload['seq']) is not int or not isinstance(payload['id'], str):
+        if payload['session'] != self.lane.scheduler_session or not all(isinstance(d, dict)
+                and type(d.get('seq')) is int and isinstance(d.get('id'), str) for d in payload['dispatches']):
             raise Denied('SCHEDULE_CALLBACK_SOURCE_MISMATCH')
         events = self._native_events()
-        dispatch = next((e for e in events if e['seq'] == payload['seq']
-                         and e['data'].get('operation') == 'dispatch'
-                         and e['data'].get('id') == payload['id']), None)
-        if not dispatch:
-            raise Denied('SCHEDULE_DISPATCH_NOT_FOUND')
-        self._deliver(payload['seq'], payload['id'], self._grouped(events)[0])
+        logged = {(e['seq'], e['data'].get('id')) for e in events if e['data'].get('operation') == 'dispatch'}
+        creates = self._grouped(events)[0]
+        for dispatch in payload['dispatches']:
+            if (dispatch['seq'], dispatch['id']) not in logged:
+                raise Denied('SCHEDULE_DISPATCH_NOT_FOUND')
+            self._deliver(dispatch['seq'], dispatch['id'], creates)
 
     def _deliver(self, seq, schedule_id, creates):
         # Startup reconciliation and a live native callback can see the same

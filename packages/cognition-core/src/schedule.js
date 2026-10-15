@@ -146,11 +146,16 @@ export class NativeSchedules {
     // The log is what delivers them (refresh reads every inserted reminder), so the ones queued before this
     // reading are removed once it has been read. One arriving later stays and wakes its own turn.
     const queued = agent.inbox.nextTurn.filter(message => message.source?.kind === 'schedule').map(message => message.id);
+    // The worker has every dispatch up to `through`: only newer ones go, in one call, so a reminder costs the same
+    // however long the log grows. The first reading after a start sends them all once; the worker drops the old.
     const rows = await this.exclusive(() => this.refresh(agent));
     await this.core.ready();
-    for (const event of rows.filter(e => e.data.operation === 'dispatch'))
-      await this.core.worker.call('schedule.deliver', {
-        session: agent.session.id, seq: event.seq, id: event.data.id });
+    const fresh = rows.filter(e => e.data.operation === 'dispatch' && e.seq > (this.through ?? -1));
+    if (fresh.length) {
+      await this.core.worker.call('schedule.deliver', { session: agent.session.id,
+        dispatches: fresh.map(e => ({ seq: e.seq, id: e.data.id })) });
+      this.through = fresh.at(-1).seq;
+    }
     for (const id of queued) agent.inbox.remove(id);
     if (queued.length) await this.ctx.sessions.flush(agent.session);
   }

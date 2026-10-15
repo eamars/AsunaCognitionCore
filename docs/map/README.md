@@ -99,6 +99,12 @@ thoughts she can still read where she wrote it. A past thought she does get back
 did then (`reasons.then`). The tool list is the
 same in every turn of a conversation, so the model keeps the conversation cached (ADR-038).
 
+A tool's parameters have two sets of names. She is shown one (`do`, `why`, `content`, `section`, `when_shown`…), and
+a handler reads another (`op`, `reason`, `body`, `sid`, `inject`…). The table is `param_names.RENAMED`;
+`param_names.inbound` maps a call before anything reads it, so the program's own records of a call
+(`episodes.tool_calls`, the audit) hold the handlers' names. DSH's session keeps the call as she wrote it, so the Web
+page's tool rows ([client.js](../../packages/cognition-core/src/client.js)) read the shown name, then the old one.
+
 ### How does the action brain get a job and hand it back?
 
 1. **Handing over.** `delegate` (`role_tools.RoleTools.tool_delegate`) creates a task (`tasks.TaskService`) with the
@@ -107,7 +113,7 @@ same in every turn of a conversation, so the model keeps the conversation cached
    ([children.js](../../packages/cognition-core/src/children.js)), and the Web page shows it inline under her turn.
    Every tool call goes through `tasks.ToolBroker` and is checked against the task's grant.
 3. **Handing back.** The report comes back to her conversation as a task result. A long report comes as its first
-   page, and she turns the rest with `task` op `page`. With `task` she also talks to a task (`message`), stops it
+   page, and she turns the rest with `task` do `page`. With `task` she also talks to a task (`message`), stops it
    (`stop`), and answers its questions (`answer`).
 
 Decided in ADR-011.

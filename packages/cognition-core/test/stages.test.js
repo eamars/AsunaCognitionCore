@@ -22,7 +22,7 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
 const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
 
 test('cold composer stays blocked until QQ policy resolves, and stale queries cannot block Local', async () => {
@@ -252,4 +252,23 @@ test('every UI language has the same words with the same placeholders', () => {
     [key, [...String(text).matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort().join(',')]));
   const [first, ...others] = Object.keys(DICTIONARY);
   for (const language of others) assert.deepEqual(shape(DICTIONARY[language]), shape(DICTIONARY[first]), language + ' vs ' + first);
+});
+
+test('her tool rows read the names she is shown, and the old ones', () => {
+  // A document write opens to what she wrote.
+  assert.deepEqual(toolRow('write_document', { doc: 'work_log', do: 'replace_section', section: 's1', content: 'Done today.', why: 'x' }),
+    { name: 'write_document', said: 'work_log', body: 'Done today.' });
+  assert.equal(toolRow('write_document', { doc: 'work_log', op: 'replace_section', body: 'Old name.' }).body, 'Old name.');
+  // The ideas notebook: the option written, or the one its fields say; each shows as its own row.
+  assert.deepEqual(toolRow('ideas', { do: 'note', idea: 'Keep a skill.', why: 'x' }), { name: 'note_idea', said: 'Keep a skill.', body: 'Keep a skill.' });
+  assert.equal(toolRow('ideas', { idea: 'No do written.' }).name, 'note_idea');
+  assert.deepEqual(toolRow('ideas', { id: 'idea-1', decision: 'adopt', why: 'Worth it.' }), { name: 'review_idea', said: 'Worth it.', body: '' });
+  assert.equal(toolRow('ideas', { do: 'read', page: 2 }).name, 'read_ideas');
+  assert.equal(toolRow('ideas', { idea: 'a', id: 'b' }).name, 'ideas');           // says two options: the plain row
+  // Tasks and the rest of the renamed fields.
+  assert.deepEqual(toolRow('task', { task: 't1', why: 'Cancelled.' }), { name: 'stop_action', said: 'Cancelled.', body: '' });
+  assert.equal(toolRow('task', { op: 'stop', task: 't1', reason: 'Old name.' }).said, 'Old name.');
+  assert.equal(toolRow('stay_silent', { why: 'Nothing to add.' }).said, 'Nothing to add.');
+  assert.equal(toolRow('understand_person', { layer: 'person', content: 'Likes tea.' }).body, 'Likes tea.');
+  assert.equal(toolRow('note_idea', { idea: 'From the action brain.', why: 'x' }).name, 'note_idea');
 });

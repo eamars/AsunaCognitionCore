@@ -619,23 +619,40 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     read_ideas: 'IconListPenOutlineRegular', read_report: 'IconFlatListOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
     ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular',
     task: 'IconPaperPlaneOutlineRegular', ideas: 'IconLightOutlineRegular' };
-  // A tool with options (role_tools.OPS) shows each option as the row its old name had; a record by the old name
-  // shows the same row.
+  // A record holds the call as she wrote it: the names she is shown (param_names.RENAMED), or an old name that still
+  // runs. A row reads the shown name, then the old one.
+  const OLD_NAMES = { do: 'op', why: 'reason', content: 'body', section: 'sid' };
+  const arg = (args, field) => field ? args[field] ?? args[OLD_NAMES[field]] : undefined;
+  // A tool with options (role_tools.OPS): the option written, or the one its fields plainly say (role_tools.OP_FIELDS).
+  const OPTION_FIELDS = { task: { message: 'message', answer: 'answer', why: 'stop', page: 'page' },
+    ideas: { idea: 'note', id: 'review', decision: 'review', search: 'read', page: 'read' } };
+  const optionOf = (tool, args) => {
+    const written = arg(args, 'do');
+    if (written) return written;
+    const said = new Set(Object.entries(OPTION_FIELDS[tool] ?? {}).filter(([field]) => arg(args, field) !== undefined).map(([, op]) => op));
+    return said.size === 1 ? [...said][0] : undefined;
+  };
+  // A tool with options shows each option as the row its old name had; a record by the old name shows the same row.
   const OPTION_ROWS = { 'task.message': 'message_action', 'task.answer': 'answer_action', 'task.stop': 'stop_action',
     'task.page': 'read_report', 'ideas.note': 'note_idea', 'ideas.read': 'read_ideas', 'ideas.review': 'review_idea' };
   // The argument that says what a call was about (her own words), and the one shown in full when opened.
-  const TOOL_SUMMARY = { think: 'thought', recall: 'query', delegate: 'title', message_action: 'message', stop_action: 'reason',
-    answer_action: 'answer', stay_silent: 'reason', attach_image: 'why', write_document: 'doc', update_self: 'target',
-    understand_person: 'body', set_policy: 'key', feel: 'why', plan: 'intent', group_action: 'who',
+  const TOOL_SUMMARY = { think: 'thought', recall: 'query', delegate: 'title', message_action: 'message', stop_action: 'why',
+    answer_action: 'answer', stay_silent: 'why', attach_image: 'why', write_document: 'doc', update_self: 'target',
+    understand_person: 'content', set_policy: 'key', feel: 'why', plan: 'intent', group_action: 'who',
     promote_memory: 'fact', note_idea: 'idea', review_idea: 'why', ask_character: 'question', report_progress: 'note',
     visit: 'topic' };
   const TOOL_BODY = { think: 'thought', delegate: 'brief', message_action: 'message', answer_action: 'answer',
-    write_document: 'body', update_self: 'body', understand_person: 'body', note_idea: 'idea', ask_character: 'question',
+    write_document: 'content', update_self: 'content', understand_person: 'content', note_idea: 'idea', ask_character: 'question',
     report_progress: 'note', promote_memory: 'fact' };
   const parseArgs = raw => { try { const value = JSON.parse(raw ?? ''); return value && typeof value === 'object' ? value : {}; } catch { return {}; } };
   const firstSentence = text => String(text ?? '').split(/(?<=[。！？!?.\n])/)[0].trim();
   const resultText = block => (block?.content ?? []).filter(part => part.type === 'text').map(part => part.text).join('\n');
   const ROLE_TOOLS = Object.keys(TOOL_ICONS);
+  /** A call's row, read from the call as recorded: which row, what it was about, and the body it opens to. */
+  const toolRow = (tool, args) => {
+    const name = OPTION_ROWS[tool + '.' + optionOf(tool, args)] ?? tool, body = arg(args, TOOL_BODY[name]);
+    return { name, said: arg(args, TOOL_SUMMARY[name]), body: typeof body === 'string' ? body : '' };
+  };
 
   function apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTIONARY));
@@ -1177,16 +1194,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const disclosure = props.useDisclosure();
       const raw = props.phase === 'start' ? props.block.argsRaw : props.phase === 'result' ? props.block.call?.argsRaw : '';
       const args = parseArgs(raw);
-      const name = OPTION_ROWS[props.toolName + '.' + args.op] ?? props.toolName;
+      const { name, said, body: written } = toolRow(props.toolName, args);
       const refused = props.phase === 'result' && props.block.isError;
-      const said = args[TOOL_SUMMARY[name]];
       const summary = name === 'think' ? firstSentence(said) : typeof said === 'string' ? said : said === undefined ? '' : JSON.stringify(said);
       // A call whose only text is its summary (stay_silent's reason, feel's why…) opens to that text in full when
       // the one-line row really cuts it off at this width; a call with a body opens to the body.
       const line = React.useRef(null);
       const cut = useCut(line, [summary], !disclosure.expanded);       // measured while closed; kept while open
-      const body = typeof args[TOOL_BODY[name]] === 'string' ? args[TOOL_BODY[name]]
-        : name !== 'think' && typeof said === 'string' && cut ? said : '';
+      const body = written || (name !== 'think' && typeof said === 'string' && cut ? said : '');
       const result = props.phase === 'result' ? resultText(props.block) : '';
       const Icon = primitives[TOOL_ICONS[name]] ?? primitives.IconInfoOutlineRegular;
       const detail = [body && h(MarkdownText, { key: 'body', text: body, labels: markdownLabels(t) }),
@@ -1326,7 +1341,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }, ActiveStage));
 
   }
-  return { apply, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
+  return { apply, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
     inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'remote.credentials', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

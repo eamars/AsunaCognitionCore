@@ -186,6 +186,10 @@ def test_an_admitted_group_is_titled_by_its_name_once_the_platform_sends_it(prod
     assert p.worker.channel_title(route) == '💤 读书会'
     # An admission stored earlier with the number as its name still reads by the group's name.
     assert p.worker.channel_title({**route, 'display_name': '33330000'}) == '💤 读书会'
+    # Regression: a newer notice (it carries no group name) turned the title back into the number.
+    p.store.db.messages.insert_one({'_id': 'notice', 'scene_id': route['scene_id'], 'direction': 'inbound',
+                                    'event': {'raw': {'asuna_notice': {'kind': 'recall'}}}, 'received_at': '9999-01-01'})
+    assert p.worker.channel_title(route) == '💤 读书会'
 
 
 def test_a_private_chat_the_platform_names_no_one_in_is_titled_by_the_name_this_profile_keeps(product):

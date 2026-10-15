@@ -137,6 +137,9 @@ resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, whic
 
 Core code, core prompts and example configs never name a persona or a platform.
 
+A skill (`skills/<name>/SKILL.md`) points at code as `` `file:name` ``, such as `` `src/asuna/restarts.py:SHOWN_HOURS` ``,
+never by line number: `tests/test_skill_anchors.py` checks that each such file exists and holds the name.
+
 ## Writing tool errors
 
 Every error a tool call can return is read by a model that has to act on it, so it says the cause and the fix:

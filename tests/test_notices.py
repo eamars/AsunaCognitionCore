@@ -258,14 +258,17 @@ def test_a_reaction_names_her_line_by_when_she_said_it_and_one_to_anothers_line_
                            'receipt_at': '2026-10-04T01:30:00+00:00', 'scene_seq': 9})
     channels, received, _ = bridge(store)
     mine = posted('20003', '给{line}点了「赞」', 'reaction', 'reacted', {'message_id': '555', 'mine': True})
-    assert channels.receive('qq', mine) == {'status': 'held'}, 'a group she lets rest: seen once, no look (ADR-039)'
+    # Regression (owner 2026-10-16): in a group she lets rest a reaction to her line was held, not looked at, and a
+    # restart lost it; 18 of her 21 groups rest. A notice that asks for a look gets it anywhere: her gate decides.
+    assert channels.receive('qq', mine) == {'status': 'accepted'}
+    assert received[0]['group_context']['wake_reason'] == 'reacted'
     store.db.scenes.update_one({'_id': SCENE}, {'$set': {'focus_active': True}})
     assert channels.receive('qq', {**mine, 'event_id': 'again'}) == {'status': 'accepted'}
     assert received[0]['text'].startswith('给你 ') and received[0]['text'].endswith(' 说的那句点了「赞」')
     assert '晚安' not in received[0]['text'], 'her line is not quoted again'
     other = posted('20003', '给{line}点了「赞」', 'reaction', 'reacted', {'message_id': '72002', 'mine': True},
                    event_id='notice-reaction-2')
-    assert channels.receive('qq', other) == {'status': 'dropped'} and len(received) == 1
+    assert channels.receive('qq', other) == {'status': 'dropped'} and len(received) == 2
 
 
 def test_a_recall_in_a_group_is_held_not_stored_and_shown_once_quoting_the_line(store):

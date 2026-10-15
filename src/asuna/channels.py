@@ -404,10 +404,13 @@ class Channels:
             if 'group_context' in event:
                 event['group_context'].update(wake_reason=None, blocked=event['group_context']['wake_reason'])
         if 'group_context' in event:
-            # ADR-039: in a group she lets rest, only what is meant for her wakes her (focus.RESTING_WAKES).
+            # ADR-039: in a group she lets rest, only what is meant for her wakes her (focus.RESTING_WAKES). A notice
+            # that asks for a look (a poke at her, a reaction to her line) gets it in any group: her relevance gate
+            # decides (ADR-064, owner 2026-10-16).
             from . import focus
             reason = event['group_context']['wake_reason']
-            kept = focus.wake(self.store, self.store.db.scenes.find_one({'_id': route['scene_id']}), reason)
+            kept = reason if notice and notice.get('gate') else focus.wake(
+                self.store, self.store.db.scenes.find_one({'_id': route['scene_id']}), reason)
             if kept != reason:
                 event['group_context'].update(wake_reason=kept, resting=reason)
             if notice and not event['group_context']['wake_reason']:

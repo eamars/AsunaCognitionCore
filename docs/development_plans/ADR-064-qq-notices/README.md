@@ -549,8 +549,9 @@ project; the host part with her next restart.
   the gate that dropped it), by UTC day for 14 days in the adapter's `notices/counts.json`; `health.json` `notices`
   shows today and the last 7 days. Unknown kinds count under their platform name and are never shown.
 - **Groups and private chats (host, `notices.py`).** As designed: the same gates as a message, a blocked person's
-  notice dropped; `poked` and `reacted` through the gate (`poked` also wakes a resting group; `reacted` there is held
-  instead); everything else in a group held in memory and shown once, folded by kind and identical words, the cap
+  notice dropped; `poked` and `reacted` through the gate, in a resting group too (owner 2026-10-16: the notices are projected
+  to text so that her relevance gate decides; a reaction held in a resting group waited for a turn that rarely
+  came, and a restart lost it, while 18 of her 21 groups rest); everything else in a group held in memory and shown once, folded by kind and identical words, the cap
   after folding. A reaction to a line not hers is dropped by the host (the adapter cannot tell whose line it was
   without reading it). A reaction names her line by when she said it and never quotes it; only a recall quotes.
 - **Her home.** Requests, a kick of her account and a change of her admin role arrive through `POST /notices`, held a

@@ -143,6 +143,10 @@ def test_the_tab_shows_her_memory_as_her_turns_read_it(view):
     store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
     titles = [row['title']['key'] for row in NativeMemory(worker, 'role').page('relation')['rows']]
     assert sorted(titles) == ['memory.title.person', 'memory.title.relation']
+    where = {row['title']['key']: row['scene_title'] for row in NativeMemory(worker, 'role').page('relation')['rows']}
+    assert where['memory.title.person'] is None, 'what holds anywhere is from no one conversation'
+    assert all(row['scene_title'] is None for row in NativeMemory(worker, 'role').page('self')['rows']
+               if row['id'].startswith('item:'))
     for unit, formed in (('older', '2026-10-01T00:00:00+00:00'), ('newer', '2026-10-02T00:00:00+00:00')):
         store.db.memory_units.insert_one({'_id': unit, 'character_id': 'character', 'scope_key': 'scene:one',
             'policy_epoch': 1, 'status': 'active', 'kind': 'monologue', 'formed_at': formed,

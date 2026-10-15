@@ -368,8 +368,10 @@ class NativeMemory:
         for row in rows:
             row.pop('body', None)
             row.pop('source_ids', None)
-            # Documents and job reports belong to the persona, not to any one conversation.
-            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report', 'affect') else self.scene_title(
+            # Documents and their items, job reports, and what holds of a person anywhere belong to no one
+            # conversation.
+            row['scene_title'] = None if row['kind'] in ('document', 'persona_job_report', 'affect') or row.get(
+                'scope_key', '').startswith('doc:') or row.get('scope_key') == 'person' else self.scene_title(
                 row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:'))
         return {'scene_id': self.scene['_id'], 'scene_title': self.scene_title(self.scene['_id']),
                 'persona': self.binding['persona'], 'subject_name': self.cognition.subject_name(),

@@ -119,7 +119,8 @@ def list_workflows(service):
     listing = service.json('GET', '/project/workflows')
     out = []
     for workflow in listing.get('workflows') or ():
-        if isinstance(workflow, dict) and workflow.get('ready') and (text_to_image(workflow) or takes_source(workflow)):
+        if (isinstance(workflow, dict) and workflow.get('ready') and not unsupplied(workflow)
+                and (text_to_image(workflow) or takes_source(workflow))):
             out.append({'workflow': workflow.get('id'), 'description': clip(workflow.get('description') or '', 200),
                         **({'source_image': 'required' if needs_source(workflow) else 'optional'}
                            if takes_source(workflow) else {}),
@@ -139,6 +140,12 @@ def takes_source(workflow):
 
 def needs_source(workflow):
     return SOURCE_PARAMETER in ((workflow.get('parameter_schema') or {}).get('required') or ())
+
+
+def unsupplied(workflow):
+    """Pictures the workflow requires besides the source (an inpaint mask…): this client cannot give them."""
+    return sorted(name for name in (workflow.get('parameter_schema') or {}).get('required') or ()
+                  if name != SOURCE_PARAMETER and name.endswith('_image'))
 
 
 def choose_workflow(service, request):
@@ -162,6 +169,10 @@ def choose_workflow(service, request):
     workflow = detail['workflow'] if isinstance(detail.get('workflow'), dict) else detail
     if not workflow.get('ready'):
         raise Failure('IMAGE_WORKFLOW_NOT_READY', workflow=name)
+    if unsupplied(workflow):
+        raise Failure('IMAGE_WORKFLOW_NEEDS_MORE_PICTURES', workflow=name, needs=unsupplied(workflow),
+                      note='这条路线还要 %s，generate_image 给不了，所以清单里没有它；换一条 list_routes=yes 里的。'
+                           % '、'.join(unsupplied(workflow)))
     if source and not takes_source(workflow):
         raise Failure('IMAGE_WORKFLOW_TAKES_NO_SOURCE', workflow=name,
                       note='这条路线只从文字画，不收原图；改图换一条 list_routes=yes 里标着 source_image 的路线，'

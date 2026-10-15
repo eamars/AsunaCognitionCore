@@ -44,4 +44,8 @@ Each trusted integration run (an image or a fetch) left its folder under `integr
 
 ## Open
 
+An inpaint route also needs a `mask_image`, which `generate_image` cannot give: such routes are not listed and
+are refused by name. A mask is not in this decision.
+
+
 The service's `input_fit` and error codes were live but not yet committed on its side when this was built.

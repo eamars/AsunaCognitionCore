@@ -282,6 +282,7 @@ Trusted one-shot image generation, run only inside the managed integration names
 - def `text_to_image`
 - def `takes_source` — The workflow declares the uploaded picture it works from (parameter_schema input_image).
 - def `needs_source`
+- def `unsupplied` — Pictures the workflow requires besides the source (an inpaint mask…): this client cannot give them.
 - def `choose_workflow` — The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's own choice: an edit route for a source picture, a text-to-image one without.
 - def `upload` — The source picture uploaded under its content name; returns the name the workflow takes as input_image.
 - def `forget` — The uploaded source removed from the service again; a failure is said, never raised.

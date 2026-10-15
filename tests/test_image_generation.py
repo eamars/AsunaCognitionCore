@@ -321,3 +321,15 @@ def test_a_service_warning_keeps_its_code_and_the_sizes_it_used():
                            'used_size': [1120, 2048], 'message': 'input image downscaled to fit the route'})
     assert said == 'input_downscaled: input image downscaled to fit the route (2232x4000 → 1120x2048)'
     assert script.warning('plain words') == 'plain words'
+
+
+def test_a_route_that_needs_a_picture_this_tool_cannot_give_is_not_listed_and_is_refused(monkeypatch, tmp_path):
+    inpaint = {**EDIT, 'id': 'demo-inpaint', 'parameter_schema': {
+        'properties': {'prompt': {}, 'input_image': {}, 'mask_image': {}}, 'required': ['input_image', 'mask_image']}}
+    service = FakeService(workflows=(T2I, EDIT, inpaint))
+    listed = run(service, gen.validate({'workflows': True})[0], monkeypatch, tmp_path)
+    assert [w['workflow'] for w in listed['workflows']] == ['demo-t2i', 'demo-edit']
+    with pytest.raises(script.Failure) as failure:
+        edit(monkeypatch, tmp_path, service, workflow='demo-inpaint')
+    assert failure.value.report['error'] == 'IMAGE_WORKFLOW_NEEDS_MORE_PICTURES'
+    assert failure.value.report['needs'] == ['mask_image'] and not service.deleted, 'refused before any upload'

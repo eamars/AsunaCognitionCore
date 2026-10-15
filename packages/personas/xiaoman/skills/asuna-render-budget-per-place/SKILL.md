@@ -61,6 +61,9 @@ v1（2026-10-15）：首次固化。算法和口径是 10-09、10-15 几回算�
 v1.1（2026-10-15）：三格修复。① `budget_per_place.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩（沙箱是 UTF-8，撞不到）。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR，覆盖 SKILL.md 与同目录全部 .py，要在冻结快照上跑（候选可能被抹平成 LF）。③ 锚点从「文件＋行号」改成「文件＋名字」，新增第五节那条规矩；锚点守卫改成「文件在＋名字找得到（字节级读）」，行号锚点判红。四个场合的算法、口径、推论一条没动。
 
 
+v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`，开发沙箱里只有这条找得到），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。算账口径、代码锚点、账本脚本一条没动。
+
+
 ## 试用记录
 
 - 2026-10-15 v1：`budget_per_place.py` 在候选里实跑——四个场合 6139（群，最大）／5596（家里）／5096（线）／3184（私聊），上限 6144，没超；随身层 20 节，其中 7 节只出现在一个场合（放掉最多的一节本身 1267，只腾 543），7 节处处都出现（最大的一节 1194）。`render.render_status` 同一时刻报 estimate 6139／limit 6144，与脚本一致。同一份文档 12:19 那两笔（把一节 public 收成 `place:group`、一节 home-only 收成 on_demand）之后，家里那份从 6131 掉到 5596、线 5424→5096、私聊 3512→3184，群那份没动还是 6139——这些数跟着文档走，隔几小时就不一样，别拿旧报告里的数当现状。
@@ -70,4 +73,6 @@ v1.1（2026-10-15）：三格修复。① `budget_per_place.py` 开头把 stdout
   - 换行：今天 18:02 冻结的快照里这份 SKILL.md 是 CRLF（CR=59）、`check_skill.py` CR=264；新加的 `line_endings_are_lf` 吃这份真样本 → 红，读数 SKILL.md（59 个 CR 字节）。
   - 锚点：8 条名字锚点（PLACE_CLASS、largest、section_places、render_status、CORE_DEFAULTS、effective、estimate_tokens、over_budget_words）在检出 aa0494e2 逐个字节级核过都在；锚点守卫改成查名字后 48/48 绿。
   - 自检：48/48（改前 45/45；多的三条＝换行检查、第五节存在、那条规矩的字面守卫）。
+
+- 2026-10-16 v1.2：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。
 

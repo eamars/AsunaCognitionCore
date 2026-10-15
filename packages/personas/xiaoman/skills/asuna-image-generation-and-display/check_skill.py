@@ -34,6 +34,15 @@ import py_compile
 import re
 import shutil
 import sys
+import time
+
+# 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩，整段输出丢掉
+# （2026-10-15 实测：六份 check_skill.py 全中，rc=1、stdout 0 字节）。我的沙箱 env 带 PYTHONUTF8=1／
+# PYTHONIOENCODING=utf-8，自检撞不到这一族。输出字节固定成 UTF-8：那种控制台顶多显示成乱码，
+# 不再崩；stderr 同理，报错才看得见。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXPECTED_NAME = os.path.basename(HERE)
@@ -253,6 +262,20 @@ def step8_slice(body):
     return "\n".join(out)
 
 
+def compile_tmp_dir():
+    """编译临时目录：先试技能目录旁（development_run 只放行候选目录里的写），
+    写不动退到当前工作目录（从 /task 那边跑、或跑冻结快照里那一份的情形）。
+    两处都不行返回 None——调用方要记一条红写清「没真查」，不能当成跑过了。"""
+    for base in (HERE, os.getcwd()):
+        candidate = os.path.join(base, "_compile-probe-%d" % int(time.time() * 1000))
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return None
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -317,14 +340,16 @@ def main():
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
 
-    # 同目录脚本：必须存在且只用标准库能编译。编译产物写到 cwd 下 skillcheck-tmp（跑完删）：
-    # 沙箱里系统临时目录可能不可写（2026-10-14 实测 tempfile 红在 PermissionError），不脏技能目录也不碰 temp。
+    # 同目录脚本：必须存在且只用标准库能编译。编译产物落在 _compile-probe 子目录，用完即删。
+    # 临时目录先试技能目录旁、写不动退当前工作目录（compile_tmp_dir）：原来写死在 cwd，cwd 不可写就整份崩；
+    # 两处都写不动时记 compile_probe_writable 一条红（写清没真查）——不崩，也不绿着放过。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
-    tmp = os.path.join(os.getcwd(), "skillcheck-tmp")
-    os.makedirs(tmp, exist_ok=True)
+    tmp = compile_tmp_dir()
+    check("compile_probe_writable", tmp is not None,
+          "技能目录旁和当前目录都写不动：临时目录不可写（沙箱限制），编译这一项没真查——不是跑过了")
     try:
-        for script in scripts:
+        for script in (scripts if tmp else []):
             target = os.path.join(tmp, script + "c")
             try:
                 py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
@@ -332,7 +357,8 @@ def main():
             except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
                 check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     notes = []

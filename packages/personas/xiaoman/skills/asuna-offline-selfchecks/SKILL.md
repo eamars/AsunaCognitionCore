@@ -55,6 +55,18 @@ napcat-qq 适配器的自检（`--selftest --offline`，跑内置占位夹具）
 
 文本模式（universal newlines）读文件看不见 CR，查换行必须读字节数 `\r`——`open(p, encoding="utf-8")` 读进来再问 `text` 里有没有 CR 永远是「没有」，CRLF 照样绿（2026-10-15 撞的：真 CRLF 样本 CR=59）。
 
+### 自检脚本自己也要能在 cp1252 下跑
+
+脚本开头不把 stdout／stderr 固定成 UTF-8，中文一 print 就在普通 Windows 控制台的 cp1252 上整段崩，
+而我的沙箱 env 带 `PYTHONUTF8=1`，永远撞不到——所以发布前拿 `PYTHONIOENCODING=cp1252` 起一次子进程冒烟，
+rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
+
+### 自检脚本的临时目录要带兜底
+
+编译临时目录先试技能目录旁、写不动退当前工作目录（`compile_tmp_dir()`），两处都不行就记一条红写清「没真查」——
+**「跑不起来」和「跑过了」不是一回事**，不许被兜底吞成绿（2026-10-15 从冻结快照跑，`os.makedirs` 一句
+PermissionError 把整份自检带崩，而它前面刚打印完一条 NOTE，看着像跑到了）。
+
 ## 版本
 
 v1（2026-09-24）：首次记录，命令与结论都来自本次实跑。
@@ -83,6 +95,14 @@ v2.2（2026-10-15）：`check_skill.py` 的编译临时目录改成「先试技�
 
 v2.3（2026-10-15）：增量加一句「查换行必须读字节」（今天撞的：文本模式读文件看不见 CR，查换行的那把尺一直是瞎的）。`check_skill.py` 新增 `line_endings_are_lf`——读字节数 CR，覆盖 SKILL.md 与同目录全部 .py，27→28 条。其余口径、增量、指向未动。
 
+
+v2.4（2026-10-15）：增量加一句判词「自检脚本自己也要能在 cp1252 下跑」（owner 采纳想法本 idea-d0b727b62e95a474f9f045f96739bc76：非 UTF-8 输出冒烟）。同轮补同类漏修：六份 check_skill.py 开头统一把 stdout／stderr 固定成 UTF-8——上一趟只修了两份探针（version_probe.py／budget_per_place.py），check_skill.py 一份都没修到，其中两份（asuna-image-generation-and-display、asuna-outbound-round）连点名都没有。正文其余口径、守卫判据未动，本技能条数不变（28 条）。
+
+v2.5（2026-10-15）：增量再加一句判词「自检脚本的临时目录要带兜底」（owner 拍板当场修，同一族：跑不起来不等于跑过了）。
+同轮修两份：asuna-outbound-round 与 asuna-image-generation-and-display 的 check_skill.py 编译临时目录改成
+compile_tmp_dir()（先技能目录旁 → 退 cwd → 两处都不行记 compile_probe_writable 一条红，detail 写清没真查），
+编译真失败照旧逐条 FAIL 不被吞。这一格不是 cp1252 那趟改出来的：上一版快照 135b38e6 里 outbound-round 从快照跑就崩。
+两份各多一条 compile_probe_writable（37→38、123→124），其余四份条数不变。
 
 ## 试用记录
 
@@ -165,3 +185,23 @@ v2.3（2026-10-15）：增量加一句「查换行必须读字节」（今天撞
 - 真样本另有一处：今天 18:02 冻结的 xiaoman 快照里 asuna-running-version／asuna-render-budget-per-place 的 SKILL.md 与 `check_skill.py` 是 CRLF（CR=90／279、59／264），候选里现在却是 LF——**换行这类字节面检查要跑在冻结快照上，只在候选里跑等于白跑**；
 - 发布结果以本次行动报告为准。
 
+
+2026-10-15（v2.4，六份 check_skill.py 加 UTF-8 输出守卫＋本文件加一句判词，xiaoman 候选）：
+
+- 改前 cp1252 实测（子进程 env 去掉 `PYTHONUTF8`、置 `PYTHONIOENCODING=cp1252`）：六份 check_skill.py 全 rc=1、  stdout 0 字节，stderr 报 `UnicodeEncodeError: 'charmap' codec can't encode characters in position …`（`Lib/encodings/cp1252.py` 第 19 行 encode）——整段输出丢掉，不是只丢几个字；同环境两份探针 rc=0、stderr 空；
+- 沙箱 env 实测带 `PYTHONUTF8=1／PYTHONIOENCODING=utf-8`，这就是以前自检全绿却照样崩的原因；
+- 改后同一 cp1252 环境：六份 rc=0、stderr 0 字节，条数照旧 129/129、123/123、28/28、37/37、48/48、56/56；
+- 锚点两条口径核对（留着不删）：仓库 `tests/test_skill_anchors.py` 与本技能两份 `code_anchors_named` 在「文件＋名字」「行号判红」「只写路径放过」三条上一致（逐个写法喂两把尺对过）；差异只在覆盖面——仓库那条扫全部角色包、只认 src/tools/tests/packages/docs/config 开头的路径，我这条只扫本技能正文、但连光杆 `:244-245` 和不带顶层目录的相对路径都收（更严）；本技能正文 11 条真锚点在两把尺下都过；
+- 发布结果以本次行动报告为准。
+
+2026-10-15（v2.5，两份自检的编译临时目录加兜底＋本文件加一句判词，xiaoman 候选）：
+
+- 怎么撞出来的：cp1252 那格发完后照本技能「字节面检查跑在冻结快照上」的口径从快照跑六份，asuna-outbound-round
+  rc=1、stderr 863B，PermissionError: [WinError 5] Access is denied: …\frozen\e04c45b2…\skills\asuna-outbound-round\_compile-probe-…
+  （os.makedirs 没兜底）；同一份在上一版快照 135b38e6 里一模一样地崩（那边行号 187）——不是本趟改出来的，是这条流程一直会撞；
+- 反证一（跑不起来）：cwd 指到只读检出根、脚本跑在冻结快照里（两处都写不动）→ 不崩、rc=1、FAIL compile_probe_writable，
+  detail 写清「编译这一项没真查——不是跑过了」（这条跑法与读数另见当趟行动报告，本条随该次发布一起冻结）；
+- 反证二（真编译不过）：往两份技能目录副本里塞一份语法就错的 broken_probe_case.py → outbound-round 38/39、
+  image-generation 124/125，各红在 compiles_broken_probe_case.py（PyCompileError），兜底没把它吞成绿；
+- 候选内沙箱正常 env 与 cp1252 env 各跑一遍：129/129、124/124、28/28、38/38、48/48、56/56，全 rc=0、stderr 0 字节；
+- 发布结果以本次行动报告为准。

@@ -33,7 +33,8 @@ source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码必须齐（错误�
 找不到名单记一条红（leak_scan_ran），不像别的技能脚本那样 NOTE 一行就算过——
 「检查项没跑」和「检查项过了」不能长得一样。名单定位依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT →
 asuna.config.DATA → 从脚本所在目录往上找 .runtime/private/personal-words.txt
-（2026-10-16 实测：开发沙箱里前三个都没有，只有最后那条找得到本机这份）。
+（2026-10-16 实测更正：开发沙箱里两个环境变量都没设，但 `asuna` 能 import、第三条就够；
+最后那条是给 `asuna` 不在 sys.path 上的环境兜底：裸检出、别的机器、装在 node_modules 里的冻结版）。
 
 群发前自检的四条要点只在「往群里发图之前的自检」这一节里查：正文别处合法提到历史口径
 （版本段引用「不发群」旧边界、试用记录里的旧句子）不算缺、也不误报红；把「不发群」这类
@@ -377,8 +378,8 @@ def private_list():
     """私密名单（private_words 工具维护，永远不进仓库）：一行一条 category|word|why。
 
     位置依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT/private/… → asuna.config.DATA/private/… →
-    从脚本所在目录往上找 .runtime/private/personal-words.txt。最后那条是给开发沙箱留的：
-    2026-10-16 实测那里两个环境变量都没设，只有往上走才找得到本机这份。
+    从脚本所在目录往上找 .runtime/private/personal-words.txt。最后那条是给 asuna 不在 sys.path
+    上的环境兜底的：2026-10-16 实测那里两个环境变量都没设，但 asuna 能 import、第三条就够。
     返回 (命中的路径或最后试过的路径, 条目列表或 None)。
     """
     named = os.environ.get("ASUNA_PRIVATE_WORDS")

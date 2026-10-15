@@ -92,7 +92,7 @@ v1（2026-10-15）：首次固化。判据全是我这几天撞出来的（10-15
 v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩，我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8 所以自检撞不到这一族。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR（文本模式读看不见 CR，那把尺是瞎的），覆盖 SKILL.md 与同目录全部 .py，并且要在冻结快照上跑——候选可能被别人抹平成 LF，只在候选里跑等于白跑。③ 锚点全部从「文件＋行号」改成「文件＋名字」，新增第十一节那条规矩；锚点守卫跟着改成「文件在＋那个名字在文件里找得到（字节级读）」，正文里再出现行号锚点直接判红。判据、读数一条没动。
 
 
-v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`，开发沙箱里只有这条找得到），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。八条判据、两条顺手、探针脚本、代码锚点一条没动。
+v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`；本机 `asuna` 能 import，第三条 `asuna.config.DATA` 就够，往上走那条是给 `asuna` 不在 `sys.path` 上的环境兜底），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。八条判据、两条顺手、探针脚本、代码锚点一条没动。
 
 
 ## 试用记录

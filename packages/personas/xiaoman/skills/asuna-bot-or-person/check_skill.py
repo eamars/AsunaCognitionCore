@@ -10,7 +10,8 @@
    命中这一项只提示不判红——产品名和群名片可能撞词（正文里「麦麦」既是一家 bot 也是某个名片）。
    名单配不上则记一条红（leak_scan_ran）：2026-10-16 起不再「NOTE 一行、绿数照旧」，
    「检查项没跑」不许长得像「检查项过了」。定位多一条兜底：环境变量都没有就从脚本往上找
-   .runtime/private/personal-words.txt（开发沙箱里两个环境变量都没设，只有这条找得到）。
+   .runtime/private/personal-words.txt（本机两个环境变量都没设；asuna 能 import 时第三条
+   asuna.config.DATA 就够，往上走那条是给 asuna 不在 sys.path 上的环境兜底）。
 4. 没有占位符残留。
 
 编译产物不落技能目录：先试系统临时目录，宿主沙箱里它常被拒（只放行候选目录内的写，
@@ -226,9 +227,10 @@ def private_list():
         candidates.append(named)
     if data:
         candidates.append(os.path.join(data, "private", "personal-words.txt"))
-    # 兜底（2026-10-16）：开发沙箱里两个环境变量都没设、asuna 也 import 不到（实测），
-    # 从脚本所在目录往上找部署的 .runtime/private/personal-words.txt——候选、冻结快照、检出都在它下面。
-    # 没有这条，本机跑这份自检永远报「名单没配上」。
+    # 兜底（2026-10-16）：本机两个环境变量都没设，但 asuna 能 import——开发沙箱与任务沙箱都实测到
+    # config.DATA = <部署根>/.runtime，所以第三条 asuna.config.DATA 在本机就够。这条往上找
+    # .runtime/private/personal-words.txt 是给 asuna 不在 sys.path 上的环境兜底：裸检出、别的机器、
+    # 装在 node_modules 里的冻结版。三条都不中才算没配上，那时调用方记一条红，不 NOTE 一行算过。
     here = HERE
     for _ in range(12):
         here = os.path.dirname(here)

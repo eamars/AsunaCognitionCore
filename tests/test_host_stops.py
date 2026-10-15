@@ -46,12 +46,17 @@ def test_her_home_turns_say_it_for_a_day_in_words(store):
 
 def test_failed_gate_looks_are_counted_for_a_day_and_kept_a_week(store):
     moment = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
-    store.db.missed_looks.insert_many([{'_id': 'ep-a', 'scene_id': 'g1', 'at': '2026-10-14T09:00:00+00:00'},
+    store.db.missed_looks.insert_many([{'_id': 'ep-a', 'scene_id': 'g1', 'at': '2026-10-14T09:00:00+00:00', 'cause': 'clash'},
                                        {'_id': 'ep-b', 'scene_id': 'g1', 'at': '2026-10-14T10:00:00+00:00'},
                                        {'_id': 'ep-c', 'scene_id': 'g1', 'at': '2026-10-12T10:00:00+00:00'},
                                        {'_id': 'ep-d', 'scene_id': 'g1', 'at': '2026-10-01T10:00:00+00:00'}])
     said = host_stops.block(store, ZONE, moment)
-    assert list(said) == ['missed_looks'] and said['missed_looks'].endswith(' 2 次')
+    # Each with its cause in words; one recorded before causes were kept reads as an error.
+    assert list(said) == ['missed_looks'] and said['missed_looks'].endswith(
+        ' 2 次（%s 1，%s 1）' % (host_stops.MISSED_CAUSES['clash'], host_stops.MISSED_CAUSES['error']))
+    assert host_stops.missed_cause(error=RuntimeError('session "x" is already owned by an active write handle')) == 'clash'
+    assert host_stops.missed_cause(error=TimeoutError('NATIVE_STAGE_TIMEOUT')) == 'timeout'
+    assert host_stops.missed_cause(finish_reason='length') == 'cut'
     assert store.db.missed_looks.count_documents({}) == 3, 'older than a week is gone'
 
 

@@ -112,7 +112,7 @@ def test_a_gate_that_cannot_answer_lets_the_message_pass_as_the_programs_failure
     from asuna import host_stops
     said = host_stops.block(store, 'UTC', datetime.now(timezone.utc), 'P1')
     assert said == {'missed_looks': host_stops.MISSED % (said['missed_looks'].split('：')[-1])}
-    assert said['missed_looks'].endswith(' 1 次') and '不是你选的不理' in said['missed_looks']
+    assert said['missed_looks'].endswith(' 1 次（程序出错 1）') and '不是你选的不理' in said['missed_looks']
     assert host_stops.block(store, 'UTC', datetime.now(timezone.utc) + timedelta(hours=25), 'P1') is None
 
 

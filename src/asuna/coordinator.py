@@ -458,22 +458,27 @@ class Coordinator:
             def rejected(attempt, issue, value):
                 self.store.audit(ep['_id'],'phase.rejected',{'operation':operation,'phase':'ATTEND','attempt':attempt,
                     'problem':issue,'request_refs':value.request_refs},ep['scope_key'])
+            from . import host_stops
             value,verdict=answers.ask(generate,attend.NEED,attend.check,rejected=rejected)
+            cause=None
             if verdict is None:          # not the model's mistake: the gate could not answer
                 verdict={'choice':'failed','reason':'没判出来：'+value.finish_reason}
+                cause=host_stops.missed_cause(finish_reason=value.finish_reason)
         except (Denied,ProtocolFailure):
             raise
         except answers.Rejected as exc:
             verdict={'choice':'failed','reason':'没判出来：没有按 接话／不理 回答'}
+            cause='unanswered'
             self.store.audit(ep['_id'],'attend.failed',{'problem':exc.problem},ep['scope_key'])
         except Exception as exc:
             # A gate that cannot answer lets the message pass quietly; it never fails the turn.
+            from . import host_stops
             verdict={'choice':'failed','reason':'没判出来：程序出错（%s）'%type(exc).__name__}
+            cause=host_stops.missed_cause(error=exc)
             self.store.audit(ep['_id'],'attend.failed',{'error':str(exc)[:300]},ep['scope_key'])
         self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
         if verdict['choice']=='failed':
-            from . import host_stops
-            host_stops.missed_look(self.store,ep)
+            host_stops.missed_look(self.store,ep,cause or 'error')
         row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})     # the chunker may have stamped it meanwhile
         if row:
             # A gate that could not decide is the program's failure, never her 不理 (her ask, 2026-10-14): it is

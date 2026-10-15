@@ -5,6 +5,8 @@
 服务路径 / 关键步骤 / 边界语句在不在、发图那条路（QQ（napcat）speak 的 picture，别处 attach_image）的清单字段与失败码在不在、
 改图那条路（「改图与 generate_image」一节：source_image 入口、11 条路线读数、三条 IMAGE_WORKFLOW_*
 即时拒绝码、改图归属、本地 Pillow 修字、剥文字块判据、排队成本）在不在、
+群聊生图上限那条（「群聊生图上限」一节标题、节内「最多 4 张」与「到顶默认不发」、
+「唯一的例外」是不是 10:59 更正版、10:57 旧措辞有没有被抄回这一节）在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
 不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
 同目录脚本能不能编译。
@@ -20,6 +22,18 @@
 2026-10-16 起再补口径（改图通路现场验收）：「改图与 generate_image」一节必须在，且该节切片里
 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码必须齐（错误码在别处出现不算数——那一节才是教改图的地方）；
 `九条路线全是 t2i` 是 2026-10-16 前的旧读数，反引号外裸写回散文（当现行事实）才红。
+
+2026-10-16 v8 再补（群聊生图上限：主人提、小满定标准）：这一节进 SECTIONS（缺标题就红），节内切片必须含
+「最多 4 张」与「到顶默认不发」（正文照主人原话抄，那一句写的是「到顶怎么办：默认不发。」，
+两种写法任一命中即算在，都被删掉才红）。「唯一的例外」那段必须含「对外不报张数」（10:59 更正版），
+10:57 旧版那句「超了要在交回时写一句」回到这一节就红——防止旧措辞把更正版覆盖掉。
+标题被删时切片为空、这几条一起红：切片为空不等于查过，不会绿着放过。
+
+同一轮补上泄露检查（这一族以前在本脚本里根本没有）：私密名单找得到就真扫，命中只报类别与名单行号；
+找不到名单记一条红（leak_scan_ran），不像别的技能脚本那样 NOTE 一行就算过——
+「检查项没跑」和「检查项过了」不能长得一样。名单定位依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT →
+asuna.config.DATA → 从脚本所在目录往上找 .runtime/private/personal-words.txt
+（2026-10-16 实测：开发沙箱里前三个都没有，只有最后那条找得到本机这份）。
 
 群发前自检的四条要点只在「往群里发图之前的自检」这一节里查：正文别处合法提到历史口径
 （版本段引用「不发群」旧边界、试用记录里的旧句子）不算缺、也不误报红；把「不发群」这类
@@ -214,6 +228,20 @@ GROUP_PRECHECK = [
 # 已退役的「不发群」旧限制不许写回这一节；只查这一节，别处引用历史口径不误报
 GROUP_PRECHECK_STALE = ["不发群", "群里不发图"]
 
+# 群聊生图上限（2026-10-16 主人提、小满定标准）：这一节必须在，节内两处硬指标必须在，
+# 「唯一的例外」那段必须是 10:59 更正版。10:57 旧版那句「超了要在交回时写一句」回到这一节就红——
+# 防止有人拿旧措辞把更正后的版本覆盖掉。只在这一节的切片里查：版本段／试用记录／离线自检里
+# 合法引用这句话不算数（与 GROUP_PRECHECK_STALE 同一口径）。
+CAP_HEADING = "## 群聊生图上限（2026-10-16 主人提、小满定标准）"
+# 每条给一组写法，任一命中即算在：正文照主人原话抄，写的是「到顶怎么办：默认不发。」，
+# 「到顶默认不发」是 frontmatter／版本段用的简写。两种都被删掉才算这条红。
+CAP_SECTION = [
+    ("cap_max_four", ("最多 4 张",)),
+    ("cap_default_no_send", ("到顶怎么办：默认不发", "到顶默认不发")),
+]
+CAP_OVERRIDE_MUST = "对外不报张数"           # 10:59 更正版的那句
+CAP_OVERRIDE_STALE = ["超了要在交回时写一句"]  # 10:57 旧版措辞，抄回来就红
+
 SECTIONS = [
     "## 用途",
     "## 前提与授权",
@@ -233,6 +261,7 @@ SECTIONS = [
     "## 步骤 8",          # 追加在末尾：老检查名（section_0..section_14）不跟着移位
     "### 往群里发图之前的自检",   # 步骤 8 下的子节；同样追加在末尾，老编号不动
     "## 改图与 `generate_image`（2026-10-16 实测）",   # 2026-10-16 追加在末尾，老编号不动
+    "## 群聊生图上限（2026-10-16 主人提、小满定标准）",   # 2026-10-16 v8 追加在末尾，老编号不动
 ]
 
 # 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
@@ -318,6 +347,84 @@ def edit_section_slice(body):
     return "\n".join(out)
 
 
+def cap_section_slice(body):
+    """「## 群聊生图上限」标题下、下一个二级标题之前的正文（2026-10-16 v8 起的张数一节）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 群聊生图上限"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
+def cap_override_slice(cap_section):
+    """那一节里「**唯一的例外**」起、到下一个空行为止的那一段（10:59 更正过的就是这一段）。"""
+    out, taking = [], False
+    for line in cap_section.splitlines():
+        if line.startswith("**唯一的例外**"):
+            taking = True
+        elif taking and not line.strip():
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
+def private_list():
+    """私密名单（private_words 工具维护，永远不进仓库）：一行一条 category|word|why。
+
+    位置依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT/private/… → asuna.config.DATA/private/… →
+    从脚本所在目录往上找 .runtime/private/personal-words.txt。最后那条是给开发沙箱留的：
+    2026-10-16 实测那里两个环境变量都没设，只有往上走才找得到本机这份。
+    返回 (命中的路径或最后试过的路径, 条目列表或 None)。
+    """
+    named = os.environ.get("ASUNA_PRIVATE_WORDS")
+    data = os.environ.get("ASUNA_DATA_ROOT")
+    if not data:
+        try:
+            from asuna import config as asuna_config   # 家里跑就有；装不上也要能跑
+            data = str(asuna_config.DATA)
+        except Exception:                              # noqa: BLE001
+            data = None
+    candidates = []
+    if named:
+        candidates.append(named)
+    if data:
+        candidates.append(os.path.join(data, "private", "personal-words.txt"))
+    here = HERE
+    for _ in range(12):                                # 候选、冻结快照、检出都在部署的 .runtime 下面
+        here = os.path.dirname(here)
+        if not here:
+            break
+        candidates.append(os.path.join(here, ".runtime", "private", "personal-words.txt"))
+    for path in candidates:
+        if path and os.path.isfile(path):
+            entries = []
+            with open(path, encoding="utf-8") as handle:
+                for number, line in enumerate(handle, 1):
+                    parts = line.strip().split("|", 2)
+                    if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
+                        entries.append((number, parts[0].strip(), parts[1].strip()))
+            return path, entries
+    return (candidates[-1] if candidates else None), None
+
+
+def listed_hits(entries, text):
+    """命中只报类别与名单行号——词本身永远不打印。"""
+    hits = []
+    for number, category, word in entries:
+        if all(ch.isascii() for ch in word):
+            found = re.search(r"(?<![A-Za-z0-9_])" + re.escape(word) + r"(?![A-Za-z0-9_])", text, re.IGNORECASE)
+        else:
+            found = word in text
+        if found:
+            hits.append("%s（名单第 %d 行）" % (category, number))
+    return hits
+
+
 def compile_tmp_dir():
     """编译临时目录：先试技能目录旁（development_run 只放行候选目录里的写），
     写不动退到当前工作目录（从 /task 那边跑、或跑冻结快照里那一份的情形）。
@@ -392,6 +499,20 @@ def main():
            and "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES" in edit_slice),
           "改图一节没把 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码教全")
 
+    # 群聊生图上限（2026-10-16 v8）：节标题在 SECTIONS 里查（section_18），这里查节内硬指标与措辞版本。
+    # 标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。
+    cap_section = cap_section_slice(body)
+    for name, tokens in CAP_SECTION:
+        check(name, any(token in cap_section for token in tokens),
+              "「%s」任一都不在「群聊生图上限」这一节里（切片 %d 字）"
+              % ("／".join(tokens), len(cap_section)))
+    override = cap_override_slice(cap_section)
+    check("cap_override_no_count_out_loud", CAP_OVERRIDE_MUST in override,
+          "「唯一的例外」那段没写「%s」（10:59 更正版）；那段现在 %d 字"
+          % (CAP_OVERRIDE_MUST, len(override)))
+    stale_cap = [item for item in CAP_OVERRIDE_STALE if item in cap_section]
+    check("cap_section_no_stale_count_line", not stale_cap, ",".join(stale_cap))
+
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
     check("selfcheck_documented", "check_skill.py" in body)
@@ -407,6 +528,20 @@ def main():
     # 过期说法：出站图片上线、DECIDE 退役、改图路线上线后不能再这么写（反引号里的引用不算）
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
+
+    # 泄露检查（2026-10-16 v8 起）：这一族以前在本脚本里根本没有。别的技能脚本有，但名单找不到时
+    # 只打一行 NOTE、绿数照旧——「检查项没跑」和「检查项过了」长得一样。这里不这么办：
+    # 名单找得到就真扫（命中只报类别与名单行号），找不到记一条红并写清没真查。
+    listed_path, entries = private_list()
+    if entries is None:
+        check("leak_scan_ran", False,
+              "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
+              % (listed_path or "都没有"))
+        leak_note = ""
+    else:
+        found = listed_hits(entries, text)
+        check("no_listed_words", not found, "、".join(found))
+        leak_note = "，泄露检查扫过（名单 %d 条，命中只报类别与行号）" % len(entries)
 
     # 同目录脚本：必须存在且只用标准库能编译。编译产物落在 _compile-probe 子目录，用完即删。
     # 临时目录先试技能目录旁、写不动退当前工作目录（compile_tmp_dir）：原来写死在 cwd，cwd 不可写就整份崩；
@@ -445,8 +580,9 @@ def main():
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
     print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、"
-          "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、历史段、"
-          "群发前自检四条要点、归属都在。" % (total, total))
+          "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、"
+          "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
+          "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note))
     return 0
 
 

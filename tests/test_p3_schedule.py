@@ -169,3 +169,22 @@ def test_her_plan_tool_reaches_a_plan_her_list_leaves_out_and_says_why_for_a_fin
         coordinator.tools.tool_plan(ep, 'c2', {'op': 'update', 'plan_id': plan['_id'], 'intent': '算了还是要'})
     made, _ = coordinator.tools.tool_plan(ep, 'c3', {'intent': '一小时后提醒喝水', 'after_seconds': 3600})
     assert '按新建' in made['note']
+
+
+def test_a_plan_in_her_list_can_be_changed(store, driven):
+    """Her list shows each plan in words, without its stored status: changing one reads the plan itself."""
+    from asuna import schedule_rules
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    p2.seed_real(store)
+    coordinator = Coordinator(store, FakeLane(store, []))
+    coordinator.scheduler = driven
+    plan = driven.create(EP, DAILY)
+    row = store.db.plans.find_one({'_id': plan['_id']})
+    shown = schedule_rules.project(row, schedule_rules.scene_timezone(store.config, None, row), schedule_rules.now_utc())
+    assert 'status' not in shown
+    ep = {**EP, 'persona': 'P1', 'context': {'plans_from_program': [shown]}, 'tool_calls': {}}
+    asked = []
+    driven.update = lambda ep, plan_id, spec: asked.append((plan_id, spec)) or {**row, 'intent': spec['intent']}
+    coordinator.tools.tool_plan(ep, 'c1', {'op': 'update', 'plan_id': plan['_id'], 'intent': '改成喝茶'})
+    assert asked == [(plan['_id'], {'intent': '改成喝茶'})]       # reached the scheduler, not refused as status None

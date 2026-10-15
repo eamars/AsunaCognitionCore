@@ -150,9 +150,10 @@ def private_list():
         candidates.append(named)
     if data:
         candidates.append(os.path.join(data, "private", "personal-words.txt"))
-    # 兜底（2026-10-16）：开发沙箱里两个环境变量都没设、asuna 也 import 不到（实测），
-    # 从脚本所在目录往上找部署的 .runtime/private/personal-words.txt——候选、冻结快照、检出都在它下面。
-    # 没有这条，本机跑这份自检永远报「名单没配上」。
+    # 兜底（2026-10-16）：本机两个环境变量都没设，但 asuna 能 import——开发沙箱与任务沙箱都实测到
+    # config.DATA = <部署根>/.runtime，所以第三条 asuna.config.DATA 在本机就够。这条往上找
+    # .runtime/private/personal-words.txt 是给 asuna 不在 sys.path 上的环境兜底：裸检出、别的机器、
+    # 装在 node_modules 里的冻结版。三条都不中才算没配上，那时调用方记一条红，不 NOTE 一行算过。
     here = HERE
     for _ in range(12):
         here = os.path.dirname(here)

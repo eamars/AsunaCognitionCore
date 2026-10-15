@@ -61,7 +61,7 @@ v1（2026-10-15）：首次固化。算法和口径是 10-09、10-15 几回算�
 v1.1（2026-10-15）：三格修复。① `budget_per_place.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩（沙箱是 UTF-8，撞不到）。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR，覆盖 SKILL.md 与同目录全部 .py，要在冻结快照上跑（候选可能被抹平成 LF）。③ 锚点从「文件＋行号」改成「文件＋名字」，新增第五节那条规矩；锚点守卫改成「文件在＋名字找得到（字节级读）」，行号锚点判红。四个场合的算法、口径、推论一条没动。
 
 
-v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`，开发沙箱里只有这条找得到），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。算账口径、代码锚点、账本脚本一条没动。
+v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`；本机 `asuna` 能 import，第三条 `asuna.config.DATA` 就够，往上走那条是给 `asuna` 不在 `sys.path` 上的环境兜底），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。算账口径、代码锚点、账本脚本一条没动。
 
 
 ## 试用记录

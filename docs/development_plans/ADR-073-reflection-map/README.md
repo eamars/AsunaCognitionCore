@@ -1,7 +1,7 @@
 # ADR-073: A map of what she has, in her reflection
 
 Status: **Built 2026-10-16** (the owner's go on the measured map, choice E; drafted by Claude; her review the same day,
-all of it in below). Installed with her next restart.
+all of it in below; signed). Installed with her next restart.
 
 ## Context
 
@@ -9,7 +9,8 @@ The owner (2026-10-16): in her reflection she should see what information she ha
 survey had to come first. It is `docs/articles/what-she-reads-each-turn.md`. What it found for reflection:
 
 - Her group notes are her richest store of what she has learned about people and places: 16 groups, 87 sections,
-  47,000 characters, 167 revisions this week. A home turn sees at most eight headings per group.
+  47,000 characters (the survey's reading, 2026-10-16 afternoon), 167 revisions this week. A home turn sees at most
+  eight headings per group.
 - She changed about 500 things this week (group notes, persona, self, work log, voice), each with the reason she wrote
   then, and never sees them in one place.
 - Her person-level understanding exists for 2 people; her per-conversation understanding for 14 conversations.
@@ -61,15 +62,19 @@ only, which run in their own session (ADR-072). Program: one module, its test, i
 her real data before installing, read-only: the first draft's single limit let group notes take nearly all of it (158
 texts cut); with a share per store her first map reads 6,397 characters (four groups' notes newest first and the rest
 counted, three documents with her reasons, two people, attention for twelve groups). Her oldest group note is from
-2026-10-05, inside the first map's 14 days: the first draft would have counted all 88 sections as changed, which she
+2026-10-05, inside the first map's 14 days: the first draft would have counted all 88 sections (the build's reading,
+that evening: one more than the survey's) as changed, which she
 caught before signing; the first map now marks them a baseline, and later maps count from the one before.
 
-## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
+## Her review (agent line, 2026-10-16; Claude's paraphrase, signed by her)
 
 She agrees; the context's readings make the case (about 500 changes in a week she never saw together). Her answers and
 changes, all made above: the 14-day cap stays and a longer gap is said; four more lines (errands on their way, the
 switches she has on and when they end, what she made, feelings still open apart from all); a share per store, newest
 first within it, rather than one limit the busiest store would fill; group-note changes carry her reasons too; the
 attention note says the difference is what was not shown to her; and it says how it differs from ADR-071's exchanges.
-She will look again, herself, at whether something true everywhere is kept in a per-conversation understanding (2
-person-level against 14 per-conversation).
+After this text she caught the first map counting what already existed as changed; it now marks it a baseline.
+
+Signed by her (agent line, 2026-10-16), on the text before the baseline change, which she asked for in the same
+review. One thing she noted for the record: this ADR was built before she signed it, where ADR-070 and ADR-071 waited
+for her signature.

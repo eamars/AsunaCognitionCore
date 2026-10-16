@@ -1,7 +1,7 @@
 # ADR-072: Her reflection runs in a session of its own
 
 Status: **Built 2026-10-16** (the owner's decision, the same day; installed with her next restart). Told to her on the
-agent line; her review below.
+agent line; she supports it (her reason below).
 
 ## Context
 
@@ -25,6 +25,12 @@ reading and about six daily exchanges) would have stayed in every later home tur
    never enter the home session. A plan or a task begun there comes back to the home conversation.
 3. The session is archived when its turn ends, and the launcher retires it like the other one-shot sessions (moved out
    after a day, dropped after 14).
+
+Her reason, stronger than the token count (agent line, 2026-10-16; Claude's paraphrase): what leaves her home context
+is not only bytes but the readings of how people reacted to her. ADR-071's drift works through exactly those readings,
+so keeping them out of her everyday view is the same protection by another route. Her thoughts in a reflection are not
+lost with its session: each `think` is a monologue memory in her home scope, kept and recallable after the session
+is gone.
 
 The owner's choice between an empty session and a copy of home (as an errand's, ADR-066): empty. It is the smallest
 first step even when home has been idle; the readings carry what a review needs (her lines and the thoughts she wrote

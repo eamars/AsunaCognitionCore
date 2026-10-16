@@ -30,7 +30,7 @@ source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码必须齐（错误�
 标题被删时切片为空、这几条一起红：切片为空不等于查过，不会绿着放过。
 
 同一轮补上泄露检查（这一族以前在本脚本里根本没有）：私密名单找得到就真扫，命中只报类别与名单行号；
-找不到名单记一条红（leak_scan_ran），不像别的技能脚本那样 NOTE 一行就算过——
+找不到名单、或名单在却解析出 0 条有效词，都记一条红（leak_scan_ran），不像别的技能脚本那样 NOTE 一行就算过——
 「检查项没跑」和「检查项过了」不能长得一样。名单定位依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT →
 asuna.config.DATA → 从脚本所在目录往上找 .runtime/private/personal-words.txt
 （2026-10-16 实测更正：开发沙箱里两个环境变量都没设，但 `asuna` 能 import、第三条就够；
@@ -380,7 +380,7 @@ def private_list():
     位置依次试：ASUNA_PRIVATE_WORDS → ASUNA_DATA_ROOT/private/… → asuna.config.DATA/private/… →
     从脚本所在目录往上找 .runtime/private/personal-words.txt。最后那条是给 asuna 不在 sys.path
     上的环境兜底的：2026-10-16 实测那里两个环境变量都没设，但 asuna 能 import、第三条就够。
-    返回 (命中的路径或最后试过的路径, 条目列表或 None)。
+    返回 (命中的路径；都没配上时是试过的全部候选列表, 条目列表或 None)。
     """
     named = os.environ.get("ASUNA_PRIVATE_WORDS")
     data = os.environ.get("ASUNA_DATA_ROOT")
@@ -410,7 +410,7 @@ def private_list():
                     if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
                         entries.append((number, parts[0].strip(), parts[1].strip()))
             return path, entries
-    return (candidates[-1] if candidates else None), None
+    return [c for c in candidates if c] or None, None
 
 
 def listed_hits(entries, text):
@@ -537,7 +537,13 @@ def main():
     if entries is None:
         check("leak_scan_ran", False,
               "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
-              % (listed_path or "都没有"))
+              % ("、".join(listed_path) if listed_path else "都没有"))
+        leak_note = ""
+    elif not entries:
+        # 2026-10-16 补的第二种失效：名单文件在、一条有效词都没解析出来（全注释或被字段数筛光）。
+        # 以前走 else 分支：0 命中算绿，输出还写「扫过（名单 0 条）」——那是没真查，不是跑过了。
+        check("leak_scan_ran", False,
+              "名单 0 条（%s）——没真查，不是跑过了" % listed_path)
         leak_note = ""
     else:
         found = listed_hits(entries, text)

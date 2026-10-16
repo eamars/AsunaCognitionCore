@@ -2,7 +2,7 @@
 """asuna-usage-readout 的零依赖离线自检（只查文件本身，不读会话记录、不连库）。
 
 查四件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；八条口径判据与来源／口径字面都在；
-三张表与硬规矩都在；不带个人信息（私密名单命中只报类别与行号，名单配不上记红）。
+三张表与硬规矩都在；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在却解析出 0 条有效词，都记红）。
 
 用法：python3 skills/asuna-usage-readout/check_skill.py [SKILL.md 路径]
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
@@ -127,7 +127,7 @@ def private_list():
                     if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
                         out.append((n, parts[0].strip(), parts[1].strip()))
             return p, out
-    return (cands[-1] if cands else None), None
+    return [c for c in cands if c] or None, None
 
 
 def listed_hits(entries, text):
@@ -197,7 +197,13 @@ def main():
 
     p, entries = private_list()
     if entries is None:
-        check("leak_scan_ran", False, "私密名单没配上（试过 %s）：没真查——不是跑过了" % (p or "都没有"))
+        check("leak_scan_ran", False, "私密名单没配上（试过 %s）：没真查——不是跑过了"
+              % ("、".join(p) if p else "都没有"))
+        leak = ""
+    elif not entries:
+        # 2026-10-16 补的第二种失效：名单文件在、一条有效词都没解析出来（全注释或被字段数筛光）。
+        # 以前走 else 分支：0 命中算绿，输出还写「扫过（名单 0 条）」——那是没真查，不是跑过了。
+        check("leak_scan_ran", False, "名单 0 条（%s）——没真查，不是跑过了" % p)
         leak = ""
     else:
         found = listed_hits(entries, text)

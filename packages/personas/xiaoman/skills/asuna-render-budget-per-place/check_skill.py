@@ -11,7 +11,7 @@
    且那个名字在文件里找得到（字节级读）。行号每次有人改那个文件就漂，名字不会，
    所以正文里再出现行号锚点也直接判红；
 4. 不带别人的个人信息：私密名单命中只报类别和名单第几行；另查字面编号与占位符。
-   名单配不上记一条红（`leak_scan_ran`）——2026-10-16 起不再「NOTE 一行、绿数照旧」：
+   名单配不上、或名单在却解析出 0 条有效词，都记一条红（`leak_scan_ran`）——2026-10-16 起不再「NOTE 一行、绿数照旧」：
    「检查项没跑」不许长得像「检查项过了」。定位多一条兜底：环境变量都没有就从脚本往上找
    .runtime/private/personal-words.txt。
 
@@ -170,8 +170,8 @@ def private_list():
                 if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
                     entries.append((number, parts[0].strip(), parts[1].strip()))
         return path, entries
-    # 一个都没配上：返回最后试过的路径，让调用方把「没查过」写进红里
-    return (candidates[-1] if candidates else None), None
+    # 一个都没配上：返回试过的全部候选，让调用方把「没查过」写进红里
+    return [c for c in candidates if c] or None, None
 
 
 def listed_hits(entries, text):
@@ -275,7 +275,13 @@ def main():
         # 2026-10-16 改口径：以前这里 NOTE 一行、绿数照旧——「没跑」和「过了」长得一样。
         check("leak_scan_ran", False,
               "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
-              % (listed_path or "都没有"))
+              % ("、".join(listed_path) if listed_path else "都没有"))
+        leak_note = ""
+    elif not entries:
+        # 2026-10-16 补的第二种失效：名单文件在、一条有效词都没解析出来（全注释或被字段数筛光）。
+        # 以前走 else 分支：0 命中算绿，输出还写「扫过（名单 0 条）」——那是没真查，不是跑过了。
+        check("leak_scan_ran", False,
+              "名单 0 条（%s）——没真查，不是跑过了" % listed_path)
         leak_note = ""
     else:
         found = listed_hits(entries, text)

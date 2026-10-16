@@ -5,7 +5,7 @@
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译；
 2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
-   这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上记一条红
+   这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上、或名单在却解析出 0 条有效词，都记一条红
    `leak_scan_ran`——2026-10-16 起不再「print 一行 NOTE、绿数照旧」，「没跑」不许长得像「过了」；
 4. 没有占位符残留。
 
@@ -120,8 +120,8 @@ def private_list():
                 if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
                     entries.append((number, parts[0].strip(), parts[1].strip()))
         return path, entries
-    # 一个都没配上：返回最后试过的路径，让调用方把「没查过」写进红里
-    return (candidates[-1] if candidates else None), None
+    # 一个都没配上：返回试过的全部候选，让调用方把「没查过」写进红里
+    return [c for c in candidates if c] or None, None
 
 
 def listed_hits(entries, text):
@@ -218,7 +218,13 @@ def main():
         # 2026-10-16 改口径：以前这里 print 一行 NOTE、绿数照旧——「没跑」和「过了」长得一样。
         check("leak_scan_ran", False,
               "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
-              % (listed_path or "都没有"))
+              % ("、".join(listed_path) if listed_path else "都没有"))
+        leak_note = ""
+    elif not entries:
+        # 2026-10-16 补的第二种失效：名单文件在、一条有效词都没解析出来（全注释或被字段数筛光）。
+        # 以前走 else 分支：0 命中算绿，输出还写「扫过（名单 0 条）」——那是没真查，不是跑过了。
+        check("leak_scan_ran", False,
+              "名单 0 条（%s）——没真查，不是跑过了" % listed_path)
         leak_note = ""
     else:
         found = listed_hits(entries, text)

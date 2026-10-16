@@ -11,7 +11,7 @@
    里最后一条 warn-only 就是这一条。唯一的例外是 LISTED_WORD_ALLOW 里逐字列出的词（产品名与
    群名片可能撞词，正文里「麦麦」既是一家 bot 也可能是某个名片）；放行几个就在输出里打一行
    「白名单放行 N 个」——放行要看得见，不许又长成「跑过了」。
-   名单配不上则记一条红（leak_scan_ran）：2026-10-16 起不再「NOTE 一行、绿数照旧」，
+   名单配不上、或名单在却解析出 0 条有效词，都记一条红（leak_scan_ran）：2026-10-16 起不再「NOTE 一行、绿数照旧」，
    「检查项没跑」不许长得像「检查项过了」。定位多一条兜底：环境变量都没有就从脚本往上找
    .runtime/private/personal-words.txt（本机两个环境变量都没设；asuna 能 import 时第三条
    asuna.config.DATA 就够，往上走那条是给 asuna 不在 sys.path 上的环境兜底）。
@@ -262,8 +262,8 @@ def private_list():
                 if line.strip() and not line.startswith("#") and len(parts) == 3 and parts[1].strip():
                     entries.append((number, parts[0].strip(), parts[1].strip()))
         return path, entries
-    # 一个都没配上：返回最后试过的路径，让调用方把「没查过」写进红里
-    return (candidates[-1] if candidates else None), None
+    # 一个都没配上：返回试过的全部候选，让调用方把「没查过」写进红里
+    return [c for c in candidates if c] or None, None
 
 
 def hit_label(number, category):
@@ -393,7 +393,13 @@ def main():
         # 红挡一次发布，比把真名推上公开仓库便宜。
         check("leak_scan_ran", False,
               "私密名单没配上（试过 %s）：真人名／群名这一项没真查——不是跑过了"
-              % (listed_path or "都没有"))
+              % ("、".join(listed_path) if listed_path else "都没有"))
+        leak_note = ""
+    elif not entries:
+        # 2026-10-16 补的第二种失效：名单文件在、一条有效词都没解析出来（全注释或被字段数筛光）。
+        # 以前走 else 分支：0 命中算绿，输出还写「扫过（名单 0 条）」——那是没真查，不是跑过了。
+        check("leak_scan_ran", False,
+              "名单 0 条（%s）——没真查，不是跑过了" % listed_path)
         leak_note = ""
     else:
         hits = listed_hits(entries, text)

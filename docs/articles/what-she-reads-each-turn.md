@@ -340,7 +340,10 @@ second wording audit's removals; those blocks are listed apart.
   the time, against 1.8% for a memory from another turn (chance), and in a quarter of her turns she echoes at least one
   (a lower bound: paraphrase and what only informs are not counted). By kind: raw chat chunks are 71% of what is shown
   and echo least (6.2%); conversation summaries 17.7%; her own past thoughts 10.2%; items of her documents 36 to 46%.
-  Memories are used; what the numbers question is the mix, not the block. Her caution: a memory used rarely can carry
+  Memories are used. The kinds cannot be ranked with this measure (her point): a six-character overlap favours text
+  written to be quoted, as her document items are, over text she rewrites when she uses it, as chat chunks are, so a
+  low rate for chunks does not mean they are not used. Setting the mix would need a comparison within one kind, or a
+  measure of use that does not depend on wording. Her caution: a memory used rarely can carry
   weight (one she uses once a day anchors a daily account), so a change would weigh what a memory holds up, not only
   how often it is echoed.
 - **E** is ADR-073, proposed for her review.

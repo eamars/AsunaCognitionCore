@@ -48,10 +48,11 @@ fact.
    - When it does not fit, explicit lines go first and the sample stays; a cut says it was cut.
    - Lines where she held to something (refused, disagreed, said no) are kept like any other. They are part of what
      she is learning, not mistakes to sand down.
-4. **One fixed note**, the reading's only words of guidance, in her wording: 「这是你那天说过的原话、你那一回合写下的
-   心里话、和之后那边发生了什么。谁也没给它打分。没人接不等于说错了，有人接也不等于说对了。心里话是那一回合你写的，不一定是
-   那句的理由。要不要改、改什么，是你的事。」 The block ends with its sources (which collections, which window), as
-   ADR-070's does.
+4. **One fixed note**, the reading's only words of guidance, in her wording:
+   「这是你那天说过的原话、你那一回合写下的心里话、和之后那边发生了什么。谁也没给它打分。
+   没人接不等于说错了，有人接也不等于说对了。心里话是那一回合你写的，不一定是那句的理由。
+   要不要改、改什么，是你的事。」
+   The block ends with its sources (which collections, which window), as ADR-070's does.
 5. **Where her learning goes** (tools she has; nothing new):
    - about a group: that group's notes (`group_notes`, which she can tidy from home by name), where it lasts;
    - about one person: their understanding, written with `understand_person` in that person's conversation, where

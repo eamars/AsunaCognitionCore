@@ -272,3 +272,18 @@ test('her tool rows read the names she is shown, and the old ones', () => {
   assert.equal(toolRow('understand_person', { layer: 'person', content: 'Likes tea.' }).body, 'Likes tea.');
   assert.equal(toolRow('note_idea', { idea: 'From the action brain.', why: 'x' }).name, 'note_idea');
 });
+
+test('ADR-075: a thread reads the tier its job was given and the one that ran it, from its latest entry', () => {
+  const at = '2026-10-16T09:00:00Z';
+  const brief = { id: 'brief:t9', kind: 'message', from: 'character', text: 'look', title: 'look', at };
+  assert.equal(threadOf([brief]).tier, null, 'no tiers configured: nothing to show');
+  const high = { chosen: '高', ran: '高' };
+  assert.deepEqual(threadOf([{ ...brief, tier: high }, { id: 's', kind: 'status', state: 'running', at, tier: high }]).tier, high);
+  const fell = { chosen: '高', ran: '低', reason: 'refused', mid_run: true };
+  assert.deepEqual(threadOf([{ ...brief, tier: high }, { id: 's2', kind: 'status', state: 'done', at, tier: fell }]).tier, fell);
+  assert.equal(words('collab.tier.fell', { chosen: words('collab.tier.high'), ran: words('collab.tier.low'),
+    why: words('collab.tier.why.refused') + words('collab.tier.midRun') }),
+  'Chose High tier, ran Low tier: the high tier refused this job; it fell partway through');
+  for (const lang of ['zh', 'en']) for (const key of ['low', 'high', 'fell', 'why.refused', 'why.down', 'why.busy', 'why.owner', 'midRun'])
+    assert.ok(DICTIONARY[lang]['collab.tier.' + key], lang + ' collab.tier.' + key);
+});

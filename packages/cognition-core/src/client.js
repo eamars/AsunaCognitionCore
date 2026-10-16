@@ -18,6 +18,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'date.locale': 'zh-CN',
       'brain.character': '角色脑', 'brain.executor': '行动脑', 'brain.executorHigh': '行动脑·高档',
       'trigger.message': '收到消息', 'trigger.task_result': '行动脑交回了结果', 'trigger.question': '行动脑在问她',
+      'collab.tier.low': '低档', 'collab.tier.high': '高档', 'collab.tier.fell': '选{chosen}，跑{ran}：{why}',
+      'collab.tier.why.refused': '高档没接这件', 'collab.tier.why.down': '高档连不上、超时或服务器出错',
+      'collab.tier.why.busy': '高档被限流', 'collab.tier.why.owner': '高档的钥匙、凭据或额度出了问题',
+      'collab.tier.midRun': '；做到一半落下来的',
       'trigger.internal': '她的内部时间', 'trigger.visit': '她自己来看看', 'trigger.note': '她自己留的便条', 'trigger.schedule': '到了安排的时间', 'trigger.brief': '她的交代',
       'trigger.follow-up': '她的补充',
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': '一件事',
@@ -174,6 +178,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'date.locale': 'en-US',
       'brain.character': 'Character brain', 'brain.executor': 'Action brain', 'brain.executorHigh': 'Action brain · high tier',
       'trigger.message': 'Message received', 'trigger.task_result': 'The action brain reported back',
+      'collab.tier.low': 'Low tier', 'collab.tier.high': 'High tier', 'collab.tier.fell': 'Chose {chosen}, ran {ran}: {why}',
+      'collab.tier.why.refused': 'the high tier refused this job', 'collab.tier.why.down': 'the high tier was unreachable, timed out or erred',
+      'collab.tier.why.busy': 'the high tier was rate limited', 'collab.tier.why.owner': "the high tier's key, credential or quota failed",
+      'collab.tier.midRun': '; it fell partway through',
       'trigger.question': 'The action brain asks her', 'trigger.internal': 'Her inner time', 'trigger.visit': 'Her own visit', 'trigger.note': 'A note from herself', 'trigger.schedule': 'A plan came due',
       'trigger.brief': 'Her brief', 'trigger.follow-up': 'Her follow-up',
       'collab.header': '{character} ⇄ {action}', 'collab.untitled': 'A task',
@@ -600,6 +608,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   }
   /** What a block of a thread reads as: its title, its sessions, its state, how long it has run, and the
    * action brain's work still going on (`live`: the range after its last work row). */
+  // The action brain's tiers as she names them (ADR-075), to the view's words.
+  const TIERS = { '低': 'low', '高': 'high' };
   function threadOf(entries) {
     const open = entries.findLast(entry => entry.kind === 'open');
     const title = entries.find(entry => entry.title)?.title;
@@ -626,7 +636,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     const work = open && entries.slice(entries.indexOf(open)).findLast(entry => entry.kind === 'work');
     const live = state === 'running' && child && (work?.through_seq ?? open?.after_seq) !== undefined
       ? { child, after: work?.through_seq ?? open.after_seq, since: Date.parse(work?.at ?? open.at) } : null;
-    return { title, open, child, live, state, handback, outcome, stopped: statuses.findLast(entry => entry.state === 'stopped'),
+    // The tier the job was given and the one that ran it (ADR-075): the latest entry's word on it.
+    const tier = entries.findLast(entry => entry.tier)?.tier ?? null;
+    return { title, open, child, live, state, handback, outcome, tier, stopped: statuses.findLast(entry => entry.state === 'stopped'),
       // A block of hand-back entries alone holds none of the run, so it has no run time to show.
       elapsed: entries.every(entry => entry.kind === 'handback') ? null
         : Number.isFinite(started) ? (['done', 'failed', 'stopped', 'paused', 'continued'].includes(state) && Number.isFinite(ended) ? ended : Date.now()) - started : null };
@@ -1204,6 +1216,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               t('collab.handback.' + thread.handback.state + (thread.handback.state === 'handing' && thread.handback.short ? 'Short' : ''),
                 { outcome: t('collab.outcome.' + thread.outcome) }))
             : h(Pill, null, t('collab.state.' + thread.state)),
+          thread.tier && h(Pill, null, thread.tier.chosen === thread.tier.ran ? t('collab.tier.' + TIERS[thread.tier.ran])
+            : t('collab.tier.fell', { chosen: t('collab.tier.' + TIERS[thread.tier.chosen]), ran: t('collab.tier.' + TIERS[thread.tier.ran]),
+              why: t('collab.tier.why.' + thread.tier.reason) + (thread.tier.mid_run ? t('collab.tier.midRun') : '') })),
           thread.elapsed !== null && h('span', { style: small }, duration(t, thread.elapsed)),
           openAside && h(Button, { size: 'sm', variant: 'ghost', onClick: openAside }, t('collab.open'))),
         ...entries.filter(entry => entry.kind !== 'open' && entry.kind !== 'continued').map(entry =>

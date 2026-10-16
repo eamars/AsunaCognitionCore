@@ -807,9 +807,15 @@ class BusinessWorker:
         """One entry of the two brains' thread (ADR-011 §7.1); the plugin appends it to her conversation."""
         session_id = self.parent_session(task)
         if session_id:
+            # The tier a job was given and the one that ran it (ADR-075), for the owner's view of the thread; read
+            # fresh, since a fall is recorded while the job runs. Never shown to her from here.
+            tier = (self.app.store.db.tasks.find_one({'_id': task['_id']}, {'tier': 1}) or task).get('tier')
+            view = {k: v for k, v in (tier or {}).items() if k in ('chosen', 'ran')}
+            if (tier or {}).get('fell'):
+                view.update(reason=tier['fell'].get('reason'), mid_run=bool(tier['fell'].get('mid_run')))
             self.emit({'kind': 'collab', 'session_id': session_id, 'task_id': task['_id'],
                        'thread': task.get('thread') or task['_id'], 'title': task.get('title') or task.get('goal'),
-                       'entry': entry})
+                       'entry': {**entry, **({'tier': view} if view else {})}})
 
     def action_message(self, task, message):
         """Her words for a running action session: steered in at its next step (ADR-011 §4)."""

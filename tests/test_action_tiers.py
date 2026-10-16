@@ -137,3 +137,22 @@ def test_her_tool_budget_grows_by_the_tier_only_when_offered(offered):
     base = len(json.dumps(role_tools.TOOLS['delegate'], ensure_ascii=False))
     tiered = len(json.dumps(role_tools.tools()['delegate'], ensure_ascii=False))
     assert 150 <= tiered - base <= 260, tiered - base                    # ADR-075: about 190 characters
+
+
+def test_the_owners_thread_view_carries_the_tier_given_and_the_one_that_ran(store, offered):
+    _, _, _, task = delegate(store, {'tier': '高', 'why': '多步'})
+    emitted = []
+    worker = BusinessWorker()
+    worker.app = types.SimpleNamespace(store=store, config=store.config)
+    worker.parent_session = lambda task: 'role-1'
+    worker.emit = emitted.append
+    worker.collab(task, {'id': 'status:x', 'kind': 'status', 'state': 'running'})
+    assert emitted[-1]['entry']['tier'] == {'chosen': '高', 'ran': '高'}
+    worker.dispatch('tier.fell', {'task_id': task['_id'], 'reason': 'down', 'mid_run': True})
+    worker.collab(task, {'id': 'status:y', 'kind': 'status', 'state': 'done'})       # the stale task in hand: read fresh
+    assert emitted[-1]['entry']['tier'] == {'chosen': '高', 'ran': '低', 'reason': 'down', 'mid_run': True}
+    plain = {**task, '_id': 'task-none'}
+    store.db.tasks.insert_one({'_id': 'task-none', 'schema_version': 1})
+    worker.collab(plain, {'id': 'status:z', 'kind': 'status', 'state': 'done'})
+    assert 'tier' not in emitted[-1]['entry']                                        # a job without tiers shows none
+    store.db.tasks.delete_one({'_id': 'task-none'})

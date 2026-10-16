@@ -123,7 +123,7 @@ def test_self_evaluation_brings_her_day_as_raw_readings_at_home(store):
     assert 'self_review_from_program' not in plain
     _, rolled, _ = ContextBuilder(store).prepare({**event, 'event_id': 'presence:e2', 'dice': 'self_evaluation'})
     review = rolled['self_review_from_program']
-    assert set(review) == {'said', 'tasks', 'refused', 'open', 'since_at', 'note'}
+    assert set(review) == {'said', 'tasks', 'refused', 'open', 'since_at', 'note', 'exchanges'}
     assert review['said'][0]['lines'] >= 1 and review['said'][0]['last_at']
 
 

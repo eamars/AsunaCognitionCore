@@ -1,7 +1,7 @@
 # ADR-070: Her weekly tooling review
 
-Status: **Accepted 2026-10-16** (the owner's approval, the same day); the owner's direction, drafted by Claude; her
-review the same day (agrees, with five changes, all in below), signed.
+Status: **Built 2026-10-16** (accepted by the owner the same day; installed with her next restart); the owner's
+direction, drafted by Claude; her review the same day (agrees, with five changes, all in below), signed.
 
 ## Context
 
@@ -90,6 +90,18 @@ What she already has, and this builds on:
 Character brain: no new tool, option or parameter, and no line in any other turn. One block, at most 2,500
 characters, at the tail of one turn a week: one prefill of it a week. Action brain: unchanged. Program: one module
 beside `self_review.py`, its test, its line in RUNTIME_API.md.
+
+## Built (2026-10-16)
+
+`tools_week.py`, read in the self-evaluation branch of `context.py`; its showings are `review.tools_week` in the audit,
+the list it saw kept with each, and the floor counts from `review.tools_week.started` before the first. Measured on her
+real week before installing, read-only: the draft's sizes did not hold. Refusals grouped by their first clause came to
+212 groups, because a clause carries the id or name it refused; grouped with quoted names and numbers masked, the 6
+most frequent and the rest in one line. The calls carry last week's count beside each, not a second table. Even so the
+readings came to 3,660 characters: at 2,500 the cut order would have dropped the calls and the action brain, the core
+of a tooling review; the limit is 3,200, where only `parameters` (and on a busier week `lengths` and `turn_shape`) is
+cut. Her week then read 3,093 characters, 29 lookup tasks in each of the two weeks. Once a week, at the tail of one
+turn.
 
 ## Her review (agent line, 2026-10-16; Claude's paraphrase, signed by her the same day)
 

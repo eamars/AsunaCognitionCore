@@ -1,7 +1,8 @@
 # ADR-071: Her exchanges, read back beside the thought she wrote
 
-Status: **Accepted 2026-10-16** (the owner's approval, the same day); the owner's direction, drafted by Claude; her
-review the same day (agrees, with five changes and her wording of the note, all in below), signed.
+Status: **Built 2026-10-16** (accepted by the owner the same day; installed with her next restart); the owner's
+direction, drafted by Claude; her review the same day (agrees, with five changes and her wording of the note, all in
+below), signed.
 
 ## Context
 
@@ -98,6 +99,17 @@ for each other, and that is where pleasing gets in.
 Character brain: no new tool, option or parameter, and no line in any other turn. One reading of at most 2,000
 characters in the self-evaluation turn: one prefill of it a day at most. Action brain: unchanged. Program: the
 reading in `self_review.py`, its test, its line in RUNTIME_API.md.
+
+## Built (2026-10-16)
+
+`self_review.exchanges` and `self_review.cared`, in the same turn as ADR-070's readings; showings are
+`review.exchanges` in the audit. A reply is matched by `group_context.reply_message_id` (the stored line it answers),
+a reaction by `asuna_notice.line`. Her tag lives in her persona model as `self_review.tag` (the core holds no word of
+hers): the week's turn carries her tagged sections whole as `cared_from_program`, any other review turn their headings
+with the day each was last written, and nothing when there is none. Measured on her real days before installing,
+read-only: one exchange is about 400 characters, so 2,000 held four of eight; her answer was to keep eight and protect
+the proportions, so the fields are shorter (her line 150, the thought 160, two next lines) and the limit is 3,200: her
+last week read seven of eight in 3,068 characters, the one cut a line with an explicit response. Once a day at most.
 
 ## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
 

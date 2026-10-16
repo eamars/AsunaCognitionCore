@@ -796,13 +796,29 @@ class ContextBuilder:
         watched=_watches.watched_block(self.store,event,session_class)
         if watched:context['watched_from_program']=watched
         # ADR-058: a heartbeat that rolled self evaluation brings her day in raw readings (home only).
-        if (event.get('dice')=='self_evaluation' and event.get('episode_kind')=='presence'
-                and session_class==visibility.OWNER_PRIVATE):
+        # ADR-070/071: once a week her tools and her own sections in full, with a floor: nine days without them and
+        # any home heartbeat that reaches her carries the review, whatever it rolled.
+        from . import tools_week as _tools_week
+        reviewing=(event.get('episode_kind')=='presence' and session_class==visibility.OWNER_PRIVATE
+                   and (event.get('dice')=='self_evaluation' or _tools_week.due(self.store,persona,moment)=='floor'))
+        if reviewing:
             from . import self_review
-            from .persona_model import timezone as _review_zone
+            from .persona_model import effective as _review_value, timezone as _review_zone
             from .render import model_and_policy as _review_model
-            context['self_review_from_program']=self_review.block(
-                self.store,persona,_review_zone(*_review_model(self.store,persona),self.store.config)[0],moment)
+            _model,_policy=_review_model(self.store,persona)
+            _zone=_review_zone(_model,_policy,self.store.config)[0]
+            _tag=_review_value(_model,'self_review.tag',_policy)
+            review=self_review.block(self.store,persona,_zone,moment)
+            review['exchanges']=self_review.exchanges(self.store,persona,_zone,moment)
+            weekly_tools=_tools_week.block(self.store,persona,moment)
+            if weekly_tools:
+                context['tools_week_from_program']=weekly_tools
+                whole=self_review.cared(self.store,persona,_tag,whole=True)
+                if whole:context['cared_from_program']={'items':whole}
+            else:
+                line=self_review.cared(self.store,persona,_tag)
+                if line:review['cared']=line
+            context['self_review_from_program']=review
             if memory_tiers.ENABLED:
                 # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
                 weekly=memory_tiers.week(self.store,persona,schedule_rules.scene_timezone(self.store.config,scene),moment)

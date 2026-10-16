@@ -30,7 +30,7 @@ AREAS = {
         'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'role_tools', 'param_names', 'tool_args',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
     'people': ('Groups and people', 'Who is talking, whether she joins in, her places, notes between conversations.', [
-        'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',
+        'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'tools_week', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',
         'watches', 'waiting', 'places', 'errands', 'focus', 'switches', 'own_mute', 'condense', 'notes', 'questions', 'scene_links', 'visibility', 'understanding', 'private_words']),
     'memory': ('Memory', 'What she remembers, how it is recalled, her documents, mood and blobs.', [
         'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest',

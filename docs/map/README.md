@@ -231,6 +231,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 - [`rhythm`](../../src/asuna/rhythm.py) — Rhythm block and recent-phrasing hint (ADR-009 §10.1, §11.2).
 - [`dice`](../../src/asuna/dice.py) — The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls one of seven outcomes.
 - [`self_review`](../../src/asuna/self_review.py) — self_review_from_program (ADR-058): her own day in raw readings, for a heartbeat that rolled self evaluation.
+- [`tools_week`](../../src/asuna/tools_week.py) — tools_week_from_program (ADR-070): her week of tools in raw readings, each with its source, for her own review.
 - [`people`](../../src/asuna/people.py) — Who is who in a scene, as the character reads it.
 - [`peer_context`](../../src/asuna/peer_context.py) — Bind and store the verified platform peer snapshot; people.py turns it into what she reads.
 - [`familiarity`](../../src/asuna/familiarity.py) — How well she knows a person, in words (AGENTS.md: interpreted state from a versioned table).

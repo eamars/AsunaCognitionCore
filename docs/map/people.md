@@ -74,6 +74,18 @@ The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls
 self_review_from_program (ADR-058): her own day in raw readings, for a heartbeat that rolled self evaluation.
 
 - def `block`
+- def `exchanges` — Her lines since this was last shown (at most WINDOW_DAYS), each beside the thought she wrote in that turn and what followed it; records the showing.
+- def `cared` — Her sections tagged `tag` in her self documents: headings with the day each was last written, or whole when `whole`; None when she has none (no line stands in for it).
+
+## `tools_week`
+
+[src/asuna/tools_week.py](../../src/asuna/tools_week.py)
+
+tools_week_from_program (ADR-070): her week of tools in raw readings, each with its source, for her own review.
+
+- def `last_shown` — The audit record of the last showing, or None.
+- def `due` — 'week' when a week has passed since the last showing (or there was none), 'floor' when nine days have: the next home heartbeat carries it then whatever it rolled; None when it was shown within the week.
+- def `block` — The readings, or None when shown within the week.
 
 ## `people`
 

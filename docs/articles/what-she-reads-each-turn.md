@@ -328,3 +328,19 @@ thoughts left out; the episode keeps the prepared context. Sizes are `len(json.d
 Tool use comes from the turn's recorded calls (`speak` parts by kind). The system prompt is `render.render_system` per
 place, the tool list `role_tools.toolbox` per kind of conversation. The week includes code from before ADR-061's and the
 second wording audit's removals; those blocks are listed apart.
+
+## Since this was measured (2026-10-16)
+
+- **A, B and C are built** (afd9e001). At home, where a sticker cannot be sent, the whole shelf comes in the turns that
+  tidy it and its names otherwise (her answer: the names are hers and what she remembers them by), and `sticker` `do:
+  shelf` lists it whole on asking. The member list holds the 20 most recently active. The understanding offer's long
+  explanation is said once in her system prompt instead of in 92% of turns. Errand places were already shown only
+  where she can send one, so they stay.
+- **D, memory use, measured.** A memory shown to her shares a run of six characters with what she then says 8.9% of
+  the time, against 1.8% for a memory from another turn (chance), and in a quarter of her turns she echoes at least one
+  (a lower bound: paraphrase and what only informs are not counted). By kind: raw chat chunks are 71% of what is shown
+  and echo least (6.2%); conversation summaries 17.7%; her own past thoughts 10.2%; items of her documents 36 to 46%.
+  Memories are used; what the numbers question is the mix, not the block. Her caution: a memory used rarely can carry
+  weight (one she uses once a day anchors a daily account), so a change would weigh what a memory holds up, not only
+  how often it is echoed.
+- **E** is ADR-073, proposed for her review.

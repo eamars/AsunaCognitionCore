@@ -832,6 +832,9 @@ class ContextBuilder:
                 line=self_review.cared(self.store,persona,_tag)
                 if line:review['cared']=line
             context['self_review_from_program']=review
+            # ADR-073: a map of what she has, what she changed and why, and her attention as counts.
+            from . import reflection_map as _map
+            context['map_from_program']=_map.block(self.store,persona,moment,tag=_tag)
             if memory_tiers.ENABLED:
                 # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
                 weekly=memory_tiers.week(self.store,persona,schedule_rules.scene_timezone(self.store.config,scene),moment)

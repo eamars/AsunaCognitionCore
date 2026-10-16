@@ -17,7 +17,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 | 5 | ADR-070 her weekly tooling review | Built 2026-10-16 (3,200 characters, measured on her week) | installed with her next restart; she checks the first reading |
 | 6 | ADR-071 her exchanges, read back beside the thought she wrote | Built 2026-10-16 (3,200 characters, measured on her days) | her `self_review.tag` in her persona model; installed with her next restart |
 | 7 | ADR-072 her reflection in a session of its own | Built 2026-10-16 (owner's decision: an empty session) | installed with her next restart; whether night self-development moves too: measured first |
-| 8 | ADR-073 a map of what she has, in her reflection | Proposed 2026-10-16 (owner's go, choice E) | her review; then build |
+| 8 | ADR-073 a map of what she has, in her reflection | Built 2026-10-16 (her review in) | installed with her next restart |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
 memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is
@@ -100,4 +100,4 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 070 | Her weekly tooling review | Built | Once a week her own review of her tools: the program's readings (calls, refusals and what they cost, unused parameters, lengths, turn shape, her action brain, the list she carries, last week's proposals) in a self-evaluation turn; her proposals to add, remove or reshape go to the developer's line, the developer answers each within a day |
 | 071 | Her exchanges, read back beside the thought she wrote | Built | Her daily self-review reads back a sample of her lines with what she meant then and what followed (facts only, no tone or sentiment label, others' words as 60-character cautioned excerpts); never a score; her lessons go by next-time notes, her voice document and her ideas |
 | 072 | Her reflection runs in a session of its own | Built | A turn carrying review readings runs in its own empty session, archived after: more tokens for reflection, none in her regular turns (owner 2026-10-16) |
-| 073 | A map of what she has, in her reflection | Proposed | In reflection turns only: one line per store (size, what changed, how to open it), what she changed in her own words, and attention as counts |
+| 073 | A map of what she has, in her reflection | Built | In reflection turns only: one line per store (size, what changed, how to open it), what she changed in her own words, and attention as counts |

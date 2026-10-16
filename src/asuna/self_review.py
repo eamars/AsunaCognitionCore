@@ -25,7 +25,7 @@ TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETU
                'CANCELLED': '撤了'}
 # The blocks only a reflection turn carries (ADR-072): a turn that carries one runs in a session of its own, so its
 # readings are never part of her home conversation's context.
-REFLECTION_BLOCKS = ('self_review_from_program', 'dice_review_from_program', 'tools_week_from_program')
+REFLECTION_BLOCKS = ('self_review_from_program', 'dice_review_from_program', 'tools_week_from_program', 'map_from_program')
 REFLECT_PREFIX = 'asuna-reflect-'
 EXCHANGES = 8
 EXCHANGE_CHARS = 3200          # the owner's limit (2026-10-16); whole thoughts first, so fewer than 8 fit on a busy day

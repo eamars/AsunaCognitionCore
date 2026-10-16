@@ -89,6 +89,14 @@ tools_week_from_program (ADR-070): her week of tools in raw readings, each with 
 - def `due` — 'week' when a week has passed since the last showing (or there was none), 'floor' when nine days have: the next home heartbeat carries it then whatever it rolled; None when it was shown within the week.
 - def `block` — The readings, or None when shown within the week.
 
+## `reflection_map`
+
+[src/asuna/reflection_map.py](../../src/asuna/reflection_map.py)
+
+map_from_program (ADR-073): in a reflection turn, a map of what she has, what changed since the last map she saw, and how to open each; what she changed, in her own words with the reasons she gave; and where her attention went, as counts.
+
+- def `block` — The map since the last one she saw (at most WINDOW_DAYS); records the showing.
+
 ## `people`
 
 [src/asuna/people.py](../../src/asuna/people.py)

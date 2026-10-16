@@ -5,6 +5,7 @@ it. The exchanges put her line beside the thought she wrote in that turn and wha
 sample chosen by the day, so the reading is not a record of the lines that got an answer. Her own sections, tagged by
 her persona's `self_review.tag`, come whole once a week and as one dated heading otherwise, and not at all when gone.
 """
+import json
 from datetime import datetime, timedelta, timezone
 
 from asuna import self_review, tools_week
@@ -157,3 +158,32 @@ def test_a_reflection_runs_in_its_own_session_and_nothing_of_it_stays_at_home(st
     store.db.messages.insert_one({'_id': 'in-ep-later', 'schema_version': 1, 'event': {'scheduled_plan_id': 'plan-r'}})
     assert worker.resolve_role_session({**turn, '_id': 'ep-later', 'context': {}}) == 'asuna-role-home'
     assert worker.resolve_role_session(turn) == own, 'the same turn finds its session again'
+
+
+def test_the_map_names_each_store_shows_her_changes_with_her_reasons_and_attention_as_counts(store):
+    """ADR-073: one line per store, what she changed with the reason she gave, attention as numbers only; the window
+    says when it was cut; no store fills the map."""
+    from asuna import reflection_map
+    from asuna.documents import DocumentStore
+    first = reflection_map.block(store, 'P1', NOW)
+    assert first['window'].startswith('这是第一张图') and first['note'] == reflection_map.NOTE
+    docs = DocumentStore(store, 'P1')
+    docs.apply('persona', {'op': 'append_section', 'heading': '新学到的', 'reason': '今天才明白'}, '一句新的话。',
+               base_revision_id=docs.read('persona')[0], author='character', mutation_id='map-1')
+    store.audit('ep-gate', 'attend.verdict', {'choice': 'join', 'reason': 'x'}, 'scene:grp-a')
+    store.audit('ep-gate', 'attend.verdict', {'choice': 'quiet', 'reason': 'y'}, 'scene:grp-a')
+    out = reflection_map.block(store, 'P1', NOW + timedelta(minutes=1), tag='标签')
+    assert 'window' not in out, 'within the look-back, nothing to say about it'
+    assert any(line.startswith('persona：') and '改了 1 节' in line for line in out['index'])
+    assert any('self_review.tag「标签」' in line for line in out['index']) and any(line.startswith('差事：') for line in out['index'])
+    [persona] = [d for d in out['changed']['documents'] if d['doc'] == 'persona']
+    assert persona['headings'] == ['新学到的'] and persona['your_reasons'] == ['今天才明白']
+    assert out['attention'] == ['一个现在已经没有的对话：看了 2 行，叫你看了 1 行'], 'numbers only'
+    assert not any(word in str(out['attention']) for word in ('放过', '忽略', '不够')), 'no verdict'
+    again = reflection_map.block(store, 'P1', NOW + timedelta(days=21))
+    assert again['window'].startswith('上次地图在 20 天前') and '最早的 6 天没进这张图' in again['window']
+    many = [('2099', {'group': 'g%d' % n, 'your_reasons': [], 'sections': [{'heading': 'h', 'ref': {}, 'text': '字' * 1000}]})
+            for n in range(9)]
+    filled = reflection_map._fill([e for _, e in many], reflection_map.BUDGET['group_notes'], lambda e: {'group': e['group']},
+                                  '另有 %d 个')
+    assert len(json.dumps(filled, ensure_ascii=False)) <= reflection_map.BUDGET['group_notes'] + 20

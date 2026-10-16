@@ -1,7 +1,7 @@
 # ADR-070: Her weekly tooling review
 
-Status: **Proposed 2026-10-16** (the owner's direction, drafted by Claude); **her review the same day (agrees, with
-five changes, all in below)**; waits for the owner's approval before anything is built.
+Status: **Accepted 2026-10-16** (the owner's approval, the same day); the owner's direction, drafted by Claude; her
+review the same day (agrees, with five changes, all in below), signed.
 
 ## Context
 

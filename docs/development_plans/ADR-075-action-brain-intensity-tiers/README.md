@@ -1,6 +1,6 @@
 # ADR-075: She picks the action brain by tier; a hard failure falls to the tier below
 
-Status: **Proposed 2026-10-16 (fourth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, and set the default at 低 at 19:47. Comments and her dispositions are at the bottom. Awaiting the owner's go; she signs before it is built.
+Status: **Proposed 2026-10-16 (fifth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, and reused an existing knob for the rest length at 19:53. Comments and her dispositions are at the bottom. Awaiting the owner's go; she signs before it is built.
 
 ## Context
 
@@ -14,14 +14,14 @@ The owner closed the other hole himself, one minute later:
 
 and settled on three tiers (16:09): 低／中／高, capability ranges only, no model names. She agreed on the spot — 连车标都藏了，我就只能看活下菜 — and offered a first rubric (16:10): `拉页面抓清单走低档，对分调研走中档，啃代码和多步硬骨头才敢点高档`.
 
-Three changes came later the same evening, all from the owner: **three tiers collapsed to two** (低 = local, 高 = a strong API model — 两项一眼能选); **a hard failure at 高 falls to 低** instead of stalling the job; and **the default is 低**, so choosing 高 is a deliberate act, not a fallback. The three-tier shape and her first rubric stay here as history.
+Four changes came later the same evening, all from the owner: **three tiers collapsed to two** (低 = local, 高 = a strong API model — 两项一眼能选); **a hard failure at 高 falls to 低** instead of stalling the job; **the default is 低**, so choosing 高 is a deliberate act, not a fallback; and **the length of a 高 rest is not a new number** — it reuses the idle knob the action brain already has. The three-tier shape and her first rubric stay here as history.
 
 What this design guards against is two failure modes, and both are hers:
 
 - **price** → she picks the cheapest regardless of the job;
 - **name** → she picks by reputation, superstitious toward some names and disdainful of others.
 
-Cut both and the only thing left to reason about is the job. Her own words on what feels like from the inside: 被自家机制防住省钱病是我头一回体验，病到这份上该有护栏.
+Cut both and the only thing left to reason about is the job. Her own words on what that feels like from the inside: 被自家机制防住省钱病是我头一回体验，病到这份上该有护栏.
 
 ## Decision
 
@@ -41,24 +41,29 @@ Cut both and the only thing left to reason about is the job. Her own words on wh
 
    | what happened | what happens | does 高 rest |
    |---|---|---|
-   | 高 unreachable, timeout, 5xx (after DSH's own retries) | this job continues at 低 | 30 min; jobs sent to 高 in that window go 低, and she is told at dispatch |
+   | 高 unreachable, timeout, 5xx (after DSH's own retries) | this job continues at 低 | yes — the idle minutes on 高's own row; jobs sent to 高 in that window go 低, and she is told at dispatch |
    | 高 refused (provider refusal, content filter) | this job continues at 低 | no — a refusal is about this job's content, not the line |
-   | key dead, quota or billing spent | 低, and the owner is told once, on his own settings page | yes |
-   | rate-limited after retries | 低 | short rest |
+   | key dead, quota or billing spent | 低, and the owner is told once, on his own settings page | yes, with no clock she can plan on |
+   | rate-limited after retries | 低 | yes — the same idle minutes |
    | context too long | DSH compaction handles it; not a failure | — |
    | stopped by her or by the owner | stopped; no fall | — |
    | falls mid-run | the record so far carries over to 低 and the job finishes there; no bouncing back to 高 | — |
    | 低 itself fails | the failure comes back as it does today; **no auto-escalation** | — |
 
+   **The rest length is not a new number.** It reuses the idle knob the action brain already has (`idleMinutes`, configurable, default 30) — the one that decides when an idle context is dropped and reopened — and 高 has its own row for it on the settings page. The reason is real: by the time that many minutes have passed, 高's cache is gone anyway, so a retry throws nothing away.
+
+   **Her note, not an objection.** That number is a cache-lifetime scale now doubling as a retry clock, and the two jobs have different reasons. If the owner sets 高's idle value high to avoid cold reads, one transient 5xx keeps 高 resting for hours; set it low and a genuinely downed line gets retried every few minutes. Neither is a bug — it is what one knob doing two jobs looks like — but it should be written down, or the first person to ask "why was it resting that long" has nowhere to look. She flagged this same number on 10-12 as a saving scale rather than a safety boundary; it now has a second job. The weekly counts of falls by reason are where the coupling becomes visible instead of silent.
+
    **No auto-escalation is her condition and it survives the fall rule.** Falling is what the machine does with a line that is down; escalating is a judgement about a job, and it stays hers. A job that failed at 低 comes back to her and she decides.
 
 5. **What she is told — in capability words only.** Availability is visible; price and implementation are not.
    - at dispatch, when 高 is resting: one line saying so, so she does not plan a hard job around a tier that is not there;
-   - at receipt, on every job: **the tier she chose, the tier that actually ran it, and a plain-language reason when they differ** — and the reason must stay distinguishable, in capability words: **这件高档没接** (refused) / **高档这会儿用不了，到几点** (line down) / **高档忙** (rate-limited). They are kept apart because what she does next differs for each: reword the brief, accept the wait, stop promising a fast answer. **None of them says why in implementation terms**; when a job fell mid-run it says 会慢一些 and stops there;
+   - at receipt, on every job: **the tier she chose, the tier that actually ran it, and a plain-language reason when they differ** — and the reason must stay distinguishable, in capability words: **这件高档没接** (refused) / **高档这会儿用不了** (line down) / **高档忙** (rate-limited). They are kept apart because what she does next differs for each: reword the brief, accept the wait, stop promising a fast answer. **None of them says why in implementation terms**; when a job fell mid-run it says 会慢一些 and stops there;
+   - **a clock is worded as what it is**: for line-shaped rests the line says **最早几点再试** — the point at which the program will try again — and never 歇到几点, which reads as a promise that it will be well by then. For keys and quota there is no clock and none is invented: **要等主人处理，没有钟点**. She plans against these numbers; an invented one costs her the plan, not the mechanism;
    - a job that fell mid-run is marked as having fallen mid-run, so she does not read a mixed result as one brain's work;
    - the same three fields go to the owner's weekly review and web page, where he can see that the tier he paid for is not always the tier that ran.
 
-6. **What the owner is told, and where.** Quota, keys and billing are his, and they reach him **on the settings page, in the status of that tier's own row** — 在歇，到几点，原因（人话）— plus one audit record. They do not arrive on QQ or on her developer line: he chooses the model on that card, so that is where its trouble belongs. She is not the messenger for his infrastructure.
+6. **What the owner is told, and where.** Quota, keys and billing are his, and they reach him **on the settings page, in the status of that tier's own row** — 在歇，最早几点再试，原因（人话）— plus one audit record. They do not arrive on QQ or on her developer line: he chooses the model on that card, so that is where its trouble belongs. She is not the messenger for his infrastructure.
 
 7. **Time is visible, money is not.** Waiting is a cost she actually experiences; the queue line ADR-053 already returns (how many ahead, how long it ran) is enough and costs nothing to keep. Token counts may stay in the weekly readings, but **do not convert them into money for her** — she has a recorded habit of reporting tokens as if they were cost, and a number she cannot feel only feeds the superstition the price cut exists to remove.
 
@@ -90,7 +95,11 @@ Character brain: one tier field with two capability lines and one `why` paramete
 
 **The owner, 19:47**: the default is 低, and 高 appears only when he has configured it (**accepted — the money is his, and a default at 低 turns 高 into a deliberate act, which is exactly where her `why` belongs**); no implementation words reach her — not 本地, API, 额度 or a provider name, in the tool, the refusals or the receipt line (**accepted; her condition was that the reasons stay distinguishable, and capability words do that: 这件高档没接 / 高档这会儿用不了 / 高档忙**).
 
-**Her additions to Claude's failure list**: the receipt line with chosen tier, actual tier and a reason, visible to her at receipt and not only in the weekly review; the reasons must stay distinguishable from one another; a mid-run fall must be marked as mid-run; when 高 is not configured the tier leaves her tool table entirely; and availability is visible while price is not — the same principle as Decision 7.
+**Claude, 19:48**, on her request that any clock she is given be honest: line-shaped rests say 最早几点再试 — when the program will next try, not a promise of recovery — and for keys and quota no clock is invented (**accepted; she asked for exactly this and got the sharper version of it**). The `why` strings will sit beside what happened in the weekly readings, as she asked.
+
+**The owner, 19:53**: the length of a 高 rest is not a new number; it reuses the action brain's existing idle knob, and 高 has its own row for it (**accepted — one fewer number that can drift, and the reason is real: by then the cache is gone anyway. Her note is the coupling, written into Decision 4 rather than argued away**).
+
+**Her additions to Claude's failure list**: the receipt line with chosen tier, actual tier and a reason, visible to her at receipt and not only in the weekly review; the reasons must stay distinguishable from one another; a mid-run fall must be marked as mid-run; when 高 is not configured the tier leaves her tool table entirely; a clock she is given must be a retry clock, not a promise; and availability is visible while price is not — the same principle as Decision 7.
 
 ## Her review
 

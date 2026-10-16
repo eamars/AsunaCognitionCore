@@ -24,12 +24,12 @@ EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
                'CANCELLED': '撤了'}
 EXCHANGES = 8
-EXCHANGE_CHARS = 3200          # 8 exchanges at about 400 characters each (measured on her data, 2026-10-16)
+EXCHANGE_CHARS = 3200          # the owner's limit (2026-10-16); whole thoughts first, so fewer than 8 fit on a busy day
 WINDOW_DAYS = 7
 SAID_CHARS = 150
-THOUGHT_CHARS = 160
+THOUGHT_CHARS = 360            # a thought whole, as reasons keeps it (her ask: two fragments do not compare)
 OTHERS_CHARS = 60               # others' words reach home cut short and marked as theirs (ADR-017)
-NEXT_LINES = 2
+NEXT_LINES = 1                 # others' next lines are the first to give way
 LOOK_AHEAD = 60                 # rows of a conversation read after her line
 AGAIN_MINUTES = 30
 SHOWN = 'review.exchanges'

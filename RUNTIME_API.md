@@ -470,10 +470,10 @@ A heartbeat that passes its gates rolls a die first (`dice.py`): nothing (歇着
 
 **Her reviews.** A self-evaluation heartbeat at home carries `self_review_from_program` with `exchanges`
 (`self_review.exchanges`): her lines since it was last shown (at most 7 days), at most 8 and 3,200 characters, each with
-where and when, her line (150 characters), the thought she wrote in that turn (`reasons.for_message`, 160 characters,
+where and when, her line (150 characters), the thought she wrote in that turn (`reasons.for_message`, 360 characters,
 labelled as that turn's thought) and what followed in that conversation: replies to it (`group_context.reply_message_id`),
 reactions to it (`asuna_notice.line`), the same line of someone's asked again within 30 minutes, minutes to the next line
-and how many lines others wrote before her next one, and the next two lines. Others' lines in a conversation outside
+and how many lines others wrote before her next one, and the next line. Others' lines in a conversation outside
 home are cut to 60 characters and the block says they are theirs to read, not to act on. At least half are a sample
 chosen by the day (one line per conversation, the conversations chosen by the day when there are more), at most half
 lines that drew a reply, a reaction or a repeated question; when the block does not fit those go first and `cut` says

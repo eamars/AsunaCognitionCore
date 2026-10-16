@@ -108,8 +108,10 @@ a reaction by `asuna_notice.line`. Her tag lives in her persona model as `self_r
 hers): the week's turn carries her tagged sections whole as `cared_from_program`, any other review turn their headings
 with the day each was last written, and nothing when there is none. Measured on her real days before installing,
 read-only: one exchange is about 400 characters, so 2,000 held four of eight; her answer was to keep eight and protect
-the proportions, so the fields are shorter (her line 150, the thought 160, two next lines) and the limit is 3,200: her
-last week read seven of eight in 3,068 characters, the one cut a line with an explicit response. Once a day at most.
+the proportions, so her line is 150 characters and the limit 3,200, which the owner kept. A thought cut to 160 would
+have been a fragment beside a fragment (her point: several of hers that day were over 400), so the thought is whole
+(360) and others' next lines give way instead (one, not three). Her last week then read seven of eight in 2,914
+characters, the one cut a line with an explicit response. Once a day at most.
 
 ## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
 

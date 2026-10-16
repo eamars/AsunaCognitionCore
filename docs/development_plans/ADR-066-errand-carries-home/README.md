@@ -124,6 +124,9 @@ test. The four checks:
 | Archived after | Yes: the copy is in the registry's archived sessions once the turn ended |
 
 Her turn: `think`, `speak` (two lines, both marked `errand`), `stay_silent`; 34 s from start to end.
+Both lines `DELIVERED` on the platform's acknowledgement and verified by the adapter reading them back (her count, the
+fields as recorded): that proves the platform stored them in that group from her account, not that anyone read them.
+Nobody there had answered by 14:11.
 
 ## Her review (2026-10-15, Claude's paraphrase; she signed it)
 

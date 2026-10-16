@@ -736,10 +736,17 @@ export class CognitionCore {
   }
 
   /** Nothing of this conversation is running: no turn, none queued, no child of it open. */
+  /** No stage running or queued in this session, nor in an action session it handed work to that is still working: an
+   * action session whose task has finished stays open and holds nothing. */
   idle(id) {
     const state = this.states.get(id);
     return !state?.current && !state?.queue.length
-      && ![...this.handles.values()].some(handle => handle.agent?.session?.header?.parentSession === id);
+      && !this.handedTo(id).some(([child]) => this.states.get(child)?.current || this.states.get(child)?.queue.length);
+  }
+
+  /** The open sessions this one handed work to, as [session id, handle]. */
+  handedTo(id) {
+    return [...this.handles].filter(([, handle]) => handle.agent?.session?.header?.parentSession === id);
   }
 
   /** The conversation's agent, loaded after any write or load of it that began before (one opener at a time). */
@@ -762,6 +769,12 @@ export class CognitionCore {
       this.handles.delete(stage.session_id);
       this.retired.add(stale.agent);
       await stale.dispose();
+      // Its finished action sessions close with it: a task's next stage opens one on the applied routes and tools.
+      for (const [child, handle] of this.handedTo(stage.session_id)) {
+        this.handles.delete(child);
+        this.retired.add(handle.agent);
+        await handle.dispose();
+      }
     }
     const existing = this.ctx.agents.get(stage.session_id);
     if (existing) return existing;

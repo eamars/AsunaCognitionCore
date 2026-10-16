@@ -88,3 +88,39 @@ test('applied settings reach a conversation already open: it is reopened between
   assert.equal(core.retired.has(first), true, 'the closed agent cannot clear the stage of the turn that reopened it');
   assert.equal(await core.ensureAgent(stage), reopened, 'reopened once, not at every turn');
 });
+
+test('a conversation that handed work to the action brain is reopened too once that work is done, and its finished action session with it', async () => {
+  const live = new Map();
+  const open = (id, options, parent) => {
+    const agent = { id, options, session: { id, header: parent ? { parentSession: parent } : {}, snapshotEvents: () => [], surface: { nodes: [] } } };
+    const handle = { agent, dispose: async () => { live.delete(id); core.disposed(agent); } };
+    live.set(id, agent);
+    return handle;
+  };
+  const ctx = { get: () => undefined,
+    agents: { get: id => live.get(id), resume: async ({ resumeSessionId, agentOptions, parentAgent }) => open(resumeSessionId, agentOptions, parentAgent?.id) },
+    sessionPersistence: { stat: async () => true },
+    agentPresets: { mount: async () => {} },
+    workspaceRegistry: { create: async () => ({ attachSession: async () => {} }), unarchiveSession: async () => {} } };
+  const route = model => ({ persona: 'p', routes: { character: { provider: 'x', model }, action: { provider: 'x', model } } });
+  let core;
+  core = new CognitionCore(ctx, route('old'));
+  core.personas.set('p', { preset: 'role' });
+  core.channelOf = () => undefined;
+  const stage = { session_id: 'role', lane: 'character', binding: { scene_id: 'x', cwd: '.' } };
+  const first = await core.ensureAgent(stage);
+  const action = { session_id: 'act', lane: 'executor', binding: { scene_id: 'x', cwd: '.' } };
+  const child = await core.ensureAgent(action, first);
+  core.lifecycle.state = 'ready';
+  core.worker = { call: async () => {} };
+  core.validateSettings = async () => {};
+  core.restart = async () => {};
+  await core.applySettings(route('new'));
+  core.state('act').current = { token: 'a' };                 // the task is still running: the conversation waits
+  assert.equal(await core.ensureAgent(stage), first);
+  core.state('act').current = null;                           // the task is done; its session is still open
+  const reopened = await core.ensureAgent(stage);
+  assert.notEqual(reopened, first, 'a finished action session no longer keeps the conversation from reopening');
+  assert.equal(core.retired.has(child), true, 'the finished action session closed with it');
+  assert.equal(core.handles.has('act'), false);
+});

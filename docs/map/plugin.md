@@ -242,7 +242,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `relay` — Her words for a running action session (collab.js), marked so its claim can be acknowledged.
   - `onEvent`
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
-  - `idle` — Nothing of this conversation is running: no turn, none queued, no child of it open.
+  - `idle` — No stage running or queued in this session, nor in an action session it handed work to that is still working: an action session whose task has finished stays open and holds nothing.
+  - `handedTo` — The open sessions this one handed work to, as [session id, handle].
   - `ensureAgent` — The conversation's agent, loaded after any write or load of it that began before (one opener at a time).
   - `openAgent`
   - `written` — Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once the conversation is durable.

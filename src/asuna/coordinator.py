@@ -607,12 +607,16 @@ class Coordinator:
         names=[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config),*ACTION_DSH_CAPABILITIES])]
         return development,integration,names
 
-    def delegate(self, ep, call_id, title, brief):
-        """A new task: the action brain's first message is her brief (§4)."""
+    def delegate(self, ep, call_id, title, brief, tier=None):
+        """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose."""
         from .grants import workspace_grant
         workspace_grant(self.store.config,ep['scene_id'],ep['person_id'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         task=self.store.db.tasks.find_one({'_id':task_id})
+        said=None
+        if not task and tier:
+            from . import action_tiers
+            tier,said=action_tiers.at_dispatch(*tier,self._zone(ep))
         if not task:
             development,integration,names=self._grants(ep)
             source_ref=('in-'+ep['_id']) if ep.get('episode_kind')!='consult' else None
@@ -627,12 +631,16 @@ class Coordinator:
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'native_session_id':ep.get('native_session_id'),
-                    'created_at':now()},stream=ep['_id'])
+                    **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
             self.crash('after_task_persist')
         fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(task,'message',{'from':'character','text':brief,'title':title},entry_id='brief:'+task_id)
-        return task
+        return {**task,**({'tier_words':said} if said else {})}
+
+    def _zone(self, ep):
+        from .schedule_rules import scene_timezone
+        return scene_timezone(self.store.config, self.store.db.scenes.find_one({'_id':ep['scene_id']}) or {})
 
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
@@ -662,14 +670,17 @@ class Coordinator:
             raise role_tools.Refused('这件事在重启时暂停了：只有主人明确要继续时才能接着做。')
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         continued=self.store.db.tasks.find_one({'_id':task_id})
+        said=None
         if not continued:
             # ADR-053: decided once, here, and kept on the task: a context idle past the action route's limit is not
             # carried on (its provider has most likely dropped the cache); the continuation starts fresh.
             from datetime import datetime, timezone
             from .tasks import idle_minutes, last_used
+            from . import action_tiers
+            limit=idle_minutes(self.store.config,(task.get('tier') or {}).get('ran'))
             idle=(datetime.now(timezone.utc)-last_used(task)).total_seconds()/60
-            fresh={'after_minutes':int(idle),'report_of':task['_id'],'limit':idle_minutes(self.store.config)} \
-                if idle>idle_minutes(self.store.config) else None
+            fresh={'after_minutes':int(idle),'report_of':task['_id'],'limit':limit} if idle>limit else None
+            tier,said=action_tiers.carried(task.get('tier'),fresh,self._zone(ep))
             binding=(f"task:{task_id}:{ep['scope_key']}:{ep['policy_epoch']}:1" if fresh else
                      task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}")
             source_ref='in-'+ep['_id']
@@ -683,7 +694,7 @@ class Coordinator:
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
-                    **({'fresh_context':fresh} if fresh else {}),
+                    **({'fresh_context':fresh} if fresh else {}),**({'tier':tier} if tier else {}),
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])
         fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
@@ -695,6 +706,7 @@ class Coordinator:
                   '它手上只有原来的交代、上一趟的报告和你这句话。要它用的东西，就在这句话里写全，或者说清楚让它重新取。')
                  % (fresh['after_minutes'],fresh['limit'])) if fresh else '接着上一趟的上下文做：之前查到的它都还看得到。'
         return {'task':task_id,'continues':task['_id'],'state':'已交给行动脑',
+                **({'tier':said} if said else {}),
                 'action_brain':context,'queue':queue_words(self.store,task_id),
                 'note':'结果回来会再叫你。'}
 

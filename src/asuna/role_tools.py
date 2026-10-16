@@ -437,9 +437,17 @@ TIERED = _tiered(TOOLS)
 
 
 def tools():
-    """The tool specs her brain is shown: tiered memory's when its switch is on, else as they are."""
-    from . import memory_tiers
-    return TIERED if memory_tiers.ENABLED else TOOLS
+    """The tool specs her brain is shown: tiered memory's when its switch is on, else as they are; `delegate` takes a
+    tier when the owner configured the action brain's 高 (ADR-075)."""
+    from . import action_tiers, memory_tiers
+    base = TIERED if memory_tiers.ENABLED else TOOLS
+    return {**base, 'delegate': tiered_delegate(base['delegate'])} if action_tiers.offered() else base
+
+
+def tiered_delegate(spec):
+    from . import action_tiers
+    return {**spec, 'parameters': {**spec['parameters'], 'tier': action_tiers.TIER_FIELD,
+                                   'why': _s('选高时写：为什么这件要高档', limit=action_tiers.WHY_CHARS)}}
 # ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
 # and a turn may use is kept by option ('task.message'); the model is shown the tools.
 OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review'),
@@ -1495,9 +1503,17 @@ class RoleTools:
         title = self._text(args, 'title', 80)
         from . import credentials
         brief = credentials.scrub(self._text(args, 'brief', 20000))     # a credential value never rides a brief
-        task = self.coordinator.delegate(ep, call_id, title, brief)
+        from . import action_tiers
+        tier = None
+        if action_tiers.offered():
+            try:
+                tier = action_tiers.chosen(args)
+            except ValueError as exc:
+                raise Refused(str(exc))
+        task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier)
         from .tasks import queue_words
         return {'task': task['_id'], 'state': '已交给行动脑',
+                **({'tier': task['tier_words']} if task.get('tier_words') else {}),
                 'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
                 'queue': queue_words(self.store, task['_id']),
                 'note': '结果回来会再叫你；在那之前不要说已经做完。'}, False

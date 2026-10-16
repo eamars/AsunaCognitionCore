@@ -30,6 +30,7 @@ export class AsunaApi extends TypertRemoteService {
     return JSON.parse(JSON.stringify({ lifecycle: core.lifecycle, worker, providers,
       personas: [...core.personas.values()].map(p => ({ id: p.id, name: p.display_name, version: p.version })),
       applied: core.publicConfig(), pending: JSON.stringify(core.config) !== JSON.stringify(core.savedConfig()),
+      actionHigh: core.tierStatus(),
       publications: Object.values((await core.ctx.asunaFloor.selected()).projects).map(p => ({
         project: p.project, state: p.state, candidate: p.candidate, changed_files: p.changed_files,
         activated_at: p.activated_at, published_at: p.published_at,

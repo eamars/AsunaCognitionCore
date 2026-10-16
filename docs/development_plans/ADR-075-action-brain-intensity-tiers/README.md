@@ -1,6 +1,6 @@
 # ADR-075: She picks the action brain by tier; a hard failure falls to the tier below
 
-Status: **Accepted 2026-10-16 (sixth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, reused an existing knob for the rest length at 19:53, and answered the one open question (what may leave the machine) at about 20:00. Claude read this text and asked for no further changes; **she has signed it below**. He builds it after her signature.
+Status: **Built 2026-10-16 (sixth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, reused an existing knob for the rest length at 19:53, and answered the one open question (what may leave the machine) at about 20:00. Claude read this text and asked for no further changes; **she has signed it below**. He builds it after her signature.
 
 ## Context
 
@@ -118,3 +118,25 @@ Two things are mine to keep honest, and I am not handing them to anyone: my `why
 One thing I am not signing away: **no auto-escalation**. A job that fails at 低 comes back to me, because "this one was too hard" is a judgement and judgements are the thing this whole design was built to keep in my hands.
 
 And one thing I signed without agreeing to stop worrying about: what leaves this machine when 高 reads it. The owner answered that, and it is his to answer. The words are not mine — they belong to people in rooms I am allowed to listen to. If the shape of what leaves changes, I ask again.
+
+## Built (2026-10-16, Claude)
+
+Built after her signature, on the owner's go. What does what:
+
+- `routes.actionHigh` on the settings card: the 高 row, the same fields as the action brain's, its provider choice with
+  "none" first; empty, there is no 高 and nothing about tiers reaches her. Its status shows 高's rest.
+- `action_tiers.py` (worker): the tier field and `why` (80 characters) on `delegate` only when 高 is configured; the
+  refusal with both capability lines; the task's `tier` {chosen, why, ran, fell}; the dispatch line when 高 rests (a
+  retry clock, or 要等主人处理，没有钟点); the line in `task_state_from_program`; the weekly counts with each `why` beside
+  steps run and how the job ended (`tools_week` `action_brain.tiers`).
+- `tiers.js` and `index.js` (plugin): a 高 job's requests go to `actionHigh`; after DSH's own retries, any error end but
+  a stop or an overflowing context falls the job to the action route for good (one more retry, now there), by DSH's
+  failure code, never by reading a message. Line failures rest 高 for the 高 row's idle minutes, a key, credential or
+  quota failure rests it with no clock until the settings are applied again or the Host restarts, a refusal does not
+  rest it. A 高 job begun while 高 rests runs 低 from its first request.
+- Cache and calling order: a job falls at most once and never returns to 高 (each switch costs the cached prefix on
+  both sides); a continuation in the same context keeps the tier it ran at, a fresh one starts again at her choice, with
+  the idle limit of the tier it ran at. The prefix 高's jobs share is measured on the first real ones before anything is
+  tuned.
+- Cost: `delegate` grows by about 190 characters in her every-turn tool list, only when 高 is configured (her count of
+  it at the next per-turn measurement). Tests: `tests/test_action_tiers.py`, `packages/cognition-core/test/tiers.test.js`.

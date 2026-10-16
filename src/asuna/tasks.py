@@ -214,10 +214,11 @@ IDLE_MINUTES = 30          # the action route's idleMinutes when empty (ADR-053)
 FRESH_REPORT_CHARS = 20000
 
 
-def idle_minutes(config):
+def idle_minutes(config, tier=None):
     """After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the
-    action route, following how long its provider keeps a cached prefix."""
-    return int((config or {}).get('action_idle_minutes') or IDLE_MINUTES)
+    action route, following how long its provider keeps a cached prefix; a job that ran at 高 uses 高's own (ADR-075)."""
+    key = 'action_high_idle_minutes' if tier == '高' else 'action_idle_minutes'
+    return int((config or {}).get(key) or IDLE_MINUTES)
 
 
 def last_used(task):

@@ -200,7 +200,9 @@ class NativeLane:
             if self.lane == 'executor' and task:
                 request['task'] = {'_id': task['_id'], 'thread': task.get('thread') or task['_id'],
                                    'title': task.get('title') or task.get('goal'),
-                                   'parent_session_id': record['parent_session_id']}
+                                   'parent_session_id': record['parent_session_id'],
+                                   # the route this job runs on (ADR-075): 高's only while it has not fallen
+                                   'tier': 'high' if (task.get('tier') or {}).get('ran') == '高' else 'low'}
             if self.lane == 'character':
                 source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
                 if source and source.get('event', {}).get('channel'):
@@ -335,7 +337,8 @@ class BusinessWorker:
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
-                   schedule=True, channels=None, sandbox=None, ui_titles=None, action_idle_minutes=None):
+                   schedule=True, channels=None, sandbox=None, ui_titles=None, action_idle_minutes=None,
+                   action_high_idle_minutes=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -368,6 +371,12 @@ class BusinessWorker:
         config['_native_routes'] = routes or {}
         if action_idle_minutes:
             config['action_idle_minutes'] = action_idle_minutes
+        # ADR-075: her action brain has a 高 only when the owner configured its route; its idle minutes are its own.
+        from . import action_tiers
+        action_tiers.CONFIGURED = bool((routes or {}).get('actionHigh'))
+        action_tiers.REST = None
+        if action_high_idle_minutes:
+            config['action_high_idle_minutes'] = action_high_idle_minutes
         for lane, key in (('character', 'character'), ('action', 'executor')):
             if models and lane in models:
                 config[key] = {**config[key], **models[lane]}
@@ -1075,6 +1084,25 @@ class BusinessWorker:
             if scheduler:
                 scheduler.retitle()
             return {'retitled': bool(scheduler)}
+        if method == 'tier.fell':
+            # ADR-075: a 高 job fell to 低 (the plugin saw a hard failure, or 高 resting when the job began).
+            from . import action_tiers
+            store = self.app.store
+            task = store.db.tasks.find_one({'_id': args['task_id']})
+            if task and (task.get('tier') or {}).get('ran') == '高':
+                fell = {'reason': args['reason'], 'mid_run': bool(args.get('mid_run')), 'at': now(),
+                        **({'code': args['code']} if args.get('code') else {})}
+                store.put('tasks', {**task, 'tier': {**task['tier'], 'ran': action_tiers.LOW, 'fell': fell}},
+                          expected=task['revision'], stream=task['_id'])
+                store.audit(task['_id'], 'tier.fell', {'task_id': task['_id'], **fell})
+            return {'recorded': bool(task)}
+        if method == 'tier.rest':
+            # ADR-075: 高 rests (until a retry clock, or with none until the owner sees to it) or is back.
+            from . import action_tiers
+            action_tiers.REST = ({'reason': args['reason'], 'until': args.get('until')} if args.get('reason') else None)
+            self.app.store.audit('action-tiers', 'tier.rest', {**(action_tiers.REST or {'over': True}),
+                                                               **({'code': args['code']} if args.get('code') else {})})
+            return {'recorded': True}
         if method == 'stage.valid':
             with self.pending_lock:
                 future=self.pending.get(args['token'])

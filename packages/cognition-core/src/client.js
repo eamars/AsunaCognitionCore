@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const DICTIONARY = {
     zh: {
       'date.locale': 'zh-CN',
-      'brain.character': '角色脑', 'brain.executor': '行动脑',
+      'brain.character': '角色脑', 'brain.executor': '行动脑', 'brain.executorHigh': '行动脑·高档',
       'trigger.message': '收到消息', 'trigger.task_result': '行动脑交回了结果', 'trigger.question': '行动脑在问她',
       'trigger.internal': '她的内部时间', 'trigger.visit': '她自己来看看', 'trigger.note': '她自己留的便条', 'trigger.schedule': '到了安排的时间', 'trigger.brief': '她的交代',
       'trigger.follow-up': '她的补充',
@@ -111,6 +111,13 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.route': '{brain} · {field}', 'settings.route.provider': '模型服务', 'settings.route.model': '模型',
       'settings.route.reasoningEffort': '推理强度', 'settings.route.maxTokens': '最大输出 token',
       'settings.route.idleMinutes': '闲置多久后重开上下文（分钟）',
+      'settings.highNone': '不用（没有高档）',
+      'settings.highHint': '空着就没有高档：她派活时不出现档位。选了模型，她才能把一件活交给高档；高档出错时这件落到行动脑接着做。'
+        + '闲置分钟数也是高档线路出错后歇多久。',
+      'settings.highResting': '高档在歇，最早 {at} 再试：{reason}',
+      'settings.highWaiting': '高档用不了，要等你处理：{reason}（重新应用设置或重启后再试）',
+      'settings.highReason.down': '连不上、超时或服务器出错', 'settings.highReason.busy': '被限流',
+      'settings.highReason.owner': '钥匙、凭据或额度',
       'settings.route.attendEffort': '要不要接话时的推理强度', 'settings.route.groupEffort': '群聊里的推理强度',
       'settings.routeEffort': '同这个脑的推理强度',
       'settings.newSecrets': '新增或更新凭据（JSON）', 'settings.overridden': '已覆盖', 'settings.reset': '恢复默认',
@@ -165,7 +172,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     },
     en: {
       'date.locale': 'en-US',
-      'brain.character': 'Character brain', 'brain.executor': 'Action brain',
+      'brain.character': 'Character brain', 'brain.executor': 'Action brain', 'brain.executorHigh': 'Action brain · high tier',
       'trigger.message': 'Message received', 'trigger.task_result': 'The action brain reported back',
       'trigger.question': 'The action brain asks her', 'trigger.internal': 'Her inner time', 'trigger.visit': 'Her own visit', 'trigger.note': 'A note from herself', 'trigger.schedule': 'A plan came due',
       'trigger.brief': 'Her brief', 'trigger.follow-up': 'Her follow-up',
@@ -263,6 +270,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.route': '{brain} · {field}', 'settings.route.provider': 'Model service', 'settings.route.model': 'Model',
       'settings.route.reasoningEffort': 'Reasoning effort', 'settings.route.maxTokens': 'Max output tokens',
       'settings.route.idleMinutes': 'Fresh context after idle (minutes)',
+      'settings.highNone': 'None (no high tier)',
+      'settings.highHint': 'Empty means no high tier: she is offered no tier when handing over work. With a model chosen she may '
+        + 'send a job to the high tier; when it fails there, the job continues on the action brain. The idle minutes are also how '
+        + 'long the high tier rests after its line failed.',
+      'settings.highResting': 'High tier resting, retried at {at} at the earliest: {reason}',
+      'settings.highWaiting': 'High tier unavailable until you see to it: {reason} (applying the settings or a restart tries again)',
+      'settings.highReason.down': 'unreachable, timed out or a server error', 'settings.highReason.busy': 'rate limited',
+      'settings.highReason.owner': 'key, credential or quota',
       'settings.route.attendEffort': 'Reasoning effort when deciding whether to reply', 'settings.route.groupEffort': 'Reasoning effort in groups',
       'settings.routeEffort': "Same as this brain's reasoning effort",
       'settings.newSecrets': 'Add or update credentials (JSON)', 'settings.overridden': 'Overridden', 'settings.reset': 'Reset to default',
@@ -837,9 +852,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         for (const key of ['persona', 'channelAdmission', 'python'])
           add([key], { key: 'settings.' + key }, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         // The character route also carries the effort of her relevance gate and of her group turns.
-        for (const lane of ['character', 'action']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
+        // The action brain's 高 (ADR-075) is a route of its own, empty when there is none.
+        const brains = { character: 'character', action: 'executor', actionHigh: 'executorHigh' };
+        for (const lane of ['character', 'action', 'actionHigh']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
           ...(lane === 'character' ? ['attendEffort', 'groupEffort'] : ['idleMinutes'])])
-          add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + (lane === 'character' ? 'character' : 'executor') },
+          add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + brains[lane] },
             field: { key: 'settings.route.' + key } } }, ['maxTokens', 'idleMinutes'].includes(key) ? 'number' : 'choice');
         // Business values use the shipped settings fields. Structured settings
         // retain their JSON type; no second schema editor or settings store.
@@ -917,11 +934,20 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       });
       const state = React.useSyncExternalStore(editor.store.subscribe, editor.store.getSnapshot);
       const routeValue = (lane, key) => state.fields[JSON.stringify(['routes', lane, key])].text;
+      // The action brain's 高: what it is for, or why it is resting now (ADR-075).
+      const highHint = () => {
+        const rest = status?.actionHigh?.rest;
+        if (!rest) return t('settings.highHint');
+        const reason = word(t, 'settings.highReason.', rest.reason);
+        return rest.until ? t('settings.highResting', { at: new Date(rest.until).toLocaleTimeString(t('date.locale'),
+          { hour: '2-digit', minute: '2-digit' }), reason }) : t('settings.highWaiting', { reason });
+      };
       const choices = field => {
         if (field.path[0] === 'channelAdmission') return [['automatic', t('settings.admission.automatic')], ['explicit', t('settings.admission.explicit')]];
         if (field.path[0] === 'persona') return (status?.personas ?? []).map(persona => [persona.id, persona.name || persona.id]);
         const [, lane, key] = field.path, providers = status?.providers ?? [];
-        if (key === 'provider') return providers.map(provider => [provider.id, provider.name || provider.id]);
+        if (key === 'provider') return [...(lane === 'actionHigh' ? [['', t('settings.highNone')]] : []),
+          ...providers.map(provider => [provider.id, provider.name || provider.id])];
         const provider = providers.find(provider => provider.id === routeValue(lane, 'provider'));
         if (key === 'model') return (provider?.models ?? []).map(model => [model.id, model.name || model.id]);
         const model = provider?.models.find(model => model.id === routeValue(lane, 'model'));
@@ -983,7 +1009,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               onEdit: text => editor.actions.edit(field.field, text), onReset: () => editor.actions.resetField(field.field) };
             if (field.type === 'choice') return h(Select, { ...props, t, value: props.text, options: choices(field),
               onChange: value => choose(field, value),
-              hint: field.path[0] === 'routes' ? t('settings.routeHint') : undefined });
+              hint: field.path[0] !== 'routes' ? undefined
+                : field.path[1] === 'actionHigh' && field.path[2] === 'provider' ? highHint() : t('settings.routeHint') });
             return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: credentialState[field.path[1]] ?? false,
               hint: field.type === 'secret-map' ? t('settings.secretMapHint') : t('settings.secretHint'),
               stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : credentialState[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })

@@ -217,9 +217,13 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `skillDirectories`
   - `ready`
   - `attachSchedule`
-  - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser has none).
+  - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action brain's 高 have none: unset, they are off).
   - `resolveRoutes`
   - `stageEfforts` — Per-stage effort on the character route, as chosen on the settings card from the levels its model offers: the relevance gate (attendEffort) and her group turns (groupEffort).
+  - `tierRoute` — ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else undefined (the action route).
+  - `fall` — The job falls to 低 for good; the worker records it on the task, said to her in capability words.
+  - `restHigh` — 高 rests: shown on its settings row, and to her when she sends a job there (action_tiers.py).
+  - `tierStatus` — The action brain's 高 for the settings card: configured, and resting until when and why.
   - `effortFor`
   - `workerPython` — The worker's interpreter: the python setting when given (a development checkout), otherwise the environment built from the package's lock in the data folder on first start (python-env.js).
   - `credentialStore` — DSH's credential store, when this Host mounts one.
@@ -465,6 +469,16 @@ The Host side of render_svg (ADR-027): resvg renders an SVG the worker has alrea
 
 - def `SVG_LIMITS`
 - def `renderSvg`
+
+## `tiers.js`
+
+[packages/cognition-core/src/tiers.js](../../packages/cognition-core/src/tiers.js)
+
+ADR-075: her action brain's two routes. A job she sent to 高 runs on `routes.actionHigh` until a request there ends in an error DSH's own retries could not cure; then the job falls to the action route for good. What the failure was decides whether 高 rests: a failure of the line rests it for 高's own idle minutes (its cache is gone by then anyway), one that waits on the owner (key, credential, quota) rests it with no clock, and a refusal of this job's content does not rest it at all. Routing goes by DSH's failure codes, never by parsing a message.
+
+- def `failureClass` — What a failure on 高 was: 'owner', 'busy', 'down', 'refused' (anything else that ended the request), or null.
+- def `restFor` — The rest a failure starts: null for a refusal; no clock when it waits on the owner.
+- def `resting` — Whether 高 is resting now.
 
 ## `tool-output.js`
 

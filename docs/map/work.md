@@ -18,7 +18,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - def `workspace_reason` — Why a file operation failed and what to do, in her words (the traceback stays in stderr).
 - def `home_env` — What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her time zone for asuna.dbread.
-- def `idle_minutes` — After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the action route, following how long its provider keeps a cached prefix.
+- def `idle_minutes` — After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the action route, following how long its provider keeps a cached prefix; a job that ran at 高 uses 高's own (ADR-075).
 - def `last_used` — When the action context of a finished task was last used.
 - def `opening_text` — The action brain's first words for a task: her brief; a continuation's new words; after the idle limit (ADR-053) a fresh context told so, with the last report.
 - def `place_words` — Where a queued task came from, coarse: never a group's or a person's name.
@@ -49,6 +49,21 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `run`
   - `pending_messages`
   - `delivered`
+
+## `action_tiers`
+
+[src/asuna/action_tiers.py](../../src/asuna/action_tiers.py)
+
+ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, never by model, provider, price or how it is run. 高 exists only when the owner configured a route for it (`routes.actionHigh`); then `delegate` takes a tier (低 when left out) and, for 高, a `why`. A 高 job runs on that route; a hard failure there (an error end the plugin sees, index.js) falls to 低 for the rest of the job and never rises again; a failure of the line itself makes 高 rest, so later 高 jobs go 低 at once. She is told what happened in capability words only.
+
+- def `offered`
+- def `resting` — The current rest, or None (a rest past its clock is over).
+- def `clock_words` — When 高 is tried again: a retry clock, never a promise; no clock when it waits on the owner.
+- def `chosen` — (tier, why) from her delegate call; raises ValueError with the words to send back.
+- def `at_dispatch` — The task's tier record and the words her dispatch returns (None when there is nothing to say).
+- def `carried` — A continuation's tier: the same context keeps the tier it ran at (a job that fell does not rise again); a fresh context is a new start at the tier she chose.
+- def `words` — The tier line of a task in task_state_from_program: what she chose, what ran it, and why they differ.
+- def `weekly` — The week's tiers for her tooling review: counts only, and each 高 reason beside what happened (her condition: a reason cannot grade itself).
 
 ## `machine_words`
 

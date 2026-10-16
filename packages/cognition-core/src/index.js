@@ -33,6 +33,7 @@ import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
 import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
+import { failureClass, restFor, resting } from './tiers.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
 import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
 import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials';
@@ -64,8 +65,9 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
 
 // attendEffort and groupEffort (character route only): the effort of her relevance gate and of her group turns, one of
 // the levels the model offers; empty is the route's own effort.
-// idleMinutes (action route only): after this long unused, a task's continuation starts a fresh action context
-// (ADR-053); empty is 30. A cost setting: it follows how long the route's provider keeps a cached prefix.
+// idleMinutes (action routes only): after this long unused, a task's continuation starts a fresh action context
+// (ADR-053); empty is 30. A cost setting: it follows how long the route's provider keeps a cached prefix. On actionHigh
+// (ADR-075) it is also how long 高 rests after its line failed: by then its cache is gone anyway.
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number(),
   attendEffort: z.string(), groupEffort: z.string(), idleMinutes: z.number() });
 export const Config = z.object({ python: z.string().volatile(), persona: z.string().volatile(),
@@ -74,7 +76,8 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
   mountSchedule: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
   channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
-  routes: z.object({ character: Route.required(false), action: Route.required(false), appraiser: Route.required(false) })
+  routes: z.object({ character: Route.required(false), action: Route.required(false), appraiser: Route.required(false),
+    actionHigh: Route.required(false) })
     .volatile() });
 
 // Responsibility routes are configured independently; a lane name never implies a model.
@@ -283,11 +286,14 @@ export class CognitionCore {
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
         id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
       const channels = await this.channelPlugins(this.config.deployment);
+      this.highRest = null;              // a new worker starts with 高 not resting (a rest waiting on the owner ends here)
       const status = await this.worker.call('initialize', { persona: await this.ctx.asunaFloor.persona(persona),
         skill_directories: await this.skillDirectories(persona, channels),
-        routes: Object.fromEntries(['character', 'action', 'appraiser'].filter(lane => this.routeFor(lane))
+        routes: Object.fromEntries(['character', 'action', 'appraiser', 'actionHigh']
+          .filter(lane => lane === 'actionHigh' ? this.routeFor(lane)?.provider : this.routeFor(lane))
           .map(lane => [lane, nativeRoute(this.routeFor(lane))])), models,
         action_idle_minutes: this.routeFor('action')?.idleMinutes,
+        action_high_idle_minutes: this.routeFor('actionHigh')?.idleMinutes,
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),
@@ -336,18 +342,20 @@ export class CognitionCore {
     return true;
   }
 
-  /** A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser has none). */
+  /** A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action
+   * brain's 高 have none: unset, they are off). */
   routeFor(lane) {
     const own = this.config.routes?.[lane];
-    if (own?.provider || lane === 'appraiser') return own;
+    if (own?.provider || lane === 'appraiser' || lane === 'actionHigh') return own;
     const fallback = this.ctx.get('agentDefaultModel')?.currentSelection();
     return fallback ? { ...own, provider: fallback.provider, model: fallback.model } : own;
   }
 
   async resolveRoutes() {
     const models = {};
-    for (const lane of ['character', 'action', 'appraiser']) {
-      if (!this.routeFor(lane)?.provider && lane === 'appraiser') continue;   // optional: the affect appraiser is off when unset
+    for (const lane of ['character', 'action', 'appraiser', 'actionHigh']) {
+      // optional: the affect appraiser and the action brain's 高 are off when unset
+      if (!this.routeFor(lane)?.provider && (lane === 'appraiser' || lane === 'actionHigh')) continue;
       const route = nativeRoute(this.routeFor(lane));
       if (!route?.provider) throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
@@ -380,6 +388,41 @@ export class CognitionCore {
       efforts[stage] = route[key];
     }
     return efforts;
+  }
+
+  /** ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else
+   * undefined (the action route). A job that meets 高 resting falls here, before its first request. */
+  tierRoute(agent, stage) {
+    const state = this.state(agent.session.id);
+    state.onHigh = false;
+    const high = this.routeFor('actionHigh');
+    if (stage?.task?.tier !== 'high' || state.fell || !high?.provider) return undefined;
+    if (resting(this.highRest)) { this.fall(agent, stage.task, this.highRest.reason); return undefined; }
+    state.onHigh = true;
+    return high;
+  }
+
+  /** The job falls to 低 for good; the worker records it on the task, said to her in capability words. */
+  fall(agent, task, reason, code) {
+    const state = this.state(agent.session.id);
+    if (state.fell) return;
+    state.fell = true; state.onHigh = false;
+    const midRun = agent.session.snapshotEvents().some(event => event.type === 'assistant/message');
+    if (task?._id) this.worker?.call('tier.fell', { task_id: task._id, reason, mid_run: midRun, ...(code ? { code } : {}) })
+      .catch(error => this.ctx.logger.warn('Asuna: tier.fell not recorded: %s', error?.message ?? error));
+  }
+
+  /** 高 rests: shown on its settings row, and to her when she sends a job there (action_tiers.py). */
+  restHigh(rest, code) {
+    this.highRest = rest;
+    this.worker?.call('tier.rest', { ...rest, code })
+      .catch(error => this.ctx.logger.warn('Asuna: tier.rest not recorded: %s', error?.message ?? error));
+  }
+
+  /** The action brain's 高 for the settings card: configured, and resting until when and why. */
+  tierStatus() {
+    const configured = Boolean(this.routeFor('actionHigh')?.provider);
+    return { configured, ...(configured && resting(this.highRest) ? { rest: this.highRest } : {}) };
   }
 
   effortFor(lane, stage) {
@@ -731,7 +774,10 @@ export class CognitionCore {
         return next();
       });
     };
-    const options = nativeRoute(this.routeFor(routeOf(stage.lane)));
+    // A job she sent to 高 opens on 高's options (its window and output limit); each request still picks (tierRoute).
+    const high = stage.lane === 'executor' && stage.task?.tier === 'high' && !resting(this.highRest)
+      && this.routeFor('actionHigh')?.provider;
+    const options = nativeRoute(high ? this.routeFor('actionHigh') : this.routeFor(routeOf(stage.lane)));
     const persisted = await this.ctx.sessionPersistence.stat(stage.session_id);
     // An errand's copy (errandSession): the conversation's events up to its last completed turn, as DSH's fork seeds.
     const copy = !persisted && stage.copy;
@@ -1023,7 +1069,7 @@ export class CognitionCore {
       // A deliberate native model selection remains authoritative for this
       // session. The plugin routes are defaults for sessions without one.
       const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
-      const route = selected ?? this.routeFor(routeOf(lane));
+      const route = selected ?? (lane === 'executor' ? this.tierRoute(agent, stage) : undefined) ?? this.routeFor(routeOf(lane));
       const effort = selected ? undefined : this.effortFor(lane, stage);
       return nativeRoute({ ...request, ...route, reasoningEffort: effort ?? route?.reasoningEffort });
     });
@@ -1072,6 +1118,19 @@ export class CognitionCore {
           state.current = nextStage; state.system = nextStage.system; agent.steer(this.message(nextStage, agent.session));
         }
       }
+    });
+    // ADR-075: a request on 高 that ended in an error DSH's own retries did not cure falls to the action route, once
+    // and for the rest of the job; a failure of the line makes 高 rest. Runs after DSH's retry decided.
+    if (lane === 'executor') scope.on('agent/request-error', async (payload, next) => {
+      const decision = await next();
+      if (decision?.kind === 'retry' || !payload.agent) return decision;
+      const state = this.state(payload.agent.session.id);
+      const kind = state.onHigh ? failureClass(payload.failure?.code) : null;
+      if (!kind) return decision;
+      const rest = restFor(kind, this.routeFor('actionHigh')?.idleMinutes);
+      if (rest) this.restHigh(rest, payload.failure.code);
+      this.fall(payload.agent, state.current?.task, kind, payload.failure.code);
+      return { kind: 'retry' };
     });
     scope.on('agent/error', ({ agent, error }) => {
       const state = this.state(agent.session.id);

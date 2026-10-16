@@ -305,6 +305,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 The action brain's tasks, grants, schedules, sandbox, development and integrations.
 
 - [`tasks`](../../src/asuna/tasks.py) — The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker` checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
+- [`action_tiers`](../../src/asuna/action_tiers.py) — ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, never by model, provider, price or how it is run.
 - [`machine_words`](../../src/asuna/machine_words.py) — What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050).
 - [`grants`](../../src/asuna/grants.py) — Host-owned resource grants, never inferred from a message or model role.
 - [`schedule`](../../src/asuna/schedule.py) — Business ownership for native DSH reminders; no host time wheel.
@@ -367,6 +368,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`summary.js`](../../packages/cognition-core/src/summary.js) — The dialogue-summary preset plugin: a tool-free session on the action route that writes low-priority conversation summaries.
 - [`svg-worker.js`](../../packages/cognition-core/src/svg-worker.js) — Renders one SVG to PNG with resvg in a worker thread (started by svg.js), so a heavy picture cannot hold up the Host.
 - [`svg.js`](../../packages/cognition-core/src/svg.js) — The Host side of render_svg (ADR-027): resvg renders an SVG the worker has already made safe (no links to pictures outside it), in a worker thread with a time and pixel limit.
+- [`tiers.js`](../../packages/cognition-core/src/tiers.js) — ADR-075: her action brain's two routes.
 - [`tool-output.js`](../../packages/cognition-core/src/tool-output.js) — Save images before exposing their durable native attachment references.
 - [`ui-language.js`](../../packages/cognition-core/src/ui-language.js) — The language of the names the program gives what DSH shows as plain text: her rhythm tasks in the task page and the scheduler session's title.
 - [`worker.js`](../../packages/cognition-core/src/worker.js) — Runs the Python business worker (`asuna.native_worker`) as a child process in the profile's data folder and talks to it in JSON lines: `call` sends a request and waits for its answer; a line without an id is an event for index.js.

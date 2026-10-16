@@ -160,7 +160,8 @@ def _turn_shape(calls):
 
 
 def _action_brain(store, since, until):
-    tasks = list(store.db.tasks.find({'created_at': {'$gte': since, '$lt': until}}, {'_id': 1, 'state': 1}))
+    tasks = list(store.db.tasks.find({'created_at': {'$gte': since, '$lt': until}},
+                                     {'_id': 1, 'state': 1, 'tier': 1, 'tool_steps': 1}))
     ids = [task['_id'] for task in tasks]
     used = collections.defaultdict(set)
     tools = collections.Counter()
@@ -170,7 +171,10 @@ def _action_brain(store, since, until):
     rejected = list(store.db.audit_events.find({'type': 'execution.rejected', 'occurred_at': {'$gte': since, '$lt': until}},
                                                {'payload.problem': 1}))
     lookups = sum(1 for task in ids if used[task] and used[task] <= set(READING))
+    from . import action_tiers
+    tiers = action_tiers.weekly(tasks)
     return ({'tasks': len(ids), 'states': dict(collections.Counter(t.get('state') for t in tasks).most_common()),
+             **({'tiers': tiers} if tiers else {}),
              'tools': dict(tools.most_common(8)), 'reports_rejected': len(rejected),
              **({'first_rejected': excerpt(rejected[0]['payload'].get('problem'), EXAMPLE_CHARS)} if rejected else {})},
             lookups)

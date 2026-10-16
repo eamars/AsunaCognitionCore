@@ -536,7 +536,7 @@ class ContextBuilder:
                 '_input_time':{'$max':'$_inputs.received_at'}}},
             {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
             {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1,
+                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1,'tier':1,
                 '_report_chars':{'$strLenCP':{'$ifNull':['$result.text','']}}}},
         ]))
         # Every open task (and every finished one whose result has not reached her), and only the last few others
@@ -560,6 +560,11 @@ class ContextBuilder:
                 task['goal']=excerpt(task['goal'],EXPERIENCE_TASK_CHARS)
             # Where it stands, in words (ADR-030 D7), instead of the raw fields.
             task['status']=_handover.status_words(task,carried_on.get(task['_id']))
+            # The tier she chose and the one that ran it, in capability words (ADR-075); only where there are two.
+            from . import action_tiers
+            tier=task.pop('tier',None)
+            if tier and action_tiers.offered():
+                task['tier']=action_tiers.words(tier)
             running=task['state'] in ('READY','RUNNING')
             for key in ('state','feedback_state','cancel_reason','pause_reason','paused_at'):
                 task.pop(key,None)

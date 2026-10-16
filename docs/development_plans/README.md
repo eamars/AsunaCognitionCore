@@ -14,6 +14,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 | 2 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
 | 3 | ADR-050 hand-back clean-up | Built 2026-10-16 (`machine_words.py`) | her restart; then the same count a week later, expecting zero. Gate asks merged per group and a fair task queue: measured first |
 | 4 | ADR-069 her tools, kept by what only they do | Built 2026-10-16 (id matching held on the data) | installed with her next restart; the old names leave 2026-10-23 |
+| 5 | ADR-070 her weekly tooling review | Proposed 2026-10-16 (owner's direction) | her review, then the owner's approval |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
 memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is
@@ -93,3 +94,4 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 067 | The audit stops copying what is kept elsewhere | Accepted and built 2026-10-15 | Commits leave out a memory's embedding; context.prepared keeps the manifest; no state.intent; bulky diagnostic records past 30 days deleted daily | [folder](ADR-067-audit-growth/README.md) |
 | 068 | Editing a picture with generate_image | Built 2026-10-15, checked live 2026-10-16 | `source_image` read with read_image's fence; an edit of someone else's picture goes back only where it came from; uploads deleted after the job; the service owns size and frames | [folder](ADR-068-image-edit/README.md) |
 | 069 | Her tools, kept by what only they do | Built | A tool or parameter is kept by whether it does something nothing else can; `update_self` retired; `pass_note` and `leave_note` merged keeping `deliver=wake` and limits; old names retired by use; long text and inexact ids answered with what to send | [folder](ADR-069-tools-by-what-only-they-do/README.md) |
+| 070 | Her weekly tooling review | Proposed | Once a week her own review of her tools: the program's readings (calls, refusals and what they cost, unused parameters, lengths, turn shape, her action brain, the list she carries, last week's proposals) in a self-evaluation turn; her proposals to add, remove or reshape go to the developer's line, the developer answers each within a day |

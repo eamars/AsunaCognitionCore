@@ -199,6 +199,19 @@ def block(store, persona, scene, *, at_home=False):
             'note': HOME_NOTE if at_home else STICKERS_NOTE}
 
 
+NAMES_NOTE = '架子上的名字（你起的）。用法、样子和 ref 在整理架子的回合里列全，别的时候用 sticker 的 shelf 看。'
+
+
+def names_block(store, persona):
+    """stickers_from_program at home outside the turns that tidy the shelf: its names only (her answer, 2026-10-16:
+    what she has stays in mind; the uses are what take the room)."""
+    rows = shelf(store, persona)
+    if not rows:
+        return None
+    return {'names': '、'.join(row['name'] for row in rows), 'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
+            'note': NAMES_NOTE}
+
+
 def _title(scene):
     return getattr(channel_kinds.of(scene['_id']), 'TITLE', '这个平台')
 

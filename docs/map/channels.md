@@ -131,6 +131,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `rename`
 - def `sends` — Whether what she says in this conversation can carry stickers and faces.
 - def `block` — stickers_from_program: the shelf by name, in a conversation that sends stickers or at home.
+- def `names_block` — stickers_from_program at home outside the turns that tidy the shelf: its names only (her answer, 2026-10-16: what she has stays in mind; the uses are what take the room).
 - def `faces_block` — faces_from_program: the platform faces people here used lately, by name.
 - def `speech_problem` — What is wrong with the stickers and faces in what she is about to say; None when they can go.
 - def `outbound` — The row fields of a message that is one sticker token: what the channel sends; None for words.

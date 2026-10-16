@@ -13,7 +13,7 @@ from . import channel_kinds
 from .people import People, safe_name
 
 MAX_MEMBERS = 5000                       # one group's list; a larger one is refused, not cut
-RECENT_ACTIVE = 50                       # the most recently active members always shown
+RECENT_ACTIVE = 20                       # the most recently active members always shown; find_member reaches the rest
 MENTIONED_HOURS = 2                      # @-mentioned this recently: shown
 FIND_LIMIT = 10
 ROLES = ('owner', 'admin', 'member')

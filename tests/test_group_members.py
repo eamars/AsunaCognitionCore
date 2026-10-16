@@ -53,8 +53,8 @@ def test_a_turn_names_who_she_knows_the_recently_active_and_the_mentioned(store)
     whos = [item['who'] for item in block['items']]
     assert block['count'] == '群里一共 69 人' and block['leaders'] == ['人1（群主）']
     assert any(who.startswith('[阿杰 #') for who in whos), 'a known person reads as her label'
-    assert '人3' in whos and '人69' not in whos and len(whos) == 51            # top 50 active + the known one
-    assert block['not_shown'] == '另有 18 人没列出' and block['items'][0]['last_spoke_at']
+    assert '人3' in whos and '人69' not in whos and len(whos) == 21            # top 20 active + the known one
+    assert block['not_shown'] == '另有 48 人没列出' and block['items'][0]['last_spoke_at']
     found = group_members.find(store, scene, 'demo', '人6')
     assert found['count'] == 11 and len(found['found']) == 10 and found['found'][0]['who'].startswith('[人6 #')
 

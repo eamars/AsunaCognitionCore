@@ -477,7 +477,7 @@ def r2_rules_explain_how_to_read_it():
     rules = _system                    # the reading rules are in her system prompt (ADR-056)
     assert 'derived_summary' in rules and 'source_window' in rules, rules
     assert 'source_event_ids' in rules, rules
-    route = context['understanding_update_from_program']['route']
+    route = rules                      # said once in her system prompt, not in every turn (block_guide)
     assert 'derived_summary' in route and '未提交' in route, route
     return '读法说明与提交口径都写清了：转述不是新经历，来源可回读'
 
@@ -914,7 +914,7 @@ def r5_group_next_turn_shows_attribution_and_correction():
     assert saved['_id'] in manifest['selected'], manifest
     rules = _system                    # the reading rules are in her system prompt (ADR-056)
     assert 'about_current_speaker' in rules and '更正' in rules, rules
-    assert 'about_current_speaker' in context['understanding_update_from_program']['route']
+    assert 'about_current_speaker' in rules and 'understanding_update_from_program' in rules
     return '下一轮在群里也认得出这条摘要盖了谁、里面哪句被更正过'
 
 

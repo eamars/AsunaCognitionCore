@@ -262,19 +262,21 @@ def test_at_home_she_asks_for_the_pool_looks_at_a_candidate_and_keeps_it(store, 
     lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'do': 'keep', 'name': '探测', 'use_for': '试试'}),
                                       ('sticker', {'do': 'pool'}), ('read_image', {'ref': candidate}),
                                       ('sticker', {'do': 'keep', 'candidate': candidate, 'name': '摸鱼', 'use_for': '有人摸鱼'}),
-                                      ('read_image', {'ref': shelf_ref})],
+                                      ('sticker', {'do': 'shelf'}), ('read_image', {'ref': shelf_ref})],
                                      '收了一张')])
     ep = Coordinator(store, lane).ingest(event('pool-1'), persona='P1')
     assert ep['state'] == 'COMMITTED', ep.get('failure')
-    assert 'sticker_candidates_from_program' not in ep['context'] and ep['context'].get('stickers_from_program')
+    # A home chat turn lists the shelf's names only (the turns that tidy it list it whole); do=shelf gives the rest.
+    assert 'sticker_candidates_from_program' not in ep['context']
+    assert set(ep['context']['stickers_from_program']) == {'names', 'shelf', 'note'}
     assert {'sticker', 'read_image'} <= set(lane.calls[0]['tools'])
     results = lane.tool_results[1:]
     assert 'do=pool' in str(results[0][4]) and not results[0][5]                  # the refusal says where the pool is
     assert results[1][5] and candidate in str(results[1][4]) and '池子里 2 个' in str(results[1][4])
     assert results[2][5] and results[3][5], results
     # Her ask 2026-10-10: at home each shelf sticker with a picture carries its id, and she can look at it again.
-    assert [item.get('ref') for item in ep['context']['stickers_from_program']['items']] == [shelf_ref]
-    assert results[4][5], results[4]
+    assert shelf_ref in [item.get('ref') for item in results[4][4]['items']]
+    assert results[5][5], results[5]
     assert all('ref' not in item for item in stickers.block(store, 'P1', store.db.scenes.find_one({'_id': SCENE}))['items'])
     assert stickers.find(store, 'P1', '摸鱼') and store.db.sticker_pool.count_documents({}) == 1
     store.db.sticker_pool.delete_many({})

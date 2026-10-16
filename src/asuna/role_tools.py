@@ -199,10 +199,10 @@ TOOLS = {
         'description': ('整理你的表情包架子（stickers_from_program），do 选一样：keep 收下一个（ref 照抄群里表情包下标的「表情包 ref」（att-…）'
                          '，或你自己画的图的 artifact_id（blob-…）；起个 name，写 use_for：什么时候用）'
                          '；只有表情包能收，架子满了先 drop。drop 按名字放下一个；rename 改 name 或 use_for；'
-                         'pool 看候选池（群里有人发过、程序存着的）；remember 看过但不收的，记个名字和它在说什么（use_for）'
+                         'shelf 列出架子；pool 看候选池（群里有人发过、程序存着的）；remember 看过但不收的，记个名字和它在说什么（use_for）'
                          '，以后有人发它会标出你认得。候选（candidate）先 read_image 看过再 keep。名字和用法在群里也看得到。'
                          '发的时候用 speak 的 sticker。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool']),
+        'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool', 'shelf']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内；pool 不用写'),
                        'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
                        'candidate': _s('keep/remember 用：候选池里的 candidate（照抄 sticker_candidates_from_program 或 pool 列出的，先看过）'),
@@ -1601,7 +1601,19 @@ class RoleTools:
             self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
                                                                          *(item['candidate'] for item in listing['items'])])])
             return listing, False
-        raise Refused('do 是 keep、drop、rename、remember 或 pool%s。' % _given(args, 'op'))
+        if op == 'shelf':
+            # At home the shelf is listed only in the turns that tidy it; any other turn asks for it here.
+            listed = stickers.block(self.store, ep['persona'],
+                                    self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']},
+                                    at_home=self._place(ep) == visibility.OWNER_PRIVATE)
+            if not listed:
+                return {'items': [], 'note': '架子是空的。'}, False
+            # What it lists she may look at with read_image, as what pool lists (stickers.candidate_ids).
+            fresh = self._fresh(ep)
+            self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
+                                                                         *(item['ref'] for item in listed['items'] if item.get('ref'))])])
+            return listed, False
+        raise Refused('do 是 keep、drop、rename、remember、pool 或 shelf%s。' % _given(args, 'op'))
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):

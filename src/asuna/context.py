@@ -112,6 +112,11 @@ EXPERIENCE_NOTE = ('真实历史片段与行动结果；每条保留来源场景
                    '说过的话，那边的情况心跳时看 places_from_program。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')
 DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感受要指向某一节时，照抄这里的 doc:… 引用。')
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
+# Said once in her system prompt (block_guide), not in every turn (measured 2026-10-16: in 92% of turns).
+UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。'
+                      '本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；'
+                      '同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker '
+                      '说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。')
 MEMORY_SOURCE_RULES = ('reported_speech 是那个人说过的话，不是核实过的事实；同一人的原话按 scene_seq 从旧到新排，'
                        '他自己的东西、喜好和更正以他较新的明确说法为准。public_statement 只证明说过，答应不等于做到；'
                        'character_interpretation 是你当时的理解或猜测。旧说法再出现不推翻已有的更正；旧记录是历史，再想起它不是新经历。'
@@ -782,7 +787,12 @@ class ContextBuilder:
             faces=_stickers.faces_block(self.store,scene)
             if faces:context['faces_from_program']=faces
         elif session_class==visibility.OWNER_PRIVATE and not event.get('episode_kind') in ('settlement',):
-            shelf=_stickers.block(self.store,persona,scene,at_home=True)
+            # At home a sticker cannot be sent: the whole shelf comes in the turns that tidy it, its names otherwise
+            # (measured 2026-10-16: 5,700 characters in every home turn, 7.8% of all she was sent; her answer: keep
+            # the names, which are hers and what she remembers them by).
+            tidying=event.get('episode_kind')=='self_development' or event.get('dice') in ('self_evaluation','review_dice')
+            shelf=(_stickers.block(self.store,persona,scene,at_home=True) if tidying
+                   else _stickers.names_block(self.store,persona))
             if shelf:context['stickers_from_program']=shelf
         # Owner 2026-10-07: her credential vault at home, names and notes only (credentials.py).
         if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external') in ('external','task_feedback','self_development'):
@@ -999,7 +1009,7 @@ class ContextBuilder:
         # Available with or without a record: her first understanding of someone creates it.
         context['understanding_update_from_program']={
             'available':True,'target':target_note,
-            'route':'有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker 说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。'}
+            'note':UNDERSTANDING_NOTE}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={

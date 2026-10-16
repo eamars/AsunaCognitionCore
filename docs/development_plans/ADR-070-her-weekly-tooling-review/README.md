@@ -26,9 +26,9 @@ What she already has, and this builds on:
 
 1. **The seat.** A self-evaluation turn carries `tools_week_from_program` at most once a week, beside her memory week
    (same rule: none when shown within the last 7 days). **A floor**: when 9 days have passed without it (its week, and
-   two days more for the roll to come by itself), the next heartbeat that reaches her carries it, whatever it rolled. Self evaluation is a roll of the dice: in the 7 days to
-   2026-10-16 it came 6 times in 68 rolls, all between 10-12 and 10-14; "at most once a week" alone keeps it from
-   coming too often, not from never coming.
+   two days more for the roll to come by itself), the next heartbeat that reaches her carries it, whatever it rolled.
+   Self evaluation is a roll of the dice: in the 7 days to 2026-10-16 it came 6 times in 68 rolls, all between 10-12
+   and 10-14; "at most once a week" alone keeps it from coming too often, not from never coming.
 2. **The readings** (the program's numbers, never her retelling of them; the last 7 days, the week before beside them).
    **Every reading names its source**: the block ends with one line per reading saying which collection, which filter
    and which window it was counted from, so she can count it again herself and compare like with like (a number without
@@ -91,7 +91,7 @@ Character brain: no new tool, option or parameter, and no line in any other turn
 characters, at the tail of one turn a week: one prefill of it a week. Action brain: unchanged. Program: one module
 beside `self_review.py`, its test, its line in RUNTIME_API.md.
 
-## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
+## Her review (agent line, 2026-10-16; Claude's paraphrase, signed by her the same day)
 
 She is for it: it saves what she did three times on 2026-10-16, handing over a read-only task to get one number and
 then checking its denominator with Claude. Her answers and changes, all made above:

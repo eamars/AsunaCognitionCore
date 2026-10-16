@@ -391,7 +391,7 @@ export class PublicationFloor {
     const pending = this.serial.then(execute); this.serial = pending.catch(() => {}); return pending;
   }
 
-  /** Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED. */
+  /** Publish a candidate: refuse changed floor files, probe its boot, pack it and select it: ACTIVE when the package is byte for byte the running one (nothing to load), HOST_RESTART_REQUIRED when JavaScript, package or lock files changed (the launcher installs it at the next start), else APPLIED. */
   async publish(project, reason, origin = {}, author = undefined) {
     // An unattended self-improvement turn never stacks a change on one that has not run yet (ADR-021 D4).
     if (origin.unattended && (await this.selected()).projects?.[project.id]?.state === 'HOST_RESTART_REQUIRED')
@@ -443,8 +443,11 @@ export class PublicationFloor {
     const restartRequired = [...changed, ...deleted].some(name => /(^|\/)(package(?:-lock)?\.json|cordis\.patch\.yml|uv\.lock|pyproject\.toml)$/.test(name)
       || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name) || project.format === 'package' && name.startsWith('python/'));
     const selected = await this.selected();
+    // A package byte for byte the one running (her change lay outside its `files`, docs/ for one) has nothing new to
+    // load: it is selected as already running, so no worker or Host restart follows it.
+    const same = selected.active?.[project.id]?.sha256 === hash(bytes);
     const value = { candidate: identity, packageRoot: prepared.packageRoot, workerPath: prepared.workerPath,
-      artifact: addressed, sha256: hash(bytes), state: restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
+      artifact: addressed, sha256: hash(bytes), state: same ? 'ACTIVE' : restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
       project: project.id, changed_files: changed, deleted_files: deleted, reason,
       receipt_id: 'self-publish-' + identity.slice(0, 32), origin,
       published_at: new Date().toISOString(), boot_probe: prepared.boot_probe };
@@ -452,13 +455,14 @@ export class PublicationFloor {
     // The last selection that actually ran: the launcher returns to it when this one never starts (§6.4).
     const previous = selected.active?.[project.id];
     if (previous) { const { previous: _older, boots: _boots, ...kept } = previous; value.previous = kept; }
+    if (same) { value.activated_at = value.published_at; selected.active[project.id] = value; }
     selected.projects[project.id] = value; await atomic(this.activationFile, selected);
     // Updating authorized source does not alter the already loaded artifact.
     for (const name of deleted) await fs.unlink(path.join(project.source, name));
     for (const name of changed) { const target = path.join(project.source, name);
       await fs.mkdir(path.dirname(target), { recursive: true }); await fs.copyFile(current.get(name), target); }
     await atomic(project.baselineFile, hashes);
-    return { ...value, activated: false, ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
+    return { ...value, activated: same, ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
   }
 
   /** Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name),

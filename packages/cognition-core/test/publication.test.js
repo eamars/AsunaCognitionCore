@@ -32,6 +32,30 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
   await assert.rejects(floor.call('development_write', { path: 'src/floor.js', text: 'denied', overwrite: true }), /PATH_DENIED/);
 });
 
+test('a publication whose package is byte for byte the running one is active at once: nothing to load, no restart', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/same-package-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
+  await fs.writeFile(path.join(source, 'README.md'), 'Running');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await floor.call('development_write', { path: 'README.md', text: 'Published', overwrite: true });
+  const first = await floor.call('development_publish', { reason: 'packed change' });
+  assert.equal(first.state, 'APPLIED', JSON.stringify(first));
+  await floor.workerReady('persona');
+  await floor.call('development_write', { path: 'docs/notes.md', text: 'outside the package' });
+  const second = await floor.call('development_publish', { reason: 'a document only' });
+  assert.equal(second.state, 'ACTIVE', JSON.stringify(second));            // not APPLIED: the Host restarts for APPLIED
+  assert.equal(second.activated, true);
+  assert.equal(second.sha256, first.sha256);
+  assert.deepEqual(second.changed_files, ['docs/notes.md']);
+  assert.equal(await fs.readFile(path.join(source, 'docs/notes.md'), 'utf8'), 'outside the package');
+  assert.equal((await floor.effective('persona')).sha256, first.sha256);
+  await floor.call('development_write', { path: 'README.md', text: 'Changed again', overwrite: true });
+  assert.equal((await floor.call('development_publish', { reason: 'packed again' })).state, 'APPLIED');
+});
+
 test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/stale-probe-'));

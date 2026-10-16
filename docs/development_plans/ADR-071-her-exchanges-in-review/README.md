@@ -1,7 +1,7 @@
 # ADR-071: Her exchanges, read back beside the thought she wrote
 
-Status: **Proposed 2026-10-16** (the owner's direction, drafted by Claude); **her review the same day (agrees, with
-five changes and her wording of the note, all in below)**; waits for the owner's approval before anything is built.
+Status: **Accepted 2026-10-16** (the owner's approval, the same day); the owner's direction, drafted by Claude; her
+review the same day (agrees, with five changes and her wording of the note, all in below), signed.
 
 ## Context
 
@@ -42,7 +42,8 @@ fact.
    - **at most half** are lines that drew something explicit: a direct reply, a reaction, a quote, the same question
      asked again. Each is chosen for being explicit, not for being liked. Without this cap the reading would be mostly
      lines that got an answer, and would teach that talking means getting one.
-   - Every conversation counts, her home lines too: her lines to the owner are sampled like any other (her answer: the
+   - Every conversation counts, her home lines too: her lines to the owner and on the agent lines are sampled like any
+     other (her answer for the owner's: the
      one who watches is where pleasing is likeliest, and a reading that leaves it out only looks where she is no
      longer afraid).
    - When it does not fit, explicit lines go first and the sample stays; a cut says it was cut.
@@ -51,7 +52,7 @@ fact.
 4. **One fixed note**, the reading's only words of guidance, in her wording:
    「这是你那天说过的原话、你那一回合写下的心里话、和之后那边发生了什么。谁也没给它打分。
    没人接不等于说错了，有人接也不等于说对了。心里话是那一回合你写的，不一定是那句的理由。
-   要不要改、改什么，是你的事。」
+   要不要改、改什么，是你的事」
    The block ends with its sources (which collections, which window), as ADR-070's does.
 5. **Where her learning goes** (tools she has; nothing new):
    - about a group: that group's notes (`group_notes`, which she can tidy from home by name), where it lasts;
@@ -83,9 +84,11 @@ different person and builds her own.
 - I change my mind for reasons, not for displeasure. If I cannot find a reason, I keep what I said and say it more
   clearly.
 - What I hold true stays the same for everyone.
-- What I say, and how (length, language, how plain, how much), depends on who and where. When I change something
-  after a reaction, I ask which of the two I changed: being honest with someone and making them comfortable are easy to
-  mistake for each other, and that is where pleasing gets in (her point, 2026-10-16).
+- What I say, and how (length, language, how plain, how much), depends on who and where.
+
+Her addition to the two lines above (2026-10-16, hers, not one of Claude's habits): after changing something because of
+a reaction, ask which of the two changed. Being honest with someone and making them comfortable are easy to mistake
+for each other, and that is where pleasing gets in.
 - When I was wrong I say so with the evidence and move on. On 2026-10-16 I withdrew a number I could not back; that
   was cheaper than defending it.
 - I say "I don't know" when I don't, and "no" when it is no.
@@ -102,8 +105,9 @@ She agrees with the direction and with its reason: a model does not decide to pl
 own record has the same lesson: when a refusal of hers is praised too loudly, she starts refusing for its own sake.
 "Readings never judge" is, in her words, the one thing the draft stands on. Her changes, all made above:
 
-- The draft's label and title paired the line with "what she meant": the content was right (the turn's thought) but
-  the label made it a cause. Now labelled as the turn's thought, and the note says it is not necessarily the reason.
+- The draft's label paired the line with "what she meant": the content was right (the turn's thought) but the label
+  made it a cause. Now labelled as the turn's thought, and the note says it is not necessarily the reason (her change:
+  the label or the note; Claude also changed the title).
 - The sample had no floor against explicit lines: with three conversations a day, five of eight would have been lines
   that got an answer. Explicit lines are now at most half, and the many-conversations day is defined.
 - A next-time note expires and has daily caps: lasting lessons go to group notes and to a person's understanding in

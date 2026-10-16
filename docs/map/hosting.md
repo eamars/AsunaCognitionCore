@@ -33,7 +33,8 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `audit_retention` — ADR-067: the audit's bulky diagnostic records past retention go, once at start and then daily.
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
-  - `errand_copy` — Whether this session is an errand's copy of a conversation (ADR-066).
+  - `side_session` — Whether this session is an errand's copy of a conversation (ADR-066) or a reflection's own (ADR-072): a one-turn session, retired once that turn ends, that later turns never take for the conversation.
+  - `reflection_session` — A reflection turn's own session (ADR-072): it starts empty, so its readings (her reviews) never enter the home conversation's context; what she does there lasts through her tools.
   - `errand_session` — The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed turn, so the turn resumes from its cached prefix.
   - `status`
   - `refusals_for` — For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given.

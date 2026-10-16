@@ -127,3 +127,33 @@ def test_a_self_evaluation_beat_carries_the_review_and_nine_days_bring_it_to_any
     monkeypatch.setattr(tools_week, 'due', lambda *args, **kwargs: 'floor')
     _, floor, _ = ContextBuilder(store).prepare({**beat, 'event_id': 'presence:r3'})
     assert 'self_review_from_program' in floor, 'nine days without it: any home beat carries it'
+
+
+def test_a_reflection_runs_in_its_own_session_and_nothing_of_it_stays_at_home(store):
+    """ADR-072 (owner 2026-10-16): more tokens for her reflection, none of them in her regular turns."""
+    import threading, types
+    from asuna.native_worker import BusinessWorker
+    from test_adr009_p2 import owner
+    owner(store)
+    worker = BusinessWorker()
+    worker.app = types.SimpleNamespace(store=store, config=store.config)
+    worker.navigation_ready = threading.Event()
+    worker.navigation_ready.set()
+    worker.host_call = lambda method, args: (_ for _ in ()).throw(AssertionError('a reflection copies nothing'))
+    store.put('sessions', {'_id': 'asuna-role-home', 'native_host': True, 'main_conversation': True, 'lane': 'character',
+                           'scene_id': 'dm-a', 'persona': 'P1', 'policy_epoch': 1, 'character_context': None,
+                           'cwd': 'work/home', 'person_id': 'A'}, stream='native-binding:asuna-role-home')
+    turn = {'_id': 'ep-reflect', 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'policy_epoch': 1,
+            'scope_key': 'scene:dm-a', 'context': {'self_review_from_program': {}, 'tools_week_from_program': {}}}
+    own = worker.resolve_role_session(turn)
+    assert own == self_review.reflection_session_id('ep-reflect') and own.startswith(self_review.REFLECT_PREFIX)
+    row = store.db.sessions.find_one({'_id': own})
+    assert row['reflection']['home_session_id'] == 'asuna-role-home' and not row['main_conversation']
+    assert worker.side_session(own) and not worker.side_session('asuna-role-home')
+    assert worker.resolve_role_session({**turn, '_id': 'ep-chat', 'context': {'clock_from_program': {}}}) == 'asuna-role-home'
+    # A plan she makes while reflecting fires at home, not in the reflection's session.
+    store.db.episodes.insert_one({'_id': 'ep-reflect', 'schema_version': 1, 'native_session_id': own})
+    store.db.plans.insert_one({'_id': 'plan-r', 'schema_version': 1, 'source_episode_id': 'ep-reflect'})
+    store.db.messages.insert_one({'_id': 'in-ep-later', 'schema_version': 1, 'event': {'scheduled_plan_id': 'plan-r'}})
+    assert worker.resolve_role_session({**turn, '_id': 'ep-later', 'context': {}}) == 'asuna-role-home'
+    assert worker.resolve_role_session(turn) == own, 'the same turn finds its session again'

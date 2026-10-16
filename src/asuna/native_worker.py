@@ -252,8 +252,9 @@ class NativeLane:
         """Her turn has no further stage (coordinator._turn): the plugin ends the native turn."""
         if self.lane == 'character' and ep.get('native_session_id'):
             session_id = self.worker.continued_session(ep['native_session_id'])
-            # An errand's copy is retired once its turn ends (ADR-066): archived, out of the session list.
-            done = bool(ep.get('errand')) and self.worker.errand_copy(session_id)
+            # An errand's copy and a reflection's session are retired once their turn ends (ADR-066, ADR-072):
+            # archived, out of the session list.
+            done = self.worker.side_session(session_id)
             self.worker.emit({'kind': 'turn_done', 'session_id': session_id, 'episode_id': ep['_id'],
                               **({'retire': True} if done else {})})
             if done:
@@ -624,14 +625,15 @@ class BusinessWorker:
         if ep.get('task_id'):
             task = store.db.tasks.find_one({'_id': ep['task_id']})
             original = store.db.episodes.find_one({'_id': task['episode_id']}) if task else None
-            if original and original.get('native_session_id') and not self.errand_copy(original['native_session_id']):
+            if original and original.get('native_session_id') and not self.side_session(original['native_session_id']):
                 return self.continued_session(original['native_session_id'])
         source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
         plan = store.db.plans.find_one({'_id': plan_id}) if plan_id else None
         original = store.db.episodes.find_one({'_id': plan.get('source_episode_id')}) if plan else None
-        # A plan or a task begun on an errand comes back to the conversation itself, never to the errand's copy.
-        if original and original.get('native_session_id') and not self.errand_copy(original['native_session_id']):
+        # A plan or a task begun on an errand or in a reflection comes back to the conversation itself, never to the
+        # side session.
+        if original and original.get('native_session_id') and not self.side_session(original['native_session_id']):
             return self.continued_session(original['native_session_id'])
         primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True,
             'scene_id': ep['scene_id'], 'persona': ep['persona'], 'policy_epoch': ep['policy_epoch'],
@@ -639,14 +641,43 @@ class BusinessWorker:
         session_id = primary['_id'] if primary else self.role_session_id(ep)
         if errands.is_errand_visit(source.get('event')):
             return self.errand_session(ep, session_id)
+        from . import self_review
+        prepared = ep.get('context') if 'context' in ep else (store.db.episodes.find_one({'_id': ep['_id']}, {'context': 1})
+                                                               or {}).get('context')
+        if self_review.reflecting(prepared):
+            return self.reflection_session(ep, session_id)
         store.audit(ep['_id'], 'native.context.bound', {
             'native_session_id': session_id, 'legacy_history': 'read-only',
             'context': 'new native conversation; no tool or message replay'}, ep['scope_key'])
         return session_id
 
-    def errand_copy(self, session_id):
-        """Whether this session is an errand's copy of a conversation (ADR-066)."""
-        return bool((self.app.store.db.sessions.find_one({'_id': session_id}, {'errand': 1}) or {}).get('errand'))
+    def side_session(self, session_id):
+        """Whether this session is an errand's copy of a conversation (ADR-066) or a reflection's own (ADR-072): a
+        one-turn session, retired once that turn ends, that later turns never take for the conversation."""
+        row = self.app.store.db.sessions.find_one({'_id': session_id}, {'errand': 1, 'reflection': 1}) or {}
+        return bool(row.get('errand') or row.get('reflection'))
+
+    def reflection_session(self, ep, home_id):
+        """A reflection turn's own session (ADR-072): it starts empty, so its readings (her reviews) never enter the
+        home conversation's context; what she does there lasts through her tools. Owner 2026-10-16: more tokens for her
+        reflection are fine, none of them in her regular turns."""
+        from . import self_review
+        store = self.app.store
+        session_id = self_review.reflection_session_id(ep['_id'])
+        if store.db.sessions.find_one({'_id': session_id}):
+            return session_id
+        scene = store.authorize(ep['scene_id'], ep['person_id'])
+        home = store.db.sessions.find_one({'_id': home_id}) or {}
+        cwd = home.get('cwd') or str(Path(workspace_grant(self.app.config, scene['_id'], ep['person_id'])['workspace']).resolve())
+        self.bind_session(session_id, {
+            'lane': 'character', 'scene_id': scene['_id'], 'person_id': ep['person_id'],
+            'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
+            'character_context': ep.get('character_context'), 'persona': ep['persona'], 'cwd': cwd,
+            'role_session_id': session_id, 'main_conversation': False, 'retired': False,
+            'reflection': {'episode_id': ep['_id'], 'home_session_id': home_id}})
+        store.audit(ep['_id'], 'reflection.session', {'session_id': session_id, 'home_session_id': home_id},
+                    scene['scope_key'])
+        return session_id
 
     def errand_session(self, ep, source_id):
         """The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed

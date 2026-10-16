@@ -76,6 +76,8 @@ self_review_from_program (ADR-058): her own day in raw readings, for a heartbeat
 - def `block`
 - def `exchanges` — Her lines since this was last shown (at most WINDOW_DAYS), each beside the thought she wrote in that turn and what followed it; records the showing.
 - def `cared` — Her sections tagged `tag` in her self documents: headings with the day each was last written, or whole when `whole`; None when she has none (no line stands in for it).
+- def `reflecting` — Whether a turn's prepared context makes it a reflection turn (ADR-072): decided from what it carries, since preparing a review records it as shown and asking again afterwards would say no.
+- def `reflection_session_id` — A reflection turn's own session, named so the launcher retires it like the other one-shot sessions.
 
 ## `tools_week`
 

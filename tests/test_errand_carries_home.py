@@ -163,7 +163,7 @@ def test_the_errand_runs_in_its_own_copy_and_later_turns_never_do(store):
     assert method == 'errand_session' and args['source_session_id'] == 'asuna-role-main' and args['cwd'] == 'work/qq'
     row = store.db.sessions.find_one({'_id': copy})
     assert row['errand']['forked'] is True and not row['main_conversation']
-    assert worker.errand_copy(copy) and not worker.errand_copy('asuna-role-main')
+    assert worker.side_session(copy) and not worker.side_session('asuna-role-main')
     # A plan made in the errand turn: when it fires it runs in the conversation, not in the copy.
     store.db.episodes.update_one({'_id': ep['_id']}, {'$set': {'native_session_id': copy}})
     store.db.plans.insert_one({'_id': 'plan-e', 'schema_version': 1, 'source_episode_id': ep['_id']})

@@ -23,6 +23,10 @@ from .evidence import sha
 EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
                'CANCELLED': '撤了'}
+# The blocks only a reflection turn carries (ADR-072): a turn that carries one runs in a session of its own, so its
+# readings are never part of her home conversation's context.
+REFLECTION_BLOCKS = ('self_review_from_program', 'dice_review_from_program', 'tools_week_from_program')
+REFLECT_PREFIX = 'asuna-reflect-'
 EXCHANGES = 8
 EXCHANGE_CHARS = 3200          # the owner's limit (2026-10-16); whole thoughts first, so fewer than 8 fit on a busy day
 WINDOW_DAYS = 7
@@ -241,3 +245,13 @@ def cared(store, persona, tag, *, whole=False):
                 out.append('%s（%s你自己写的）' % (heading, day + ' ' if day else ''))
     return out or None
 
+
+def reflecting(context):
+    """Whether a turn's prepared context makes it a reflection turn (ADR-072): decided from what it carries, since
+    preparing a review records it as shown and asking again afterwards would say no."""
+    return any(key in (context or {}) for key in REFLECTION_BLOCKS)
+
+
+def reflection_session_id(episode_id):
+    """A reflection turn's own session, named so the launcher retires it like the other one-shot sessions."""
+    return REFLECT_PREFIX + sha(episode_id.encode())[:32]

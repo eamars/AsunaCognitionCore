@@ -38,6 +38,22 @@ history on the debug page.
 Expected: ~130 MB a day before retention, and a bounded audit after it. MongoDB reuses the freed space; the files do
 not shrink without a compaction, which is the owner's to run.
 
+## Measured (2026-10-16)
+
+The audit's growth in bytes, 24 hours each, the third from the restart that installed this (2026-10-15 00:31 UTC):
+
+| 24 h from | Added | `state.commit` | `context.prepared` | `state.intent` |
+|---|---|---|---|---|
+| 2026-10-13 00:31 UTC | 233 MB | 154 MB | 36 MB | 28 MB |
+| 2026-10-14 00:31 UTC | 273 MB | 166 MB | 53 MB | 33 MB |
+| 2026-10-15 00:31 UTC (this built) | 165 MB | 141 MB | 6 MB | 0 |
+
+Down 40%, short of the expected ~130 MB a day. 9 MB of that day was identity commits from a separate bug (every
+group member renamed at each start; fixed 16fad5ee, about one identity commit in 3.6 hours after it), so the steady
+rate is about 156 MB. What is left is `state.commit` of `messages`: 5,644 messages committed 29,323 times in the day
+(about five full copies each as their state moves), 75 MB; `memory_units` 20 MB, `artifacts` and `tasks` 10 MB each.
+No `audit.pruned` record yet: the oldest bulky record crosses 30 days around 2026-10-20.
+
 ## Side effect
 
 The memory view's "used in the latest context" (`native_cognition`) looks up `context.prepared` by person and epoch;

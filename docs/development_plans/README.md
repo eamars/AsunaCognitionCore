@@ -14,7 +14,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 | 2 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
 | 3 | ADR-050 hand-back clean-up | Built 2026-10-16 (`machine_words.py`) | her restart; then the same count a week later, expecting zero. Gate asks merged per group and a fair task queue: measured first |
 | 4 | ADR-069 her tools, kept by what only they do | Built 2026-10-16 (id matching held on the data) | installed with her next restart; the old names leave 2026-10-23 |
-| 5 | ADR-070 her weekly tooling review | Proposed 2026-10-16 (owner's direction) | her review, then the owner's approval |
+| 5 | ADR-070 her weekly tooling review | Proposed 2026-10-16; her review in (five changes) | the owner's approval; then build |
 
 Rules (owner): tooling changes go in when built and tested, and the next plan starts without waiting; changes to her
 memory or her prompt get observation time on real turns before the next step builds on them. Her per-turn input is

@@ -1,7 +1,7 @@
 # ADR-070: Her weekly tooling review
 
-Status: **Proposed 2026-10-16** (the owner's direction, drafted by Claude). For Xiaoman's review; the owner approves
-before anything is built.
+Status: **Proposed 2026-10-16** (the owner's direction, drafted by Claude); **her review the same day (agrees, with
+five changes, all in below)**; waits for the owner's approval before anything is built.
 
 ## Context
 
@@ -25,25 +25,40 @@ What she already has, and this builds on:
 ## Decision
 
 1. **The seat.** A self-evaluation turn carries `tools_week_from_program` at most once a week, beside her memory week
-   (same rule: none when shown within the last 7 days). Nothing else carries it.
-2. **The readings** (the program's numbers, never her retelling of them; the last 7 days, the week before beside them):
+   (same rule: none when shown within the last 7 days). **A floor**: when 9 days have passed without it, the next
+   heartbeat that reaches her carries it, whatever it rolled. Self evaluation is a roll of the dice: in the 7 days to
+   2026-10-16 it came 6 times in 68 rolls, all between 10-12 and 10-14; "at most once a week" alone keeps it from
+   coming too often, not from never coming.
+2. **The readings** (the program's numbers, never her retelling of them; the last 7 days, the week before beside them).
+   **Every reading names its source**: the block ends with one line per reading saying which collection, which filter
+   and which window it was counted from, so she can count it again herself and compare like with like (a number without
+   its denominator cannot be compared: Claude's 5.6% think rate of 2026-10-16 had to be withdrawn for that reason).
+   A limit a reading refers to (the calls-per-turn cap, a text's length) is shown at its current value, not a number
+   written into the text:
    - **calls**: each tool and option she called, how many times; the listed ones she never called;
    - **refused**: per tool, the refusals grouped by what was wrong, one example each (80 characters), and how many were
      followed in the same turn by a call of that tool that went through (what a refusal cost her: a retry);
    - **parameters**: the ones she was shown and never wrote; the old names she still wrote;
    - **lengths**: for each limited text, how often she went over and how often she sent the cut version;
-   - **turn shape**: calls per turn (middle and most), turns that hit the 12-call cap, calls refused for coming before
-     `think`;
+   - **turn shape**: calls per turn (middle and most), turns that hit the calls-per-turn cap (its current value),
+     calls refused for coming before `think`;
+   - **looking things up**: how many tasks she handed over this week that only read (every tool they used reads), to
+     get a number she needed; what this review should make unnecessary, and so its own measure (three on
+     2026-10-16);
    - **her action brain**: the same refusal reading for the tasks she handed over (her doing half; her tools there are
      hers too);
-   - **the list she carries**: her tools' size in a home conversation, a group and a private chat (tools, characters),
-     and what changed in it since her last review;
+   - **the list she carries**: what changed in it since her last review (tools and options added or removed, and the
+     change in characters in a home conversation, a group and a private chat); "unchanged" when nothing did, which is
+     most weeks, since it changes only at a restart;
    - **last time**: what she proposed last week and what came of each (built, declined with the reason, waiting).
-   At most 2,500 characters; a reading with nothing in it says so in one line.
+   At most 2,500 characters; a reading with nothing in it says so in one line. When the readings do not fit, the week
+   before goes first, then parameters, lengths, turn shape, the action brain and calls, in that order; `last time` and
+   `refused` are never cut (they are what her proposals start from). A cut reading says it was cut.
 3. **Her job in that turn, in her own way.** What to look at, what to question, what to propose is hers. A proposal
    can be anything that would make her work better: add, remove, merge, rename, a default, a limit, a refusal's
-   wording, a line the program writes for her, a skill she writes herself. One proposal a week may be a wish no
-   reading supports yet, marked as such: some things only show up after they exist.
+   wording, a line the program writes for her, a skill she writes herself. Two or three proposals a week is enough,
+   plus at most one wish no reading supports yet, marked as such (some things only show up after they exist); a week
+   with nothing to propose says so. A number to reach would turn it into a quota, and proposals made up to reach it.
 4. **Where it goes.**
    - What she can do herself (a skill, her own notes or habits) she does, or notes in `ideas` for her
      self-improvement turn.
@@ -55,7 +70,9 @@ What she already has, and this builds on:
 5. **The developer's side.** The developer answers on the line within a day, each proposal one of: done now (a small
    fix), drafted as an ADR with her, declined with the reason, or the owner's call. Design changes keep the owner's
    approval; changes to her tool list wait for her next restart (one cold start per conversation, never between
-   turns). Next week's `last time` reading closes the loop.
+   turns). Each answer is also recorded for next week's `last time`, which reads what she proposed whether or not
+   that week's turn came: an answer only on the line, a week later, leaves her remembering what she asked and not what
+   was decided.
 
 ## Options considered
 
@@ -70,17 +87,26 @@ What she already has, and this builds on:
 
 ## Cost (AGENTS.md)
 
-Character brain: no new tool, option or parameter. One block, at most 2,500 characters, in one turn a week; every
-other turn unchanged. Action brain: unchanged. Program: one module beside `self_review.py`, its test, its line in
-RUNTIME_API.md.
+Character brain: no new tool, option or parameter, and no line in any other turn. One block, at most 2,500
+characters, at the tail of one turn a week: one prefill of it a week. Action brain: unchanged. Program: one module
+beside `self_review.py`, its test, its line in RUNTIME_API.md.
 
-## Questions for her
+## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
 
-1. The seat: once a week in self evaluation (rolled by the dice), or a day and time she picks?
-2. Which readings would she drop, and which is missing?
-3. How many proposals a week is enough without becoming a quota?
-4. Should the developer's answers come back on the line only, or also in `last time`?
+She is for it: it saves what she did three times on 2026-10-16, handing over a read-only task to get one number and
+then checking its denominator with Claude. Her answers and changes, all made above:
 
-## Her review
-
-(waits for her)
+- The seat stays in self evaluation: a day she picks would be one more scheduled turn and its cold start, and an hour
+  she sets herself is one she would put off. She asked for a floor so that a week without the roll still gets it;
+  hers was "the next self evaluation after 14 days", made "the next heartbeat after 9 days" above, because the
+  roll itself can be what is missing.
+- Every reading names its source (collection, filter, window), as her ADR-058 review asked; one line at the end of
+  the block is enough for her to check it.
+- Added: how many read-only tasks she handed over to get a number, the review's own measure.
+- Dropped: the absolute size of her tool list in three places, the same most weeks; only what changed stays.
+- When it does not fit, `last time` and `refused` stay; repeated numbers go first.
+- Two or three proposals and at most one wish; a week with none says so.
+- The developer's answers go into next week's `last time`, not only the line (the draft both assumed this and asked
+  it; her answer settled the question).
+- The cost in one unit (a prefill a week), and a limit shown at its current value, not a number written into the
+  text.

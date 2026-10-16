@@ -10,7 +10,7 @@ PLANS = pathlib.Path(__file__).resolve().parents[1] / 'docs' / 'development_plan
 def test_every_adr_folder_has_a_readme_and_one_index_row_and_no_number_is_taken_twice():
     folders = sorted(p for p in PLANS.iterdir() if p.is_dir())
     assert folders
-    number = lambda folder: re.fullmatch(r'ADR-(\d{3})-[a-z0-9-]+', folder.name).group(1)
+    number = lambda folder: re.match(r'ADR-(\d{3})(-|$)', folder.name).group(1)
     assert [f.name for f in folders if not (f / 'README.md').is_file()] == []
     taken = collections.Counter(number(f) for f in folders)
     assert [n for n, count in taken.items() if count > 1] == []

@@ -7,7 +7,10 @@
    取数必须在场那一轮、验收「先跑我自己」——每条都按「只有写全了才会出现」的字面查；
 3. 不带别人的个人信息：正文没有字面编号（#数字）、没有账号那样的长数字串，对照名单留在仓库外
    （work_log 那一节 + recall）。私密名单可达时再扫一遍，命中只报类别和行号、不打印词本身；
-   命中这一项只提示不判红——产品名和群名片可能撞词（正文里「麦麦」既是一家 bot 也是某个名片）。
+   命中就红（no_listed_words）——2026-10-16 起不再「NOTE 一行、绿数照旧」，五份 check_skill.py
+   里最后一条 warn-only 就是这一条。唯一的例外是 LISTED_WORD_ALLOW 里逐字列出的词（产品名与
+   群名片可能撞词，正文里「麦麦」既是一家 bot 也可能是某个名片）；放行几个就在输出里打一行
+   「白名单放行 N 个」——放行要看得见，不许又长成「跑过了」。
    名单配不上则记一条红（leak_scan_ran）：2026-10-16 起不再「NOTE 一行、绿数照旧」，
    「检查项没跑」不许长得像「检查项过了」。定位多一条兜底：环境变量都没有就从脚本往上找
    .runtime/private/personal-words.txt（本机两个环境变量都没设；asuna 能 import 时第三条
@@ -188,6 +191,18 @@ VERSION_LOG = [
 TIERS = ["**强**（", "**中**（", "**弱**（"]
 VENDORS = ["AstrBot", "Hermes", "ATRI", "MaiBot", "NapCat", "SnowLuma"]
 
+# 白名单（2026-10-16）：私密名单命中就红（no_listed_words），唯一的例外是这里逐字列出的词。
+# 为什么留这个口子：这份正文按 ADR-047 逐字定稿，里面写的是各家 bot 的出厂名和产品名，它们可能
+# 同时是某个群名片（正文「名字不是指纹」那条就是撞过的记录）。无条件红会让正常发布天天撞红，
+# 撞多了这一格就没人看了——所以例外必须显式写在这里：每条带一行为什么允许，放行时输出打一行
+# 「白名单放行 N 个」，不静默。写法：词照名单里那一行原样抄（逐字一致才算放行，含大小写）；
+# 名单里暂时没有的词留着不算错，它只是等哪天撞上了才生效。词本身永远不进输出。
+LISTED_WORD_ALLOW = [
+    # 一家 bot 的出厂名：正文固定文本清单里逐字写着「麦麦不知道哦」，公开仓库里本来就有这个词。
+    # 它同时是某个群名片的话，撞的是产品名不是隐私。（2026-10-16 实测：本机名单 45 条里没有它。）
+    "麦麦",
+]
+
 # 字面编号（#12 这种）是具体坐标，规则里只该出现占位写法；长数字串多半是账号，也不该进仓库
 LITERAL_ID = re.compile(r"#\d")
 LONG_DIGITS = re.compile(r"\d{8,}")
@@ -251,7 +266,13 @@ def private_list():
     return (candidates[-1] if candidates else None), None
 
 
+def hit_label(number, category):
+    """命中在输出里的样子：只有类别和名单行号。防泄露的检查自己不许漏词，词本身不进输出。"""
+    return "%s（名单第 %d 行）" % (category, number)
+
+
 def listed_hits(entries, text):
+    """命中返回 [(名单行号, 类别, 词)]。词只给调用方判白名单用，打出去前一律换成 hit_label。"""
     hits = []
     for number, category, word in entries:
         if all(ch.isascii() for ch in word):
@@ -259,7 +280,7 @@ def listed_hits(entries, text):
         else:
             found = word in text
         if found:
-            hits.append("%s（名单第 %d 行）" % (category, number))
+            hits.append((number, category, word))
     return hits
 
 
@@ -375,12 +396,20 @@ def main():
               % (listed_path or "都没有"))
         leak_note = ""
     else:
-        found = listed_hits(entries, text)
+        hits = listed_hits(entries, text)
+        blocked = [h for h in hits if h[2] not in LISTED_WORD_ALLOW]
+        allowed = [h for h in hits if h[2] in LISTED_WORD_ALLOW]
         leak_note = "，泄露检查扫过（名单 %d 条，命中只报类别与行号）" % len(entries)
-        if found:
-            # 只提示不判红：正文按 ADR-047 逐字定稿，产品名与群名片可能撞词（麦麦）；
-            # 命中只报类别和行号，词本身不回显。
-            notes.append("NOTE 私密名单命中，人工过一眼是不是真人名／群名：" + "、".join(found))
+        # 2026-10-16 改口径：命中就红，不再「NOTE 一行、绿数照旧」——「只警告」的格子跑过了
+        # 还是没人看。例外只有 LISTED_WORD_ALLOW 逐字列出的词；仍然只报类别与名单行号，词不回显。
+        check("no_listed_words", not blocked,
+              ("命中私密名单，人工过一眼是不是真人名／群名："
+               + "、".join(hit_label(n, c) for n, c, _w in blocked)) if blocked else "")
+        if allowed:
+            # 放行要可见：绿数里混着几条白名单放行，得在输出里看得见，不能静默。
+            notes.append("白名单放行 %d 个（只报类别与名单行号，词本身不打印）：" % len(allowed)
+                         + "、".join(hit_label(n, c) for n, c, _w in allowed)
+                         + "——理由见脚本 LISTED_WORD_ALLOW 那一条注释")
 
     # 同目录脚本：必须存在且能编译。编译产物落在技能目录之外，用完即删。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))

@@ -25,8 +25,8 @@ What she already has, and this builds on:
 ## Decision
 
 1. **The seat.** A self-evaluation turn carries `tools_week_from_program` at most once a week, beside her memory week
-   (same rule: none when shown within the last 7 days). **A floor**: when 9 days have passed without it, the next
-   heartbeat that reaches her carries it, whatever it rolled. Self evaluation is a roll of the dice: in the 7 days to
+   (same rule: none when shown within the last 7 days). **A floor**: when 9 days have passed without it (its week, and
+   two days more for the roll to come by itself), the next heartbeat that reaches her carries it, whatever it rolled. Self evaluation is a roll of the dice: in the 7 days to
    2026-10-16 it came 6 times in 68 rolls, all between 10-12 and 10-14; "at most once a week" alone keeps it from
    coming too often, not from never coming.
 2. **The readings** (the program's numbers, never her retelling of them; the last 7 days, the week before beside them).

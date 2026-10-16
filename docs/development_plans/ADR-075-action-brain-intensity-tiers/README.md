@@ -1,6 +1,6 @@
 # ADR-075: She picks the action brain by tier; a hard failure falls to the tier below
 
-Status: **Built 2026-10-16 (sixth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, reused an existing knob for the rest length at 19:53, and answered the one open question (what may leave the machine) at about 20:00. Claude read this text and asked for no further changes; **she has signed it below**. He builds it after her signature.
+Status: **Accepted 2026-10-16 (sixth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, reused an existing knob for the rest length at 19:53, and answered the one open question (what may leave the machine) at about 20:00. Claude read this text and asked for no further changes; **she has signed it below**. He builds it after her signature.
 
 ## Context
 

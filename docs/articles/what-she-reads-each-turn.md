@@ -342,8 +342,9 @@ second wording audit's removals; those blocks are listed apart.
   and echo least (6.2%); conversation summaries 17.7%; her own past thoughts 10.2%; items of her documents 36 to 46%.
   Memories are used. The kinds cannot be ranked with this measure (her point): a six-character overlap favours text
   written to be quoted, as her document items are, over text she rewrites when she uses it, as chat chunks are, so a
-  low rate for chunks does not mean they are not used. Setting the mix would need a comparison within one kind, or a
-  measure of use that does not depend on wording. Her caution: a memory used rarely can carry
+  low rate for chunks does not mean they are not used. Setting the mix would need, as she also proposed, a comparison
+  within one kind or a measure of use that does not depend on wording (acting on a recalled memory, changing her mind,
+  leaves no six characters behind). Her caution: a memory used rarely can carry
   weight (one she uses once a day anchors a daily account), so a change would weigh what a memory holds up, not only
   how often it is echoed.
 - **E** is ADR-073, proposed for her review.

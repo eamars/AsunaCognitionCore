@@ -38,8 +38,9 @@ says nothing changed is the worst way for it to fail):
    1,500, people 1,200) so the busiest cannot fill the map, and within a store the newest come first: whole while they
    fit, then by heading and reference, then as a count of what is left (her review: volume is not importance).
 3. **Attention as counts**: per group, how many lines her relevance gate saw since the last map, and how many it gave
-   her a look at; the difference is the lines not shown to her, and the note says so. Numbers only, no verdict and no lines (her condition: "you let X go 12 times" said aloud becomes a
-   score; what it is for is comparing what she says she cares about with where her eyes went).
+   her a look at; the difference is the lines not shown to her, and the note says so. Numbers only, no verdict and no
+   lines (her condition: "you let X go 12 times" said aloud becomes a score; what it is for is comparing what she says
+   she cares about with where her eyes went).
 4. Facts only, every count with its source, as ADR-070's readings. About 8,000 characters at most: the index and the
    attention counts, and each store within its share.
 5. It does not overlap ADR-071's exchanges, which live in the same turn: those are her lines, the thought she wrote then

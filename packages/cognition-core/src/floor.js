@@ -557,6 +557,21 @@ export class PublicationFloor {
         path.join(target, 'python')]);
       if (probe.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: probe };
     }
+    const model = path.join(target, 'persona-model.json');
+    const python = this.config.python ?? this.workerPython;
+    if (!workerPath && python && await exists(model)) {
+      // The next start loads a persona model through the worker's schema: a model it would refuse is refused here,
+      // where it can still be fixed, not at that start (2026-10-16).
+      const checked = await run(python, ['-c', 'import json, sys\n'
+        + 'from asuna.persona_model import PersonaModelError, validate\n'
+        + 'model = json.load(open(sys.argv[1], encoding="utf-8"))\n'
+        + 'try:\n    validate(model, (model.get("persona") or {}).get("id"))\n'
+        + 'except PersonaModelError as exc:\n    sys.exit(str(exc) + "：下次启动装不上这个人格模型；照这个改 persona-model.json 再发布")\n'
+        + 'print("Persona model valid against the running Core.")', model],
+        { env: { ...process.env, PYTHONPATH: await this.workerPath(), PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
+      if (checked.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: checked };
+      probe = { ...probe, stdout: probe.stdout + checked.stdout };
+    }
     if (workerPath) {
       probe = await run(this.config.python ?? this.workerPython, ['-c', 'import asuna.native_worker; print("Worker imports.")'],
         { cwd: frozen, env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot, PYTHONPATH: workerPath, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });

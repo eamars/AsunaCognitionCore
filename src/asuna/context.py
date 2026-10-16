@@ -803,11 +803,11 @@ class ContextBuilder:
                    and (event.get('dice')=='self_evaluation' or _tools_week.due(self.store,persona,moment)=='floor'))
         if reviewing:
             from . import self_review
-            from .persona_model import effective as _review_value, timezone as _review_zone
+            from .persona_model import effective as _review_effective, timezone as _review_zone
             from .render import model_and_policy as _review_model
             _model,_policy=_review_model(self.store,persona)
             _zone=_review_zone(_model,_policy,self.store.config)[0]
-            _tag=_review_value(_model,'self_review.tag',_policy)
+            _tag=_review_effective(_model,'self_review.tag',_policy)
             review=self_review.block(self.store,persona,_zone,moment)
             review['exchanges']=self_review.exchanges(self.store,persona,_zone,moment)
             weekly_tools=_tools_week.block(self.store,persona,moment)
@@ -815,6 +815,9 @@ class ContextBuilder:
                 context['tools_week_from_program']=weekly_tools
                 whole=self_review.cared(self.store,persona,_tag,whole=True)
                 if whole:context['cared_from_program']={'items':whole}
+                # Her tag matches exactly: the week says what it found, so a tag off by a character is seen (her ask).
+                weekly_tools['sources']+=('；self_review.tag「%s」在 self、core 里找到 %d 节'%(_tag,len(whole or []))
+                                          if _tag else '；人格模型里没有 self_review.tag')
             else:
                 line=self_review.cared(self.store,persona,_tag)
                 if line:review['cared']=line

@@ -106,6 +106,34 @@ test('ADR-011 §6.4: publication imports the plugin entry and reads its structur
   assert.equal(selected.projects.persona.candidate, good.candidate, 'a failed probe never replaces the selection');
 });
 
+test('a persona model the next start would refuse is refused at publication, by the worker schema', async t => {
+  const { checkoutPython } = await import('../../../tools/asuna-launch.mjs');
+  const python = checkoutPython(path.resolve('.'), process.platform);
+  try { await fs.access(python); } catch { t.skip('no checkout Python to run the worker schema'); return; }
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/model-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe-persona', version: '0.0.0',
+    type: 'module', exports: { '.': './src/index.js' }, files: ['src', 'persona-model.json'] }));
+  await fs.writeFile(path.join(source, 'src/index.js'), "export const name = 'probe';\nexport function apply() {}\n");
+  const model = { model_version: 1, persona: { id: 'probe-persona', display_name: 'Probe' } };
+  await fs.writeFile(path.join(source, 'persona-model.json'), JSON.stringify(model));
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', python,
+    projects: [{ id: 'persona', root: source, format: 'package' }] });
+  floor.workerPath = async () => path.resolve('src');           // the checkout's worker, as an installed Core's
+  await floor.call('development_write', { path: 'persona-model.json', overwrite: true,
+    text: JSON.stringify({ ...model, self_review: { tag: '标签' } }) });
+  const good = await floor.call('development_publish', { reason: 'a valid model, with her review tag' });
+  assert.match(good.state, /^(APPLIED|HOST_RESTART_REQUIRED)$/, JSON.stringify(good.boot_probe));
+  assert.match(good.boot_probe.stdout, /Persona model valid against the running Core/);
+  await floor.call('development_write', { path: 'persona-model.json', overwrite: true,
+    text: JSON.stringify({ ...model, not_a_key: { tag: 'x' } }) });
+  const refused = await floor.call('development_publish', { reason: 'a key the schema does not have' });
+  assert.equal(refused.state, 'BOOT_FAILED');
+  assert.match(refused.boot_probe.stderr, /PERSONA_MODEL_INVALID: <root>: Additional properties.*not_a_key.*下次启动装不上/s);
+});
+
 test('a refused development call says what was wrong, with the values, and what to do', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/refusal-probe-'));

@@ -88,8 +88,8 @@ def selections(store, window_days, *, moment=None):
 
 
 def promotion_candidates(store, model, policy, *, limit=20):
-    """Deterministic: units or monologues referenced by ≥ 2 different turns within promotion.window_days."""
-    window = effective(model, 'promotion.window_days', policy) or effective(model, 'memory.promotion.window_days', policy) or 7
+    """Deterministic: units or monologues referenced by ≥ 2 different turns within memory.promotion.window_days."""
+    window = effective(model, 'memory.promotion.window_days', policy) or 7
     picked = [(memory_id, episodes) for memory_id, episodes in selections(store, window).items() if len(episodes) >= 2]
     rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': [m for m, _ in picked]}, 'status': 'active'},
                                                                  {'body_markdown': 1, 'kind': 1, 'scope_key': 1})}

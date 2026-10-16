@@ -456,6 +456,17 @@
         }
       }
     },
+    "self_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
     "speak": {
       "type": "object",
       "additionalProperties": false,

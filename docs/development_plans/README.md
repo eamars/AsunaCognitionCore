@@ -10,7 +10,7 @@ Kept current by the master agent (Claude); each plan has one builder at a time.
 
 | # | Plan | Where it stands | Waits on |
 |---|---|---|---|
-| 1 | ADR-066 an errand carries home | Built 2026-10-15 | a real errand checked: the forked session, the copy's title, a warm cache, the archive after |
+| 1 | ADR-066 an errand carries home | Built 2026-10-15; first real errand checked 2026-10-16 (fork, title, archive as designed; first step cold after an idle hour) | nothing |
 | 2 | ADR-067 audit growth | Built 2026-10-15 | 24 h of growth measured from the restart that installed it (2026-10-15 00:31 UTC; expected ~130 MB a day); the first daily prune around 2026-10-20 |
 | 3 | ADR-050 hand-back clean-up | Built 2026-10-16 (`machine_words.py`) | her restart; then the same count a week later, expecting zero. Gate asks merged per group and a fair task queue: measured first |
 | 4 | ADR-069 her tools, kept by what only they do | Built 2026-10-16 (id matching held on the data) | installed with her next restart; the old names leave 2026-10-23 |

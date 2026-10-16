@@ -111,6 +111,20 @@ none.
    pictures from anywhere, and the owner's chat now does too (direction 8, folded in). Home's other pictures (the
    owner's) do not go out into a public place on an errand.
 
+## The first real errand (2026-10-16)
+
+Her home plan sent her at 14:07 NZDT to a group with the results of a research task of hers; nothing was staged for the
+test. The four checks:
+
+| Check | Result |
+|---|---|
+| The session is a fork | Yes: `errand.session` `forked: true`, opened 10 s after the errand was queued, seeded with the conversation's 3,050 events |
+| The copy's title | 「<group> · Errand」: the word comes from the Web UI's language table (`uiTitles.errand`), English in this profile; 差事 where the UI is Chinese |
+| The cache | First step cold: 88,263 input tokens computed, 13,257 read from cache, 16 s to her first call; the next two steps warm (about 102,000 from cache each). The group's own last turn was an hour earlier and the model server had evicted it: a fork reuses a cache that is still there, and cannot keep one the server dropped |
+| Archived after | Yes: the copy is in the registry's archived sessions once the turn ended |
+
+Her turn: `think`, `speak` (two lines, both marked `errand`), `stay_silent`; 34 s from start to end.
+
 ## Her review (2026-10-15, Claude's paraphrase; she signed it)
 
 She read the whole text first (79 lines at 9671ba6d, 13 rows) rather than review a summary. She agrees with the

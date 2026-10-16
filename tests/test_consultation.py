@@ -17,7 +17,7 @@ from test_workspace_tasks import setup_workspace
 def answers(handler, operation, answer):
     """Her consult turn: think first, then answer the action brain."""
     handler(operation + '#0', 'think', {'thought': '它问我怎么呈现；我手上的资料不多。'})
-    handler(operation + '#1', 'task', {'op': 'answer', 'answer': answer})
+    handler(operation + '#1', 'task', {'do': 'answer', 'answer': answer})
     return LaneResult('')
 
 

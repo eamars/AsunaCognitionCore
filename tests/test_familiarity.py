@@ -51,7 +51,7 @@ def test_first_understanding_needs_no_placeholder_record(store):
     """Nobody starts with a relationship record: her context says so, and her first understanding creates it."""
     store.db.state_heads.delete_many({'_id': {'$regex': '^relationship:A\\|'}})
     text = 'A 说话直接，喜欢先听结论。'
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '第一次认真聊。'}), ('understand_person', {'layer': 'here', 'body': text})], '好。')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '第一次认真聊。'}), ('understand_person', {'layer': 'here', 'content': text})], '好。')])
     event = {'event_id': 'first-understanding', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '结论先说。'}
     _, before, manifest = ContextBuilder(store).prepare(event)
     assert before['relationship']['here'] == NO_HERE

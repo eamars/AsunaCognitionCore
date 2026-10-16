@@ -28,6 +28,7 @@ from .state import Conflict, Denied
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
+from .config import cut_offer
 from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 300                  # what she is asked for; a longer thought is kept, and only its own result says by how much
@@ -228,12 +229,6 @@ TOOLS = {
             'kind': _s('新建文档时：ledger 活账，每回合带上；journal 流水；working 工作文档，默认', enum=['ledger', 'journal', 'working']),
         },
     },
-    'update_self': {
-        'description': ('改你的自我描述：character_core 是跨场景的长期自我，current_self 是近期的自我理解。'
-                         '自我理解真的变了才改，content 写完整的新正文。'),
-        'parameters': {'target': _s('改哪一份', required=True, enum=['character_core', 'current_self']),
-                       'body': _s(limit=SINGLE_BODY_CHARS, description='完整的新正文', required=True), 'reason': _s(limit=2000, description='为什么改', required=True)},
-    },
     'understand_person': {
         'description': ('更新你对当前说话人的理解，选一层：person 人那层（在哪儿遇到他都看得到），here 这里那层（只在这个对话）'
                          '。content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的。只在真有值得留下的变化时写，'
@@ -312,21 +307,15 @@ TOOLS = {
                        'exactly': {'type': 'boolean', 'description': 'yes：原样转达'},
                        'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
     },
-    'pass_note': {
-        'description': ('给别的对话里的你写一张便条（你在家里，便条算你自己的决定）：to 照抄 note_places_from_program 里的 place。'
-                         '那边的回合会读到，知道是你写的；那边的人看不到便条，但那边的你可能照着说，所以只写愿意在那边说的。deliver=wake 马上叫醒那边（排在手上的事后面）'
-                         '；next_time 等那边下次有回合；不写按那个地方的默认。叫醒一个群算一次出门。送到家里的另一条线 1500 字以内，'
-                         '群和私聊 300 字以内；一回合最多两张。'),
-        'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place', required=True),
-                       'text': _s('便条：你自己的话；家里的线 1500 字以内，群和私聊 300 字以内', required=True),
-                       'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time'])},
-    },
-    'leave_note': {
-        'description': ('给别的对话里的你留一张便条（你在外面）：to 写「家里」就送回家并叫醒家里，或照抄 note_places_from_program 里另一个群的 place。'
-                         '用你自己的话写许下的事、要记得的事；别人托你的写清是谁的意思。那边读了只当消息，不会因为便条去做有后果的事。300 字以内，一回合最多两张。'),
-        'parameters': {'to': _s('送到哪儿：「家里」或 note_places_from_program 里的 place', required=True),
-                       'text': _s('便条：你自己的话，300 字以内', required=True),
-                       'question': _s('这张便条是哪个问题的回答：照抄 q-…；程序会在家里写上谁答的和原话在哪儿')},
+    'note': {
+        'description': ('给别的对话里的你写一张便条：to 照抄 note_places_from_program 里的 place（在外面也可写「家里」）。'
+                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话，别人托的写清是谁的意思。'
+                         'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
+                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 1500 字以内，别的 300 字以内；一回合最多两张。'),
+        'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
+                       'text': _s('便条，你自己的话', required=True),
+                       'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
+                       'question': _s('在群里：回答的是哪个问题，照抄 q-…（程序在家里写上谁答的、原话在哪）')},
     },
     'restart': {
         'description': ('重启宿主（只在家里）。preview 先看会打断什么；request 交给监工重启，why 写原因，when 选 now、quiet（默认：'
@@ -418,6 +407,10 @@ TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name
 # Her list of words that point at real people and places, shared with the action brain (private_words.py).
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
+# ADR-069: retired; for a week an old call still runs (as write_document where she has written herself as items).
+UPDATE_SELF = {'description': '已并入 write_document（doc=self 或 core）；旧名照常可用。',
+               'parameters': {'target': _s('改哪一份', enum=['character_core', 'current_self']),
+                              'content': _s('完整的新正文'), 'why': _s('为什么改')}}
 # ADR-060: what she is shown is each parameter's new name; handlers read the old ones (param_names.inbound).
 from . import param_names as _names
 TOOLS = {name: {**spec, 'parameters': _names.shown(name, spec['parameters'])} for name, spec in TOOLS.items()}
@@ -425,11 +418,10 @@ TOOL_NAMES = tuple(TOOLS)
 
 
 def _tiered(tools):
-    """Her tools with tiered memory on (ADR-062): update_self retires into write_document (it still runs, unlisted);
-    write_document lets an item go and says what an item is or where it came from; recall says it lists a document's
+    """Her tools with tiered memory on (ADR-062): write_document lets an item go and says what an item is or where it came from; recall says it lists a document's
     headings; promote_memory says what a fact is about. The texts are the smallest that say it."""
     import copy
-    out = copy.deepcopy({name: spec for name, spec in tools.items() if name != 'update_self'})
+    out = copy.deepcopy(tools)
     write = out['write_document']
     write['description'] += 'let_go 把一节放下一层。'
     write['parameters']['do']['enum'] = [*write['parameters']['do']['enum'], 'let_go']
@@ -454,7 +446,8 @@ OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 
        'ask': ('ask', 'read', 'close')}
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
 RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
-           'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review'}
+           'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review',
+           'pass_note': 'note', 'leave_note': 'note'}
 RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
 # A field only one option takes says which option a call without op is (as plan's create, ADR-054).
 OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page'},
@@ -469,7 +462,7 @@ def developer_ask(store, args):
     note as until it is answered (ADR-061)."""
     from . import places, questions
     scene_id, _ = questions.developer_place(store.config)
-    return {'op': 'ask', 'question': args.get('text'), 'to': [places.place_id(scene_id) if scene_id else '开发代理'],
+    return {'do': 'ask', 'question': args.get('text'), 'to': [places.place_id(scene_id) if scene_id else '开发代理'],
             'patience': '一小时' if args.get('level') == 'wake' else '回了为止'}
 
 
@@ -508,7 +501,7 @@ def renamed(name, args):
     args = dict(args)
     if name == 'review_idea' and 'idea' in args and 'id' not in args:
         args['id'] = args.pop('idea')
-    return tool, {**args, 'op': op}
+    return tool, {**args, 'do': op}
 
 
 def specs(names):
@@ -523,22 +516,15 @@ def all_specs():
         return {'name': old, 'description': rename_note(old),
                 'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
                                for key, spec in TOOLS[tool]['parameters'].items() if key != 'op'}}
-    from . import memory_tiers
-    if memory_tiers.ENABLED:
-        # update_self runs on, unlisted, where write_document is listed (ADR-055's rule for a retired name).
-        retired = {'name': 'update_self', 'description': '已并入 write_document（doc=self 或 core）；旧名照常可用。',
-                   'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
-                                  for key, spec in TOOLS['update_self']['parameters'].items()}}
-        return specs([name for name in TOOL_NAMES if name != 'update_self']) + [
-            unlisted(old, can) for old, can in RENAMED.items()] + [retired, MESSAGE_DEVELOPER]
-    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [MESSAGE_DEVELOPER]
+    # update_self runs on, unlisted, where write_document is listed (ADR-055's rule for a retired name).
+    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [
+        {'name': 'update_self', **UPDATE_SELF}, MESSAGE_DEVELOPER]
 
 
 def aliases():
     """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
-    from . import memory_tiers
-    retired = {'update_self': 'write_document'} if memory_tiers.ENABLED else {}
-    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, **retired, MESSAGE_DEVELOPER['name']: 'ask'}
+    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, 'update_self': 'write_document',
+            MESSAGE_DEVELOPER['name']: 'ask'}
 
 
 def turn_kind(ep):
@@ -565,8 +551,7 @@ def _turn_rules(store, ep):
     if her_pictures(store, ep):
         names.append('read_image')
     names += ['stay_silent', 'ideas.note']
-    note_tool = ['pass_note' if cls == visibility.OWNER_PRIVATE else 'leave_note'] \
-        if context.get('note_places_from_program') else []
+    note_tool = ['note'] if context.get('note_places_from_program') else []
     if kind == 'note':
         from . import notes
         first = notes.opening(store, ep) if ep.get('_id') else None
@@ -616,7 +601,7 @@ def _turn_rules(store, ep):
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
-        names += ['update_self', 'set_policy', 'ask.ask', 'ask.read', 'ask.close', 'place_timezone', 'restart',
+        names += ['set_policy', 'ask.ask', 'ask.read', 'ask.close', 'place_timezone', 'restart',
                   'group_focus']
     if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
@@ -653,9 +638,9 @@ EVERYWHERE = ('think', 'recall', 'stay_silent', 'ideas.note', 'plan', 'private_w
 WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
-AT_HOME = ('write_document', 'pass_note', 'update_self', 'set_policy', 'ideas.read', 'ideas.review',
+AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',
            'ask.ask', 'ask.read', 'ask.close', 'restart', 'place_timezone', 'group_focus')
-IN_GROUPS = ('write_document', 'leave_note', 'await_answer', 'quote', 'find_member', 'group_focus')
+IN_GROUPS = ('write_document', 'note', 'await_answer', 'quote', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
@@ -693,7 +678,7 @@ def abilities(store, ep):
         if lines.peer_lines(store):
             names.append('peer_line')
     else:
-        names += IN_GROUPS if where == 'group' else ('leave_note',)
+        names += IN_GROUPS if where == 'group' else ('note',)
     if where == 'group' and persona and (group_admin.place(People(store, persona), scene) or {}).get('admin'):
         names.append('group_action')
     if platform:
@@ -715,9 +700,6 @@ def abilities(store, ep):
             names.append('group_action')        # answering the friend and group requests listed at home
     if channel_kinds.reply_parts(ep['scene_id']):
         names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2
-    from . import memory_tiers
-    if memory_tiers.ENABLED:
-        names = [name for name in names if name != 'update_self']     # retired into write_document (ADR-062)
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
     return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
                                                 OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
@@ -751,10 +733,9 @@ NOT_NOW = {
     'errand': ('差事在家里接：有人跟你说话让你去办、你自己的计划到点、或者你在家里写的便条叫醒你的那一回合，'
                '去处列在 errand_places_from_program；自己想去别处串门，用 visit。'),
     'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
-    'pass_note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
+    'note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
 }
 NOT_NOW['ideas.review'] = NOT_NOW['ideas.read']
-NOT_NOW['leave_note'] = NOT_NOW['pass_note']
 ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过他的账号）才能接差事；这张没有。'
                '要去办，等主人在家里说，或者写进计划。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
@@ -777,7 +758,7 @@ def not_now(store, ep, name):
         return NO_DELEGATE
     if kind == 'note' and name == 'errand':
         return ERRAND_NOTE
-    if kind == 'note' and name not in ('pass_note', 'leave_note', 'feel', 'watch', 'read_image'):
+    if kind == 'note' and name not in ('note', 'feel', 'watch', 'read_image'):
         from . import notes
         if (notes.opening(store, ep) or {}).get('trust') != notes.TRUSTED:
             return NOTE_ONLY
@@ -1059,6 +1040,7 @@ class RoleTools:
         elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
             called_as, name, args = name, 'ask', developer_ask(self.store, args)       # ADR-061
         olds = _names.old_used(name, args)
+        gone = _names.retired(name, olds)               # ADR-069: an old name past its week is not taken
         args, old_names = _names.inbound(name, args)
         inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
         if inferred:
@@ -1071,15 +1053,16 @@ class RoleTools:
                 raise Refused(done['refused'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
         try:
-            if name not in TOOLS:
+            if name not in TOOLS and name != 'update_self':           # retired, runs for a week (ADR-069)
                 raise Refused('没有 %s 这个工具。' % name)
             if not isinstance(args, dict):
                 raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
             if name in OPS and args.get('op') not in OPS[name]:
                 raise Refused('%s 的 do 是 %s 之一%s。' % (name, '、'.join(OPS[name]), _given(args, 'op')))
             can = ability(name, args)
-            from . import memory_tiers
-            if (memory_tiers.ENABLED and can == 'update_self' and 'write_document' in (ep.get('turn_tools') or ())
+            if gone:
+                raise Refused(_names.gone(gone))
+            if (can == 'update_self' and 'write_document' in (ep.get('turn_tools') or ())
                     and visibility.OWNER_PRIVATE == self._cls(ep)):
                 pass                              # her retired name, where write_document is hers (ADR-062)
             elif can not in (ep.get('turn_tools') or ()):
@@ -1170,8 +1153,8 @@ class RoleTools:
             raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
                           % (field, limit))
         if len(value) > limit:
-            raise Refused('%s 太长了：%d 字，%d 字以内，超了 %d 字。精简后再调用。'
-                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit))
+            raise Refused('%s 太长了：%d 字，%d 字以内，超了 %d 字。精简后再调用，或者照这个截好的写：%s'
+                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, cut_offer(value, limit)))
         return value.strip()
 
     # ── mind ────────────────────────────────────────────────────────
@@ -2052,15 +2035,13 @@ class RoleTools:
                              ep['scope_key'])
             raise Refused(str(exc)) from None
 
-    def tool_pass_note(self, ep, call_id, args):
-        if self._place(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('在外面用 leave_note。')
-        return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
-
-    def tool_leave_note(self, ep, call_id, args):
-        if self._place(ep) == visibility.OWNER_PRIVATE:
-            raise Refused('在家里用 pass_note。')
+    def tool_note(self, ep, call_id, args):
+        # Trust is the program's: from the conversation the note is written in (notes.trust_of), never from the call.
         qid = args.get('question')
+        if self._place(ep) == visibility.OWNER_PRIVATE:
+            if qid is not None:
+                raise Refused('question 是在群里把问到的回答带回家用的；家里的便条不写它。')
+            return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
         if qid is not None:
             # ADR-061 step 2 (her answer a): a group's answer goes home in her words; the program adds who and where.
             row = self.store.db.questions.find_one({'_id': str(qid), 'persona': ep['persona']})
@@ -2240,7 +2221,7 @@ class RoleTools:
                          for p, sid in homes.items())
         if place:
             raise Refused('ASK_PLACE_NOT_HOME: 「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
-                          '在群里或别人的私聊里问，用 pass_note 送过去，到那边自己问。' % (wanted, names or '没有别处'))
+                          '在群里或别人的私聊里问，用 note 送过去，到那边自己问。' % (wanted, names or '没有别处'))
         raise Refused('ASK_PLACE_UNKNOWN: 问不到「%s」：to 写 %s这里，或 行动脑。' % (wanted, names + '、' if names else ''))
 
     def tool_ask_ask(self, ep, call_id, args):

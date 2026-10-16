@@ -16,7 +16,7 @@ def event(key, scene='dm-a', person='A', text='你可以把回复改得更短吗
 
 
 def test_an_idea_from_a_public_chat_is_noted_but_cannot_be_read_there(store):
-    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'op': 'note', 'idea': '群里说话可以更短', 'why': '有人嫌我的回复太长'})], '好，我记下了。'),
+    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'do': 'note', 'idea': '群里说话可以更短', 'why': '有人嫌我的回复太长'})], '好，我记下了。'),
                             FakeTurn([THINK], '嗯。')])
     coordinator = Coordinator(store, lane)
     ep = coordinator.ingest(event('pub-1'))
@@ -33,14 +33,14 @@ def test_an_idea_from_a_public_chat_is_noted_but_cannot_be_read_there(store):
 def test_her_self_improvement_turn_reads_the_notebook_and_records_each_decision(store):
     owner(store)
     coordinator = Coordinator(store, FakeLane(store, [
-        FakeTurn([THINK, ('ideas', {'op': 'note', 'idea': '回想时先看最近的心里话', 'why': '这次差点忘了上次说的'})], '好。')]))
+        FakeTurn([THINK, ('ideas', {'do': 'note', 'idea': '回想时先看最近的心里话', 'why': '这次差点忘了上次说的'})], '好。')]))
     coordinator.ingest(event('own-1', text='没事'))
     idea = store.db.ideas.find_one({})
     lane = FakeLane(store, [FakeTurn([THINK,
-        ('ideas', {'op': 'review', 'id': idea['_id'], 'decision': 'adopt', 'why': '值得做，交给行动脑改技能'}),
-        ('ideas', {'op': 'review', 'id': 'idea-nope', 'decision': 'drop', 'why': 'x'}),
+        ('ideas', {'do': 'review', 'id': idea['_id'], 'decision': 'adopt', 'why': '值得做，交给行动脑改技能'}),
+        ('ideas', {'do': 'review', 'id': 'idea-nope', 'decision': 'drop', 'why': 'x'}),
         ('delegate', {'title': '改进回想技能', 'brief': '在技能里加一条：回想时先看最近的心里话。'}),
-        ('stay_silent', {'reason': '自我改进时间，不用对谁说话'})])])
+        ('stay_silent', {'why': '自我改进时间，不用对谁说话'})])])
     coordinator.character = lane
     ep = coordinator.ingest(event('self-development:1', text='这是一次内部自我开发机会。', episode_kind='self_development', adapter_id='self-development'))
     assert [item['_id'] for item in ep['context']['ideas_from_program']['items']] == [idea['_id']]
@@ -69,7 +69,7 @@ def test_development_tools_come_only_from_the_owner_and_her_self_improvement(sto
     assert granted['development_grant'] is True and 'development_publish' in granted['allowed_capabilities']
     # Her internal moments other than self-improvement do not.
     lane = FakeLane(store, [FakeTurn([THINK, ('delegate', {'title': '看看', 'brief': '看看有什么能改的。'}),
-                                      ('stay_silent', {'reason': '内部'})])])
+                                      ('stay_silent', {'why': '内部'})])])
     ep = Coordinator(store, lane).ingest(event('presence:1', text='内部时间', episode_kind='presence', adapter_id='presence'))
     assert store.db.tasks.find_one({'_id': ep['task_ids'][0]})['development_grant'] is False
 
@@ -94,8 +94,8 @@ def test_update_self_is_an_owner_private_tool(store):
     Coordinator(store, lane).ingest(event('pub-self'))
     assert 'update_self' not in lane.calls[0]['tools']
     owner(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('update_self', {'target': 'current_self', 'body': '最近更想把话说短。',
-                                                               'reason': '主人说回复太长'})], '我改了一点对自己的描述。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('update_self', {'target': 'current_self', 'content': '最近更想把话说短。',
+                                                               'why': '主人说回复太长'})], '我改了一点对自己的描述。')])
     ep = Coordinator(store, lane).ingest(event('own-self'))
     assert lane.tool_results[1][5] and lane.tool_results[1][4]['committed'] is True
     assert ep['state'] == 'COMMITTED'
@@ -103,18 +103,18 @@ def test_update_self_is_an_owner_private_tool(store):
 
 
 def test_the_owner_can_ask_her_to_review_her_ideas_in_private(store):
-    Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('ideas', {'op': 'note', 'idea': '群里少用感叹号', 'why': '显得太吵'})], '好。')]
+    Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('ideas', {'do': 'note', 'idea': '群里少用感叹号', 'why': '显得太吵'})], '好。')]
                                 )).ingest(event('pub-idea', scene='dm-b', person='B', text='你感叹号好多'))
     idea = store.db.ideas.find_one({})
     owner(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'op': 'read'}),
-                                      ('ideas', {'op': 'review', 'id': idea['_id'], 'decision': 'defer', 'why': '先观察一阵'})],
+    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'do': 'read'}),
+                                      ('ideas', {'do': 'review', 'id': idea['_id'], 'decision': 'defer', 'why': '先观察一阵'})],
                                      '看过了，先放一放。')])
     Coordinator(store, lane).ingest(event('own-review', text='整理一下你的改进想法吧'))
     read, reviewed = lane.tool_results[1], lane.tool_results[2]
     assert read[5] and [item['_id'] for item in read[4]['items']] == [idea['_id']]
     assert reviewed[5] and store.db.ideas.find_one({})['state'] == 'deferred'
-    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'op': 'read'})], '嗯。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('ideas', {'do': 'read'})], '嗯。')])
     Coordinator(store, lane).ingest(event('pub-read', scene='dm-b', person='B', text='你的想法本里有什么'))
     # Her notebook's note is everywhere, so the tool is listed; reading it there is refused, saying where it is read.
     assert not lane.tool_results[1][5] and '自我改进' in lane.tool_results[1][4], 'a public chat never reads the notebook'

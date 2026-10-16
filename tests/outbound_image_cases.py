@@ -1037,7 +1037,7 @@ def a_silent_turn_sends_no_picture():
     ep = offered_ep(store)
     done, lane, publisher = run_turn(store, ep, FakeTurn(
         [THINK, ('attach_image', {'artifact_id': stored['artifact_id'], 'why': '想给他看'}),
-         ('stay_silent', {'reason': '他在忙，先不打扰'})], '不该发出去'))
+         ('stay_silent', {'why': '他在忙，先不打扰'})], '不该发出去'))
     assert done['state'] == 'COMMITTED' and done['silent_reason'] == '他在忙，先不打扰', done['state']
     assert speak_rows(store, ep) == [] and publisher.published == [], '沉默的回合还是发出了东西'
     assert [result[2] for result in lane.tool_results] == ['think', 'attach_image', 'stay_silent']

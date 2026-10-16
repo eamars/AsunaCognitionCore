@@ -12,15 +12,16 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (33, 21218)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (31, 20432)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
                               # second wording audit (her yes 2026-10-14): 回合 for her turn, 家里·私聊 for the home chat, 叫到你才会醒 +2
                               # ADR-066: errand says it carries home and drops "only when the one talking asks" -6
-# With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): update_self retires (-388) and pays for let_go,
-# nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (32, 21124)
+                              # ADR-069: update_self retired (-396); pass_note and leave_note one note tool (1,028 -> 642;
+                              # each conversation listed one of them: at home +75, elsewhere +181)
+# With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
+CHARACTER_TIERED = (31, 20728)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -51,7 +52,7 @@ def test_with_tiered_memory_off_her_tools_are_exactly_as_before(monkeypatch):
     from asuna import memory_tiers
     monkeypatch.setattr(memory_tiers, 'ENABLED', False)
     assert role_tools.tools() is role_tools.TOOLS and size(list(role_tools.TOOLS.values())) == CHARACTER[1]
-    assert 'update_self' not in role_tools.aliases() and 'let_go' not in str(role_tools.TOOLS['write_document'])
+    assert 'let_go' not in str(role_tools.TOOLS['write_document'])
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     assert role_tools.tools() is role_tools.TIERED and role_tools.aliases()['update_self'] == 'write_document'
     assert 'update_self' in [spec['name'] for spec in role_tools.all_specs()], 'the retired name still runs'

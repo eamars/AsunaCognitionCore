@@ -50,11 +50,11 @@ THINK = ('think', {'thought': '他说了一件小事，值得记下来。'})
 def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_turn(store):
     owner(store)
     store.config['persona_contribution'] = {'seeds': []}
-    entry = {'doc': 'diary', 'op': 'append_section', 'heading': '今天', 'reason': '值得记下',
-             'body': '今天他提到了一件小事。'}
-    tags = {'doc': 'persona', 'op': 'set_tags', 'sid': PREAMBLE, 'tags': ['values'], 'reason': '标注'}
+    entry = {'doc': 'diary', 'do': 'append_section', 'heading': '今天', 'why': '值得记下',
+             'content': '今天他提到了一件小事。'}
+    tags = {'doc': 'persona', 'do': 'set_tags', 'section': PREAMBLE, 'tags': ['values'], 'why': '标注'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', entry), ('write_document', tags),
-                                      ('set_policy', {'key': 'nope', 'value': 1, 'reason': 'x'})], '记下了。')])
+                                      ('set_policy', {'key': 'nope', 'value': 1, 'why': 'x'})], '记下了。')])
     ep = Coordinator(store, lane).ingest(event('write-1'))
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     assert ep['manifest']['session_class'] == 'owner_private', ep['manifest']['session_class']
@@ -81,8 +81,8 @@ def test_T2_6_documents_are_written_in_the_call_and_refusals_do_not_stop_the_tur
 
 def test_person_files_are_retired(store):
     owner(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'dossier:A', 'op': 'append_section',
-                                     'heading': '今天', 'reason': '记一笔', 'body': '他提到了一件小事。'})], '好。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'dossier:A', 'do': 'append_section',
+                                     'heading': '今天', 'why': '记一笔', 'content': '他提到了一件小事。'})], '好。')])
     ep = Coordinator(store, lane).ingest(event('dossier-retired'))
     refusal = lane.tool_results[1]
     assert ep['state'] == 'COMMITTED' and not refusal[5] and 'understand_person' in refusal[4]

@@ -66,7 +66,7 @@ def test_in_the_line_she_sees_it_and_closes_it_herself(store):
                          'scope_key': 'scene:' + SCENE, 'policy_epoch': 1, 'sequence': 0,
                          'channel_id': 'dsh', 'channel_account_id': 'home'})
     turn = FakeTurn([('think', {'thought': '那边在值夜，我先睡。'}),
-                     ('peer_line', {'line': 'dsh:peer', 'op': 'close', 'close_for': 'until_morning'})], '我先睡了，早上见。')
+                     ('peer_line', {'place': 'dsh:peer', 'do': 'close', 'close_for': 'until_morning'})], '我先睡了，早上见。')
     lane = FakeLane(store, [turn])
     Coordinator(store, lane).ingest({'event_id': 'line-1', 'scene_id': SCENE, 'person_id': 'dsh:peer', 'text': '还醒着吗',
                                      'channel': {'id': 'dsh', 'account_id': 'home', 'platform_event_id': 'e1',
@@ -88,7 +88,7 @@ def test_from_home_she_plans_a_turn_in_a_peer_line(store):
     received = []
     service.controller.receive = received.append
     turn = FakeTurn([('think', {'thought': '晚点问她太阳能的事。'}),
-                     ('plan', {'op': 'create', 'intent': '问她太阳能读数', 'after_seconds': 600, 'line': 'dsh:peer'})], '好')
+                     ('plan', {'op': 'create', 'intent': '问她太阳能读数', 'after_seconds': 600, 'place': 'dsh:peer'})], '好')
     lane = FakeLane(store, [turn, FakeTurn([('think', {'thought': '嗯'})], '嗯')])
     coordinator = Coordinator(store, lane)
     coordinator.scheduler = service

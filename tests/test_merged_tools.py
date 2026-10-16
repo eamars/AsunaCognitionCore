@@ -53,7 +53,7 @@ def test_old_names_are_registered_never_listed(store):
 
 def test_an_option_the_turn_may_not_use_is_refused_with_its_rule(store):
     owner(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'answer', 'answer': '好'})], '嗯。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('task', {'do': 'answer', 'answer': '好'})], '嗯。')])
     ep = Coordinator(store, lane).ingest(event('own-4', text='在吗'))
     assert 'task.answer' not in ep['turn_tools']
     assert not lane.tool_results[1][5] and lane.tool_results[1][4] == role_tools.NOT_NOW['task.answer']

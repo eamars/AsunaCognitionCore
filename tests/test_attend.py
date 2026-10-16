@@ -64,7 +64,7 @@ def test_quiet_ends_the_turn_before_any_recall(store):
 def test_join_runs_the_full_turn_with_her_reason(store):
     setup(store)
     character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我，想了想还是不说。'}),
-                                           ('stay_silent', {'reason': '想了想还是不说'})])])
+                                           ('stay_silent', {'why': '想了想还是不说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [LaneResult('接话：有人提到我')])
     ep = coordinator.ingest(gated_event(20002, '演示 你怎么看', 'name_called'), persona='P1')
@@ -88,7 +88,7 @@ class Chunked:
 
 def test_a_line_changed_while_the_gate_thinks_still_gets_its_turn(store):
     setup(store)
-    character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'reason': '不用说'})])])
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'why': '不用说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = Chunked(store, FakeLane(store, [LaneResult('接话：他在回我')]))
     ep = coordinator.ingest(gated_event(20002, '没有这东西', 'awaited_answer'), persona='P1')
@@ -126,7 +126,7 @@ def test_each_gate_question_has_its_own_session_and_its_repairs_stay_in_it():
 def test_addressed_messages_skip_the_gate(store):
     setup(store)
     character = FakeLane(store, [FakeTurn([('think', {'thought': '有人 @ 我，看到了，不用说。'}),
-                                           ('stay_silent', {'reason': '不用说'})])])
+                                           ('stay_silent', {'why': '不用说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [])
     ep = coordinator.ingest(gated_event(20004, '@演示 在吗', 'mentioned_account'), persona='P1')

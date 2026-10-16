@@ -26,7 +26,7 @@ def ref_of(key):
 
 def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     setup(store)
-    secret = {'op': 'record', 'kind': 'attachment', 'intensity': '强烈', 'arousal': '激动', 'ref': 'private-1',
+    secret = {'do': 'record', 'feeling': 'attachment', 'intensity': '强烈', 'arousal': '激动', 'ref': 'private-1',
               'why': 'OWNER_SECRET_WHY', 'cost': 'OWNER_SECRET_COST'}
     private = FakeLane(store, [FakeTurn([THINK, ('feel', secret)], '嗯。')])
     Coordinator(store, private).ingest(event('private-1'))
@@ -50,9 +50,9 @@ def test_T3_8_she_reads_and_writes_feelings_in_words_and_the_same_state_reads_th
     from asuna.affect import interpret
     import re
     ledger = setup(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('feel', {'op': 'record', 'kind': 'joy', 'intensity': '明显', 'arousal': '有些波动',
+    lane = FakeLane(store, [FakeTurn([THINK, ('feel', {'do': 'record', 'feeling': 'joy', 'intensity': '明显', 'arousal': '有些波动',
                                                       'ref': 'happy-1', 'why': '他夸了我', 'cost': '有点不好意思'}),
-                                      ('feel', {'op': 'record', 'kind': 'joy', 'intensity': '很多很多', 'ref': 'happy-1',
+                                      ('feel', {'do': 'record', 'feeling': 'joy', 'intensity': '很多很多', 'ref': 'happy-1',
                                                 'why': '不在词表里'})], '嗯。')])
     ep = Coordinator(store, lane).ingest(event('happy-1'))
     assert 'feel' in lane.calls[0]['tools'] and ep['state'] == 'COMMITTED', ep.get('failure')

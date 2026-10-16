@@ -37,7 +37,9 @@ def intent_problem(intent):
     """What is wrong with a plan's intent, with its length and the limit."""
     if not isinstance(intent, str) or not intent.strip():
         return 'intent 要写届时要重新考虑的事（文字，不能空）'
-    return 'intent %d 字，上限 %d 字；精简到 %d 字以内' % (len(intent.strip()), INTENT_CHARS, INTENT_CHARS)
+    from .config import cut_offer
+    return 'intent %d 字，上限 %d 字；精简到 %d 字以内，或者照这个截好的写：%s' % (
+        len(intent.strip()), INTENT_CHARS, INTENT_CHARS, cut_offer(intent, INTENT_CHARS))
 
 
 def night_stage_busy(store):

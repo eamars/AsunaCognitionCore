@@ -41,7 +41,7 @@ def test_self_improvement_sees_publication_counts_not_every_path(store):
     store.put('sink_receipts', {'_id': 'self-publish-x', 'kind': 'self_development_publish', 'project': 'p',
         'state': 'ACTIVE', 'changed_files': ['a/%d.md' % index for index in range(30)], 'deleted_files': ['b.md'],
         'published_at': '2026-10-05T00:00:00Z', 'task_id': 'task-x'}, stream='task-x')
-    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '没什么要做的'})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '没什么要做的'})])])
     ep = Coordinator(store, lane).ingest({'event_id': 'self-development:size', 'scene_id': 'dm-a', 'person_id': 'A',
         'text': '这是一次内部自我开发机会。', 'episode_kind': 'self_development', 'adapter_id': 'self-development'})
     row = ep['context']['recent_experience_from_program']['publish_lineage'][0]

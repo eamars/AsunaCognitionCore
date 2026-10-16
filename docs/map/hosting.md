@@ -108,6 +108,8 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `validate_endpoint` — The rule DSH's Models page applies to a provider address: an http or https URL with a host.
 - def `redacted`
 - def `ago` — How long ago, as she and the owner read it: 刚才, N 分钟前, N 小时前, N 天前.
+- def `cut` — An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is can never pass fo
+- def `cut_offer` — The cut version as a refusal offers it: on its own lines, ready to copy.
 - def `excerpt` — Bounded text for a context block; a cut always says so and how long the original was.
 
 ## `native_settings`

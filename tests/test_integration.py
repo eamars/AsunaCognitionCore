@@ -167,7 +167,7 @@ def test_continuation_cannot_inherit_previous_integration_grant(store, runtime_w
     assert first['integration_profile']=='owner'
     returned(store,first,'runner checked',[])
     # An ordinary turn cannot continue the owner-granted work; she is told so and hands over new work instead.
-    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'op': 'message', 'task':first['_id'],'message':'ordinary check'}),
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'do': 'message', 'task':first['_id'],'message':'ordinary check'}),
         ('delegate',{'title':'check','brief':'ordinary check'})],'我另交了一件。')])
     revised=router.receive({'event_id':'revision','scene_id':'dm-a','person_id':'A','text':'ordinary check'})
     _,_,tool,_,refusal,ok=lane.tool_results[1]
@@ -178,7 +178,7 @@ def test_continuation_cannot_inherit_previous_integration_grant(store, runtime_w
     assert not any(t.startswith('integration_') or t=='import_integration_artifact'
                    for t in task['allowed_capabilities']), task['allowed_capabilities']
     # The same grant again continues it, still owner-granted.
-    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'op': 'message', 'task':first['_id'],'message':'check again'})],'接着看。')])
+    coordinator.character=lane=FakeLane(store,[FakeTurn([THINK,('task', {'do': 'message', 'task':first['_id'],'message':'check again'})],'接着看。')])
     again=router.receive({'event_id':'owner-again','scene_id':'dm-a','person_id':'A','text':'check again','integration_profile':'owner'})
     continued=store.db.tasks.find_one({'_id':again['task_ids'][0]})
     assert lane.tool_results[1][5] and continued['continues_task_id']==first['_id']
@@ -366,7 +366,7 @@ def test_a_narrow_task_answered_on_its_own_line_is_not_refused(store, runtime_wo
         line_event('agent-continue', AGENT_SCENE, AGENT_PERSON, 'agent', '看看适配器'), work)
     done = returned(store, service.claim(task['_id']), '适配器在跑，日志里没有报错。', [])
     coordinator.character = FakeLane(store, [FakeTurn(
-        [THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': '再看一眼状态'})], '我让它再看一眼。')])
+        [THINK, ('task', {'do': 'message', 'task': task['_id'], 'message': '再看一眼状态'})], '我让它再看一眼。')])
     feedback = service.feedback(done, coordinator)
     # 补话开了新任务，那一回合就挂在它上面：关键是没被当成授权不一致拒掉。
     assert feedback['state'] in ('COMMITTED', 'WAITING_TASK'), feedback['state']

@@ -249,14 +249,14 @@ def test_a_visit_turn_carries_the_line_and_her_places_mark_the_group_while_letti
     assert row['muted_you'].startswith('你在这个群被禁言了，到 ') and '谁禁的不知道' in row['muted_you']
     assert '说话发不出去' in row['muted_you'] and row['can_visit'] == '可以去', 'reading is fine'
     home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
-                                      ('stay_silent', {'reason': '出门了'})], '')])
+                                      ('stay_silent', {'why': '出门了'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     assert coordinator.ingest(home_beat(store))['state'] == 'COMMITTED'
     _, event_id, scene_id, person = service.controller.offers[-1]
     visit_event = {'event_id': event_id, 'scene_id': scene_id, 'person_id': person, 'adapter_id': 'visit',
                    'episode_kind': 'visit', 'text': service.controller.texts[-1], **service.controller.envelopes[-1]}
-    visit = Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '只看看'})], '')])).ingest(
+    visit = Coordinator(store, FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '只看看'})], '')])).ingest(
         visit_event)
     assert visit['state'] in ('COMMITTED', 'WAITING_TASK'), visit.get('failure')
     assert visit['context']['muted_here_from_program'].startswith('你在这个群被禁言了')

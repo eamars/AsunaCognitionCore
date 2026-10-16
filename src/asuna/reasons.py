@@ -55,7 +55,7 @@ def _action(tool, args):
         return '问了：%s' % _short(args.get('question'))
     if can == 'ask.close':
         return '结束了一个问题：%s' % _short(args.get('took'))
-    if tool in ('pass_note', 'leave_note'):
+    if tool == 'note':
         return '写了张便条：%s' % _short(args.get('text'))
     if tool == 'visit':
         return '出门去一个群%s' % VISIT_WORDS.get(args.get('intent'), '看看') + (

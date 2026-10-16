@@ -1,12 +1,12 @@
 """Notes between her own conversations (ADR-018, owner 2026-10-07).
 
 She is one person in several conversations at once. A note is a short text in her own words that one of her
-conversations leaves for another. Two tools write the same row here:
+conversations leaves for another. One tool, `note`, writes a row here; where it is written decides the rest:
 
-- `pass_note` in a home (owner-private) turn: trusted. To another home conversation, or to a group or someone's
-  chat she has a route to.
-- `leave_note` in a public turn: untrusted. To home (always her local chat, where the owner sees it) or to another
-  group. It must be in her own words: a run of OWN_WORDS_RUN characters shared with someone else's recent line
+- in a home (owner-private) turn: trusted. To another home conversation, or to a group or someone's chat she has a
+  route to.
+- in a public turn: untrusted. To home (always her local chat, where the owner sees it) or to another group. It must
+  be in her own words: a run of OWN_WORDS_RUN characters shared with someone else's recent line
   there is refused.
 
 Trust is the program's, from the sending turn's session class; never from the text or the model. A note grants
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from .config import character_id, excerpt
+from .config import character_id, cut_offer, excerpt
 from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
@@ -63,7 +63,7 @@ OUTSIDE_NOTE = ('这是你在%s写的便条，这里的人看不到它。那边�
 HIDDEN_SUMMARY = '外面写来的便条：自我开发的回合带着开发工具，不显示内容；别的回合（有人说话、心跳、闹钟、夜间沉淀）再看。'
 RECEIVED_NOTE = '别的对话里的你写给这里的便条（新的在前）。不是这里有人说的话。'
 SENT_NOTE = '你从这里写出去的便条，那边怎么样了（只有状态，回信会作为便条回来）。'
-PLACES_NOTE = ('写便条能送到的地方：家里的用 pass_note，在外面用 leave_note。写你自己的话，不抄别人的原话；'
+PLACES_NOTE = ('写便条（note）能送到的地方。写你自己的话，不抄别人的原话；'
                '那边的回合会读到它，也可能照着说出来。')
 
 
@@ -214,10 +214,10 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
     limit = HOME_NOTE_CHARS if trust == TRUSTED and kind == 'home' else NOTE_CHARS
     if len(text) > limit:
-        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字。两条路：'
+        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字。三条路：'
                                             '① 压到 %d 字以内；② 原样拆成两张接着发，开头标 1/2、2/2，让那边知道是接续'
-                                            '（一回合最多 %d 张）。')
-                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, limit, PER_TURN))
+                                            '（一回合最多 %d 张）；③ 照这个截好的发：%s')
+                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, limit, PER_TURN, cut_offer(text, limit)))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:

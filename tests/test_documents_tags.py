@@ -18,8 +18,8 @@ def test_her_write_receipt_names_the_new_sections_sid_and_its_tags(store):
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn
     from test_engineering_m1 import THINK
-    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'work', 'op': 'append_section', 'heading': '新的一节',
-                                                                 'body': 'x', 'reason': 'r'})], '好')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'work', 'do': 'append_section', 'heading': '新的一节',
+                                                                 'content': 'x', 'why': 'r'})], '好')])
     from test_adr009_p5_rhythm import scheduler
     scheduler(store)                                  # the owner's private chat dm-a
     ep = Coordinator(store, lane).ingest({'event_id': 'w1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '记一下'})

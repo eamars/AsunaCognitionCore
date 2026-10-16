@@ -137,7 +137,7 @@ def test_reach_out_names_her_lines_and_weighs_nothing_without_one(store):
     store.db.plans.delete_many({})
     service, _ = beat(store, '找人 1')
     text = service.controller.texts[-1]
-    assert text.startswith('这一拍掷到：找人') and 'pass_note' in text and service.controller.envelopes[-1] == {}
+    assert text.startswith('这一拍掷到：找人') and 'note' in text and service.controller.envelopes[-1] == {}
 
 
 def at(store, stream, kind, when, payload):

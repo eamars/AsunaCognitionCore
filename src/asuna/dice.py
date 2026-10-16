@@ -10,7 +10,7 @@
 - self_evaluation: the heartbeat with the raw readings of her own day (self_review.py).
 - review_dice: the heartbeat with the raw readings of every roll since her last review and her two tables
   (dice_review_from_program), so the weights are something she can check, not only set.
-- reach_out: the heartbeat, suggesting a word on one of her home lines (pass_note), whom is hers to choose; counts as 0
+- reach_out: the heartbeat, suggesting a word on one of her home lines (note), whom is hers to choose; counts as 0
   where she has no line.
 - idle: the beat reaches her with nothing but its line and hint (her seventh face, 2026-10-14): no readings,
   no task, no output asked of it.
@@ -48,7 +48,7 @@ HINTS = {
     'self_development': '翻翻想法本、接着做手上的改进，或者交一件给行动脑。',
     'self_evaluation': 'self_review_from_program 是你今天的原始读数，带出处，没替你总结。',
     'review_dice': 'dice_review_from_program 是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
-    'reach_out': '从家里 pass_note 到你的一条线（%s），找谁、说不说，由你。',
+    'reach_out': '从家里写便条（note）到你的一条线（%s），找谁、说不说，由你。',
     'idle': '这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。',
 }
 REVIEW_ROLLS = 60

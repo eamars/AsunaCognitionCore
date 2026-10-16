@@ -174,8 +174,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_group_action`
   - `tool_visit`
   - `tool_errand`
-  - `tool_pass_note`
-  - `tool_leave_note`
+  - `tool_note`
   - `tool_restart`
   - `tool_peer_line`
   - `tool_ideas_note`
@@ -205,6 +204,8 @@ ADR-060: one name per idea in what a tool shows, and the old names still working
 
 - def `names` — {shown: handler's} for a tool.
 - def `old_used` — The old names this call was written with (each counted toward retiring it).
+- def `retired` — The old names among `olds` (old_used) that her calls no longer take.
+- def `gone` — The refusal for a call written with retired names.
 - def `inbound` — (arguments under the handler's names, notes for each old name she used).
 - def `shown` — A tool's parameters as the model is shown them: new names, yes/no as words.
 

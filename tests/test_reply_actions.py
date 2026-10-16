@@ -1,7 +1,7 @@
 """ADR-064 phase 2, stage B: a poke and a reaction as parts of her reply. Each is a row in her history in the
 program's words, marked as something she did; the adapter does it only when it declared it; its receipt has no
 message id; a reaction a private chat refuses is not tried there again until the Host restarts."""
-from asuna import role_tools
+from asuna import param_names, role_tools
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
 from test_adr009_p2 import THINK
@@ -97,13 +97,17 @@ def test_the_old_name_reply_still_speaks_and_says_the_new_one(store):
     assert call['called_as'] == 'reply', 'counted toward retiring the old name'
 
 
-def test_a_call_with_an_old_parameter_name_is_counted_toward_retiring_it(store):
+def test_an_old_parameter_name_past_its_week_is_refused_by_name_and_counted(store):
+    """ADR-069: an old name her calls used fewer than 5 times in a week is not taken; plan's op still is."""
     world(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '不接'})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '不接'}), ('stay_silent', {'why': '不接'})])])
     ep = Coordinator(store, lane).ingest(mention('old-param'), persona='P1')
-    [call] = [c for c in store.db.episodes.find_one({'_id': ep['_id']})['tool_calls'].values() if c['tool'] == 'stay_silent']
-    assert call['old_names'] == ['reason']
+    old, new = sorted((c for c in store.db.episodes.find_one({'_id': ep['_id']})['tool_calls'].values()
+                       if c['tool'] == 'stay_silent'), key=lambda c: c['seq'])
+    assert old['refused'] == 'reason（现在叫 why）已经不用了，这次什么都没做；改成新名字再调用。' and old['old_names'] == ['reason']
+    assert 'refused' not in new
     assert store.db.audit_events.find_one({'type': 'role_tool', 'payload.tool': 'stay_silent', 'payload.old_names': 'reason'})
+    assert param_names.retired('plan', ['op']) == [] and param_names.retired('task', ['op']) == [('op', 'do')]
 
 
 def test_a_whole_label_or_a_number_of_nobody_here_passes(store):

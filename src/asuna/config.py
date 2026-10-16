@@ -150,6 +150,35 @@ def ago(hours):
             else f'{hours:.0f} 小时前' if hours < 48 else f'{hours / 24:.0f} 天前')
 
 
+CUT_MARK = '（截在这里，原文还有 %d 字）'
+SENTENCE_ENDS = '。！？!?…\n'
+CLOSERS = '”’」』）)"\''
+
+
+def cut(text, limit):
+    """An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last
+    sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is
+    can never pass for the whole text (ADR-069)."""
+    text = str(text or '').strip()
+    if len(text) <= limit:
+        return text
+    room = max(0, limit - len(CUT_MARK % len(text)))
+    head = text[:room]
+    end = max(head.rfind(mark) for mark in SENTENCE_ENDS)
+    if end >= 0:
+        end += 1
+        while end < len(head) and head[end] in CLOSERS:
+            end += 1
+        head = head[:end]
+    head = head.rstrip()
+    return head + CUT_MARK % (len(text) - len(head))
+
+
+def cut_offer(text, limit):
+    """The cut version as a refusal offers it: on its own lines, ready to copy."""
+    return '\n' + cut(text, limit)
+
+
 def excerpt(text, limit):
     """Bounded text for a context block; a cut always says so and how long the original was."""
     text = str(text or '')

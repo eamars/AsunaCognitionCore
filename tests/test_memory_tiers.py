@@ -179,8 +179,8 @@ def test_let_go_in_her_turn_and_where_things_are_told_once_per_conversation(stor
     tiers = Tiers(store, 'P1')
     tiers.sync()
     row = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['visibility'] == 'public')
-    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'persona', 'op': 'let_go', 'sid': row['sid'],
-                                                                 'reason': '用不着天天带着'})], '好。'),
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'persona', 'do': 'let_go', 'section': row['sid'],
+                                                                 'why': '用不着天天带着'})], '好。'),
                             FakeTurn([THINK], '嗯。'), FakeTurn([THINK], '嗯。')])
     coordinator = Coordinator(store, lane)
     ep = coordinator.ingest(event('e-let'))
@@ -202,8 +202,8 @@ def test_a_tag_lets_an_item_go_down_but_never_carries_it_back_up(store, tiers_on
     up = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['visibility'] == 'public')
     down = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['_id'] != up['_id'])
     tiers.rows.update_one({'_id': up['_id']}, {'$set': {'place': AT_HAND}})
-    pin = {'doc': 'persona', 'op': 'set_tags', 'sid': up['sid'], 'inject': 'always', 'reason': '想一直带着'}
-    tuck = {'doc': 'persona', 'op': 'set_tags', 'sid': down['sid'], 'inject': 'on_demand', 'reason': '收起来'}
+    pin = {'doc': 'persona', 'do': 'set_tags', 'section': up['sid'], 'when_shown': 'always', 'why': '想一直带着'}
+    tuck = {'doc': 'persona', 'do': 'set_tags', 'section': down['sid'], 'when_shown': 'on_demand', 'why': '收起来'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', pin), ('write_document', tuck)], '好。')])
     ep = Coordinator(store, lane).ingest(event('e-pin'))
     assert tiers.item('persona', up['sid'])['place'] == AT_HAND, 'a tag is not a way up'
@@ -249,10 +249,10 @@ def test_an_item_is_a_fact_or_a_memory_by_what_she_says_not_by_its_store(store, 
 
 def test_saying_what_an_item_is_writes_no_new_revision_and_update_self_writes_items(store, tiers_on):
     owner(store)
-    first = {'doc': 'self', 'op': 'append_section', 'heading': '做饭', 'reason': '拆', 'body': '最近在学做饭'}
+    first = {'doc': 'self', 'do': 'append_section', 'heading': '做饭', 'why': '拆', 'content': '最近在学做饭'}
     sid = '做饭'
-    tag = {'doc': 'self', 'op': 'set_tags', 'sid': sid, 'nature': '事实', 'reason': '这是事实'}
-    old_name = {'target': 'current_self', 'body': '- 早上跑步\n跑了一周了', 'reason': '新的'}
+    tag = {'doc': 'self', 'do': 'set_tags', 'section': sid, 'nature': '事实', 'why': '这是事实'}
+    old_name = {'target': 'current_self', 'content': '- 早上跑步\n跑了一周了', 'why': '新的'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', first)], '好。'),
                             FakeTurn([THINK, ('write_document', tag)], '嗯。'),
                             FakeTurn([THINK, ('update_self', old_name)], '嗯。')])
@@ -270,7 +270,7 @@ def test_saying_what_an_item_is_writes_no_new_revision_and_update_self_writes_it
 
 def test_her_self_as_items_is_what_she_reads_of_herself(store, tiers_on):
     owner(store)
-    entry = {'doc': 'self', 'op': 'append_section', 'heading': '最近', 'reason': '拆成一条一条', 'body': '最近在学做饭'}
+    entry = {'doc': 'self', 'do': 'append_section', 'heading': '最近', 'why': '拆成一条一条', 'content': '最近在学做饭'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', entry)], '好。'), FakeTurn([THINK], '嗯。')])
     coordinator = Coordinator(store, lane)
     coordinator.ingest(event('e-self'))

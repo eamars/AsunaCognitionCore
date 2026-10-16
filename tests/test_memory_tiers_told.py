@@ -28,7 +28,7 @@ def test_off_her_system_prompt_is_as_before_and_on_it_tells_her_once(store, monk
 def test_on_update_self_is_unlisted_but_still_runs_where_write_document_is_hers(store, monkeypatch):
     owner(store)
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
-    old = {'target': 'current_self', 'body': '还是一整段的自我', 'reason': '照旧'}
+    old = {'target': 'current_self', 'content': '还是一整段的自我', 'why': '照旧'}
     lane = FakeLane(store, [FakeTurn([THINK, ('update_self', old)], '好。')])
     ep = Coordinator(store, lane).ingest(event('e-old-name'))
     assert 'update_self' not in lane.calls[0]['tools'] and 'write_document' in lane.calls[0]['tools']

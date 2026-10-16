@@ -18,6 +18,8 @@ def shown(row):
     options = {row_name: key.split('.')[0] for key, row_name in table('OPTION_ROWS').items()}
     tool = options.get(row, row)
     action = {spec['name']: spec for spec in (tasks.ASK_TOOL, tasks.PROGRESS_TOOL)}
+    if tool == 'update_self':                       # retired, still registered (ADR-069): its old records show
+        return set(role_tools.UPDATE_SELF['parameters'])
     spec = role_tools.TOOLS.get(tool) or action[tool]
     return set(spec['parameters'] if tool in role_tools.TOOLS else param_names.shown(tool, spec['parameters']))
 

@@ -214,7 +214,7 @@ def test_T4_12_consult_from_a_public_task_sees_no_owner_private_material(store):
         assert ep['manifest']['session_class'] == 'public' and ep['task_ids'], (ep['manifest'], ep.get('failure'))
         from asuna.tasks import TaskService
         task = TaskService(store).claim(ep['task_ids'][0])
-        role = FakeLane(store, [FakeTurn([THINK, ('task', {'op': 'answer', 'answer': '建议先确认清单。'})])])
+        role = FakeLane(store, [FakeTurn([THINK, ('task', {'do': 'answer', 'answer': '建议先确认清单。'})])])
         answer = Coordinator(store, role).consult(task, 'c1', {'question': '怎么排？'})
         assert answer['answer'] == '建议先确认清单。' and role.calls
         assert 'OWNER_PRIVATE_PERSONA_CANARY' not in json.dumps([role.calls, role.tool_results], ensure_ascii=False)

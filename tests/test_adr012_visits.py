@@ -84,7 +84,7 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
         'scene_seq': 999, 'direction': 'inbound', 'author': 'A', 'text': 'HOME_SECRET_LINE', 'received_at': now()})
     home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'start_topic', 'topic': '周末去哪儿玩'}),
                                       ('visit', {'place': PLACE, 'intent': 'check_in'}),
-                                      ('stay_silent', {'reason': '出门了'})], '')])
+                                      ('stay_silent', {'why': '出门了'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     ep = coordinator.ingest(home_beat(store))
@@ -228,7 +228,7 @@ def test_at_home_other_peoples_group_lines_do_not_arrive_live(store):
         'delivery_state': 'DELIVERED', 'received_at': now()})
     store.db.messages.insert_one({'_id': 'home-line', 'schema_version': 1, 'scene_id': 'dm-a', 'policy_epoch': 1,
         'scene_seq': 999, 'direction': 'inbound', 'author': 'A', 'text': 'OWNER_HOME_LINE', 'received_at': now()})
-    home = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '看看'})], '')])
+    home = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '看看'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     ep = coordinator.ingest(home_beat(store, 'presence:s-p5:21'))
@@ -247,7 +247,7 @@ def test_a_plan_of_hers_due_at_home_may_send_her_out_but_one_due_in_a_group_may_
         fire(service, service.create(ep, {'intent': '过二十分钟去群里答那三问', 'after_seconds': 60}))
     home_due, group_due = due
     home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
-                                      ('stay_silent', {'reason': '出门了'})], '')])
+                                      ('stay_silent', {'why': '出门了'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     ep = coordinator.ingest(home_due)
@@ -257,7 +257,7 @@ def test_a_plan_of_hers_due_at_home_may_send_her_out_but_one_due_in_a_group_may_
     assert result[5], result[4]
     kind, event_id, scene_id, _ = service.controller.offers[-1]
     assert (kind, scene_id, event_id) == ('visit', 'g1', 'visit:g1:' + home_due['event_id'])
-    group = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '没什么要说'})], '')])
+    group = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '没什么要说'})], '')])
     ep = Coordinator(store, group).ingest(group_due)
     assert 'visit' not in group.calls[0]['tools'] and 'places_from_program' not in ep['context']
 
@@ -370,7 +370,7 @@ def test_her_own_setting_lets_one_beat_go_to_two_groups(store):
     home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
                                       ('visit', {'place': g2, 'intent': 'write_notes'}),
                                       ('visit', {'place': PLACE, 'intent': 'write_notes'}),
-                                      ('stay_silent', {'reason': '出门了'})], '')])
+                                      ('stay_silent', {'why': '出门了'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     ep = coordinator.ingest(home_beat(store, 'presence:s-p5:30'))
@@ -383,7 +383,7 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
     # Owner 2026-10-08: "还在那儿" and "你 25 分钟前来过这里" confused her at home about a visit that had not run.
     service = group_world(store)
     home = FakeLane(store, [FakeTurn([THINK, ('visit', {'place': PLACE, 'intent': 'check_in'}),
-                                      ('stay_silent', {'reason': '出门了'})], '')])
+                                      ('stay_silent', {'why': '出门了'})], '')])
     coordinator = Coordinator(store, home)
     coordinator.scheduler = service
     assert coordinator.ingest(home_beat(store))['state'] == 'COMMITTED'

@@ -17,7 +17,7 @@ def thought(store, ep_id, call_id, text):
 def test_an_action_keeps_her_newest_thought_and_a_lookup_or_a_refused_call_keeps_none(store):
     turn = FakeTurn([('think', {'thought': '他嫌我回得太长'}), ('recall', {'query': '回复长短'}),
                      ('think', {'thought': '那就记一条，以后短点'}),
-                     ('ideas', {'op': 'note', 'idea': '群里说话可以更短', 'why': '有人嫌长'})], '好，我记下了。')
+                     ('ideas', {'do': 'note', 'idea': '群里说话可以更短', 'why': '有人嫌长'})], '好，我记下了。')
     ep = Coordinator(store, FakeLane(store, [turn])).ingest(event('e-b2'))
     calls = sorted(ep['tool_calls'].items(), key=lambda item: item[1]['seq'])
     by_tool = {call['tool']: (call_id, call) for call_id, call in calls}

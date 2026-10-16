@@ -8,7 +8,7 @@ from asuna.memory import MemoryService
 
 def setup_turn(store, reflection):
     store.config['task_mode']='workspace'
-    understand=('understand_person',{'layer':'here','body':reflection})
+    understand=('understand_person',{'layer':'here','content':reflection})
     lane=FakeLane(store,[
         FakeTurn([('think',{'thought':'这是当前人物明确的反馈，不代表所有人。'}),understand],'知道了。'),
         # The resumed turn is told which calls already took effect (think); the interrupted one is not among them.

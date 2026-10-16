@@ -191,8 +191,8 @@ def test_words_beside_stay_silent_come_back_too_and_a_reply_then_sends_them(stor
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)
     words = '我觉得挺好\n\n就是贵了点，' + '真的' * 60
-    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '说完了'})], said=[words]),
-                            FakeTurn([said('我觉得挺好'), ('stay_silent', {'reason': '说完了'})])])
+    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '说完了'})], said=[words]),
+                            FakeTurn([said('我觉得挺好'), ('stay_silent', {'why': '说完了'})])])
     event = {'event_id': 'body-s', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你看呢',
              'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-body-s'}}
     persist_input(store, event, managed=True)

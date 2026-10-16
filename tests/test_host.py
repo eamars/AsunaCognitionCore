@@ -95,7 +95,7 @@ def responses():
 def delegating(thought='original', title='inspect'):
     """A turn that hands work to the action brain and says nothing yet."""
     return FakeTurn([think(thought), ('delegate', {'title': title, 'brief': title + ' the controlled fixture'}),
-                     ('stay_silent', {'reason': 'wait for the result'})])
+                     ('stay_silent', {'why': 'wait for the result'})])
 
 
 def controller(store, tmp_path, coordinator):

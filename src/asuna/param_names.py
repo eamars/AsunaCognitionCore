@@ -21,7 +21,7 @@ RENAMED = {
     'understand_person': {'content': 'body', 'block_hours': 'block'},
     'feel': {'feeling': 'kind', 'unresolved': 'open'},
     'watch': {'how_often': 'mode'},
-    'pass_note': {'deliver': 'mode'},
+    'note': {'deliver': 'mode'},
     'sticker': {'use_for': 'when'},
     'quote': {'quote_whom': 'how'},
     'recall': {},
@@ -39,6 +39,10 @@ NESTED_YES_NO = {('feel', 'edit', 'unresolved')}
 # feel's decision on a proposal is a `do` of its own (ADR-060 item 8).
 FEEL_DECISIONS = ('accept', 'decline', 'edit')
 NOTE = '%s 现在叫 %s，这次照办，下次直接用新名字。'
+# ADR-069: her calls' old names that are still taken (used 5 times or more in the last week); every other old name in
+# her calls is refused by name. The action brain's calls keep taking theirs.
+STILL_TAKEN = {('plan', 'op')}
+GONE = '%s已经不用了，这次什么都没做；改成新名字再调用。'
 
 
 def names(tool):
@@ -58,6 +62,17 @@ def old_used(tool, args):
         return []
     old_to_new = {old: new for new, old in names(tool).items()}
     return sorted(key for key in args if key in old_to_new and old_to_new[key] not in args)
+
+
+def retired(tool, olds):
+    """The old names among `olds` (old_used) that her calls no longer take."""
+    table = names(tool)
+    return [(old, next(new for new, was in table.items() if was == old)) for old in olds if (tool, old) not in STILL_TAKEN]
+
+
+def gone(pairs):
+    """The refusal for a call written with retired names."""
+    return GONE % '、'.join('%s（现在叫 %s）' % pair for pair in pairs)
 
 
 def inbound(tool, args):

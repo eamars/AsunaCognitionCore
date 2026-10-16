@@ -1,6 +1,6 @@
 """ADR-061 step 2 with ADR-064 phase 2: a question in a group is a reply with wait=question. People who speak
 unaddressed while it waits get her a look, once each; replies to her line, those lines and reactions to it are its
-answers, kept by reference; she brings an answer home in her own words with leave_note's question, and the program
+answers, kept by reference; she brings an answer home in her own words with note's question, and the program
 adds who answered and where the original is; ask's read at home reads the group's own words for that turn only."""
 from datetime import datetime, timedelta, timezone
 
@@ -93,7 +93,7 @@ def test_she_brings_the_answer_home_in_her_words_and_reads_the_original_there(st
     assert answer['text'] == questions.GONE, 'never an empty answer'
 
 
-def test_leave_note_takes_only_a_question_asked_here(store):
+def test_a_note_takes_only_a_question_asked_here(store):
     world(store)
     ask(store)
     qid = store.db.questions.find_one()['_id']
@@ -102,7 +102,7 @@ def test_leave_note_takes_only_a_question_asked_here(store):
     import pytest
     from asuna.role_tools import Refused
     with pytest.raises(Refused, match='不是你在这里问的问题'):
-        tools.tool_leave_note(ep, 'c1', {'to': '家里', 'text': '他们说吃面', 'question': 'q-00000000'})
+        tools.tool_note(ep, 'c1', {'to': '家里', 'text': '他们说吃面', 'question': 'q-00000000'})
     assert qid.startswith('q-')
 
 

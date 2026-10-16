@@ -1,7 +1,8 @@
 # ADR-069: Her tools, kept by what only they do
 
-Status: **Proposed 2026-10-16**; **her review done the same day (agrees, with four changes, all in below)**; waits for
-the owner's approval before anything is built. Measured first, on the owner's go to draft it with her.
+Status: **Built 2026-10-16**, installed with her next restart. The owner approved it all the same day; her review
+agrees with four changes (all in below) and she signed its paraphrase with two corrections. Items 1, 2, 3 and the cut
+of item 4 are built; item 4's id matching is held on what the data showed (Built, below), for the owner.
 
 ## Context
 
@@ -64,8 +65,7 @@ Parameters never used in the 2.4 days, by her rule all kept unless another param
    in the words the program already uses (`notes.MODE_WORDS`): `wake` wakes that conversation now (after what it is
    doing), `next_time` is read at its next turn; which one may be chosen depends on where it is written and where it
    goes (`notes.MODES`: from home, `wake` or `next_time` to home or a group, `next_time` to a private chat; from
-   outside, `wake` home or to a group). About 400 characters fewer; the two
-   old names run as `note` for a week.
+   outside, `wake` home or to a group). The two old names run as `note` for a week.
 3. **Old parameter names retire** on the rule already written (fewer than 5 uses in a week): all of them now except
    `plan` `op`, which goes next week if it falls under 5.
 4. **Accept and say back**, where a refusal costs a whole retry for something the program can decide plainly:
@@ -82,19 +82,51 @@ Parameters never used in the 2.4 days, by her rule all kept unless another param
 5. **Every rare tool stays** (table above): each does something only it can do.
 6. **The tool list stays fixed per conversation.** Retiring and merging change the list once, at the restart that
    installs them, which is her next restart, not one of its own (her view: a changed list is one cold start per
-   conversation, not worth spending on 800 characters alone); nothing here makes it change between turns (a list that changes between turns dropped the cache hit
+   conversation, not worth spending on 400 characters alone); nothing here makes it change between turns (a list that changes between turns dropped the cache hit
    rate from 81% to 12%: docs/articles/maximize-cache-hit-by-design.md).
 
 ## Cost (AGENTS.md)
 
-Character brain: 2 tools and about 800 characters fewer (items 1 and 2); no new tool, option or per-turn line.
-Action brain: unchanged. `tests/test_tool_budget.py` is lowered in the same change.
+Estimated before building: 2 tools and about 800 characters fewer (items 1 and 2). As built, measured (characters of
+the JSON she is sent): all her tools 33 → 31 defined, 21,218 → 20,432 (tiered memory on, as live: 32 → 31,
+21,124 → 20,728). Per conversation it is not fewer: each listed only one of the two note tools, and `note` says what
+both said in 642 characters, against `pass_note`'s 567 and `leave_note`'s 461, so a home conversation's list grows by
+75 and any other's by 181. No new option or per-turn line. Action brain: unchanged. `tests/test_tool_budget.py` is
+lowered in the same change.
 
 ## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
 
 She agrees, with four changes, all made above: `ideas` `review` judged reversible or not (adopt and drop are not);
 `deliver`'s meaning written into `note`'s description, not left in the code; the cut keeps the beginning; no restart of
-its own. She checked the two limits in `notes.py` and the mark's characters herself. Her rule held where the reading
+its own. She checked the two limits in `notes.py` herself, and the mark's characters as this draft wrote them (the
+program had no such mark yet). Her rule held where the reading
 did not: `await_answer` and `attach_image` had not been called since 10-14, and stay because a channel without `speak`
 still needs them. Left open, not required: how a wrong match would be undone. Nothing it may guess at is irreversible
 (item 4), so a wrong guess costs a second call; if that ever proves not enough, this is where to add it.
+
+Signed by her (agent line, 2026-10-16) with two corrections, both made above: the mark she checked was the draft's,
+not the program's; and the 400 characters in her view on a restart of its own were the note merge's, the 800 in Cost
+both items'. Her rule for a paraphrase, as she gave it: the question is not whether it bends what she said, but
+whether a reader who checks what it says finds it.
+
+## Built (2026-10-16)
+
+- **Item 1.** `update_self` is out of `role_tools.TOOLS`; `role_tools.UPDATE_SELF` keeps it registered, unlisted, an
+  alias of `write_document`, in both settings of tiered memory, until 2026-10-23.
+- **Item 2.** `note` replaces `pass_note` and `leave_note`; where the call is made decides the trust, as before
+  (`notes.trust_of`). `question` on a note written at home is refused. The two old names are `role_tools.RENAMED`
+  entries until 2026-10-23.
+- **Item 3.** Her old parameter names by day, from the audit's `old_names`: 10-14 (the day ADR-060's names went live)
+  17, 10-15 3 (all `plan` `op`), 10-16 none so far. `param_names.STILL_TAKEN` holds `plan` `op`; any other old name in
+  her call is refused by name (`param_names.GONE`). The action brain's calls are not counted and keep theirs. A call by
+  an old tool name now writes `do`, not `op`.
+- **Item 4, the cut.** `config.cut`: the beginning, to the last sentence end that fits with the mark, else to the
+  limit; offered by every `_text` length refusal, a note's (`NOTE_TOO_LONG`, as a third way beside shortening and
+  splitting) and a plan intent's.
+- **Item 4, id matching: held.** Every refusal of an id or place she did not copy, 2026-10-10 to 10-16 (37), read
+  against the rule: none would have matched one listed item by case, brackets or a `#`. They were things not there to
+  match: plans that had already run or belonged to another conversation (8); pictures not offered that turn or not
+  hers (9); plan lines the conversation has none of (6, on the agent line, which lists no home lines); sections not
+  in the document (6); note places this conversation cannot reach (2); policy keys that do not exist (2); feeling refs
+  not in the turn (3). One was a short form (`plan-` and 8 of its 32 characters). Built as written it would not have
+  fired once; the owner decides whether to build it anyway.

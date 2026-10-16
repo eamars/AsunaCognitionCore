@@ -91,7 +91,7 @@ def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):
             assert store.db.artifacts.find_one({'_id': ref, 'task_id': done['_id'], 'state': 'DONE'})
         assert (work / '便条.txt').read_text(encoding='utf-8') == '原文保持不变'
         # Her message to the finished task continues it in the same action session.
-        turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': done['_id'], 'message': '继续这份便条'})], '继续原会话')
+        turn = FakeTurn([THINK, ('task', {'do': 'message', 'task': done['_id'], 'message': '继续这份便条'})], '继续原会话')
         follow = Coordinator(store, FakeLane(store, [turn])).ingest(
             {'event_id':'continue','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作'})
         continuation = store.db.tasks.find_one({'_id': follow['task_ids'][0]})
@@ -106,7 +106,7 @@ def test_only_explicit_current_scene_decision_can_cancel_task(store):
     try:
         task = service.claim(ep['task_ids'][0])
         broker.bind('workspace', task, work)
-        stop = ('task', {'op': 'stop', 'task': task['_id'], 'reason': '他说刚才的任务先停下'})
+        stop = ('task', {'do': 'stop', 'task': task['_id'], 'why': '他说刚才的任务先停下'})
         # Another conversation without a workspace has no task tool at all.
         foreign = FakeLane(store, [FakeTurn([THINK, stop], '这不是我能停的。')])
         other = Coordinator(store, foreign).ingest({'event_id': 'foreign-cancel', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '停止别人的任务。'})
@@ -143,7 +143,7 @@ def test_restart_paused_task_can_only_continue_from_new_local_request(store, int
     try:
         task = service.claim(ep['task_ids'][0])
         paused = service.pause_for_restart(task['_id'])
-        turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': '继续原目标，先核实已有结果。'})],
+        turn = FakeTurn([THINK, ('task', {'do': 'message', 'task': task['_id'], 'message': '继续原目标，先核实已有结果。'})],
                         '旧行动仍暂停。')
         lane = FakeLane(store, [turn])
         incoming = {'event_id': 'paused-continue', 'scene_id': 'dm-a', 'person_id': 'A',
@@ -177,7 +177,7 @@ def test_her_message_reaches_a_live_task_in_place_without_a_new_revision(store, 
     message = '优先核对另一份；原文仍然只读。'
     notices, steered, seen, said = [], [], [], {}
     service.on_fenced = lambda row, reason: notices.append((row['_id'], row['intent_revision'], reason))
-    turn = FakeTurn([THINK, ('task', {'op': 'message', 'task': task['_id'], 'message': message})], '我跟它说了。')
+    turn = FakeTurn([THINK, ('task', {'do': 'message', 'task': task['_id'], 'message': message})], '我跟它说了。')
     role = Coordinator(store, FakeLane(store, [turn]), task_service=service)
     role.on_action_message = lambda row, sent: steered.append((row['_id'], sent['text']))
     event = {'event_id':'redirect-live','scene_id':'dm-a','person_id':'A','text':'继续刚才的工作，优先核对另一份。'}

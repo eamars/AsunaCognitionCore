@@ -57,7 +57,7 @@ def test_a_question_here_is_her_reply_and_the_next_line_answers_it(store):
     assert item['state'] == '程序收了' and item['took'] == '程序收的：都有了结果，有回答' and item['to'][0]['state'] == '答了'
     assert item['question'] == '晚饭吃什么好？'
     assert store.db.audit_events.find_one({'type': 'question.answered', 'payload.question': row['_id']})
-    read_ep, read_lane = owner_says(store, service, 'ask-3', '嗯', calls=[('ask', {'op': 'read', 'id': row['_id']})])
+    read_ep, read_lane = owner_says(store, service, 'ask-3', '嗯', calls=[('ask', {'do': 'read', 'id': row['_id']})])
     assert 'questions_from_program' not in read_ep['context'], 'told once'
     [(found, ok)] = results(read_lane, 'ask')
     assert ok and found['to'][0]['answers'][0]['text'] == '吃面吧' and found['to'][0]['answers'][0]['line']
@@ -67,7 +67,7 @@ def test_a_question_here_is_her_reply_and_the_next_line_answers_it(store):
         'her own took replaces the program\'s'
     after, _ = owner_says(store, service, 'ask-5', '好')
     assert 'questions_from_program' not in after['context']
-    _, history_lane = owner_says(store, service, 'ask-6', '嗯', calls=[('ask', {'op': 'read', 'to': ['这里']})])
+    _, history_lane = owner_says(store, service, 'ask-6', '嗯', calls=[('ask', {'do': 'read', 'to': ['这里']})])
     [(history, ok)] = results(history_lane, 'ask')
     assert ok and history['items'][0]['took'] == '吃面' and history['items'][0]['state'] == '答了'
 
@@ -99,7 +99,7 @@ def test_a_question_to_another_home_place_wakes_it_with_a_note_and_its_text_goes
 def test_unspoken_is_not_asked_unanswered_lapses_and_the_program_closes_it_once_per_conversation(store):
     service = world(store)
     _, lane = turn(store, service, HOME, [('ask', {'question': '要不要去？', 'to': ['这里']}),
-                                          ('stay_silent', {'reason': '算了'})])
+                                          ('stay_silent', {'why': '算了'})])
     silent = asked(store, lane)
     assert questions.refresh(store, silent)['sources'][0]['state'] == 'not_asked'
     _, lane = owner_says(store, service, 'ask-2', '嗯', calls=[('ask', {'question': '明天几点？', 'to': ['这里']})],
@@ -154,7 +154,7 @@ def test_a_place_outside_home_is_refused_in_words(store):
     service = world(store)
     _, lane = turn(store, service, HOME, [('ask', {'question': '大家觉得呢？', 'to': [places.place_id('g1')]})], '嗯')
     [(said, ok)] = results(lane, 'ask')
-    assert not ok and said.startswith('ASK_PLACE_NOT_HOME') and 'pass_note' in said
+    assert not ok and said.startswith('ASK_PLACE_NOT_HOME') and 'note' in said
     assert store.db.questions.count_documents({}) == 0 and store.db.notes.count_documents({}) == 0
 
 

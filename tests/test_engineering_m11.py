@@ -25,7 +25,7 @@ def test_E16_old_worker_exception_does_not_poison_replacement(store):
     first=router.receive({'event_id':'v1','scene_id':'dm-a','person_id':'A','text':'核实第一版'})
     task_id=first['task_ids'][0]
     with pytest.raises(Denied):service.cancel(task_id,reason='host_stop',person_id='B')
-    router.coordinator.character=FakeLane(store,[FakeTurn([THINK,('task', {'op': 'message', 'task':task_id,'message':'改成第二版'})],'接着做。')])
+    router.coordinator.character=FakeLane(store,[FakeTurn([THINK,('task', {'do': 'message', 'task':task_id,'message':'改成第二版'})],'接着做。')])
     event={'event_id':'v2','scene_id':'dm-a','person_id':'A','text':'改成第二版'}
     work=Path(store.config['channels']['fixture']['routes']['dm-a']['workspace'])
     broker=ToolBroker(service)

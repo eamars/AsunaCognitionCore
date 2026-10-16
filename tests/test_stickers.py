@@ -124,7 +124,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
              for rid in ('in-sticker', 'in-old', 'in-market', 'in-photo')}
     assert lines['in-sticker'] == '（表情包 ref：%s）' % refs['custom'] and refs['old'] in lines['in-old']
     assert lines['in-photo'] == '（图 ref：%s）' % refs['photo'] and '表情包' in lines['in-market']
-    keep = lambda ref, name: ('sticker', {'op': 'keep', 'ref': ref, 'name': name, 'when': '有人摸鱼的时候'})
+    keep = lambda ref, name: ('sticker', {'do': 'keep', 'ref': ref, 'name': name, 'use_for': '有人摸鱼的时候'})
     lane = FakeLane(store, [FakeTurn([THINK, keep(refs['custom'], '摸鱼'), keep(refs['market'], '臭'),
                                       keep(refs['old'], '老图'), keep(refs['photo'], '照片'),
                                       keep(refs['custom'], '又一个'),
@@ -158,7 +158,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
 
 def test_an_adapter_that_cannot_send_stickers_sends_none(store, monkeypatch):
     refs = group_world(store, monkeypatch)
-    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'ref': refs['market'], 'name': '臭', 'when': '嫌弃'}),
+    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'do': 'keep', 'ref': refs['market'], 'name': '臭', 'use_for': '嫌弃'}),
                                       ('speak', {'parts': [{'kind': 'sticker', 'name': '臭'}]})])])
     ep = Coordinator(store, lane).ingest(mention('keep-2'), persona='P1')
     [row] = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}))
@@ -259,9 +259,9 @@ def test_at_home_she_asks_for_the_pool_looks_at_a_candidate_and_keeps_it(store, 
         stickers.pool_seen(store, blobs, store.config, rid)
     candidate = store.db.sticker_pool.find_one({'source_message_id': 'in-sticker'})['artifact_id']
     shelf_ref = stickers.find(store, 'P1', '老图')['artifact_id']
-    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'op': 'keep', 'name': '探测', 'when': '试试'}),
-                                      ('sticker', {'op': 'pool'}), ('read_image', {'ref': candidate}),
-                                      ('sticker', {'op': 'keep', 'candidate': candidate, 'name': '摸鱼', 'when': '有人摸鱼'}),
+    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'do': 'keep', 'name': '探测', 'use_for': '试试'}),
+                                      ('sticker', {'do': 'pool'}), ('read_image', {'ref': candidate}),
+                                      ('sticker', {'do': 'keep', 'candidate': candidate, 'name': '摸鱼', 'use_for': '有人摸鱼'}),
                                       ('read_image', {'ref': shelf_ref})],
                                      '收了一张')])
     ep = Coordinator(store, lane).ingest(event('pool-1'), persona='P1')

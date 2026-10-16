@@ -214,9 +214,9 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     from asuna.documents import DocumentStore
     from asuna.lanes import FakeLane, FakeTurn
     setup(store, 'admin')
-    mute = {'kind': 'mute', 'who': '#2', 'duration': 1, 'reason': '连续刷屏'}
-    notes = {'doc': 'group_notes', 'op': 'append_section', 'heading': '刷屏', 'reason': '记下做法',
-             'body': '刷屏的先禁言一分钟。'}
+    mute = {'do': 'mute', 'who': '#2', 'duration': 1, 'why': '连续刷屏'}
+    notes = {'doc': 'group_notes', 'do': 'append_section', 'heading': '刷屏', 'why': '记下做法',
+             'content': '刷屏的先禁言一分钟。'}
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '他在刷屏，先禁言一分钟，再记下做法。'}),
                                       ('group_action', mute), ('write_document', notes), said('先禁言一分钟哦')])])
     event = {'event_id': 'spam-1', 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 刷屏',

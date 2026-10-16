@@ -131,7 +131,7 @@ TOLD_MANY = '程序一次收了你问的 %d 个问题：%s'
 GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
 GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
-              '回答怎么带回家由你，用 leave_note 写 question。')
+              '回答怎么带回家由你，用 note 写 question。')
 
 
 def ask_in_group(store, ep, scene, text, patience):

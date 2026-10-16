@@ -29,7 +29,7 @@ def turn(thought, speech):
 def delegating(thought, title):
     """A turn that hands work to the action brain and says nothing yet."""
     return FakeTurn([('think', {'thought': thought}), ('delegate', {'title': title, 'brief': title + '：照原话去做。'}),
-                     ('stay_silent', {'reason': '等结果回来再说'})])
+                     ('stay_silent', {'why': '等结果回来再说'})])
 
 
 def test_local_owner_can_delegate_with_both_configured_capabilities(store, tmp_path):

@@ -189,9 +189,9 @@ def test_at_home_she_previews_and_asks_with_the_tool(store, tmp_path, monkeypatc
     d = desk(store, tmp_path, [T0])
     d.start = lambda: None
     monkeypatch.setattr(restarts, 'DESK', d)
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '新版要重启才生效。'}), ('restart', {'op': 'preview'}),
-                                      ('restart', {'op': 'request', 'why': '测试', 'at': '23:55'}),
-                                      ('restart', {'op': 'request', 'why': '前端改了', 'when': '04:30'})], '交给监工了。')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '新版要重启才生效。'}), ('restart', {'do': 'preview'}),
+                                      ('restart', {'do': 'request', 'why': '测试', 'at': '23:55'}),
+                                      ('restart', {'do': 'request', 'why': '前端改了', 'when': '04:30'})], '交给监工了。')])
     ep = Coordinator(store, lane).ingest(event('restart-1'), persona='P1')
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     assert 'restart' in lane.calls[0]['tools']

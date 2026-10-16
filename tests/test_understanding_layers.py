@@ -25,7 +25,7 @@ def test_the_person_layer_is_read_elsewhere_with_where_it_was_written(store):
     assert before['relationship']['person'] == {'first': PART + '；你在另外 1 个对话里还各有一份他在那儿的样子，这里看不到。',
                                                 'text': NO_PERSON}
     assert manifest['person_revision'] is None and manifest['person_entity_key'] == 'relationship:A|person'
-    done, _ = write(store, ('understand_person', {'layer': 'person', 'body': 'A 说话直接，先给结论。'}))
+    done, _ = write(store, ('understand_person', {'layer': 'person', 'content': 'A 说话直接，先给结论。'}))
     assert done['state'] == 'COMMITTED' and done['person_understanding_update']['state'] == 'COMMITTED'
     _, there, _ = ContextBuilder(store).prepare({**GROUP, 'event_id': 'e3'})
     person = there['relationship']['person']
@@ -35,10 +35,10 @@ def test_the_person_layer_is_read_elsewhere_with_where_it_was_written(store):
 
 
 def test_both_layers_in_one_turn_each_once_and_the_layer_is_required(store):
-    done, lane = write(store, ('understand_person', {'layer': 'here', 'body': '在私聊里他放松很多。'}),
-                       ('understand_person', {'layer': 'person', 'body': '他重视守时。'}),
-                       ('understand_person', {'layer': 'person', 'body': '再写一次。'}),
-                       ('understand_person', {'body': '没选层。'}))
+    done, lane = write(store, ('understand_person', {'layer': 'here', 'content': '在私聊里他放松很多。'}),
+                       ('understand_person', {'layer': 'person', 'content': '他重视守时。'}),
+                       ('understand_person', {'layer': 'person', 'content': '再写一次。'}),
+                       ('understand_person', {'content': '没选层。'}))
     results = [r for r in lane.tool_results if r[2] == 'understand_person']
     assert [r[-1] for r in results] == [True, True, False, False]
     assert '人那层' in str(results[2][-2]) and 'UNDERSTANDING_LAYER_REQUIRED' in str(results[3][-2])
@@ -47,7 +47,7 @@ def test_both_layers_in_one_turn_each_once_and_the_layer_is_required(store):
 
 
 def test_erasing_the_conversation_it_came_from_takes_it_back(store):
-    write(store, ('understand_person', {'layer': 'person', 'body': '他重视守时。'}))
+    write(store, ('understand_person', {'layer': 'person', 'content': '他重视守时。'}))
     assert store.head('relationship:A', 'person')
     PrivacyService(store).delete_memory('M09', operator=True)
     assert store.head('relationship:A', 'person') is None

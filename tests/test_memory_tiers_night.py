@@ -144,12 +144,12 @@ def test_a_write_may_not_sign_her_judgment_as_a_fact_but_a_checked_rewrite_may(o
     from asuna.lanes import FakeLane, FakeTurn
     from test_adr009_p2 import THINK
     sid = append(on, 'persona', '先不放开', '这个群先不放开', **{'from': '我自己的判断'})
-    signed = {'doc': 'persona', 'op': 'set_tags', 'sid': sid, 'nature': '事实', 'reason': '我觉得是事实'}
-    relabel = {'doc': 'persona', 'op': 'set_tags', 'sid': sid, 'from': '查过的', 'reason': '查过了'}
-    both = {'doc': 'persona', 'op': 'append_section', 'heading': '新的', 'nature': '事实', 'from': '我自己的判断',
-            'body': '新判断', 'reason': 'r'}
-    checked = {'doc': 'persona', 'op': 'replace_section', 'sid': sid, 'from': '查过的', 'reason': '查过了',
-               'body': '这个群先不放开\n依据：10/12 群主在群公告里写了'}
+    signed = {'doc': 'persona', 'do': 'set_tags', 'section': sid, 'nature': '事实', 'why': '我觉得是事实'}
+    relabel = {'doc': 'persona', 'do': 'set_tags', 'section': sid, 'from': '查过的', 'why': '查过了'}
+    both = {'doc': 'persona', 'do': 'append_section', 'heading': '新的', 'nature': '事实', 'from': '我自己的判断',
+            'content': '新判断', 'why': 'r'}
+    checked = {'doc': 'persona', 'do': 'replace_section', 'section': sid, 'from': '查过的', 'why': '查过了',
+               'content': '这个群先不放开\n依据：10/12 群主在群公告里写了'}
     lane = FakeLane(on, [FakeTurn([THINK, ('write_document', signed), ('write_document', relabel),
                                    ('write_document', both), ('write_document', checked)], '好。')])
     ep = Coordinator(on, lane).ingest(event('e-sign'))
@@ -241,7 +241,7 @@ def test_her_rewrite_that_drops_the_basis_of_a_listed_item_is_refused_in_her_tur
     sid = append(on, 'persona', '周六', LONG + '\n依据：主人说过三次')
     lapse(on, 'persona', sid)
     night_list(on, 'P1', NIGHT)
-    short = {'doc': 'persona', 'op': 'replace_section', 'sid': sid, 'body': '周六早上烤松饼。', 'reason': '写一句意思'}
+    short = {'doc': 'persona', 'do': 'replace_section', 'section': sid, 'content': '周六早上烤松饼。', 'why': '写一句意思'}
     ep = Coordinator(on, FakeLane(on, [FakeTurn([THINK, ('write_document', short)], '好。')])).ingest(event('e-gist'))
     call = next(c for c in ep['tool_calls'].values() if c['tool'] == 'write_document')
     assert '没带依据' in call['refused']

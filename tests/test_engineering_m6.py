@@ -22,7 +22,7 @@ def task_setup(store):
     workspace as session s-test (nothing is published before the tests start)."""
     turn=FakeTurn([('think',{'thought':'交给行动脑复制，原件要保留。'}),
                    ('delegate',{'title':'copy fixture','brief':'复制受控文件，保留原件。'}),
-                   ('stay_silent',{'reason':'做完再说'})])
+                   ('stay_silent',{'why':'做完再说'})])
     # Running commands is for the owner's own scenes: dm-a is the owner's DM (A is the owner by account).
     store.config['canonical_persons']={'A':store.config['chat']['person_id']}
     ep=Coordinator(store,FakeLane(store,[turn])).ingest({'event_id':'copy','scene_id':'dm-a','person_id':'A','text':'复制受控文件，保留原件。'})

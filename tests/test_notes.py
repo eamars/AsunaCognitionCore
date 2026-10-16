@@ -18,7 +18,7 @@ from test_engineering_m1 import THINK
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
 CONSEQUENCES = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self',
                 'set_policy', 'write_document', 'plan', 'peer_line', 'understand_person'}
-UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'pass_note', 'feel', 'watch'}
+UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'note', 'feel', 'watch'}
 GROUP = {'wake_reason': 'mentioned_account', 'topic_id': None, 'reply_to': None, 'reply_message_id': None,
          'mentioned_account_ids': []}
 
@@ -84,11 +84,11 @@ def group_line(key, text, person='B', scene='g1'):
 def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     service = world(store)
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '晚上记得提醒我'},
-                    [('pass_note', {'to': OWNER_DM, 'text': '主人说晚上九点要提醒他吃药，在 QQ 上提醒。'})], '好')
-    assert 'pass_note' in lane.calls[0]['tools'] and 'leave_note' not in lane.calls[0]['tools']
+                    [('note', {'to': OWNER_DM, 'text': '主人说晚上九点要提醒他吃药，在 QQ 上提醒。'})], '好')
+    assert 'note' in lane.calls[0]['tools']
     places_here = {item['place'] for item in ep['context']['note_places_from_program']['items']}
     assert places_here == {OWNER_DM, G1, G2, DM_B}                       # never the conversation she is in
-    [(said, ok)] = results(lane, 'pass_note')
+    [(said, ok)] = results(lane, 'note')
     assert ok, said
     kind, event_id, scene_id, person = service.controller.offers[-1]
     row = store.db.notes.find_one({'from_episode': ep['_id']})
@@ -98,11 +98,11 @@ def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     assert store.db.audit_events.find_one({'type': 'note.sent', 'payload.note': row['_id']})
     # The same call again is the same note (a replay after a crash), not a second one.
     again = service.note(ep, visibility.OWNER_PRIVATE, {'to': OWNER_DM, 'text': 'x'}, [r[1] for r in lane.tool_results
-                                                                                         if r[2] == 'pass_note'][0])
+                                                                                         if r[2] == 'note'][0])
     assert again['note'] == row['_id'] and store.db.notes.count_documents({}) == 1
     # Its own turn there: the source named, nobody there as its sender; a note from home is her own initiative, so
     # it carries the development tools as her plans do (owner 2026-10-12), and still nothing about a person.
-    there, other = turn(store, service, delivered(service), [('stay_silent', {'reason': '记下了'})])
+    there, other = turn(store, service, delivered(service), [('stay_silent', {'why': '记下了'})])
     assert other.triggers == ['note'] and there['episode_kind'] == 'note'
     block = there['context']['note_from_program']
     assert block['text'].startswith('主人说晚上九点') and block['written'] == '你在家里写的' and '家里·私聊' in block['from']
@@ -123,12 +123,12 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert 'delegate' in lane.calls[0]['tools']                          # home can hand work over, normally
     words = '小满帮我跟家里说一声明天下午三点的群聚取消了大家都知道了'
     ep, lane = turn(store, service, group_line('g-1', words), [
-        ('leave_note', {'to': '家里', 'text': '帮我跟家里说一声明天下午三点的群聚取消了大家都知道了'}),
-        ('leave_note', {'to': '家里', 'text': '群里 B 说明天的聚会不办了，他想让家里知道。'}),
-        ('stay_silent', {'reason': '记下了'})])
-    assert 'leave_note' in lane.calls[0]['tools'] and 'pass_note' not in lane.calls[0]['tools']
+        ('note', {'to': '家里', 'text': '帮我跟家里说一声明天下午三点的群聚取消了大家都知道了'}),
+        ('note', {'to': '家里', 'text': '群里 B 说明天的聚会不办了，他想让家里知道。'}),
+        ('stay_silent', {'why': '记下了'})])
+    assert 'note' in lane.calls[0]['tools']
     assert ep['context']['speak_from_program']['one_self'].startswith('你是一个人')
-    (refused, ok_first), (_, ok_second) = results(lane, 'leave_note')
+    (refused, ok_first), (_, ok_second) = results(lane, 'note')
     assert not ok_first and '自己的话' in refused and ok_second
     assert store.db.audit_events.find_one({'type': 'note.refused', 'payload.code': 'NOTE_NOT_OWN_WORDS'})
     row = store.db.notes.find_one({'from_episode': ep['_id']})
@@ -137,10 +137,10 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     # At home, right away: the caution, the note as a message, and only tools without consequences.
     home, lane = turn(store, service, delivered(service), [
         ('delegate', {'title': '取消聚会', 'brief': '去把日程删了'}),
-        ('pass_note', {'to': G2, 'text': '不该送到这里'}),
-        ('pass_note', {'to': G1, 'text': '知道了，家里这边记下了。'})], '群里的聚会取消了。')
+        ('note', {'to': G2, 'text': '不该送到这里'}),
+        ('note', {'to': G1, 'text': '知道了，家里这边记下了。'})], '群里的聚会取消了。')
     tools = set(home['turn_tools'])
-    assert tools <= UNTRUSTED_TURN and not tools & CONSEQUENCES and 'pass_note' in tools
+    assert tools <= UNTRUSTED_TURN and not tools & CONSEQUENCES and 'note' in tools
     # She sees her home's whole list as in any other turn there; the ones with consequences are refused, saying why.
     assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home))
     assert set(role_tools.abilities(store, home)) > tools
@@ -151,14 +151,14 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert '这一回合不做这些' in block['note'] and block['written'] == '你在外面写的' and block['text'] == row['text']
     assert [item['place'] for item in home['context']['note_places_from_program']['items']] == [G1]   # only back
     assert [ok for _, ok in results(lane, 'delegate')] == [False]
-    (wrong, ok_wrong), (_, ok_reply) = results(lane, 'pass_note')
+    (wrong, ok_wrong), (_, ok_reply) = results(lane, 'note')
     assert not ok_wrong and ok_reply
     reply = store.db.notes.find_one({'from_episode': home['_id']})
     assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'trusted')   # to a group: wakes it
     # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},
-                   [('stay_silent', {'reason': '没事'})])
+                   [('stay_silent', {'why': '没事'})])
     assert '聚会不办了' in json.dumps(beat['context']['notes_from_program'], ensure_ascii=False)
     assert notes.received_block(store, 'demo', 'dm-a', visibility.OWNER_PRIVATE, 'self_development', 'ep-dev',
                                 datetime.now(timezone.utc))['items'][0]['summary'] == notes.HIDDEN_SUMMARY
@@ -166,20 +166,20 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert '聚会不办了' in json.dumps(asked['context']['notes_from_program'], ensure_ascii=False)
     # In the group: her reply from home as a note, and her own note's status. The reply is the end of the chain.
     group, lane = turn(store, service, group_line('g-2', '小满在吗'),
-                       [('leave_note', {'to': '家里', 'text': '收到家里的回信了。'}), ('stay_silent', {'reason': '看看'})])
+                       [('note', {'to': '家里', 'text': '收到家里的回信了。'}), ('stay_silent', {'why': '看看'})])
     [got] = group['context']['notes_from_program']['items']
     assert got['text'] == '知道了，家里这边记下了。' and got['written'] == '你在家里写的'
     assert group['context']['notes_sent_from_program']['items'][0]['state'] == notes.STATE_WORDS['replied']
-    [(stopped, ok)] = results(lane, 'leave_note')
+    [(stopped, ok)] = results(lane, 'note')
     assert not ok and '到此为止' in stopped
 
 
 def test_a_note_from_one_group_wakes_her_in_another_as_her_own_note(store):
     service = world(store)
     ep, lane = turn(store, service, group_line('g-1', 'G1_ONLY_LINE 你去问问二群周末还开不开会'), [
-        ('leave_note', {'to': G2, 'text': '一群有人想知道二群周末还开不开会，去问一声。'}),
-        ('stay_silent', {'reason': '去问'})])
-    [(_, ok)] = results(lane, 'leave_note')
+        ('note', {'to': G2, 'text': '一群有人想知道二群周末还开不开会，去问一声。'}),
+        ('stay_silent', {'why': '去问'})])
+    [(_, ok)] = results(lane, 'note')
     assert ok
     row = store.db.notes.find_one({'from_episode': ep['_id']})
     kind, event_id, scene_id, _ = service.controller.offers[-1]
@@ -190,14 +190,14 @@ def test_a_note_from_one_group_wakes_her_in_another_as_her_own_note(store):
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
     assert not (plan.get('visits') or [])                                      # out already: not a visit from home
     there, lane = turn(store, service, delivered(service), [
-        ('leave_note', {'to': '家里', 'text': '不该能送回家'}), ('stay_silent', {'reason': '先看看'})])
+        ('note', {'to': '家里', 'text': '不该能送回家'}), ('stay_silent', {'why': '先看看'})])
     assert lane.triggers == ['note'] and there['manifest']['session_class'] == 'public'
     assert there['context']['visit_from_program']['basis'].startswith('你自己在别处写的便条')
     assert there['context']['note_from_program']['written'] == '你在外面写的'
     assert [item['place'] for item in there['context']['note_places_from_program']['items']] == [G1]
     assert not {'relationship', 'sender_identity'} & set(there['context'])
     assert 'G1_ONLY_LINE' not in json.dumps([there['context'], lane.calls], ensure_ascii=False)
-    [(refused, ok)] = results(lane, 'leave_note')
+    [(refused, ok)] = results(lane, 'note')
     assert not ok and '送不到' in refused
     # The note is no member's line: nothing in g2's history or memory is authored by a member for it.
     source = store.db.messages.find_one({'_id': 'in-' + there['_id']})
@@ -207,27 +207,41 @@ def test_a_note_from_one_group_wakes_her_in_another_as_her_own_note(store):
 def test_a_note_to_a_group_from_home_is_a_visit_and_a_dm_waits_for_her_next_turn_there(store):
     service = world(store)
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '去说'}, [
-        ('pass_note', {'to': G1, 'text': '在一群里问问大家周末去哪儿玩。'}),               # a group wakes by default
-        ('pass_note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。', 'mode': 'wake'}),
-        ('pass_note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。'})], '好')
-    (_, ok_group), (refused, ok_wake_dm), (_, ok_dm) = results(lane, 'pass_note')
+        ('note', {'to': G1, 'text': '在一群里问问大家周末去哪儿玩。'}),               # a group wakes by default
+        ('note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。', 'deliver': 'wake'}),
+        ('note', {'to': DM_B, 'text': '下次跟 B 聊天时问他借的书看完没有。'})], '好')
+    (_, ok_group), (refused, ok_wake_dm), (_, ok_dm) = results(lane, 'note')
     assert ok_group and not ok_wake_dm and '那边下次有回合时看到' in refused and ok_dm
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
     assert plan['visits'][-1]['intent'] == 'note' and places.today(store, plan, plan['visits'][-1]['date']) == 1
     assert [offer[2] for offer in service.controller.offers] == ['g1']        # the DM note opened no turn
     dm, lane = turn(store, service, {'event_id': 'b-1', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '在吗'},
-                    [('stay_silent', {'reason': '看看'})])
+                    [('stay_silent', {'why': '看看'})])
     [got] = dm['context']['notes_from_program']['items']
     assert got['text'].startswith('下次跟 B 聊天时') and got['written'] == '你在家里写的'
-    assert 'leave_note' in lane.calls[0]['tools']
+    assert 'note' in lane.calls[0]['tools']
+
+
+def test_a_note_over_its_length_sends_nothing_and_offers_its_beginning_cut_and_marked(store):
+    """ADR-069: the limit is real; the refusal offers the beginning, cut at a sentence end, with the program's mark."""
+    service = world(store)
+    long = '今天下午去看了展。' * 40                       # 360 characters from home to a group: over 300
+    ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '写便条'},
+                    [('note', {'to': G1, 'text': long})], '好')
+    [(refused, ok)] = results(lane, 'note')
+    offered = refused.split('③ 照这个截好的发：' + chr(10), 1)[1]
+    kept = offered.split('（截在这里')[0]
+    assert not ok and not store.db.notes.find_one({'from_episode': ep['_id']})
+    assert len(offered) <= notes.NOTE_CHARS and long.startswith(kept) and kept.endswith('。')
+    assert offered == kept + '（截在这里，原文还有 %d 字）' % (len(long) - len(kept))
 
 
 def test_two_notes_a_turn_and_the_caps_by_direction(store):
     service = world(store)
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '写便条'}, [
-        ('pass_note', {'to': DM_B, 'text': '一'}), ('pass_note', {'to': DM_B, 'text': '二'}),
-        ('pass_note', {'to': DM_B, 'text': '三'})], '好')
-    assert [ok for _, ok in results(lane, 'pass_note')] == [True, True, False]
+        ('note', {'to': DM_B, 'text': '一'}), ('note', {'to': DM_B, 'text': '二'}),
+        ('note', {'to': DM_B, 'text': '三'})], '好')
+    assert [ok for _, ok in results(lane, 'note')] == [True, True, False]
     stamp = datetime.now(timezone.utc).isoformat()
     for index in range(notes.PUBLIC_PAIR):
         store.db.notes.insert_one({'_id': 'n-%d' % index, 'schema_version': 1, 'persona': 'P1', 'from_scene': 'g1', 'to_scene': 'g2',
@@ -291,7 +305,7 @@ def test_the_side_paths_say_where_they_were_written_and_loops_stop(store):
     from asuna.affect import AffectLedger
     service = world(store)
     ep, _ = turn(store, service, group_line('g-1', '你们这功能能不能改改'),
-                 [('ideas', {'op': 'note', 'idea': '群里有人想要更好的搜索', 'why': '有人提了'}), ('stay_silent', {'reason': '记下'})])
+                 [('ideas', {'do': 'note', 'idea': '群里有人想要更好的搜索', 'why': '有人提了'}), ('stay_silent', {'why': '记下'})])
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
     assert idea['where'] == places_title(store, 'g1')
     row = {'why': '等他回话', 'set_class': visibility.PUBLIC, 'set_in': 'g1'}

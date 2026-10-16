@@ -139,11 +139,11 @@ def test_mood_reasons_are_capped_stable_and_keep_every_unsettled_feeling():
 def test_a_short_event_id_closes_the_feeling_it_names(store):
     from test_adr009_p3 import setup
     ledger = setup(store)
-    record = ('feel', {'op': 'record', 'kind': 'joy', 'intensity': '明显', 'arousal': '有些波动', 'ref': 'happy-1',
+    record = ('feel', {'do': 'record', 'feeling': 'joy', 'intensity': '明显', 'arousal': '有些波动', 'ref': 'happy-1',
                        'why': '他夸了我', 'cost': '有点不好意思'})
     Coordinator(store, FakeLane(store, [FakeTurn([THINK, record], '嗯。')])).ingest(event('happy-1'))
     stored = store.db.affect_events.find_one({'why': '他夸了我'})
-    void = ('feel', {'op': 'void', 'event_id': stored['_id'][:12], 'why': '其实是客气话'})
+    void = ('feel', {'do': 'void', 'event_id': stored['_id'][:12], 'why': '其实是客气话'})
     lane = FakeLane(store, [FakeTurn([THINK, void], '嗯。')])
     Coordinator(store, lane).ingest(event('happy-2'))
     assert lane.tool_results[1][5], lane.tool_results
@@ -228,7 +228,7 @@ def test_her_self_description_and_understanding_have_a_length_limit(store):
     from test_adr009_p2 import owner
     owner(store)
     long = '我' * (budget.SINGLE_BODY_CHARS + 1)
-    lane = FakeLane(store, [FakeTurn([THINK, ('update_self', {'target': 'current_self', 'body': long, 'reason': '写'})], '嗯。')])
+    lane = FakeLane(store, [FakeTurn([THINK, ('update_self', {'target': 'current_self', 'content': long, 'why': '写'})], '嗯。')])
     Coordinator(store, lane).ingest(event('self-1'))
     refused = lane.tool_results[1]
     assert not refused[5] and '%d 字以内' % budget.SINGLE_BODY_CHARS in refused[4]
@@ -270,7 +270,7 @@ def test_in_its_group_she_tucks_a_section_away_and_from_home_she_tidies_it_by_na
     docs.apply(slug, {'op': 'append_section', 'heading': '细节', 'reason': '记', 'visibility': 'public', 'inject': 'always'},
                '很长的细节', base_revision_id=None, author='character', mutation_id='g1')
     sid = docs.read(slug)[1]['sections'][0]['sid']
-    tuck = {'doc': 'group_notes', 'op': 'set_tags', 'sid': sid, 'inject': 'on_demand', 'reason': '不常用'}
+    tuck = {'doc': 'group_notes', 'do': 'set_tags', 'section': sid, 'when_shown': 'on_demand', 'why': '不常用'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', tuck), said('在')])])
     group_event = {'event_id': 'tuck-1', 'scene_id': SCENE, 'person_id': 'qq:20002', 'text': '@演示 在吗',
                    'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 't', 'mentioned_account_ids': [BOT]},
@@ -283,7 +283,7 @@ def test_in_its_group_she_tucks_a_section_away_and_from_home_she_tidies_it_by_na
     _, block = group_admin.notes_block(docs, scene)
     assert block['sections'] == [] and '1 节收起了' in block['tucked_away']
     owner(store)
-    tidy = {'doc': slug, 'op': 'append_section', 'heading': '要点', 'body': '一句话的要点', 'reason': '整理'}
+    tidy = {'doc': slug, 'do': 'append_section', 'heading': '要点', 'content': '一句话的要点', 'why': '整理'}
     home = FakeLane(store, [FakeTurn([THINK, ('write_document', tidy)], '嗯。')])
     Coordinator(store, home).ingest(event('tidy-1'), persona='P1')
     assert home.tool_results[1][5], home.tool_results

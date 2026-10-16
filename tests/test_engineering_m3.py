@@ -28,7 +28,7 @@ def task_setup(store):
     # She hands the copy to the action brain and says nothing until the result is back.
     lane=FakeLane(store,[FakeTurn([('think',{'thought':'先核实。'}),
                                    ('delegate',{'title':'copy fixture','brief':'复制受控文件，保留原件。'}),
-                                   ('stay_silent',{'reason':'等结果'})])])
+                                   ('stay_silent',{'why':'等结果'})])])
     # Running commands is for the owner's own scenes: dm-a is the owner's DM (A is the owner by account).
     store.config['canonical_persons']={'A':store.config['chat']['person_id']}
     ep=Coordinator(store,lane).ingest({'event_id':'copy','scene_id':'dm-a','person_id':'A','text':'复制受控文件，保留原件。'})

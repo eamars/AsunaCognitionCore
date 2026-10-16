@@ -99,7 +99,7 @@ def test_she_adds_a_watch_from_her_turn_and_sees_her_list_after(store):
              'group_context': {'wake_reason': 'mentioned_account', 'topic_id': 'w-1', 'mentioned_account_ids': [BOT]},
              'channel': {'id': 'qq', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP},
                          'sender_id': '20002', 'platform_event_id': 'w-1'}}
-    lane = FakeLane(store, [FakeTurn([THINK, ('watch', {'op': 'on', 'person': 'qq:20003', 'hours': 6, 'why': '等他说打印机'}),
+    lane = FakeLane(store, [FakeTurn([THINK, ('watch', {'do': 'on', 'person': 'qq:20003', 'hours': 6, 'why': '等他说打印机'}),
                                       said('好，我盯着')]),
                             FakeTurn([THINK, said('还在盯')])])
     coordinator = Coordinator(store, lane)

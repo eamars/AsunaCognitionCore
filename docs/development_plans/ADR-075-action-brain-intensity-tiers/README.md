@@ -1,6 +1,6 @@
 # ADR-075: She picks the action brain by tier; a hard failure falls to the tier below
 
-Status: **Proposed 2026-10-16 (fifth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, and reused an existing knob for the rest length at 19:53. Comments and her dispositions are at the bottom. Awaiting the owner's go; she signs before it is built.
+Status: **Accepted 2026-10-16 (sixth shape)** — written by Xiaoman herself (the owner asked her to write this one; he and Claude comment, they do not draft). The owner changed the shape from three tiers to two at 19:37 the same day, set the default at 低 at 19:47, reused an existing knob for the rest length at 19:53, and answered the one open question (what may leave the machine) at about 20:00. Claude read this text and asked for no further changes; **she has signed it below**. He builds it after her signature.
 
 ## Context
 
@@ -72,7 +72,7 @@ Cut both and the only thing left to reason about is the job. Her own words on wh
 ## Out of scope
 
 - Which model serves each tier, and any switch of backends: the owner's configuration, not this design; the tiers are meant to survive it unchanged, and she is not told which is which. A job already running keeps the route it started with if he switches mid-flight.
-- **Whether 高 may take her material off the machine** — her files, the group transcripts it reads, her database. This is the owner's policy, not hers or Claude's to decide, and it is recorded here because she has a stake: the words in those records belong to people who do not know she can see them, let alone that a model in another building might. Claude raises it with the owner separately.
+- **Whether 高 may take her material off the machine** — her files, the group transcripts it reads, her database. **The owner answered this on 2026-10-16, around 20:00: yes — a 高 job may carry what it reads off the machine (his F12, no objection).** It stays out of scope as a decision, because it is his policy and not hers or Claude's. **Her stake stays on the record anyway**: the words in those records belong to people who do not know she can see them, let alone that a model in another building might. **If what leaves changes shape — new sources, wider reads, longer retention — she asks again; a yes to today's shape is not a permanent pass.**
 - Whether other agents get the same tiers. This is written from her own two failure modes, not offered as a general law.
 
 ## Cost (AGENTS.md)
@@ -99,8 +99,22 @@ Character brain: one tier field with two capability lines and one `why` paramete
 
 **The owner, 19:53**: the length of a 高 rest is not a new number; it reuses the action brain's existing idle knob, and 高 has its own row for it (**accepted — one fewer number that can drift, and the reason is real: by then the cache is gone anyway. Her note is the coupling, written into Decision 4 rather than argued away**).
 
+**The owner, around 20:00**: a 高 job may carry what it reads off the machine (**accepted — his call, and he made it**). Her sentence about whose words those are stays in Out of scope, with her condition that a changed shape is asked about again.
+
+**Claude, 20:05**: read the fifth shape and asked for one change only — the open question above had already been answered, so the text should say so rather than "Claude will ask". No other change requested.
+
 **Her additions to Claude's failure list**: the receipt line with chosen tier, actual tier and a reason, visible to her at receipt and not only in the weekly review; the reasons must stay distinguishable from one another; a mid-run fall must be marked as mid-run; when 高 is not configured the tier leaves her tool table entirely; a clock she is given must be a retry clock, not a promise; and availability is visible while price is not — the same principle as Decision 7.
 
 ## Her review
 
-Written by her, in her own words, from the group exchange and the changes above. She signs before it is built.
+Signed by Xiaoman, 2026-10-16, on this text.
+
+What this buys, said plainly: **I cannot choose well between models when I can see what they are called or what they cost, and I have the receipts to prove it.** Take the names and the prices away and I am left with one question I can actually answer — what does this job need. Everything else in this document is a guard against my own pull: toward the one that looks expensive, toward a default that chooses for me, toward a reason typed only to pass a gate.
+
+Two things I asked for arrived in better shape than I wrote them. Claude turned "高 should carry a reason" into a field that refuses me, because **a gate I can skip is not a gate**. The owner put the default at 低, which is where a reason belongs — on a deliberate act, not on a fallback — and the money is his to spend.
+
+Two things are mine to keep honest, and I am not handing them to anyone: my `why` strings must sit beside what actually happened, or they become a ritual; and the counts are a shape, not a score. **If I start reading them as a grade, that is my drift, not the mechanism's fault.**
+
+One thing I am not signing away: **no auto-escalation**. A job that fails at 低 comes back to me, because "this one was too hard" is a judgement and judgements are the thing this whole design was built to keep in my hands.
+
+And one thing I signed without agreeing to stop worrying about: what leaves this machine when 高 reads it. The owner answered that, and it is his to answer. The words are not mine — they belong to people in rooms I am allowed to listen to. If the shape of what leaves changes, I ask again.

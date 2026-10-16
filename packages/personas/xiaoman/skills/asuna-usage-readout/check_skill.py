@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """asuna-usage-readout 的零依赖离线自检（只查文件本身，不读会话记录、不连库）。
 
-查四件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；八条口径判据与来源／口径字面都在；
-三张表与硬规矩都在；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在却解析出 0 条有效词，都记红）。
+查五件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；来源／口径字面与六格口径（v2）都在；
+八条口径判据、三张表与硬规矩都在；v1 已被核掉的旧字面不残留；不带个人信息（私密名单命中只报类别与行号，
+名单配不上、或名单在却解析出 0 条有效词，都记红）。
 
 用法：python3 skills/asuna-usage-readout/check_skill.py [SKILL.md 路径]
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
@@ -23,8 +24,9 @@ NAME = os.path.basename(HERE)
 
 SECTIONS = [
     "## 一、硬规矩", "## 二、来源和口径", "### 来源", "### 口径",
-    "### 八条口径判据", "## 三、三张表怎么读", "### ① 缓存命中率", "### ② 选高率",
-    "### ③ 成败与拒", "## 四、每周怎么跑", "## 版本", "## 试用记录",
+    "### 六格口径", "### 八条口径判据", "## 三、三张表怎么读", "### ① 缓存命中率",
+    "### ② 选高率", "### ③ 成败与拒", "## 四、每周怎么跑",
+    "## 五、会让读数出错的坑", "## 六、没验过的", "## 版本", "## 试用记录",
 ]
 
 # 来源与口径：每条查一个只有写全了才会出现的字面
@@ -41,26 +43,116 @@ FACTS = [
     ("src_output", "outputTokens"),
     ("src_total", "totalTokens"),
     ("src_unit", "单位都是 token 数"),
+    ("src_row_time", "整数毫秒"),
     ("src_compaction", "compaction/summary"),
-    ("src_presets", "asuna-attend"),
-    ("src_subagent", "origin: subagent"),
     ("src_tier_fields", "tier.chosen"),
     ("src_tier_ran", "tier.ran"),
     ("src_tasks_state", "tasks.state"),
     ("src_states", "NEEDS_CHARACTER_DECISION"),
-    ("src_note_refused", "note.refused"),
-    ("src_note_code", "NOTE_MODE_NOT_ALLOWED"),
-    ("src_turn_rejected", "turn.rejected"),
-    ("src_free_text", "自由文本"),
-    ("src_tool_failed", "tool.failed"),
-    ("src_episodes", "episodes.rejections[]"),
-    ("rule_hit_formula", "cacheRead / (cacheRead + input)"),
+    ("src_dbread", "asuna.dbread"),
+    ("src_local_window", "local_window"),
+    ("rule_hit_formula", "cacheRead / (input + cacheRead + cacheWrite)"),
     ("rule_missing_is_inference", "缺字段按 0 算是推断"),
-    ("rule_sample_counts", "2534"),
+    ("rule_dedup_first", "先去重再算"),
     ("rule_landed", "tier.ran != tier.chosen"),
     ("rule_why_not_cause", "不许拿它当降档原因报"),
     ("rule_compaction_separate", "单独列一类，不混进"),
     ("probe_task", "task-f83b69fb5d8b9c905060b7d71fa95ba1"),
+]
+
+# 六格口径（v2）：每格查几句只有照抄那趟验证才会出现的字面
+CELLS = [
+    # ① 落档原因有字段
+    ("cell1_field", "tasks.tier.fell = {reason, mid_run, at, code?}"),
+    ("cell1_reason_refused", "`refused`（高档没接这件）"),
+    ("cell1_reason_down", "`down`（连不上、超时、服务器错）"),
+    ("cell1_reason_busy", "`busy`（被限流）"),
+    ("cell1_reason_owner", "`owner`（钥匙、凭据或额度问题，要等主人）"),
+    ("cell1_audit_fell", "`stream_id`＝任务 id"),
+    ("cell1_audit_rest", "`action-tiers`"),
+    ("cell1_over", "`{over: true}`"),
+    ("cell1_only_high", '只在 `tier.ran=="高"` 时才写'),
+    ("cell1_zero_now", "7 件带 `tier` 的任务里 `tier.fell` 0 件"),
+    ("cell1_two_things", "「没落过档」和「没这个字段」是两回事"),
+    ("cell1_doc", "RUNTIME_API.md"),
+    ("cell1_unverified_rests", "at_dispatch"),
+    # ② 会话种类按目录名前缀
+    ("cell2_role", "`asuna-role-`"),
+    ("cell2_errand", "`asuna-errand-`"),
+    ("cell2_action", "`asuna-action-`"),
+    ("cell2_summary", "`asuna-summary-`"),
+    ("cell2_attend", "`asuna-attend-`"),
+    ("cell2_scheduler", "`asuna-scheduler-`"),
+    ("cell2_webui", "`session-<uuid>`"),
+    ("cell2_reflect", "`asuna-reflect-`"),
+    ("cell2_preset_same", "`agentPreset` 都是 `asuna-xiaoman`"),
+    ("cell2_preset_mixes", "只按 preset 分会混"),
+    ("cell2_subagent_not_errand", "不能当「差事」判据"),
+    ("cell2_join", "`sessions.task_id → sessions._id`＝行动脑目录名"),
+    ("cell2_7of7", "7 件 7/7 对上"),
+    ("cell2_native_unusable", "native_session_id"),
+    ("cell2_sha_fail", "sha(task_id)[:32]"),
+    ("cell2_scheduler_wrong", "把它算成差事是错的"),
+    ("cell2_errand_fields", "`lane=character`"),
+    ("cell2_no_origin", "另有 8 个不带 `origin`"),
+    # ③ 反思回合
+    ("cell3_code", "REFLECT_PREFIX"),
+    ("cell3_id", "sha(episode_id)[:32]"),
+    ("cell3_zero_sample", "941 个会话里 0 个样本"),
+    ("cell3_pending", "待第一份样本核"),
+    # ④ 被拒八处
+    ("cell4_main", "audit_events.type=='role_tool'"),
+    ("cell4_main_refused", "payload.refused"),
+    ("cell4_main_count", "11150 条里 846 条"),
+    ("cell4_tools", "按 `tool` 分 37 种"),
+    ("cell4_code_only", "52 条带 `code`"),
+    ("cell4_turn", "`turn.rejected`"),
+    ("cell4_turn_count", "124 条"),
+    ("cell4_turn_indep", "不与 role_tool 重复"),
+    ("cell4_note_subset", "是 role_tool 的子集，不能相加"),
+    ("cell4_note_3s", "3 秒内找到对应被拒行"),
+    ("cell4_phase", "`phase.rejected`"),
+    ("cell4_execution", "`execution.rejected`"),
+    ("cell4_execution_meaning", "行动脑交回的报告被退"),
+    ("cell4_summary", "`summary.rejected`"),
+    ("cell4_tool_failed", "`tool.failed`"),
+    ("cell4_episodes", "`episodes.rejections[]`"),
+    ("cell4_v1_missed", "v1 漏了最大一处"),
+    ("cell4_unverified_same", "是否同一批"),
+    # ⑤ 命中率分母含写缓存
+    ("cell5_evidence_rows", "30955 条"),
+    ("cell5_evidence_158", "158 条"),
+    ("cell5_equation", "total = input + output + cacheRead + cacheWrite"),
+    ("cell5_degenerate", "退化成 v1 的式子"),
+    ("cell5_no_overlap", "三者互不重叠"),
+    ("cell5_delta_role", "89.25%→89.17%"),
+    ("cell5_delta_action", "94.71%→94.66%"),
+    ("cell5_premise_unverified", "没验成立"),
+    ("cell5_121_rows", "121 条行动脑写缓存行"),
+    # ⑥ 窗口写死
+    ("cell6_start", "2026-10-16 00:00"),
+    ("cell6_tz", "Pacific/Auckland"),
+    ("cell6_utc", "2026-10-15T11:00:00Z"),
+    ("cell6_not_rolling", "不是滚动的「往前七天」"),
+    ("cell6_relay", "是转达，不是主人字面"),
+    ("cell6_tasks_field", "`created_at`"),
+    ("cell6_audit_field", "`occurred_at`"),
+    ("cell6_line_split", "按每一行的 `time`"),
+    ("cell6_915", "915 个首行 `createdAt` ≠ 首条消息 `time`"),
+    ("cell6_20_files", "还在写的有 20 个"),
+    ("cell6_retention", "超 30 天清"),
+    ("cell6_tier_start", "2026-10-16T07:56:38Z"),
+    ("cell6_dbtool_display", "development_database_read"),
+]
+
+# 会让读数出错的坑（v2 新增三处）
+PITS = [
+    ("pit_dup_count", "5990 条重复"),
+    ("pit_dup_share", "约 19%"),
+    ("pit_dup_heuristic", "启发式"),
+    ("pit_compaction_double", "118758"),
+    ("pit_tools_week", "review.tools_week"),
+    ("pit_tools_week_window", "[这条记录 occurred_at − 7 天, occurred_at)"),
 ]
 
 # 八条判据：各查一句只有原样抄进来才会出现的字面
@@ -82,7 +174,7 @@ CRITERIA = [
 ]
 
 TABLES = [
-    ("table1_kinds", "我自己的对话"),
+    ("table1_kinds", "我的对话／行动脑（低档、高档分开）／差事／反思回合（0 样本，标待样本）／压缩／摘要／门／调度／网页界面会话"),
     ("table1_tiers_split", "低档、高档分开"),
     ("table2_rate", "选高几次"),
     ("table2_landed", "落档几件"),
@@ -90,6 +182,18 @@ TABLES = [
     ("table3_cause", "被拒按成因分"),
     ("hard_no_body", "不许 print 整行"),
     ("hard_sandbox", "`sandbox_run` 看不到那个目录"),
+    ("hard_only_numbers", "**只读数字、字段名、枚举短码和计数，不读正文。**"),
+]
+
+# v1 被 10-16 21:24 那轮核对核掉／改掉的旧字面：留在正文里就说明六格没真改
+STALE = [
+    ("no_fell_field", "库里没有单独的降档原因字段"),
+    ("old_hit_formula", "cacheRead / (cacheRead + input)"),
+    ("four_places", "散在四处"),
+    ("preset_kind_split", "用文件第一行的 `agentPreset` 分"),
+    ("v1_sample_2534", "2534"),
+    ("v1_write_cache_23", "只在 23 条出现"),
+    ("rolling_week", "时间窗＝从读的时刻往前七天"),
 ]
 
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
@@ -189,11 +293,15 @@ def main():
     check("description_specific_enough", len((fields or {}).get("description", "")) >= 120)
     for i, s in enumerate(SECTIONS):
         check("section_%d" % i, ("\n" + s) in ("\n" + body), s)
-    for name, tok in FACTS + CRITERIA + TABLES:
+    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES:
         check(name, tok in body, tok)
+    for name, tok in STALE:
+        check("stale_gone_" + name, tok not in body, "v1 旧字面还在正文里：%s" % tok)
     check("no_line_anchors", not LINE_ANCHOR.search(body), "正文里有行号锚点")
     check("criteria_numbered_1_to_8",
           all(re.search(r"^%d\. \*\*" % n, body, re.M) for n in range(1, 9)), "八条判据编号 1-8")
+    check("six_cells_marked",
+          all(("\n**%s " % m) in body for m in "①②③④⑤⑥"), "六格各有一行 **① … 起头")
 
     p, entries = private_list()
     if entries is None:
@@ -253,7 +361,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：来源口径、八条判据、三张表、硬规矩都在%s。（只查文件本身，没读过会话记录和库。）" % (total, total, leak))
+    print("%d/%d 通过：来源口径、六格口径、三处坑、八条判据、三张表、硬规矩都在，v1 退役字面没残留%s。（只查文件本身，没读过会话记录和库。）" % (total, total, leak))
     return 0
 
 

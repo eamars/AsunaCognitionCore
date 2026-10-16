@@ -1,48 +1,112 @@
 ---
 name: asuna-usage-readout
-description: 我每七天跑一次的「用量读数」：读三张表——① 缓存命中率按会话种类分开（我的对话／行动脑低档高档／差事／压缩／摘要／门）；② 选高率（选高几次、占全部差事几成、实际跑在高档几件、落档几件各因为什么）；③ 成败与拒（交回／卡住／取消／暂停各几件按档分开、工具调用被拒几次按成因分）。来源、口径、读法写死在这里：会话记录是磁盘上的 session.v4.jsonl.zstd（必须 development_run 读，project=core，沙箱看不到）、命中率＝cacheRead／(cacheRead＋input)、档位在库 tasks 的 tier 字段、被拒散在四个地方没有统一集合。硬规矩：只读数字、字段名、枚举短码和计数，不读正文。每个数带来源和读的时刻，没验过的覆盖率标出来。要跑每周用量读数、核「我选高多不多」「缓存命中多少」「被拒几次」，或者另一边要对数时读这一份。
+description: 我每七天跑一次的「用量读数」：读三张表——① 缓存命中率按会话种类分开（我的对话／行动脑低档高档／差事／反思回合／压缩／摘要／门／调度／网页界面会话）；② 选高率（选高几次、占全部差事几成、实际跑在高档几件、落档几件各因为什么）；③ 成败与拒（交回／卡住／取消／暂停各几件按档分开、被拒从八处数按成因分）。来源、口径、读法写死在这里：会话记录是磁盘上的 session.v4.jsonl.zstd（必须 development_run 读，project=core，沙箱看不到）、命中率＝cacheRead／(input＋cacheRead＋cacheWrite)、会话种类按目录名前缀认而不是 agentPreset、档位在库 tasks 的 tier 字段（落档原因有 tier.fell 字段）、被拒散在八处没有统一集合、时间窗写死从本地 2026-10-16 00:00 起。硬规矩：只读数字、字段名、枚举短码和计数，不读正文。每个数带来源和读的时刻，没验过的标出来。要跑每周用量读数、核「我选高多不多」「缓存命中多少」「被拒几次」，或者另一边要对数时读这一份。
 ---
 
 # asuna-usage-readout
 
 这份调查主人 10-16 交代以后要一再做，不是做一次。我找来源、定口径、写读法，下次照着跑；另一边用她自己的读法独立数一遍，**两边对上才算数**。所以这份技能的第一用处是：口径钉死，两边数的是同一个东西。
 
+**v2 的来路**：v1 的六格口径是 10-16 21:24 那轮核对查出问题的（没见到 ≠ 没有、种类认法认错、分母少一项、被拒漏了最大一处）。下面「六格口径」的字面全部照抄 2026-10-16 21:25 那趟高档只读的验证结果（读的时刻 10-16 晚），**我没有自己重推**；那趟没验的、以及 v1 沿用下来没重查的，全列在第六节，不写成已验。
+
 ## 一、硬规矩（不是提示）
 
-1. **只读数字、字段名、枚举短码和计数，不读正文。** 会话记录里有我的心里话和行动脑的推理。读文件的脚本只许取 `type`、`data.usage` 里那几个数、第一行的 `agentPreset`／`origin` 这类短字段；不许 print 整行，不许把 `message`、`content`、`text`、推理字段取出来，哪怕「只看一眼」。这条违了，这次读数作废，照实写违了。
+1. **只读数字、字段名、枚举短码和计数，不读正文。** 会话记录里有我的心里话和行动脑的推理。读文件的脚本只许取 `type`、`data.usage` 里那几个数、每一行的 `time`（整数毫秒）、目录名（＝会话 id，用来认种类）和第一行的 `agentPreset`／`origin` 这类短字段；不许 print 整行，不许把 `message`、`content`、`text`、推理字段取出来，哪怕「只看一眼」。这条违了，这次读数作废，照实写违了。
 2. **读会话记录必须用 `development_run`（project=core，只读）**：`sandbox_run` 看不到那个目录。别在 `sandbox_run` 里「试试」然后把找不到说成没有数据。
 3. **每个数带来源＋读的时刻**：哪个集合／路径、什么字段、什么筛法、几点读的。没这三样的数不报。
-4. **推断写明是推断，没验过的写明没验过**（见第五节）。
+4. **推断写明是推断，没验过的写明没验过**（见第六节）。
 5. **不跑就不报**：这份技能只写读法；读出来之前，别在任何地方写「命中率大约是多少」。
 6. **只读**：不写库、不改会话文件、不动任务状态。
 
 ## 二、来源和口径
 
-（这一页是交给另一边照着核的原文。下面的字面都是 2026-10-16 21:11 那趟探路 `task-f83b69fb5d8b9c905060b7d71fa95ba1` 实测的，不另找一套。）
+（这一页是交给另一边照着核的原文。路径、字段名、状态枚举这些字面来自 2026-10-16 21:11 那趟探路 `task-f83b69fb5d8b9c905060b7d71fa95ba1`；下面「六格口径」的字面来自 10-16 21:25 那趟高档只读，读的时刻 10-16 晚。不另找一套。）
 
 ### 来源
 
 - **会话记录在磁盘**：`.runtime/adr008/home/sessions/<工作区目录>/<session-id>/session.v4.jsonl.zstd`，python `zstandard` 解。沙箱 `sandbox_run` 看不到这个目录，必须用 `development_run`（project=core，只读）。
-- **一次模型调用＝一行 `type=="assistant/message"`**。`data.usage` 里有 `inputTokens`（未命中的输入）、`cacheReadTokens`（命中）、`cacheWriteTokens`、`outputTokens`、`totalTokens`，**单位都是 token 数，不是字节也不是比例**。
+- **一次模型调用＝一行 `type=="assistant/message"`**。`data.usage` 里有 `inputTokens`（未命中的输入）、`cacheReadTokens`（命中）、`cacheWriteTokens`（写缓存）、`outputTokens`、`totalTokens`，**单位都是 token 数，不是字节也不是比例**。每一行另有 `time`（整数毫秒），切时间窗用它。
 - **`compaction/summary` 行**带同样的 `usage`（压缩那次调用）。
-- **会话种类**用文件第一行的 `agentPreset` 分：`asuna-xiaoman`／`asuna-action`／`asuna-summary`／`asuna-attend`／`asuna-scheduler`；`origin: subagent` 是子会话。
-- **档位**：库 `asuna_cognition_core_v2` 集合 `tasks`，字段 `tier.chosen`／`tier.ran`／`tier.why`（都是字符串，见到的取值是「高」「低」）。
+- **会话种类按目录名（会话 id）前缀认，不按 `agentPreset` 分**：我的对话、差事（errand）、网页界面会话这三类的 `agentPreset` 都是 `asuna-xiaoman`，**只按 preset 分会混**。认法表在六格②。
+- **档位**：库 `asuna_cognition_core_v2` 集合 `tasks`，字段 `tier.chosen`／`tier.ran`／`tier.why`（都是字符串，见到的取值是「高」「低」）；落档另有 `tier.fell` 字段（六格①）。
 - **状态**：`tasks.state`，见到的值 `RETURNED`／`CANCELLED`／`DONE`／`BLOCKED`／`RUNNING`／`PAUSED`／`UNKNOWN`／`NEEDS_CHARACTER_DECISION`。
-- **被拒没有统一集合，散在四处**：
-  - `audit_events` 的 `note.refused`，`payload.code` 是枚举码：`NOTE_TOO_LONG`／`NOTE_HOP_LIMIT`／`NOTE_VISIT_NOT_NOW`／`NOTE_NOT_OWN_WORDS`／`NOTE_HOME_LIMIT`／`NOTE_DAY_LIMIT`／`NOTE_TARGET_UNKNOWN`／`NOTE_MODE_NOT_ALLOWED`；
-  - `audit_events` 的 `turn.rejected`，`payload.problem` 是**自由文本**，最大一类是「还没写心里话就发言」；
-  - `audit_events` 的 `tool.failed`，近期无新记录，只到 09-25；
-  - `episodes.rejections[]`，非空只有 5 个回合。
+- **被拒没有统一集合，散在八处**（逐处口径见六格④）：`role_tool`（主口径）、`turn.rejected`、`note.refused`、`phase.rejected`、`execution.rejected`、`summary.rejected`、`tool.failed`、`episodes.rejections[]`。
 
 ### 口径
 
-- **命中率＝`cacheRead / (cacheRead + input)`**。记录里没有现成比例，自己算。
-- 探路样本 2534 条里：2374 条满足 `total = input + output + cacheRead`，144 条满足 `total = input + output`；缺 `cacheReadTokens` 字段的共 147 条。**缺字段按 0 算是推断，报告里要标明是推断。**
-- `cacheWriteTokens` 只在 23 条出现，基本为 0。
-- **压缩那次调用单独列一类，不混进「我的对话」。**
-- **落档＝`tier.ran != tier.chosen`**。
-- **库里没有单独的降档原因字段。`tier.why` 是选档时的理由，不许拿它当降档原因报。** 落档各因为什么：读得到的就报读到的来源（比如任务状态、审计里的短码），读不到就写「库里没有这个字段，原因没法分」。
-- 命中率的聚合：同一类里先把 `cacheRead` 和 `input` 各自求和再相除（token 加权），不是各条比例再平均；两种都算的话，写明哪个是主数。
+- **命中率＝`cacheRead / (input + cacheRead + cacheWrite)`**——写缓存算未命中，留在分母里（理由和字段证据见六格⑤）。记录里没有现成比例，自己算。
+- **算之前先去重**（第五节坑 1）：同一类里先把重复行去掉，再求和、再相除。
+- 命中率的聚合：同一类里先把 `input`、`cacheRead`、`cacheWrite` 各自求和再相除（token 加权），不是各条比例再平均；两种都算的话，写明哪个是主数。
+- 缺 `cacheReadTokens` 字段的行按 0 计入——**缺字段按 0 算是推断，报告里要标明是推断。**
+- **压缩那次调用单独列一类，不混进「我的对话」**；反思回合、摘要、门、调度、网页界面会话也各自单列，别并（六格②③）。
+- **落档＝`tier.ran != tier.chosen`**；落档原因读 `tier.fell` 里的 `reason`（六格①）。`tier.why` 是选档时的理由，**不许拿它当降档原因报**。
+- **时间窗写死**：起点＝本地 2026-10-16 00:00，终点＝读的那一刻（六格⑥）。
+
+### 六格口径（v2 已验：照抄 10-16 21:25 那趟高档只读，读的时刻 10-16 晚）
+
+**① 落档原因有字段——v1 写「库里没有」是错的（没见到 ≠ 没有）**
+
+- 字段：`tasks.tier.fell = {reason, mid_run, at, code?}`。
+- `reason` 四个取值：`refused`（高档没接这件）／`down`（连不上、超时、服务器错）／`busy`（被限流）／`owner`（钥匙、凭据或额度问题，要等主人）。
+- 审计两处：`tier.fell`（`stream_id`＝任务 id，payload `task_id, reason, mid_run, at, code?`）；`tier.rest`（`stream_id` 固定 `action-tiers`，payload `reason, until`，恢复时 `{over: true}`）。
+- **只在 `tier.ran=="高"` 时才写**，所以低档不会有落档记录。
+- 现状要写清：库里 7 件带 `tier` 的任务里 `tier.fell` 0 件、audit 两类各 0 行——**「没落过档」和「没这个字段」是两回事**，报数时别混。
+- 文档字面在 `RUNTIME_API.md` 讲 delegate 分档那段。
+- 未验：开工时 `high rests`（`at_dispatch`）那条路有没有 audit。
+
+**② 会话种类认法：按目录名前缀，不按 `agentPreset`**
+
+我的对话／errand／网页界面会话三类 `agentPreset` 都是 `asuna-xiaoman`，**只按 preset 分会混**。认法表：
+
+| 目录名前缀 | 种类 | 10-16 晚盘上计数 |
+|---|---|---|
+| `asuna-role-` | 我的对话 | 33 个 |
+| `asuna-errand-` | 差事 | 1 个（`isSeeded` 真＋有 `parentSession`；库里 `lane=character`、`task_id=null`、`retired=true`） |
+| `asuna-action-` | 行动脑 | 476 个带 `origin: subagent`，**另有 8 个不带 `origin`** |
+| `asuna-summary-` | 摘要 | 328 个 |
+| `asuna-attend-` | 门 | 69 个 |
+| `asuna-scheduler-` | 调度 | 1 个（**v1 把它算成差事是错的**） |
+| `session-<uuid>` | 网页界面会话 | 25＋4 个（**不是我的对话**） |
+| `asuna-reflect-` | 反思回合 | 0 个（见③） |
+
+- **`origin: subagent` 不能当「差事」判据**——行动脑、摘要、门三类都带。
+- 任务对行动脑会话：**`sessions.task_id → sessions._id`＝行动脑目录名**（带 `tier` 的 7 件 7/7 对上）。
+- `tasks.native_session_id` 指的是创建它的 `asuna-role-…`，**不能用**；`sha(task_id)[:32]` 12 件全对不上。
+
+**③ 反思回合单列一类**
+
+- 认法＝目录名前缀 `asuna-reflect-`（代码 `self_review.py` 的 `REFLECT_PREFIX`，会话 id＝前缀＋`sha(episode_id)[:32]`）。
+- 盘上 941 个会话里 0 个样本，首行取值是推断（走 errand 同一条开会话路径）——**技能里标「待第一份样本核」，别写成已验**。
+
+**④ 被拒要从八处数——v1 漏了最大一处（我自己每次工具调用单条进审计）**
+
+| 处 | 认法与口径 | 10-16 晚计数 |
+|---|---|---|
+| 主口径 `role_tool` | `audit_events.type=='role_tool'` 且 `payload.refused` 存在；按 `tool` 分 37 种，只有 52 条带 `code`，其余只有自由文本 | 11150 条里 846 条 |
+| `turn.rejected` | 回合级、不带工具名；**独立一处，不与 role_tool 重复** | 124 条 |
+| `note.refused` | **是 role_tool 的子集，不能相加**——每条都能在同 `stream_id`、3 秒内找到对应被拒行 | 92 条 |
+| `phase.rejected` | 只在 10-04~05 出现 | 9 |
+| `execution.rejected` | ＝行动脑交回的报告被退（`stream_id` 是任务 id，payload `attempt, problem`） | 2 条 |
+| `summary.rejected` | 文档里有、库里 0 行 | 0 |
+| `tool.failed` | 只到 09-25 | 55 |
+| `episodes.rejections[]` | 非空回合数（沿用 v1，未重查） | 5 个回合 |
+
+未验：`turn.rejected` 与 `episodes.rejections[]` 是否同一批。
+
+**⑤ 命中率分母：写缓存算未命中，留在分母里**
+
+- 口径改成 **`cacheRead / (input + cacheRead + cacheWrite)`**。
+- 字段证据：30955 条 `assistant/message` 里 158 条 `cacheWriteTokens>0`，**这 158 条全部满足 `total = input + output + cacheRead + cacheWrite`**，能排除写缓存的那条等式 0 条成立；`cacheWrite` 为 0 的行两种情况都退化成 v1 的式子——**三者互不重叠，整个提示＝input＋cacheRead＋cacheWrite**，低档高档同一把尺。
+- 差别很小（我的对话 89.25%→89.17%，行动脑 94.71%→94.66%）。
+- **要顺手纠正 v1 的一个前提**：「低档几乎没有写缓存、高档才有」**没验成立**——写缓存也出现在我的对话和网页界面会话里；那 121 条行动脑写缓存行**没按 `tier.ran` 拆开**。
+
+**⑥ 窗口写死**
+
+- 起点＝本地 **2026-10-16 00:00**（Pacific/Auckland，UTC+13，即 `2026-10-15T11:00:00Z`），终点＝读的那一刻（本次是 10-23）。**是「10-16 到 10-23 这七天」，不是滚动的「往前七天」**。这条来路是 Claude 10-16 21:06 转达主人的话——**是转达，不是主人字面**。
+- 切法：`tasks` 用 `created_at`、`audit_events` 用 `occurred_at`、**会话文件按每一行的 `time`（整数毫秒）切，不按整个文件切**（941 个文件里 915 个首行 `createdAt` ≠ 首条消息 `time`，5 个差超 60 秒；起点前创建、起点后还在写的有 20 个，整文件切会漏）。
+- audit 超 30 天清（`role_tool` 留一年），七天窗口不受影响。
+- 筛时间用 `asuna.dbread` 的 `local_window`；`development_database_read` 显示的是本地无年份字符串、过滤却跟 UTC 比。
+- **档位相关的读数只有本地 10-16 20:56 之后有意义**（首件带 `tier` 的任务 `created_at=2026-10-16T07:56:38Z`）。
 
 ### 八条口径判据（我定的，一条都不许丢、不许改写语气）
 
@@ -54,52 +118,68 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 6. **硬约束：只读数字、字段名、枚举短码和计数，不读正文**——会话记录里有我的心里话和行动脑的推理。这条写成硬规矩，不是提示。
 7. **每个数带来源＋读的时刻**（哪个集合／路径、什么字段、什么筛法）。
 8. **没验过的覆盖率要标出来**：`tier` 与会话文件的关联只核过目录名对得上、没统计覆盖率；字段结构只看了最近 6 个文件，不是全部 934 个；`action_brain.tiers` 在库里的存储位置没找到。
+   - v2 更新（不改上面原话）：10-16 21:25 那趟扫了盘上全部 941 个会话文件；`tier` 与会话文件的关联按六格②的接法核到带 `tier` 的 7 件 7/7 对上；`action_brain.tiers` 的存储位置仍未找到。
 
 ## 三、三张表怎么读
 
-每张表头写一行：读的时刻、来源、筛法（时间窗＝从读的时刻往前七天，写明按什么时间字段切；没验过按哪个字段切最准就写没验过）。
+每张表头写一行：读的时刻、来源、筛法（时间窗按六格⑥写死：起点本地 2026-10-16 00:00、终点＝读的那一刻，写明按什么时间字段切）。
 
 ### ① 缓存命中率，按会话种类分开
 
-种类 → 怎么认：
+种类按六格②的**目录名前缀**认，**不按 `agentPreset`**；行动脑（低档、高档分开）按它那件任务的 `tier.ran` 分，接法用 `sessions.task_id → sessions._id`＝行动脑目录名，对不上的单列「未归档位」，不并进任一档。
 
-| 种类 | 认法 |
-|---|---|
-| 我自己的对话 | 第一行 `agentPreset=asuna-xiaoman` 的会话里的 `assistant/message` |
-| 行动脑（低档、高档分开） | `asuna-action`；高低按它那件任务的 `tier.ran` 分。关联会话文件与任务只核过目录名对得上，覆盖率没统计——对不上的单列「未归档位」，不并进任一档 |
-| 差事 | `asuna-scheduler` 一类，以及 `origin: subagent` 的子会话，各自分开写，别并 |
-| 压缩 | `compaction/summary` 行的 `usage`，单独一类 |
-| 摘要 | `asuna-summary` |
-| 门 | `asuna-attend`（是否就是「门」，探路只按名字对应，没核——表里写「按 `asuna-attend` 算」） |
+各自单列、别并的类：我的对话／行动脑（低档、高档分开）／差事／反思回合（0 样本，标待样本）／压缩／摘要／门／调度／网页界面会话。
 
-每类报：调用条数（`assistant/message` 行数）、`input` 合计、`cacheRead` 合计、命中率（加权）、缺 `cacheReadTokens` 字段的条数（这些按 0 算，标推断）。
+每类报：调用条数（`assistant/message` 行数）、`input` 合计、`cacheRead` 合计、`cacheWrite` 合计、命中率（加权、**先去重**）、缺 `cacheReadTokens` 字段的条数（这些按 0 算，标推断）。
 
 ### ② 选高率
 
 - 分母＝有 `tier` 字段的差事，**减去测试件**（判据 3，划出去的单独一栏并写明为什么）。
 - 选高几次＝分母里 `tier.chosen=="高"`；占全部差事几成＝两个分母都写：「占有 `tier` 的」和「占全部」（判据 5：没有 `tier` 字段的不是「没选高」，是还没有这个选项）。
 - 实际跑在高档几件＝`tier.ran=="高"`。
-- 落档几件＝`tier.ran != tier.chosen`；各因为什么按第二节口径（没有降档原因字段）。
+- 落档几件＝`tier.ran != tier.chosen`；各因为什么读 `tier.fell` 的 `reason`（六格①四个取值），审计读 `tier.fell`／`tier.rest`。库里 0 件时写「这七天没落过档」，**别写成「没有原因字段」**。
 - `action_brain.tiers` 存哪儿没找到，不拿它补数。
 
 ### ③ 成败与拒
 
 - 交回／卡住／取消／暂停＝`tasks.state` 的 `RETURNED`／`BLOCKED`／`CANCELLED`／`PAUSED`，按 `tier.ran` 分档；没有 `tier` 的单列一栏。其他状态（`DONE`／`RUNNING`／`UNKNOWN`／`NEEDS_CHARACTER_DECISION`）也列，别丢。**交回只等于交回**（判据 2）。
-- 被拒按成因分（判据 4）：`note.refused` 按 `payload.code` 数；`turn.rejected` 的 `problem` 是自由文本——**只数条数，按字面相同的短句聚类，不引原文长段**；`tool.failed` 写「只到 09-25，近期无记录」；`episodes.rejections[]` 数非空回合数。每一类标「归我／不归我／分不出」，schema 必填所致不归我，分不出就写分不出。
+- 被拒按成因分（判据 4）：按六格④的八处逐处数。**`note.refused` 是 `role_tool` 的子集，不能相加**；`role_tool` 只有 52 条带 `code`，其余只有自由文本——**只数条数，按字面相同的短句聚类，不引原文长段**；`turn.rejected` 单独一处（回合级、不带工具名）；`tool.failed` 写「只到 09-25，近期无记录」；`episodes.rejections[]` 数非空回合数。每一类标「归我／不归我／分不出」，schema 必填所致不归我，分不出就写分不出。
 - 步数和工具记录别混（判据 1），写明用的哪个计数器。
 
 ## 四、每周怎么跑
 
 1. 先把第二节「八条口径判据」重读一遍，再开工。
-2. `development_run`（project=core）里写一个只读脚本：解 `zstandard`、逐行 `json.loads`，**只取** `type`、`data.usage` 的五个数字、第一行的 `agentPreset`／`origin`；不 print 行。库用 `asuna.dbread`（见技能 asuna-database），只取字段名列出的那几个字段。
-3. 输出三张表，每个数带来源＋读的时刻；推断与没验过的单独一节列出来。
-4. 做到的标准：三张表齐、每张表头有时刻／来源／筛法、推断与没验过的有一节、没碰正文。少一样就写「没做完」。
-5. 交给另一边核时，附这份技能第二节原文，她数出来跟我对上才算数；对不上先查口径哪一条两边不同，不先改数。
+2. `development_run`（project=core）里写一个只读脚本：解 `zstandard`、逐行 `json.loads`，**只取** `type`、`data.usage` 的五个数字、每一行的 `time`、目录名前缀和第一行的 `agentPreset`／`origin`；不 print 行。库用 `asuna.dbread`（见技能 asuna-database），只取字段名列出的那几个字段，筛时间用 `local_window`。
+3. 会话文件**先去重再算**（第五节坑 1），时间窗**按每一行的 `time` 切，不按整个文件切**（六格⑥）。
+4. 输出三张表，每个数带来源＋读的时刻；推断与没验过的单独一节列出来。
+5. 做到的标准：三张表齐、每张表头有时刻／来源／筛法、推断与没验过的有一节、没碰正文。少一样就写「没做完」。
+6. 交给另一边核时，附这份技能第二节原文（含六格口径），她数出来跟我对上才算数；对不上先查口径哪一条两边不同，不先改数。
+
+## 五、会让读数出错的坑
+
+1. **会话文件有大量重复行**：按 (`time`, 输入、输出、总、读缓存) 去重，941 个文件里 5990 条重复（约 19%：网页界面会话 5898、我的对话 92）——**命中率先去重再算**。这是启发式判的，未逐条核。
+2. **压缩那一行疑似被数两次**：我的对话和网页界面会话的压缩写缓存合计都是 118758，**疑似同一行被两边各数一次**（未核）。
+3. **`review.tools_week` 库里 0 行**（还没展示过），它的窗口是 `[这条记录 occurred_at − 7 天, occurred_at)`、不写进 payload；第一份周读数约 10-23 才有。
+
+## 六、没验过的／待样本的（照实列，别美化）
+
+- 开工时 `high rests`（`at_dispatch`）那条路有没有 audit（六格①）。
+- 反思回合：盘上 0 样本，首行取值是推断，**待第一份样本核**（六格③）。
+- `turn.rejected` 与 `episodes.rejections[]` 是否同一批（六格④）。
+- `episodes.rejections[]` 的 5 个回合沿用 v1，这趟未重查。
+- 重复行去重是启发式判的，未逐条核（坑 1）。
+- 压缩行疑似被两边各数一次，未核（坑 2）。
+- 「低档几乎没有写缓存、高档才有」这个 v1 前提**没验成立**；那 121 条行动脑写缓存行未按 `tier.ran` 拆开（六格⑤）。
+- `action_brain.tiers` 在库里的存储位置仍未找到。
+- 判据 5 的 654／651 是 10-16 21:11 那趟的数；这趟只读到库里 7 件带 `tier` 的任务，任务总数没重数。
 
 ## 版本
+
+v2（2026-10-23）：六格口径按 10-16 21:24 那轮核对的结论改掉，验证字面照抄 10-16 21:25 那趟高档只读（读的时刻 10-16 晚），我没自己重推。① 落档原因有 `tier.fell` 字段（v1 说库里没有是错的）＋`tier.fell`／`tier.rest` 两处审计，且只在跑过高档时才写；② 会话种类按目录名前缀认、不按 `agentPreset`，任务对行动脑会话用 `sessions.task_id → sessions._id`；③ 反思回合单列一类（0 样本，待样本）；④ 被拒从八处数，主口径是 `role_tool` 的 `payload.refused`（v1 漏了最大一处），`note.refused` 是它的子集不能相加；⑤ 命中率分母改成含写缓存的式子（写缓存算未命中、留在分母里），并纠正 v1 那个没验的写缓存前提；⑥ 时间窗写死从本地 2026-10-16 00:00 起、会话文件按行切不按整文件切。另加第五节三处坑、第六节没验过的清单。八条判据原文一条没丢、语气没改，只在判据 8 后面另起一行补 v2 更新。
 
 v1（2026-10-16）：首次落盘，只写读法，**没跑数**——来源和口径来自 10-16 21:11 探路任务的实测，八条判据是主人定的原话。三张表的种类认法里，「差事」「门」两格与会话种类的对应只按名字，标了没核。主人先核读法，10-23 才核数。
 
 ## 试用记录
 
 - 2026-10-16 v1：只做了结构自检（见 `check_skill.py`），没有跑过任何读数脚本，第四节第 2 步的读法还没真跑过一遍；第一次真跑以后把读数与撞到的坑补在这里。
+- 2026-10-23 v2：本次只改口径，**没跑读数**——六格里的数字是 10-16 21:25 那趟只读的读数（读的时刻 10-16 晚），照抄进来，本次没重跑。下一次真跑（这七天的周读数）按新口径出表后，把结果与撞到的坑补在这里。

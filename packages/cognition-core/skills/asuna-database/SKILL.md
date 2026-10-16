@@ -48,7 +48,7 @@ dbread.show(dbread.find('messages', {'scene_id': 'local-dm', 'received_at': when
 - `identities`：`_id` 是 person id，`display_name`。
 - `episodes`：`_id` 是回合 id，`episode_kind`（external/presence/visit/note/self_development/task_feedback/scheduled/settlement/consult）、`scene_id`、`source_event_id`、`silent_reason`。
 - `tasks`：`_id` 是任务 id（没有 task_id），`state`、`title`、`goal`、`brief`、`created_at`、`finished_at`、`result`、`failure_type`。
-- `audit_events`：`stream_id`（回合、任务等的 id）、`seq`、`type`、`occurred_at`、`payload`。一次工具调用是 `type: role_tool`，`stream_id` 是那个回合。`context.prepared` 只记 manifest（选了哪些、上下文的哈希）和 person_id／policy_epoch，上下文全文在 `episodes.context`。超过 30 天的 `context.prepared`、`retrieval.selected`、`native.context.bound`，以及消息、会话等的 `state.commit` 每天清掉；查得更早的，先看 `audit.pruned` 那条说清到哪天。
+- `audit_events`：`stream_id`（回合、任务等的 id）、`seq`、`type`、`occurred_at`、`payload`。一次工具调用是 `type: role_tool`，`stream_id` 是那个回合。`context.prepared` 只记 manifest（选了哪些、上下文的哈希）和 person_id／policy_epoch，上下文全文在 `episodes.context`。超过 30 天的记录每天清掉（`role_tool` 留一年，每种回顾最近一次展示的那条一直留着）；数据超过 6 GB 时最早的先清。查得更早的，先看 `audit.pruned` 那条说清到哪天、为什么。
 - `memory_units`：`kind`（monologue/dialogue_summary/chat_chunk/memory_unit）、`status`、`body_markdown`（正文；没有 text/content/body）、`scene_id`、`participants`。
 - 文档没有 documents 集合：`state_heads`（`_id` 如 `doc:<主人>:<名字>`，`revision_id`）→ `state_revisions`（`content.sections`）。
 

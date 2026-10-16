@@ -30,7 +30,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `earlier_sessions` — This session and every session it continued from (their successors lead to it).
   - `carry_session` — Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that carries the old one's last summary, and the old binding names it as successor.
   - `action_session_id` — One native context per authorized execution binding, including old logs.
-  - `audit_retention` — ADR-067: the audit's bulky diagnostic records past retention go, once at start and then daily.
+  - `audit_retention` — ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily.
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
   - `side_session` — Whether this session is an errand's copy of a conversation (ADR-066) or a reflection's own (ADR-072): a one-turn session, retired once that turn ends, that later turns never take for the conversation.
@@ -182,7 +182,7 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
 Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 
 - def `reconcile_calls`
-- def `prune` — Delete the audit records past retention; one `audit.pruned` record says up to when and how many.
+- def `prune` — Delete the audit records past retention, then the oldest while the audit is over its cap; one `audit.pruned` record per run says up to when, how many and why.
 - def `verify` — Each event's own hash, and each stream's chain.
 - def `verify_documents` — Compare each document's latest audited commit with the collection (ADR-009 D-4).
 - def `trace_contents` — {content_sha256: document} for reference commits that still match the collection; exported with a trace.

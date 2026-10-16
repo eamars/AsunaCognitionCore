@@ -134,7 +134,7 @@ class Store:
                              ([('scope_key',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
             'state_revisions': [([('mutation_id',1)], {'unique':True})],
             'sessions': [([('binding_key',1)], {'unique':True})],
-            'audit_events': [([('stream_id',1),('seq',1)], {'unique':True}), ([('type',1),('occurred_at',1)], {})],
+            'audit_events': [([('stream_id',1),('seq',1)], {'unique':True}), ([('type',1),('occurred_at',1)], {}), ([('occurred_at',1)], {})],
             'affect_events': [([('persona',1),('ts',1)],{}),
                               ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
             'affect_amendments': [([('target',1)],{}),

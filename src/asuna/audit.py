@@ -23,27 +23,49 @@ def reconcile_calls(observed_body_hashes,events):
     return {'requests':len(requests),'responses_or_errors':len(response_ids),'matched':True}
 
 
-# Retention (ADR-067): past RETENTION_DAYS the bulky diagnostic records go; everything else stays whatever its age:
-# persona and relationship revisions, tasks, plans, episodes, artifacts, tool calls, restarts, errands.
+# Retention (ADR-067, ADR-074): the audit is bounded by time and by size. Past RETENTION_DAYS a record goes, except her
+# own tool calls, kept KEPT_DAYS so an old thought still says what she did next (reasons.then), and the latest showing
+# of each review, kept whatever its age so the next one counts from it. Above CAP_BYTES of data the oldest go first,
+# whatever their kind, until it is under the cap again.
 RETENTION_DAYS=30
-PRUNED_KINDS=('context.prepared','retrieval.selected','native.context.bound','state.intent')
-PRUNED_COMMITS=('messages','sink_receipts','identities','sessions','lane_receipts')
+KEPT_DAYS={'role_tool':365}
+LATEST_KEPT=('review.tools_week','review.tools_week.started','review.exchanges','review.map','sticker.review_offered')
+CAP_BYTES=6*10**9
 
 
-def prune(store, moment=None):
-    """Delete the audit records past retention; one `audit.pruned` record says up to when and how many."""
+def _latest(store):
+    """The _ids of the newest record of each LATEST_KEPT kind in each stream: never pruned."""
+    return [row['id'] for row in store.db.audit_events.aggregate([
+        {'$match':{'type':{'$in':list(LATEST_KEPT)}}},{'$sort':{'occurred_at':-1}},
+        {'$group':{'_id':{'type':'$type','stream':'$stream_id'},'id':{'$first':'$_id'}}}])]
+
+
+def prune(store, moment=None, cap=None):
+    """Delete the audit records past retention, then the oldest while the audit is over its cap; one `audit.pruned`
+    record per run says up to when, how many and why."""
     from datetime import datetime,timedelta,timezone
-    cutoff=((moment or datetime.now(timezone.utc))-timedelta(days=RETENTION_DAYS)).isoformat()
-    old={'occurred_at':{'$lt':cutoff}}
-    deleted=store.db.audit_events.delete_many({**old,'type':{'$in':list(PRUNED_KINDS)}}).deleted_count
-    deleted+=store.db.audit_events.delete_many({**old,'type':'state.commit','$or':[
-        {'payload.collection':{'$in':list(PRUNED_COMMITS)}},
-        # a memory's later revisions (its embedding, its counters); the first, which dates it, stays
-        {'payload.collection':'memory_units','payload.document.revision':{'$gt':1}},
-        {'payload.collection':'memory_units','payload.revision':{'$gt':1}}]}).deleted_count
+    moment=moment or datetime.now(timezone.utc)
+    cap=CAP_BYTES if cap is None else cap
+    keep=_latest(store)
+    cutoff=(moment-timedelta(days=RETENTION_DAYS)).isoformat()
+    deleted=store.db.audit_events.delete_many({'occurred_at':{'$lt':cutoff},'_id':{'$nin':keep},
+                                               'type':{'$nin':list(KEPT_DAYS)}}).deleted_count
+    for kind,days in KEPT_DAYS.items():
+        deleted+=store.db.audit_events.delete_many({'type':kind,'occurred_at':{
+            '$lt':(moment-timedelta(days=days)).isoformat()}}).deleted_count
+    before,by=cutoff,['time']
+    stats=store.db.command('collStats','audit_events')
+    if stats.get('size',0)>cap and stats.get('count'):
+        # as many of the oldest as the excess holds at the average record size; the boundary is the next one's time
+        over=-(-(stats['size']-cap)*stats['count']//stats['size'])
+        nxt=list(store.db.audit_events.find({'_id':{'$nin':keep}},{'occurred_at':1}).sort('occurred_at',1).skip(over).limit(1))
+        if nxt:
+            before=max(before,nxt[0]['occurred_at'])
+            deleted+=store.db.audit_events.delete_many({'occurred_at':{'$lt':before},'_id':{'$nin':keep}}).deleted_count
+            by.append('size')
     if deleted:
-        store.audit('audit-retention','audit.pruned',{'before':cutoff,'deleted':deleted,'kinds':list(PRUNED_KINDS),
-                                                     'commits':list(PRUNED_COMMITS)+['memory_units revision > 1']})
+        store.audit('audit-retention','audit.pruned',{'before':before,'deleted':deleted,'by':by,'days':RETENTION_DAYS,
+                                                     'kept_days':KEPT_DAYS,'latest_kept':list(LATEST_KEPT),'cap_bytes':cap})
     return deleted
 
 

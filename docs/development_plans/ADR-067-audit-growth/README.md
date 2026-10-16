@@ -1,6 +1,7 @@
 # ADR-067: The audit stops copying what is kept elsewhere
 
-Status: **Accepted 2026-10-15** (the owner chose options 1–3 and retention), built the same day.
+Status: **Accepted 2026-10-15** (the owner chose options 1–3 and retention), built the same day. Retention (item 4) is
+replaced by ADR-074 (time and size).
 
 ## What happened
 

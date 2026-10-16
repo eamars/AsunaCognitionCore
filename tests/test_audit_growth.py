@@ -1,6 +1,7 @@
 """ADR-067 MongoDB tests: the audit keeps what it is for and stops copying what is kept elsewhere. A commit leaves out a
 memory's embedding (and says so), a write has no intent record, a turn's prepared context is recorded by its manifest
-and who it is with, and past retention the bulky diagnostic records go while the chain still verifies."""
+and who it is with, and past retention the bulky diagnostic records go while the chain still verifies. ADR-074: the audit is bounded
+by time and by size."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -42,28 +43,54 @@ def test_a_write_has_no_intent_record_and_a_turn_records_its_manifest_not_its_co
     assert 'selected' in row['payload']['manifest']
 
 
-def test_past_retention_the_bulky_records_go_and_the_chain_still_verifies(store, monkeypatch):
+def test_past_retention_every_record_goes_but_her_tool_calls_and_the_latest_showing_and_the_chain_verifies(store, monkeypatch):
     moment = datetime.now(timezone.utc)
-    old = (moment - timedelta(days=audit.RETENTION_DAYS + 2)).isoformat()
     real_now = state.now
-    monkeypatch.setattr(state, 'now', lambda: old)
+    def at(days):
+        monkeypatch.setattr(state, 'now', lambda: (moment - timedelta(days=days)).isoformat())
+    at(audit.KEPT_DAYS['role_tool'] + 1)
+    store.audit('ep-older', 'role_tool', {'tool': 'think'})                  # past its year: goes
+    at(audit.RETENTION_DAYS + 3)
+    store.audit('review:p', 'review.map', {'persona': 'p'})                   # an older showing: goes
+    at(audit.RETENTION_DAYS + 2)
+    store.audit('review:p', 'review.map', {'persona': 'p'})                   # the latest showing: stays, whatever its age
     store.audit('ep-old', 'context.prepared', {'manifest': {}, 'context': {}})
-    store.audit('ep-old', 'role_tool', {'tool': 'think'})                    # kept whatever its age
+    store.audit('ep-old', 'role_tool', {'tool': 'think'})                    # her action: kept a year
     store.audit('ep-old', 'state.commit', {'operation': 'o1', 'collection': 'messages', 'document': {'_id': 'm', 'revision': 2}})
     store.audit('ep-old', 'state.commit', {'operation': 'o2', 'collection': 'memory_units', 'document': {'_id': 'u', 'revision': 1}})
-    store.audit('ep-old', 'state.commit', {'operation': 'o3', 'collection': 'memory_units', 'document': {'_id': 'u', 'revision': 2}})
     store.audit('ep-old', 'state.commit', {'operation': 'o4', 'collection': 'state_revisions', 'document': {'_id': 'r', 'revision': 1}})
     monkeypatch.setattr(state, 'now', real_now)
     store.audit('ep-old', 'context.prepared', {'manifest': {}, 'context': {}})       # recent: kept
-    assert audit.prune(store, moment) == 3
-    left = [(e['type'], (e['payload'].get('document') or {}).get('_id'), (e['payload'].get('document') or {}).get('revision'))
-            for e in store.db.audit_events.find({'stream_id': 'ep-old'}).sort('seq', 1)]
-    assert left == [('role_tool', None, None), ('state.commit', 'u', 1), ('state.commit', 'r', 1),
-                    ('context.prepared', None, None)]
+    assert audit.prune(store, moment) == 6
+    mine = {'stream_id': {'$in': ['ep-older', 'ep-old', 'review:p']}}
+    left = [(e['stream_id'], e['type']) for e in store.db.audit_events.find(mine).sort([('stream_id', 1), ('seq', 1)])]
+    assert left == [('ep-old', 'role_tool'), ('ep-old', 'context.prepared'), ('review:p', 'review.map')]
     [mark] = store.db.audit_events.find({'type': 'audit.pruned'})
-    assert mark['payload']['deleted'] == 3 and mark['payload']['before'] < moment.isoformat()
+    assert mark['payload']['deleted'] == 6 and mark['payload']['by'] == ['time'] and mark['payload']['before'] < moment.isoformat()
     everything = list(store.db.audit_events.find({}))
     audit.verify(everything)                                                 # gaps where retention cut: accepted
     with pytest.raises(ValueError, match='AUDIT_HASH_CHAIN_INVALID'):
         audit.verify([e for e in everything if e['type'] != 'audit.pruned'])  # the same gaps unexplained: not
     assert audit.prune(store, moment) == 0 and store.db.audit_events.count_documents({'type': 'audit.pruned'}) == 1
+
+
+def test_over_its_cap_the_oldest_go_first_whatever_their_kind_and_the_latest_showing_stays(store, monkeypatch):
+    moment = datetime.now(timezone.utc)
+    real_now = state.now
+    for hours in range(40, 0, -1):                                           # 40 records, oldest first, all recent
+        monkeypatch.setattr(state, 'now', lambda h=hours: (moment - timedelta(hours=h)).isoformat())
+        store.audit('ep-%d' % hours, 'role_tool', {'tool': 'think', 'pad': 'x' * 400})
+        if hours == 39:
+            store.audit('review:p', 'review.exchanges', {'persona': 'p'})
+    monkeypatch.setattr(state, 'now', real_now)
+    stats = store.db.command('collStats', 'audit_events')
+    size, count = stats['size'], stats['count']
+    deleted = audit.prune(store, moment, cap=size // 2)
+    assert abs(deleted - count // 2) <= 2                                   # about half, by the average record size
+    assert store.db.audit_events.find_one({'type': 'review.exchanges'})     # the only showing stays
+    oldest_left = min(e['occurred_at'] for e in store.db.audit_events.find({'type': 'role_tool'}))
+    assert all(e['occurred_at'] >= oldest_left for e in store.db.audit_events.find({'type': 'role_tool'}))
+    assert not store.db.audit_events.find_one({'stream_id': 'ep-40'})       # the oldest went first
+    [mark] = store.db.audit_events.find({'type': 'audit.pruned'})
+    assert mark['payload']['by'] == ['time', 'size'] and mark['payload']['cap_bytes'] == size // 2
+    audit.verify(list(store.db.audit_events.find({})))

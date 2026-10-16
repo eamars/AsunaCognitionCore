@@ -599,7 +599,7 @@ class BusinessWorker:
         return 'asuna-action-' + sha(identity.encode())[:32]
 
     def audit_retention(self):
-        """ADR-067: the audit's bulky diagnostic records past retention go, once at start and then daily."""
+        """ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily."""
         from .audit import prune
         while True:
             try:

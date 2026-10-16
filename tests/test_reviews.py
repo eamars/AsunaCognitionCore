@@ -168,7 +168,7 @@ def test_the_map_names_each_store_shows_her_changes_with_her_reasons_and_attenti
     first = reflection_map.block(store, 'P1', NOW)
     assert first['window'].startswith('这是第一张图') and first['note'] == reflection_map.NOTE
     # Her review: the first map has nothing to compare with, so what exists is a baseline, never "changed".
-    assert first['changed']['documents'] == [] and first['changed']['group_notes'] == []
+    assert first['changed'] == {'group_notes': [], 'documents': [], 'people': []}, 'all three stores, people too (her ask)'
     assert any(line.startswith('persona：') and '基线·首次入图' in line for line in first['index'])
     docs = DocumentStore(store, 'P1')
     docs.apply('persona', {'op': 'append_section', 'heading': '新学到的', 'reason': '今天才明白'}, '一句新的话。',

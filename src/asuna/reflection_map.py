@@ -104,7 +104,8 @@ def block(store, persona, moment=None, *, tag=None):
     since_at = max(_at(last['occurred_at']), floor) if last else floor
     since = _iso(since_at)
     if not last:
-        window = '这是第一张图：只看最近 %d 天。' % WINDOW_DAYS
+        # Her review: seen for the first time is not new, so the first map counts nothing as changed.
+        window = '这是第一张图：没有上一张可比，现有的都是基线·首次入图，不算改过；从下一张起才数改了什么。'
     elif _at(last['occurred_at']) < floor:
         gap = (moment - _at(last['occurred_at'])).days
         window = '上次地图在 %d 天前，最早的 %d 天没进这张图（只看最近 %d 天）。' % (gap, gap - WINDOW_DAYS, WINDOW_DAYS)
@@ -127,7 +128,7 @@ def block(store, persona, moment=None, *, tag=None):
         totals[0] += 1
         totals[1] += len(secs)
         totals[2] += sum(len(s.get('body') or '') for s in secs)
-        moved = _changed_sections(_before(store, entity, since), now)
+        moved = _changed_sections(_before(store, entity, since), now) if last else []
         if not moved:
             continue
         totals[3] += len(moved)
@@ -136,8 +137,9 @@ def block(store, persona, moment=None, *, tag=None):
             'group': people.scene_title(scene) if scene else slug, 'your_reasons': _reasons(store, entity, since),
             'sections': [{'heading': s.get('heading') or s['sid'], 'ref': {'doc': slug, 'section': s['sid']},
                           'text': excerpt(s.get('body'), WHOLE_CHARS)} for s in moved]}))
-    index.append('群笔记：%d 个群，%d 节，%d 字；上次以来改了 %d 节（changed.group_notes）。打开：recall 的 sections 写 '
-                 '{doc: "group:…", section: "…"}' % tuple(totals))
+    index.append(('群笔记：%d 个群，%d 节，%d 字；' % tuple(totals[:3]))
+                 + ('上次以来改了 %d 节（changed.group_notes）' % totals[3] if last else '基线·首次入图')
+                 + '。打开：recall 的 sections 写 {doc: "group:…", section: "…"}')
 
     # Her own documents: headings changed, newest first, with the reasons she gave then.
     documents = []
@@ -148,8 +150,9 @@ def block(store, persona, moment=None, *, tag=None):
         row = _revision(store, head['revision_id']) or {}
         entity = row.get('entity_key') or head['_id']
         now = row.get('content') or {}
-        moved = _changed_sections(_before(store, entity, since), now)
-        index.append('%s：%d 节，上次以来改了 %d 节' % (slug, len(now.get('sections') or []), len(moved)))
+        moved = _changed_sections(_before(store, entity, since), now) if last else []
+        index.append('%s：%d 节，%s' % (slug, len(now.get('sections') or []),
+                                       '上次以来改了 %d 节' % len(moved) if last else '基线·首次入图'))
         if moved:
             documents.append((row.get('created_at') or '', {
                 'doc': slug, 'headings': [s.get('heading') or s['sid'] for s in moved],
@@ -161,12 +164,13 @@ def block(store, persona, moment=None, *, tag=None):
     understood = []
     for head in persons:
         row = _revision(store, head['revision_id']) or {}
-        if (row.get('created_at') or '') >= since:
+        if last and (row.get('created_at') or '') >= since:
             person = head['_id'].split('|')[0].split(':', 1)[1]
             understood.append((row['created_at'], {'who': _who(store, people, person),
                                                    'text': excerpt((row.get('content') or {}).get('body'), WHOLE_CHARS)}))
-    index.append('人：按人那层的理解 %d 个人，按对话那层 %d 个对话（那层只在各自的对话里）；上次以来按人那层改了 %d 个'
-                 % (len(persons), len(heads) - len(persons), len(understood)))
+    index.append('人：按人那层的理解 %d 个人，按对话那层 %d 个对话（那层只在各自的对话里）；%s'
+                 % (len(persons), len(heads) - len(persons),
+                    '上次以来按人那层改了 %d 个' % len(understood) if last else '基线·首次入图'))
 
     # The rest, as counts with where to look.
     kinds = collections.Counter(m.get('kind') for m in store.db.memory_units.find({'status': 'active'}, {'kind': 1}))

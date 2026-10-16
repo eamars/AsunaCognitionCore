@@ -23,7 +23,9 @@ owner's rule is more tokens for reflection, none in regular turns.
 A reflection turn (self evaluation, dice review, the nine-day floor; `self_review.REFLECTION_BLOCKS`) carries
 `map_from_program`, from what changed since the last map she was shown, at most 14 days back; a longer gap is said,
 not hidden: "the last map was N days ago; the earliest N-14 days are not in this one" (her review: a map that quietly
-says nothing changed is the worst way for it to fail):
+says nothing changed is the worst way for it to fail). The first map has nothing to compare with: what exists is
+marked a baseline, first in the map, and nothing is counted as changed (her review: seen for the first time is not
+new; her oldest group note being inside the first window would otherwise have read as 88 sections changed):
 
 1. **One line per store**: what it is, how much there is, what changed since the last map, and exactly how to open it
    (`recall` `sections` with the `doc`, or the tool that lists it). Her group notes, her own documents (persona, self,
@@ -59,8 +61,8 @@ only, which run in their own session (ADR-072). Program: one module, its test, i
 her real data before installing, read-only: the first draft's single limit let group notes take nearly all of it (158
 texts cut); with a share per store her first map reads 6,397 characters (four groups' notes newest first and the rest
 counted, three documents with her reasons, two people, attention for twelve groups). Her oldest group note is from
-2026-10-05, inside the first map's 14 days, so the first map counts all 88 sections as changed; later maps count from
-the one before.
+2026-10-05, inside the first map's 14 days: the first draft would have counted all 88 sections as changed, which she
+caught before signing; the first map now marks them a baseline, and later maps count from the one before.
 
 ## Her review (agent line, 2026-10-16; Claude's paraphrase, for her to sign or correct)
 

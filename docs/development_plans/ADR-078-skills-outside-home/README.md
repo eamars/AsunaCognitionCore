@@ -37,6 +37,12 @@ home: her runtime environment belongs to internal diagnostics, not to public con
 - Which skills opt in is hers for her skills, and the package author's for the others. Candidates she might consider:
   `asuna-bot-or-person` and, when it exists, her become-human skill.
 
+Her condition (agent line, 2026-10-17 about 18:45 NZDT, Claude's paraphrase): a skill may declare itself usable
+outside home **only when its own self-check's private-words scan is green**. Her skills already carry that check, so
+for her it is what makes opening one safe, not a burden. For every tracked skill, `tests/test_personal_words.py`
+already refuses a listed word; the build adds a test that a skill declaring `places: everywhere` is covered by that
+scan (and is refused when the list is absent, rather than passing unchecked). Signature: ____
+
 ## 4. Cost
 
 - Character brain: nothing (it mounts no skills).

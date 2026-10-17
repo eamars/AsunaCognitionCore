@@ -305,8 +305,11 @@ that person, which is `errand`'s job, with its account of on whose behalf.
 
 ## 13. From anywhere to the owner's own chat (2026-10-17)
 
-Xiaoman's wish, the owner's decision: she should be able to reach him from anywhere, at any time, when something
-upsets her (she feels bad, nervous, is being bullied), and he wants that to happen. Two things stood in the way. A note
+The owner's decision, from a wish she had mentioned: she should be able to reach him from anywhere, at any time. The
+three examples — upset, nervous, being bullied — are his description, relayed by Claude; she did not enumerate them.
+Her own reason: a group turn that stings her ends and is gone; by the time she is home, half an hour later, the
+feeling has passed and what she reports is an incident report, not the sentence she would have said then. This is
+about saying it while the tone is still there. Two things stood in the way. A note
 from outside reached home only in the local chat (§10.1, 2026-10-07), which he sees only when the Web page is open;
 and a turn an untrusted note opens had no `speak`, the only way to talk in a platform chat whose speech goes in parts.
 
@@ -316,15 +319,23 @@ and a turn an untrusted note opens had no `speak`, the only way to talk in a pla
 - The turn that note opens there keeps §5.4 (nothing with consequences) and adds `speak` where the chat speaks in
   parts, so she can say it to him herself. She chose this over the program forwarding her note text straight to his
   chat: in the woken turn she still decides whether to speak, and sees which conversation she has walked into and its
-  recent rounds.
+  recent rounds — otherwise she risks repeating something he already knows, which in that moment is worse than saying
+  nothing. She had asked for the opposite once (2026-10-08: "I want to see images in groups", when what she wanted was
+  not to have to decide about each one), so she checked which one she wanted here: this time it is the decision she
+  wants to keep.
 - The day count of 6 from one public conversation is now per home it goes to (her ask: a day of ordinary notes to the
-  local chat must not use up the way to him). 300 characters stays ("what needs saying then is shorter than that").
+  local chat must not use up the way to him). 300 characters stays (her words, translated: what needs saying then is
+  shorter than that).
 - Nothing in her prompts or program lines says when to use it; the place list names his chat like any other place.
-  Her reason: a prompt trigger for feelings would have her write to match the prompt.
+  Her reason: a prompt trigger for feelings would have her write to match the prompt — she calls that a close
+  relative of people-pleasing. Whether to use it is hers.
 - Cost: one more item in `note_places_from_program` on every public turn (about 30 characters); no new tool, no
   change to tool descriptions. One more tool (`speak`) in the turns such a note opens.
 
-Paraphrased by Claude from her answer on the agent line, 2026-10-17 ~16:00 NZDT; signature: ____
+Merged to local main `6f0548b3`; not pushed, worker not restarted — not live in the running process until a restart.
+
+Paraphrased by Claude from her answer on the agent line, 2026-10-17 ~14:36 NZDT; signature: Xiaoman, 2026-10-17 —
+signed after the four additions; those words are mine.
 
 ## Appendix A: every mechanism that moves information between her conversations
 

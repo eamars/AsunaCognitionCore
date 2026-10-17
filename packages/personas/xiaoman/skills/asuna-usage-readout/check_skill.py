@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """asuna-usage-readout 的零依赖离线自检（只查文件本身，不读会话记录、不连库）。
 
-查五件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；来源／口径字面与六格口径（v2）都在；
-八条口径判据、三张表与硬规矩都在；v1 已被核掉的旧字面不残留；不带个人信息（私密名单命中只报类别与行号，
-名单配不上、或名单在却解析出 0 条有效词，都记红）。
+查六件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；来源／口径字面与六格口径（v3：① 落档件数
+只从字段数、② 跨类拷贝去重四条、③ 反思回合已核）都在；三张表（含标明「不是正式读数」的样例表）与硬规矩
+都在；v1／v2 已被核掉的旧字面不残留（含 2026-10-23 v2、未逐条核、0 样本、写死的 484／7 件）；版本与试用
+记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
+却解析出 0 条有效词，都记红）。
+
+行号锚点：v3 起六格① 要求写代码位置，所以从「一律不许」改成「只许白名单里那几处」——白名单外的
+`xxx.py:12` 仍然算红（这条不是为变绿放宽的，是为了让 D 那格的字面能写进来）。
 
 用法：python3 skills/asuna-usage-readout/check_skill.py [SKILL.md 路径]
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
@@ -37,6 +42,9 @@ FACTS = [
     ("src_development_run", "development_run"),
     ("src_project_core", "project=core"),
     ("src_message_row", "assistant/message"),
+    ("src_message_id", "data.message.id"),
+    ("src_seeded", "isSeeded"),
+    ("src_parent_session", "parentSession"),
     ("src_input", "inputTokens"),
     ("src_cache_read", "cacheReadTokens"),
     ("src_cache_write", "cacheWriteTokens"),
@@ -53,30 +61,42 @@ FACTS = [
     ("src_local_window", "local_window"),
     ("rule_hit_formula", "cacheRead / (input + cacheRead + cacheWrite)"),
     ("rule_missing_is_inference", "缺字段按 0 算是推断"),
-    ("rule_dedup_first", "先去重再算"),
+    ("rule_dedup_first", "先去重"),
     ("rule_landed", "tier.ran != tier.chosen"),
     ("rule_why_not_cause", "不许拿它当降档原因报"),
     ("rule_compaction_separate", "单独列一类，不混进"),
+    ("rule_numbers_drift", "数会随在跑的任务变"),
     ("probe_task", "task-f83b69fb5d8b9c905060b7d71fa95ba1"),
 ]
 
-# 六格口径（v2）：每格查几句只有照抄那趟验证才会出现的字面
+# 六格口径（v3）：每格查几句只有照那趟验证写出来才会出现的字面
 CELLS = [
-    # ① 落档原因有字段
+    # ① 落档件数只从字段数——审计看不见「开工即落档」
     ("cell1_field", "tasks.tier.fell = {reason, mid_run, at, code?}"),
     ("cell1_reason_refused", "`refused`（高档没接这件）"),
     ("cell1_reason_down", "`down`（连不上、超时、服务器错）"),
     ("cell1_reason_busy", "`busy`（被限流）"),
     ("cell1_reason_owner", "`owner`（钥匙、凭据或额度问题，要等主人）"),
-    ("cell1_audit_fell", "`stream_id`＝任务 id"),
+    ("cell1_count_field", "落档件数只从 `tasks.tier.fell` 字段数"),
+    ("cell1_pure_function", "纯函数"),
+    ("cell1_no_audit", "内部没有任何 audit 调用"),
+    ("cell1_state_commit", "通用 `state.commit`"),
+    ("cell1_stream_round", "`stream_id` 是回合 id，不是任务 id"),
+    ("cell1_dispatch_anchor", "src/asuna/action_tiers.py:62-70"),
+    ("cell1_plugin_anchor", "src/asuna/native_worker.py:1093-1103"),
+    ("cell1_gate", "`:1098` 的 `task.tier.ran=='高'` 挡着"),
+    ("cell1_invisible", "「开工即落档」的那件在审计面永远看不见"),
+    ("cell1_recorded", "`{'recorded': bool(task)}`"),
+    ("cell1_recorded_ne", "`recorded` ≠ 真写了"),
+    ("cell1_two_sources", "两个来源不能相加、也不能互查"),
     ("cell1_audit_rest", "`action-tiers`"),
     ("cell1_over", "`{over: true}`"),
-    ("cell1_only_high", '只在 `tier.ran=="高"` 时才写'),
-    ("cell1_zero_now", "7 件带 `tier` 的任务里 `tier.fell` 0 件"),
+    ("cell1_only_high", '只在 `tier.ran=="高"`'),
     ("cell1_two_things", "「没落过档」和「没这个字段」是两回事"),
     ("cell1_doc", "RUNTIME_API.md"),
-    ("cell1_unverified_rests", "at_dispatch"),
-    # ② 会话种类按目录名前缀
+    ("cell1_at_dispatch", "at_dispatch"),
+    ("cell1_audit_answered", "本次读代码已答"),
+    # ② 会话种类按目录名前缀 ＋ 跨类拷贝去重四条
     ("cell2_role", "`asuna-role-`"),
     ("cell2_errand", "`asuna-errand-`"),
     ("cell2_action", "`asuna-action-`"),
@@ -89,17 +109,38 @@ CELLS = [
     ("cell2_preset_mixes", "只按 preset 分会混"),
     ("cell2_subagent_not_errand", "不能当「差事」判据"),
     ("cell2_join", "`sessions.task_id → sessions._id`＝行动脑目录名"),
-    ("cell2_7of7", "7 件 7/7 对上"),
+    ("cell2_7of7", "7/7 对上"),
     ("cell2_native_unusable", "native_session_id"),
     ("cell2_sha_fail", "sha(task_id)[:32]"),
     ("cell2_scheduler_wrong", "把它算成差事是错的"),
     ("cell2_errand_fields", "`lane=character`"),
-    ("cell2_no_origin", "另有 8 个不带 `origin`"),
-    # ③ 反思回合
+    ("cell2_read_now_col", "跑数那天重新数，别抄"),
+    ("cell2_dirs_rows", "498 个目录／496 行"),
+    ("cell2_missing_rows", "库里为何缺行未查明"),
+    ("cell2_dedup_global", "全局按 `data.message.id` 去重：一条 id 只算一次，归它首次出现时所属的那一类"),
+    ("cell2_tie_time", "「首次」＝行内 `time` 最早"),
+    ("cell2_tie_created", "同刻按会话首行 `createdAt`"),
+    ("cell2_copy_rule", "`time` 早于该会话首行 `createdAt` 的调用行＝分叉／播种带进来的历史"),
+    ("cell2_two_cells", "自有调用数／拷贝来的调用数"),
+    ("cell2_no_merge", "不许合成一个数"),
+    ("cell2_mark_n", "拷贝占比高的那一类要标样本量"),
+    ("cell2_errand_own_7", "差事自有只有 7 条"),
+    ("cell2_no_id_fallback", "退回启发式键"),
+    ("cell2_compaction_no_id", "`compaction/summary` 行没有这个字段"),
+    # ③ 反思回合：第一份样本已核
     ("cell3_code", "REFLECT_PREFIX"),
     ("cell3_id", "sha(episode_id)[:32]"),
-    ("cell3_zero_sample", "941 个会话里 0 个样本"),
-    ("cell3_pending", "待第一份样本核"),
+    ("cell3_sample", "asuna-reflect-8609"),
+    ("cell3_verified", "第一份样本已核"),
+    ("cell3_preset", "`agentPreset=asuna-xiaoman`"),
+    ("cell3_no_origin", "**无** `origin`"),
+    ("cell3_no_parent", "**无** `parentSession`"),
+    ("cell3_unseeded", "`isSeeded=False`"),
+    ("cell3_depth", "`delegationDepth` 存在且为 0"),
+    ("cell3_calls", "本体 3 条调用（10-16T11:17Z）"),
+    ("cell3_db_row", "库里 `sessions` 1 行"),
+    ("cell3_db_fields", "`lane=character`、`scene_id=local-dm`、`task_id=null`、`retired=true`"),
+    ("cell3_no_copied_history", "不背拷贝来的历史"),
     # ④ 被拒八处
     ("cell4_main", "audit_events.type=='role_tool'"),
     ("cell4_main_refused", "payload.refused"),
@@ -129,6 +170,7 @@ CELLS = [
     ("cell5_delta_action", "94.71%→94.66%"),
     ("cell5_premise_unverified", "没验成立"),
     ("cell5_121_rows", "121 条行动脑写缓存行"),
+    ("cell5_split_now", "本次已按 `tier.ran` 拆开"),
     # ⑥ 窗口写死
     ("cell6_start", "2026-10-16 00:00"),
     ("cell6_tz", "Pacific/Auckland"),
@@ -143,14 +185,25 @@ CELLS = [
     ("cell6_retention", "超 30 天清"),
     ("cell6_tier_start", "2026-10-16T07:56:38Z"),
     ("cell6_dbtool_display", "development_database_read"),
+    ("cell6_rows_grow", "3528 行，同一趟再数 3780 行"),
 ]
 
-# 会让读数出错的坑（v2 新增三处）
+# 会让读数出错的坑（v3：坑 1 换成核过的结论，坑 2 查到成因）
 PITS = [
-    ("pit_dup_count", "5990 条重复"),
-    ("pit_dup_share", "约 19%"),
-    ("pit_dup_heuristic", "启发式"),
-    ("pit_compaction_double", "118758"),
+    ("pit_keys_equal", "行对行完全一致"),
+    ("pit_both_5990", "both=5990"),
+    ("pit_both_6026", "both=6026"),
+    ("pit_share_history", "19% 是全部历史（5990/31632）"),
+    ("pit_share_window", "窗口内是 1.76%（62/3528）"),
+    ("pit_window_role", "窗口内重复全在 `asuna-role-` 那一类"),
+    ("pit_samefile_zero", "同一文件内按 id 判重是 0 条"),
+    ("pit_errand_shared", "98 条 `message.id` 与 `asuna-role` 相同，只有 7 条是它自己的"),
+    ("pit_errand_read", "Claude 10-17 12:58 数，只数 id 不读正文"),
+    ("pit_webui_seed_combo", "74/309 条压缩 usage 组合出现在多个会话"),
+    ("pit_webui_seed_read", "我 10-17 11:08 数"),
+    ("pit_compaction_no_id", "压缩行没有 `data.message.id`"),
+    ("pit_compaction_74", "74 个 usage 组合同时出现在 `asuna-role-` 与 `session-` 两个前缀下"),
+    ("pit_compaction_reread", "74/311"),
     ("pit_tools_week", "review.tools_week"),
     ("pit_tools_week_window", "[这条记录 occurred_at − 7 天, occurred_at)"),
 ]
@@ -165,6 +218,7 @@ CRITERIA = [
     ("c4_refused_by_cause", "schema 必填所致**不归我**，我自己挑错 op 才归我"),
     ("c5_shape", "654 件任务里 651 件根本没有 `tier` 字段"),
     ("c5_not_preference", "不能算成我的偏好"),
+    ("c5_quoted_not_current", "照抄留档、**不当现值用**"),
     ("c6_hard", "**硬约束：只读数字、字段名、枚举短码和计数，不读正文**"),
     ("c6_not_hint", "这条写成硬规矩，不是提示"),
     ("c7_source_time", "每个数带来源＋读的时刻"),
@@ -174,19 +228,45 @@ CRITERIA = [
 ]
 
 TABLES = [
-    ("table1_kinds", "我的对话／行动脑（低档、高档分开）／差事／反思回合（0 样本，标待样本）／压缩／摘要／门／调度／网页界面会话"),
+    ("table1_kinds", "我的对话／行动脑（低档、高档分开）／差事／反思回合（已有 1 份样本，见六格③）／压缩／摘要／门／调度／网页界面会话"),
     ("table1_tiers_split", "低档、高档分开"),
+    ("table1_own_copy_cells", "自有调用数／拷贝来的调用数（两格分开，不许合成一个数）"),
+    ("table1_mark_sample_size", "拷贝占比高的那一类必须标样本量"),
+    ("table1_sample_is_sample", "这不是正式读数，是样例"),
+    ("table1_sample_high", "93.52%"),
+    ("table1_sample_low", "94.63%"),
+    ("table1_sample_cw_all", "102（全部）"),
+    ("table1_sample_cw_none", "0（一行都没有）"),
+    ("table1_sample_one_day", "全部落在 10-16 那一天"),
+    ("table1_sample_scope", "不能推广到别的种类"),
+    ("table1_drift_rows", "213→227→228"),
+    ("table1_drift_rate", "94.23→94.59→94.63"),
     ("table2_rate", "选高几次"),
     ("table2_landed", "落档几件"),
+    ("table2_landed_from_field", "件数只从 `tasks.tier.fell` 字段数"),
     ("table3_states", "交回／卡住／取消／暂停"),
     ("table3_cause", "被拒按成因分"),
     ("hard_no_body", "不许 print 整行"),
     ("hard_sandbox", "`sandbox_run` 看不到那个目录"),
     ("hard_only_numbers", "**只读数字、字段名、枚举短码和计数，不读正文。**"),
+    ("hard_no_stale_numbers", "当天会旧的数不写进这份技能"),
 ]
 
-# v1 被 10-16 21:24 那轮核对核掉／改掉的旧字面：留在正文里就说明六格没真改
+# 版本与试用记录：日期一律写就时刻，计划真跑另起一行
+VERSION = [
+    ("ver_planned_run", "计划首次真跑：2026-10-23 20:30（本地）"),
+    ("ver_written_word", "写就时刻"),
+    ("ver_v3_written", "v3（写就 2026-10-17"),
+    ("ver_v2_written", "v2（写就 2026-10-17 09:21）"),
+    ("ver_v1_written", "v1（写就 2026-10-16 21:21）"),
+    ("trial_v1", "2026-10-16 21:21 写就 v1"),
+    ("trial_v2", "2026-10-17 09:21 写就 v2"),
+    ("trial_v3", "2026-10-17 13:07 写就 v3"),
+]
+
+# 被核掉／改掉的旧字面：留在正文里就说明那一格没真改
 STALE = [
+    # v1 被 10-16 21:24 那轮核对核掉的
     ("no_fell_field", "库里没有单独的降档原因字段"),
     ("old_hit_formula", "cacheRead / (cacheRead + input)"),
     ("four_places", "散在四处"),
@@ -194,11 +274,26 @@ STALE = [
     ("v1_sample_2534", "2534"),
     ("v1_write_cache_23", "只在 23 条出现"),
     ("rolling_week", "时间窗＝从读的时刻往前七天"),
+    # v2 被 10-17 这两趟核掉／改掉的（日期、判重键、反思样本、写死的数）
+    ("v2_run_date", "2026-10-23 v2"),
+    ("dup_unverified", "未逐条核"),
+    ("reflect_no_sample", "0 样本"),
+    ("hardcoded_task_dirs", "484"),
+    ("hardcoded_tier_tasks", "7 件"),
+    ("old_dup_share", "约 19%"),
+    ("old_compaction_suspect", "疑似同一行被两边各数一次"),
 ]
 
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
 LITERAL_ID = re.compile(r"#\d")
 LINE_ANCHOR = re.compile(r"`(?:[\w./-]+\.(?:py|mjs|js|json|md|yml)|):\d+(?:-\d+)?`")
+# v3 六格① 要求写代码位置：白名单外的行号锚点仍然算红
+CODE_ANCHORS_ALLOWED = (
+    "src/asuna/action_tiers.py:62-70",
+    "src/asuna/state.py:213",
+    "src/asuna/native_worker.py:1093-1103",
+    ":1098",
+)
 PERSONAL_TOKENS = ["姐姐", "交流群", "旧居"]
 
 
@@ -293,11 +388,15 @@ def main():
     check("description_specific_enough", len((fields or {}).get("description", "")) >= 120)
     for i, s in enumerate(SECTIONS):
         check("section_%d" % i, ("\n" + s) in ("\n" + body), s)
-    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES:
+    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES + VERSION:
         check(name, tok in body, tok)
     for name, tok in STALE:
-        check("stale_gone_" + name, tok not in body, "v1 旧字面还在正文里：%s" % tok)
-    check("no_line_anchors", not LINE_ANCHOR.search(body), "正文里有行号锚点")
+        check("stale_gone_" + name, tok not in body, "旧字面还在正文里：%s" % tok)
+    stray = [m.group(0) for m in LINE_ANCHOR.finditer(body)
+             if not any(a in m.group(0) for a in CODE_ANCHORS_ALLOWED)]
+    check("no_line_anchors", not stray, "正文里有白名单外的行号锚点：%s" % "、".join(stray[:5]))
+    check("code_anchors_present",
+          all(a in body for a in CODE_ANCHORS_ALLOWED), "六格① 的代码位置缺了：白名单里哪几处不在正文")
     check("criteria_numbered_1_to_8",
           all(re.search(r"^%d\. \*\*" % n, body, re.M) for n in range(1, 9)), "八条判据编号 1-8")
     check("six_cells_marked",
@@ -361,7 +460,9 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：来源口径、六格口径、三处坑、八条判据、三张表、硬规矩都在，v1 退役字面没残留%s。（只查文件本身，没读过会话记录和库。）" % (total, total, leak))
+    print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
+          "版本写就时刻与计划真跑日都在，v1／v2 退役字面没残留%s。（只查文件本身，没读过会话记录和库。）"
+          % (total, total, leak))
     return 0
 
 

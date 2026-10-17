@@ -118,3 +118,14 @@ the skills that declare `group` (ADR-078). What the next run needs:
   leaves `node_modules` half deleted. Stop the Host first (the switch is a restart anyway), then `npm ci`.
 - Packed tarballs the old profile named are pruned only at the next pack; after the switch, prune them once
   (`pack_plugins.prune`) and remove the worktree, the fork clone and the probe homes.
+
+## Third run (0.2.1-rc.2, 2026-10-18)
+
+The owner asked for rc.2, one day old, and to switch directly without a rehearsal (a small change). The DSH
+upgrade session rebased the two patches onto `dsh-v0.2.1-rc.2` cleanly (fork `asuna/0.2.1-rc.2`, 5713aab7); rc.1→rc.2
+adds DeepSeek's Search and Fetch APIs behind a settings switch, off by default. Asuna changed only its pins.
+- Clone the fork with `core.longpaths=true` on Windows (a test fixture path is too long otherwise).
+- `uv` lives in the main checkout's `.venv`; a worktree's own `uv sync` does not install it, so `test_lock_files`
+  skips there unless that `Scripts` folder is on PATH.
+- `pyproject.toml` and the worker's bundled `pyproject.toml` named `0.1.0`; both now follow Asuna's version, and
+  `tests/test_versions.py` checks the first.

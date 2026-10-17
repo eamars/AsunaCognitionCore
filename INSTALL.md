@@ -5,7 +5,7 @@ order; every step says how to check it worked.
 
 ## What you need
 
-- **DSH 0.2.1-rc.1** with a Web profile (`dsh --profile <name>`). The plugins pin this exact version.
+- **DSH 0.2.1-rc.2** with a Web profile (`dsh --profile <name>`). The plugins pin this exact version.
 - **MongoDB with vector search** that the profile can reach, and a database name for Asuna. Asuna keeps all of its
   state there, and its memory recall uses Atlas Vector Search: MongoDB Atlas, the `mongodb/mongodb-atlas-local` image,
   or MongoDB Community with its search process (mongot). A plain `mongod` runs, but memory is never indexed.

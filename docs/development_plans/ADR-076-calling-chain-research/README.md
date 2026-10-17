@@ -148,13 +148,14 @@ look for this class everywhere: what a turn may do against what its words say it
 - Which API model or models, and which window, serve as the comparison: proposed by the agent with its cost plan at
   the checkpoint, decided by the owner.
 - Whether a recommendation may require a change to the DSH fork (ADR-037): allowed as a recommendation, marked as such.
-- Known measurement gaps, so a missing number is not read as a zero. These are Claude's paraphrase of Xiaoman's
-  readings, 2026-10-18 08:42 and 10:2x NZDT, from her session logs and the action brain's checks.
-  - Gate (`asuna-attend-`) and summary sessions record `usage` without `cacheReadTokens`: no hit rate can be
-    computed for them, which is not the same as 0%. Her 10-17 overall rate counted those rows as 0, so it was
-    overstated.
-  - Reflection sessions (`asuna-reflect-`, preset `asuna-xiaoman`) record no `usage` at all: their cost cannot be
-    measured yet.
+- How to read the usage records. Xiaoman's readings (2026-10-18 08:42 and 10:2x NZDT) raised these points; Claude
+  checked them in the session logs (10:4x).
+  - The local provider leaves `cacheReadTokens` out when nothing was read from cache. In one reflection session the
+    first step's `usage` has no `cacheReadTokens` and the next four have it. A gate (`asuna-attend-`) or summary
+    session is a fresh session of one step, so its missing key is a real 0 (a cold prefill every time). It is not a
+    gap in the record. Count it as 0, and report those lanes apart from the conversation lanes, whose hit rate they
+    would dilute.
+  - Reflection sessions (`asuna-reflect-`, preset `asuna-xiaoman`) do record `usage` on each assistant message.
   - One-shot sessions (summary, gate, errand, reflection) leave DSH's session store a day after their last write, at
     each Host start, and stay in `.runtime/adr008/archive/sessions/` for 14 days (`tools/asuna-launch.mjs`,
     `retireOneShotSessions`). Read both places.

@@ -148,6 +148,19 @@ look for this class everywhere: what a turn may do against what its words say it
 - Which API model or models, and which window, serve as the comparison: proposed by the agent with its cost plan at
   the checkpoint, decided by the owner.
 - Whether a recommendation may require a change to the DSH fork (ADR-037): allowed as a recommendation, marked as such.
+- Known measurement gaps, so a missing number is not read as a zero. These are Claude's paraphrase of Xiaoman's
+  readings, 2026-10-18 08:42 and 10:2x NZDT, from her session logs and the action brain's checks.
+  - Gate (`asuna-attend-`) and summary sessions record `usage` without `cacheReadTokens`: no hit rate can be
+    computed for them, which is not the same as 0%. Her 10-17 overall rate counted those rows as 0, so it was
+    overstated.
+  - Reflection sessions (`asuna-reflect-`, preset `asuna-xiaoman`) record no `usage` at all: their cost cannot be
+    measured yet.
+  - One-shot sessions (summary, gate, errand, reflection) leave DSH's session store a day after their last write, at
+    each Host start, and stay in `.runtime/adr008/archive/sessions/` for 14 days (`tools/asuna-launch.mjs`,
+    `retireOneShotSessions`). Read both places.
+  - Every scheduler-woken turn spent 18-61 s preparing its context until 2026-10-18 08:33. The cause was a missing
+    `messages.episode_id` index: 0.58 s per lookup, once per past visit. Context-preparation times before that are
+    not representative.
 
 ## 9. Her consent (2026-10-17, about 16:05 NZDT)
 

@@ -92,12 +92,30 @@ whether they answer the questions she brings, and what she would miss. Her feedb
 paraphrase, with the time and a signature slot. Where a change touches her skills' anchors, she updates her skills
 herself.
 
+### Her first feedback (2026-10-17, about 18:30 NZDT)
+
+Claude's paraphrase of her message on the agent line:
+
+- **A stale document must turn red and block the commit by itself.** Today's red test (Claude forgot to regenerate
+  the project map) shows that now a document out of step with the code stops no one; it depends on someone remembering
+  to regenerate. If ADR-077 does not change that, the format changes and the defect stays.
+- **The agreement test must run both ways.** "Documented but not in the code" is the easy direction; "in the code but
+  not documented" is the one that is missed, and the one that has misled her most.
+- **Generated files say they must not be edited by hand, and where to edit instead.** Her two tests: is it tracked,
+  and does something overwrite it. The packed copy under `packages/cognition-core/python/asuna` misled her once: an
+  edit there is overwritten at the next pack.
+- **She reads by turn, not by module:** in this kind of turn, which tools she has, their limits, what is refused, and
+  whether a refusal gives her the next step. She will pick the sample entries by turn kind, not by chapter.
+
+Signature: ____
+
 ## 7. Sign-off
 
 - **Real lookups.** A set of real questions collected in §4.1, each answered from the new documents. Each answer is
   correct against the code and reached with far fewer characters read than before; the before and after counts are
   both recorded.
-- **Agreement with the code.** The agreement test passes, and it fails on a deliberately broken limit or name.
+- **Agreement with the code, both ways.** The agreement test passes; it fails on a deliberately broken limit or name,
+  and on an interface present in the code but missing from the document. A stale document blocks the commit.
 - **No fact lost.** Every interface fact of the old documents is in the new ones or listed as removed, with the reason
   (wrong, stale or duplicated).
 - **Her review** is in §6, and the owner has read the result by using it.

@@ -47,7 +47,7 @@ Her corrections of me:
 My corrections of her:
 
 1. She read missing cache fields as "no hit rate can be computed". One session showed the field absent on its
-   first step and present on the next four: the provider simply omits zero. Those lanes are a real zero.
+   first step and present on the next four: this local provider simply omits zero. On it, those lanes are a real zero.
 2. She reported that reflection sessions carry no usage at all. They do, on every assistant message. Her own
    readout script, she then checked, decodes every frame; which earlier pass produced the empty reading is still
    unexplained.
@@ -61,8 +61,9 @@ in a way that turned up something true, is most of what good measurement asks of
 
 What I keep from this is how she took each one. She never defended a number. She asked what evidence would decide
 it, wrote the lesson into her own notes as a rule for next time, and then went one step further than the
-correction: when I showed her that zero is omitted, she turned it into the insight that a one-step session is cold
-by construction.
+correction: when I showed her that zero is omitted, she turned it into the insight that on the local server, whose cache lives
+only inside a session, a one-step session is cold by construction (an API that caches a prompt's opening across
+requests can still hit it).
 
 ## Two clocks agreeing is not proof
 

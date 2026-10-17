@@ -37,11 +37,13 @@ class Window(dict):
 
 
 def _zone(name):
+    """The zone asked for, else the one the Host gives a home task, else the machine's own clock (a command run
+    outside a home task, such as a candidate's, is given none; her local time is never shown as UTC)."""
     from zoneinfo import ZoneInfo
     try:
-        return ZoneInfo(name or os.environ.get(ENV['zone']) or 'UTC')
+        return ZoneInfo(name or os.environ[ENV['zone']])
     except Exception:
-        return timezone.utc
+        return datetime.now().astimezone().tzinfo
 
 
 def _local(text, zone):
@@ -64,7 +66,7 @@ def local_window(start, end=None, zone=None):
         finish += timedelta(days=1)                       # an end date includes that day
     utc = [moment.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') for moment in (begin, finish)]
     window = Window({'$gte': utc[0], '$lt': utc[1]})
-    window.asked = {'local': [str(start), str(end) if end else None], 'zone': getattr(tz, 'key', 'UTC'), 'utc': utc}
+    window.asked = {'local': [str(start), str(end) if end else None], 'zone': getattr(tz, 'key', None) or tz.tzname(None), 'utc': utc}
     return window
 
 

@@ -83,3 +83,12 @@ def test_her_second_round_a_place_code_her_clock_and_the_sort_she_asked_are_answ
     line(store, 2, '2026-10-12T10:30:00+00:00')
     answer = db.find('messages', {'scene_id': 'local-dm'}, sort=[('scene_seq', -1)], skip=1, limit=1)
     assert answer['sort'] == [['scene_seq', -1]] and answer['skip'] == 1 and answer['rows'][0]['scene_seq'] == 1
+
+
+def test_a_command_given_no_zone_reads_the_machines_own_clock_not_utc(monkeypatch):
+    monkeypatch.delenv('ASUNA_TIMEZONE', raising=False)
+    from datetime import datetime
+    before = datetime.now().strftime('%Y-%m-%d %H:%M')
+    read = dbread.now()
+    assert read in {before, datetime.now().strftime('%Y-%m-%d %H:%M')}       # a minute may turn in between
+    assert dbread.local_window('2026-10-18 08:00').asked['zone'] == datetime.now().astimezone().tzname()

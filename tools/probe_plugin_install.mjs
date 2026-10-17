@@ -59,7 +59,7 @@ try {
   for (const name of personaPackages) {
     await import(pathToFileURL(path.join(profileDir, 'node_modules', name, 'src/index.js')).href);
   }
-  const result = { passed: true, profile: profileDir, hostVersion: '0.2.1-alpha.2',
+  const result = { passed: true, profile: profileDir, hostVersion: '0.2.1-rc.1',
     coreExports: imported, nativePeers: Object.keys(manifest.peerDependencies).length,
     artifacts: artifacts.map(({ name, sha256 }) => ({ name, sha256 })),
     liveConsumersStarted: false };

@@ -169,6 +169,8 @@ def event_profile(config, event, store=None):
     from . import sandbox_backend
     if not sandbox_backend.available(config):
         return None                      # the managed process only runs in the sandbox (ADR-010 D5)
+    if (config.get('integration') or {}).get('enabled') is not True:
+        return None                      # integration off is a setting, not a broken binding: no grant, no trace
     if declared is None:
         # Nothing declared: the owner's own DM and an agent line each carry their own grant, by their scene.
         if owner_dm_granted(config, event, store):

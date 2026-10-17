@@ -21,27 +21,33 @@ whose descriptions add up to about 4,600 characters, most of them about developm
 
 ## 2. Decision (owner, 2026-10-17)
 
-**Each skill opts in.** A skill whose `SKILL.md` header says it may be used outside home is offered to action-brain
+**Each skill opts in.** A skill whose `SKILL.md` header lists the scene kinds it may be used in is offered to action-brain
 jobs from public conversations; every other skill stays home-only, as now. Diagnostic and development skills stay at
 home: her runtime environment belongs to internal diagnostics, not to public conversations (AGENTS.md).
 
-## 3. Shape (to agree with Xiaoman)
+## 3. Shape (agreed with Xiaoman, 2026-10-17 about 18:50 NZDT)
 
-- One header field in `SKILL.md`, beside `name` and `description`; proposed `places: everywhere` (absent means home
-  only). The program reads it; a typo in it means home only.
-- A job from a home conversation sees every skill, as now. A job from a public conversation sees only the opted-in
-  ones.
+- One header field in `SKILL.md`, beside `name` and `description`: **`scene_kinds`, a list from a closed set**:
+  `home`, `group`, `dm` (someone else's direct chat; the owner's own chats are `home`). Absent means `[home]`.
+  There is no `everywhere`: a new kind of scene (a new channel, a new lane) is never let in by default. (Her change:
+  `places` already names conversations in her tools, and a catch-all value widens by itself.)
+- **A wrong declaration is never silently home-only.** An unknown key spelling, a value outside the set or a malformed
+  list is refused when the skill is published, and a repository test fails on it. (Her change: a declaration that
+  quietly does nothing is worse than none, because she cannot see it failed.)
+- A job from a home conversation sees every skill, as now. A job from a group sees the skills that list `group`; from
+  someone else's chat, those that list `dm`.
 - How DSH is given the narrower set (it discovers skills by root directory) is settled in the build: a root of only
-  the opted-in skills, generated at start and marked as generated, or one root per opted-in skill. Her open point is
+  the allowed skills, generated at start and marked as generated, or one root per allowed skill. Her open point is
   checked there first: whether DSH lists and loads skills from the narrower set.
-- Which skills opt in is hers for her skills, and the package author's for the others. Candidates she might consider:
-  `asuna-bot-or-person` and, when it exists, her become-human skill.
+- **The gate, as a test (her condition):** a skill that lists anything besides `home` must carry a self-check with a
+  private-words leak criterion; without one the test fails. Separately, every tracked skill is already scanned by
+  `tests/test_personal_words.py`; a skill listing more than `home` fails when the private list is absent, instead of
+  passing unchecked.
+- Order: the gate is built first; she declares her skills after it is in. Which skills open is hers for her skills
+  and the package author's for the others. Her first: `asuna-image-generation-and-display` (on 2026-10-17 a real job
+  from a group drew seven pictures without it).
 
-Her condition (agent line, 2026-10-17 about 18:45 NZDT, Claude's paraphrase): a skill may declare itself usable
-outside home **only when its own self-check's private-words scan is green**. Her skills already carry that check, so
-for her it is what makes opening one safe, not a burden. For every tracked skill, `tests/test_personal_words.py`
-already refuses a listed word; the build adds a test that a skill declaring `places: everywhere` is covered by that
-scan (and is refused when the list is absent, rather than passing unchecked). Signature: ____
+Claude's paraphrase of her three changes and her condition; signature: ____
 
 ## 4. Cost
 

@@ -59,9 +59,9 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 - 字段：`tasks.tier.fell = {reason, mid_run, at, code?}`。
 - `reason` 四个取值：`refused`（高档没接这件）／`down`（连不上、超时、服务器错）／`busy`（被限流）／`owner`（钥匙、凭据或额度问题，要等主人）。
 - **落档件数只从 `tasks.tier.fell` 字段数，不能从审计数。** 代码我 10-17 13:00 前后那趟在 core 检出里逐行看过：
-  - `action_tiers.at_dispatch()`（`src/asuna/action_tiers.py:62-70`）是**纯函数**：高档开工时正赶上歇，它就把 `ran` 直接写成低＋挂上 `fell` 就返回，**内部没有任何 audit 调用**（整个文件里一个 audit 都没有，我 grep 过）。落库靠 `coordinator.delegate()` 里那次通用 `store.put(..., stream=ep['_id'])`，审计面留下的是通用 `state.commit`，**`stream_id` 是回合 id，不是任务 id**（`src/asuna/state.py:213`）。
-  - 专属 `tier.fell` 审计只来自插件那条路（`src/asuna/native_worker.py:1093-1103`），**且被 `:1098` 的 `task.tier.ran=='高'` 挡着**。
-  - **所以「开工即落档」的那件在审计面永远看不见**，而 `fall()` 照样回 `{'recorded': bool(task)}`——任务行在就回 True，哪怕 `:1098` 那道判断没通过、什么都没写。**`recorded` ≠ 真写了。**
+  - `action_tiers.at_dispatch()`（`src/asuna/action_tiers.py:at_dispatch`）是**纯函数**：高档开工时正赶上歇，它就把 `ran` 直接写成低＋挂上 `fell` 就返回，**内部没有任何 audit 调用**（整个文件里一个 audit 都没有，我 grep 过）。落库靠 `coordinator.delegate()` 里那次通用 `store.put(..., stream=ep['_id'])`，审计面留下的是通用 `state.commit`，**`stream_id` 是回合 id，不是任务 id**（`src/asuna/state.py:Store.put`）。
+  - 专属 `tier.fell` 审计只来自插件那条路（`src/asuna/native_worker.py:BusinessWorker.dispatch`），**且被同一函数里 `task.tier.ran=='高'` 那道判断挡着**。
+  - **所以「开工即落档」的那件在审计面永远看不见**，而 `fall()` 照样回 `{'recorded': bool(task)}`——任务行在就回 True，哪怕 `dispatch` 里 `tier.ran=='高'` 那道判断没通过、什么都没写。**`recorded` ≠ 真写了。**
   - 审计里的 `tier.fell` 只覆盖「跑起来之后才落」那一类。**两个来源不能相加、也不能互查。**
 - `tier.rest` 审计：`stream_id` 固定 `action-tiers`，payload `reason, until`，恢复时 `{over: true}`。
 - 库里那条路只在 `tier.ran=="高"` 时才有落档可言，低档不会有落档记录。

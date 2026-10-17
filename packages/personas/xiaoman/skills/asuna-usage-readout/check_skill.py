@@ -7,8 +7,8 @@
 记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
 却解析出 0 条有效词，都记红）。
 
-行号锚点：v3 起六格① 要求写代码位置，所以从「一律不许」改成「只许白名单里那几处」——白名单外的
-`xxx.py:12` 仍然算红（这条不是为变绿放宽的，是为了让 D 那格的字面能写进来）。
+行号锚点：一律红（2026-10-15 定的规矩，仓库共用测试 tests/test_skill_anchors.py 查的是同一条）。v3 曾为
+六格① 的代码位置开过四处白名单，2026-10-17 撤掉：代码位置写 `文件:函数名`，行号会随每次编辑漂走、不算锚点。
 
 用法：python3 skills/asuna-usage-readout/check_skill.py [SKILL.md 路径]
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
@@ -82,9 +82,10 @@ CELLS = [
     ("cell1_no_audit", "内部没有任何 audit 调用"),
     ("cell1_state_commit", "通用 `state.commit`"),
     ("cell1_stream_round", "`stream_id` 是回合 id，不是任务 id"),
-    ("cell1_dispatch_anchor", "src/asuna/action_tiers.py:62-70"),
-    ("cell1_plugin_anchor", "src/asuna/native_worker.py:1093-1103"),
-    ("cell1_gate", "`:1098` 的 `task.tier.ran=='高'` 挡着"),
+    ("cell1_dispatch_anchor", "src/asuna/action_tiers.py:at_dispatch"),
+    ("cell1_plugin_anchor", "src/asuna/native_worker.py:BusinessWorker.dispatch"),
+    ("cell1_gate", "同一函数里 `task.tier.ran=='高'` 那道判断挡着"),
+    ("cell1_gate_dispatch", "哪怕 `dispatch` 里 `tier.ran=='高'` 那道判断没通过"),
     ("cell1_invisible", "「开工即落档」的那件在审计面永远看不见"),
     ("cell1_recorded", "`{'recorded': bool(task)}`"),
     ("cell1_recorded_ne", "`recorded` ≠ 真写了"),
@@ -287,12 +288,12 @@ STALE = [
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
 LITERAL_ID = re.compile(r"#\d")
 LINE_ANCHOR = re.compile(r"`(?:[\w./-]+\.(?:py|mjs|js|json|md|yml)|):\d+(?:-\d+)?`")
-# v3 六格① 要求写代码位置：白名单外的行号锚点仍然算红
-CODE_ANCHORS_ALLOWED = (
-    "src/asuna/action_tiers.py:62-70",
-    "src/asuna/state.py:213",
-    "src/asuna/native_worker.py:1093-1103",
-    ":1098",
+# 代码位置写 `文件:函数名`（2026-10-15 的规矩，仓库共用测试 tests/test_skill_anchors.py 同一条）：
+# 行号一律红，没有白名单。下面这三处只是「六格① 确实写了代码位置」的正向检查，不是例外。
+CODE_ANCHORS = (
+    "src/asuna/action_tiers.py:at_dispatch",
+    "src/asuna/state.py:Store.put",
+    "src/asuna/native_worker.py:BusinessWorker.dispatch",
 )
 PERSONAL_TOKENS = ["姐姐", "交流群", "旧居"]
 
@@ -392,11 +393,10 @@ def main():
         check(name, tok in body, tok)
     for name, tok in STALE:
         check("stale_gone_" + name, tok not in body, "旧字面还在正文里：%s" % tok)
-    stray = [m.group(0) for m in LINE_ANCHOR.finditer(body)
-             if not any(a in m.group(0) for a in CODE_ANCHORS_ALLOWED)]
-    check("no_line_anchors", not stray, "正文里有白名单外的行号锚点：%s" % "、".join(stray[:5]))
+    stray = [m.group(0) for m in LINE_ANCHOR.finditer(body)]
+    check("no_line_anchors", not stray, "正文里有行号锚点（代码位置写 `文件:函数名`）：%s" % "、".join(stray[:5]))
     check("code_anchors_present",
-          all(a in body for a in CODE_ANCHORS_ALLOWED), "六格① 的代码位置缺了：白名单里哪几处不在正文")
+          all(a in body for a in CODE_ANCHORS), "六格① 的代码位置缺了：这三处名字锚点不在正文")
     check("criteria_numbered_1_to_8",
           all(re.search(r"^%d\. \*\*" % n, body, re.M) for n in range(1, 9)), "八条判据编号 1-8")
     check("six_cells_marked",

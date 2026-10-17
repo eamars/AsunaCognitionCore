@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
+import manifest from '../package.json' with { type: 'json' };
 
 export const name = 'asuna-yan-sui';
 export const inject = ['asuna'];
 
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'yan-sui', character_id: 'yan-sui', display_name: '晏绥', version: '0.2.0',
+    id: 'yan-sui', character_id: 'yan-sui', display_name: '晏绥', version: manifest.version,
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     model: 'persona-model.json',
     seeds: [

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import manifest from '../package.json' with { type: 'json' };
 
 // 一之瀬アスナ: an original persona inspired by a Blue Archive character, run on the Asuna core (owner 2026-10-07,
 // the first persona deployed on Linux, ADR-019). Her text is written fresh; nothing here is copied game text.
@@ -6,7 +7,7 @@ export const name = 'asuna-ichinose';
 export const inject = ['asuna'];
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'ichinose-asuna', character_id: 'ichinose-asuna', display_name: '一之瀬アスナ', version: '0.2.0',
+    id: 'ichinose-asuna', character_id: 'ichinose-asuna', display_name: '一之瀬アスナ', version: manifest.version,
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     model: 'persona-model.json',
     seeds: [

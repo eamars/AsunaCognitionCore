@@ -1,6 +1,6 @@
 # 白濑栞 · 日系病娇人格包
 
-`@asuna/shirase-shiori` 提供原创日系成年女性人格白濑栞（白瀬栞，しらせ しおり，Shirase Shiori），使用人格契约 v2，依赖 `@asuna/cognition-core` 的 `0.2.x` 版本。中文人格正文、口吻、初始活账及情绪解释完整包含在包内。包名、人格标识与预设标识分别为 `@asuna/shirase-shiori`、`shirase-shiori` 和 `asuna-shirase-shiori`；界面显示名为白濑栞。
+`@asuna/shirase-shiori` 提供原创日系成年女性人格白濑栞（白瀬栞，しらせ しおり，Shirase Shiori），使用人格契约 v2，依赖 `@asuna/cognition-core` 的 `1.x` 版本。中文人格正文、口吻、初始活账及情绪解释完整包含在包内。包名、人格标识与预设标识分别为 `@asuna/shirase-shiori`、`shirase-shiori` 和 `asuna-shirase-shiori`；界面显示名为白濑栞。
 
 ## 人物
 

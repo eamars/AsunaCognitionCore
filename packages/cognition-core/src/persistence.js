@@ -1,4 +1,4 @@
-/** DSH 0.2.1-rc.1 compatibility seam for informational plugin event envelopes.
+/** DSH compatibility seam for informational plugin event envelopes.
  * Session.append cannot set ignorable, and DSH's plugin-record API is limited to its own experimental packages.
  * The public persistence handle can. DSH's JSONL backend is mounted as its own plugin in an isolated scope, and the
  * service this plugin provides delegates to it, marking Asuna's events on the way in.

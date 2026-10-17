@@ -86,3 +86,35 @@ The owner chose alpha.2 for the first run, one day after its release, overriding
   lists node-pty and koffi (native builds or prebuilds), the spawn-helper chmod of `dsh-subprocess-local` (it
   matters on Linux and in Docker) and protobufjs; a DSH alpha that adds an install script shows up as an
   `allow-scripts` warning in `npm ci`, to approve or deny there.
+
+## Second run (0.2.1-rc.1, 2026-10-17)
+
+The owner asked for rc.1 the same evening and, after the rehearsal incident below, to switch the live profile
+without a second rehearsal and watch her closely that night. Live since 20:56 NZDT; her smoke tests passed (recall,
+plans, a timed wake, pictures, notes, the action brain with web search, report paging) and a real group job got only
+the skills that declare `group` (ADR-078). What the next run needs:
+
+- rc.1's `dsh-session-persistence-jsonl` exports only `{Config, JsonlCompressionSchema, apply, name}`, no class to
+  extend: `persistence.js` mounts it in an isolated `sessionPersistence` scope and delegates to it. Old compaction
+  rows and session logs stay readable.
+- The client conversation bundle imports `zod`; the stages test's module table resolves it from
+  `dsh-client-ui-conversation`.
+- DSH's plugin compatibility check refuses a package whose `@deepseek-ai/dsh*` peers name the old version, so every
+  pin moves in one change; `tests/test_versions.py` lists the one that was missed (manifests, `source.json`, the
+  current references). ADR-010's line that `engines.dsh` is only declared is stale: since alpha.3 DSH reads it for
+  compatibility. Asuna declares none; the refusal it met came from the peers.
+- `dsh plugin add` needs `pnpm`; the launcher and `setup_native_profile.py` give the DSH child a corepack shim, a
+  hand-run command needs one on PATH. The probes need the persona and channel packages packed
+  (`pack_plugins.py --persona … --channel …`); a fresh DSH home inside the checkout is refused, so it goes outside.
+  The inline review profile must not list the real core among its bundles.
+- **Rehearsal incident.** The rehearsal ran `asuna-launch.mjs` from the worktree, whose `.venv` was a junction to the
+  main checkout's: the editable install imports `asuna` from main, so `setup_native_profile.py` (via
+  `asuna.config.ROOT`) acted on the LIVE profile: pnpm pruned 11 packages, `cordis.patch.yml` and `launch.json` were
+  rewritten to point at the worktree. They were restored from a copy taken before; the Host kept running. The
+  first run's note already said the worktree needs its own `uv sync`; also check that
+  `python -c "import asuna.config as c; print(c.ROOT)"` prints the worktree, and copy the live `cordis.patch.yml`
+  and `launch.json` aside before any rehearsal.
+- Never `npm ci` in the main checkout while the Host runs: a loaded `koffi.node` is locked, npm stops halfway and
+  leaves `node_modules` half deleted. Stop the Host first (the switch is a restart anyway), then `npm ci`.
+- Packed tarballs the old profile named are pruned only at the next pack; after the switch, prune them once
+  (`pack_plugins.prune`) and remove the worktree, the fork clone and the probe homes.

@@ -17,7 +17,7 @@
     <img alt="DeepSeek Harness" src="https://img.shields.io/badge/DeepSeek_Harness-plugin-4D6BFE" />
     <img alt="Python" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white" />
     <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-memory-47A248?logo=mongodb&logoColor=white" />
-    <img alt="Release" src="https://img.shields.io/badge/Release-v0.2.0-6f42c1" />
+    <img alt="Release" src="https://img.shields.io/badge/Release-v1.0.0-6f42c1" />
     <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0--only-blue" />
   </p>
 </div>

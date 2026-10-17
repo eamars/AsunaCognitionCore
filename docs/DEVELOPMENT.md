@@ -110,7 +110,7 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 
 1. Copy `tests/fixtures/personas/demo` to `packages/personas/<name>`.
 2. In `package.json`, set `name` (`@asuna/<name>`), `version` and `description`; keep `peerDependencies`
-   (`@asuna/cognition-core` `0.2.x`) and the `dsh.bundle.patch` entry.
+   (`@asuna/cognition-core` `1.x`) and the `dsh.bundle.patch` entry.
 3. In `src/index.js`, set `name` and the `registerPersona` fields: `id`, `character_id`, `display_name`, `version`,
    the seeds (one with kind `persona`), any jobs, and `preset`.
 4. In `cordis.patch.yml`, rename the plugin and preset ids and the preset's `names` (and `descriptions`), one entry per shipped language (`en`, `zh`). The row is `@asuna/cognition-core/preset`: DSH shows a declared preset name as written, so it registers the words of the language the program's names follow (English when that language has none).

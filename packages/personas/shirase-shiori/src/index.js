@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
+import manifest from '../package.json' with { type: 'json' };
 
 export const name = 'asuna-shirase-shiori';
 export const inject = ['asuna'];
 
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'shirase-shiori', character_id: 'shirase-shiori', display_name: '白濑栞', version: '0.2.5',
+    id: 'shirase-shiori', character_id: 'shirase-shiori', display_name: '白濑栞', version: manifest.version,
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     model: 'persona-model.json',
     seeds: [

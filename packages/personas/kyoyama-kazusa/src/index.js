@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import manifest from '../package.json' with { type: 'json' };
 
 // 杏山カズサ: an original persona inspired by a Blue Archive character, run on the Asuna core. Her text is written
 // fresh; nothing here is copied game text.
@@ -6,7 +7,7 @@ export const name = 'asuna-kazusa';
 export const inject = ['asuna'];
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'kyoyama-kazusa', character_id: 'kyoyama-kazusa', display_name: '杏山カズサ', version: '0.2.0',
+    id: 'kyoyama-kazusa', character_id: 'kyoyama-kazusa', display_name: '杏山カズサ', version: manifest.version,
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     model: 'persona-model.json',
     seeds: [

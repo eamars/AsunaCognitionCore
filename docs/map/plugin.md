@@ -303,7 +303,7 @@ Where a profile's files live: `dataRoot` (the profile's data folder, which the w
 
 [packages/cognition-core/src/persistence.js](../../packages/cognition-core/src/persistence.js)
 
-DSH 0.2.1-rc.1 compatibility seam for informational plugin event envelopes. Session.append cannot set ignorable, and DSH's plugin-record API is limited to its own experimental packages. The public persistence handle can. DSH's JSONL backend is mounted as its own plugin in an isolated scope, and the service this plugin provides delegates to it, marking Asuna's events on the way in. All storage, leases, sequence validation, compression and reads remain native.
+DSH compatibility seam for informational plugin event envelopes. Session.append cannot set ignorable, and DSH's plugin-record API is limited to its own experimental packages. The public persistence handle can. DSH's JSONL backend is mounted as its own plugin in an isolated scope, and the service this plugin provides delegates to it, marking Asuna's events on the way in. All storage, leases, sequence validation, compression and reads remain native.
 
 - def `ASUNA_EVENTS`
 - def `compatibleHandle`

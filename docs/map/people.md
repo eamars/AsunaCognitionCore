@@ -403,12 +403,14 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 
 Session class and data visibility (ADR-009 §2).
 
+- def `home_group` — A group the owner trusts as home (config `home_groups`, whole scene ids compared exactly): it reads as his own conversations do, and is still a group.
+- def `place_of` — The place of a conversation of this class: a trusted line is peer, a home group stays a group.
 - def `place` — The place of a turn in a scene, decided by the program like its session class.
 - def `section_places` — The places a section is pinned to (its `place:` tags); empty means everywhere.
 - def `owner_private_scope`
 - def `is_owner_private_scope`
 - def `owner_id`
-- def `session_class` — owner_private ⇔ the owner's local scene, or a DM whose canonical person is the owner.
+- def `session_class` — owner_private ⇔ the owner's local scene, a DM whose canonical person is the owner, a trusted home line, or a group the owner configured as home.
 - def `readable`
 - def `readable_scope` — owner-private scopes depend only on the session class, never on links.
 - def `owner_private_scenes` — Scenes that are owner-private by configuration alone (used before any DB read).

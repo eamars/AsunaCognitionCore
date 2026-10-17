@@ -24,13 +24,25 @@ PLACE_CLASS = {'home': OWNER_PRIVATE, 'peer': OWNER_PRIVATE, 'group': PUBLIC, 'd
 PLACE_TAG = 'place:'
 
 
-def place(config, db, scene: dict, person_id: str) -> str:
-    """The place of a turn in a scene, decided by the program like its session class."""
-    if channel_kinds.home(scene.get('_id') or scene.get('scene_id')):
+def home_group(config, scene_id) -> bool:
+    """A group the owner trusts as home (config `home_groups`, whole scene ids compared exactly): it reads as his own
+    conversations do, and is still a group."""
+    return bool(scene_id) and scene_id in (config.get('home_groups') or ())
+
+
+def place_of(config, scene: dict, cls: str) -> str:
+    """The place of a conversation of this class: a trusted line is peer, a home group stays a group."""
+    scene_id = scene.get('_id') or scene.get('scene_id')
+    if channel_kinds.home(scene_id):
         return 'peer'
-    if session_class(config, db, scene, person_id) == OWNER_PRIVATE:
+    if cls == OWNER_PRIVATE and not home_group(config, scene_id):
         return 'home'
     return 'group' if scene.get('kind') == 'group' else 'dm'
+
+
+def place(config, db, scene: dict, person_id: str) -> str:
+    """The place of a turn in a scene, decided by the program like its session class."""
+    return place_of(config, scene, session_class(config, db, scene, person_id))
 
 
 def section_places(section) -> list:
@@ -51,7 +63,8 @@ def owner_id(config) -> str | None:
 
 
 def session_class(config, db, scene: dict, person_id: str) -> str:
-    """owner_private ⇔ the owner's local scene, or a DM whose canonical person is the owner."""
+    """owner_private ⇔ the owner's local scene, a DM whose canonical person is the owner, a trusted home line, or a
+    group the owner configured as home."""
     local = config.get('chat') or {}
     owner = local.get('person_id')
     if not owner:
@@ -63,6 +76,8 @@ def session_class(config, db, scene: dict, person_id: str) -> str:
         return OWNER_PRIVATE
     if channel_kinds.home(scene_id):
         return OWNER_PRIVATE          # ADR-017: a trusted home channel (the owner's own agents), not a platform
+    if home_group(config, scene_id):
+        return OWNER_PRIVATE          # a group the owner trusts as home; every speaker there keeps their own identity
     return PUBLIC
 
 

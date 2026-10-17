@@ -25,8 +25,10 @@ def home_workspaces(config):
 def workspace_grant(config, scene_id, person_id, *, required=True):
     local = config.get('chat', {})
     from .integration import owner_line
-    if (scene_id, person_id) == (local.get('scene_id'), local.get('person_id')) or owner_line(config, scene_id, person_id):
-        return local                     # the owner, in his home chat or on a home line he joins (ADR-051)
+    from .visibility import home_group
+    if (scene_id, person_id) == (local.get('scene_id'), local.get('person_id')) or owner_line(config, scene_id, person_id)             or home_group(config, scene_id):
+        return local                     # the owner in his home chat, on a home line he joins (ADR-051), or anyone in a
+                                         # group he trusts as home
     for channel in config.get('channels', {}).values():
         for route in channel.get('routes', {}).values():
             if scene_id == route['scene_id']:
@@ -46,7 +48,8 @@ def conversation_workspace(config, scene_id):
     """Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it;
     each turn still checks its own speaker with workspace_grant)."""
     local = config.get('chat', {})
-    if scene_id == local.get('scene_id'):
+    from .visibility import home_group
+    if scene_id == local.get('scene_id') or home_group(config, scene_id):
         return bool(local.get('person_id'))
     for channel in config.get('channels', {}).values():
         for route in channel.get('routes', {}).values():

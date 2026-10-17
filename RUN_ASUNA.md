@@ -187,7 +187,7 @@ Recall ranking forgets by time and by volume (persona model `memory.forgetting`,
 
 All of these are ignored by git. Templates are tracked next to them as `*.example.*`.
 
-- `config/local.json` (template `config/local.example.json`): migration source for Mongo, workspace and business configuration. Set `timezone` (an IANA name) here; without it clocks and schedules are shown in UTC and say so — the core has no built-in time zone.
+- `config/local.json` (template `config/local.example.json`): migration source for Mongo, workspace and business configuration. Set `timezone` (an IANA name) here; without it clocks and schedules are shown in UTC and say so — the core has no built-in time zone. `home_groups` lists whole group scene ids (compared exactly) that the owner trusts as home: there she reads and may do what she does in his own conversations, development work included, with his workspace for anyone speaking there; it stays a group (its people keep their identities, errands and notes reach it, its group sections and tools apply).
 - Adjacent `asuna-channel.local.json` (template `config/asuna-channel.example.json`): initial authenticated routes, identities, grants and A2 read links; imported only when `enabled`.
 - Adjacent `integration.local.json` (template `config/integration.example.json`): initial managed adapter configuration and approved network endpoints.
 - These two sibling files belong to `config/local.json` only. Any other config file names them explicitly with `channel_config` / `integration_config`, so a second config never inherits real routes.

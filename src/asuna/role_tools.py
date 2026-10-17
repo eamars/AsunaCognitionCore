@@ -683,8 +683,7 @@ def abilities(store, ep):
     scene = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
     # Its place (visibility.place) from the class the program gave the conversation: one class per conversation.
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
-    where = ('peer' if channel_kinds.home(ep['scene_id']) else 'home' if cls == visibility.OWNER_PRIVATE
-             else 'group' if scene.get('kind') == 'group' else 'dm')
+    where = visibility.place_of(config, scene, cls)
     local = ep['scene_id'] == (config.get('chat') or {}).get('scene_id')
     platform = bool(scene.get('channel_id')) and where != 'peer'        # a group or a private chat on a platform
     names = list(EVERYWHERE)

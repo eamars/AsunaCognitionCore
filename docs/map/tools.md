@@ -32,6 +32,7 @@ Stable entry: native Web and repair tools boot without importing Python code.
 - def `MAX_UNCONFIRMED_STARTS`
 - def `advanceSelection` — Advance one start: count unconfirmed selections and revert those that never came up.
 - def `profileBase`
+- def `dataFolder`
 - def `resolveLaunch`
 - def `listProfiles` — Every installed profile of this checkout: its persona, Web port, database and whether something answers there.
 - def `retireOneShotSessions` — Move finished one-shot sessions out of DSH's store (Host stopped); drop archived ones past their keep.

@@ -19,11 +19,13 @@ function patch(file, change) {
   return true;
 }
 
-const client = patch('client.js', source => {
+// The browser bundle and the node one carry the same expression.
+const loopback = source => {
   const pattern = /isLoopback:\s*(?:transport\?\.ownsHost === true \|\| )?pageLocation === void 0 \|\| isLoopbackHostname\(pageLocation\.hostname\),/;
   if (!pattern.test(source)) throw new Error('lan-login: the client loopback expression changed in this DSH; update the patch');
   return source.replace(pattern, 'isLoopback: true,');
-});
+};
+const client = ['client.browser.js', 'client.node.js'].map(file => patch(file, loopback)).some(Boolean);
 
 const server = patch('index.js', source => {
   let out = source;

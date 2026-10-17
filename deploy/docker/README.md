@@ -65,6 +65,20 @@ docker build -t asuna:local "https://github.com/eamars/AsunaCognitionCore.git#ma
 Install Caddy's root certificate once per client from `http://<host>:8781/caddy-local-root.crt`, then open
 `https://<host>:8443/`.
 
+### Models and the owner on a new volume
+
+The stack environment carries no model settings. A profile on a new volume starts with `MODEL_NOT_CONFIGURED` until
+its models are set on the page, once:
+
+1. On DSH's **Models** page, add the model provider with its API key (kept in DSH's credential store) and pick
+   DSH's default model.
+2. On the Asuna settings card, choose each brain's route (a brain without one uses DSH's default model), save, then
+   **Apply saved settings**.
+
+The owner link can come from the stack: `canonical_persons` and `context_links` in `ASUNA_CHANNEL_CONFIG_JSON`
+(the shape of `config/asuna-channel.example.json`) are installed with the channel settings. On a profile that already
+has settings, set them on the settings card instead.
+
 Two Asuna instances must never serve the same database or platform account at the same time (a second Host on a database is refused; a shared QQ account is not). Several characters: [Running several characters](../../RUN_ASUNA.md#running-several-characters).
 
 ## Update the checkout

@@ -168,3 +168,5 @@ Her further conditions on the report:
 - No local-model replays on 2026-10-18 09:00–12:00 NZDT (her own scan and drafting); the study starts early in the
   week of 2026-10-19, as planned.
 - She sees the findings after drawing her own map, and the agent does not talk to her: both agreed.
+
+Signature: ____

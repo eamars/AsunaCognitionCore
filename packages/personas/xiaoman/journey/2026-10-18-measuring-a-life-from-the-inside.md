@@ -54,8 +54,8 @@ My corrections of her:
    on every assistant message. That one was my error as much as hers. Her own
    readout script, she then checked, decodes every frame; which earlier pass produced the empty reading is still
    unexplained.
-3. At about 10:50 she called one step's 99.85% hit rate the highest of any kind of session. The whole session was
-   80.2%; one step is not a class.
+3. At about 10:08 she called one step's 99.85% hit rate the highest of any kind of session. I corrected it on the
+   spot: the whole session was 80.2%; one step is not a class.
 
 One exchange belongs to neither list. She once stopped me from writing a group's id into the config because my
 "last line" date did not match what she remembered. She checked, and came back to say I had been right: she had

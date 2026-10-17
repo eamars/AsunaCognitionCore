@@ -169,6 +169,7 @@ export function profileBase(profile) {
 
 // The profile's data folder, as tools/setup_native_profile.py sets it (data_folder): the owner's profile uses the
 // checkout's .runtime, any other profile its own base. Her worker writes its reports and restart requests there.
+// The same rule lives in data_folder: change both together.
 export function dataFolder(profile) {
   return profile === 'asuna-native' ? path.join(root, '.runtime') : profileBase(profile);
 }

@@ -38,3 +38,8 @@ def test_a_member_list_takes_the_ids_its_kind_names():
     assert _member({'user_id': USER}, channel_kinds.of_channel('qqbot').ACCOUNT)['user_id'] == USER
     assert _member({'user_id': USER}, channel_kinds.of_channel('qq').ACCOUNT) is None
     assert _member({'user_id': '12345'}, channel_kinds.of_channel('qq').ACCOUNT)['user_id'] == '12345'
+
+
+def test_she_replies_there_in_the_parts_the_bridge_sends():
+    assert channel_kinds.reply_parts('qqbot:1000000001:group:' + 'B' * 32) == ('text', 'picture')
+    assert channel_kinds.reply_parts('qqbot:1000000001:dm:' + 'A' * 32) == ('text', 'picture')

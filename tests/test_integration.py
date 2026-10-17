@@ -439,3 +439,17 @@ def test_a_broken_binding_refuses_a_declared_grant_and_leaves_a_trace(store):
     assert row['payload']['declared'] == 'owner' and row['payload']['event_id'] == 'broken-binding'
     assert row['scope_key'] == 'scene:dm-a'
     assert event_profile(config, event) is None                          # 没有 store 的用法照旧，只是没地方记
+
+
+def test_integration_off_is_no_grant_and_no_refusal_trace(store):
+    """A profile without integration (a channel-only deployment): the owner's own DM carries no grant, and that is
+    not a broken binding, so nothing lands in the audit for each of the owner's messages."""
+    from asuna.integration import event_profile
+    config = {**profile('dm-a', 'A'), 'canonical_persons': {'qq:1': 'A'},
+              'channels': {'qq': {'routes': {'me': {'scene_id': 'qq:9:dm:1', 'target': {'type': 'dm', 'id': '1'},
+                                                    'person_id': 'qq:1'}}}}}
+    config['integration']['enabled'] = False
+    event = {'event_id': 'off', 'scene_id': 'qq:9:dm:1', 'person_id': 'qq:1', 'text': 'hi', 'channel': {'id': 'qq'}}
+    assert event_profile(config, event, store) is None
+    assert event_profile(config, {**event, 'integration_profile': 'owner'}, store) is None
+    assert store.db.audit_events.count_documents({'type': 'integration.grant_refused'}) == 0

@@ -18,6 +18,8 @@ def credential_ref(path):
 def export_settings(config):
     secrets = {}
     def visit(value, path=()):
+        if isinstance(value, dict) and set(value) == {'$secret'} and isinstance(value['$secret'], str):
+            return dict(value)          # already a credential reference: kept, not stored again as a secret
         if isinstance(value, dict):
             result = {}
             for key, item in value.items():

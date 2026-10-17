@@ -292,7 +292,7 @@ export class QQBotBridge {
       this.log('inbound: a ' + scope + ' message without the ids this bridge needs was passed over'); return;
     }
     const target = scope === 'dm' ? sender : group;
-    this.remember(scope + ':' + target, d.id);
+    this.remember(scope + ':' + target, d.id, Date.parse(String(d.timestamp ?? '')));
     const key = scope + ':' + target + ':' + d.id;
     if (this.state.seen.includes(key)) return;
     const media = (Array.isArray(d.attachments) ? d.attachments : []).slice(0, 8).map(mediaItem);
@@ -315,11 +315,14 @@ export class QQBotBridge {
     await this.flush();
   }
 
-  /** A received message she may answer as a reply while the platform takes replies to it. */
-  remember(conversation, id) {
-    const list = (this.state.received[conversation] ?? []).filter(item => item.id !== id);
-    list.push({ id: String(id), at: this.now(), replies: 0 });
-    this.state.received[conversation] = list.slice(-KEPT_PER_TARGET);
+  /** A received message she may answer as a reply while the platform takes replies to it. Its window starts at its
+   * platform send time (a message replayed after a gap is old), and a message pushed again keeps its count: a msg_seq
+   * used twice is taken as the same message, so her later words would be dropped. */
+  remember(conversation, id, sentAt) {
+    const list = this.state.received[conversation] ?? [];
+    if (list.some(item => item.id === String(id))) return;
+    const at = Number.isFinite(sentAt) ? Math.min(sentAt, this.now()) : this.now();
+    this.state.received[conversation] = [...list, { id: String(id), at, replies: 0 }].slice(-KEPT_PER_TARGET);
   }
 
   async flush() {

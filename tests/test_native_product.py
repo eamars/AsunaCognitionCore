@@ -157,6 +157,11 @@ def test_native_settings_preserve_secret_refs_and_derive_one_adapter_policy(prod
     assert 'character' not in exported['deployment']
     assert 'dsh_home' not in exported['deployment'] and 'workspace' not in exported['deployment']['chat']
     assert resolved['chat']['workspace'] == str(p.root / '.runtime' / 'work' / 'local-user')
+    # A settings file may already name a stored secret, as a channel's own README shows: kept as that reference.
+    named = native_settings.export_settings({**config, 'embedding': {**config['embedding'],
+                                                                     'api_key': {'$secret': 'ASUNA_EMBEDDING_API_KEY'}}})
+    assert named['deployment']['embedding']['api_key'] == {'$secret': 'ASUNA_EMBEDDING_API_KEY'}
+    assert not [name for name in named['secrets'] if name.startswith('ASUNA_EMBEDDING')]   # nothing stored again
 
 
 def test_a_configured_route_without_a_workspace_gets_one_in_the_data_folder(product):

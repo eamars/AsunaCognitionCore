@@ -151,6 +151,24 @@ test('her words go out as a reply to the message she answers while the platform 
   assert.equal(last.msg_id, undefined);
 });
 
+test('a message pushed again keeps its reply count, and one replayed after its window is not answered as a reply', async () => {
+  const w = world(), b = await bridge(w);
+  const host = await b.host();
+  const push = (id, timestamp) => b.dispatch('GROUP_AT_MESSAGE_CREATE', { id, content: 'hi', group_openid: GROUP,
+    author: { member_openid: MEMBER }, ...(timestamp ? { timestamp } : {}) });
+  const item = n => ({ publication_id: 'p' + n, attempt_id: 'a' + n, target: { type: 'group', id: GROUP }, text: '好', reply_to: 'g1' });
+  await push('g1');
+  await b.deliver(host, item(1));
+  await push('g1');                                     // the platform pushes it twice
+  await b.deliver(host, item(2));
+  const sends = () => w.calls.filter(call => call.url.endsWith('/v2/groups/' + GROUP + '/messages')).map(call => call.body);
+  assert.deepEqual(sends().map(body => body.msg_seq), [1, 2]);
+  // Sent 10 minutes before it reached this bridge (a resumed session replays it): the group's 5 minutes are over.
+  await push('g0', '2026-10-11T17:50:00+08:00');
+  await b.deliver(host, { ...item(3), reply_to: 'g0' });
+  assert.equal(sends().at(-1).msg_id, 'g1');           // the newest message still open, not the replayed one
+});
+
 test('a refused reply is sent once as her own message', async () => {
   const w = world({ refuseReply: true }), b = await bridge(w);
   const host = await b.host();

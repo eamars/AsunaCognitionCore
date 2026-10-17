@@ -13,7 +13,7 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 
 ## 一、硬规矩（不是提示）
 
-1. **只读数字、字段名、枚举短码和计数，不读正文。** 会话记录里有我的心里话和行动脑的推理。读文件的脚本只许取 `type`、`data.usage` 里那几个数、`data.message.id`（判重键，不是正文）、每一行的 `time`（整数毫秒）、目录名（＝会话 id，用来认种类）和第一行的 `agentPreset`／`origin`／`createdAt`／`isSeeded`／`parentSession`／`delegationDepth` 这类短字段；不许 print 整行，不许把 `message`、`content`、`text`、推理字段取出来，哪怕「只看一眼」。这条违了，这次读数作废，照实写违了。
+1. **只读数字、字段名、枚举短码和计数，不读正文。** 会话记录里有我的心里话和行动脑的推理。读文件的脚本只许取 `type`、`data.usage` 里那几个数、`data.message.id`（判重键，不是正文）、每一行的 `time`（整数毫秒）、目录名（＝会话 id，用来认种类）和第一行的 `agentPreset`／`origin`／`createdAt`（整数毫秒，比较前先换算）／`isSeeded`／`parentSession`／`delegationDepth` 这类短字段；不许 print 整行，不许把 `message`、`content`、`text`、推理字段取出来，哪怕「只看一眼」。这条违了，这次读数作废，照实写违了。
 2. **读会话记录必须用 `development_run`（project=core，只读）**：`sandbox_run` 看不到那个目录。别在 `sandbox_run` 里「试试」然后把找不到说成没有数据。
 3. **每个数带来源＋读的时刻**：哪个集合／路径、什么字段、什么筛法、几点读的。没这三样的数不报。
 4. **推断写明是推断，没验过的写明没验过**（见第六节）。

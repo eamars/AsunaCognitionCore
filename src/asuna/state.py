@@ -128,7 +128,9 @@ class Store:
                          ([('author',1),('direction',1)],{}),
                          # A turn's own lines (speaking, reply parts, visit outcomes, recovery): without it each
                          # lookup scans every message.
-                         ([('episode_id',1)],{})],
+                         ([('episode_id',1)],{}),
+                         # Her errands (the daily cap, what came of them at home): only visit rows carry it.
+                         ([('event.visit.intent',1),('received_at',1)],{'partialFilterExpression':{'event.visit.intent':{'$exists':True}}})],
             'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
                          ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
             'tasks': [([('request_key',1)], {'unique':True})],

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { fastForwardCheckout, packageManagerEnv, prepareFresh, retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -111,6 +112,13 @@ test('ADR-020: a profile starts on its own recorded Web port unless this start n
   }
 });
 
+test('the supervisor waits on the profile data folder its worker writes to (setup_native_profile.data_folder)', async () => {
+  const { dataFolder, profileBase } = await import('../../../tools/asuna-launch.mjs');
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  assert.equal(dataFolder('asuna-native'), path.join(root, '.runtime'));
+  assert.equal(dataFolder('kazusa'), profileBase('kazusa'));
+  assert.equal(dataFolder('kazusa'), path.join(root, '.runtime', 'adr008', 'profiles', 'kazusa'));
+});
 
 // A child of the launcher script, as prepareFresh spawns it: writes some lines, then exits with `code`.
 function fakeChild(lines, code, seen) {

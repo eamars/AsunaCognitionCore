@@ -167,6 +167,12 @@ export function profileBase(profile) {
   return profile === 'asuna-native' ? base : path.join(base, 'profiles', profile);
 }
 
+// The profile's data folder, as tools/setup_native_profile.py sets it (data_folder): the owner's profile uses the
+// checkout's .runtime, any other profile its own base. Her worker writes its reports and restart requests there.
+export function dataFolder(profile) {
+  return profile === 'asuna-native' ? path.join(root, '.runtime') : profileBase(profile);
+}
+
 export async function resolveLaunch(argv, env = process.env) {
   const args = argv.filter(arg => !['ui', '--native'].includes(arg));
   const options = { profile: env.ASUNA_PROFILE || 'asuna-native', config: env.ASUNA_CONFIG || null, port: null, dryRun: false,
@@ -279,9 +285,11 @@ async function main() {
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   const supervisor = await import('./asuna-supervisor.mjs');
   const launchFile = path.join(launch.base, 'launch.json');
+  // The supervisor reads and writes where her worker does: the profile's data folder, not the launcher's own.
+  const data = { ...env, ASUNA_DATA_ROOT: dataFolder(launch.profile) };
   // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
-  const logFile = path.join(supervisor.restartFolder(env), 'prepare.log');
-  const keep = supervisor.hostLog(path.join(supervisor.restartFolder(env), 'host.log'));
+  const logFile = path.join(supervisor.restartFolder(data), 'prepare.log');
+  const keep = supervisor.hostLog(path.join(supervisor.restartFolder(data), 'host.log'));
   await supervisor.supervise({
     prepare: async (rung, { fastForward = false } = {}) =>
       rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile }) : [],
@@ -293,10 +301,10 @@ async function main() {
       child.stderr.on('data', chunk => { process.stderr.write(chunk); keep(chunk); });
       return child;
     },
-    ready: since => supervisor.readySince(path.join(supervisor.dataRoot(env), 'reports'), since),
-    takeRequest: () => supervisor.takeRequest(env),
+    ready: since => supervisor.readySince(path.join(supervisor.dataRoot(data), 'reports'), since),
+    takeRequest: () => supervisor.takeRequest(data),
     loaded: () => supervisor.loaded(launch.base, launchFile),
-    writeRecord: record => supervisor.writeRecord(env, record),
+    writeRecord: record => supervisor.writeRecord(data, record),
     note: text => { process.stderr.write(text + '\n'); keep(new Date().toISOString() + ' ' + text + '\n'); },
     now: () => Date.now(),
     sleep: ms => new Promise(resolve => { const timer = setTimeout(resolve, ms); stops.push(() => { clearTimeout(timer); resolve(); }); }),

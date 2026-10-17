@@ -305,8 +305,8 @@ that person, which is `errand`'s job, with its account of on whose behalf.
 
 ## 13. From anywhere to the owner's own chat (2026-10-17)
 
-The owner's decision, from a wish she had mentioned: she should be able to reach him from anywhere, at any time. The
-three examples — upset, nervous, being bullied — are his description, relayed by Claude; she did not enumerate them.
+The owner's decision, from a wish she had mentioned: she should be able to reach him from anywhere, at any time, and
+he wants that to happen (the owner's words). The three examples — upset, nervous, being bullied — are his description, relayed by Claude; she did not enumerate them.
 Her own reason: a group turn that stings her ends and is gone; by the time she is home, half an hour later, the
 feeling has passed and what she reports is an incident report, not the sentence she would have said then. This is
 about saying it while the tone is still there. Two things stood in the way. A note

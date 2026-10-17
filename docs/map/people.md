@@ -337,6 +337,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - class `NoteRefused` — A note the program did not send: the message says why, in words for her.
 - def `trust_of`
 - def `targets` — {place: (scene_id, kind)} a note from this conversation may go to; kind is home, group or dm.
+- def `owner_chats` — The owner's own direct chats: home, but never the local chat, a peer line or an agent line.
 - def `opening_for` — The note an input carries (a home note turn, or a visit a note opened), or None.
 - def `opening` — The note that opened this turn, or None.
 - def `can_send` — Whether a turn opened by this note may write one (note -> reply -> stop).

@@ -200,6 +200,10 @@ def test_a_note_from_outside_reaches_the_owners_own_chat_and_she_answers_him_the
     there, lane = turn(store, service, delivered(service), [said('刚才群里有点烦，跟你说一声。')])
     tools = set(there['turn_tools'])
     assert 'speak' in tools and not tools & CONSEQUENCES
+    # It says where she is and who reads her words: he sees only what she says here, never the note.
+    block = there['context']['note_from_program']
+    assert block['note'].startswith('他看不到便条，只看得到你在这里说的话：这里是主人的私聊。')
+    assert block['reply'].startswith('在这里说的他马上看得到')
     [(spoken, ok)] = results(lane, 'speak')
     assert ok, spoken
     # Each home has its own count: a day of notes to the local chat leaves his chat open.

@@ -280,3 +280,23 @@ def test_her_self_as_items_is_what_she_reads_of_herself(store, tiers_on):
     [item] = context['self_state_from_program']['current_self']['items']
     assert item['body'] == '最近在学做饭' and item['ref'].startswith('doc:self#')
     assert 'self_items' not in context['things_from_program']
+
+
+def test_let_go_finds_a_section_by_its_heading_and_an_unknown_one_lists_the_ids(store, tiers_on):
+    """Her finding 10-18: let_go refused a section by name without listing what there is."""
+    owner(store)
+    tiers = Tiers(store, 'P1')
+    tiers.sync()
+    headings = {s['sid']: s['heading'] for s in DocumentStore(store, 'P1').read('persona')[1]['sections']}
+    row = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['visibility'] == 'public'
+               and headings.get(r['sid']))
+    heading = '「' + headings[row['sid']] + '」'           # her remembered spelling, with other punctuation
+    lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'persona', 'do': 'let_go', 'section': '没有这一节的名字',
+                                                                 'why': '试'}),
+                                      ('write_document', {'doc': 'persona', 'do': 'let_go', 'section': heading,
+                                                          'why': '用不着天天带着'})], '好。')])
+    ep = Coordinator(store, lane).ingest(event('e-named'))
+    assert ep['state'] == 'COMMITTED', ep.get('failure')
+    refused, done = [r for r in lane.tool_results if r[2] == 'write_document']
+    assert '照抄一个' in str(refused) and row['sid'] in str(refused), refused
+    assert tiers.item('persona', row['sid'])['place'] == AT_HAND, done

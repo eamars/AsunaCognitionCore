@@ -1673,6 +1673,13 @@ class RoleTools:
         docs = DocumentStore(self.store, ep['persona'])
         slug = item['doc']
         base, before = docs.read(slug)
+        if isinstance(item.get('sid'), str):
+            # The section as she named it (id, heading, or a heading's spelling only it has) becomes its id once,
+            # so every check below reads the same section; an unknown name stays and is refused with the ids.
+            from .documents import named_section
+            named = named_section((before or {}).get('sections') or [], item['sid'])
+            if named:
+                item = {**item, 'sid': named['sid']}
         mutation_id = f"{ep['_id']}:write:{call_id}"
         from . import memory_tiers
         if memory_tiers.ENABLED:
@@ -1695,9 +1702,12 @@ class RoleTools:
         if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
                 and not any(field in item for field in ('visibility', 'inject', 'tags'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
-            sections = {s['sid'] for s in (before or {}).get('sections') or []}
-            if item.get('sid') not in sections:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', '「%s」里没有 section「%s」；照抄一个' % (slug, item.get('sid')))
+            from .documents import missing_section, named_section
+            listed = (before or {}).get('sections') or []
+            found = named_section(listed, item.get('sid'))
+            if not found:
+                raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, item.get('sid'), listed))
+            item = {**item, 'sid': found['sid']}
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
             tiers.sync()
             tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
@@ -1741,9 +1751,12 @@ class RoleTools:
     def _let_go(self, ep, slug, sid, content):
         """ADR-062: her let_go of one item: one place down now; nothing of its text changes."""
         from . import memory_tiers
-        sections = {s['sid']: s for s in (content or {}).get('sections') or []}
-        if not isinstance(sid, str) or sid not in sections:
-            raise DocumentError('DOC_SECTION_NOT_FOUND', '「%s」里没有 section「%s」；照抄一个' % (slug, sid))
+        from .documents import missing_section, named_section
+        listed = (content or {}).get('sections') or []
+        found = named_section(listed, sid) if isinstance(sid, str) else None
+        if not found:
+            raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, sid, listed))
+        sid = found['sid']
         tiers = memory_tiers.Tiers(self.store, ep['persona'])
         tiers.sync()
         move = tiers.let_go(slug, sid, scene_id=ep['scene_id'])
@@ -2497,7 +2510,8 @@ def read_sections(store, ep, items, cls):
             out.append(section) if section else missing.append(why)
             continue
         _, content = docs.read(item['doc'])
-        section = next((s for s in (content or {}).get('sections', []) if s['sid'] == item['sid']), None)
+        from .documents import named_section
+        section = named_section((content or {}).get('sections', []), item['sid'])
         if not section:
             missing.append('%s#%s：没有这一节' % (item['doc'], item['sid']))
         elif not visibility.readable(section['visibility'], cls):

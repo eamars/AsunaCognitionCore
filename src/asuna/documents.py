@@ -49,14 +49,14 @@ def stale(slug):
     return 'BASE_REVISION_STALE: 「%s」刚被改过（不是你的错）；先 recall 读最新的那一节，再改一次' % slug
 
 
-def _missing_sid(slug, sid, sections):
+def missing_section(slug, sid, sections):
     sids = [s['sid'] for s in sections]
     listed = '、'.join(sids[:30]) + ('…' if len(sids) > 30 else '')
     return ('「%s」里没有 section「%s」' % (slug, sid) if sid else '没写 section') + (
         '；有的是：%s，照抄一个' % listed if sids else '；这份文档还没有节，用 append_section 开第一节')
 
 
-def _named(sections, wanted):
+def named_section(sections, wanted):
     """The section she names: by its sid, by its heading as written, or by a heading whose slug only it has (a
     remembered heading with other punctuation still finds it). None when nothing, or more than one, fits."""
     if not wanted:
@@ -283,9 +283,9 @@ class DocumentStore:
                     **{k: section[k] for k in SECTION_KEYS if k in section},
                     'created_at': now(), 'updated_at': now(), 'last_mutation': mutation_id}, stream='doc:' + mutation_id)
             else:
-                target = _named(sections, intent.get('sid'))
+                target = named_section(sections, intent.get('sid'))
                 if not target:
-                    raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
+                    raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
                 if op == 'replace_section' and intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
                     raise Conflict(stale(slug))
                 row = self.store.db.journal_entries.find_one({'_id': self._journal_entry_id(slug, target['sid'])})
@@ -405,9 +405,9 @@ class DocumentStore:
         if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
             raise DocumentError('DOC_BODY_REQUIRED', '%s 的 content 是空的' % op)
         if op == 'replace_section':
-            target = _named(sections, intent.get('sid'))
+            target = named_section(sections, intent.get('sid'))
             if not target:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
+                raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
             if intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
                 raise Conflict(stale(slug))
             target.update(body=body, body_sha256=sha(body.encode()))
@@ -426,9 +426,9 @@ class DocumentStore:
                 if kind != 'ledger':
                     raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
                                         '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, kind))
-                original = _named(sections, intent.get('sid'))
+                original = named_section(sections, intent.get('sid'))
                 if not original:
-                    raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
+                    raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
                 heading = heading or '更正：' + (original['heading'] or original['sid'])
             if not heading.strip():
                 raise DocumentError('DOC_HEADING_REQUIRED', 'append_section 要写 heading（新节的标题）')
@@ -448,9 +448,9 @@ class DocumentStore:
                 section['corrects'] = original['sid']
             sections.append(section)
         elif op == 'set_tags':
-            target = _named(sections, intent.get('sid'))
+            target = named_section(sections, intent.get('sid'))
             if not target:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
+                raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
             for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):
                 if field in intent:
                     if intent[field] not in allowed:

@@ -179,6 +179,8 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 
 - class `DocumentError` — A refused document operation; ``code`` is the stable reason.
 - def `stale` — A Conflict message for a document someone else wrote between her read and her write.
+- def `missing_section`
+- def `named_section` — The section she names: by its sid, by its heading as written, or by a heading whose slug only it has (a remembered heading with other punctuation still finds it).
 - def `slugify` — GitHub-style: lowercase, drop punctuation, spaces to hyphens (CJK kept).
 - def `unique_sid`
 - def `parse_markdown` — (front_matter, sections) from seed markdown split on '##'; deterministic sids.

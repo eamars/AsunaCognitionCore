@@ -2,7 +2,7 @@
 import pytest
 
 from asuna import affect, render, schedule, schedule_rules
-from asuna.documents import _missing_sid
+from asuna.documents import missing_section
 from asuna.persona_model import writable_keys
 from asuna.policy import PolicyStore
 from asuna.state import Denied
@@ -47,7 +47,7 @@ def test_an_over_budget_write_says_by_how_much_and_the_largest_sections():
 
 
 def test_a_missing_section_lists_the_sids_there_are():
-    assert _missing_sid('voice', 'x', [{'sid': 'a'}, {'sid': 'b'}]) == '「voice」里没有 section「x」；有的是：a、b，照抄一个'
+    assert missing_section('voice', 'x', [{'sid': 'a'}, {'sid': 'b'}]) == '「voice」里没有 section「x」；有的是：a、b，照抄一个'
 
 
 def test_a_feeling_without_intensity_is_a_refusal_naming_the_words():

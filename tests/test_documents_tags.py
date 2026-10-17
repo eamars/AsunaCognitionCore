@@ -49,3 +49,4 @@ def test_a_section_is_found_by_its_heading_or_a_remembered_spelling_unless_two_s
         docs.apply('work', {'op': 'replace_section', 'sid': '：判 bot 的对照名单', 'reason': 'r'}, 'x',
                    base_revision_id=rev['_id'], author='character', mutation_id='m6')
     assert refused.value.code == 'DOC_SECTION_NOT_FOUND' and '判-bot-的对照名单-2' in str(refused.value)
+

@@ -17,6 +17,9 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
     becomes a group message that goes through her usual group wake rules.
   - The sender's `username`, when the platform gives one, rides as `raw.asuna_peer`. In private chats it gives
     none, so a person there has no name until she learns one or `canonical_persons` links them.
+  - A group message carries the group's name as the platform gives it (`raw.group_name`, from
+    `/v2/groups/{group_openid}/info`), read once a day per group and kept with when it was read in the bridge's
+    state file (`groups`). A bot the platform refuses that lookup gets no name, and the group shows none.
   - Other people's @ read as `@<openid>`.
   - Pictures arrive as `[图片（未解析）]` with their link in `raw.asuna_media`, so she can read them. Video, voice
     and files arrive as placeholders; a voice message carries the platform's transcript when it has one.

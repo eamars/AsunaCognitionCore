@@ -489,6 +489,7 @@ The bridge between Asuna's channel API and the official QQ Bot open platform (AD
   - `dispatch`
   - `routeFor` — The route a message belongs to: the configured route for this conversation, else the one admission names.
   - `receive`
+  - `groupName` — The group's name as the platform gives it (`/v2/groups/{openid}/info`), read once a day per group and kept with when it was read; null when the platform gives none or refuses this bot the lookup.
   - `remember` — A received message she may answer as a reply while the platform takes replies to it.
   - `flush`
   - `flushLoop`

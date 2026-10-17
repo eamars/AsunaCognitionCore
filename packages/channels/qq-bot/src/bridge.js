@@ -252,17 +252,25 @@ export class QQBotBridge {
   }
 
   async dispatch(type, d, seq) {
+    // Which events the platform pushes, by type: count and last time, no ids or text. The Host log may not be at
+    // hand; this file is (`events`), and it tells whether a group sends every message or only those that @ her.
+    const count = (this.state.events ??= {})[type] ??= { count: 0 };
+    count.count += 1; count.last_at = new Date(this.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
     if (type === 'READY') {
       this.state.session = { id: d.session_id, seq: seq ?? 0 };
       this.status = 'connected'; this.failures = 0;
       this.info('connected as ' + (d.user?.username ?? 'the bot') + ' (new session)');
       await this.save(); return;
     }
-    if (type === 'RESUMED') { this.status = 'connected'; this.failures = 0; this.info('connected (session resumed)'); return; }
+    if (type === 'RESUMED') {
+      this.status = 'connected'; this.failures = 0; this.info('connected (session resumed)');
+      await this.save(); return;
+    }
     if (type === 'C2C_MESSAGE_CREATE') return this.receive('dm', d, false);
     if (type === 'GROUP_AT_MESSAGE_CREATE') return this.receive('group', d, true);
     if (type === 'GROUP_MESSAGE_CREATE') return this.receive('group', d, (d.mentions ?? []).some(m => m?.is_you));
     this.info('event ' + type);
+    await this.save();
   }
 
   // ── inbound: messages pushed by the platform ──────────────────────

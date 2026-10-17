@@ -115,6 +115,19 @@ test('a group @ wakes her: the AppID is among the mentions; other mentions read 
   assert.equal(posted.raw.asuna_peer.group_id, GROUP);
 });
 
+test('the state file counts each event type the platform pushes, with its last time and no ids or text', async () => {
+  const w = world(), b = await bridge(w);
+  await b.dispatch('RESUMED', {});
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'g1', content: '闲聊', group_openid: GROUP, author: { member_openid: MEMBER } });
+  w.clock.advance(60000);
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'g2', content: '还是闲聊', group_openid: GROUP, author: { member_openid: MEMBER } });
+  const saved = JSON.parse(await fs.readFile(b.statePath, 'utf8'));
+  assert.deepEqual(saved.events, { RESUMED: { count: 1, last_at: '2026-10-11T10:00:00Z' },
+    GROUP_MESSAGE_CREATE: { count: 2, last_at: '2026-10-11T10:01:00Z' } });
+  // An un-addressed group message goes through her usual group wake rules: her AppID is not among its mentions.
+  assert.deepEqual(w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.mentioned_account_ids), [[], []]);
+});
+
 test('her words go out as a reply to the message she answers while the platform takes replies, then as her own', async () => {
   const w = world(), b = await bridge(w);
   const host = await b.host();

@@ -45,7 +45,8 @@ def profile_base(profile):
 def data_folder(profile):
     """(dataRoot, stateDir) of a profile set up from this checkout (ADR-010 D3). The owner's profile keeps its
     folders where they are: data in the checkout's .runtime, floor state in its adr008. Another profile's data
-    folder is its own base, with the floor state at the top."""
+    folder is its own base, with the floor state at the top. tools/asuna-launch.mjs dataFolder() holds the same
+    rule for the supervisor: change both together."""
     return (ROOT / '.runtime', 'adr008') if profile == 'asuna-native' else (profile_base(profile), None)
 
 

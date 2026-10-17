@@ -158,6 +158,12 @@ def test_a_reflection_runs_in_its_own_session_and_nothing_of_it_stays_at_home(st
     store.db.messages.insert_one({'_id': 'in-ep-later', 'schema_version': 1, 'event': {'scheduled_plan_id': 'plan-r'}})
     assert worker.resolve_role_session({**turn, '_id': 'ep-later', 'context': {}}) == 'asuna-role-home'
     assert worker.resolve_role_session(turn) == own, 'the same turn finds its session again'
+    # Work handed to the action brain would outlive the archived session (2026-10-17: such a job lost its parent and
+    # was blocked): as in an errand, a reflection turn does not delegate, and the refusal says where to.
+    from asuna import role_tools
+    assert role_tools.not_now(store, turn, 'delegate') == role_tools.REFLECTION_NO_DELEGATE
+    assert role_tools.not_now(store, turn, 'task.message') == role_tools.REFLECTION_NO_DELEGATE
+    assert not role_tools._one_shot({**turn, 'context': {'clock_from_program': {}}})
 
 
 def test_the_map_names_each_store_shows_her_changes_with_her_reasons_and_attention_as_counts(store):

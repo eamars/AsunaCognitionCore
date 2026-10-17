@@ -42,3 +42,11 @@ Not decided yet: whether her night self-development turns (46 of those 400) move
 
 Character brain: no tool, option or line added. A reflection turn's prefill is its system prompt, tools and notice
 (its own readings and the conversation's recent lines), not the home history; home turns carry no review again.
+
+## Amendment (2026-10-17, Claude, the owner's go)
+
+A reflection turn does not hand work to the action brain, as an errand does not: on 2026-10-17 at 20:17 NZDT a
+reflection turn delegated, the job lost its parent when the session was archived, was blocked without a model call,
+and the turn was left waiting. `delegate` and `task` message and stop are now refused there with words saying to hand
+it over in her next home turn or as a plan (`role_tools.REFLECTION_NO_DELEGATE`). The stuck turn was settled
+(`episode.settled`).

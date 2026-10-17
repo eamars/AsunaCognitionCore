@@ -158,6 +158,35 @@ test('a persona model the next start would refuse is refused at publication, by 
   assert.match(refused.boot_probe.stderr, /PERSONA_MODEL_INVALID: <root>: Additional properties.*not_a_key.*下次启动装不上/s);
 });
 
+test('ADR-078: a skill header the program would refuse is refused at publication, never read as home only', async t => {
+  const { checkoutPython } = await import('../../../tools/asuna-launch.mjs');
+  const python = checkoutPython(path.resolve('.'), process.platform);
+  try { await fs.access(python); } catch { t.skip('no checkout Python to read skill headers'); return; }
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/skill-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
+  await fs.mkdir(path.join(source, 'skills/probe-skill'), { recursive: true });
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe-skills', version: '0.0.0',
+    type: 'module', exports: { '.': './src/index.js' }, files: ['src', 'skills'] }));
+  await fs.writeFile(path.join(source, 'src/index.js'), "export const name = 'probe';\nexport function apply() {}\n");
+  const header = extra => `---\nname: probe-skill\ndescription: a skill to probe\n${extra}---\n\nbody\n`;
+  await fs.writeFile(path.join(source, 'skills/probe-skill/SKILL.md'), header(''));
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', python,
+    projects: [{ id: 'persona', root: source, format: 'package' }] });
+  floor.workerPath = async () => path.resolve('src');
+  await floor.call('development_write', { path: 'skills/probe-skill/SKILL.md', overwrite: true,
+    text: header('scene_kinds: [home, group]\n') });
+  const good = await floor.call('development_publish', { reason: 'a skill that may be used in groups' });
+  assert.match(good.state, /^(APPLIED|HOST_RESTART_REQUIRED)$/, JSON.stringify(good.boot_probe));
+  assert.match(good.boot_probe.stdout, /Skill headers valid/);
+  await floor.call('development_write', { path: 'skills/probe-skill/SKILL.md', overwrite: true,
+    text: header('scene_kind: [group]\n') });
+  const refused = await floor.call('development_publish', { reason: 'a misspelt key' });
+  assert.equal(refused.state, 'BOOT_FAILED');
+  assert.match(refused.boot_probe.stderr, /技能 probe-skill：头里有不认识的键 scene_kind.*照这个改 SKILL.md 的头再发布/s);
+});
+
 test('a refused development call says what was wrong, with the values, and what to do', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/refusal-probe-'));

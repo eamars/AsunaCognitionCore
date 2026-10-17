@@ -586,6 +586,14 @@ export class PublicationFloor {
         probe = { ...validated, stdout: probe.stdout + validated.stdout };
       }
     }
+    const skills = path.join(target, 'skills');
+    if (probe.exit_code === 0 && python && await exists(skills)) {
+      // A skill header the program would refuse (ADR-078: an unknown key, a scene kind outside the set) is refused
+      // here, where it can still be fixed, never left to read as home only.
+      const checked = await run(python, ['-m', 'asuna.skills', skills],
+        { env: { ...process.env, PYTHONPATH: workerPath ?? await this.workerPath(), PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
+      probe = { ...checked, stdout: probe.stdout + checked.stdout };
+    }
     return { packageRoot: target, workerPath, boot_probe: probe };
   }
 }

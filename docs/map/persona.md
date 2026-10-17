@@ -84,4 +84,8 @@ Policy store ``policy:<persona>`` (ADR-009 PERSONA_CONTRACT §3).
 
 Skill discovery roots; discovery and parsing remain native DSH services.
 
-- def `skill_directories` — The published core, persona and channel skill roots, for the owner's private chats (local or DM).
+- class `SkillHeaderError`
+- def `header` — The top-level keys of a SKILL.md header, as {key: raw value}; raises SkillHeaderError when there is none.
+- def `scene_kinds` — The scene kinds a SKILL.md allows, as a tuple; raises SkillHeaderError on an unknown key or a wrong value.
+- def `problems` — [(skill folder, words)] for every SKILL.md under a skills root whose header the program would refuse.
+- def `skill_directories` — Skill roots for a session: every root in the owner's private conversations; elsewhere one root per skill that lists this kind of scene (ADR-078).

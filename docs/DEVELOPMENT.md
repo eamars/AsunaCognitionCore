@@ -139,6 +139,10 @@ Core code, core prompts and example configs never name a persona or a platform.
 
 A skill (`skills/<name>/SKILL.md`) points at code as `` `file:name` ``, such as `` `src/asuna/restarts.py:SHOWN_HOURS` ``,
 never by line number: `tests/test_skill_anchors.py` checks that each such file exists and holds the name.
+Its header may list where it is offered: `scene_kinds: [home, group, dm]` (`home` alone when absent). An action-brain
+job from a group gets only the skills listing `group`, one from someone else's chat those listing `dm`; home gets all.
+A key or value the program does not know is refused at publication. A skill listing more than `home` needs a
+`check_skill.py` with a private-words leak criterion that passes (`tests/test_skill_scenes.py`).
 
 ## Writing tool errors
 

@@ -12,7 +12,7 @@ const USER = 'A'.repeat(32), GROUP = 'B'.repeat(32), MEMBER = 'C'.repeat(32), OT
 const HOST = 'http://127.0.0.1:8766';
 
 /** A fake platform and channel API: records every request, answers by route. */
-function world({ refuseReply = false, refuseMarkdown = false } = {}) {
+function world({ refuseReply = false, refuseMarkdown = false, refuseInfo = false, names = [] } = {}) {
   const calls = [];
   let now = Date.parse('2026-10-11T10:00:00Z');
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -27,6 +27,10 @@ function world({ refuseReply = false, refuseMarkdown = false } = {}) {
       if (refuseReply && body.msg_id) return json(400, { code: 40034024, message: 'reply window closed' });
       if (refuseMarkdown && body.msg_type === 2) return json(400, { code: 304036, message: 'no markdown permission' });
       return json(200, { id: 'sent-' + calls.length, timestamp: '2026-10-11T18:00:01+08:00' });
+    }
+    if (u.pathname.endsWith('/info')) {
+      if (refuseInfo) return json(403, { code: 11253, message: 'no access' });
+      return json(200, { group_openid: GROUP, group_name: names.shift() ?? '读书会', group_member_num: 3 });
     }
     if (u.pathname.endsWith('/events')) return json(200, { status: 'accepted' });
     if (u.pathname.endsWith('/receipt')) return json(200, { status: 'recorded' });
@@ -126,6 +130,30 @@ test('the state file counts each event type the platform pushes, with its last t
     GROUP_MESSAGE_CREATE: { count: 2, last_at: '2026-10-11T10:01:00Z' } });
   // An un-addressed group message goes through her usual group wake rules: her AppID is not among its mentions.
   assert.deepEqual(w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.mentioned_account_ids), [[], []]);
+});
+
+test('a group message carries the group name the platform gives, read once a day; none when the lookup is refused', async () => {
+  const w = world({ names: ['读书会', '读书分享会'] }), b = await bridge(w);
+  const msg = id => b.dispatch('GROUP_AT_MESSAGE_CREATE', { id, content: 'hi', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await msg('g1'); await msg('g2');
+  const posted = () => w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.raw.group_name);
+  const lookups = () => w.calls.filter(call => call.url.endsWith('/v2/groups/' + GROUP + '/info')).length;
+  assert.deepEqual(posted(), ['读书会', '读书会']);
+  assert.equal(lookups(), 1);
+  w.clock.advance(24 * 3600000);                       // a day later its admins may have renamed it
+  await msg('g3');
+  assert.equal(posted().at(-1), '读书分享会');
+  assert.equal(lookups(), 2);
+  const saved = JSON.parse(await fs.readFile(b.statePath, 'utf8'));
+  assert.deepEqual(saved.groups[GROUP], { name: '读书分享会', read_at: '2026-10-12T10:00:00Z' });
+
+  const r = world({ refuseInfo: true }), c = await bridge(r);
+  await c.dispatch('GROUP_AT_MESSAGE_CREATE', { id: 'g1', content: 'hi', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await c.dispatch('GROUP_AT_MESSAGE_CREATE', { id: 'g2', content: 'hi', group_openid: GROUP, author: { member_openid: MEMBER } });
+  const events = r.calls.filter(call => call.url.endsWith('/events'));
+  assert.equal(events.length, 2);
+  assert.ok(events.every(call => !('group_name' in call.body.raw)));
+  assert.equal(r.calls.filter(call => call.url.endsWith('/info')).length, 1);   // refused once: not asked again that day
 });
 
 test('her words go out as a reply to the message she answers while the platform takes replies, then as her own', async () => {

@@ -24,6 +24,7 @@ const OPENID = /^[0-9A-Za-z_-]{24,64}$/;
 const BACKOFF_MS = [2000, 5000, 10000, 30000, 60000];
 const BLOCKED_RETRY_MS = 10 * 60000;            // 4914 / 4915: the platform refuses this bot; try again much later
 const SESSION_CLOSES = new Set([4006, 4007, 4009]);   // the session cannot be resumed: identify again
+const GROUP_NAME_MS = 24 * 3600000;             // a group's name is read again after a day (its admins may rename it)
 
 /** One of the platform's attachment kinds as the media block the core reads (RUNTIME_API.md, raw.asuna_media). */
 function mediaItem(attachment) {
@@ -105,8 +106,8 @@ export class QQBotApi {
 
   forget() { this.cached = null; }
 
-  async call(method, route, body) {
-    const res = await this.fetch(this.apiBase + route, { method, signal: AbortSignal.timeout(30000),
+  async call(method, route, body, timeoutMs = 30000) {
+    const res = await this.fetch(this.apiBase + route, { method, signal: AbortSignal.timeout(timeoutMs),
       headers: { authorization: 'QQBot ' + await this.token(), 'x-union-appid': String(this.appId),
                  ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
@@ -306,13 +307,32 @@ export class QQBotBridge {
     const mentions = scope === 'group' ? [...new Set([...(mentionsMe ? [host.accountId] : []),
       ...(d.mentions ?? []).filter(m => !m?.is_you && !m?.bot).map(m => m?.member_openid ?? m?.id).filter(id => OPENID.test(String(id ?? '')))])] : [];
     const occurred = isoOf(d.timestamp);
+    const groupName = group ? await this.groupName(group) : null;
     this.state.pending.push({ route_id: this.routeFor(host.settings, scope, target), account_id: host.accountId,
       sender_id: sender, event_id: String(d.id), text, ...(occurred ? { occurred_at: occurred } : {}),
       ...(group ? { group_id: group, mentioned_account_ids: mentions } : {}),
-      raw: { ...(peer ? { asuna_peer: peer } : {}), ...(media.length ? { asuna_media: { count: media.length, items: media } } : {}) } });
+      raw: { ...(peer ? { asuna_peer: peer } : {}), ...(media.length ? { asuna_media: { count: media.length, items: media } } : {}),
+             ...(groupName ? { group_name: groupName } : {}) } });
     this.state.seen = [...this.state.seen, key].slice(-SEEN_KEPT);
     await this.save();
     await this.flush();
+  }
+
+  /** The group's name as the platform gives it (`/v2/groups/{openid}/info`), read once a day per group and kept with
+   * when it was read; null when the platform gives none or refuses this bot the lookup. Never holds a message up long. */
+  async groupName(group) {
+    const known = (this.state.groups ??= {})[group];
+    if (known && this.now() - Date.parse(known.read_at) < GROUP_NAME_MS) return known.name ?? null;
+    let name = known?.name ?? null;
+    try {
+      const info = await this.api.call('GET', '/v2/groups/' + group + '/info', undefined, 5000);
+      name = typeof info?.group_name === 'string' && info.group_name.trim() ? info.group_name.trim() : null;
+    } catch (error) {
+      if (!error.status) return name;                     // the platform did not answer: ask again with the next message
+      name = null;                                        // refused (11253 without the platform's access): no name
+    }
+    this.state.groups[group] = { ...(name ? { name } : {}), read_at: new Date(this.now()).toISOString().replace(/\.\d{3}Z$/, 'Z') };
+    return name;
   }
 
   /** A received message she may answer as a reply while the platform takes replies to it. Its window starts at its

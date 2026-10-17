@@ -150,3 +150,8 @@ group's first `group_name` values were three member names joined with 、, and a
 unconfirmed (perhaps QQ's default for a group nobody has named). Whether `/info` returns such a default for a
 never-named group was not tested (no such group to probe), and the bridge cannot tell the two apart. A rename
 reaches her within a day.
+
+**Known gap: a quote she asks for is dropped without a word.** In a group, `speak` (its `quote` argument) and the
+`quote` tool take `source`, but this bridge carries no quotes, so her words go out unquoted and nothing tells her.
+That is the "I thought I said it" kind of failure; how it should show belongs to the quote semantics, which go
+through the core and Xiaoman (noted 2026-10-18).

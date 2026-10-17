@@ -4,6 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as cordis from '@deepseek-ai/cordis';
 const require = createRequire(import.meta.url);
 const modules = {
@@ -11,6 +13,9 @@ const modules = {
   'react/jsx-runtime': {}, 'react-dom': {}, '@deepseek-ai/cordis': cordis,
   '@deepseek-ai/dsh-client-ui-primitives': {}, '@deepseek-ai/dsh-client-ui-slots': {},
   '@deepseek-ai/dsh-client-store': { notifySubscribers: listeners => { for (const fn of listeners) fn(); } },
+  // The conversation assembler's own schema library, as the Web module loader shares it.
+  zod: await import(pathToFileURL(require.resolve('zod',
+    { paths: [path.dirname(require.resolve('@deepseek-ai/dsh-client-ui-conversation/package.json'))] })).href),
 };
 async function load(path) {
   let result;

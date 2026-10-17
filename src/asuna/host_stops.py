@@ -1,4 +1,4 @@
-"""When the Host was taken away from outside (小满's ask, 2026-10-08): she should not have to infer from a gap in
+"""When the Host was taken away from outside, she should not have to infer from a gap in
 the logs whether she was away. A clean stop deletes the database lease (host_lease); a Host killed from outside
 leaves its own lease behind. The next start finds it, records one row in `host_stops` — about when the old Host was
 last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home

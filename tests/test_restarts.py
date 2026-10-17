@@ -98,13 +98,13 @@ def test_a_due_request_goes_to_the_supervisor_as_a_planned_stop(store, tmp_path,
     d.request('publish needs it', drill=True)
     request = d.go()
     written = json.loads((tmp_path / 'restart' / 'request.json').read_text(encoding='utf-8'))
-    assert written == request and written['asked'] == 'xiaoman' and written['drill'] is True
-    assert written['interrupted'] and marked == ['xiaoman'] and d.pending is None
+    assert written == request and written['asked'] == 'self' and written['drill'] is True
+    assert written['interrupted'] and marked == ['self'] and d.pending is None
     assert store.db.audit_events.find_one({'type': 'restart.requested'})
 
 
 def record(**fields):
-    return {'id': 'restart-1', 'asked': 'xiaoman', 'why': 'JS change', 'down_at': (T0 - timedelta(minutes=3)).isoformat(),
+    return {'id': 'restart-1', 'asked': 'self', 'why': 'JS change', 'down_at': (T0 - timedelta(minutes=3)).isoformat(),
             'back_at': T0.isoformat(), 'result': 'running', 'attempts': [{'rung': 0, 'ok': True}],
             'loaded': {'commit': 'abc1234', 'packages': {'@asuna/cognition-core': '12d47a38aaaa'}}, **fields}
 

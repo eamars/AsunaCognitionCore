@@ -197,7 +197,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`evidence`](../../src/asuna/evidence.py) — File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 - [`testing`](../../src/asuna/testing.py) — Explicit teardown for databases owned by isolated tests and probes.
 - [`restarts`](../../src/asuna/restarts.py) — Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supervisor.mjs).
-- [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside (小满's ask, 2026-10-08): she should not have to infer from a gap in the logs whether she was away.
+- [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
 - [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
 

@@ -25,7 +25,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 TABLES_VERSION = 1
-# Average incoming lines a day over the last week → minutes of quiet before condensing (Xiaoman's measurement,
+# Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
 # 2026-10-12: 8 days of 16 groups; ADR-049).
 QUIET_TIERS = ((100, 10), (30, 15), (0, 30))
 WEEK_DAYS = 7

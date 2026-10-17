@@ -52,6 +52,11 @@ def test_the_core_and_its_channels_share_one_version_and_every_package_accepts_i
     assert not wrong, 'Asuna %s (%s): %s' % (ASUNA, RANGE, wrong)
 
 
+def test_the_worker_package_is_asunas_version():
+    project = re.search(r'^version = "([^"]+)"', (ROOT / 'pyproject.toml').read_text(encoding='utf-8'), re.M).group(1)
+    assert project == ASUNA, 'pyproject.toml version %s, Asuna %s' % (project, ASUNA)
+
+
 def test_the_references_name_the_current_versions():
     wrong = []
     for path in REFERENCES:

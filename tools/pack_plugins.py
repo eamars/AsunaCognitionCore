@@ -111,12 +111,13 @@ requires = ["hatchling==1.30.1"]
 build-backend = "hatchling.build"
 [project]
 name = "asuna-cognition-worker"
-version = "0.1.0"
+version = "%s"
 requires-python = ">=3.12"
 dependencies = ["httpx==0.28.1", "pymongo==4.16.0", "jsonschema==4.26.0", "pydantic==2.12.5", "PyYAML==6.0.3", "tzdata==2026.4"]
 [tool.hatch.build.targets.wheel]
 packages = ["asuna"]
-''', encoding='utf-8')
+''' % json.loads((ROOT / 'packages/cognition-core/package.json').read_text(encoding='utf-8'))['version'],
+        encoding='utf-8')
     (destination.parent / 'requirements.lock').write_text(pinned_requirements(WORKER_DEPENDENCIES), encoding='utf-8', newline='\n')
     subprocess.run([sys.executable, '-c',
         "import sys; import asuna.native_worker; assert 'asuna.cli' not in sys.modules"],

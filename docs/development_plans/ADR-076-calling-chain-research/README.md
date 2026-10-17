@@ -161,7 +161,8 @@ look for this class everywhere: what a turn may do against what its words say it
     `retireOneShotSessions`). Read both places.
   - Every scheduler-woken turn spent 18-61 s preparing its context until 2026-10-18 08:33. The cause was a missing
     `messages.episode_id` index: 0.58 s per lookup, once per past visit. Context-preparation times before that are
-    not representative.
+    not representative. The cost is still one lookup per remembered visit, now 0.001 s each (30 visits at 08:33). If
+    it grows again, count her visits before looking for a new cause (Xiaoman's note).
 
 ## 9. Her consent (2026-10-17, about 16:05 NZDT)
 

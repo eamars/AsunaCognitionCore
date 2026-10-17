@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """asuna-usage-readout 的零依赖离线自检（只查文件本身，不读会话记录、不连库）。
 
-查六件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）；来源／口径字面与六格口径（v3：① 落档件数
+查七件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）＋读数脚本 `usage_readout.py` 在、且它的 `--selfcheck`（不读盘不连库的纯逻辑模式）真跑通；来源／口径字面与六格口径（v3：① 落档件数
 只从字段数、② 跨类拷贝去重四条、③ 反思回合已核）都在；三张表（含标明「不是正式读数」的样例表）与硬规矩
 都在；v1／v2 已被核掉的旧字面不残留（含 2026-10-23 v2、未逐条核、0 样本、写死的 484／7 件）；版本与试用
 记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
@@ -17,6 +17,7 @@ import os
 import py_compile
 import re
 import shutil
+import subprocess
 import sys
 import time
 
@@ -447,6 +448,22 @@ def main():
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
+    # 读数脚本：存在 ＋ 真跑一次它的离线模式。「跑不起来」和「跑过了」不是一回事——
+    # 文件不在、起不了子进程、超时、非零退出、没打出 SELFCHK 那行，都记红，不因「脚本在目录里」就放行。
+    readout = os.path.join(HERE, "usage_readout.py")
+    if not os.path.isfile(readout):
+        check("readout_script_runs", False, "技能目录里没有 usage_readout.py（现有：%s）" % "、".join(scripts))
+    else:
+        try:
+            done = subprocess.run([sys.executable, readout, "--selfcheck"], capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace", timeout=90, cwd=HERE)
+            output = ((done.stdout or "") + (done.stderr or "")).strip()
+            check("readout_script_runs",
+                  done.returncode == 0 and "SELFCHK" in output and "通过" in output,
+                  "rc=%s｜%s" % (done.returncode, output[-240:] or "（没有任何输出）"))
+        except Exception as exc:                            # noqa: BLE001
+            check("readout_script_runs", False,
+                  "起不了子进程（%s: %s）——没真跑，不是跑过了" % (type(exc).__name__, exc))
     if "__pycache__" in os.listdir(HERE):
         notes.append("NOTE 技能目录里有 __pycache__，发布前清掉")
 
@@ -461,7 +478,7 @@ def main():
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
     print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
-          "版本写就时刻与计划真跑日都在，v1／v2 退役字面没残留%s。（只查文件本身，没读过会话记录和库。）"
+          "版本写就时刻与计划真跑日都在，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
           % (total, total, leak))
     return 0
 

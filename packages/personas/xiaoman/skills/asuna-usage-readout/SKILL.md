@@ -180,7 +180,7 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 ## 四、每周怎么跑
 
 1. 先把第二节「八条口径判据」重读一遍，再开工。
-2. `development_run`（project=core）里写一个只读脚本：解 `zstandard`、逐行 `json.loads`，**只取** `type`、`data.usage` 的五个数字、`data.message.id`、每一行的 `time`、目录名前缀和第一行的 `agentPreset`／`origin`／`createdAt`／`isSeeded`／`parentSession`；不 print 行。库用 `asuna.dbread`（见技能 asuna-database），只取字段名列出的那几个字段，筛时间用 `local_window`。
+2. 读数脚本已经在这个技能目录里：**`usage_readout.py`**（单文件、只读、打印到 stdout；六格各出一行，每行末尾带来源／筛法／读的时刻，⑥ 窗口排在最前当基准，「选高率」并进①）。跑法：`development_run`（project=core）里 `python3 skills/asuna-usage-readout/usage_readout.py`——默认窗口＝最近 24 小时，`--days N` 换天数，`--since`／`--until` 收本地钟点（六格⑥ 那种写死窗口就这么给）；`--selfcheck` 是不读盘不连库的纯逻辑模式，给 `check_skill.py` 跑通用；`--no-db` 只读盘。它解 `zstandard`、逐行 `json.loads`，**只取** `type`、`data.usage` 的五个数字、`data.message.id`、每一行的 `time`、目录名前缀和第一行的 `createdAt`（判拷贝用），不 print 行；库走 `asuna.dbread`（见技能 asuna-database），只取字段名列出的那几个字段，筛时间用本地钟点换出的 UTC 区间（同 `local_window`）。脚本没跑通之前照旧不报数（硬规矩 5）。
 3. **先跨类全局去重（第二节口径那四条），再按类求和**；每类另报自有／拷贝两格。时间窗**按每一行的 `time` 切，不按整个文件切**（六格⑥）。
 4. 输出三张表，每个数带来源＋读的时刻；推断与没验过的单独一节列出来。
 5. 做到的标准：三张表齐、每张表头有时刻／来源／筛法、推断与没验过的有一节、没碰正文、**当天会旧的数都带读的时刻且没有一处抄上一版**。少一样就写「没做完」。
@@ -198,7 +198,7 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
      - **网页界面播种拷贝**：`isSeeded=true` ＋ 有 `parentSession` 的 `session-` 目录带着父会话早先的行，role/session 两前缀间 **74/309 条压缩 usage 组合出现在多个会话**，`cacheRead`、`input` 也被重复数（我 10-17 11:08 数；同一趟再数 74/311）。
    - 处置：按第二节口径那四条——全局按 id 归首次出现那一类、`time` 早于本会话 `createdAt` 的算拷贝、每类报自有／拷贝两格、拷贝占比高的标样本量。
 2. **压缩那一行确实被数了两次**（v2 标「疑似、未核」，本次查到成因）：压缩行没有 `data.message.id`，只能按 usage 组合判——**74 个 usage 组合同时出现在 `asuna-role-` 与 `session-` 两个前缀下**（10-17 11:08 数 74/309，同一趟再数 74/311），带这些行的网页界面会话都是 `isSeeded=true` 带 `parentSession` 的那 4 个。组合相同＝**推断**为同一次调用（没有 id 可证）；去重时它靠口径第 2 条（`time` 早于本会话 `createdAt`）落回拷贝那一格。
-3. **`review.tools_week` 库里 0 行**（还没展示过），它的窗口是 `[这条记录 occurred_at − 7 天, occurred_at)`、不写进 payload；第一份周读数约 10-23 才有。
+3. **`review.tools_week` 库里现读已有 1 行**（10-17 18:24 现读 `audit_events` 里 `type=review.tools_week` 1 行，我 18:39 那趟再读仍是 1 行）——v2 那趟读到 0 行、写下「第一份周读数约 10-23 才有」，这一格按现读更正，别照抄上一版。它的窗口仍是 `[这条记录 occurred_at − 7 天, occurred_at)`、不写进 payload。
 
 ## 六、没验过的／待样本的（照实列，别美化）
 

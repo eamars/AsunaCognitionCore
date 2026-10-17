@@ -353,7 +353,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`navigation.js`](../../packages/cognition-core/src/navigation.js) — Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn.
 - [`pairing.js`](../../packages/cognition-core/src/pairing.js) — A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
 - [`paths.js`](../../packages/cognition-core/src/paths.js) — Where a profile's files live: `dataRoot` (the profile's data folder, which the worker also gets as ASUNA_DATA_ROOT), the local chat's working folder and the publication floor's state folder.
-- [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH 0.2.1-rc.1 compatibility seam for informational plugin event envelopes.
+- [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH compatibility seam for informational plugin event envelopes.
 - [`persona.js`](../../packages/cognition-core/src/persona.js) — Persona contribution v2 (ADR-009 PERSONA_CONTRACT §2): shape checks at registration.
 - [`preset.js`](../../packages/cognition-core/src/preset.js) — An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) with its name and description declared per language.
 - [`python-env.js`](../../packages/cognition-core/src/python-env.js) — Builds the worker's Python environment on first start: a venv in the profile's data folder, installed from the package's `requirements.lock` with uv, or with any Python 3.12+ and pip.

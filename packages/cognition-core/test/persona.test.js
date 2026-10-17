@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Context } from '@deepseek-ai/cordis';
 import { CognitionCore } from '../src/index.js';
 import { PublicationFloor } from '../src/floor.js';
+import coreManifest from '../package.json' with { type: 'json' };
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 // Every persona package (packages/personas) and channel package (packages/channels) in the repository.
@@ -38,7 +39,8 @@ test('T1.1 the synthetic and every persona package register; no persona leaves C
     const withPersona = core('other');
     const manifest = await install(withPersona, directory);
     assert.equal(withPersona.personas.size, 1, directory);
-    assert.equal(manifest.peerDependencies['@asuna/cognition-core'], '0.2.x', directory);
+    assert.equal(manifest.peerDependencies['@asuna/cognition-core'], coreManifest.version.split('.')[0] + '.x', directory);
+    assert.equal(withPersona.personas.values().next().value.version, manifest.version, directory);
   }
   const empty = core('demo');
   await assert.rejects(empty.ready(), /Select an installed Asuna persona/);

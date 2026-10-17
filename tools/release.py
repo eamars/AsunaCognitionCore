@@ -11,7 +11,7 @@ Output: `.runtime/release/<tag>/` with the tarballs, SHA256SUMS and NOTES.md. Pu
 step done by the owner (or with their go-ahead): create the GitHub Release <tag> on this repository and attach the
 files from that folder.
 
-    python tools/release.py --channel packages/channels/napcat-qq [--tag v0.2.0]
+    python tools/release.py --channel packages/channels/napcat-qq [--tag v<core version>]
 """
 import argparse
 import hashlib
@@ -74,6 +74,7 @@ def main():
     parser.add_argument('--tag', help='release tag; default v<core version>')
     args = parser.parse_args()
     version = json.loads((ROOT / 'packages/cognition-core/package.json').read_text(encoding='utf-8'))['version']
+    dsh = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['dependencies']['@deepseek-ai/dsh']
     tag = args.tag or 'v' + version
     if tag != 'v' + version:
         raise SystemExit('The tag must name the core version (v%s)' % version)
@@ -104,7 +105,7 @@ def main():
         raise SystemExit(1)
     (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='utf-8')
     assets = '\n'.join('- `%s`' % line.split('  ')[1] for line in sums)
-    (out / 'NOTES.md').write_text(f'''Asuna {tag} for DeepSeek Harness 0.2.1-rc.1.
+    (out / 'NOTES.md').write_text(f'''Asuna {tag} for DeepSeek Harness {dsh}.
 
 Install with DSH's own installer, using the links of the files below; then configure Asuna on its settings card.
 INSTALL.md in the repository is written for the agent or person doing the install.

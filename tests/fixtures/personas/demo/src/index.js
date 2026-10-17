@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import manifest from '../package.json' with { type: 'json' };
 
 // Synthetic persona used by tests and the demo environment. It proves the core
 // runs any persona package; nothing here describes a real persona.
@@ -7,7 +8,7 @@ export const name = 'asuna-demo';
 export const inject = ['asuna'];
 export function apply(ctx) {
   const remove = ctx.asuna.registerPersona({
-    id: 'demo', character_id: 'demo', display_name: '演示', version: '0.2.0',
+    id: 'demo', character_id: 'demo', display_name: '演示', version: manifest.version,
     resource_root: root,
     model: 'persona-model.json',
     seeds: [

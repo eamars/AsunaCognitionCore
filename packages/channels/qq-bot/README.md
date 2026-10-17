@@ -8,7 +8,8 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
   Someone who also talks to her through NapCat is a different person id there; `canonical_persons` links the owner.
 - **The bridge runs in this Host** (`src/bridge.js`), not in the integration sandbox. It reaches the channel API
   through `ctx.asuna.channelEndpoint('qqbot')`, and keeps its gateway session and the messages it may still reply
-  to in `<data folder>/bridges/qqbot.json`.
+  to in `<data folder>/bridges/qqbot.json`. That file's `events` counts each event type the platform pushed, with
+  the last time: `GROUP_MESSAGE_CREATE` there means a group sends every message, not only those that @ her.
 - **Inbound:** one gateway session (WebSocket, intent `GROUP_AND_C2C_EVENT`), resumed after a drop.
   - `C2C_MESSAGE_CREATE` becomes a direct message.
   - `GROUP_AT_MESSAGE_CREATE` becomes a group message whose `mentioned_account_ids` holds the AppID, so it wakes her.

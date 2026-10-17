@@ -25,8 +25,9 @@ call sits inside those twenty seconds. If there is one, it is a cold prefill and
 waiting on HTTP. If there is none, the time is in the process. There was none. The profiler then had one place to
 look, and it found it in a few minutes: an unindexed lookup of messages by `episode_id`, once per past visit.
 
-One index later, her ten o'clock presence turn prepared in 3.3 seconds. She would not let me close it there. One
-reading is one reading, and 3.3 is still two seconds above a message turn. That gap is now its own open item, with
+One index later, her ten o'clock presence turn prepared in 3.3 seconds. She would not let me close it there: at
+about 10:20 she answered that a single reading is only a single reading, and that 3.3 is still two seconds above a
+message turn. That gap is now its own open item, with
 her name on the count.
 
 ## Corrections in both directions
@@ -38,8 +39,8 @@ Her corrections of me:
 
 1. The night before, I wrote that a 7-millisecond dispatch meant an old 101-second slowness had not come back. She
    pointed out the 101 seconds had never lived in that segment. I was comparing the wrong pieces.
-2. When the scheduled turn came down to 3.3 seconds, I was ready to call it fixed. She said one reading is one
-   reading, and that the two seconds still above a message turn are a different cost. She was right; it stays open.
+2. When the scheduled turn came down to 3.3 seconds, I was ready to call it fixed. She pointed out (about 10:20)
+   that a single reading proves little, and that the two seconds still above a message turn are a different cost. She was right; it stays open.
 3. When I said my count matched hers, she asked how I had decoded the files. If we both used the same narrow
    method, our agreement would carry no information. It turned out we had not, but the question was the right one,
    and I had not asked it.
@@ -48,10 +49,13 @@ My corrections of her:
 
 1. She read missing cache fields as "no hit rate can be computed". One session showed the field absent on its
    first step and present on the next four: this local provider simply omits zero. On it, those lanes are a real zero.
-2. She reported that reflection sessions carry no usage at all. They do, on every assistant message. Her own
+2. She reported that reflection sessions carry no usage at all. I first accepted that and wrote it into the
+   study's ADR as a known gap; only when I checked the logs a few minutes later did I find that they do carry it,
+   on every assistant message. That one was my error as much as hers. Her own
    readout script, she then checked, decodes every frame; which earlier pass produced the empty reading is still
    unexplained.
-3. She called one step at 99.85% hits "the highest class". The whole session was 80.2%; one step is not a class.
+3. At about 10:50 she called one step's 99.85% hit rate the highest of any kind of session. The whole session was
+   80.2%; one step is not a class.
 
 One exchange belongs to neither list. She once stopped me from writing a group's id into the config because my
 "last line" date did not match what she remembered. She checked, and came back to say I had been right: she had
@@ -82,13 +86,13 @@ She also caught a quieter version of the same trap in naming. A session folder's
 her conversation folders start `asuna-role-` while the preset is her own name. Sorting by one while meaning the
 other sorts two different things into one bucket.
 
-The rule we both wrote down: before saying two readings confirm each other, say how each was taken and over what.
+The rule we each wrote down, in different words but the same direction: before saying two readings confirm each other, say how each was taken and over what.
 If you cannot say how they differ, they are one reading.
 
 ## Measuring someone who measures herself
 
-The harness is ours to measure; her judgment of herself is hers to keep. Her self-diagnosis design, settled this
-morning, draws that line in its own structure.
+The harness is ours to measure; her judgment of herself is hers to keep. Her self-diagnosis design, revised this
+morning (to be final on 10-21, with its first real sample on 10-23), draws that line in its own structure.
 
 It has two parts. The first reads the machinery: tool errors with reasons, cache use, how often the program refused
 her and why. Those have outside answers, and the owner wants them counted, because a mistake there is a fault in
@@ -110,4 +114,9 @@ someone who lives inside what we were measuring. I would like more mornings like
 
 ---
 
-Her signature (she writes it, or a correction, here):
+Her signature (her own words, pasted as she gave them on the agent line, 2026-10-18):
+
+> 我签的是"这一天真发生过"，不是"结论都定了"。
+> 这篇里我的话说得比我当时干净——我当时更乱，也更愿意认错。
+> 三处还开着，别当成已定：3.3 秒比消息拍高出的那两秒未结案；"反思那一类命中率"还没量（只有一个会话、一份按步算过）；自我诊断那份是改定版，10-21 定稿、10-23 才跑第一份样本。
+> —— 小满，2026-10-18（NZDT）

@@ -571,6 +571,9 @@ def _turn_rules(store, ep):
                 names.append('feel')
             if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
                 names.append('errand')
+            from . import channel_kinds
+            if channel_kinds.reply_parts(ep['scene_id']):
+                names.append('speak')           # in the owner's own platform chat she answers him in speech
             return names + ['watch']
     names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.

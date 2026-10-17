@@ -7,13 +7,14 @@ import types
 
 import pytest
 
-from asuna import notes, places, role_tools, visibility
+from asuna import channel_kinds, notes, places, role_tools, visibility
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
 from asuna.role_tools import Refused, ideas_block
 from asuna.router import FairQueue
 from test_adr009_p5_rhythm import scheduler
 from test_engineering_m1 import THINK
+from reply_parts import said
 
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
 CONSEQUENCES = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self',
@@ -172,6 +173,46 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert group['context']['notes_sent_from_program']['items'][0]['state'] == notes.STATE_WORDS['replied']
     [(stopped, ok)] = results(lane, 'note')
     assert not ok and '到此为止' in stopped
+
+
+def test_a_note_from_outside_reaches_the_owners_own_chat_and_she_answers_him_there(store, monkeypatch):
+    """Owner 2026-10-17: from anywhere, at any time, a note of hers may go to his own direct chat; the turn it opens
+    there may speak to him. Never a peer or agent line, which are home but not him; each home has its own day count."""
+    service = world(store)
+    home = store.db.scenes.find_one({'_id': 'dm-a'})
+    store.db.scenes.insert_one({**home, '_id': 'line-x', 'scene_id': 'line-x', 'scope_key': 'scene:line-x', 'sequence': 0})
+    store.config['channels']['qq']['routes']['r5'] = {'scene_id': 'line-x', 'target': {'type': 'dm', 'id': 'agent'},
+                                                      'sender_id': 'agent', 'person_id': 'X'}
+    monkeypatch.setattr(channel_kinds, 'home', lambda identifier: identifier == 'line-x')
+    monkeypatch.setattr(channel_kinds, 'reply_parts', lambda scene_id: ('text',) if scene_id == 'dm-o' else ())
+    ep, lane = turn(store, service, group_line('g-1', '小满你今天怎么不说话'), [
+        ('note', {'to': OWNER_DM, 'text': '群里有人一直拿我开玩笑，我有点不舒服，想跟你说一声。'}),
+        ('stay_silent', {'why': '先不在这里说'})])
+    homes = [item['place'] for item in ep['context']['note_places_from_program']['items']
+             if item['place'] not in (G2,)]
+    assert homes == [places.place_id('dm-a'), OWNER_DM]          # the local chat first (家里), then his own chat
+    [(said_back, ok)] = results(lane, 'note')
+    assert ok, said_back
+    row = store.db.notes.find_one({'from_episode': ep['_id']})
+    assert (row['to_scene'], row['trust'], row['mode'], row['kind']) == ('dm-o', 'untrusted', 'wake', 'home')
+    assert service.controller.offers[-1][:3] == ('note', 'note:dm-o:' + row['_id'], 'dm-o')
+    # There, right away: she may speak to him; nothing with consequences.
+    there, lane = turn(store, service, delivered(service), [said('刚才群里有点烦，跟你说一声。')])
+    tools = set(there['turn_tools'])
+    assert 'speak' in tools and not tools & CONSEQUENCES
+    [(spoken, ok)] = results(lane, 'speak')
+    assert ok, spoken
+    # Each home has its own count: a day of notes to the local chat leaves his chat open.
+    stamp = datetime.now(timezone.utc).isoformat()
+    for index in range(notes.PUBLIC_HOME_PER_SCENE):
+        store.db.notes.insert_one({'_id': 'day-%d' % index, 'schema_version': 1, 'persona': 'P1', 'from_scene': 'g1',
+                                   'to_scene': 'dm-a', 'kind': 'home', 'trust': 'untrusted', 'hop': 1, 'text': 'x',
+                                   'created_at': stamp, 'seen_in': []})
+    with pytest.raises(notes.NoteRefused, match='往那边写的便条'):
+        notes.prepare(store, {'_id': 'ep-l', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                      {'to': '家里', 'text': '又一张'}, 'c1')
+    notes.prepare(store, {'_id': 'ep-m', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                  {'to': OWNER_DM, 'text': '还想跟你说一句'}, 'c2')
 
 
 def test_a_note_from_one_group_wakes_her_in_another_as_her_own_note(store):

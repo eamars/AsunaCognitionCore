@@ -5,8 +5,8 @@ conversations leaves for another. One tool, `note`, writes a row here; where it 
 
 - in a home (owner-private) turn: trusted. To another home conversation, or to a group or someone's chat she has a
   route to.
-- in a public turn: untrusted. To home (always her local chat, where the owner sees it) or to another group. It must
-  be in her own words: a run of OWN_WORDS_RUN characters shared with someone else's recent line
+- in a public turn: untrusted. To home (her local chat, or the owner's own direct chat, where it reaches him at
+  once) or to another group. It must be in her own words: a run of OWN_WORDS_RUN characters shared with someone else's recent line
   there is refused.
 
 Trust is the program's, from the sending turn's session class; never from the text or the model. A note grants
@@ -31,7 +31,7 @@ TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
 HOME_NOTE_CHARS = 1500           # from home to another home line: no boundary to guard, room for the context
 PER_TURN = 2
-PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation
+PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation and home it goes to
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
 MAX_HOP = 2                      # a note, its reply, and no more
@@ -98,9 +98,13 @@ def targets(store, scene_id, cls):
         for sid, route, _ in places.errand_targets(config):
             found[places.place_id(sid)] = (sid, route['target']['type'])
     else:
+        # Public -> home: the local chat, and the owner's own direct chats, so a note reaches him from anywhere at
+        # once (owner, 2026-10-17); the local chat first, which is what 家里 names.
+        from . import channel_kinds
         local = (config.get('chat') or {}).get('scene_id')
-        if local:
-            found[places.place_id(local)] = (local, 'home')        # public -> home lands in the local chat only
+        direct = sorted(sid for sid in visibility.owner_private_scenes(config) - {local} if not channel_kinds.home(sid))
+        for sid in ([local] if local else []) + direct:     # never a peer or agent line: those are not him
+            found[places.place_id(sid)] = (sid, 'home')
         for sid, _, _ in places.groups(config):
             found[places.place_id(sid)] = (sid, 'group')
     return {place: value for place, value in found.items()
@@ -237,8 +241,8 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     since = (moment - timedelta(days=1)).isoformat()
     day = {'persona': persona, 'created_at': {'$gte': since}}
     if trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
-            {**day, 'from_scene': ep['scene_id'], 'kind': 'home'}) >= PUBLIC_HOME_PER_SCENE:
-        raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往家里写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)
+            {**day, 'from_scene': ep['scene_id'], 'to_scene': to_scene}) >= PUBLIC_HOME_PER_SCENE:
+        raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往那边写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)
     if trust == UNTRUSTED and kind == 'group':
         outside = {**day, 'trust': UNTRUSTED, 'kind': 'group'}
         if store.db.notes.count_documents(outside) >= PUBLIC_TOTAL:

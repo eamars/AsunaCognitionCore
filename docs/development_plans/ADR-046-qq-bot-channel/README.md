@@ -113,3 +113,14 @@ names people by QQ number, and its adapter runs in the integration sandbox. The 
 A new Portainer stack `asuna-shiori` runs persona `shirase-shiori` with only the `qq-bot` channel. It has its own
 database and ports, automatic admission, and DeepSeek `deepseek-v4-flash` for both brains (the owner's choice). The
 owner messages the bot from QQ; the Web page and the bridge log are checked.
+
+## Group @ (2026-10-17)
+
+The owner reported that Xiaoman's older sister, on her own QQ Bot, could not @ anyone in a group. Claude probed the
+platform with that bot while the owner @-ed it in a group (21:11–21:15 NZDT). In a plain-text message
+(`msg_type` 0) the platform shows both `<qqbot-at-user id="…" />` and `<@…>` as raw text; in a markdown message
+(`msg_type` 2, `markdown.content`) both become a real @. Markdown also reformats `*`, `_`, a line-start `#`, `1.` or
+`>`; a backslash before each keeps them as written (the space after an escaped line-start marker is lost). This
+bridge sent plain text too, so it now sends a group message that @s someone as escaped markdown, and falls back to
+plain text without the @ when the platform refuses markdown. The sister's own code runs on her host, which Asuna's
+agents only read; the owner carries the finding to her.

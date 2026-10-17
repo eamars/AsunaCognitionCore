@@ -5,14 +5,14 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { QQBotBridge, INTENTS, inboundText, outboundText } from '../src/bridge.js';
+import { QQBotBridge, INTENTS, inboundText, outboundBody, plainText } from '../src/bridge.js';
 
 const APP = '1000000001';
 const USER = 'A'.repeat(32), GROUP = 'B'.repeat(32), MEMBER = 'C'.repeat(32), OTHER = 'D'.repeat(32);
 const HOST = 'http://127.0.0.1:8766';
 
 /** A fake platform and channel API: records every request, answers by route. */
-function world({ refuseReply = false } = {}) {
+function world({ refuseReply = false, refuseMarkdown = false } = {}) {
   const calls = [];
   let now = Date.parse('2026-10-11T10:00:00Z');
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -25,6 +25,7 @@ function world({ refuseReply = false } = {}) {
     if (u.pathname.endsWith('/files')) return json(200, { file_uuid: 'u1', file_info: 'INFO', ttl: 0 });
     if (u.pathname.endsWith('/messages')) {
       if (refuseReply && body.msg_id) return json(400, { code: 40034024, message: 'reply window closed' });
+      if (refuseMarkdown && body.msg_type === 2) return json(400, { code: 304036, message: 'no markdown permission' });
       return json(200, { id: 'sent-' + calls.length, timestamp: '2026-10-11T18:00:01+08:00' });
     }
     if (u.pathname.endsWith('/events')) return json(200, { status: 'accepted' });
@@ -123,7 +124,8 @@ test('her words go out as a reply to the message she answers while the platform 
   await b.deliver(host, item(1));
   await b.deliver(host, item(2));
   const sends = w.calls.filter(call => call.url.endsWith('/v2/groups/' + GROUP + '/messages'));
-  assert.deepEqual(sends[0].body, { msg_type: 0, content: '好呀 <qqbot-at-user id="' + MEMBER + '" />', msg_id: 'g1', msg_seq: 1 });
+  assert.deepEqual(sends[0].body, { msg_type: 2, markdown: { content: '好呀 <qqbot-at-user id="' + MEMBER + '" />' },
+    msg_id: 'g1', msg_seq: 1 });
   assert.equal(sends[1].body.msg_seq, 2);
   assert.equal(sends[0].headers.authorization, 'QQBot tok');
   const receipt = w.calls.find(call => call.url.endsWith('/outbox/p1/receipt')).body;
@@ -164,8 +166,25 @@ test('a picture is read from the channel API, checked, uploaded for that convers
   assert.equal(w.calls.find(call => call.url.endsWith('/outbox/p2/receipt')).body.status, 'failed');
 });
 
-test('the platform markup reads as the core reads mentions, and her @ becomes the platform\'s', () => {
+test('the platform markup reads as the core reads mentions; her @ in a group goes as markdown, her words escaped', () => {
   assert.equal(inboundText('<qqbot-at-user id="' + OTHER + '" /> 嗨 <faceType=1,faceId="13",ext="eA==">'), '@' + OTHER + ' 嗨 [表情]');
-  assert.equal(outboundText('@qqbot:' + OTHER + ' 嗨', 'group'), '<qqbot-at-user id="' + OTHER + '" /> 嗨');
-  assert.equal(outboundText('@qqbot:' + OTHER + ' 嗨', 'dm'), '嗨');
+  // Plain text shows the mention tag as it is; only markdown makes it a real @ (checked on the platform).
+  assert.deepEqual(outboundBody('@qqbot:' + OTHER + ' 嗨 *这样* 1. a_b', 'group'),
+    { msg_type: 2, markdown: { content: '<qqbot-at-user id="' + OTHER + '" /> 嗨 \\*这样\\* 1\\. a\\_b' } });
+  assert.deepEqual(outboundBody('没有 @ 的 *话*', 'group'), { msg_type: 0, content: '没有 @ 的 *话*' });
+  assert.deepEqual(outboundBody('@qqbot:' + OTHER + ' 嗨', 'dm'), { msg_type: 0, content: '嗨' });
+  assert.equal(plainText('看 @qqbot:' + OTHER + ' 这张'), '看 这张');
+});
+
+test('a bot that may not send markdown sends her words as plain text, without the @', async () => {
+  const w = world({ refuseMarkdown: true }), b = await bridge(w);
+  const host = await b.host();
+  await b.dispatch('GROUP_AT_MESSAGE_CREATE', { id: 'g1', content: 'hi', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await b.deliver(host, { publication_id: 'p1', attempt_id: 'a1', target: { type: 'group', id: GROUP },
+    text: '好呀 @qqbot:' + MEMBER + ' 来了', reply_to: 'g1' });
+  const sends = w.calls.filter(call => call.url.endsWith('/v2/groups/' + GROUP + '/messages')).map(call => call.body);
+  assert.equal(sends.length, 2);
+  assert.equal(sends[0].msg_type, 2);
+  assert.deepEqual(sends[1], { msg_type: 0, content: '好呀 来了', msg_id: 'g1', msg_seq: 2 });
+  assert.equal(w.calls.find(call => call.url.endsWith('/receipt')).body.status, 'platform_accepted');
 });

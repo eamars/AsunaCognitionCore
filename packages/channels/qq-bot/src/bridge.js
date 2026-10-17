@@ -53,11 +53,28 @@ export function inboundText(content) {
     .trim();
 }
 
-/** Her words for the platform: her @ of a person (`@qqbot:<openid>`) becomes the platform's mention in a group; a
- * private chat has no mentions, so there the tag is left out. */
-export function outboundText(text, scope) {
-  return String(text ?? '').replace(/@qqbot:([0-9A-Za-z_-]{24,64})/g,
-    (_all, id) => scope === 'group' ? '<qqbot-at-user id="' + id + '" />' : '').trim();
+// The platform's answers when this bot has no markdown permission (304036, 40034127) or markdown is refused (50056).
+const MARKDOWN_REFUSED = new Set([304036, 40034127, 50056]);
+const HER_MENTION = /@qqbot:([0-9A-Za-z_-]{24,64})/g;
+// Markdown's own characters, escaped so her words read as she wrote them.
+const MARKDOWN = /[\\`*_{}[\]()#+\-.!|>~]/g;
+
+/** Her words as the platform's message body. Only a markdown message turns the platform's mention tag into a real @
+ * (plain text shows the tag as it is), so a group message that @s someone goes as markdown with her other characters
+ * escaped; anything else goes as plain text without the tag (a private chat or a picture has no mentions). */
+export function outboundBody(text, scope) {
+  const words = String(text ?? '');
+  if (scope === 'group' && words.match(HER_MENTION)) {
+    const content = words.split(HER_MENTION).map((part, i) => i % 2 ? '<qqbot-at-user id="' + part + '" />'
+      : part.replace(MARKDOWN, '\\$&')).join('').trim();
+    return { msg_type: 2, markdown: { content } };
+  }
+  return { msg_type: 0, content: plainText(words) };
+}
+
+/** Her words without mention tags, for a body that cannot carry one. */
+export function plainText(text) {
+  return String(text ?? '').replace(HER_MENTION, '').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 const isoOf = value => {
@@ -363,7 +380,7 @@ export class QQBotBridge {
       await receipt('failed', { reason: 'this bridge sends text and pictures to a private chat or a group' }); return;
     }
     const base = scope === 'dm' ? '/v2/users/' + target.id : '/v2/groups/' + target.id;
-    const text = outboundText(item.text, scope);
+    const text = item.attachment ? plainText(item.text) : null;
     let media = null;
     try {
       if (item.attachment) media = await this.upload(host, item, base);
@@ -371,25 +388,34 @@ export class QQBotBridge {
       await receipt(error.status ? 'failed' : 'unknown', { error: String(error.message).slice(0, 300), stage: 'picture' });
       return;
     }
-    if (!text && !media) { await receipt('failed', { reason: 'nothing to send' }); return; }
     const body = media ? { msg_type: 7, media: { file_info: media }, ...(text ? { content: text } : {}) }
-      : { msg_type: 0, content: text };
+      : outboundBody(item.text, scope);
+    if (!media && !(body.content ?? body.markdown.content)) { await receipt('failed', { reason: 'nothing to send' }); return; }
     const conversation = scope + ':' + target.id;
     const reply = this.replyTo(conversation, scope, item.reply_to);
+    const post = async message => {
+      if (!reply) return this.api.call('POST', base + '/messages', message);
+      reply.replies += 1;                         // a msg_seq is used once, whatever the answer
+      await this.save();
+      try {
+        return await this.api.call('POST', base + '/messages', { ...message, msg_id: reply.id, msg_seq: reply.replies });
+      } catch (error) {
+        if (!error.status || error.status >= 500 || MARKDOWN_REFUSED.has(Number(error.platform?.code))) throw error;
+        // The platform no longer takes a reply to that message: send it as her own message once.
+        this.info('a reply was refused (' + (error.platform?.code ?? error.status) + '); sending it as her own message');
+        return this.api.call('POST', base + '/messages', message);
+      }
+    };
     try {
       let sent;
-      if (reply) {
-        reply.replies += 1;                       // a msg_seq is used once, whatever the answer
-        await this.save();
-        try {
-          sent = await this.api.call('POST', base + '/messages', { ...body, msg_id: reply.id, msg_seq: reply.replies });
-        } catch (error) {
-          if (!error.status || error.status >= 500) throw error;
-          // The platform no longer takes a reply to that message: send it as her own message once.
-          this.info('a reply was refused (' + (error.platform?.code ?? error.status) + '); sending it as her own message');
-          sent = await this.api.call('POST', base + '/messages', body);
-        }
-      } else sent = await this.api.call('POST', base + '/messages', body);
+      try {
+        sent = await post(body);
+      } catch (error) {
+        if (body.msg_type !== 2 || !MARKDOWN_REFUSED.has(Number(error.platform?.code))) throw error;
+        // This bot may not send markdown: her words go as plain text, without the @.
+        this.info('markdown was refused (' + error.platform.code + '); sending her words as plain text');
+        sent = await post({ msg_type: 0, content: plainText(item.text) });
+      }
       if (!sent?.id) throw Object.assign(new Error('QQBOT_SEND_UNCONFIRMED: no message id in the answer'), { status: 0 });
       await receipt('platform_accepted', { id: sent.id, timestamp: sent.timestamp ?? null,
         as: reply ? 'reply' : 'own message' }, String(sent.id));

@@ -472,7 +472,8 @@ The bridge between Asuna's channel API and the official QQ Bot open platform (AD
 - def `API_BASE`
 - def `REPLY_WINDOW`
 - def `inboundText` — The platform's mention markup as the core reads a real @ (`@<openid>`), and its faces as a plain placeholder.
-- def `outboundText` — Her words for the platform: her @ of a person (`@qqbot:<openid>`) becomes the platform's mention in a group; a private chat has no mentions, so there the tag is left out.
+- def `outboundBody` — Her words as the platform's message body.
+- def `plainText` — Her words without mention tags, for a body that cannot carry one.
 - class `QQBotApi` — The platform's OpenAPI with an access token kept fresh.
   - `token` — The current access token.
   - `forget`

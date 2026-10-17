@@ -6,15 +6,17 @@ fail on the one mention an upgrade or a release forgot.
 """
 import json
 import re
+import subprocess
 
 from asuna.config import ROOT
 
 DSH = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['dependencies']['@deepseek-ai/dsh']
 ASUNA = json.loads((ROOT / 'packages/cognition-core/package.json').read_text(encoding='utf-8'))['version']
 RANGE = ASUNA.split('.')[0] + '.x'
-MANIFESTS = [ROOT / 'package.json', *sorted(ROOT.glob('packages/**/package.json')),
-             ROOT / 'tests/fixtures/personas/demo/package.json']
-MANIFESTS = [path for path in MANIFESTS if 'node_modules' not in path.parts]
+# Tracked manifests only: a test's leftover copy of a package is not one of ours.
+MANIFESTS = [ROOT / path for path in subprocess.run(
+    ['git', 'ls-files', '--', 'package.json', 'packages/**/package.json', 'tests/fixtures/personas/*/package.json'],
+    cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()]
 REFERENCES = [*sorted(ROOT.glob('*.md')), ROOT / 'docs/DEVELOPMENT.md', *sorted(ROOT.glob('packages/*/*/README.md')),
               *sorted(ROOT.glob('packages/*/README.md')), *sorted(ROOT.glob('tools/**/README.md'))]
 

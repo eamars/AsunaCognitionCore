@@ -28,7 +28,10 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
   - When the platform refuses a reply, the message is sent once as her own message. A refusal of that is a failed
     receipt with the platform's code. The platform may refuse her own messages in a group, or from someone who
     turned them off.
-  - Her @ of a person becomes the platform's `<qqbot-at-user>` in a group.
+  - A group message with her @ of a person goes as markdown (`msg_type` 2): her @ becomes the platform's
+    `<qqbot-at-user>` and her other markdown characters are escaped, so her words read as written. Plain text
+    cannot carry an @. A bot the platform refuses markdown (304036, 40034127, 50056) sends her words once as
+    plain text without the @. Elsewhere (a private chat, a picture message) the @ is left out.
   - A picture is read from the channel API and checked against its digest. It is uploaded for that one conversation
     (`file_data`, at most 5 MB) and sent as a media message with her words.
 - **Not carried:** stickers, faces outbound, quotes, recall and group admin actions, member lists, and catch-up

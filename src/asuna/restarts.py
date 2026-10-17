@@ -127,7 +127,7 @@ class Desk:
                               else '这次宿主不是由监工起的：没人接重启请求，现在要不了'}
 
     # ── her request ────────────────────────────────────────────────
-    def request(self, why, when='quiet', drill=False, asked='xiaoman', where=None):
+    def request(self, why, when='quiet', drill=False, asked='self', where=None):
         """Her one pending request; a new one replaces it, and says what it replaced (any of her home conversations
         may ask, so one may replace another's)."""
         if not supervised():
@@ -242,7 +242,7 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     pending = waiting(root)
     if not record or not record.get('back_at') or moment - _aware(record['back_at']) > timedelta(hours=SHOWN_HOURS):
         return {'waiting': waiting_words(pending, zone)} if pending else None
-    asked = {'xiaoman': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来'}.get(record.get('asked'), str(record.get('asked')))
+    asked = {'self': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来'}.get(record.get('asked'), str(record.get('asked')))
     down = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
     tries = record.get('attempts') or []
     value = {'what': ('演练' if record.get('drill') else '重启') + '：' + asked,

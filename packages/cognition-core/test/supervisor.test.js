@@ -57,11 +57,11 @@ function world({ starts = [], events = [], reverts = {}, checkout = null } = {})
 }
 
 test('her restart comes back on the same packages and the record says what loaded', async () => {
-  const w = world({ events: [{ request: { asked: 'xiaoman', why: 'a JS change', interrupted: ['nothing'] } }] });
+  const w = world({ events: [{ request: { asked: 'self', why: 'a JS change', interrupted: ['nothing'] } }] });
   await supervise(w.d);
   assert.equal(w.records.length, 1);
   const [record] = w.records;
-  assert.equal(record.asked, 'xiaoman'); assert.equal(record.why, 'a JS change');
+  assert.equal(record.asked, 'self'); assert.equal(record.why, 'a JS change');
   assert.equal(record.result, 'running'); assert.equal(record.rung, RUNGS[0]);
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, true]]);
   assert.equal(record.loaded.commit, 'abc1234');
@@ -83,7 +83,7 @@ test('ADR-065: only the first start of a restart she asked for brings origin/mai
 });
 
 test('a start that fails goes one rung down and the record says she fell back and why', async () => {
-  const w = world({ starts: ['ready', 'exit'], events: [{ request: { asked: 'xiaoman', why: 'publish' } }],
+  const w = world({ starts: ['ready', 'exit'], events: [{ request: { asked: 'self', why: 'publish' } }],
                     reverts: { 1: ['core: returned to the previous running version'] } });
   await supervise(w.d);
   const [record] = w.records;
@@ -97,7 +97,7 @@ test('a start that fails goes one rung down and the record says she fell back an
 });
 
 test('the ladder ends on what is installed and keeps trying with a backoff; it never gives up', async () => {
-  const w = world({ starts: ['ready', 'prepare', 'never', 'exit', 'exit'], events: [{ request: { asked: 'xiaoman', why: 'x' } }] });
+  const w = world({ starts: ['ready', 'prepare', 'never', 'exit', 'exit'], events: [{ request: { asked: 'self', why: 'x' } }] });
   await supervise(w.d);
   const [record] = w.records;
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, false], [2, false], [2, false], [2, true]]);
@@ -108,7 +108,7 @@ test('the ladder ends on what is installed and keeps trying with a backoff; it n
 });
 
 test('a drill fails its first start on purpose and is back on the same packages', async () => {
-  const w = world({ events: [{ request: { asked: 'xiaoman', why: 'drill', drill: true } }] });
+  const w = world({ events: [{ request: { asked: 'self', why: 'drill', drill: true } }] });
   await supervise(w.d);
   const [record] = w.records;
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, true]]);

@@ -86,7 +86,7 @@ names people by QQ number, and its adapter runs in the integration sandbox. The 
 | NapCat function | QQ Bot, first step |
 |---|---|
 | Private chats, groups, automatic admission | Carried |
-| Sender name (`raw.asuna_peer`) | Carried where the platform gives `username` (empty in private chats; no group card or role) |
+| Sender name (`raw.asuna_peer`) | Carried where the platform gives `username` (empty in private chats; no group card; the role is sent, see 2026-10-18) |
 | @ of her wakes her; her @ of someone | Carried (`mentioned_account_ids`; `<qqbot-at-user>`) |
 | Every group message, the relevance gate | Carried where the group owner allows it (`GROUP_MESSAGE_CREATE`) |
 | Inbound pictures readable; video, voice, file placeholders | Carried (attachment links; voice with the platform's transcript) |
@@ -94,8 +94,8 @@ names people by QQ number, and its adapter runs in the integration sandbox. The 
 | Platform send time, dedupe | Carried |
 | Faces `[表情:名字]` both ways | Inbound as `[表情]`; outbound later (the face syntax for bots is not documented) |
 | Stickers | Later (no sticker type in the bot API; a custom sticker could go out as a picture) |
-| Quotes inbound and outbound | Later (needs the platform's `ref_idx` kept per message) |
-| Member lists, `find_member`, group role | Not offered by the platform |
+| Quotes inbound and outbound | Later (needs the platform's `ref_idx` kept per message; inbound quotes arrive in `msg_elements`, see 2026-10-18) |
+| Member lists, `find_member`, group role | Member list invite-only; role sent with each message (see 2026-10-18) |
 | Catch-up after a gap | Not offered (no history API); a resumed session replays what it missed |
 | Mute, kick; recall | Not offered for groups; recall only within 2 minutes |
 | Media-link keys (`rkey`) | Not needed until links are seen to expire |
@@ -124,3 +124,29 @@ platform with that bot while the owner @-ed it in a group (21:11–21:15 NZDT). 
 bridge sent plain text too, so it now sends a group message that @s someone as escaped markdown, and falls back to
 plain text without the @ when the platform refuses markdown. The sister's own code runs on her host, which Asuna's
 agents only read; the owner carries the finding to her.
+
+## Platform facts corrected (docs read 2026-10-18)
+
+The event pages (`GROUP_AT_MESSAGE_CREATE`, `GROUP_MESSAGE_CREATE`, updated 2026-09-16) and the group API pages were
+read again on 2026-10-18 for the group-name question. Three facts above were wrong or have changed:
+
+- **Group role.** Every group message's `author` (and each `mentions` entry) is a User with `member_role`
+  (`owner`, `admin`, `member`). The bridge does not carry it yet; a use of it in her understanding of speakers goes
+  through the core (people.py) and Xiaoman's agreement.
+- **Inbound quotes.** A message carries `msg_elements`, each with `msg_idx`, `author`, `message_type`, `content`,
+  attachments and nested elements: a quoted message arrives with the message. Not carried yet; it would touch the
+  `reply_to` chain, which goes through the core and Xiaoman first.
+- **Member list.** `GET /v2/groups/{group_openid}/members` (page updated 2026-09-03; members with `member_role` and
+  `joined_at`, 30 a page, 60 QPM) is documented as invite-only (内邀接入中, 11253 without access). Not used.
+
+**Group names.** The message events carry no group name. `GET /v2/groups/{group_openid}/info` (page updated
+2026-08-10, 30 QPM) returns `group_name`, documented as whitelist-only (11253). Probed with Kazusa's bot on
+2026-10-18 12:2x NZDT: it answered with a name for both her groups. The owner's rule (2026-10-18): a group's name
+is its admins'; she reads it when the platform gives it, nobody sets one by hand. The bridge reads it once a day per
+group into `raw.group_name` (`6cb18784`); a refused lookup shows no name.
+
+**Known gap: a default name reads as a real one.** Xiaoman found in her own database (NapCat, 2026-10-18) that a
+group's first `group_name` values were three member names joined with 、, and a real name came only later; why is
+unconfirmed (perhaps QQ's default for a group nobody has named). Whether `/info` returns such a default for a
+never-named group was not tested (no such group to probe), and the bridge cannot tell the two apart. A rename
+reaches her within a day.

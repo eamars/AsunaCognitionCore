@@ -10,7 +10,7 @@ KIND = 'qqbot'                    # scene ids qqbot:<appid>:<dm|group>:<openid>;
 TITLE = 'QQ Bot'                  # the sidebar workspace its conversations live in
 # The hosts the platform delivers inbound pictures from (attachments[].url).
 IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn')
-# What her reply is made of here: she speaks only through `reply`, in the parts the bridge sends (words and pictures;
+# What she sends here: she speaks only through `speak`, in the parts the bridge sends (words and pictures;
 # the platform has no stickers, pokes or reactions for a bot).
 REPLY_PARTS = ('text', 'picture')
 

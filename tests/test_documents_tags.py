@@ -26,3 +26,26 @@ def test_her_write_receipt_names_the_new_sections_sid_and_its_tags(store):
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     [row] = [row for row in lane.tool_results if row[2] == 'write_document']
     assert "'sid': '" in str(row) and 'owner_private' in str(row), row
+
+
+def test_a_section_is_found_by_its_heading_or_a_remembered_spelling_unless_two_share_it(store):
+    import pytest
+    from asuna.documents import DocumentError
+    docs = DocumentStore(store, 'P1')
+    rev = docs.apply('work', {'op': 'append_section', 'heading': '（判 bot 的对照名单）', 'reason': 'r'}, 'a',
+                     base_revision_id=None, author='character', mutation_id='m1')
+    rev = docs.apply('work', {'op': 'append_section', 'heading': '另一节', 'reason': 'r'}, 'b',
+                     base_revision_id=rev['_id'], author='character', mutation_id='m2')
+    # The heading as written, then as she remembered it with other punctuation: both name that section.
+    rev = docs.apply('work', {'op': 'replace_section', 'sid': '（判 bot 的对照名单）', 'reason': 'r'}, 'a2',
+                     base_revision_id=rev['_id'], author='character', mutation_id='m3')
+    rev = docs.apply('work', {'op': 'replace_section', 'sid': '：判 bot 的对照名单', 'reason': 'r'}, 'a3',
+                     base_revision_id=rev['_id'], author='character', mutation_id='m4')
+    assert [s['body'] for s in docs.read('work')[1]['sections']] == ['a3', 'b']
+    # A second heading with the same slug: the remembered spelling names neither, and the refusal lists the sids.
+    rev = docs.apply('work', {'op': 'append_section', 'heading': '判 bot 的对照名单', 'reason': 'r'}, 'c',
+                     base_revision_id=rev['_id'], author='character', mutation_id='m5')
+    with pytest.raises(DocumentError) as refused:
+        docs.apply('work', {'op': 'replace_section', 'sid': '：判 bot 的对照名单', 'reason': 'r'}, 'x',
+                   base_revision_id=rev['_id'], author='character', mutation_id='m6')
+    assert refused.value.code == 'DOC_SECTION_NOT_FOUND' and '判-bot-的对照名单-2' in str(refused.value)

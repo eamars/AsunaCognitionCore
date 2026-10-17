@@ -56,6 +56,20 @@ def _missing_sid(slug, sid, sections):
         '；有的是：%s，照抄一个' % listed if sids else '；这份文档还没有节，用 append_section 开第一节')
 
 
+def _named(sections, wanted):
+    """The section she names: by its sid, by its heading as written, or by a heading whose slug only it has (a
+    remembered heading with other punctuation still finds it). None when nothing, or more than one, fits."""
+    if not wanted:
+        return None
+    wanted = str(wanted)
+    for key in ('sid', 'heading'):
+        found = [s for s in sections if s.get(key) == wanted]
+        if len(found) == 1:
+            return found[0]
+    found = [s for s in sections if slugify(s.get('heading') or '') == slugify(wanted)]
+    return found[0] if len(found) == 1 else None
+
+
 def _bad_tag(field, value, allowed):
     return '%s「%s」不行，只能是 %s' % (field, value, ' 或 '.join(allowed))
 
@@ -269,7 +283,7 @@ class DocumentStore:
                     **{k: section[k] for k in SECTION_KEYS if k in section},
                     'created_at': now(), 'updated_at': now(), 'last_mutation': mutation_id}, stream='doc:' + mutation_id)
             else:
-                target = by_sid.get(intent.get('sid'))
+                target = _named(sections, intent.get('sid'))
                 if not target:
                     raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
                 if op == 'replace_section' and intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
@@ -391,7 +405,7 @@ class DocumentStore:
         if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
             raise DocumentError('DOC_BODY_REQUIRED', '%s 的 content 是空的' % op)
         if op == 'replace_section':
-            target = by_sid.get(intent.get('sid'))
+            target = _named(sections, intent.get('sid'))
             if not target:
                 raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
             if intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
@@ -412,7 +426,7 @@ class DocumentStore:
                 if kind != 'ledger':
                     raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
                                         '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, kind))
-                original = by_sid.get(intent.get('sid'))
+                original = _named(sections, intent.get('sid'))
                 if not original:
                     raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
                 heading = heading or '更正：' + (original['heading'] or original['sid'])
@@ -431,10 +445,10 @@ class DocumentStore:
             section = _section(unique_sid(slugify(heading), by_sid), heading, body, visibility=visibility,
                                inject=inject, tags=tags, entry_date=intent.get('entry_date'))
             if op == 'correction':
-                section['corrects'] = intent['sid']
+                section['corrects'] = original['sid']
             sections.append(section)
         elif op == 'set_tags':
-            target = by_sid.get(intent.get('sid'))
+            target = _named(sections, intent.get('sid'))
             if not target:
                 raise DocumentError('DOC_SECTION_NOT_FOUND', _missing_sid(slug, intent.get('sid'), sections))
             for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):

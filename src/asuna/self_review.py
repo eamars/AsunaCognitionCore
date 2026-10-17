@@ -201,6 +201,13 @@ def exchanges(store, persona, zone_name, moment=None):
             if queues[scene] and len(sample) < sample_slots:
                 sample.append(queues[scene].pop(0))
     extra = [k for k in explicit if k not in sample][:min(half, EXCHANGES - len(sample))]
+    # When the sample itself drew explicit lines, fewer are left for extra: the sample goes on filling the slots.
+    while len(sample) + len(extra) < EXCHANGES and any(queues.values()):
+        for scene in places:
+            queue = [k for k in queues[scene] if k not in extra]
+            queues[scene] = queue
+            if queue and len(sample) + len(extra) < EXCHANGES:
+                sample.append(queue.pop(0))
     chosen = sample + extra
     out = {'items': [], 'note': EXCHANGES_NOTE}
     if any(found[k]['scene_id'] not in home for k in chosen):

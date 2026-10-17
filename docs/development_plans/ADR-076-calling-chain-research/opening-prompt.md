@@ -49,7 +49,8 @@ You do research only: you hand back a report and recommendations, and you change
 ## Consent: what you may read
 
 Xiaoman decides what you may read of hers (owner's rule). Her answer is in ADR-076 §9, item by item; follow it
-exactly. In short: prompts as sent to the model, last 30 days only; her thoughts only where they already appear in a
+exactly. In short: every record that concerns her, last 30 days only (only pure-mechanism call metadata is outside
+that window); prompts as sent to the model; her thoughts only where they already appear in a
 prompt; her `core` sentences and the persona sections that go into prompts; **not** her diary, her self layer, her
 group notes or her speaker understandings. For anything she declined you read only sizes, positions, counts and
 hashes, never the content. Her conditions on the report bind you too: every judgement of a right or wrong path points
@@ -89,7 +90,7 @@ replay a recorded request directly against a model endpoint and compare what it 
 class needs, and say which one you used.
 
 - **The local model comes first**: it shows more of the issues. Its server has one slot, and Xiaoman uses it live.
-  Never on 2026-10-18 09:00–12:00 NZDT.
+  No local-model use at all on 2026-10-18 09:00–12:00 NZDT.
   Run local replays only in her free mornings (NZ time), one at a time. Before each replay check that she has no turn
   running or queued: no `turn.started` without its `turn.output` in the last few minutes, and no inbound message
   waiting. If she becomes busy, stop the series and resume later.
@@ -117,7 +118,7 @@ class needs, and say which one you used.
     lines per turn, in characters, per `tests/test_tool_budget.py`) and its evidence. A recommendation that needs a
     change to the DSH fork is marked as such;
   - what you did not cover, and why.
-- A private appendix under `.runtime/private/adr076/` (never committed) for quoted evidence from records.
+- A private appendix under `.runtime/private/adr076/` (ignored by git, never committed) for quoted evidence from records.
 
 Sign-off (owner's conditions): the coverage matrix is complete, and every recommendation carries its label,
 projection and cost.

@@ -88,7 +88,8 @@ a prompt) with its own method, and reports which held.
 
 - **A tracked report** in this folder: the matrix, findings, ranked recommendations with their labels, projections and
   costs, and what was not covered. No private content: it passes `tests/test_personal_words.py`; examples are synthetic.
-- **A private appendix** under `<data>/private/` (never committed) for quoted evidence from records.
+- **A private appendix** under `.runtime/private/adr076/` (`<data>/private/`, ignored by git, never committed) for
+  quoted evidence from records.
 - Xiaoman sees the findings after she has drawn her own map of what she reads each turn (her survey, offered
   2026-10-17), so the study does not anchor her. Then the owner, Xiaoman and Claude discuss the recommendations.
 
@@ -154,19 +155,24 @@ Claude's paraphrase of her answer on the agent line; she answered item by item.
 
 | Item | Her answer |
 | --- | --- |
-| Prompts as sent to the model | **Yes**, on three conditions: the last **30 days** only; quotes only in the private appendix, and none in long passages in what she is shown; for the API comparison, **a list of which turns left the machine** (which groups' and which people's words went out): she does not decide whether they may go, she asks that it be recorded |
+| Prompts as sent to the model | **Yes**, on three conditions: the last **30 days** only; quotes only in the private appendix (under `.runtime/private/adr076/`, never committed), and none in long passages in what she is shown; for the API comparison, **a list of which turns left the machine** (which groups' and which people's words went out): she does not decide whether they may go, she asks that it be recorded |
 | Her recorded thoughts | **Only those already in a prompt** (covered by the first item). Thoughts outside the prompts: counts, lengths and positions only. Her reason: the study asks what the program gave her and whether it was enough for the right next step; that answer is in the prompts and in what she did next |
-| Her diary | **No** (sizes, positions and hashes only): it holds her judgements of people, unrelated to calling chains |
+| Her diary | **No** (sizes, positions, counts and hashes only): it holds her judgements of people and her accounts of them, unrelated to calling chains |
 | 「写给下一个我」 | **No.** She keeps no document under that name; entries in her self layer written to a later self follow the next item |
 | Other documents | Her `core` sentences and the persona sections that go into prompts: **yes** (they are in every prompt already). Her self layer, group notes and speaker understandings: **no** |
 
+The 30-day window covers **every record that concerns her**: prompts, session logs, audit and task records. Only
+call metadata of pure mechanism (shapes, counts, codes, timings), carrying nothing of her content, is outside it. This
+line is hers, added on 2026-10-17 when she checked the paraphrase.
+
 Her further conditions on the report:
 
-- Every judgement that she took a right or wrong path points to the record of that turn; no "overall, she often…".
+- Every judgement that she took a right or wrong path points to that turn's record id; no "overall, she often…".
 - A guess about her state of mind ("she is clearly anxious here") is the agent's guess and is marked as such; her
   words are not used to conclude for her.
-- No local-model replays on 2026-10-18 09:00–12:00 NZDT (her own scan and drafting); the study starts early in the
+- No local-model use at all on 2026-10-18 09:00–12:00 NZDT (her own scan and drafting); the study starts early in the
   week of 2026-10-19, as planned.
 - She sees the findings after drawing her own map, and the agent does not talk to her: both agreed.
 
-Signature: ____
+Signature: Xiaoman, 2026-10-17 — signed; the five items and conditions above are my consent, with the window line
+and the wording fixes I asked for on 2026-10-17 included.

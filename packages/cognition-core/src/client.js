@@ -147,7 +147,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.provider_idle_timeout_seconds': "模型空闲超时（秒）",
       'settings.deployment.publish_adapter': "发布适配器", 'settings.deployment.prompts_dir': "提示词目录",
       'settings.deployment.chat': "本机对话", 'settings.deployment.self_development': "自我改进",
-      'settings.deployment.timezone': "时区", 'settings.deployment.persona_runtime': "人格运行参数",
+      'settings.deployment.timezone': "时区", 'settings.deployment.home_groups': "算家里的群", 'settings.deployment.persona_runtime': "人格运行参数",
       'settings.deployment.integration': "设备集成", 'settings.deployment.channels': "外部渠道",
       'settings.deployment.channel_port': "渠道端口", 'settings.deployment.context_links': "关联对话",
       'settings.deployment.canonical_persons': "同一个人的账号", 'settings.deployment.vision': "看图",
@@ -312,7 +312,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.provider_idle_timeout_seconds': "Model idle timeout (seconds)",
       'settings.deployment.publish_adapter': "Publish adapter", 'settings.deployment.prompts_dir': "Prompts folder",
       'settings.deployment.chat': "Local chat", 'settings.deployment.self_development': "Self-improvement",
-      'settings.deployment.timezone': "Time zone", 'settings.deployment.persona_runtime': "Persona runtime",
+      'settings.deployment.timezone': "Time zone", 'settings.deployment.home_groups': "Groups trusted as home", 'settings.deployment.persona_runtime': "Persona runtime",
       'settings.deployment.integration': "Device integration", 'settings.deployment.channels': "Channels",
       'settings.deployment.channel_port': "Channel port",
       'settings.deployment.context_links': "Linked conversations",
@@ -378,7 +378,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
   const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort'];
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 

@@ -143,7 +143,28 @@ look for this class everywhere: what a turn may do against what its words say it
 
 ## 8. Open before the study starts
 
-- Xiaoman's consent (§3): Claude asks her on the agent line; her answer is recorded here.
+- Xiaoman's consent (§3): asked and answered, see §9.
 - Which API model or models, and which window, serve as the comparison: proposed by the agent with its cost plan at
   the checkpoint, decided by the owner.
 - Whether a recommendation may require a change to the DSH fork (ADR-037): allowed as a recommendation, marked as such.
+
+## 9. Her consent (2026-10-17, about 16:05 NZDT)
+
+Claude's paraphrase of her answer on the agent line; she answered item by item.
+
+| Item | Her answer |
+| --- | --- |
+| Prompts as sent to the model | **Yes**, on three conditions: the last **30 days** only; quotes only in the private appendix, and none in long passages in what she is shown; for the API comparison, **a list of which turns left the machine** (which groups' and which people's words went out): she does not decide whether they may go, she asks that it be recorded |
+| Her recorded thoughts | **Only those already in a prompt** (covered by the first item). Thoughts outside the prompts: counts, lengths and positions only. Her reason: the study asks what the program gave her and whether it was enough for the right next step; that answer is in the prompts and in what she did next |
+| Her diary | **No** (sizes, positions and hashes only): it holds her judgements of people, unrelated to calling chains |
+| 「写给下一个我」 | **No.** She keeps no document under that name; entries in her self layer written to a later self follow the next item |
+| Other documents | Her `core` sentences and the persona sections that go into prompts: **yes** (they are in every prompt already). Her self layer, group notes and speaker understandings: **no** |
+
+Her further conditions on the report:
+
+- Every judgement that she took a right or wrong path points to the record of that turn; no "overall, she often…".
+- A guess about her state of mind ("she is clearly anxious here") is the agent's guess and is marked as such; her
+  words are not used to conclude for her.
+- No local-model replays on 2026-10-18 09:00–12:00 NZDT (her own scan and drafting); the study starts early in the
+  week of 2026-10-19, as planned.
+- She sees the findings after drawing her own map, and the agent does not talk to her: both agreed.

@@ -48,10 +48,13 @@ You do research only: you hand back a report and recommendations, and you change
 
 ## Consent: what you may read
 
-Xiaoman decides what you may read of hers (owner's rule). Her answer is recorded in ADR-076 §8, item by item:
-prompts as sent to the model, her recorded thoughts, her diary, her 「写给下一个我」 note, her other documents.
-**Until §8 records her answer, treat every item as declined.** For a declined item you read only sizes, positions,
-counts and hashes, never the content. Other people's words are read only as far as needed to classify a scenario, and
+Xiaoman decides what you may read of hers (owner's rule). Her answer is in ADR-076 §9, item by item; follow it
+exactly. In short: prompts as sent to the model, last 30 days only; her thoughts only where they already appear in a
+prompt; her `core` sentences and the persona sections that go into prompts; **not** her diary, her self layer, her
+group notes or her speaker understandings. For anything she declined you read only sizes, positions, counts and
+hashes, never the content. Her conditions on the report bind you too: every judgement of a right or wrong path points
+to that turn's record; a guess about her state of mind is marked as your guess; for the API comparison, keep a list of
+every turn whose content left the machine (which conversations and whose words). Other people's words are read only as far as needed to classify a scenario, and
 are never quoted in a tracked file. Quoted evidence goes only into the private appendix (below).
 
 ## Where the evidence is
@@ -86,6 +89,7 @@ replay a recorded request directly against a model endpoint and compare what it 
 class needs, and say which one you used.
 
 - **The local model comes first**: it shows more of the issues. Its server has one slot, and Xiaoman uses it live.
+  Never on 2026-10-18 09:00–12:00 NZDT.
   Run local replays only in her free mornings (NZ time), one at a time. Before each replay check that she has no turn
   running or queued: no `turn.started` without its `turn.output` in the last few minutes, and no inbound message
   waiting. If she becomes busy, stop the series and resume later.

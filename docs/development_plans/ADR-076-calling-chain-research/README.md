@@ -156,6 +156,11 @@ look for this class everywhere: what a turn may do against what its words say it
     gap in the record. Count it as 0, and report those lanes apart from the conversation lanes, whose hit rate they
     would dilute.
   - Reflection sessions (`asuna-reflect-`, preset `asuna-xiaoman`) do record `usage` on each assistant message.
+  - Report hit rates by step within a session as well as by lane (Xiaoman's slicing, 10-18). On the local server a
+    session's first step is always cold, because its cache lives only within a session. One reflection session read
+    80.2% over its five steps and 99.1% after the first. One-step lanes (gate, summary) are therefore structurally 0%
+    there. Providers that cache a request's opening prefix across requests can hit even a fresh one-step session
+    whose prompt opening is stable. The API comparison should show this difference.
   - One-shot sessions (summary, gate, errand, reflection) leave DSH's session store a day after their last write, at
     each Host start, and stay in `.runtime/adr008/archive/sessions/` for 14 days (`tools/asuna-launch.mjs`,
     `retireOneShotSessions`). Read both places.

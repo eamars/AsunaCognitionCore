@@ -73,9 +73,16 @@ def _private_list():
     return Path(named) if named else ROOT / '.runtime' / 'private' / 'personal-words.txt'
 
 
-@pytest.mark.parametrize('path', [path for path in TRACKED
-                                  if set(skills.scene_kinds(path.read_text(encoding='utf-8'))) - {'home'}],
-                         ids=lambda path: path.parent.name)
+def _leaves_home(path):
+    """Whether a shipped skill lists more than home; a header that cannot be read fails its own test above, not the
+    collection of this file."""
+    try:
+        return bool(set(skills.scene_kinds(path.read_text(encoding='utf-8'))) - {'home'})
+    except skills.SkillHeaderError:
+        return False
+
+
+@pytest.mark.parametrize('path', [path for path in TRACKED if _leaves_home(path)], ids=lambda path: path.parent.name)
 def test_a_skill_that_leaves_home_passes_its_own_private_words_scan(path):
     """Her condition: a skill may go outside home only with a self-check whose leak scan is green. With no private
     list on this machine it fails: unchecked is not clean."""

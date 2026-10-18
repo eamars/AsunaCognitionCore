@@ -107,6 +107,7 @@ def words(store, scene, text, block):
 # ---- seen once, in a group ------------------------------------------------------------------------------------------
 HELD_KIND = 'held_notice'
 REACTIONS_HEAD = '这期间的点表情：'
+REACTIONS_MAX = 5                            # lines reacted to, in that one line; older ones counted
 
 
 def hold(store, scene_id, row):
@@ -153,8 +154,10 @@ def take(store, scene, persona=None, keep=False):
         item['at'] = line_stamp(zone, said_at(row)) or item['at']
     items = ['%s %s%s%s' % ('、'.join(item['who']), item['at'], MARK, body) for (_, body), item in folded.items()]
     if reactions:
-        items.append(REACTIONS_HEAD + '；'.join('%s %s' % ('、'.join(item['who']), body)
-                                                for (_, body), item in reactions.items()) + MARK)
+        shown = ['%s %s' % ('、'.join(item['who']), body) for (_, body), item in reactions.items()]
+        rest = len(shown) - REACTIONS_MAX
+        items.append(REACTIONS_HEAD + '；'.join(shown[-REACTIONS_MAX:]) + ('；另有 %d 条较早的' % rest if rest > 0 else '')
+                     + MARK)
     out = {'items': items[-HELD_MAX:]}
     if len(items) > HELD_MAX:
         out['more'] = '还有 %d 条较早的通知没列出' % (len(items) - HELD_MAX)

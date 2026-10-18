@@ -274,6 +274,21 @@ def test_a_reaction_names_her_line_like_any_pointer_and_one_between_others_is_ke
     assert line.startswith(notices.REACTIONS_HEAD) and '给 [阿杰 #1]：' in line and '点了「赞」' in line
 
 
+def test_reactions_between_others_fold_into_one_line_with_the_older_ones_counted(store):
+    scene = world(store)
+    channels, received, _ = bridge(store)
+    for index in range(7):
+        store.put('messages', {'_id': 'r%d' % index, 'scene_id': SCENE, 'direction': 'inbound', 'author': 'qq:20004',
+                               'text': '第%d句' % index, 'received_at': now(), 'scene_seq': 200 + index,
+                               'event': {'channel': {'platform_event_id': 'z%d' % index}}})
+        channels.receive('qq', posted('20003', '给{line}点了「赞」', 'reaction', 'reacted',
+                                      {'message_id': 'z%d' % index, 'mine': True}, event_id='rz%d' % index))
+    assert received == [], 'none of them asks for a look'
+    [line] = notices.take(store, scene)['items']
+    assert line.startswith(notices.REACTIONS_HEAD) and line.count('点了「赞」') == notices.REACTIONS_MAX
+    assert '第6句' in line and '第0句' not in line and '另有 2 条较早的' in line
+
+
 def test_a_recall_in_a_group_is_kept_across_a_restart_and_shown_once_naming_the_line(store):
     scene = world(store)
     channels, received, _ = bridge(store)

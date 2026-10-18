@@ -97,7 +97,23 @@ reflection: no delegating).
 | F11 publication | outbox and part failures (`CANCELLED_AFTER_FAILURE`, `CHANNEL_DOES_NOT_DECLARE_*`), `not_landed`, recall refused | `[ ]` |
 | F12 notes | `NOTE_TOO_LONG` 75, `NOTE_HOP_LIMIT` 18, `NOTE_MODE_NOT_ALLOWED` 16, `NOTE_VISIT_NOT_NOW` 14, `NOTE_NOT_OWN_WORDS` 6, `NOTE_HOME_LIMIT` 6, `NOTE_DAY_LIMIT` 4, `NOTE_TARGET_UNKNOWN` 4 | 143 |
 
-### 2.6 The action brain and the side sessions
+### 2.6 The window holds two designs
+
+The 30-day window spans design changes that moved prompt text between positions, so the matrix reads records from
+**2026-10-14 onward** as the current design and keeps the older ones only for counts:
+
+| Change | First commit (NZDT) | What moved |
+| --- | --- | --- |
+| ADR-056: turn instruction and block guide into the system prompt | 2026-10-12 20:16 (`block_guide.py` 20:54) | the `# 这一回合` text left the notice tail (2,315 older notices carry it; 1,978 current ones end with `THINK_FIRST` alone) |
+| ADR-060: wording audit, new tool names | 2026-10-13 01:57 | tool descriptions |
+| ADR-064 phase 2: `reply` → `speak` on platform conversations | 2026-10-13 12:39; renamed 2026-10-14 | the speaking tool and the unsent-body rule |
+| ADR-067: `context.prepared` manifest | 2026-10-15 | the audit, not the prompt |
+| ADR-069: one `note` tool | 2026-10-16 | tool list |
+| ADR-075: action-brain tiers | 2026-10-16 19:26 | `delegate` `tier`, `why` |
+| ADR-079: per-session `speak` definitions, pointers | 2026-10-18 13:49 | tool definitions fixed per session (`session.tools`, 32 rows) |
+| ADR-080: refusal probe, Claude off the character route | 2026-10-18 19:07 | — |
+
+### 2.7 The action brain and the side sessions
 
 - Action brain: `delegate` (tier 低/高 when `actionHigh` exists) → `tasks.py` → executor session (`executor.md` + her
   `core` sentences readable in the task's class) with the granted tools (`tool_args.normalize` first) → `ask_character`
@@ -153,29 +169,192 @@ negligible) to show the cross-request prefix caching the local server cannot do 
 
 ## 4. Coverage matrix
 
-`[ ]` One row per class of §2 (kind × place/channel × step × state, plus each failure branch), with: how it was
-covered (replayed local / API, traced in code, unreachable), evidence (record ids, replay ids, `file:name` anchors),
-the prompt shown there (block, size, cached prefix or per-turn tail, how often it changes, whether the model is seen
-to use it), and every failure branch's message (what happened, what to do next, whether its values can be copied,
+One row per class of §2 (kind × place/channel × step × state, plus each failure branch), with: how it was covered
+(replayed local / API, traced in code, unreachable), evidence (record ids, replay ids, `file:name` anchors), the
+prompt shown there (block, size, cached prefix or per-turn tail, how often it changes, whether the model is seen to
+use it), and every failure branch's message (what happened, what to do next, whether its values can be copied,
 whether its wording agrees with the same situation elsewhere).
+
+### 4.1 Character-brain turns: what the first request carries (records 2026-10-14 → 2026-10-19, local route)
+
+Generated from the session logs by the agent's script; sizes are characters of the JSON sent. "Prefix" is the
+system prompt (fixed per conversation: `common.md`, the persona render for the place, `turn.md` and the block guide,
+`render.role_text`) plus the session's tool definitions (`role_tools.session_specs`); everything else is the per-turn
+tail. A block "in N of M" notices is sent only when it changed since the session last showed it
+(`context-delivery.composeContext`); `unchanged_from_program` names the ones held back.
+
+<!-- matrix:begin -->
+Block names end in `_from_program` where written `*`. Sizes are median characters of the block when sent. "Every notice" = sent in ≥ 90% of this cell's first notices (it changes every turn or is always sent); "often" = 30–90%; "rarely" = under 30% (the block is usually unchanged, so held back by the delivery, or absent in that state). Steps and cache hit are the lane's 30-day medians; the prefix is the system prompt median for the place (tool definitions, about 20,000 characters, come on top of it).
+
+| Kind | Where (scene, class) | Turns | First notice chars / blocks | Every notice | Often | Rarely (count) | Prefix chars | Steps | Cache hit | Made in |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `external` | QQ (napcat-qq) (group, public) | 985 | 2658 / 13 | `unchanged*` 603, `memories` 505, `group_continuity*` 295, `event` 150, `repeated*` 55, `ref_index` 42, `scene` 19, `speaker` 13, `session_class` 8, `delivered_history` 2 | `pace*` 157, `clock*` 101 | 36 | 5664 | 3 | 93.3% | `chat.py` (a message or line) |
+| `external` | agent line (dm, owner_private) | 330 | 5191 / 12 | `memories` 2751, `unchanged*` 635, `event` 456, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 19, `session_class` 15, `delivered_history` 2 | `task_state*` 277, `elsewhere*` 202, `recent_phrasing*` 103 | 24 | 11679 | 3 | 92.1% | `chat.py` (a message or line) |
+| `external` | local chat (dm, owner_private) | 157 | 4027 / 12 | `memories` 2272, `unchanged*` 643, `delivered_history` 181, `event` 111, `clock*` 104, `rhythm*` 98, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7 |  | 24 | 6959 | 3 | 87.5% | `chat.py` (a message or line) |
+| `external` | DSH peer line (dm, owner_private) | 29 | 4511 / 12 | `memories` 1957, `unchanged*` 613, `event` 362, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 17, `session_class` 15, `speaker` 12, `delivered_history` 2 | `elsewhere*` 344, `task_state*` 267, `recent_phrasing*` 109 | 14 | 6670 | 2 | 83.2% | `chat.py` (a message or line) |
+| `external` | QQ (napcat-qq) (dm, owner_private) | 13 | 2784 / 12 | `memories` 717, `unchanged*` 673, `event` 137, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 18, `session_class` 15, `speaker` 13, `delivered_history` 2 | `restart*` 1095, `affect*` 549, `elsewhere*` 412, `things*` 332, `task_state*` 242 | 18 | 5664 | 3 | 93.3% | `chat.py` (a message or line) |
+| `external` | QQ (napcat-qq) (group, owner_private) | 2 | 8567 / 23 | `unchanged*` 542, `things*` 417, `notes*` 326, `group_continuity*` 272, `pace*` 155, `event` 136, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 13, `scene` 9, `memories` 2, `delivered_history` 2 | `lines*` 2680, `affect*` 1373, `errand_places*` 1348, `group_notes*` 1177, `restart*` 1136, `action_capabilities*` 965, `self_state*` 591, `elsewhere*` 567, `errands*` 560, `note_places*` 536 | 0 | 5664 | 3 | 93.3% | `chat.py` (a message or line) |
+| `task_feedback` | agent line (dm, owner_private) | 93 | 13457 / 12 | `event` 10181, `memories` 1354, `unchanged*` 571, `task_state*` 337, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 19, `session_class` 15, `delivered_history` 2 | `elsewhere*` 187, `recent_phrasing*` 103 | 17 | 11679 | 3 | 92.1% | `tasks.py:feedback`, `handover.py` |
+| `task_feedback` | QQ (napcat-qq) (group, public) | 85 | 8614 / 14 | `event` 5295, `unchanged*` 566, `group_continuity*` 534, `memories` 401, `task_state*` 311, `pace*` 158, `repeated*` 55, `ref_index` 42, `scene` 19, `speaker` 13, `session_class` 8, `delivered_history` 2 | `image_artifacts*` 604, `clock*` 101 | 17 | 5664 | 3 | 93.3% | `tasks.py:feedback`, `handover.py` |
+| `task_feedback` | local chat (dm, owner_private) | 45 | 12618 / 13 | `event` 9613, `memories` 920, `unchanged*` 553, `task_state*` 325, `clock*` 104, `rhythm*` 98, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7, `delivered_history` 2 | `elsewhere*` 255 | 11 | 6959 | 3 | 87.5% | `tasks.py:feedback`, `handover.py` |
+| `task_feedback` | DSH peer line (dm, owner_private) | 8 | 13353 / 13 | `event` 9585, `memories` 1856, `unchanged*` 558, `task_state*` 281, `clock*` 107, `repeated*` 55, `ref_index` 42, `scene` 17, `session_class` 15, `speaker` 12, `delivered_history` 2 | `questions*` 2124, `elsewhere*` 229 | 5 | 6670 | 2 | 83.2% | `tasks.py:feedback`, `handover.py` |
+| `task_feedback` | QQ (napcat-qq) (dm, owner_private) | 2 | 7786 / 12 | `event` 5295, `image_artifacts*` 991, `unchanged*` 616, `task_state*` 294, `memories` 245, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 18, `session_class` 15, `speaker` 13, `delivered_history` 2 |  | 0 | 5664 | 3 | 93.3% | `tasks.py:feedback`, `handover.py` |
+| `consult` | QQ (napcat-qq) (group, public) | 37 | 2598 / 10 | `event` 949, `unchanged*` 673, `memories` 284, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 13, `session_class` 8, `delivered_history` 2 | `clock*` 101 | 9 | 5664 | 3 | 93.3% | `coordinator.py` (consult) |
+| `consult` | agent line (dm, owner_private) | 10 | 11145 / 13 | `memories` 4203, `event` 2780, `unchanged*` 497, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 19, `session_class` 15, `delivered_history` 2 | `action_capabilities*` 823, `task_state*` 273, `elsewhere*` 196, `recent_phrasing*` 98 | 7 | 11679 | 3 | 92.1% | `coordinator.py` (consult) |
+| `consult` | local chat (dm, owner_private) | 4 | 10034 / 13 | `memories` 4018, `event` 3143, `unchanged*` 482, `delivered_history` 224, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7 | `action_capabilities*` 823, `task_state*` 279, `elsewhere*` 409, `recent_phrasing*` 74 | 2 | 6959 | 3 | 87.5% | `coordinator.py` (consult) |
+| `self_development` | local chat (dm, owner_private) | 77 | 4671 / 13 | `unchanged*` 591, `event` 197, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7, `memories` 2, `delivered_history` 2 | `recent_experience*` 1905, `ideas*` 1998, `affect*` 483, `notes*` 475 | 20 | 6959 | 3 | 87.5% | `chat.py`, `schedule.py` |
+| `presence` | local chat (dm, owner_private) | 42 | 16949 / 17 | `places*` 5654, `recent_experience*` 4473, `memories` 2028, `unchanged*` 534, `event` 455, `delivered_history` 178, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7 | `lines*` 1953, `night*` 1491, `peer_asides*` 602, `affect*` 446, `last_visits*` 230, `notes_sent*` 212, `notes*` 228 | 21 | 6959 | 3 | 87.5% | heartbeat (`rhythm`) |
+| `settlement` | local chat (dm, owner_private) | 5 | 10560 / 16 | `memories` 3466, `sticker_candidates*` 1097, `unchanged*` 538, `settlement*` 188, `event` 182, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7, `delivered_history` 2 | `night_list*` 3890, `stickers_review*` 588, `affect*` 759, `elsewhere*` 168 | 7 | 6959 | 3 | 87.5% | `context_budget.py` |
+| `scheduled` | agent line (dm, owner_private) | 22 | 14093 / 17 | `places*` 5491, `memories` 3559, `scheduled_plan*` 1236, `event` 790, `unchanged*` 564, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 19, `session_class` 15, `delivered_history` 2 | `peer_asides*` 552, `questions*` 692, `affect*` 496, `last_visits*` 318, `elsewhere*` 219, `plans*` 119, `rhythm*` 98 | 16 | 11679 | 3 | 92.1% | `schedule.py` |
+| `scheduled` | local chat (dm, owner_private) | 14 | 15483 / 18 | `places*` 5020, `memories` 4631, `scheduled_plan*` 1128, `event` 785, `unchanged*` 536, `delivered_history` 170, `clock*` 104, `rhythm*` 98, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7 | `peer_asides*` 582, `elsewhere*` 468, `affect*` 501, `plans*` 341, `questions*` 273, `notes*` 223 | 13 | 6959 | 3 | 87.5% | `schedule.py` |
+| `scheduled` | QQ (napcat-qq) (group, public) | 11 | 6062 / 17 | `memories` 2431, `scheduled_plan*` 516, `unchanged*` 473, `event` 288, `pace*` 155, `clock*` 101, `repeated*` 55, `ref_index` 42, `scene` 17, `speaker` 14, `session_class` 8, `delivered_history` 2 | `self_state*` 1538, `image_artifacts*` 1423, `members*` 707, `note_places*` 410, `stickers*` 397, `things*` 155, `pictures*` 169, `faces*` 123, `affect*` 130, `plans*` 81 | 20 | 5664 | 3 | 93.3% | `schedule.py` |
+| `scheduled` | DSH peer line (dm, owner_private) | 6 | 15787 / 21 | `places*` 6359, `memories` 3693, `scheduled_plan*` 1065, `event` 748, `unchanged*` 466, `peer_asides*` 398, `elsewhere*` 349, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 17, `session_class` 15, `speaker` 12, `delivered_history` 2 | `affect*` 1374, `lines*` 1362, `restart*` 1039, `doc_refs*` 510, `stickers*` 727, `last_visits*` 323, `your_pictures*` 406, `notes_sent*` 462, `things*` 314, `task_state*` 302 | 5 | 6670 | 2 | 83.2% | `schedule.py` |
+| `visit` | QQ (napcat-qq) (group, public) | 51 | 5125 / 16 | `memories` 1286, `visit*` 672, `event` 263, `clock*` 101, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 18, `session_class` 8, `delivered_history` 2 | `group_notes*` 1224, `members*` 1111, `image_artifacts*` 1429, `unchanged*` 461, `sticker_candidates*` 544, `pace*` 157, `things*` 216, `pictures*` 169, `faces*` 136 | 23 | 5664 | 3 | 93.3% | `places.py` |
+| `note` | local chat (dm, owner_private) | 56 | 4083 / 15 | `note*` 589, `elsewhere*` 472, `unchanged*` 451, `event` 152, `clock*` 104, `repeated*` 55, `ref_index` 42, `session_class` 15, `speaker` 14, `scene` 7, `memories` 2, `delivered_history` 2 | `affect*` 506, `questions*` 531, `notes*` 228, `notes_sent*` 214, `note_places*` 192 | 16 | 6959 | 3 | 87.5% | `role_tools.py` (`note`) |
+| `note` | agent line (dm, owner_private) | 17 | 7568 / 16 | `memories` 3050, `note*` 666, `unchanged*` 476, `event` 169, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 24, `speaker` 19, `session_class` 15, `delivered_history` 2 | `action_capabilities*` 965, `questions*` 873, `affect*` 652, `elsewhere*` 295, `rhythm*` 98, `recent_phrasing*` 98 | 14 | 11679 | 3 | 92.1% | `role_tools.py` (`note`) |
+| `note` | DSH peer line (dm, owner_private) | 7 | 6080 / 16 | `note*` 469, `unchanged*` 457, `event` 168, `clock*` 104, `repeated*` 55, `ref_index` 42, `scene` 17, `session_class` 15, `speaker` 12, `memories` 2, `delivered_history` 2 | `lines*` 2757, `affect*` 824, `restart*` 1028, `elsewhere*` 344, `notes_sent*` 196, `things*` 253, `rhythm*` 98 | 11 | 6670 | 2 | 83.2% | `role_tools.py` (`note`) |
+| `note` | QQ (napcat-qq) (dm, owner_private) | 5 | 11709 / 23 | `lines*` 2996, `self_state*` 1591, `affect*` 1327, `restart*` 1081, `questions*` 754, `elsewhere*` 734, `note*` 372, `unchanged*` 319, `event` 170, `clock*` 104, `rhythm*` 98, `repeated*` 55, `ref_index` 42, `scene` 18, `session_class` 15, `speaker` 13, `memories` 2, `delivered_history` 2 | `note_places*` 452, `action_capabilities*` 894, `things*` 399, `doc_refs*` 508, `stickers*` 304, `errands*` 237, `notes*` 201, `notes_sent*` 182 | 5 | 5664 | 3 | 93.3% | `role_tools.py` (`note`) |
+
+**Block index** (all cells above): how many cells carry the block, in what share of their first notices it was sent (its change rate, since an unchanged block is held back), and its median size. Whether the model is seen to use a block is marked only where a tool consumes it (`[ ]` elsewhere: not measurable from the records without reading her words).
+
+| Block | Cells | Sent in | Median chars | Consumed by |
+| --- | --- | --- | --- | --- |
+| `memories` | 26 | 100% | 1856 | `recall` |
+| `event` | 26 | 100% | 455 | the turn itself |
+| `scene` | 26 | 100% | 17 | `[ ]` |
+| `speaker` | 26 | 100% | 14 | `[ ]` |
+| `session_class` | 26 | 100% | 15 | `[ ]` |
+| `delivered_history` | 26 | 100% | 2 | `speak` quote/line numbers |
+| `repeated_from_program` | 26 | 100% | 55 | `[ ]` |
+| `ref_index` | 26 | 100% | 42 | `feel` event_id |
+| `unchanged_from_program` | 26 | 98% | 553 | `[ ]` |
+| `clock_from_program` | 26 | 88% | 104 | `[ ]` |
+| `group_continuity_from_program` | 4 | 96% | 295 | `[ ]` |
+| `pace_from_program` | 6 | 87% | 157 | `[ ]` |
+| `task_state_from_program` | 24 | 28% | 277 | `task` |
+| `recent_phrasing_from_program` | 22 | 18% | 98 | `[ ]` |
+| `questions_from_program` | 23 | 17% | 396 | `speak` wait, `await_answer` |
+| `elsewhere_from_program` | 18 | 42% | 344 | `[ ]` |
+| `rhythm_from_program` | 17 | 31% | 98 | `[ ]` |
+| `affect_from_program` | 21 | 14% | 503 | `feel` |
+| `sticker_candidates_from_program` | 6 | 19% | 544 | `sticker` keep/remember |
+| `pictures_from_program` | 4 | 19% | 169 | `[ ]` |
+| `notes_from_program` | 22 | 10% | 223 | `note` reply |
+| `things_from_program` | 21 | 9% | 216 | `[ ]` |
+| `plans_from_program` | 18 | 9% | 936 | `plan` update/cancel |
+| `notes_sent_from_program` | 21 | 9% | 213 | `[ ]` |
+| `attend_from_program` | 2 | 14% | 39 | `[ ]` |
+| `sender_identity` | 1 | 14% | 47 | `[ ]` |
+| `group_notes_from_program` | 5 | 12% | 1177 | `[ ]` |
+| `members_from_program` | 4 | 12% | 707 | `find_member`, `@` labels |
+| `faces_from_program` | 4 | 12% | 130 | `[ ]` |
+| `image_artifacts_from_program` | 7 | 10% | 1423 | `attach_image`, `speak` picture part |
+| `stickers_from_program` | 18 | 6% | 328 | `speak` sticker part |
+| `relationship` | 10 | 6% | 4163 | `[ ]` |
+| `unsent_from_program` | 4 | 10% | 36 | `[ ]` |
+| `self_state_from_program` | 18 | 5% | 933 | `[ ]` |
+| `action_capabilities_from_program` | 17 | 6% | 965 | `[ ]` |
+| `note_places_from_program` | 16 | 6% | 452 | `note` |
+| `restart_from_program` | 17 | 11% | 1081 | `restart` |
+| `recent_experience_from_program` | 2 | 82% | 4473 | `[ ]` |
+| `recent_thoughts_from_program` | 8 | 7% | 423 | `[ ]` |
+| `undelivered_outbound_not_public` | 12 | 5% | 629 | `[ ]` |
+| `note_from_program` | 5 | 65% | 469 | `[ ]` |
+| `places_from_program` | 4 | 100% | 5654 | `visit` |
+| `lines_from_program` | 13 | 10% | 2191 | `peer_line`, `plan` line |
+| `notices_from_program` | 6 | 5% | 96 | `[ ]` |
+| `peer_asides_from_program` | 4 | 68% | 582 | `[ ]` |
+| `doc_refs_from_program` | 13 | 3% | 485 | `[ ]` |
+| `scheduled_plan_from_program` | 4 | 100% | 1128 | `[ ]` |
+| `speak_from_program` | 7 | 4% | 185 | `[ ]` |
+| `visit_from_program` | 1 | 100% | 672 | `[ ]` |
+| `your_pictures_from_program` | 11 | 6% | 406 | `[ ]` |
+| `ideas_from_program` | 1 | 61% | 1998 | `ideas` review |
+| `understanding_update_from_program` | 10 | 2% | 285 | `understand_person` |
+| `errands_from_program` | 12 | 6% | 243 | `[ ]` |
+| `errand_places_from_program` | 11 | 6% | 1189 | `errand` |
+| `media_from_program` | 2 | 3% | 478 | `[ ]` |
+| `last_visits_from_program` | 4 | 45% | 318 | `[ ]` |
+| `your_place_from_program` | 3 | 3% | 22 | `[ ]` |
+| `how_to_record_from_program` | 3 | 3% | 215 | `[ ]` |
+| `condensed_from_program` | 3 | 3% | 79 | `[ ]` |
+| `host_from_program` | 13 | 3% | 110 | `[ ]` |
+| `credentials_from_program` | 7 | 3% | 162 | `credential` |
+| `night_from_program` | 1 | 43% | 1491 | `[ ]` |
+| `ongoing_development_task_id_from_program` | 1 | 18% | 39 | `[ ]` |
+| `waiting_from_program` | 2 | 0% | 206 | `[ ]` |
+| `settlement_from_program` | 1 | 100% | 188 | `promote_memory` |
+| `schedule_control_from_program` | 1 | 0% | 719 | `[ ]` |
+| `night_list_from_program` | 1 | 80% | 3890 | `[ ]` |
+| `muted_here_from_program` | 1 | 8% | 42 | `[ ]` |
+| `errand_from_program` | 3 | 0% | 227 | `[ ]` |
+| `self_review_from_program` | 1 | 7% | 723 | `[ ]` |
+| `stickers_review_from_program` | 1 | 60% | 588 | `[ ]` |
+| `coverage_from_program` | 1 | 0% | 31 | `[ ]` |
+| `task_continuation_from_program` | 2 | 0% | 127 | `[ ]` |
+| `dice_review_from_program` | 1 | 5% | 3811 | `[ ]` |
+| `relationship_shared_from_program` | 1 | 8% | 108 | `[ ]` |
+| `memory_week_from_program` | 1 | 2% | 1430 | `[ ]` |
+| `notes_review_from_program` | 1 | 20% | 11197 | `[ ]` |
+| `trimmed_from_program` | 1 | 20% | 126 | `[ ]` |
+<!-- matrix:end -->
+
+### 4.2 Failure branches: the message each one shows
+
+`[ ]`
+
+### 4.3 Side sessions and the action brain
+
+`[ ]`
 
 ## 5. Findings
 
 `[ ]` Each finding points to the turn records it rests on; a guess about her state of mind is marked as the agent's
 guess.
 
-Candidates noted so far (to verify against records before they count):
+Verified against the records (counts from the audit and session logs; episode ids in the private appendix):
 
-1. The "think first" rule is enforced in three places at once: the `THINK_FIRST` tail line, a per-tool refusal in the
-   handlers (≈190 refusals across 20 tools in 30 days), and the end-of-turn `no_thought` rejection (99 of 130
-   `turn.rejected`). Whether the three agree in wording and whether the model's next step after each is the right one
-   is to be read from the records (`[ ]`).
-2. `self_development` turns fail at runtime more than every other kind together (35 of 57 `FAILED_RUNTIME`): a
-   program fault, not hers; its traceback class is to be read (`[ ]`).
-3. The summary lane retried 149 times on `Connection error` and the embedding step failed 4,595 times in 30 days,
-   silently to her: a cost without a prompt, to be sized (`[ ]`).
-4. `write_document` op `correction` was refused every one of 29 times (`DOC_OP_NOT_ALLOWED`): either an option she
-   is shown but can never use here, or one whose refusal does not teach the right op (`[ ]`).
+1. **"Think first" is enforced three times, and each layer works; the cost is one wasted call in 3.5% of turns.**
+   The rule is said in `turn.md` step 1 and in the `THINK_FIRST` tail line, enforced by the handlers (a call before
+   `think` is refused with `先用 think 写下这回合的心里话，再做别的。`) and by the end-of-turn check (`no_thought`).
+   Since 2026-10-14: 69 of 1,968 turns met the handler refusal; in 66 the very next call was `think` and the refused
+   call was then repeated; 3 turns needed it twice. 13 turns reached the end-of-turn `no_thought` rejection; all 13
+   recovered on the first repair and committed. No turn failed on this rule. The refusal text names the fix and the
+   fix works, so this is robustness by design, not a defect; its price is one extra model step per affected turn.
+2. **`self_development` turns fail at runtime every day: `NATIVE_BINDING_IDENTITY_CHANGED`** (`asuna.state.Denied`),
+   33 of 179 such turns since 2026-10-05 (2–7 a day from 2026-10-10 on), plus 1 `scheduled`. The same code appears
+   34 times in `chat.error`. The turn fails before any `think` (0 tool calls in 25 of the 33). She never sees it: the
+   failure has no prompt and no message to her. A program fault in the binding of the self-development turn to its
+   native session, to be traced in `native_worker.py` (`[ ]` anchor).
+3. **Silent failures around her:** the embedding step failed 4,595 times (`HTTPStatusError`) over 2026-10-06 →
+   2026-10-09 and the summary lane retried 149 times on `Connection error`; `chat.error` holds 18 `KeyError:
+   'scope_key'` (2026-10-04) and 26 `STALE_REVISION` conflicts; 10 requests were refused by the local server with
+   `prompt + max tokens exceeds the context` (the `maxTokens` 32,768 reserve meets a full window) and 3 timed out in
+   its queue (`LOCAL_ENDPOINT_QUEUE_TIMEOUT`). None of these reach her as a message; whether each should is a design
+   question for §6.
+4. **`write_document` op `correction` was refused all 29 times** (`DOC_OP_NOT_ALLOWED: 这份文档不能这样改`, 17 of
+   them adding `「work_log」是流水记录…`): an option she is shown and never once allowed to use in 30 days. Either
+   the option's description does not say where it applies, or the refusal should name the op to use instead (`[ ]`
+   read the description).
+5. **DSH's own schema validation speaks English and runs before every rule of the house.** About 60 calls in 30
+   days were returned as `invalid arguments: missing required property "op"` and the like (`feel` 13, `write_document`
+   12, `plan` 6, `private_words` 4, `sticker` 4, `ideas` 3, `stay_silent` 3, `think` 3, …). The message names the
+   field, so she can correct it, but it is not in the `CODE: 原因；怎么办` form, not in Chinese, and carries no
+   "what to do next". Fixing the wording needs the DSH fork (**marked**); the record shows the next call usually
+   corrects it (`[ ]` measure).
+6. **Hallucinated tool names hit the DSH guard 6 times** (`read_image` where the conversation has none, `ask`,
+   `set_tags`, `lines_from_program` and `catchup` as tools): the guard's text lists the usable tools and says to go
+   on without one; an adequate message.
+7. **The relevance gate failed 27 times, all `Native turn stopped before stage completion`** (26) or a session
+   handle clash (1), never on the model's answer shape (613 verdicts: quiet 384, join 228, 1 failed answer). The gate
+   itself is reliable; its failures are the Host's.
+8. **Publication is nearly failure-free:** of 4,596 outbound `SPEAK` rows from 30-day turns, 4,584 delivered, 5
+   `FAILED`, 4 `UNKNOWN`, 2 `QUEUED_EXTERNAL`, 1 `CANCELLED_AFTER_FAILURE`. The failure branches of §2.5 F11 exist in
+   the code and are almost never taken; their messages are checked in §4.2 by code reading.
+9. **The summary lane is the largest silent spender of the one local slot.** 6,817 one-step summary sessions in 30
+   days (about 227 a day) produced 7.2M output tokens, as many as all her turns together (7.0M), at a 1–3% cache hit
+   rate by construction; a summary emits a median of about 2,400–3,400 output tokens (reasoning included) for a
+   230-character system prompt and a 1,200-character input. Sizing and trigger in §4.3 (`[ ]`).
 
 ## 6. Recommendations
 

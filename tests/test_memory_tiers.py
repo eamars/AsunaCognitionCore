@@ -1,6 +1,7 @@
 """ADR-062 phase 2, state and moves: her items' places, kept up by memorable moments and moved down by the program,
 behind memory_tiers.ENABLED (off by default: nothing is read or written)."""
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -120,7 +121,8 @@ def test_a_second_conversation_surfacing_an_item_is_memorable_one_echoing_itself
     assert tiers.item('persona', row['sid'])['uses'] == 1
 
 
-def test_a_new_item_starts_carried_and_an_overflow_lapses_the_least_recently_memorable(store, tiers_on):
+def test_a_new_item_starts_carried_and_over_the_cap_she_is_shown_the_carried_list_before_anything_lapses(store, tiers_on):
+    from asuna import visibility
     owner(store)
     docs, tiers = DocumentStore(store, 'P1'), Tiers(store, 'P1')
     tiers.sync()
@@ -132,11 +134,38 @@ def test_a_new_item_starts_carried_and_an_overflow_lapses_the_least_recently_mem
             oldest = after['sections'][-1]['sid']
             tiers.rows.update_one({'_id': memory_tiers.item_id('P1', 'persona', oldest)},
                                   {'$set': {'memorable_at': ago(3)}})
-    carried = tiers.items(doc='persona', place=CARRIED)
-    assert len(carried) == memory_tiers.CAPS['persona']
     newest = after['sections'][-1]['sid']
     assert tiers.item('persona', newest)['place'] == CARRIED
-    assert any(m['reason'] == 'overflow' for m in moves), 'the write that overflowed names what lapsed'
+    assert len(tiers.items(doc='persona', place=CARRIED)) == memory_tiers.CAPS['persona'] + 1, 'one over, for her'
+    # Her next turn that reads it lists what is carried, with days unused, and names the default.
+    block = tiers.things(visibility.OWNER_PRIVATE, {'_id': 'dm-a'}, {'tz': ZoneInfo('UTC')})
+    [line] = block['over']
+    cap = memory_tiers.CAPS['persona']
+    assert line.startswith('随身满了（人设 %d/%d）：随身的有 「' % (cap + 1, cap)) and '天没用到；' in line
+    default = line.rsplit('放最久没用到的「', 1)[1].rstrip('」。')
+    [named] = [row for row in tiers.items(doc='persona') if row.get('heading') == default]
+    # She did not choose: the turn after, the named one lapses by the program's rule, and is told as before.
+    block = tiers.things(visibility.OWNER_PRIVATE, {'_id': 'dm-b'}, {'tz': ZoneInfo('UTC')})
+    assert 'over' not in block
+    assert tiers.item('persona', named['sid'])['place'] == AT_HAND
+    assert len(tiers.items(doc='persona', place=CARRIED)) == cap
+
+
+def test_when_she_lets_one_go_over_the_cap_nothing_else_lapses(store, tiers_on):
+    from asuna import visibility
+    owner(store)
+    docs, tiers = DocumentStore(store, 'P1'), Tiers(store, 'P1')
+    tiers.sync()
+    sids = []
+    for n in range(memory_tiers.CAPS['persona'] + 1):
+        before, after = write(docs, 'persona', {'op': 'append_section', 'heading': '另一条 %d' % n}, '内容 %d' % n)
+        tiers.written('persona', {'op': 'append_section'}, before, after, scene_id='dm-a')
+        sids.append(after['sections'][-1]['sid'])
+    assert tiers.things(visibility.OWNER_PRIVATE, {'_id': 'dm-a'}, {'tz': ZoneInfo('UTC')}).get('over')
+    tiers.let_go('persona', sids[5])                       # her choice
+    tiers.things(visibility.OWNER_PRIVATE, {'_id': 'dm-b'}, {'tz': ZoneInfo('UTC')})
+    places = {sid: tiers.item('persona', sid)['place'] for sid in sids}
+    assert places[sids[5]] == AT_HAND and list(places.values()).count(CARRIED) == memory_tiers.CAPS['persona']
 
 
 def test_memories_cool_by_disuse_facts_do_not_and_a_correction_supersedes(store, tiers_on):

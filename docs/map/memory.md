@@ -63,6 +63,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `move` — One item to another place: the row, a `move` row told once per conversation, one audit line.
   - `tick` — Lapses whose stay ran out and memories cooled by disuse; facts never cool.
   - `memorable` — A memorable moment: the stay starts again from now and, once per stay, the next one doubles.
+  - `overflows` — The stores over their cap that this turn reads: shown once each, for her to choose; one already shown in an earlier turn lapses by the program's rule first (so a cap is over for one turn at most).
   - `written` — After one of her document writes: a new item starts carried (a running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.

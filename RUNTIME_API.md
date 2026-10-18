@@ -365,8 +365,11 @@ spread per item from its usual length to twice that, at most 56 days); a memorab
 rewrite changed its body, its `doc:` ref cited in a tool call, a second conversation it came up in) starts the stay
 again and, once per stay, doubles the next, up to 56 days. A rewrite that changes an item brings it back to 随身. A
 store over its count of 随身 items (`self` 12, persona 18, each ledger 10, each group's notes 10, `core` 12, voice 6)
-lapses its least recently memorable one (one written in a turn where she recorded a feeling last), and the write's
-result names it under `moved`. Each item is a fact (事实) or a memory (记忆): by default
+is hers to settle first: one item over, nothing lapses yet (more than one over lapses by the rule at once), and her
+next turn that reads that store carries, in `things_from_program.over`, every 随身 item there with the days since it
+was last memorable and the one that would go (`随身满了（人设 19/18）：随身的有 …。想换就 let_go 一条；这一回合不挑，
+下一回合程序照旧放最久没用到的「…」。`); she may let one go. In the turn after, if it is still over, it lapses its least
+recently memorable one (one written in a turn where she recorded a feeling last), named under `moved`. Each item is a fact (事实) or a memory (记忆): by default
 facts in persona, ledgers, group notes and `core`, memories in `self`, voice and running records; `write_document`
 takes `nature` (事实 or 记忆) or `from` (主人定的 and 查过的 make a fact, 别人说的 and 我自己的判断 a memory) for the item
 it writes, and a `set_tags` carrying only these changes nothing in the document. Her own judgment is not made a fact
